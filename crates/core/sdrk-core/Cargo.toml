@@ -13,6 +13,9 @@ num-complex.workspace = true
 bytemuck.workspace = true
 libm.workspace = true
 
+[build-dependencies]
+libm.workspace = true
+
 [features]
 default = []
 # Executable specification (f64 / exact integer model); used by the testkit and tests only.

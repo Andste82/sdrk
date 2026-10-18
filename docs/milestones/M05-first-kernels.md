@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 1/2](../PLAN.md#phase-1--core-foundations-medium) · Depends on: [M04](M04-golden-vectors.md) · Next: [M06](M06-receive-kernels.md)
 
+## Status
+
+**Fully completed:** `convert` (`Convert`, `ConvertReal`, zero-copy views), `rotate` (`Nco`, `Rotate`) and `fir` (`FirState`, `Fir`) with traits, `Fallback`, `Reference` and facade delegation for `C32` and `CQ15`; build-time cosine tables (`build.rs`); golden cases (`convert`, `rotate`, `fir`) with Rust golden tests; testkit suite cases; block-size-invariance, extreme-input and exhaustive/property tests; docs and changelog. All R1.2 commands, `python tests/golden/generate.py --check` and `cargo test -p sdrk-testkit --features std` pass.
+
+**Partial / open:** nothing in the scope of this milestone. Spec deviations and judgement calls are recorded in [`decisions-log.md`](../decisions-log.md). The only open item is the CI confirmation of the golden-check job (M04 entry in [`open-items.md`](../open-items.md)); `convert_out` and decimating/interpolating FIR belong to M08 and M06/M08, SIMD to M13.
+
 ## Goal
 
 Implement the first three real kernels end to end (trait, `Fallback`, `Reference`, facade delegation, golden cases, suite cases, invariance and extreme-input tests): raw-format conversion into the internal types, the NCO mixer, and the complex FIR filter with real taps, in both `C32` and `CQ15`.
@@ -272,8 +278,8 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] `convert`, `rotate`, `fir` traits, states, fallback, reference, facade delegation
-- [ ] `build.rs` cosine tables
-- [ ] Golden cases + Rust golden tests
-- [ ] Suite cases, invariance, extremes
-- [ ] `docs/kernels.md` contracts for the three kernels; `docs/timing.md` part 1 (Timing trait, ratio, group delay, Nco phase model)
+- [x] `convert`, `rotate`, `fir` traits, states, fallback, reference, facade delegation
+- [x] `build.rs` cosine tables
+- [x] Golden cases + Rust golden tests
+- [x] Suite cases, invariance, extremes
+- [x] `docs/kernels.md` contracts for the three kernels; `docs/timing.md` part 1 (Timing trait, ratio, group delay, Nco phase model)

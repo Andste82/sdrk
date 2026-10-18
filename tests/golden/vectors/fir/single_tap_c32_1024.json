@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "single_tap_c32_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "single_tap_c32_1024.input.bin",
+      "len": 1024
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "single_tap_c32_1024.taps.bin",
+      "len": 1
+    }
+  },
+  "case": "single_tap_c32_1024",
+  "format_version": 1,
+  "kernel": "fir",
+  "notes": "a single tap of 0.5 halves every sample exactly",
+  "params": {
+    "taps": 1
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 33,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

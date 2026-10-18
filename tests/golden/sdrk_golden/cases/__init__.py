@@ -1,3 +1,3 @@
 """Importing this package registers every case module."""
 
-from . import q15_ops, scale  # noqa: F401
+from . import convert, fir, q15_ops, rotate, scale  # noqa: F401

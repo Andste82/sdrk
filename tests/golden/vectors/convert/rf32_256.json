@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected_f32": {
+      "dtype": "f32",
+      "file": "rf32_256.expected_f32.bin",
+      "len": 256
+    },
+    "expected_q15": {
+      "dtype": "i16",
+      "file": "rf32_256.expected_q15.bin",
+      "len": 256
+    },
+    "input": {
+      "dtype": "u8",
+      "file": "rf32_256.input.bin",
+      "len": 1024
+    }
+  },
+  "case": "rf32_256",
+  "format_version": 1,
+  "kernel": "convert",
+  "notes": "f32 containers pass through unchanged (NaN, inf, -0.0); Q15 uses the f64 rounding rule",
+  "params": {
+    "align": "lsb",
+    "bits": 32,
+    "container": "f32",
+    "endian": "little",
+    "full_scale": null,
+    "layout": "real",
+    "samples": 256,
+    "signed": true,
+    "swap_iq": false
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 110,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

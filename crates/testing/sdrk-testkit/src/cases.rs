@@ -10,6 +10,15 @@
 //! | `encode_decode_roundtrip_all_formats` | quick | about 20 KiB |
 //! | `scale_fallback_vs_reference` | quick | about 40 KiB |
 //! | `scale_block_invariance` | full | about 100 KiB |
+//! | `convert_all_formats_vs_encoder` | quick | about 7 KiB |
+//! | `rotate_c32_vs_reference` | quick | about 48 KiB |
+//! | `rotate_cq15_vs_reference` | quick | about 32 KiB |
+//! | `rotate_block_invariance` | quick | about 24 KiB |
+//! | `fir_c32_vs_reference` | quick | about 48 KiB |
+//! | `fir_cq15_vs_reference` | quick | about 32 KiB |
+//! | `fir_block_invariance` | quick | about 24 KiB |
+//! | `fir_impulse_response` | quick | 0 (stack only) |
+//! | `extremes_convert_rotate_fir` | full | about 20 KiB |
 
 // The stack-frame lint counts every `Result<_, Failure>` temporary of an
 // unoptimised build separately (a `Failure` is about 200 bytes by
@@ -33,7 +42,9 @@ use crate::metrics::{bit_exact, compare_complex};
 use crate::rng::Pcg32;
 use crate::suite::{Failure, TestCase, Tier};
 
-pub(crate) static CASES: [TestCase; 5] = [
+mod m05;
+
+pub(crate) static CASES: [TestCase; 14] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -58,6 +69,51 @@ pub(crate) static CASES: [TestCase; 5] = [
         name: "scale_block_invariance",
         tier: Tier::Full,
         run: scale_block_invariance,
+    },
+    TestCase {
+        name: "convert_all_formats_vs_encoder",
+        tier: Tier::Quick,
+        run: m05::convert_all_formats_vs_encoder,
+    },
+    TestCase {
+        name: "rotate_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m05::rotate_c32_vs_reference,
+    },
+    TestCase {
+        name: "rotate_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m05::rotate_cq15_vs_reference,
+    },
+    TestCase {
+        name: "rotate_block_invariance",
+        tier: Tier::Quick,
+        run: m05::rotate_block_invariance,
+    },
+    TestCase {
+        name: "fir_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m05::fir_c32_vs_reference,
+    },
+    TestCase {
+        name: "fir_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m05::fir_cq15_vs_reference,
+    },
+    TestCase {
+        name: "fir_block_invariance",
+        tier: Tier::Quick,
+        run: m05::fir_block_invariance,
+    },
+    TestCase {
+        name: "fir_impulse_response",
+        tier: Tier::Quick,
+        run: m05::fir_impulse_response,
+    },
+    TestCase {
+        name: "extremes_convert_rotate_fir",
+        tier: Tier::Full,
+        run: m05::extremes_convert_rotate_fir,
     },
 ];
 

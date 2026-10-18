@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected_f32": {
+      "dtype": "cf32",
+      "file": "cu8_256.expected_f32.bin",
+      "len": 256
+    },
+    "expected_q15": {
+      "dtype": "ci16",
+      "file": "cu8_256.expected_q15.bin",
+      "len": 256
+    },
+    "input": {
+      "dtype": "u8",
+      "file": "cu8_256.input.bin",
+      "len": 512
+    }
+  },
+  "case": "cu8_256",
+  "format_version": 1,
+  "kernel": "convert",
+  "notes": "raw bytes decoded to amplitude (f32) and to Q15 by the exact integer rules",
+  "params": {
+    "align": "lsb",
+    "bits": 8,
+    "container": "u8",
+    "endian": "little",
+    "full_scale": null,
+    "layout": "interleaved",
+    "samples": 256,
+    "signed": false,
+    "swap_iq": false
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 100,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

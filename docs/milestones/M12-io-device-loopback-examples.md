@@ -207,7 +207,6 @@ All optional: a driver implements only what its hardware can do. `Unsupported`, 
 | `long_run_no_drift` | start index `2^50`, 20 s at 240 kHz through `resampler` (tuned, ppm +37.5) and `fm_demod` | output count equals the exact formula; anchor time of the last output within ±1 ns of the analytic value; `#[ignore]`d 10-minute variant run nightly |
 | `event_propagation_exact` | events (gap, anchor, retune, overflow) at 50 random indices through `fm_receiver.json` | every event appears on `audio` at exactly the index given by the M11 mapping rule |
 | `sigmf_roundtrip_pipeline` | generate E2E-RX signal → `SigmfWriter` (with a gap and annotations) → `SigmfReader` → flow | audio identical to direct push; annotations preserved |
-| `real_recording` (optional) | env var `SDRK_REAL_RECORDING=<path to sigmf-meta>`; skipped with a message when unset | demodulation runs without error; SINAD is reported, not asserted |
 
 ## Test vectors
 

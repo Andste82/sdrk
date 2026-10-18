@@ -31,7 +31,6 @@ These items are planned but not yet written as implementation-ready milestones. 
 - **Device API gaps** identified by the SoapySDR mapping in M12 (sensors, generic settings, frequency components, clock/time source selection).
 - **Optional:** GStreamer-style shorthand for flows (`rf ! ddc frequency_hz=600e3 ! fm_demod ! out`) compiled to the JSON model; compiling a JSON flow into heap-free Rust code for MCUs.
 - **Release work:** check that `sdrk` is free on crates.io and npm, crates.io publishing in the order given in CONTRIBUTING.md, npm package name.
-- **Test data:** an optional small real recording (≤ 5 MiB, license CC0/CC-BY, SigMF) for the `real_recording` system test.
 
 ## Later (prepared, not scheduled)
 

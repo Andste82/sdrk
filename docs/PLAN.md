@@ -333,7 +333,7 @@ A server with an SDR, a web UI and MCP access: mark a signal in the waterfall, t
 | Q15 overflow | always saturate, never wrap (−1 × −1 saturates to the maximum) |
 | Q15 multiply | (a · b + 2¹⁴) >> 15, saturated |
 | Q15 accumulation | reference and fallback in `i64`; fast variants may use `i32` with documented headroom; round and saturate once at the end |
-| Q15 FFT scaling | two modes from the start: fixed (halve after every stage, output scaled by 1/N, inverse unscaled; matches CMSIS-DSP) and block floating point (halve only when overflow threatens, one shared exponent per block, returned with the result); FFT only, not streaming filters |
+| Q15 FFT scaling | two modes from the start: fixed (halve after every stage in both directions, output scaled by 1/N, cannot overflow; matches CMSIS-DSP; forward then inverse returns x/N) and block floating point (halve only when overflow threatens, one shared exponent per block, returned with the result; use it when precision matters, e.g. round trips); FFT only, not streaming filters |
 | f32 → Q15 | round and saturate; NaN → 0, ±∞ → ±maximum |
 | f32 denormals | feedback states (IIR, deemphasis, AGC, PLL) are flushed to zero below 1e-30; no reliance on CPU flush-to-zero modes, so results stay identical across backends |
 | Byte order | little-endian targets only (all current targets are); zero-copy reinterpretation relies on it; big-endian is not supported |

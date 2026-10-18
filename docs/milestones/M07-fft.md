@@ -146,7 +146,7 @@ Additional rules:
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum Direction { Forward, Inverse }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] #[non_exhaustive] pub enum Scaling { Default, BlockFloat }
-/// The true transform equals `output · 2^exponent` (see conventions below).
+/// One rule for every type and direction: the unnormalized sum `Σ x[n] e^{∓j2πkn/N}` equals `output · 2^exponent`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)] pub struct FftScale { pub exponent: i32 }
 
 pub struct FftPlan<T: ComplexSample, Tw: AsRef<[T]>> { n: usize, log2n: u32, twiddles: Tw, tw_stride: usize /* 1 for new/from_twiddles, 4096/n for from_static_4096 */ }
@@ -174,7 +174,7 @@ Optional feature `static-twiddles` on `sdrk-core`: `build.rs` additionally emits
 | Type | Direction | Output | `exponent` |
 | --- | --- | --- | --- |
 | C32 | Forward | `X[k] = Σ x[n] e^{−j2πkn/N}` (unnormalized, like `numpy.fft.fft`) | 0 |
-| C32 | Inverse | `x[n] = (1/N) Σ X[k] e^{+j2πkn/N}` (like `numpy.fft.ifft`) | 0 |
+| C32 | Inverse | `x[n] = (1/N) Σ X[k] e^{+j2πkn/N}` (like `numpy.fft.ifft`) | `log2 N` |
 | CQ15 | Forward, Default (fixed) | `X[k] / N` | `log2 N` |
 | CQ15 | Inverse, Default (fixed) | `(1/N) Σ X[k] e^{+j2πkn/N}` (= `numpy.fft.ifft`; halves after every stage like CMSIS-DSP, so it cannot overflow; forward-then-inverse returns `x/N` — use BlockFloat when precision matters) | `log2 N` (relative to the unnormalized sum) |
 | CQ15 | Forward/Inverse, BlockFloat | transform divided by `2^e`, where `e` = sum of the per-stage shifts (0, 1 or 2 per stage) | `e` |

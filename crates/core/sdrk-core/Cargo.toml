@@ -9,6 +9,14 @@ repository.workspace = true
 
 [dependencies]
 sdrk-device = { path = "../sdrk-device" }
+num-complex.workspace = true
+bytemuck.workspace = true
+libm.workspace = true
+
+[features]
+default = []
+# Executable specification (f64 / exact integer model); used by the testkit and tests only.
+reference = []
 
 [lints]
 workspace = true

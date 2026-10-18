@@ -74,7 +74,7 @@ fn layers_accepts_correct_direction() {
             "#![no_std]\n",
         ),
     ]);
-    assert!(check_layers(ws.path()).expect("run").is_empty());
+    assert_eq!(check_layers(ws.path()).expect("run"), []);
 }
 
 #[test]
@@ -112,12 +112,12 @@ fn layers_rejects_reference_feature_in_library_crates() {
 #[test]
 fn heap_rejects_vec_in_heap_free_crate() {
     let clean = workspace(&[core("", "#![no_std]\npub fn f() {}\n")]);
-    assert!(check_heap(clean.path()).expect("run").is_empty());
+    assert_eq!(check_heap(clean.path()).expect("run"), []);
     let dirty = workspace(&[core(
         "",
         "#![no_std]\npub fn f() { let v: Vec<u8> = Vec::new(); drop(v); }\n",
     )]);
-    assert!(!check_heap(dirty.path()).expect("run").is_empty());
+    assert_ne!(check_heap(dirty.path()).expect("run"), []);
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn heap_allows_vec_in_pipeline_crate() {
         lib: "pub fn f() { let v: Vec<u8> = Vec::new(); drop(v); }\n",
     };
     let ws = workspace(&[pipeline]);
-    assert!(check_heap(ws.path()).expect("run").is_empty());
+    assert_eq!(check_heap(ws.path()).expect("run"), []);
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn heap_exempts_out_of_line_test_module_but_not_plain_module() {
         "crates/core/sdrk-core/src/tests.rs",
         "fn t() { let _v: Vec<u8> = Vec::new(); }\n",
     );
-    assert!(check_heap(ws.path()).expect("run").is_empty());
+    assert_eq!(check_heap(ws.path()).expect("run"), []);
 
     let lib = "#![no_std]\nmod plain;\n";
     let ws = workspace(&[core("", lib)]);
@@ -150,7 +150,7 @@ fn heap_exempts_out_of_line_test_module_but_not_plain_module() {
         "crates/core/sdrk-core/src/plain.rs",
         "fn t() { let _v: Vec<u8> = Vec::new(); }\n",
     );
-    assert!(!check_heap(ws.path()).expect("run").is_empty());
+    assert_ne!(check_heap(ws.path()).expect("run"), []);
 }
 
 #[test]
@@ -159,17 +159,17 @@ fn global_state_rejects_atomic_static() {
         "",
         "#![no_std]\npub static TABLE: [u8; 2] = [1, 2];\n",
     )]);
-    assert!(check_global_state(clean.path()).expect("run").is_empty());
+    assert_eq!(check_global_state(clean.path()).expect("run"), []);
     let dirty = workspace(&[core(
         "",
         "#![no_std]\nuse core::sync::atomic::AtomicU32;\nstatic COUNTER: AtomicU32 = AtomicU32::new(0);\n",
     )]);
-    assert!(!check_global_state(dirty.path()).expect("run").is_empty());
+    assert_ne!(check_global_state(dirty.path()).expect("run"), []);
 }
 
 #[test]
 fn global_state_ignores_test_code() {
     let lib = "#![no_std]\n#[cfg(test)]\nmod tests {\n    use core::sync::atomic::AtomicU32;\n    static C: AtomicU32 = AtomicU32::new(0);\n}\n";
     let ws = workspace(&[core("", lib)]);
-    assert!(check_global_state(ws.path()).expect("run").is_empty());
+    assert_eq!(check_global_state(ws.path()).expect("run"), []);
 }

@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** in prose, docs and messages; `sdrk` only where lowercase is required (crate, package, module, file and path names).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -98,7 +98,7 @@ Additional rules:
 3. No reliance on CPU floating-point modes (flush-to-zero, rounding modes). Feedback states are flushed explicitly: `sdrk_core::num::flush_denormal(x)` returns 0.0 when `|x| < 1e-30`.
 4. No hash-map iteration order in any output; use `BTreeMap` or ordered `Vec`s in upper layers.
 5. Fused multiply-add is used only where the numeric contract allows it; the reference and the fallback never use FMA.
-6. Little-endian only: `sdrk-device` contains `#[cfg(target_endian = "big")] compile_error!("SDRk supports little-endian targets only");`.
+6. Little-endian only: `sdrk-device` contains `#[cfg(target_endian = "big")] compile_error!("sdrk supports little-endian targets only");`.
 
 ### R7 — Numeric conventions (from the plan's Decisions table)
 
@@ -232,7 +232,7 @@ Each entry runs the steps below (on Windows the bare-metal step needs the `thumb
 
 ### 7. Documents
 
-- `README.md`: one-paragraph project description (copy from PLAN.md › Project), name and pronunciation note ("SDRk, pronounced *shark*"; text uses **SDRk**, crate/package/module names use `sdrk`), scope rule, link to `docs/PLAN.md` and `docs/milestones/README.md`, license section.
+- `README.md`: one-paragraph project description (copy from PLAN.md › Project), name and pronunciation note ("SDRk, pronounced *shark*"; text, comments and docs use **SDRk**, code uses `sdrk`), scope rule, link to `docs/PLAN.md` and `docs/milestones/README.md`, license section.
 - `CONTRIBUTING.md`: the ground rules R1–R9 in short form, semver policy (`sdrk-device` aims at 1.0 early; all other crates 0.x until phase 9; breaking changes bump the minor version while < 1.0), changelog format (Keep a Changelog), crate publishing order (`sdrk-device`, `sdrk-core`, backends, `sdrk`, `sdrk-blocks`, `sdrk-io`, `sdrk-pipeline`, `sdrk-testkit`).
 - `docs/architecture.md`: layer table (R2), the principles from PLAN.md, the extensibility rules (node groups as the single extension point; no global state; everything `Send`; edges as interfaces; determinism independent of partitioning).
 - `docs/performance.md`: the instruction-count method and the 1.00× / 1.10× / 1.15× / 1.50× table from PLAN.md.

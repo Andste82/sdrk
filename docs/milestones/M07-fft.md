@@ -137,7 +137,7 @@ Additional rules:
 
 **In:** `FftPlan`, `RealFftPlan`, traits `Fft` and `RealFft`, twiddle generation, bit reversal, fixed and BFP Q15 scaling, reference DFT, golden cases, suite cases, docs.
 
-**Out:** radix-4/SIMD versions (M13), Q15 real FFT and inverse real FFT (backlog), FFT-based convolution.
+**Out:** radix-4/SIMD versions (M13), Q15 real FFT and its inverse (backlog), FFT-based convolution.
 
 ## Specification
 
@@ -191,17 +191,23 @@ For displaying spectra from a Q15 FFT: `power_db(|X_out|²) + 6.0206 · exponent
    - **BlockFloat:** before each stage compute `m = max |component|` over the whole block. A radix-2 butterfly output can grow to `(1 + √2)·m`. Choose the shift `s` of this stage: `m > 27145` (= ⌊2·32767/(1 + √2)⌋) → `s = 2`; else `m > 13572` (= ⌊32767/(1 + √2)⌋) → `s = 1`; else `s = 0`. The stage stores `sat16(round_shift(a ± t, s))` per component (i64 arithmetic) and adds `s` to `e`. With this rule no butterfly can saturate.
 5. Index arithmetic must not use unchecked slice indexing (R5.4); use `split_at_mut` per block to obtain `a`/`c` halves and iterate with `zip`.
 
-### 4. Real FFT (f32 only in this milestone)
+### 4. Real FFT, forward and inverse (f32 only in this milestone)
 
 ```rust
 pub struct RealFftPlan<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>> { inner: FftPlan<C32, Tw>, post: Tw2 }  // inner size N/2; post[k] = e^{−j2πk/N}, k < N/2
 // new(n, inner_twiddles (len n/4), post_twiddles (len n/2)) -> Result; n ≥ 32
 pub trait RealFft {
-    /// input: N real samples; output: N/2 + 1 complex bins (= numpy.fft.rfft); scratch: N/2 complex
-    fn rfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(&self, plan: &RealFftPlan<Tw, Tw2>, input: &[f32], output: &mut [C32], scratch: &mut [C32]) -> Result<()>;
+    /// Forward. input: N real samples; output: N/2 + 1 complex bins (= numpy.fft.rfft); scratch: N/2 complex. Exponent 0.
+    fn rfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(&self, plan: &RealFftPlan<Tw, Tw2>, input: &[f32], output: &mut [C32], scratch: &mut [C32]) -> Result<FftScale>;
+    /// Inverse. input: N/2 + 1 complex bins; output: N real samples (= numpy.fft.irfft(X, n=N)); scratch: N/2 complex.
+    /// The imaginary parts of bin 0 and bin N/2 are ignored (as in NumPy). Exponent log2 N (same rule as §2).
+    fn irfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(&self, plan: &RealFftPlan<Tw, Tw2>, input: &[C32], output: &mut [f32], scratch: &mut [C32]) -> Result<FftScale>;
 }
 ```
+Both directions use the same plan, the same scratch size and the same return type; lengths are checked identically (`LengthMismatch`).
 Algorithm: `z[n] = x[2n] + j·x[2n+1]` (n < N/2) into `scratch`; `Z = FFT_{N/2}(z)`; with `Z[N/2] := Z[0]`, for `k = 0 … N/2`: `E = (Z[k] + conj(Z[N/2−k])) / 2`, `O = (Z[k] − conj(Z[N/2−k])) / 2`, `X[k] = E − j · post[k] · O` (for `k = N/2` use `post = −1`, i.e. `e^{−jπ}`).
+
+Inverse algorithm (exact mirror of the forward one): for `k = 0 … N/2 − 1`: `E = (X[k] + conj(X[N/2−k])) / 2`, `D = (X[k] − conj(X[N/2−k])) / 2 · conj(post[k])`, `Z[k] = E + j·D` into `scratch` (use `Re` only of `X[0]` and `X[N/2]`); `z = IFFT_{N/2}(Z)` with the complex `Fft` in direction `Inverse` (which divides by N/2); then `x[2n] = Re z[n]`, `x[2n+1] = Im z[n]`.
 
 ### 5. Reference
 
@@ -209,14 +215,14 @@ Algorithm: `z[n] = x[2n] + j·x[2n+1]` (n < N/2) into `scratch`; `Z = FFT_{N/2}(
 
 ### 6. Facade, suite, docs
 
-Delegations for `Fft<C32>`, `Fft<CQ15>`, `RealFft`. Suite cases: `fft_c32_vs_reference_{64,1024}`, `fft_cq15_fixed_vs_reference_1024`, `fft_cq15_bfp_vs_reference_1024`, `fft_roundtrip_c32`, `fft_roundtrip_cq15_bfp`, `rfft_vs_reference_1024`, `fft_weak_tone_bfp` (full), `fft_parseval_c32`. `docs/kernels.md`: conventions table, scaling modes, dB offset rule, numeric contracts below.
+Delegations for `Fft<C32>`, `Fft<CQ15>`, `RealFft`. Suite cases: `fft_c32_vs_reference_{64,1024}`, `fft_cq15_fixed_vs_reference_1024`, `fft_cq15_bfp_vs_reference_1024`, `fft_roundtrip_c32`, `fft_roundtrip_cq15_bfp`, `rfft_vs_reference_1024`, `irfft_vs_reference_1024`, `rfft_roundtrip_f32`, `fft_weak_tone_bfp` (full), `fft_parseval_c32`. `docs/kernels.md`: conventions table, scaling modes, dB offset rule, numeric contracts below.
 
 ## Numeric contracts (initial thresholds)
 
 | Case | Threshold |
 | --- | --- |
 | C32 forward/inverse, N ≤ 4096, noise σ = 0.3 | SNR ≥ 110 dB |
-| C32 rfft | SNR ≥ 110 dB |
+| C32 rfft and irfft | SNR ≥ 110 dB |
 | CQ15 fixed forward, full-scale tone | SNR ≥ 55 dB |
 | CQ15 fixed forward, noise σ = 0.3 | SNR ≥ 40 dB |
 | CQ15 BFP forward, full-scale tone | SNR ≥ 60 dB |
@@ -234,6 +240,7 @@ All expected values from `numpy.fft` in complex128, computed from the **quantize
 | `c32_fwd_{16,64,1024,4096}` | 70–73 | noise σ 0.3, complex64 | `np.fft.fft(x)` | SNR ≥ 110 |
 | `c32_inv_1024` | 74 | X = fft of noise, complex64 | `np.fft.ifft(X)` | SNR ≥ 110 |
 | `rfft_f32_{32,1024,4096}` | 75–77 | real noise σ 0.3, float32 | `np.fft.rfft(x)` | SNR ≥ 110 |
+| `irfft_f32_{32,1024,4096}` | 85–87 | X = `np.fft.rfft(noise σ 0.3)` cast to complex64, then `X[0].imag` and `X[N/2].imag` set to 0.5 (must be ignored) | `np.fft.irfft(X, n=N)` | SNR ≥ 110 |
 | `cq15_fixed_tone_1024` | 78 | full-scale tone at bin 37 (amplitude 1 − 2⁻¹⁵) quantized | `np.fft.fft(x)/1024` | SNR ≥ 55 |
 | `cq15_fixed_noise_{1024,4096}` | 79/80 | noise σ 0.3 quantized | `np.fft.fft(x)/N` | SNR ≥ 40 |
 | `cq15_fixed_inv_1024` | 81 | X = complex noise σ 0.3, quantized (a white spectrum) | `np.fft.ifft(X)` | SNR ≥ 40 |
@@ -244,7 +251,7 @@ All expected values from `numpy.fft` in complex128, computed from the **quantize
 ## Tests
 
 1. Golden tests for all cases.
-2. Round trip: C32 `inverse(forward(x)) ≈ x` (SNR ≥ 110 dB). CQ15 with BlockFloat in both directions: `out · 2^(e_fwd + e_inv) / N ≈ x` (SNR ≥ 40 dB for σ 0.3 noise). CQ15 fixed: `inverse(forward(x))` equals `x/N` within the fixed contract (documents the precision loss).
+2. Round trip: C32 `inverse(forward(x)) ≈ x` and f32 `irfft(rfft(x)) ≈ x` (SNR ≥ 110 dB). CQ15 with BlockFloat in both directions: `out · 2^(e_fwd + e_inv) / N ≈ x` (SNR ≥ 40 dB for σ 0.3 noise). CQ15 fixed: `inverse(forward(x))` equals `x/N` within the fixed contract (documents the precision loss).
 3. Parseval (C32): `Σ|x|² · N ≈ Σ|X|²` within 1e-5 relative.
 4. Linearity and time-shift property on random inputs (C32, tolerance 1e-5 relative).
 5. Single impulse at 0 → flat spectrum; tone at bin k → energy concentrated in bin k (≥ 100 dB above others for C32).
@@ -260,7 +267,7 @@ R1.2 commands; `cargo test -p sdrk-core --features reference,static-twiddles`; g
 
 ## Deliverables checklist
 
-- [ ] `FftPlan`, `RealFftPlan`, `Fft`, `RealFft`, scaling modes
+- [ ] `FftPlan`, `RealFftPlan`, `Fft`, `RealFft` (forward and inverse), scaling modes
 - [ ] Reference DFT
 - [ ] Golden cases, Rust golden tests, property tests
 - [ ] Suite cases

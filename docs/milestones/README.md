@@ -17,7 +17,7 @@ Milestones are strictly sequential: each depends on all previous ones, and each 
 | M04 | [M04-golden-vectors.md](M04-golden-vectors.md) | 1 | Golden-vector pipeline (Python 3.12 + NumPy/SciPy), file format, Q15 model, Rust loader, first cases |
 | M05 | [M05-first-kernels.md](M05-first-kernels.md) | 1 | `convert` (all formats), `rotate`, `fir` |
 | M06 | [M06-receive-kernels.md](M06-receive-kernels.md) | 2 | `fir_decimate`, `resample`, `quad_demod`, `deemphasis`, `dc_block`, windows, `mag_sq`, `power_db` |
-| M07 | [M07-fft.md](M07-fft.md) | 2 | Own FFT: f32/Q15, fixed and block-floating-point scaling, real FFT, static twiddles |
+| M07 | [M07-fft.md](M07-fft.md) | 2 | Own FFT: f32/Q15, fixed and block-floating-point scaling, real FFT and its inverse, static twiddles |
 | M08 | [M08-transmit-and-fused.md](M08-transmit-and-fused.md) | 2 | `convert_out`, `fir_interpolate`, `fm_mod`, fused `ddc`/`duc`/`fm_demod`, meters, FM end-to-end chains |
 | M09 | [M09-blocks.md](M09-blocks.md) | 3 | `sdrk-blocks`: filter design, storage, block interface with descriptions, 11 blocks, kernel `dot` |
 | M10 | [M10-pipeline-core.md](M10-pipeline-core.md) | 3 | `sdrk-pipeline`: JSON model, registry, schema, validation, build, push runner, no allocation after build |

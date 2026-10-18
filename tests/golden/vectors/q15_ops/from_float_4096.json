@@ -1,0 +1,29 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "from_float_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "from_float_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "from_float_4096",
+  "format_version": 1,
+  "kernel": "q15_ops",
+  "notes": "expected[n] = q15_from_f32(input[n]); rounding happens in f64",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 2,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

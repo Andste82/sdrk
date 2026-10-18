@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "c32_random_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_random_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "c32_random_4096",
+  "format_version": 1,
+  "kernel": "scale",
+  "notes": "output[n] = input[n] * gain",
+  "params": {
+    "gain": 0.75
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 1,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 140.0
+  }
+}

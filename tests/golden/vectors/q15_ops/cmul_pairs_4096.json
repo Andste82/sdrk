@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "a": {
+      "dtype": "ci16",
+      "file": "cmul_pairs_4096.a.bin",
+      "len": 4096
+    },
+    "b": {
+      "dtype": "ci16",
+      "file": "cmul_pairs_4096.b.bin",
+      "len": 4096
+    },
+    "expected": {
+      "dtype": "ci16",
+      "file": "cmul_pairs_4096.expected.bin",
+      "len": 4096
+    }
+  },
+  "case": "cmul_pairs_4096",
+  "format_version": 1,
+  "kernel": "q15_ops",
+  "notes": "expected[n] = cq15_mul(a[n], b[n])",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 4,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

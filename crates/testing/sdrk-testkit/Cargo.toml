@@ -15,12 +15,14 @@ num-complex.workspace = true
 libm.workspace = true
 bytemuck.workspace = true
 heapless.workspace = true
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
 proptest = "1"
 
 [features]
-std = []
+std = ["dep:serde", "dep:serde_json"]
 
 [lints]
 workspace = true

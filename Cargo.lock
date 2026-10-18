@@ -596,6 +596,8 @@ dependencies = [
  "sdrk",
  "sdrk-core",
  "sdrk-device",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

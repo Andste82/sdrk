@@ -56,3 +56,7 @@ SDRK-SUITE END passed=<p> failed=<f>
 ```
 
 `WriteReporter` prints it to any `core::fmt::Write`, `StdReporter` (feature `std`) to stdout. Registered by M03: `rng_known_answer`, `gen_tone_frequency`, `encode_decode_roundtrip_all_formats`, `scale_fallback_vs_reference` (quick) and `scale_block_invariance` (full). New kernels add their cases to `cases.rs`. On the host, `cargo test -p sdrk-testkit --features std` runs the whole suite in `tests/suite.rs`.
+
+## Golden vectors
+
+Golden vectors are produced by `tests/golden/generate.py` with NumPy/SciPy (pinned exactly) and an independent Python implementation of the Q15 rules. They are committed to `tests/golden/vectors/<kernel>/<case>.json` plus binary arrays and loaded by `sdrk_testkit::golden`. Each case stores its tolerance (`bit_exact`, `tolerance` with a minimum SNR, or `max_abs_err`), so tolerances never live in Rust code. See [`tests/golden/README.md`](../tests/golden/README.md) for the format, regeneration (`python tests/golden/generate.py --check`) and how to add a case. Present cases: `q15_ops/{from_float_4096, mul_pairs_4096, cmul_pairs_4096}` and `scale/{c32_random_4096, cq15_random_4096}`.

@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Testing and performance](../PLAN.md#testing-and-performance) · Depends on: [M03](M03-testkit-foundations.md) · Next: [M05](M05-first-kernels.md)
 
+## Status
+
+**Fully completed:** Python golden package and CLI (`tests/golden/generate.py`, including `--check`) with pinned `requirements.txt`; the independent Python Q15 integer model with self-test; committed vectors for `q15_ops/*` and `scale/*` (17 files, byte-identical on regeneration); the Rust loader and `assert_matches` in `sdrk_testkit::golden`; Rust golden tests (`golden_basic`, `golden_env`, `golden_loader`); the `golden-check` CI job definition; `tests/golden/README.md` and the `docs/kernels.md` section. All R1.2 commands (fmt, clippy, workspace tests, `xtask check`, `xtask bare-metal`) and `generate.py --check` pass locally.
+
+**Open:** the `golden-check` CI job can only run on GitHub, so its first green run is not confirmed locally. Tracked in [`docs/open-items.md`](../open-items.md). Nothing else is partial.
+
 ## Goal
 
 Create the reproducible pipeline that produces golden samples with NumPy/SciPy, the on-disk format, the Rust loader in the testkit, the Python Q15 integer model, and the first cases (Q15 arithmetic cross-check and `scale`). Every later kernel milestone adds cases with the recipe defined here.
@@ -295,8 +301,8 @@ R1.2 commands; `python tests/golden/generate.py --check`; the `golden-check` CI 
 
 ## Deliverables checklist
 
-- [ ] Python package, CLI, pinned requirements, Q15 model with self-test
-- [ ] Vectors for `q15_ops/*`, `scale/*` committed
-- [ ] Loader + `assert_matches` in the testkit
-- [ ] Rust golden tests
-- [ ] CI job, `tests/golden/README.md`, `docs/kernels.md` section
+- [x] Python package, CLI, pinned requirements, Q15 model with self-test
+- [x] Vectors for `q15_ops/*`, `scale/*` committed
+- [x] Loader + `assert_matches` in the testkit
+- [x] Rust golden tests
+- [x] CI job, `tests/golden/README.md`, `docs/kernels.md` section

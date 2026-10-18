@@ -1,0 +1,148 @@
+//! Command dispatch and the commands that spawn `cargo`.
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
+use std::path::Path;
+use std::process::Command;
+
+use anyhow::{Context, bail};
+
+use crate::layers;
+use crate::scan::Finding;
+
+const USAGE: &str =
+    "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | test-all>";
+
+/// The bare-metal target used to prove that heap-free crates need no allocator.
+pub const BARE_METAL_TARGET: &str = "thumbv7em-none-eabihf";
+
+/// Runs a command line. Returns `Ok(true)` on success and `Ok(false)` if a check found violations.
+///
+/// # Errors
+/// Fails on unknown commands or if a tool cannot be run.
+pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    match args.as_slice() {
+        ["check"] => check_all(root),
+        ["check", "layers"] => Ok(print_findings("layers", &layers::check_layers(root)?)),
+        ["check", "heap"] => Ok(print_findings("heap", &layers::check_heap(root)?)),
+        ["check", "global-state"] => Ok(print_findings(
+            "global-state",
+            &layers::check_global_state(root)?,
+        )),
+        ["check", "docs"] => check_docs(root),
+        ["bare-metal"] => bare_metal(root),
+        ["test-all"] => test_all(root),
+        _ => bail!("{USAGE}"),
+    }
+}
+
+/// Prints findings to stderr, one line each; `true` if there are none.
+#[must_use]
+pub fn print_findings(name: &str, findings: &[Finding]) -> bool {
+    for finding in findings {
+        eprintln!("{finding}");
+    }
+    if findings.is_empty() {
+        println!("check {name}: ok");
+    } else {
+        eprintln!("check {name}: {} violation(s)", findings.len());
+    }
+    findings.is_empty()
+}
+
+fn check_all(root: &Path) -> anyhow::Result<bool> {
+    let mut ok = print_findings("layers", &layers::check_layers(root)?);
+    ok &= print_findings("heap", &layers::check_heap(root)?);
+    ok &= print_findings("global-state", &layers::check_global_state(root)?);
+    ok &= check_docs(root)?;
+    Ok(ok)
+}
+
+fn cargo() -> Command {
+    Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+}
+
+fn run_step(label: &str, mut cmd: Command, root: &Path) -> anyhow::Result<bool> {
+    println!("==> {label}");
+    let status = cmd
+        .current_dir(root)
+        .status()
+        .with_context(|| format!("cannot run `{label}`"))?;
+    if !status.success() {
+        eprintln!("xtask: `{label}` failed");
+    }
+    Ok(status.success())
+}
+
+fn check_docs(root: &Path) -> anyhow::Result<bool> {
+    let mut cmd = cargo();
+    cmd.args(["doc", "--workspace", "--no-deps"])
+        .env("RUSTDOCFLAGS", "-D warnings");
+    run_step(
+        "cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)",
+        cmd,
+        root,
+    )
+}
+
+fn bare_metal(root: &Path) -> anyhow::Result<bool> {
+    let crates = layers::heap_free_crates(root)?;
+    let mut ok = true;
+    for name in crates {
+        let mut cmd = cargo();
+        cmd.args([
+            "build",
+            "--target",
+            BARE_METAL_TARGET,
+            "-p",
+            &name,
+            "--no-default-features",
+        ]);
+        let passed = run_step(
+            &format!("cargo build --target {BARE_METAL_TARGET} -p {name} --no-default-features"),
+            cmd,
+            root,
+        )?;
+        if !passed {
+            eprintln!(
+                "xtask: if the target is missing, run `rustup target add {BARE_METAL_TARGET}`"
+            );
+        }
+        ok &= passed;
+    }
+    Ok(ok)
+}
+
+fn test_all(root: &Path) -> anyhow::Result<bool> {
+    let steps: [(&str, &[&str]); 3] = [
+        (
+            "cargo fmt --all -- --check",
+            &["fmt", "--all", "--", "--check"],
+        ),
+        (
+            "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+            &[
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                "--",
+                "-D",
+                "warnings",
+            ],
+        ),
+        (
+            "cargo test --workspace --all-features",
+            &["test", "--workspace", "--all-features"],
+        ),
+    ];
+    let mut ok = true;
+    for (label, args) in steps {
+        let mut cmd = cargo();
+        cmd.args(args);
+        ok &= run_step(label, cmd, root)?;
+    }
+    ok &= check_all(root)?;
+    ok &= bare_metal(root)?;
+    Ok(ok)
+}

@@ -1,0 +1,17 @@
+[package]
+name = "sdrk-testkit"
+description = "SDRk testkit: generators, virtual devices, loopback and the on-target test suite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk = { path = "../../facade/sdrk" }
+
+[features]
+std = []
+
+[lints]
+workspace = true

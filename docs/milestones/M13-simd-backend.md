@@ -26,7 +26,8 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
+5. Naming: write **SDRk** in prose, docs and messages; `sdrk` only where lowercase is required (crate, package, module, file and path names).
+6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
 
@@ -97,7 +98,7 @@ Additional rules:
 3. No reliance on CPU floating-point modes (flush-to-zero, rounding modes). Feedback states are flushed explicitly: `sdrk_core::num::flush_denormal(x)` returns 0.0 when `|x| < 1e-30`.
 4. No hash-map iteration order in any output; use `BTreeMap` or ordered `Vec`s in upper layers.
 5. Fused multiply-add is used only where the numeric contract allows it; the reference and the fallback never use FMA.
-6. Little-endian only: `sdrk-device` contains `#[cfg(target_endian = "big")] compile_error!("sdrk supports little-endian targets only");`.
+6. Little-endian only: `sdrk-device` contains `#[cfg(target_endian = "big")] compile_error!("SDRk supports little-endian targets only");`.
 
 ### R7 — Numeric conventions (from the plan's Decisions table)
 
@@ -206,7 +207,7 @@ FMA is allowed in backends for tolerance kernels (state it in `docs/backends.md`
 
 ### 6. Release 0.1
 
-When every kernel in §4 has status `release` and passes: update CHANGELOG, bump workspace version to `0.1.0`, create git tag `v0.1.0`. **Do not publish to crates.io** — the final crate name is still open; publishing needs an explicit maintainer decision (log it).
+When every kernel in §4 has status `release` and passes: update CHANGELOG, bump workspace version to `0.1.0`, create git tag `v0.1.0`. **Do not publish to crates.io** — publishing needs an explicit maintainer decision (log it).
 
 ## Test vectors
 

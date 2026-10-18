@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -289,7 +290,7 @@ All stateful Rust golden tests run the input once in one piece and once in rando
 3. `fir_decimate` with M = 1 equals `fir` bit for bit; `resample` with L = M = 1 equals `fir`.
 4. `quad_demod` of a pure tone `e^{j2πfn}` gives the constant `2πf·gain` (f32 within 1e-6).
 5. `deemphasis` step response reaches 63.2 % after τ·fs samples (±1 sample).
-6. `dc_block` removes a constant input (0.5 + 0.25j) after 10 000 samples (r = 0.999): f32 output magnitude < 1e-3; Q15 output magnitude < 0.02 (the round-half-up feedback has a dead band of about 0.5/(1 − r) LSB ≈ 500 LSB; document this limit in `docs/kernels.md`).
+6. `dc_block` removes a constant input (0.5 + 0.25j) after 10 000 samples (r = 0.999): f32 output magnitude < 1e-3; Q15: each component settles within ±496 LSB (magnitude < 0.022) — the round-half-up feedback has a dead band of ⌊0.5/(1 − r_q15)⌋ = 496 LSB per component with `r_q15 = 32735`; document this limit in `docs/kernels.md`.
 7. Window generators: symmetric windows are symmetric bit for bit; `window_gain` of Hann periodic = (0.5, 1.5) within 1e-9 for N = 4096.
 8. `power_db` never panics on NaN/negative/zero.
 9. Progress semantics: with an output buffer smaller than needed, `consumed` stops at the right sample and resubmitting the rest yields identical output.

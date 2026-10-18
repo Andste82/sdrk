@@ -59,7 +59,7 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 1–5 | M04 (`q15_ops`, `scale`) |
 | 20–39 | M05 (`rotate` 20–24, `fir` 30–34) |
 | 40–69 | M06 (40–62) |
-| 70–89 | M07 (70–84) |
+| 70–89 | M07 (70–87) |
 | 90–99 | M08 kernels (`fir_interpolate`, `fm_mod`) |
 | 100–199 | M05 `convert` (100 + position in the format table) |
 | 200–299 | M08 `convert_out` (200 + i from C32, 220 + i from CQ15) |

@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -202,7 +203,7 @@ All optional: a driver implements only what its hardware can do. `Unsupported`, 
 | Test | Setup | Pass criterion |
 | --- | --- | --- |
 | `fm_over_loopback_{f32,q15}` | `fm_transmitter.json` (1 kHz tone) → `Loopback` (CS8, delay 1234.37, attenuation 6 dB, freq offset +1.5 kHz, noise for 30 dB CNR in 200 kHz) → `fm_receiver.json` with `inputs.rf.format` overridden to `cs8` (and `settings.precision` to `q15` for the Q15 variant; overrides applied to the parsed `PipelineSpec` in the test) | SINAD ≥ 30 dB (f32), ≥ 25 dB (Q15) over the last 50 % |
-| `burst_timing_loopback` | TX: bursts of a constant carrier (100 ms) at `t0 + 1 s`, `t0 + 1.5 s`; RX: `ddc` + `mag_sq` stream output; burst start = first output sample whose power exceeds 50 % of the plateau, converted to time with the delay-compensated anchor | abs(measured − (tx_time + delay/rate)) ≤ 1 output sample period, both bursts |
+| `burst_timing_loopback` | TX: bursts of a constant carrier (100 ms) at `t0 + 1 s`, `t0 + 1.5 s`; RX: `ddc` stream output (the test computes |x|² from the read samples); burst start = first output sample whose power exceeds 50 % of the plateau, converted to time with the delay-compensated anchor | abs(measured − (tx_time + delay/rate)) ≤ 1 output sample period, both bursts |
 | `two_stations_no_crosstalk` | two FM stations at −400 kHz (1 kHz tone) and +400 kHz (1.7 kHz tone), equal level, one flow with fan-out to two `ddc`→`fm_demod` branches | each output: SINAD of its tone ≥ 35 dB, the other tone ≤ −50 dB relative (ToneMeter) |
 | `long_run_no_drift` | start index `2^50`, 20 s at 240 kHz through `resampler` (tuned, ppm +37.5) and `fm_demod` | output count equals the exact formula; anchor time of the last output within ±1 ns of the analytic value; `#[ignore]`d 10-minute variant run nightly |
 | `event_propagation_exact` | events (gap, anchor, retune, overflow) at 50 random indices through `fm_receiver.json` | every event appears on `audio` at exactly the index given by the M11 mapping rule |

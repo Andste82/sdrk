@@ -4,7 +4,7 @@
 
 ## Goal
 
-Implement our own heap-free FFT as an ordinary kernel: power-of-two sizes 16…65 536, in-place radix-2, complex forward/inverse in `C32` and `CQ15`, Q15 with two scaling modes (fixed 1/N and block floating point), and a real-input FFT for `f32`. The fallback is a clear radix-2 implementation; speed comes later from backends (M13, M16).
+Implement our own heap-free FFT as an ordinary kernel: power-of-two sizes 16…65 536, in-place radix-2, complex forward/inverse in `C32` and `CQ15`, Q15 with two scaling modes (fixed 1/N and block floating point), and a real-input FFT for `f32` and its inverse. The fallback is a clear radix-2 implementation; speed comes later from backends (M13, M16).
 
 ## Why
 
@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -176,7 +177,7 @@ Optional feature `static-twiddles` on `sdrk-core`: `build.rs` additionally emits
 | C32 | Forward | `X[k] = Σ x[n] e^{−j2πkn/N}` (unnormalized, like `numpy.fft.fft`) | 0 |
 | C32 | Inverse | `x[n] = (1/N) Σ X[k] e^{+j2πkn/N}` (like `numpy.fft.ifft`) | `log2 N` |
 | CQ15 | Forward, Default (fixed) | `X[k] / N` | `log2 N` |
-| CQ15 | Inverse, Default (fixed) | `(1/N) Σ X[k] e^{+j2πkn/N}` (= `numpy.fft.ifft`; halves after every stage like CMSIS-DSP, so it cannot overflow; forward-then-inverse returns `x/N` — use BlockFloat when precision matters) | `log2 N` (relative to the unnormalized sum) |
+| CQ15 | Inverse, Default (fixed) | `(1/N) Σ X[k] e^{+j2πkn/N}` (= `numpy.fft.ifft`; halves after every stage like CMSIS-DSP, so it cannot overflow for inputs with |x| ≤ 1; forward-then-inverse returns `x/N` — use BlockFloat when precision matters) | `log2 N` (relative to the unnormalized sum) |
 | CQ15 | Forward/Inverse, BlockFloat | transform divided by `2^e`, where `e` = sum of the per-stage shifts (0, 1 or 2 per stage) | `e` |
 
 For displaying spectra from a Q15 FFT: `power_db(|X_out|²) + 6.0206 · exponent` gives the level relative to the unnormalized transform (each halving = ×4 in power = +6.02 dB). Document this in `docs/kernels.md`.
@@ -186,9 +187,9 @@ For displaying spectra from a Q15 FFT: `power_db(|X_out|²) + 6.0206 · exponent
 1. Bit-reversal permutation in place (swap `i` and `rev(i)` when `i < rev(i)`).
 2. For each stage `s = 1 … log2 N`: `half = 2^(s−1)`, `stride = N / 2^s`. For each block start `b` in steps of `2·half`, for `k = 0 … half−1`: `w = tw[k·stride·tw_stride]` (Inverse: `conj(w)`), `a = data[b+k]`, `c = data[b+k+half]`, `t = w·c`, then `data[b+k] = a + t`, `data[b+k+half] = a − t`.
 3. f32: complex multiply `(wr·cr − wi·ci, wr·ci + wi·cr)`, no FMA. Inverse: multiply every output by `1.0 / N as f32` (exact power of two) at the end.
-4. Q15 multiply `t = cq15_mul(w, c)`.
+4. Q15 multiply **without** intermediate saturation (unlike `cq15_mul`): `tr = round_shift(wr·cr − wi·ci, 15)`, `ti = round_shift(wr·ci + wi·cr, 15)` in i64; `t` may exceed the i16 range (up to ≈ 46341) and is only saturated after the butterfly.
    - **Fixed:** in both directions every stage stores `round_shift(a ± t, 1)` per component (i64 arithmetic, then `sat16`).
-   - **BlockFloat:** before each stage compute `m = max |component|` over the whole block. A radix-2 butterfly output can grow to `(1 + √2)·m`. Choose the shift `s` of this stage: `m > 27145` (= ⌊2·32767/(1 + √2)⌋) → `s = 2`; else `m > 13572` (= ⌊32767/(1 + √2)⌋) → `s = 1`; else `s = 0`. The stage stores `sat16(round_shift(a ± t, s))` per component (i64 arithmetic) and adds `s` to `e`. With this rule no butterfly can saturate.
+   - **BlockFloat:** before each stage compute `m = max |component|` over the whole block. A radix-2 butterfly output can grow to `(1 + √2)·m`. Choose the shift `s` of this stage: `m > 27145` (= ⌊2·32767/(1 + √2)⌋) → `s = 2`; else `m > 13572` (= ⌊32767/(1 + √2)⌋) → `s = 1`; else `s = 0`. The stage stores `sat16(round_shift(a ± t, s))` per component (i64 arithmetic) and adds `s` to `e`. With this rule no butterfly can saturate for inputs whose complex magnitude is ≤ 1 (|x| ≤ 1); corner inputs such as (32767, 32767) have magnitude √2 and may still saturate in the first stage — document this.
 5. Index arithmetic must not use unchecked slice indexing (R5.4); use `split_at_mut` per block to obtain `a`/`c` halves and iterate with `zip`.
 
 ### 4. Real FFT, forward and inverse (f32 only in this milestone)
@@ -211,7 +212,7 @@ Inverse algorithm (exact mirror of the forward one): for `k = 0 … N/2 − 1`: 
 
 ### 5. Reference
 
-`Reference` implements `Fft` and `RealFft` as a naive O(N²) DFT in f64 (`libm::cos/sin` of `2π·((k·n) mod N)/N` — reduce the product modulo N in integers first to keep precision), then applies the conventions in §2 (for Q15 BFP the reference returns the unnormalized transform with exponent 0 and the comparison divides the fallback output's scale out; see tests). Only used up to N = 4096 in tests.
+`Reference` implements `Fft` and `RealFft` as a naive O(N²) DFT in f64 (`libm::cos/sin` of `2π·((k·n) mod N)/N` — reduce the product modulo N in integers first to keep precision), then applies the conventions in §2 (for Q15 BlockFloat the reference returns `round(X/N)` (R7) with exponent `log2 N`, which the one exponent rule allows; comparisons always multiply both sides by `2^exponent` before computing the SNR). Only used up to N = 4096 in tests.
 
 ### 6. Facade, suite, docs
 
@@ -257,7 +258,7 @@ All expected values from `numpy.fft` in complex128, computed from the **quantize
 5. Single impulse at 0 → flat spectrum; tone at bin k → energy concentrated in bin k (≥ 100 dB above others for C32).
 6. Plan validation: non-power-of-two, N < 16, N > 65536, wrong twiddle length → errors; `data.len() != N` → `LengthMismatch`.
 7. `Scaling::BlockFloat` with C32 → `Unsupported`.
-8. BFP never overflows: inputs of full-scale alternating values **and** random full-scale values (uniform raw −32768…32767, 20 seeds) of every size 16…4096 produce no saturation. Implement a test-only counter (`#[cfg(test)]` field or a debug variant of the stage function returning the number of clamped values) and assert it is 0.
+8. BFP never overflows: inputs of full-scale alternating values **and** random values with complex magnitude ≤ 1 (random phase, magnitude uniform in [0, 1 − 2⁻¹⁵], 20 seeds) of every size 16…4096 produce no saturation. Implement a test-only counter (`#[cfg(test)]` field or a debug variant of the stage function returning the number of clamped values) and assert it is 0; the counter also counts any intermediate |t| that would exceed 32767 *after* the butterfly sum.
 9. `static-twiddles` feature: plans from the static table equal plans from `new` bit for bit (N = 16…4096).
 10. Suite cases pass on the host.
 

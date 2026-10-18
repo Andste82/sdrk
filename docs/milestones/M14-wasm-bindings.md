@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -145,6 +146,7 @@ Additional rules:
 
 - `bindings/wasm/Cargo.toml`: `crate-type = ["cdylib", "rlib"]`, dependencies `sdrk-pipeline` with `default-features = false` (no YAML), `wasm-bindgen` (pinned exact version `=x.y.z`; the `wasm-bindgen-cli` used by `xtask` must have the identical version — `xtask` checks this), `js-sys`, `serde-wasm-bindgen` only if needed for events; dev: `wasm-bindgen-test`.
 - Features: default none; `relaxed-simd` (opt-in). This milestone adds the feature `relaxed-simd` to `sdrk-backend-simd` and `sdrk` as well: on `wasm32` with target feature `+relaxed-simd` it lets the C32 variants of `rotate`, `fir`/`fir_decimate`/`fir_interpolate`, `mag_sq` and `fft` use relaxed SIMD instructions (e.g. relaxed madd); on other targets it is a no-op. Those kernels must still meet the M13 contracts (test them with the relaxed build in the wasmtime CI job); documented as *not* bit-exact.
+- `sdrk-wasm` does **not** add `#![forbid(unsafe_code)]`: wasm-bindgen's macro expansion may need `unsafe`; it relies on the workspace `deny` and allows only what the expansion needs (log it).
 - No `wasm-pack` (its upstream organization was archived): `xtask` drives `cargo build --target wasm32-unknown-unknown --release` and `wasm-bindgen --target web` directly; optionally `wasm-opt -O3` if present in PATH (skip otherwise, log size).
 
 ### 2. JS API (wasm-bindgen exports, camelCase)
@@ -152,7 +154,7 @@ Additional rules:
 ```ts
 export function version(): string;
 export function schema(): string;                        // JSON Schema text
-export function validate(flowJson: string): Report;      // never throws on invalid flows; returns diagnostics
+export function validate(flowJson: string): Report;      // uses Registry::validate_json; never throws on invalid flows; returns diagnostics incl. syntax errors
 export function backends(): Record<string, string>;      // kernel → backend for this build
 export class Pipeline {
   static fromJson(flowJson: string): Pipeline;          // throws SdrkError with diagnostics
@@ -182,7 +184,7 @@ index.js              # loader: detects SIMD128 (WebAssembly.validate of a 1-fun
 builder.js            # FlowBuilder: .input(name, spec) .node(name, kind, params, opts) .edge(from, to) .output(name, spec) .settings(obj) .toJson() → same model as JSON files
 index.d.ts            # hand-written types for everything above (incl. Report, Diagnostic, SdrkEvent union, BlockMeta, FrameMeta)
 sdrk_simd.js/.wasm    # wasm-bindgen output, built with +simd128
-sdrk_scalar.js/.wasm  # without SIMD
+sdrk_scalar.js/.wasm  # without SIMD, built with RUSTFLAGS="--cfg sdrk_fallback_only" (backends() reports only "fallback")
 README.md             # usage, worker pattern, cross-origin isolation, relaxed-SIMD note
 ```
 `cargo xtask wasm-pkg [--relaxed]` builds both variants (and `sdrk_relaxed.wasm` with `--relaxed`, selectable only explicitly via `init({ variant: "relaxed" })`), assembles the package, runs `npm pack` if npm exists. Report the `.wasm` sizes in `docs/wasm.md`; soft limit 1.5 MiB per variant after `wasm-opt` (warn above).
@@ -192,7 +194,7 @@ README.md             # usage, worker pattern, cross-origin isolation, relaxed-S
 - Rust-side `wasm-bindgen-test` (in `bindings/wasm/tests/`), run in Node and headless Chrome and Firefox (`wasm-bindgen-test-runner`; CI installs chromedriver/geckodriver via the browser-actions setup actions):
   1. `version`, `schema` parse as JSON; `validate` on each example flow is clean and on an invalid flow returns the expected diagnostic code/path.
   2. FM receive: generate the E2E-RX CU8 signal in Rust test code, push through `Pipeline.fromJson(fm_receiver.json)`, read audio; SINAD ≥ 40 dB (f32 flow) — compute with the testkit meter.
-  3. Reproducibility: a native test run with `RUSTFLAGS="--cfg sdrk_fallback_only"` writes a checksum (SHA-256 of the audio bytes) and the audio SINAD into `bindings/wasm/tests/fixtures/fm_receiver.json` (committed; the native test regenerates and compares it). The **scalar** WASM build must match the checksum bit for bit (fallback everywhere, so results are identical). The SIMD128 build is a different backend and is only bound to the numeric contracts: its SINAD must be ≥ fixture SINAD − 0.5 dB. The relaxed build is checked the same way as SIMD128.
+  3. Reproducibility: a native test run with `RUSTFLAGS="--cfg sdrk_fallback_only"` writes a checksum (SHA-256 of the audio bytes) and the audio SINAD into `bindings/wasm/tests/fixtures/fm_receiver.json` (committed; the native fixture test is `#[cfg(sdrk_fallback_only)]` and runs only in the CI job that sets that flag, so the normal SIMD test run is unaffected). The **scalar** WASM build must match the checksum bit for bit (fallback everywhere, so results are identical). The SIMD128 build is a different backend and is only bound to the numeric contracts: its SINAD must be ≥ fixture SINAD − 0.5 dB. The relaxed build is checked the same way as SIMD128.
   4. Pull mode with a JS callback source, bursts, events, `setParam` with `at`, wrong dtype → `SdrkError`.
 - JS-side test (`bindings/wasm/js-tests/*.mjs`, run with `node --test`): install the packed tarball into a temp directory (`npm install <tgz>`), import it, run the FM flow, check SINAD with a small JS meter, check that the builder produces JSON equal to `examples/flows/fm_receiver.json` (deep equality).
 - Loader test: forcing `variant: "scalar"` reproduces the fixture checksum; `"simd"` meets the SINAD rule of test 3; automatic selection picks `simd` where SIMD128 is available.

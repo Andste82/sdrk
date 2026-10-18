@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -154,7 +155,7 @@ Additional rules:
 - `crates/backends/sdrk-backend-esp-pie`, `#![no_std]`, compiled only for `target_arch = "riscv32"` (on other targets the crate is empty so that `cargo build --workspace` on hosts still works; `cfg(all(target_arch = "riscv32", feature = "esp32p4"))` guards the code).
 - `pub struct EspPie;` implements: `Fir<CQ15>`, `FirDecimate<CQ15>`, `Dot<CQ15>`, `MagSq<CQ15>`, `Convert<CQ15>` (CU8, CS8, CS16 interleaved), `Fft<CQ15>`.
 - Facade feature `esp-pie` → `delegate!(… => EspPie)` for those kernels under the cfg above; `backend_for` returns `"esp-pie"`.
-- Alignment: PIE 128-bit loads need 16-byte alignment; kernels handle unaligned heads/tails with the fallback for the remainder, or require aligned storage through state constructors (document per kernel; `ArenaStorage` can align to 16 when requested — add `alloc_aligned::<T>(len, align)` to the `Storage` trait with a default implementation; log the API addition).
+- Alignment: PIE 128-bit loads need 16-byte alignment; kernels handle unaligned heads/tails with the fallback for the remainder, or require aligned storage through state constructors (document per kernel; `ArenaStorage` can align to 16 when requested — add `alloc_aligned::<T>(len, align)` to the `Storage` trait with a default implementation; log the API addition). `storage_bytes` of every block that uses `alloc_aligned` includes that padding (deterministic for a 16-byte aligned arena), so M09 test 3 still passes.
 
 ### 3. Kernel contracts (unchanged from the fallback)
 
@@ -179,7 +180,7 @@ Additional rules:
 
 ## Test vectors
 
-Golden files run on the host only, so add **embedded golden checks**. New Python cases in `cases/fft.py`: `fft/cq15_fixed_noise_256` (seed 400, noise σ 0.3 quantized, expected `np.fft.fft(x)/256`, SNR ≥ 40) and `fft/cq15_bfp_noise_256` (seed 401, expected unnormalized `np.fft.fft(x)`, SNR ≥ 55 after applying `2^exponent`). `build.rs` of `targets/esp32p4` embeds exactly these cases via `include_bytes!` into a `static` table: `fir/gain_overflow_cq15_2048`, `dot/cq15_64`, `mag_sq/cq15_4096`, `convert/cu8_256`, `convert/cs8_256`, `convert/cs16_256`, `fft/cq15_fixed_noise_256`, `fft/cq15_bfp_noise_256` (each ≤ 64 KiB), and a suite extension runs them on the target (target crate only; the testkit gets a `no_std` golden view type `GoldenRef { input: &[u8], expected: &[u8], dtype, tolerance }`).
+Golden files run on the host only, so add **embedded golden checks**. New Python cases in `cases/fft.py`: `fft/cq15_fixed_noise_256` (seed 400, noise σ 0.3 quantized, expected `np.fft.fft(x)/256`, SNR ≥ 40) and `fft/cq15_bfp_noise_256` (seed 401, expected unnormalized `np.fft.fft(x)`, SNR ≥ 55 after applying `2^exponent`). `build.rs` of `targets/esp32p4` embeds exactly these cases via `include_bytes!` into a `static` table: `fir/gain_overflow_cq15_2048`, `dot/cq15_64`, `mag_sq/cq15_4096`, `convert/cu8_256`, `convert/cs8_256`, `convert/cs16_256`, `fft/cq15_fixed_noise_256`, `fft/cq15_bfp_noise_256` (each ≤ 64 KiB), and a suite extension runs them on the target (target crate only; the testkit gets a `no_std` golden view type `GoldenRef { name: &'static str, arrays: &'static [(&'static str, Dtype, &'static [u8])], params: &'static [(&'static str, f64)], tolerance: Tolerance }`; `include_bytes!` data is only 1-byte aligned, so arrays are copied into the arena before casting (or read with `bytemuck::pod_read_unaligned`); `build.rs` converts the JSON params of each case into the `params` table).
 
 ## Tests
 

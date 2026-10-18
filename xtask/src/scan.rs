@@ -645,7 +645,10 @@ mod tests {
 
     #[test]
     fn clean_code_passes() {
-        assert!(heap("fn f(x: &[u8]) -> usize { x.len() }\n").is_empty());
+        assert_eq!(
+            heap("fn f(x: &[u8]) -> usize { x.len() }\n"),
+            Vec::<usize>::new()
+        );
     }
 
     #[test]
@@ -659,7 +662,7 @@ mod tests {
     #[test]
     fn comments_and_strings_are_ignored() {
         let src = "// Vec<u8> here\n/* Box<u8>\n String */\nconst S: &str = \"Vec<u8> and std::fs\";\nconst R: &str = r#\"String\"#;\nfn f() {}\n";
-        assert!(heap(src).is_empty());
+        assert_eq!(heap(src), Vec::<usize>::new());
     }
 
     #[test]
@@ -681,10 +684,17 @@ mod tests {
 
     #[test]
     fn method_alloc_and_heapless_are_fine() {
-        assert!(heap("fn f(s: &mut S) { s.alloc::<u8>(3); }\n").is_empty());
-        assert!(heap("fn f(a: heapless::Vec<u8, 4>, b: heapless::String<8>) {}\n").is_empty());
-        assert!(
-            heap("use heapless::{String, Vec};\nfn f(a: Vec<u8, 4>, b: String<8>) {}\n").is_empty()
+        assert_eq!(
+            heap("fn f(s: &mut S) { s.alloc::<u8>(3); }\n"),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            heap("fn f(a: heapless::Vec<u8, 4>, b: heapless::String<8>) {}\n"),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            heap("use heapless::{String, Vec};\nfn f(a: Vec<u8, 4>, b: String<8>) {}\n"),
+            Vec::<usize>::new()
         );
         assert_eq!(heap("fn f(a: HVec<u8>, b: MyString) {}\n").len(), 0);
     }
@@ -755,15 +765,15 @@ mod tests {
 
     #[test]
     fn immutable_statics_and_tests_are_fine() {
-        assert!(
+        assert_eq!(
             global(
                 "static TABLE: [u8; 4] = [1, 2, 3, 4];\nconst X: AtomicU32 = AtomicU32::new(0);\n"
-            )
-            .is_empty()
+            ),
+            Vec::<usize>::new()
         );
-        assert!(
-            global("#[cfg(test)]\nmod t {\n    static C: AtomicU32 = AtomicU32::new(0);\n}\n")
-                .is_empty()
+        assert_eq!(
+            global("#[cfg(test)]\nmod t {\n    static C: AtomicU32 = AtomicU32::new(0);\n}\n"),
+            Vec::<usize>::new()
         );
     }
 

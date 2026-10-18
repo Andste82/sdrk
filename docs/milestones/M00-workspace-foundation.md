@@ -270,8 +270,8 @@ All succeed on Linux x86_64, Linux arm64 and Windows x86_64; the CI workflow pas
 
 ## Deliverables checklist
 
-- [ ] Layout, workspace manifest, toolchain, lint, format and deny configuration
-- [ ] Four placeholder crates following R2/R3
-- [ ] `xtask` with `check`, `bare-metal`, `test-all` and negative tests
-- [ ] CI workflow
-- [ ] README, CONTRIBUTING, CHANGELOG, licenses, docs skeleton, decisions log
+- [x] Layout, workspace manifest, toolchain, lint, format and deny configuration
+- [x] Four placeholder crates following R2/R3
+- [x] `xtask` with `check`, `bare-metal`, `test-all` and negative tests
+- [x] CI workflow
+- [x] README, CONTRIBUTING, CHANGELOG, licenses, docs skeleton, decisions log

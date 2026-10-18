@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Testing and performance](../PLAN.md#testing-and-performance) · Depends on: [M02](M02-core-foundations.md) · Next: [M04](M04-golden-vectors.md)
 
+## Status
+
+**Fully completed:** all modules (`rng`, `gen`, `metrics`, `invariance`, `arena`, `encode`, `virtual_rx`, `suite`), `StdReporter` and the host suite test, the five registered suite cases, tests 1-8, and the "How kernels are tested" section in `docs/kernels.md`. All R1.2 commands, `cargo test -p sdrk-testkit --features std` and the `sdrk-testkit` bare-metal build (no `std`) pass.
+
+**Partial / open:** nothing. Judgement calls are recorded in `docs/decisions-log.md` (M03 entries); `docs/open-items.md` has no entry for this milestone.
+
 ## Goal
 
 Build the heap-free test toolkit that every later milestone uses on the PC **and** inside emulators: a deterministic PRNG, signal generators, comparison metrics, a block-size-invariance harness, a bump arena for test buffers, a format encoder (the independent oracle for `convert`), a minimal virtual RX device, and the suite runner that executes registered test cases on any target.
@@ -283,8 +289,8 @@ R1.2 commands; `cargo test -p sdrk-testkit --features std`; `cargo xtask bare-me
 
 ## Deliverables checklist
 
-- [ ] `rng`, `gen`, `metrics`, `invariance`, `arena`, `encode`, `virtual_rx`, `suite`
-- [ ] `StdReporter` and host suite test
-- [ ] Five registered suite cases
-- [ ] Tests 1–8
-- [ ] `docs/kernels.md` section "How kernels are tested" (suite, invariance, extremes)
+- [x] `rng`, `gen`, `metrics`, `invariance`, `arena`, `encode`, `virtual_rx`, `suite`
+- [x] `StdReporter` and host suite test
+- [x] Five registered suite cases
+- [x] Tests 1–8
+- [x] `docs/kernels.md` section "How kernels are tested" (suite, invariance, extremes)

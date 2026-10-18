@@ -9,6 +9,15 @@ repository.workspace = true
 
 [dependencies]
 sdrk = { path = "../../facade/sdrk" }
+sdrk-core = { path = "../../core/sdrk-core", features = ["reference"] }
+sdrk-device = { path = "../../core/sdrk-device" }
+num-complex.workspace = true
+libm.workspace = true
+bytemuck.workspace = true
+heapless.workspace = true
+
+[dev-dependencies]
+proptest = "1"
 
 [features]
 std = []

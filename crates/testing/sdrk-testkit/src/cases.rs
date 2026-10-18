@@ -1,0 +1,368 @@
+//! The test cases registered by [`all_cases`](crate::all_cases).
+//!
+//! Arena use per case (every case needs at most 256 KiB, quick cases at most
+//! 64 KiB):
+//!
+//! | Case | Tier | Arena |
+//! | --- | --- | --- |
+//! | `rng_known_answer` | quick | 0 |
+//! | `gen_tone_frequency` | quick | about 13 KiB |
+//! | `encode_decode_roundtrip_all_formats` | quick | about 20 KiB |
+//! | `scale_fallback_vs_reference` | quick | about 40 KiB |
+//! | `scale_block_invariance` | full | about 100 KiB |
+
+// The stack-frame lint counts every `Result<_, Failure>` temporary of an
+// unoptimised build separately (a `Failure` is about 200 bytes by
+// specification), so check-heavy test bodies exceed 4 KiB in the lint's model
+// although the optimised frames are small. See docs/decisions-log.md (M03).
+#![allow(clippy::large_stack_frames)]
+
+use core::f64::consts::PI;
+
+use num_complex::Complex64;
+use sdrk::Sdrk;
+use sdrk_core::kernels::basic::Scale;
+use sdrk_core::{C32, CQ15, ComplexSample, Fallback, Progress, Q15, Reference};
+use sdrk_device::{FullScale, SampleFormat, formats};
+
+use crate::arena::Arena;
+use crate::encode::{decode_reference, encode};
+use crate::r#gen;
+use crate::invariance::{ChunkPlan, check_block_invariance};
+use crate::metrics::{bit_exact, compare_complex};
+use crate::rng::Pcg32;
+use crate::suite::{Failure, TestCase, Tier};
+
+pub(crate) static CASES: [TestCase; 5] = [
+    TestCase {
+        name: "rng_known_answer",
+        tier: Tier::Quick,
+        run: rng_known_answer,
+    },
+    TestCase {
+        name: "gen_tone_frequency",
+        tier: Tier::Quick,
+        run: gen_tone_frequency,
+    },
+    TestCase {
+        name: "encode_decode_roundtrip_all_formats",
+        tier: Tier::Quick,
+        run: encode_decode_roundtrip_all_formats,
+    },
+    TestCase {
+        name: "scale_fallback_vs_reference",
+        tier: Tier::Quick,
+        run: scale_fallback_vs_reference,
+    },
+    TestCase {
+        name: "scale_block_invariance",
+        tier: Tier::Full,
+        run: scale_block_invariance,
+    },
+];
+
+fn ensure(cond: bool, f: impl FnOnce() -> Failure) -> Result<(), Failure> {
+    if cond { Ok(()) } else { Err(f()) }
+}
+
+fn rng_known_answer(_arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "rng_known_answer";
+    // Reference values of `pcg32-demo` (pcg_basic.c), seed 42, stream 54.
+    const EXPECTED: [u32; 6] = [
+        0xa15c_02b7,
+        0x7b47_f409,
+        0xba1d_3330,
+        0x83d2_f293,
+        0xbfa4_784b,
+        0xcbed_606e,
+    ];
+    let mut rng = Pcg32::new(42, 54);
+    for (i, want) in EXPECTED.iter().enumerate() {
+        let got = rng.next_u32();
+        ensure(got == *want, || {
+            Failure::new(CASE, "wrong output")
+                .detail(format_args!("draw {i}: got {got:#010x}, want {want:#010x}"))
+        })?;
+    }
+    let mut rng = Pcg32::new(1, 1);
+    for _ in 0..1000 {
+        let x = rng.next_f64();
+        ensure((0.0..1.0).contains(&x), || {
+            Failure::new(CASE, "next_f64 out of range").detail(format_args!("{x}"))
+        })?;
+        let b = rng.below(7);
+        ensure(b < 7, || {
+            Failure::new(CASE, "below out of range").detail(format_args!("{b}"))
+        })?;
+    }
+    let mut a = Pcg32::new(5, 6);
+    let mut b = a.clone();
+    for _ in 0..777 {
+        a.next_u32();
+    }
+    b.advance(777);
+    ensure(a == b, || {
+        Failure::new(CASE, "advance differs from stepping")
+    })
+}
+
+fn gen_tone_frequency(arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "gen_tone_frequency";
+    const N: usize = 256;
+    const BIN: usize = 37;
+    let mut c = arena.carver();
+    let x = c.take::<Complex64>(N)?;
+    let chunked = c.take::<Complex64>(N)?;
+    let twiddle = c.take::<Complex64>(N)?;
+    r#gen::tone(x, BIN as f64 / N as f64, 1.0, 0.0, 0);
+    // Same signal in chunks of seven (the last one shorter).
+    let mut start = 0usize;
+    for piece in chunked.chunks_mut(7) {
+        r#gen::tone(piece, BIN as f64 / N as f64, 1.0, 0.0, start as u64);
+        start += piece.len();
+    }
+    let same = compare_complex(x, chunked.iter().copied(), 0);
+    ensure(same.first_mismatch.is_none(), || {
+        Failure::new(CASE, "chunked tone differs")
+            .detail(format_args!("index {:?}", same.first_mismatch))
+    })?;
+    for (m, w) in twiddle.iter_mut().enumerate() {
+        let a = -2.0 * PI * m as f64 / N as f64;
+        *w = Complex64::new(libm::cos(a), libm::sin(a));
+    }
+    let mut peak = (0usize, 0.0f64);
+    let mut mags = [0.0f64; N];
+    for (k, mag) in mags.iter_mut().enumerate() {
+        let mut acc = Complex64::new(0.0, 0.0);
+        for (n, s) in x.iter().enumerate() {
+            let w = twiddle.get(k * n % N).copied().unwrap_or_default();
+            acc += s * w;
+        }
+        *mag = libm::sqrt(acc.re * acc.re + acc.im * acc.im);
+        if *mag > peak.1 {
+            peak = (k, *mag);
+        }
+    }
+    ensure(peak.0 == BIN, || {
+        Failure::new(CASE, "peak at the wrong bin").detail(format_args!("bin {}", peak.0))
+    })?;
+    for (k, mag) in mags.iter().enumerate().filter(|(k, _)| *k != BIN) {
+        let db = 20.0 * libm::log10(peak.1 / mag.max(1e-300));
+        ensure(db >= 100.0, || {
+            Failure::new(CASE, "leakage too high").detail(format_args!("bin {k}: {db} dB"))
+        })?;
+    }
+    Ok(())
+}
+
+/// Formats exercised by the round-trip case (everything but `Bits1`).
+fn all_formats() -> [SampleFormat; 12] {
+    [
+        formats::CU8,
+        formats::CS8,
+        formats::CS16,
+        formats::CS12_LSB16,
+        formats::SC16_Q11,
+        formats::CS16_PLANAR,
+        formats::PACKED12,
+        formats::PACKED10,
+        formats::I2S32_MSB,
+        formats::CF32,
+        formats::RF32,
+        formats::RS16,
+    ]
+}
+
+/// Largest allowed round-trip error: half an LSB (f32 containers: rounding of f32).
+fn half_lsb(f: &SampleFormat) -> f64 {
+    if f.container() == sdrk_device::Container::F32 {
+        return 1e-7;
+    }
+    let fs = match f.full_scale() {
+        FullScale::Explicit(v) => f64::from(v),
+        FullScale::PowerOfTwo => (1u64 << (f.bits() - 1)) as f64,
+    };
+    0.5 / fs + 1e-12
+}
+
+fn encode_decode_roundtrip_all_formats(arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "encode_decode_roundtrip_all_formats";
+    const N: usize = 512;
+    let mut c = arena.carver();
+    let samples = c.take::<Complex64>(N)?;
+    let bytes = c.take::<u8>(N * 8)?;
+    let decoded = c.take::<Complex64>(N)?;
+    let mut rng = Pcg32::new(99, 1);
+    for s in samples.iter_mut() {
+        let re = (rng.next_f64() * 2.0 - 1.0) * 0.99;
+        let im = (rng.next_f64() * 2.0 - 1.0) * 0.99;
+        *s = Complex64::new(re, im);
+    }
+    for (i, format) in all_formats().iter().enumerate() {
+        let real = format.layout() == sdrk_device::Layout::Real;
+        let written = encode(format, samples, bytes)?;
+        let used = bytes.get(..written).unwrap_or_default();
+        let count = decode_reference(format, used, decoded)?;
+        ensure(count == N, || {
+            Failure::new(CASE, "wrong sample count").detail(format_args!("format {i}: {count}"))
+        })?;
+        let tol = half_lsb(format);
+        for (k, (want, got)) in samples.iter().zip(decoded.iter()).enumerate() {
+            let want_im = if real { 0.0 } else { want.im };
+            let err = libm::fabs(want.re - got.re).max(libm::fabs(want_im - got.im));
+            ensure(err <= tol, || {
+                Failure::new(CASE, "round-trip error too large")
+                    .detail(format_args!("format {i}, sample {k}: {err} > {tol}"))
+            })?;
+        }
+    }
+    // Spot values.
+    let one = |format: &SampleFormat, re: f64, im: f64, want: &[u8]| -> Result<(), Failure> {
+        let mut out = [0u8; 8];
+        let n = encode(format, &[Complex64::new(re, im)], &mut out)?;
+        ensure(out.get(..n) == Some(want), || {
+            Failure::new(CASE, "spot value differs").detail(format_args!("{re} {im}"))
+        })
+    };
+    one(&formats::CU8, 0.0, -1.0, &[128, 0])?;
+    one(&formats::CU8, 1.0, 0.0, &[255, 128])?;
+    one(&formats::CS16, 1.0, -1.0, &[0xFF, 0x7F, 0x00, 0x80])?;
+    one(&formats::CS12_LSB16, 0.5, 0.0, &[0x00, 0x04, 0, 0])?;
+    one(&formats::SC16_Q11, -1.0, 0.0, &[0x00, 0xF8, 0, 0])?;
+    one(
+        &formats::PACKED12,
+        f64::from(1.0f32 / 2048.0),
+        -1.0 / 2048.0,
+        &[0x01, 0xF0, 0xFF],
+    )
+}
+
+fn random_cq15(rng: &mut Pcg32) -> CQ15 {
+    CQ15 {
+        re: Q15((rng.next_u32() >> 16) as i16),
+        im: Q15((rng.next_u32() >> 16) as i16),
+    }
+}
+
+fn scale_fallback_vs_reference(arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "scale_fallback_vs_reference";
+    const N: usize = 1024;
+    let mut rng = Pcg32::new(7, 3);
+    {
+        let mut c = arena.carver();
+        let input = c.take::<CQ15>(N)?;
+        let fb = c.take::<CQ15>(N)?;
+        let rf = c.take::<CQ15>(N)?;
+        let fac = c.take::<CQ15>(N)?;
+        for s in input.iter_mut() {
+            *s = random_cq15(&mut rng);
+        }
+        for gain in [Q15(0), Q15(1), Q15(16384), Q15::MAX, Q15::MIN, Q15(-12345)] {
+            for extremes in [false, true] {
+                if extremes {
+                    r#gen::extreme::full_scale_alternating(input);
+                    if let Some(first) = input.first_mut() {
+                        *first = CQ15 {
+                            re: Q15::MIN,
+                            im: Q15::MIN,
+                        };
+                    }
+                }
+                Scale::<CQ15>::scale(&Fallback, input, fb, gain)?;
+                Scale::<CQ15>::scale(&Reference, input, rf, gain)?;
+                Scale::<CQ15>::scale(&Sdrk, input, fac, gain)?;
+                for (name, got) in [("fallback", &*fb), ("facade", &*fac)] {
+                    if let Some(i) = bit_exact(rf, got) {
+                        return Err(Failure::new(CASE, "not bit-exact to the reference")
+                            .detail(format_args!("{name}, gain {}, index {i}", gain.0)));
+                    }
+                }
+            }
+        }
+    }
+    let mut c = arena.carver();
+    let input = c.take::<C32>(N)?;
+    let fb = c.take::<C32>(N)?;
+    let rf = c.take::<C32>(N)?;
+    let want = c.take::<Complex64>(N)?;
+    for s in input.iter_mut() {
+        let re = (rng.next_f64() * 2.0 - 1.0) as f32;
+        let im = (rng.next_f64() * 2.0 - 1.0) as f32;
+        *s = C32::new(re, im);
+    }
+    let gain = 0.37f32;
+    Scale::<C32>::scale(&Fallback, input, fb, gain)?;
+    Scale::<C32>::scale(&Reference, input, rf, gain)?;
+    for (w, i) in want.iter_mut().zip(input.iter()) {
+        *w = Complex64::new(
+            f64::from(i.re) * f64::from(gain),
+            f64::from(i.im) * f64::from(gain),
+        );
+    }
+    for (name, got) in [("fallback", &*fb), ("reference", &*rf)] {
+        let cmp = compare_complex(want, got.iter().map(|s| s.to_c64()), 0);
+        ensure(cmp.snr_db >= 140.0, || {
+            Failure::new(CASE, "scale C32 below 140 dB")
+                .detail(format_args!("{name}: {} dB", cmp.snr_db))
+        })?;
+    }
+    Ok(())
+}
+
+fn same_rate<T: ComplexSample>(
+    input: &[T],
+    output: &mut [T],
+    kernel: impl FnOnce(&[T], &mut [T]) -> sdrk_core::Result<()>,
+) -> sdrk_core::Result<Progress> {
+    let n = input.len().min(output.len());
+    let internal = || sdrk_core::Error::Internal("slice split");
+    let (i, _) = input.split_at_checked(n).ok_or_else(internal)?;
+    let (o, _) = output.split_at_mut_checked(n).ok_or_else(internal)?;
+    kernel(i, o)?;
+    Ok(Progress {
+        consumed: n,
+        produced: n,
+    })
+}
+
+fn scale_block_invariance(arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "scale_block_invariance";
+    const N: usize = 4096;
+    let mut rng = Pcg32::new(11, 5);
+    {
+        let mut c = arena.carver();
+        let input = c.take::<CQ15>(N)?;
+        let whole = c.take::<CQ15>(N)?;
+        let chunked = c.take::<CQ15>(N)?;
+        for s in input.iter_mut() {
+            *s = random_cq15(&mut rng);
+        }
+        let report = check_block_invariance(
+            input,
+            whole,
+            chunked,
+            ChunkPlan::new(1, 97),
+            || (),
+            |(), i, o| same_rate(i, o, |i, o| Scale::<CQ15>::scale(&Sdrk, i, o, Q15(23456))),
+        )?;
+        ensure(report.outputs == N, || {
+            Failure::new(CASE, "wrong output count").detail(format_args!("{}", report.outputs))
+        })?;
+    }
+    let mut c = arena.carver();
+    let input = c.take::<C32>(N)?;
+    let whole = c.take::<C32>(N)?;
+    let chunked = c.take::<C32>(N)?;
+    for s in input.iter_mut() {
+        *s = C32::new(rng.next_f64() as f32, -(rng.next_f64() as f32));
+    }
+    check_block_invariance(
+        input,
+        whole,
+        chunked,
+        ChunkPlan::new(2, 53),
+        || (),
+        |(), i, o| same_rate(i, o, |i, o| Scale::<C32>::scale(&Sdrk, i, o, 0.8)),
+    )?;
+    Ok(())
+}

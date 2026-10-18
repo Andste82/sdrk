@@ -33,3 +33,26 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 | --- | --- | --- | --- | --- |
 | `scale` | `kernels::basic::Scale` | `C32` | tolerance | SNR >= 140 dB vs. the f64 reference; plain f32 multiply per component, no FMA. The f64 path and the f32 path can differ in the last bit, so bit-exactness is not promised. |
 | `scale` | `kernels::basic::Scale` | `CQ15` | bit-exact | `q15_mul` per component with the Q15 gain |
+
+## How kernels are tested
+
+Every kernel is covered by three layers, all provided by `sdrk-testkit`:
+
+1. **Golden vectors** (M04) and the **reference**: the fallback is compared with `Reference` (bit-exact kernels with `bit_exact`, tolerance kernels with `compare_complex` and the SNR from the contract table).
+2. **Block-size invariance** (R6.2): stateful kernels and blocks must produce identical bits however the input is split. `check_block_invariance(input, out_whole, out_chunked, ChunkPlan::new(seed, max), make_state, step)` runs `step` once over the whole input and once over random chunk sizes (deterministic PCG32) and reports the first differing output index. `step` may consume less than it is offered; the harness resubmits the rest. Stateless kernels such as `scale` pass it trivially and are still registered, so the harness itself stays covered.
+3. **Extreme inputs**: `r#gen::extreme::silence`, `full_scale_alternating` (`+-(1 - 2^-15)` on both components) and `f32_specials` (0.0, -0.0, NaN, +inf, -inf, a denormal, `f32::MAX`) feed every kernel. A kernel must not panic, must saturate Q15 results and must keep feedback state finite (`flush_denormal`).
+
+Test inputs come from deterministic generators (`r#gen::tone`, `noise`, `chirp`, ...) that depend only on the absolute sample index, so chunked and whole generation agree bit for bit. Raw device formats are checked against the independent oracle `encode::encode` / `encode::decode_reference`, never against the code under test.
+
+### The suite
+
+`suite::all_cases()` lists every registered `TestCase { name, tier, run }`. A case is a plain function over an `Arena` (no heap, no `cargo test`), so the same suite runs on the PC and inside emulators. `run_suite(cases, tier, arena, reporter)` resets the arena before each case; `Tier::Quick` runs the quick cases (64 KiB arena), `Tier::Full` all of them (256 KiB). Reporters print the protocol parsed by the emulator runners:
+
+```text
+SDRK-SUITE START <n>
+SDRK-CASE PASS <name>
+SDRK-CASE FAIL <name> <msg> <detail>
+SDRK-SUITE END passed=<p> failed=<f>
+```
+
+`WriteReporter` prints it to any `core::fmt::Write`, `StdReporter` (feature `std`) to stdout. Registered by M03: `rng_known_answer`, `gen_tone_frequency`, `encode_decode_roundtrip_all_formats`, `scale_fallback_vs_reference` (quick) and `scale_block_invariance` (full). New kernels add their cases to `cases.rs`. On the host, `cargo test -p sdrk-testkit --features std` runs the whole suite in `tests/suite.rs`.

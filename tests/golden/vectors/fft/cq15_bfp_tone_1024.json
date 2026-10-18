@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "cq15_bfp_tone_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_bfp_tone_1024.input.bin",
+      "len": 1024
+    }
+  },
+  "case": "cq15_bfp_tone_1024",
+  "format_version": 1,
+  "kernel": "fft",
+  "notes": "expected = unnormalized fft(quantized input); the test multiplies the output by 2^exponent first",
+  "params": {
+    "bin": 37,
+    "direction": "forward",
+    "n": 1024,
+    "scaling": "block_float"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 82,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 58.0
+  }
+}

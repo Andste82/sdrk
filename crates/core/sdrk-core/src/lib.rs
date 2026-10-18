@@ -18,6 +18,9 @@
     clippy::indexing_slicing
 )]
 
+#[cfg(test)]
+extern crate std;
+
 mod error;
 mod fallback;
 pub mod kernels;
@@ -33,6 +36,6 @@ pub mod window;
 pub use error::{Error, Result};
 pub use fallback::Fallback;
 #[cfg(feature = "reference")]
-pub use reference::Reference;
+pub use reference::{REFERENCE_IN_PLACE_MAX, Reference};
 pub use timing::*;
 pub use types::*;

@@ -4,6 +4,7 @@ from . import (  # noqa: F401
     convert,
     dc_block,
     deemphasis,
+    fft,
     fir,
     fir_decimate,
     mag_sq,

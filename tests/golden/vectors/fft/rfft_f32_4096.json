@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "rfft_f32_4096.expected.bin",
+      "len": 2049
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "rfft_f32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "rfft_f32_4096",
+  "format_version": 1,
+  "kernel": "fft",
+  "notes": "expected = numpy.fft.rfft of the float32 input (N/2 + 1 bins); exponent 0",
+  "params": {
+    "n": 4096
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 77,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

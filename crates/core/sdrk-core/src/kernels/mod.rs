@@ -4,6 +4,7 @@ pub mod basic;
 pub mod convert;
 pub mod decim;
 pub mod demod;
+pub mod fft;
 pub mod filter;
 pub mod mix;
 pub mod spectrum;

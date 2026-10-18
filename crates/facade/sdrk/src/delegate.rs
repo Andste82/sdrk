@@ -11,6 +11,10 @@
 /// (it also defines `backend_for`); later backends only change the `=> Backend`
 /// target of an entry, guarded by `#[cfg(...)]`.
 ///
+/// Kernels whose trait has no sample-type parameter (`RealFft`) are implemented by hand and
+/// listed after the entries as `@extra [("kernel", SampleTypeIdent, Backend), ...]`; they only
+/// add rows to the `backend_for` table.
+///
 /// The trait, the sample type and the result type must be in scope at the call site.
 #[macro_export]
 macro_rules! delegate {
@@ -19,6 +23,7 @@ macro_rules! delegate {
             $(#[$meta:meta])*
             $tr:ident < $ty:ident > :: $m:ident $([ $($gen:tt)* ])? ( &self $(, $a:ident : $at:ty)* $(,)? ) -> $ret:ty => $be:ident
         );+ $(;)?
+        $(@extra [ $( ( $ek:literal , $ety:ident , $ebe:ident ) ),* $(,)? ])?
     ) => {
         $(
             $(#[$meta])*
@@ -48,6 +53,13 @@ macro_rules! delegate {
                         <$be as $crate::BackendName>::NAME,
                     ),
                 )+
+                $($(
+                    (
+                        $ek,
+                        <$ety as $crate::Sample>::TYPE,
+                        <$ebe as $crate::BackendName>::NAME,
+                    ),
+                )*)?
             ];
             for &(k, t, b) in TABLE {
                 if t == ty && k == kernel {

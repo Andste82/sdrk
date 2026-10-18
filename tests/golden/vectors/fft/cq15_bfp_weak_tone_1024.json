@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "cq15_bfp_weak_tone_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_bfp_weak_tone_1024.input.bin",
+      "len": 1024
+    }
+  },
+  "case": "cq15_bfp_weak_tone_1024",
+  "format_version": 1,
+  "kernel": "fft",
+  "notes": "tone at -60 dBFS, no noise; the test also checks that the tone bin is at least min_margin_db above the median of all other bins (after multiplying by 2^exponent)",
+  "params": {
+    "bin": 100,
+    "direction": "forward",
+    "min_margin_db": 30.0,
+    "n": 1024,
+    "scaling": "block_float"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 84,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 55.0
+  }
+}

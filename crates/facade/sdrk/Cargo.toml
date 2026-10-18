@@ -1,0 +1,14 @@
+[package]
+name = "sdrk"
+description = "SDRk facade: picks the fastest available backend per kernel and platform (heap-free)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk-core = { path = "../../core/sdrk-core" }
+
+[lints]
+workspace = true

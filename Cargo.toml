@@ -1,0 +1,62 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/core/sdrk-device",
+    "crates/core/sdrk-core",
+    "crates/facade/sdrk",
+    "crates/testing/sdrk-testkit",
+    "xtask",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Andste82/sdrk"
+version = "0.0.1"
+
+[workspace.dependencies]
+num-complex = { version = "0.4.6", default-features = false, features = ["bytemuck"] }
+libm = "0.2.16"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+heapless = "0.9.3"
+
+[workspace.lints.rust]
+# `deny`, not `forbid`: backend crates later allow unsafe locally.
+# Every non-backend library crate adds `#![forbid(unsafe_code)]` itself.
+unsafe_code = "deny"
+missing_docs = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+large_stack_frames = "deny"
+large_stack_arrays = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints that conflict with the numeric rules (R7 prescribes explicit casts).
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_possible_wrap = "allow"
+float_cmp = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+
+[profile.dev]
+overflow-checks = true
+
+[profile.test]
+overflow-checks = true
+
+[profile.release]
+overflow-checks = false
+lto = "thin"
+codegen-units = 1

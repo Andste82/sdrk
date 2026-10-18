@@ -3,6 +3,8 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "17 3 * * *"
 
 env:
   CARGO_TERM_COLOR: always
@@ -10,6 +12,7 @@ env:
 jobs:
   tier1:
     name: tier1 (${{ matrix.name }})
+    if: github.event_name != 'schedule'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -41,3 +44,38 @@ jobs:
       - uses: taiki-e/install-action@cargo-deny
       - name: Dependency policy
         run: cargo deny check
+
+  golden-check:
+    name: golden-check
+    # On changes under tests/golden/** (the paths are checked in the first step) and nightly.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Decide whether the golden files changed
+        id: changed
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            base="${{ github.event.pull_request.base.sha || github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$base" 2>/dev/null; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            elif git diff --name-only "$base" "${{ github.sha }}" | grep -q '^tests/golden/'; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.changed.outputs.run == 'true'
+        with:
+          python-version: "3.12"
+      - name: Install pinned requirements
+        if: steps.changed.outputs.run == 'true'
+        run: pip install -r tests/golden/requirements.txt
+      - name: Check committed vectors
+        if: steps.changed.outputs.run == 'true'
+        run: python tests/golden/generate.py --check

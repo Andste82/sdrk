@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "cq15_random_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_random_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "cq15_random_4096",
+  "format_version": 1,
+  "kernel": "scale",
+  "notes": "output[n] = input[n] * gain_raw / 32768 per component, Q15 rounding",
+  "params": {
+    "gain_raw": 24576
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 5,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

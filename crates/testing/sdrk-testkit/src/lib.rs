@@ -6,6 +6,7 @@
 //!
 //! The modules are:
 //!
+//! - `golden` (feature `std`): loader and comparison for the golden vectors,
 //! - [`rng`]: deterministic PCG32 random numbers,
 //! - `r#gen` (`gen` is a reserved word in edition 2024): signal generators that depend only on the absolute sample index,
 //! - [`metrics`]: SNR, error and bit-exact comparison,
@@ -40,6 +41,8 @@ extern crate std;
 pub mod arena;
 pub mod encode;
 pub mod r#gen;
+#[cfg(feature = "std")]
+pub mod golden;
 pub mod invariance;
 pub mod metrics;
 pub mod rng;

@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 1](../PLAN.md#phase-1--core-foundations-medium) · Depends on: [M00](M00-workspace-foundation.md) · Next: [M02](M02-core-foundations.md)
 
+## Status
+
+**Fully completed:** the `error`, `format`, `time` and `stream` modules with docs and examples; all tests required by this milestone (integration tests in `crates/core/sdrk-device/tests/`); `docs/device.md`; CHANGELOG and decisions log. All R1.2 commands (fmt, clippy, workspace tests, `cargo xtask check`, `cargo xtask bare-metal` for `thumbv7em-none-eabihf`) pass.
+
+**Partial / open:** nothing. Judgement calls are recorded in `docs/decisions-log.md`; there are no entries for this milestone in `docs/open-items.md`.
+
 ## Goal
 
 Implement the lowest crate `sdrk-device`: the shared error classification, the description of raw sample formats (`SampleFormat`), the time types (sample index, exact rates, time anchors) and the minimal synchronous RX/TX stream traits with per-block metadata. Everything else in the workspace builds on these types, and external drivers will implement these traits, so they must be small, precise and stable.
@@ -352,7 +358,7 @@ R1.2 commands, plus `cargo xtask bare-metal` builds `sdrk-device` for `thumbv7em
 
 ## Deliverables checklist
 
-- [ ] `error`, `format`, `time`, `stream` modules with docs and examples
-- [ ] All tests above
-- [ ] `docs/device.md` written
-- [ ] CHANGELOG and decisions log updated
+- [x] `error`, `format`, `time`, `stream` modules with docs and examples
+- [x] All tests above
+- [x] `docs/device.md` written
+- [x] CHANGELOG and decisions log updated

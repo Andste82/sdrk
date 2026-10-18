@@ -17,3 +17,11 @@ One line per judgement call: date, milestone, decision, reason.
 | 2026-10-18 | M00 | xtask tests use `assert_eq!`/`assert_ne!` against an empty collection instead of `assert!(x.is_empty())` | `clippy::assert_is_empty` (new in stable clippy) failed CI; the new form also prints the findings on failure |
 | 2026-10-18 | M00 | the container runs as root (no `ubuntu` user switch); `devcontainer.json` uses `remoteUser: root` | toolchains in `/usr/local` stay writable for `rustup target add` and `cargo install`; `start.sh` mounts the assistant config under `/root` |
 | 2026-10-18 | M00 | `.devcontainer/start.sh` (bash) starts or attaches to the container on Linux hosts | developer convenience outside build and test; R1.3 (no shell scripts) covers the build, test and `xtask` tooling, which stays pure Rust |
+| 2026-10-18 | M01 | `Rate::hz(u64)` returns `Result<Rate>` | it is shorthand for `new(hz, 1)` and must keep the invariant `num > 0` (0 Hz would divide by zero in `time_of`) |
+| 2026-10-18 | M01 | `SampleFormat::new` also rejects `bits == 0`, and `with_full_scale` is the only fallible builder | a zero-bit component is meaningless; `with_swap_iq` cannot fail |
+| 2026-10-18 | M01 | `ErrorKind::as_str`, getters `num()`/`den()` on `Rate` and `Ratio`, and `BlockFlags::ALL` (private) were added | needed for `Display` and for callers; they extend the specified API without changing it |
+| 2026-10-18 | M01 | `Ratio::mul` carries `#[allow(clippy::should_implement_trait)]` | the name is normative and the operation is fallible, so `std::ops::Mul` does not fit |
+| 2026-10-18 | M01 | `BlockFlags::from_bits_truncate` drops bits outside the seven defined flags | keeps unknown bits from leaking into `contains` |
+| 2026-10-18 | M01 | tests live in `crates/core/sdrk-device/tests/device.rs` (integration) instead of unit modules | the crate is `no_std`; integration tests have `std` for `to_string` |
+| 2026-10-18 | M01 | `full_scale_value` for `FullScale::PowerOfTwo` on `U8` returns 128 | `2^(bits-1)` with bits = 8, matching the spec |
+| 2026-10-18 | M01 | `samples_in_bytes` saturates instead of failing for very large byte counts | its signature returns `usize`, not `Result` |

@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "l147m160_n1470_c32_16000.expected.bin",
+      "len": 14700
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "l147m160_n1470_c32_16000.input.bin",
+      "len": 16000
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "l147m160_n1470_c32_16000.taps.bin",
+      "len": 1470
+    }
+  },
+  "case": "l147m160_n1470_c32_16000",
+  "format_version": 1,
+  "kernel": "resample",
+  "notes": "rate 147/160 (44.1 kHz to 48 kHz style); K = floor((n * L - 1) / M) + 1 outputs",
+  "params": {
+    "down": 160,
+    "outputs": 14700,
+    "taps": 1470,
+    "up": 147
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 45,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

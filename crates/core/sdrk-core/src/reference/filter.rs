@@ -8,7 +8,7 @@ use crate::num::{round_shift, sat16};
 use crate::types::{C32, CQ15, ComplexSample, Q15};
 
 /// `x[n-k]` of the stream (history ++ input), `None` if out of range.
-fn sample_at<T: Copy>(hist: &[T], input: &[T], n: usize, k: usize) -> Option<T> {
+pub(super) fn sample_at<T: Copy>(hist: &[T], input: &[T], n: usize, k: usize) -> Option<T> {
     let past = hist.len();
     let idx = (n + past).checked_sub(k)?;
     if idx < past {

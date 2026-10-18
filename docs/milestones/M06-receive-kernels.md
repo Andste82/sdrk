@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 2](../PLAN.md#phase-2--mvp-kernels-both-directions-large) · Depends on: [M05](M05-first-kernels.md) · Next: [M07](M07-fft.md)
 
+## Status
+
+**Fully completed:** `fir_decimate`, `resample`, `resample_real`, `quad_demod`, `deemphasis`, `dc_block`, `window`, `mag_sq` and `power_db` with traits, states, `Fallback`, `Reference` and facade delegation for `C32`/`CQ15` (and `f32`/`Q15` where real); `sdrk_core::window` (`hann`, `blackman_harris`, `kaiser`, `bessel_i0`, `window_gain`); all 23 golden cases of the milestone table with Rust golden tests (whole and chunked runs); 21 suite cases; invariance tests (20 chunk plans per stateful kernel), Progress tests, extreme-input tests and Fallback-vs-Reference property tests; `docs/kernels.md`, `docs/timing.md` and the changelog. All R1.2 commands, `python tests/golden/generate.py --check`, `cargo deny check` and `cargo test -p sdrk-testkit --features std` pass.
+
+**Partial / open:** nothing in the scope of this milestone. Spec readings and deviations are recorded in [`decisions-log.md`](../decisions-log.md) (M06 entries).
+
 ## Goal
 
 Implement the remaining receive-side kernels of the MVP: decimating FIR, rational resampler, quadrature (FM) demodulator, de-emphasis, DC blocker, windowing with window generators, magnitude squared and power in dB — each with fallback, reference, facade delegation, golden cases, suite cases, invariance and extreme-input tests.
@@ -302,8 +308,8 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] 8 kernels (+ `resample_real`) with states, fallback, reference, delegation
-- [ ] `sdrk_core::window`
-- [ ] Golden cases and Rust golden tests
-- [ ] Suite, invariance, extremes
-- [ ] `docs/kernels.md`, `docs/timing.md` updated
+- [x] 8 kernels (+ `resample_real`) with states, fallback, reference, delegation
+- [x] `sdrk_core::window`
+- [x] Golden cases and Rust golden tests
+- [x] Suite, invariance, extremes
+- [x] `docs/kernels.md`, `docs/timing.md` updated

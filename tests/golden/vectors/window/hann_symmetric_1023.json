@@ -1,0 +1,30 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "hann_symmetric_1023.expected.bin",
+      "len": 1023
+    }
+  },
+  "case": "hann_symmetric_1023",
+  "format_version": 1,
+  "kernel": "window",
+  "notes": "scipy.signal.get_window in float64; the Rust generator writes f32",
+  "params": {
+    "n": 1023,
+    "symmetry": "symmetric",
+    "window": "hann"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 55,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 2e-07,
+    "skip": 0
+  }
+}

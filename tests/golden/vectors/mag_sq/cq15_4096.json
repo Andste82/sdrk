@@ -1,0 +1,29 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "cq15_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "cq15_4096",
+  "format_version": 1,
+  "kernel": "mag_sq",
+  "notes": "sat16(round_shift(re^2 + im^2, 15)); the first eight samples are corner values, full scale saturates",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 61,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

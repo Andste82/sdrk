@@ -1,3 +1,17 @@
 """Importing this package registers every case module."""
 
-from . import convert, fir, q15_ops, rotate, scale  # noqa: F401
+from . import (  # noqa: F401
+    convert,
+    dc_block,
+    deemphasis,
+    fir,
+    fir_decimate,
+    mag_sq,
+    power_db,
+    q15_ops,
+    quad_demod,
+    resample,
+    rotate,
+    scale,
+    window,
+)

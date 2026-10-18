@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "l1m5_n121_f32_10000.expected.bin",
+      "len": 2000
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "l1m5_n121_f32_10000.input.bin",
+      "len": 10000
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "l1m5_n121_f32_10000.taps.bin",
+      "len": 121
+    }
+  },
+  "case": "l1m5_n121_f32_10000",
+  "format_version": 1,
+  "kernel": "resample_real",
+  "notes": "real signal, decimation by 5",
+  "params": {
+    "down": 5,
+    "outputs": 2000,
+    "taps": 121,
+    "up": 1
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 47,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

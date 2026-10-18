@@ -20,12 +20,23 @@ Declared values:
 | --- | --- | --- |
 | `Nco` | `1/1` | 0 |
 | `FirState` with `N` taps | `1/1` | `(N - 1) / 2`, built as `Delay::new(N - 1, 2)` (not reduced; call `reduced()` before comparing) |
+| `FirDecimState` with `N` taps, factor `M` | `1/M` | `(N - 1) / 2`, built as `Delay::new(N - 1, 2)` |
+| `ResampleState`, `ResampleRealState` with `N` taps, `L / M` | `L/M` | `(N - 1) / (2 L)`, built as `Delay::new(N - 1, 2 * L)` |
+| `QuadDemodState` | `1/1` | `1/2`, `Delay::new(1, 2)` (the discriminator looks at two samples) |
+| `DeemphasisState` | `1/1` | 0 (IIR; the real delay depends on the frequency and is not part of exact event timing) |
+| `DcBlockState` | `1/1` | 0 (one-pole high-pass; the delay depends on the frequency) |
+
+`window`, `mag_sq` and `power_db` are stateless per-sample kernels with ratio `1/1` and no delay. The window generators and the FFT-related timing follow with M07.
 
 The FIR group delay is exact for symmetric (linear-phase) taps. A filter with asymmetric taps still reports `(N - 1) / 2`; it is the declaration of the structure, not a measurement.
 
 ## Block-size invariance
 
-Output samples are a function of the absolute input position only, never of how the input was cut into calls: the same input produces bit-identical output whether it arrives in one block or in chunks of any size. `rotate` and `fir` keep their state (`Nco`, `FirState`) between calls and are tested with `check_block_invariance` over random chunk plans.
+Output samples are a function of the absolute input position only, never of how the input was cut into calls: the same input produces bit-identical output whether it arrives in one block or in chunks of any size. `rotate` and `fir` keep their state (`Nco`, `FirState`) between calls and are tested with `check_block_invariance` over random chunk plans; the same holds for `fir_decimate`, `resample`, `quad_demod`, `deemphasis` and `dc_block` (20 plans each).
+
+## Rate-changing kernels
+
+`fir_decimate`, `resample` and `resample_real` return `Progress { consumed, produced }`. They consume input only as far as the output space allows and the caller resubmits `input[consumed..]`; the output depends only on the absolute input position, so the sequence of outputs is the same for any block size and any output buffer size. After `n` input samples since a reset the decimator has produced `ceil(n / M)` outputs and the resampler `floor((n * L - 1) / M) + 1` (see `docs/kernels.md`). A resampler whose output buffer ran full keeps the remaining outputs pending; they are produced by the next call (also with an empty input).
 
 ## The NCO phase model
 

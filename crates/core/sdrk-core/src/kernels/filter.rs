@@ -112,7 +112,7 @@ pub trait Fir<T: ComplexSample> {
 }
 
 /// Sets the history to the last `hist.len()` samples of (old history ++ `input`).
-pub(crate) fn update_history<T: ComplexSample>(hist: &mut [T], input: &[T]) -> Result<()> {
+pub(crate) fn update_history<T: Copy>(hist: &mut [T], input: &[T]) -> Result<()> {
     let internal = || Error::Internal("history update");
     let keep = hist.len();
     if input.len() >= keep {

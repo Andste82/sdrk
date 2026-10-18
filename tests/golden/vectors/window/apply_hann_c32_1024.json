@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "apply_hann_c32_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "apply_hann_c32_1024.input.bin",
+      "len": 1024
+    },
+    "window": {
+      "dtype": "f32",
+      "file": "apply_hann_c32_1024.window.bin",
+      "len": 1024
+    }
+  },
+  "case": "apply_hann_c32_1024",
+  "format_version": 1,
+  "kernel": "window",
+  "notes": "one f32 multiply per component (the f64 product of two f32 values is exact, rounded once)",
+  "params": {
+    "window": "hann"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 58,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

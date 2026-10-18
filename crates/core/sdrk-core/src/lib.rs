@@ -28,6 +28,7 @@ mod reference;
 mod tables;
 pub mod timing;
 mod types;
+pub mod window;
 
 pub use error::{Error, Result};
 pub use fallback::Fallback;

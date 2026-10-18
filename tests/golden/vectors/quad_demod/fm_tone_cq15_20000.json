@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "fm_tone_cq15_20000.expected.bin",
+      "len": 20000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "fm_tone_cq15_20000.input.bin",
+      "len": 20000
+    }
+  },
+  "case": "fm_tone_cq15_20000",
+  "format_version": 1,
+  "kernel": "quad_demod",
+  "notes": "amplitude 0.9, output unit phase / pi times the Q15 gain 32767/32768",
+  "params": {
+    "gain_raw": 32767
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 49,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 70.0
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "l3m2_n96_c32_6000.expected.bin",
+      "len": 9000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "l3m2_n96_c32_6000.input.bin",
+      "len": 6000
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "l3m2_n96_c32_6000.taps.bin",
+      "len": 96
+    }
+  },
+  "case": "l3m2_n96_c32_6000",
+  "format_version": 1,
+  "kernel": "resample",
+  "notes": "rate 3/2, gain L = 3 in the taps; K = floor((n * L - 1) / M) + 1 outputs",
+  "params": {
+    "down": 2,
+    "outputs": 9000,
+    "taps": 96,
+    "up": 3
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 44,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

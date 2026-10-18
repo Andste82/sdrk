@@ -47,5 +47,8 @@ impl Scale<CQ15> for Reference {
 }
 
 mod convert;
+mod decim;
+mod demod;
 mod filter;
 mod mix;
+mod spectrum;

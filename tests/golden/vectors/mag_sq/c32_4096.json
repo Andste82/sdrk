@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "c32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "c32_4096",
+  "format_version": 1,
+  "kernel": "mag_sq",
+  "notes": "re^2 + im^2 in float64 from the f32 input",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 60,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 140.0
+  }
+}

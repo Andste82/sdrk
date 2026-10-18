@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "f32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "f32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "f32_4096",
+  "format_version": 1,
+  "kernel": "power_db",
+  "notes": "10 log10(max(p, 1e-20)) + 1.5; the first ten entries are 0, -0, -1, NaN, -1e-25, 1e-20, 1e-30, 1e-40, 1, 2",
+  "params": {
+    "offset_db": 1.5,
+    "special_entries": 10
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 62,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.0001,
+    "skip": 0
+  }
+}

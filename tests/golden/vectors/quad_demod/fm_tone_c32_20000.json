@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "fm_tone_c32_20000.expected.bin",
+      "len": 20000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "fm_tone_c32_20000.input.bin",
+      "len": 20000
+    }
+  },
+  "case": "fm_tone_c32_20000",
+  "format_version": 1,
+  "kernel": "quad_demod",
+  "notes": "FM tone, deviation 0.05 cycles per sample, gain 1.0 (radians)",
+  "params": {
+    "gain": 1.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 48,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "l3m2_n96_cq15_6000.expected.bin",
+      "len": 9000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "l3m2_n96_cq15_6000.input.bin",
+      "len": 6000
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "l3m2_n96_cq15_6000.taps.bin",
+      "len": 96
+    }
+  },
+  "case": "l3m2_n96_cq15_6000",
+  "format_version": 1,
+  "kernel": "resample",
+  "notes": "taps scaled by 1/3 (gain loss of 3); integer polyphase model; K = floor((n * L - 1) / M) + 1",
+  "params": {
+    "down": 2,
+    "outputs": 9000,
+    "taps": 96,
+    "up": 3
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 46,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

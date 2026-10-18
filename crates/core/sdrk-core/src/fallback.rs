@@ -26,5 +26,8 @@ impl Scale<CQ15> for Fallback {
 }
 
 mod convert;
+mod decim;
+mod demod;
 mod filter;
 mod mix;
+mod spectrum;

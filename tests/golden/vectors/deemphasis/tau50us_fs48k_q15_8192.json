@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "tau50us_fs48k_q15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "tau50us_fs48k_q15_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "tau50us_fs48k_q15_8192",
+  "format_version": 1,
+  "kernel": "deemphasis",
+  "notes": "exact Q15 recursion y = sat16(y + round_shift(alpha * (x - y), 15))",
+  "params": {
+    "alpha_raw": 11166,
+    "rate_hz": 48000,
+    "tau_s": 5e-05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 51,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

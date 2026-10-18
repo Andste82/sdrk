@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "apply_hann_cq15_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "apply_hann_cq15_1024.input.bin",
+      "len": 1024
+    },
+    "window": {
+      "dtype": "i16",
+      "file": "apply_hann_cq15_1024.window.bin",
+      "len": 1024
+    }
+  },
+  "case": "apply_hann_cq15_1024",
+  "format_version": 1,
+  "kernel": "window",
+  "notes": "Q15 multiply per component",
+  "params": {
+    "window": "hann"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 59,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

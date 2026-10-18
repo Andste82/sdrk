@@ -19,6 +19,27 @@
 //! | `fir_block_invariance` | quick | about 24 KiB |
 //! | `fir_impulse_response` | quick | 0 (stack only) |
 //! | `extremes_convert_rotate_fir` | full | about 20 KiB |
+//! | `fir_decimate_c32_vs_reference` | quick | about 33 KiB |
+//! | `fir_decimate_cq15_vs_reference` | quick | about 17 KiB |
+//! | `fir_decimate_block_invariance` | quick | about 24 KiB |
+//! | `resample_c32_vs_reference` | quick | about 15 KiB |
+//! | `resample_cq15_vs_reference` | quick | about 10 KiB |
+//! | `resample_real_vs_reference` | quick | about 10 KiB |
+//! | `resample_block_invariance` | quick | about 25 KiB |
+//! | `quad_demod_c32_vs_reference` | quick | about 20 KiB |
+//! | `quad_demod_cq15_vs_reference` | quick | about 10 KiB |
+//! | `quad_demod_block_invariance` | quick | about 20 KiB |
+//! | `deemphasis_f32_vs_reference` | quick | about 32 KiB |
+//! | `deemphasis_q15_vs_reference` | quick | about 16 KiB |
+//! | `deemphasis_block_invariance` | quick | about 12 KiB |
+//! | `dc_block_c32_vs_reference` | quick | about 32 KiB |
+//! | `dc_block_cq15_vs_reference` | quick | about 32 KiB |
+//! | `dc_block_block_invariance` | quick | about 24 KiB |
+//! | `window_vs_reference` | quick | about 27 KiB |
+//! | `window_generators` | quick | about 8 KiB |
+//! | `mag_sq_vs_reference` | quick | about 30 KiB |
+//! | `power_db_vs_reference` | quick | about 18 KiB |
+//! | `extremes_rx_kernels` | full | about 30 KiB |
 
 // The stack-frame lint counts every `Result<_, Failure>` temporary of an
 // unoptimised build separately (a `Failure` is about 200 bytes by
@@ -43,8 +64,9 @@ use crate::rng::Pcg32;
 use crate::suite::{Failure, TestCase, Tier};
 
 mod m05;
+mod m06;
 
-pub(crate) static CASES: [TestCase; 14] = [
+pub(crate) static CASES: [TestCase; 35] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -114,6 +136,111 @@ pub(crate) static CASES: [TestCase; 14] = [
         name: "extremes_convert_rotate_fir",
         tier: Tier::Full,
         run: m05::extremes_convert_rotate_fir,
+    },
+    TestCase {
+        name: "fir_decimate_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m06::fir_decimate_c32_vs_reference,
+    },
+    TestCase {
+        name: "fir_decimate_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m06::fir_decimate_cq15_vs_reference,
+    },
+    TestCase {
+        name: "fir_decimate_block_invariance",
+        tier: Tier::Quick,
+        run: m06::fir_decimate_block_invariance,
+    },
+    TestCase {
+        name: "resample_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m06::resample_c32_vs_reference,
+    },
+    TestCase {
+        name: "resample_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m06::resample_cq15_vs_reference,
+    },
+    TestCase {
+        name: "resample_real_vs_reference",
+        tier: Tier::Quick,
+        run: m06::resample_real_vs_reference,
+    },
+    TestCase {
+        name: "resample_block_invariance",
+        tier: Tier::Quick,
+        run: m06::resample_block_invariance,
+    },
+    TestCase {
+        name: "quad_demod_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m06::quad_demod_c32_vs_reference,
+    },
+    TestCase {
+        name: "quad_demod_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m06::quad_demod_cq15_vs_reference,
+    },
+    TestCase {
+        name: "quad_demod_block_invariance",
+        tier: Tier::Quick,
+        run: m06::quad_demod_block_invariance,
+    },
+    TestCase {
+        name: "deemphasis_f32_vs_reference",
+        tier: Tier::Quick,
+        run: m06::deemphasis_f32_vs_reference,
+    },
+    TestCase {
+        name: "deemphasis_q15_vs_reference",
+        tier: Tier::Quick,
+        run: m06::deemphasis_q15_vs_reference,
+    },
+    TestCase {
+        name: "deemphasis_block_invariance",
+        tier: Tier::Quick,
+        run: m06::deemphasis_block_invariance,
+    },
+    TestCase {
+        name: "dc_block_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m06::dc_block_c32_vs_reference,
+    },
+    TestCase {
+        name: "dc_block_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m06::dc_block_cq15_vs_reference,
+    },
+    TestCase {
+        name: "dc_block_block_invariance",
+        tier: Tier::Quick,
+        run: m06::dc_block_block_invariance,
+    },
+    TestCase {
+        name: "window_vs_reference",
+        tier: Tier::Quick,
+        run: m06::window_vs_reference,
+    },
+    TestCase {
+        name: "window_generators",
+        tier: Tier::Quick,
+        run: m06::window_generators,
+    },
+    TestCase {
+        name: "mag_sq_vs_reference",
+        tier: Tier::Quick,
+        run: m06::mag_sq_vs_reference,
+    },
+    TestCase {
+        name: "power_db_vs_reference",
+        tier: Tier::Quick,
+        run: m06::power_db_vs_reference,
+    },
+    TestCase {
+        name: "extremes_rx_kernels",
+        tier: Tier::Full,
+        run: m06::extremes_rx_kernels,
     },
 ];
 

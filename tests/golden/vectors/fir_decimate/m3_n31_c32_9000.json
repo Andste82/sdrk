@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "m3_n31_c32_9000.expected.bin",
+      "len": 3000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "m3_n31_c32_9000.input.bin",
+      "len": 9000
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "m3_n31_c32_9000.taps.bin",
+      "len": 31
+    }
+  },
+  "case": "m3_n31_c32_9000",
+  "format_version": 1,
+  "kernel": "fir_decimate",
+  "notes": "y[m] = lfilter(h, 1, x)[m * 3], zero history",
+  "params": {
+    "factor": 3,
+    "taps": 31
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 42,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

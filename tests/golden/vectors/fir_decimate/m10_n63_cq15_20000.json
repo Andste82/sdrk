@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "m10_n63_cq15_20000.expected.bin",
+      "len": 2000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "m10_n63_cq15_20000.input.bin",
+      "len": 20000
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "m10_n63_cq15_20000.taps.bin",
+      "len": 63
+    }
+  },
+  "case": "m10_n63_cq15_20000",
+  "format_version": 1,
+  "kernel": "fir_decimate",
+  "notes": "integer convolution in int64, every 10th output, one rounding and saturation per component",
+  "params": {
+    "factor": 10,
+    "taps": 63
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 41,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

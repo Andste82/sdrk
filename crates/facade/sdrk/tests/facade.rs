@@ -3,7 +3,8 @@
 #![allow(
     clippy::many_single_char_names,
     clippy::unreadable_literal,
-    clippy::items_after_statements
+    clippy::items_after_statements,
+    clippy::too_many_lines
 )]
 use sdrk::kernels::basic::Scale;
 use sdrk::{C32, CQ15, Error, Fallback, Q15, Result, SampleType, Sdrk, backend_for};
@@ -157,5 +158,201 @@ fn m05_kernels_delegate_to_the_fallback() -> Result<()> {
     Sdrk.fir(&mut sa, &cq, &mut a)?;
     Fallback.fir(&mut sb, &cq, &mut b)?;
     assert_eq!((a, sa.history()), (b, sb.history()));
+    Ok(())
+}
+
+#[test]
+fn backend_table_lists_the_m06_kernels() {
+    for (kernel, ty) in [
+        ("fir_decimate", SampleType::C32),
+        ("fir_decimate", SampleType::CQ15),
+        ("resample", SampleType::C32),
+        ("resample", SampleType::CQ15),
+        ("resample_real", SampleType::F32),
+        ("resample_real", SampleType::Q15),
+        ("quad_demod", SampleType::C32),
+        ("quad_demod", SampleType::CQ15),
+        ("deemphasis", SampleType::F32),
+        ("deemphasis", SampleType::Q15),
+        ("dc_block", SampleType::C32),
+        ("dc_block", SampleType::CQ15),
+        ("window", SampleType::C32),
+        ("window", SampleType::CQ15),
+        ("mag_sq", SampleType::C32),
+        ("mag_sq", SampleType::CQ15),
+        ("power_db", SampleType::F32),
+        ("power_db", SampleType::Q15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("fir_decimate", SampleType::F32), "none");
+    assert_eq!(backend_for("deemphasis", SampleType::C32), "none");
+    assert_eq!(backend_for("resample_real", SampleType::C32), "none");
+    assert_eq!(backend_for("power_db", SampleType::CQ15), "none");
+}
+
+#[test]
+fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
+    use sdrk::Rate;
+    use sdrk::kernels::decim::{
+        FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
+    };
+    use sdrk::kernels::demod::{
+        DcBlock, DcBlockState, Deemphasis, DeemphasisState, QuadDemod, QuadDemodState,
+    };
+    use sdrk::kernels::spectrum::{MagSq, PowerDb, Window};
+
+    let mut s = 8u64;
+    let c32: Vec<C32> = (0..200)
+        .map(|_| {
+            C32::new(
+                lcg(&mut s) as f32 / 4e9 - 0.5,
+                lcg(&mut s) as f32 / 4e9 - 0.5,
+            )
+        })
+        .collect();
+    let cq: Vec<CQ15> = (0..200)
+        .map(|_| CQ15 {
+            re: Q15(lcg(&mut s) as i16),
+            im: Q15(lcg(&mut s) as i16),
+        })
+        .collect();
+    let taps = [0.1f32, 0.2, 0.4, 0.2, 0.1];
+    let tapsq = [Q15(1000), Q15(-2000), Q15(30000)];
+
+    let (mut sa, mut sb) = (
+        FirDecimState::<C32, _, _>::new(taps, [C32::default(); 4], 3)?,
+        FirDecimState::<C32, _, _>::new(taps, [C32::default(); 4], 3)?,
+    );
+    let (mut a, mut b) = (vec![C32::default(); 200], vec![C32::default(); 200]);
+    let (pa, pb) = (
+        Sdrk.fir_decimate(&mut sa, &c32, &mut a)?,
+        Fallback.fir_decimate(&mut sb, &c32, &mut b)?,
+    );
+    assert_eq!((pa, a, sa.history()), (pb, b, sb.history()));
+    let (mut sa, mut sb) = (
+        FirDecimState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 2], 4)?,
+        FirDecimState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 2], 4)?,
+    );
+    let (mut a, mut b) = (vec![CQ15::default(); 200], vec![CQ15::default(); 200]);
+    let (pa, pb) = (
+        Sdrk.fir_decimate(&mut sa, &cq, &mut a)?,
+        Fallback.fir_decimate(&mut sb, &cq, &mut b)?,
+    );
+    assert_eq!((pa, a), (pb, b));
+
+    let (mut sa, mut sb) = (
+        ResampleState::<C32, _, _>::new(taps, [C32::default(); 2], 3, 2)?,
+        ResampleState::<C32, _, _>::new(taps, [C32::default(); 2], 3, 2)?,
+    );
+    let (mut a, mut b) = (vec![C32::default(); 400], vec![C32::default(); 400]);
+    let (pa, pb) = (
+        Sdrk.resample(&mut sa, &c32, &mut a)?,
+        Fallback.resample(&mut sb, &c32, &mut b)?,
+    );
+    assert_eq!((pa, a, sa.phase()), (pb, b, sb.phase()));
+    let (mut sa, mut sb) = (
+        ResampleState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 1], 3, 2)?,
+        ResampleState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 1], 3, 2)?,
+    );
+    let (mut a, mut b) = (vec![CQ15::default(); 400], vec![CQ15::default(); 400]);
+    let (pa, pb) = (
+        Sdrk.resample(&mut sa, &cq, &mut a)?,
+        Fallback.resample(&mut sb, &cq, &mut b)?,
+    );
+    assert_eq!((pa, a), (pb, b));
+    let xr: Vec<f32> = c32.iter().map(|v| v.re).collect();
+    let (mut sa, mut sb) = (
+        ResampleRealState::<f32, _, _>::new(taps, [0f32; 5], 1, 2)?,
+        ResampleRealState::<f32, _, _>::new(taps, [0f32; 5], 1, 2)?,
+    );
+    let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
+    let (pa, pb) = (
+        Sdrk.resample_real(&mut sa, &xr, &mut a)?,
+        Fallback.resample_real(&mut sb, &xr, &mut b)?,
+    );
+    assert_eq!((pa, a), (pb, b));
+    let xq: Vec<Q15> = cq.iter().map(|v| v.re).collect();
+    let (mut sa, mut sb) = (
+        ResampleRealState::<Q15, _, _>::new(tapsq, [Q15(0); 3], 1, 2)?,
+        ResampleRealState::<Q15, _, _>::new(tapsq, [Q15(0); 3], 1, 2)?,
+    );
+    let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
+    let (pa, pb) = (
+        Sdrk.resample_real(&mut sa, &xq, &mut a)?,
+        Fallback.resample_real(&mut sb, &xq, &mut b)?,
+    );
+    assert_eq!((pa, a), (pb, b));
+
+    let (mut sa, mut sb) = (QuadDemodState::<C32>::new(), QuadDemodState::<C32>::new());
+    let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
+    Sdrk.quad_demod(&mut sa, &c32, &mut a, 0.7)?;
+    Fallback.quad_demod(&mut sb, &c32, &mut b, 0.7)?;
+    assert_eq!((a, sa), (b, sb));
+    let (mut sa, mut sb) = (QuadDemodState::<CQ15>::new(), QuadDemodState::<CQ15>::new());
+    let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
+    Sdrk.quad_demod(&mut sa, &cq, &mut a, Q15(20000))?;
+    Fallback.quad_demod(&mut sb, &cq, &mut b, Q15(20000))?;
+    assert_eq!((a, sa), (b, sb));
+
+    let rate = Rate::hz(48_000)?;
+    let (mut sa, mut sb) = (
+        DeemphasisState::<f32>::new(50e-6, rate)?,
+        DeemphasisState::<f32>::new(50e-6, rate)?,
+    );
+    let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
+    Sdrk.deemphasis(&mut sa, &xr, &mut a)?;
+    Fallback.deemphasis(&mut sb, &xr, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+    let (mut sa, mut sb) = (
+        DeemphasisState::<Q15>::new(50e-6, rate)?,
+        DeemphasisState::<Q15>::new(50e-6, rate)?,
+    );
+    let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
+    Sdrk.deemphasis(&mut sa, &xq, &mut a)?;
+    Fallback.deemphasis(&mut sb, &xq, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+
+    let (mut sa, mut sb) = (
+        DcBlockState::<C32>::new(0.99)?,
+        DcBlockState::<C32>::new(0.99)?,
+    );
+    let (mut a, mut b) = (vec![C32::default(); 200], vec![C32::default(); 200]);
+    Sdrk.dc_block(&mut sa, &c32, &mut a)?;
+    Fallback.dc_block(&mut sb, &c32, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+    let (mut sa, mut sb) = (
+        DcBlockState::<CQ15>::new(Q15(32000))?,
+        DcBlockState::<CQ15>::new(Q15(32000))?,
+    );
+    let (mut a, mut b) = (vec![CQ15::default(); 200], vec![CQ15::default(); 200]);
+    Sdrk.dc_block(&mut sa, &cq, &mut a)?;
+    Fallback.dc_block(&mut sb, &cq, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+
+    let (mut a, mut b) = (vec![C32::default(); 200], vec![C32::default(); 200]);
+    Sdrk.window(&c32, &mut a, &xr)?;
+    Fallback.window(&c32, &mut b, &xr)?;
+    assert_eq!(a, b);
+    let (mut a, mut b) = (vec![CQ15::default(); 200], vec![CQ15::default(); 200]);
+    Sdrk.window(&cq, &mut a, &xq)?;
+    Fallback.window(&cq, &mut b, &xq)?;
+    assert_eq!(a, b);
+    let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
+    Sdrk.mag_sq(&c32, &mut a)?;
+    Fallback.mag_sq(&c32, &mut b)?;
+    assert_eq!(a, b);
+    let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
+    Sdrk.mag_sq(&cq, &mut a)?;
+    Fallback.mag_sq(&cq, &mut b)?;
+    assert_eq!(a, b);
+    let p: Vec<f32> = xr.iter().map(|v| v * v).collect();
+    let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
+    Sdrk.power_db(&p, &mut a, 3.0)?;
+    Fallback.power_db(&p, &mut b, 3.0)?;
+    assert_eq!(a, b);
+    Sdrk.power_db(&xq, &mut a, 3.0)?;
+    Fallback.power_db(&xq, &mut b, 3.0)?;
+    assert_eq!(a, b);
     Ok(())
 }

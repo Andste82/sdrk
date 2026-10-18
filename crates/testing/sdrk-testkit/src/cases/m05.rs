@@ -42,12 +42,12 @@ const FORMATS: [SampleFormat; 12] = [
     formats::RS16,
 ];
 
-fn random_cq15(rng: &mut Pcg32, scale: f64) -> CQ15 {
+pub(super) fn random_cq15(rng: &mut Pcg32, scale: f64) -> CQ15 {
     let mut v = || q15_from_f64((rng.next_f64() * 2.0 - 1.0) * scale);
     CQ15 { re: v(), im: v() }
 }
 
-fn random_c32(rng: &mut Pcg32, scale: f64) -> C32 {
+pub(super) fn random_c32(rng: &mut Pcg32, scale: f64) -> C32 {
     C32::new(
         ((rng.next_f64() * 2.0 - 1.0) * scale) as f32,
         ((rng.next_f64() * 2.0 - 1.0) * scale) as f32,
@@ -250,7 +250,7 @@ pub(super) fn rotate_cq15_vs_reference(arena: &mut Arena<'_>) -> Result<(), Fail
     Ok(())
 }
 
-fn same_rate_step<T: ComplexSample>(
+pub(super) fn same_rate_step<T: ComplexSample>(
     input: &[T],
     output: &mut [T],
     kernel: impl FnOnce(&[T], &mut [T]) -> sdrk_core::Result<()>,

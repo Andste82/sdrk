@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "lowpass63_c32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "lowpass63_c32_8192.input.bin",
+      "len": 8192
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "lowpass63_c32_8192.taps.bin",
+      "len": 63
+    }
+  },
+  "case": "lowpass63_c32_8192",
+  "format_version": 1,
+  "kernel": "fir",
+  "notes": "y[n] = sum h[k] x[n-k], zero history",
+  "params": {
+    "taps": 63
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 30,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

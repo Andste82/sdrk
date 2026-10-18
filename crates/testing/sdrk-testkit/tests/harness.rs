@@ -665,7 +665,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[test]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 5);
+    assert_eq!(cases.len(), 14);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));
@@ -676,6 +676,15 @@ fn registered_cases_have_unique_names_without_spaces() {
         "encode_decode_roundtrip_all_formats",
         "scale_fallback_vs_reference",
         "scale_block_invariance",
+        "convert_all_formats_vs_encoder",
+        "rotate_c32_vs_reference",
+        "rotate_cq15_vs_reference",
+        "rotate_block_invariance",
+        "fir_c32_vs_reference",
+        "fir_cq15_vs_reference",
+        "fir_block_invariance",
+        "fir_impulse_response",
+        "extremes_convert_rotate_fir",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

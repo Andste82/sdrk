@@ -1,6 +1,6 @@
 # Device API (`sdrk-device`)
 
-`sdrk-device` is the lowest crate of SDRk. It is `no_std`, heap-free and has no dependencies. External drivers depend only on this crate. It defines the shared error classification, raw sample formats, exact time types and the synchronous RX/TX stream traits. Control capabilities, async streams and the conformance suite follow in M12; sample conversion follows in M05.
+`sdrk-device` is the lowest crate of SDRk. It is `no_std`, heap-free and has no dependencies. External drivers depend only on this crate. It defines the shared error classification, raw sample formats, exact time types and the synchronous RX/TX stream traits. Control capabilities, async streams and the conformance suite follow in M12; sample conversion (`convert`, `view_cq15`, `view_c32`) is in `sdrk-core` since M05, see `docs/kernels.md`.
 
 ## Errors
 

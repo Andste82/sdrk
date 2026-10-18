@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "gain_overflow_cq15_2048.expected.bin",
+      "len": 2048
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "gain_overflow_cq15_2048.input.bin",
+      "len": 2048
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "gain_overflow_cq15_2048.taps.bin",
+      "len": 8
+    }
+  },
+  "case": "gain_overflow_cq15_2048",
+  "format_version": 1,
+  "kernel": "fir",
+  "notes": "eight taps of 0.25 (gain 2.0) on a DC input saturate to full scale",
+  "params": {
+    "taps": 8
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 34,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

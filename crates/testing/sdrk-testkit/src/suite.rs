@@ -100,6 +100,12 @@ impl From<sdrk_core::Error> for Failure {
     }
 }
 
+impl From<sdrk_device::Error> for Failure {
+    fn from(e: sdrk_device::Error) -> Self {
+        Failure::new("", "device error").detail(format_args!("{e}"))
+    }
+}
+
 /// A registered test case.
 #[derive(Clone, Copy)]
 pub struct TestCase {

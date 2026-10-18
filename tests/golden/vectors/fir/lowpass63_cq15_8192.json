@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "lowpass63_cq15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "lowpass63_cq15_8192.input.bin",
+      "len": 8192
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "lowpass63_cq15_8192.taps.bin",
+      "len": 63
+    }
+  },
+  "case": "lowpass63_cq15_8192",
+  "format_version": 1,
+  "kernel": "fir",
+  "notes": "Q30 accumulation in int64, one rounding and saturation per component",
+  "params": {
+    "taps": 63
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 31,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "c32_negfreq_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_negfreq_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "c32_negfreq_8192",
+  "format_version": 1,
+  "kernel": "rotate",
+  "notes": "output[n] = input[n] * exp(j*2*pi*phase[n]/2^32), phase[n] = phase0 + n*inc (mod 2^32)",
+  "params": {
+    "freq": -0.3,
+    "inc": 3006477107,
+    "phase0": 123456789
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 21,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 120.0
+  }
+}

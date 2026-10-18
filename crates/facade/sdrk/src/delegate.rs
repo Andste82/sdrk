@@ -5,7 +5,8 @@
 ///
 /// Each entry has the form
 /// `Trait<Type>::method(&self, arg: Ty, ...) -> Ret => Backend`, entries are separated
-/// by `;`. `Backend` is a unit struct that implements the trait and
+/// by `;`. A generic method lists its generics and bounds in square brackets after the
+/// name: `Trait<Type>::method[A: Bound, B: Other](&self, ...) -> Ret => Backend`. `Backend` is a unit struct that implements the trait and
 /// [`BackendName`](crate::BackendName). The macro must be invoked exactly once
 /// (it also defines `backend_for`); later backends only change the `=> Backend`
 /// target of an entry, guarded by `#[cfg(...)]`.
@@ -16,14 +17,14 @@ macro_rules! delegate {
     (
         $(
             $(#[$meta:meta])*
-            $tr:ident < $ty:ident > :: $m:ident ( &self $(, $a:ident : $at:ty)* $(,)? ) -> $ret:ty => $be:ident
+            $tr:ident < $ty:ident > :: $m:ident $([ $($gen:tt)* ])? ( &self $(, $a:ident : $at:ty)* $(,)? ) -> $ret:ty => $be:ident
         );+ $(;)?
     ) => {
         $(
             $(#[$meta])*
             impl $tr<$ty> for $crate::Sdrk {
                 #[inline]
-                fn $m(&self $(, $a: $at)*) -> $ret {
+                fn $m $(< $($gen)* >)? (&self $(, $a: $at)*) -> $ret {
                     <$be as $tr<$ty>>::$m(&$be $(, $a)*)
                 }
             }
@@ -43,7 +44,7 @@ macro_rules! delegate {
                     $(#[$meta])*
                     (
                         ::core::stringify!($m),
-                        $crate::SampleType::$ty,
+                        <$ty as $crate::Sample>::TYPE,
                         <$be as $crate::BackendName>::NAME,
                     ),
                 )+

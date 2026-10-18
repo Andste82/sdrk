@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 1](../PLAN.md#phase-1--core-foundations-medium) · Depends on: [M01](M01-device-foundations.md) · Next: [M03](M03-testkit-foundations.md)
 
+## Status
+
+Fully completed: all items of the deliverables checklist below (types, num, error, timing, `Scale`, fallback, reference, `map_kernel!`, facade `Sdrk`/`delegate!`/`backend_for`, tests 1-8, `docs/kernels.md`, CHANGELOG, decisions log). All R1.2 commands (fmt, clippy, workspace tests, `cargo xtask check`, `cargo xtask bare-metal`) and `cargo test -p sdrk-core --features reference` pass.
+
+Partial/open: nothing. No entries in `docs/open-items.md` for this milestone; judgement calls are recorded in `docs/decisions-log.md`.
+
 ## Goal
 
 Establish the types and patterns every kernel will use: the four sample types, Q15 arithmetic, the crate error type, timing declarations (rate ratio, group delay), the **one-trait-per-kernel** pattern with `Fallback`, `Reference` and the facade `Sdrk`, and one complete example kernel (`scale`) that later milestones copy as a template.
@@ -313,8 +319,10 @@ R1.2 commands; `cargo test -p sdrk-core --features reference`; `cargo xtask bare
 
 ## Deliverables checklist
 
-- [ ] `types`, `num`, `error`, `timing`, `kernels::basic::Scale`, `fallback`, `reference`, `map_kernel!`
-- [ ] Facade `Sdrk`, `delegate!`, `backend_for`
-- [ ] Tests 1–8
-- [ ] `docs/kernels.md`: kernel pattern, contract table with `scale`
-- [ ] CHANGELOG, decisions log
+- [x] `types`, `num`, `error`, `timing`, `kernels::basic::Scale`, `fallback`, `reference`, `map_kernel!`
+- [x] Facade `Sdrk`, `delegate!`, `backend_for`
+- [x] Tests 1–8
+- [x] `docs/kernels.md`: kernel pattern, contract table with `scale`
+- [x] CHANGELOG, decisions log
+
+Status: all deliverables are complete. `cargo test -p sdrk-core --features reference` and `cargo xtask bare-metal` (builds `sdrk-core` and `sdrk`) pass.

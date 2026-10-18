@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 sdrk-core = { path = "../../core/sdrk-core" }
+sdrk-device = { path = "../../core/sdrk-device" }
 
 [lints]
 workspace = true

@@ -79,12 +79,12 @@ RUN cargo install --locked cargo-deny wasm-bindgen-cli wasmtime-cli cbindgen iai
 # Espressif QEMU fork (M15), espup / espflash / ESP-IDF (M15, M16),
 # Chrome and Firefox with their drivers for wasm-bindgen-test (M14, CI action).
 
-# Node.js (LTS): WASM package tests (M14) and Claude Code
+# Node.js (LTS): WASM package tests (M14) and the coding assistant CLI
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude Code
+# Coding assistant CLI
 RUN npm install -g @anthropic-ai/claude-code
 
 # GitHub CLI (gh) from GitHub's official apt repository
@@ -97,12 +97,6 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
-
-# Work as the default non-root user of the base image; it owns the toolchains
-# so that `rustup target add` and `cargo install` work without root.
-RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
-    && chown -R ubuntu:ubuntu /usr/local/rustup /usr/local/cargo
-USER ubuntu
 
 WORKDIR /workspace
 

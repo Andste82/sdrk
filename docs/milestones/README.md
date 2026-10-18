@@ -1,4 +1,4 @@
-# sdrk milestones
+# SDRk milestones
 
 > Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 · Snapshot: [`docs/PLAN.md`](../PLAN.md)
 

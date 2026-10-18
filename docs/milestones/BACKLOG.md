@@ -30,7 +30,7 @@ These items are planned but not yet written as implementation-ready milestones. 
 - **Real hardware:** the same `targets/` on boards via `probe-rs` (Cortex-M, ESP32 via `espflash`), DWT cycle counters / `mcycle`, real-time targets per platform (the plan defers them until hardware is in use).
 - **Device API gaps** identified by the SoapySDR mapping in M12 (sensors, generic settings, frequency components, clock/time source selection).
 - **Optional:** GStreamer-style shorthand for flows (`rf ! ddc frequency_hz=600e3 ! fm_demod ! out`) compiled to the JSON model; compiling a JSON flow into heap-free Rust code for MCUs.
-- **Release work:** final crate name decision (open since M00 — see the decisions table in the plan), crates.io publishing in the order given in CONTRIBUTING.md, npm package name.
+- **Release work:** check that `sdrk` is free on crates.io and npm, crates.io publishing in the order given in CONTRIBUTING.md, npm package name.
 - **Test data:** an optional small real recording (≤ 5 MiB, license CC0/CC-BY, SigMF) for the `real_recording` system test.
 
 ## Later (prepared, not scheduled)

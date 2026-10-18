@@ -1,4 +1,4 @@
-# SDR Library – Project Plan
+# SDRk – Project Plan
 
 > Snapshot of the project plan as of 2026-10-18. The living version is the shared plan document:
 > https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1
@@ -9,7 +9,7 @@
 
 A Rust library of SDR building blocks for receiving and transmitting, from mixers and filters to complete demodulation chains, composed as JSON pipelines and controllable at runtime. The same kernels run heap-free on microcontrollers like the ESP32 and Cortex-M, on PCs and the Raspberry Pi, and as WebAssembly in the browser, each with dedicated SIMD optimizations from AVX-512 and NEON to the ESP32's PIE instructions. Sample-accurate timing, deterministic results on every platform, and a single test suite that runs in emulators and on real hardware make it a dependable foundation for firmware, desktop tools, web apps and AI-assisted signal analysis.
 
-Working name: **`sdrk`**, pronounced *shark* (Software-Defined Radio Kernels). It stays until a better name comes along.
+Name: **SDRk**, pronounced *shark* (Software-Defined Radio Kernels). Crate, package and module names use the lowercase form `sdrk` (Rust and npm require lowercase).
 
 ## Scope and principles
 
@@ -326,7 +326,7 @@ A server with an SDR, a web UI and MCP access: mark a signal in the waterfall, t
 
 | Topic | Decision |
 | --- | --- |
-| Name | Working name `sdrk`, pronounced shark (Software-Defined Radio Kernels); final name still open (alternatives: Ferriq, Ferrodyne, Zerodyne) |
+| Name | **SDRk** in text, pronounced shark (Software-Defined Radio Kernels); `sdrk` in crate, package and module names |
 | Support tiers | Tier 1 (every commit, a failure blocks the merge): x86-64, AArch64, wasm32, Cortex-M4. Tier 2 (nightly): ESP32-P4/S3, RISC-V, Cortex-M55. Tier 3 (builds, not tested): every other Rust target via the fallback |
 | Q15 format | Q1.15 in `i16`, range −1 to 1 − 2⁻¹⁵ |
 | Q15 rounding | round half up: add ½ LSB, then arithmetic shift |

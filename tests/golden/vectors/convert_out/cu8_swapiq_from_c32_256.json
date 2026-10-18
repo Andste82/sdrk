@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "cu8_swapiq_from_c32_256.expected.bin",
+      "len": 512
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "cu8_swapiq_from_c32_256.input.bin",
+      "len": 256
+    }
+  },
+  "case": "cu8_swapiq_from_c32_256",
+  "format_version": 1,
+  "kernel": "convert_out",
+  "notes": "float path: floor(x * full_scale + offset + 0.5) in float64, NaN as 0, saturated; bytes as in docs/device.md",
+  "params": {
+    "align": "lsb",
+    "bits": 8,
+    "container": "u8",
+    "endian": "little",
+    "full_scale": null,
+    "layout": "interleaved",
+    "samples": 256,
+    "signed": false,
+    "swap_iq": true
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 210,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

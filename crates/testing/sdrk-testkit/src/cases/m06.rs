@@ -71,7 +71,7 @@ fn taps_q15(out: &mut [Q15], fc: f64, gain: f64) {
 }
 
 /// Runs a same-rate kernel on as many samples as both buffers hold.
-fn same_rate<I: Copy, O>(
+pub(super) fn same_rate<I: Copy, O>(
     input: &[I],
     output: &mut [O],
     kernel: impl FnOnce(&[I], &mut [O]) -> sdrk_core::Result<()>,
@@ -89,7 +89,10 @@ fn same_rate<I: Copy, O>(
 
 /// Hands out two history buffers one after the other (and empty slices afterwards), so that
 /// a `make_state` closure can build two states over caller-provided storage.
-fn hand_out<'a, T>(first: &'a mut [T], second: &'a mut [T]) -> impl FnMut() -> &'a mut [T] {
+pub(super) fn hand_out<'a, T>(
+    first: &'a mut [T],
+    second: &'a mut [T],
+) -> impl FnMut() -> &'a mut [T] {
     let mut slots = [Some(first), Some(second)];
     let mut next = 0usize;
     move || {
@@ -102,12 +105,12 @@ fn hand_out<'a, T>(first: &'a mut [T], second: &'a mut [T]) -> impl FnMut() -> &
     }
 }
 
-fn flat(x: &[C32]) -> &[f32] {
+pub(super) fn flat(x: &[C32]) -> &[f32] {
     bytemuck::try_cast_slice(x).unwrap_or_default()
 }
 
 /// `10 log10(sum want^2 / sum (want - got)^2)`; `+inf` for identical signals.
-fn snr_db(want: &[f32], got: &[f32]) -> f64 {
+pub(super) fn snr_db(want: &[f32], got: &[f32]) -> f64 {
     let (mut sig, mut err) = (0.0f64, 0.0f64);
     for (&w, &g) in want.iter().zip(got) {
         let (w, g) = (f64::from(w), f64::from(g));
@@ -121,7 +124,7 @@ fn snr_db(want: &[f32], got: &[f32]) -> f64 {
     }
 }
 
-fn min_snr(
+pub(super) fn min_snr(
     case: &'static str,
     msg: &'static str,
     want: &[f32],
@@ -135,7 +138,7 @@ fn min_snr(
 }
 
 /// Output room that suffices for `n` input samples at `up / down`.
-const fn room(n: usize, up: usize, down: usize) -> usize {
+pub(super) const fn room(n: usize, up: usize, down: usize) -> usize {
     n * up / down + up + 2
 }
 

@@ -23,6 +23,7 @@ extern crate std;
 
 mod error;
 mod fallback;
+pub mod fused;
 pub mod kernels;
 mod macros;
 pub mod num;

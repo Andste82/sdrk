@@ -47,11 +47,15 @@ impl Scale<CQ15> for Reference {
 }
 
 mod convert;
+mod convert_out;
 mod decim;
 mod demod;
 mod fft;
 mod filter;
+mod fused;
+mod interp;
 mod mix;
+mod modulate;
 mod spectrum;
 
 pub use fft::REFERENCE_IN_PLACE_MAX;

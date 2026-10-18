@@ -27,7 +27,7 @@ fn ensure(cond: bool, f: impl FnOnce() -> Failure) -> Result<(), Failure> {
 }
 
 /// The formats the conversion kernels support (everything but `Bits1`).
-const FORMATS: [SampleFormat; 12] = [
+pub(super) const FORMATS: [SampleFormat; 12] = [
     formats::CU8,
     formats::CS8,
     formats::CS16,

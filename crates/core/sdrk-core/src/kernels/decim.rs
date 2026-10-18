@@ -103,6 +103,26 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>>
         self.countdown
     }
 
+    /// The largest number of input samples that [`FirDecimate::fir_decimate`] consumes while
+    /// producing at most `output_len` outputs, counted from the current state:
+    /// `countdown + output_len * factor` (saturating). Submitting exactly this many samples
+    /// (or fewer) with an output of `output_len` samples consumes all of them, which is how
+    /// fused kernels keep the oscillator phase exact when the output space is limited.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::decim::FirDecimState, C32};
+    /// let state = FirDecimState::<C32, _, _>::new([1.0f32], [], 4)?;
+    /// // Outputs appear at input indices 0, 4, 8: two outputs fit in 8 samples; the sample at
+    /// // index 8 would produce a third one.
+    /// assert_eq!(state.max_input_for_output(2), 8);
+    /// assert_eq!(state.max_input_for_output(0), 0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn max_input_for_output(&self, output_len: usize) -> usize {
+        self.countdown
+            .saturating_add(output_len.saturating_mul(self.factor))
+    }
+
     pub(crate) fn parts_mut(&mut self) -> DecimParts<'_, T> {
         DecimParts {
             taps: self.taps.as_ref(),

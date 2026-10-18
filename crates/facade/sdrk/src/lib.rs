@@ -26,7 +26,7 @@ mod delegations;
 
 pub use sdrk_core::{
     C32, CQ15, ComplexSample, Delay, Error, Fallback, Progress, Q15, Rate, Ratio, RatioKind,
-    RealSample, Result, Sample, SampleIndex, SampleType, Timing, kernels, num,
+    RealSample, Result, Sample, SampleIndex, SampleType, Timing, fused, kernels, num,
 };
 
 /// The facade: implements every kernel trait for every supported sample type by
@@ -42,6 +42,15 @@ pub trait BackendName {
 
 impl BackendName for Fallback {
     const NAME: &'static str = "fallback";
+}
+
+/// Marker of the fused kernels (`ddc`, `duc`, `fm_demod`), which the facade builds by chaining
+/// its own single kernels; reported by [`backend_for`] as `"chained"`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Chained;
+
+impl BackendName for Chained {
+    const NAME: &'static str = "chained";
 }
 
 pub use delegations::backend_for;

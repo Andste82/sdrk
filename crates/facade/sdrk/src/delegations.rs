@@ -1,8 +1,9 @@
 //! The single place that maps kernels to implementations.
 
-use crate::{C32, CQ15, Fallback, Progress, Q15, Result};
+use crate::{C32, CQ15, Chained, Fallback, Progress, Q15, Result};
+use sdrk_core::fused::{ddc_chained, duc_chained, fm_demod_chained};
 use sdrk_core::kernels::basic::Scale;
-use sdrk_core::kernels::convert::{Convert, ConvertReal};
+use sdrk_core::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
 use sdrk_core::kernels::decim::{
     FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
 };
@@ -11,7 +12,12 @@ use sdrk_core::kernels::demod::{
 };
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
+use sdrk_core::kernels::fused::{Ddc, Duc, FmDemod};
+use sdrk_core::kernels::interp::{
+    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
+};
 use sdrk_core::kernels::mix::{Nco, Rotate};
+use sdrk_core::kernels::modulate::{FmMod, FmModState};
 use sdrk_core::kernels::spectrum::{MagSq, PowerDb, Window};
 use sdrk_device::SampleFormat;
 
@@ -46,7 +52,26 @@ crate::delegate! {
     PowerDb<Q15>::power_db(&self, input: &[Q15], output: &mut [f32], offset_db: f32) -> Result<()> => Fallback;
     Fft<C32>::fft[Tw: AsRef<[C32]>](&self, plan: &FftPlan<C32, Tw>, data: &mut [C32], dir: Direction, scaling: Scaling) -> Result<FftScale> => Fallback;
     Fft<CQ15>::fft[Tw: AsRef<[CQ15]>](&self, plan: &FftPlan<CQ15, Tw>, data: &mut [CQ15], dir: Direction, scaling: Scaling) -> Result<FftScale> => Fallback;
-    @extra [("rfft", f32, Fallback), ("irfft", f32, Fallback)]
+    ConvertOut<C32>::convert_out(&self, format: &SampleFormat, input: &[C32], output: &mut [u8]) -> Result<usize> => Fallback;
+    ConvertOut<CQ15>::convert_out(&self, format: &SampleFormat, input: &[CQ15], output: &mut [u8]) -> Result<usize> => Fallback;
+    ConvertOutReal<f32>::convert_out_real(&self, format: &SampleFormat, input: &[f32], output: &mut [u8]) -> Result<usize> => Fallback;
+    ConvertOutReal<Q15>::convert_out_real(&self, format: &SampleFormat, input: &[Q15], output: &mut [u8]) -> Result<usize> => Fallback;
+    FirInterpolate<C32>::fir_interpolate[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut FirInterpState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fallback;
+    FirInterpolate<CQ15>::fir_interpolate[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut FirInterpState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fallback;
+    FirInterpolateReal<f32>::fir_interpolate_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut FirInterpRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fallback;
+    FirInterpolateReal<Q15>::fir_interpolate_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut FirInterpRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fallback;
+    FmMod<C32>::fm_mod(&self, s: &mut FmModState, input: &[f32], output: &mut [C32]) -> Result<()> => Fallback;
+    FmMod<CQ15>::fm_mod(&self, s: &mut FmModState, input: &[Q15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    @extra [
+        ("rfft", f32, Fallback),
+        ("irfft", f32, Fallback),
+        ("ddc", C32, Chained),
+        ("ddc", CQ15, Chained),
+        ("duc", C32, Chained),
+        ("duc", CQ15, Chained),
+        ("fm_demod", C32, Chained),
+        ("fm_demod", CQ15, Chained)
+    ]
 }
 
 // `RealFft` has no sample-type parameter, so it is delegated by hand; the two rows above
@@ -74,3 +99,65 @@ impl RealFft for crate::Sdrk {
         <Fallback as RealFft>::irfft(&Fallback, plan, input, output, scratch)
     }
 }
+
+// The fused kernels are the chaining functions of `sdrk_core::fused` called with the facade
+// itself, so they use the best single kernel for every step. A backend that provides a truly
+// fused version must be bit-identical to this chain (see `docs/kernels.md`). The rows above
+// register them in the `backend_for` table as `chained`.
+macro_rules! fused_for {
+    ($t:ty) => {
+        impl Ddc<$t> for crate::Sdrk {
+            #[inline]
+            fn ddc<Taps, Hist>(
+                &self,
+                nco: &mut Nco,
+                fir: &mut FirDecimState<$t, Taps, Hist>,
+                input: &[$t],
+                output: &mut [$t],
+                scratch: &mut [$t],
+            ) -> Result<Progress>
+            where
+                Taps: AsRef<[<$t as crate::ComplexSample>::Real]>,
+                Hist: AsRef<[$t]> + AsMut<[$t]>,
+            {
+                ddc_chained(self, nco, fir, input, output, scratch)
+            }
+        }
+
+        impl Duc<$t> for crate::Sdrk {
+            #[inline]
+            fn duc<Taps, Hist>(
+                &self,
+                fir: &mut FirInterpState<$t, Taps, Hist>,
+                nco: &mut Nco,
+                input: &[$t],
+                output: &mut [$t],
+                scratch: &mut [$t],
+            ) -> Result<Progress>
+            where
+                Taps: AsRef<[<$t as crate::ComplexSample>::Real]>,
+                Hist: AsRef<[$t]> + AsMut<[$t]>,
+            {
+                duc_chained(self, fir, nco, input, output, scratch)
+            }
+        }
+
+        impl FmDemod<$t> for crate::Sdrk {
+            #[inline]
+            fn fm_demod(
+                &self,
+                quad: &mut QuadDemodState<$t>,
+                deemph: &mut DeemphasisState<<$t as crate::ComplexSample>::Real>,
+                input: &[$t],
+                output_audio: &mut [<$t as crate::ComplexSample>::Real],
+                scratch_real: &mut [<$t as crate::ComplexSample>::Real],
+                gain: <$t as crate::ComplexSample>::Real,
+            ) -> Result<()> {
+                fm_demod_chained(self, quad, deemph, input, output_audio, scratch_real, gain)
+            }
+        }
+    };
+}
+
+fused_for!(C32);
+fused_for!(CQ15);

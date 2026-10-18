@@ -52,6 +52,25 @@
 //! | `fft_weak_tone_bfp` | full | about 14 KiB |
 //! | `fft_parseval_c32` | quick | about 21 KiB |
 //! | `extremes_fft` | full | about 5 KiB |
+//! | `convert_out_all_formats_roundtrip` | quick | about 6 KiB |
+//! | `fir_interpolate_c32_vs_reference` | quick | about 19 KiB |
+//! | `fir_interpolate_cq15_vs_reference` | quick | about 11 KiB |
+//! | `fir_interpolate_real_vs_reference` | quick | about 9 KiB |
+//! | `fir_interpolate_block_invariance` | quick | about 19 KiB |
+//! | `fm_mod_c32_vs_reference` | quick | about 28 KiB |
+//! | `fm_mod_cq15_vs_reference` | quick | about 14 KiB |
+//! | `fm_mod_block_invariance` | quick | about 20 KiB |
+//! | `ddc_equals_chain` | quick | about 12 KiB |
+//! | `duc_equals_chain` | quick | about 16 KiB |
+//! | `fm_demod_equals_chain` | quick | about 12 KiB |
+//! | `ddc_partial_output_keeps_phase` | quick | about 10 KiB |
+//! | `e2e_fm_rx_f32` | quick | about 43 KiB |
+//! | `e2e_fm_rx_q15` | quick | about 37 KiB |
+//! | `e2e_fm_txrx_f32` | quick | about 48 KiB |
+//! | `e2e_fm_txrx_q15` | quick | about 37 KiB |
+//! | `e2e_fm_rx_f32_1s`, `e2e_fm_rx_q15_1s` | full | about 211 KiB |
+//! | `e2e_fm_txrx_f32_1s`, `e2e_fm_txrx_q15_1s` | full | about 217 KiB |
+//! | `extremes_tx_kernels` | full | about 16 KiB |
 
 // The stack-frame lint counts every `Result<_, Failure>` temporary of an
 // unoptimised build separately (a `Failure` is about 200 bytes by
@@ -78,8 +97,9 @@ use crate::suite::{Failure, TestCase, Tier};
 mod m05;
 mod m06;
 mod m07;
+mod m08;
 
-pub(crate) static CASES: [TestCase; 47] = [
+pub(crate) static CASES: [TestCase; 68] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -314,6 +334,111 @@ pub(crate) static CASES: [TestCase; 47] = [
         name: "extremes_fft",
         tier: Tier::Full,
         run: m07::extremes_fft,
+    },
+    TestCase {
+        name: "convert_out_all_formats_roundtrip",
+        tier: Tier::Quick,
+        run: m08::convert_out_all_formats_roundtrip,
+    },
+    TestCase {
+        name: "fir_interpolate_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m08::fir_interpolate_c32_vs_reference,
+    },
+    TestCase {
+        name: "fir_interpolate_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m08::fir_interpolate_cq15_vs_reference,
+    },
+    TestCase {
+        name: "fir_interpolate_real_vs_reference",
+        tier: Tier::Quick,
+        run: m08::fir_interpolate_real_vs_reference,
+    },
+    TestCase {
+        name: "fir_interpolate_block_invariance",
+        tier: Tier::Quick,
+        run: m08::fir_interpolate_block_invariance,
+    },
+    TestCase {
+        name: "fm_mod_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m08::fm_mod_c32_vs_reference,
+    },
+    TestCase {
+        name: "fm_mod_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m08::fm_mod_cq15_vs_reference,
+    },
+    TestCase {
+        name: "fm_mod_block_invariance",
+        tier: Tier::Quick,
+        run: m08::fm_mod_block_invariance,
+    },
+    TestCase {
+        name: "ddc_equals_chain",
+        tier: Tier::Quick,
+        run: m08::ddc_equals_chain,
+    },
+    TestCase {
+        name: "duc_equals_chain",
+        tier: Tier::Quick,
+        run: m08::duc_equals_chain,
+    },
+    TestCase {
+        name: "fm_demod_equals_chain",
+        tier: Tier::Quick,
+        run: m08::fm_demod_equals_chain,
+    },
+    TestCase {
+        name: "ddc_partial_output_keeps_phase",
+        tier: Tier::Quick,
+        run: m08::ddc_partial_output_keeps_phase,
+    },
+    TestCase {
+        name: "e2e_fm_rx_f32",
+        tier: Tier::Quick,
+        run: m08::e2e_fm_rx_f32,
+    },
+    TestCase {
+        name: "e2e_fm_rx_q15",
+        tier: Tier::Quick,
+        run: m08::e2e_fm_rx_q15,
+    },
+    TestCase {
+        name: "e2e_fm_txrx_f32",
+        tier: Tier::Quick,
+        run: m08::e2e_fm_txrx_f32,
+    },
+    TestCase {
+        name: "e2e_fm_txrx_q15",
+        tier: Tier::Quick,
+        run: m08::e2e_fm_txrx_q15,
+    },
+    TestCase {
+        name: "e2e_fm_rx_f32_1s",
+        tier: Tier::Full,
+        run: m08::e2e_fm_rx_f32_1s,
+    },
+    TestCase {
+        name: "e2e_fm_rx_q15_1s",
+        tier: Tier::Full,
+        run: m08::e2e_fm_rx_q15_1s,
+    },
+    TestCase {
+        name: "e2e_fm_txrx_f32_1s",
+        tier: Tier::Full,
+        run: m08::e2e_fm_txrx_f32_1s,
+    },
+    TestCase {
+        name: "e2e_fm_txrx_q15_1s",
+        tier: Tier::Full,
+        run: m08::e2e_fm_txrx_q15_1s,
+    },
+    TestCase {
+        name: "extremes_tx_kernels",
+        tier: Tier::Full,
+        run: m08::extremes_tx_kernels,
     },
 ];
 

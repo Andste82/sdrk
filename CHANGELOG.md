@@ -6,4 +6,4 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
-- M00: workspace with the layer folders, placeholder crates `sdrk-device`, `sdrk-core`, `sdrk` and `sdrk-testkit`, `xtask` (`check`, `bare-metal`, `test-all`), lint and format configuration, `deny.toml`, CI on Linux x86_64, Linux arm64 and Windows x86_64, documentation skeleton.
+- M00: workspace with the layer folders, placeholder crates `sdrk-device`, `sdrk-core`, `sdrk` and `sdrk-testkit`, `xtask` (`check`, `bare-metal`, `test-all`), lint and format configuration, `deny.toml`, CI on Linux x86_64, Linux arm64 and Windows x86_64, documentation skeleton, development container (`.devcontainer/`).

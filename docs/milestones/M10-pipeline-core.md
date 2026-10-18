@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -194,6 +195,8 @@ impl Registry {
     pub fn descriptions(&self) -> impl Iterator<Item = &'static BlockDescription>;
     pub fn json_schema(&self) -> serde_json::Value;
     pub fn validate(&self, spec: &PipelineSpec, opts: &BuildOptions) -> Report;
+    /// Parse + validate in one step: serde errors become diagnostics `Syntax` (with line/column), `UnknownField`, `SchemaVersion` with their path.
+    pub fn validate_json(&self, json: &str, opts: &BuildOptions) -> Report;
     pub fn build(&self, spec: &PipelineSpec, opts: &BuildOptions) -> Result<Pipeline, Report>;
 }
 pub trait BlockFactory: Send + Sync {
@@ -292,12 +295,12 @@ No new Python vectors. Pipeline tests compare against blocks driven by hand (bit
 ## Tests
 
 1. JSON round trip: for every example flow, `to_json(from_json(x))` parses back to an equal `PipelineSpec`; for a canonical file the bytes are identical.
-2. Schema: committed schema up to date; every example flow validates against it (dev-dependency `jsonschema`); hand-written invalid flows, one per `DiagCode` (19 in this milestone; M11 adds files for its new codes), are rejected by `validate` with the expected `code` and `path` (table-driven test, files in `crates/pipeline/sdrk-pipeline/tests/invalid/*.json` with the expected diagnostic in a sibling `.expected.json`).
+2. Schema: committed schema up to date; every example flow validates against it (dev-dependency `jsonschema`); hand-written invalid flows, one per `DiagCode` (19 in this milestone; M11 adds files for its new codes), are rejected by `validate_json` with the expected `code` and `path` (table-driven test, files in `crates/pipeline/sdrk-pipeline/tests/invalid/*.json` with the expected diagnostic in a sibling `.expected.json`).
 3. All-errors-at-once: a flow with three independent mistakes reports three diagnostics.
 4. **Pipeline = hand-wired chain:** `fm_receiver.json` run on a CU8 recording generated with the testkit (E2E-RX signal, 0.5 s) gives output bit-identical to the same blocks constructed and chained manually.
 5. **Block-size invariance:** pushing the same input in random chunk sizes (ChunkPlan, 10 seeds) gives bit-identical stream outputs and identical frames.
 6. **Fan-out:** `rf → tune` and `rf → fft` read the same buffer; spectrum frames equal those of a standalone spectrum block.
-7. **No allocation after build:** test binary `tests/no_alloc.rs` with a counting `#[global_allocator]`; after `build`, 1000 iterations of `push` + `read_stream` + `read_frame` + `set_param(frequency_hz)` (with a pre-built `serde_json::Value::Number` — note: `set_param` must not allocate for numbers) → allocation count unchanged.
+7. **No allocation after build:** test binary `tests/no_alloc.rs` (starts with `#![allow(unsafe_code)]`, the only exception in this crate, because `GlobalAlloc` is an `unsafe trait`) with a counting `#[global_allocator]`; after `build`, 1000 iterations of `push` + `read_stream` + `read_frame` + `set_param(frequency_hz)` (with a pre-built `serde_json::Value::Number` — note: `set_param` must not allocate for numbers) → allocation count unchanged.
 8. Runtime parameter: changing `tune.frequency_hz` moves the demodulated tone exactly from the next pushed chunk.
 9. Limits: each limit triggers `LimitExceeded`; cost and memory in the report are positive and monotonic in `max_chunk`/taps.
 10. Drop policies behave as specified; `OutputFull` consumes nothing.

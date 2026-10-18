@@ -26,7 +26,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - plus every additional command listed in the milestone's *Acceptance* section.
 3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
-5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages).
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
 
 ### R2 — Layers and dependencies
@@ -123,6 +123,7 @@ Additional rules:
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
 6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
 
@@ -294,7 +295,7 @@ Rules (tested): every text non-empty and without trailing whitespace; `summary` 
 | `fir` | `FirBlock<T>` | T → T | `cutoff_hz` (build), `transition_hz` (build), `attenuation_db` (build, 60), `max_taps` (build, 1023) | design + `fir` |
 | `ddc` | `DdcBlock<T>` | T → T | `frequency_hz` (Hz, **runtime**, 0; ±fs/2), `decimation` (I64, build, 1…1024), `cutoff_hz` (build, default 0.4·fs/decimation), `transition_hz` (build, default 0.1·fs/decimation), `attenuation_db` (build, 60), `max_taps` | NCO at `−frequency_hz` (shift the signal at +f to 0 Hz) + designed taps + fused `ddc` with scratch sized to `max_chunk` (build param, default 4096) |
 | `duc` | `DucBlock<T>` | T → T | `frequency_hz` (runtime), `interpolation` (build), `cutoff_hz`, `transition_hz`, `attenuation_db`, `max_taps` | taps · L, fused `duc` |
-| `fm_demod` | `FmDemodBlock<T>` | C32→f32, CQ15→Q15 | `deviation_hz` (build, 75e3), `deemphasis_us` (Microseconds, build, 50; 0 = off), `audio_cutoff_hz` (build, 15e3), `audio_decimation` (build, 1…64, default 1) | `quad_demod` (gain per M08: f32 `fs/(2π·dev)`; Q15 1.0) + `deemphasis` + `resample_real` (L=1, M=audio_decimation) |
+| `fm_demod` | `FmDemodBlock<T>` | C32→f32, CQ15→Q15 | `deviation_hz` (build, 75e3), `deemphasis_us` (Microseconds, build, 50; 0 = off), `audio_cutoff_hz` (build, 15e3), `audio_decimation` (build, 1…64, default 1) | `quad_demod` (gain per M08: f32 `fs/(2π·dev)`; Q15 gain raw 32767, as in M08 E2E-RX) + `deemphasis` + `resample_real` (L=1, M=audio_decimation) |
 | `fm_mod` | `FmModBlock<T>` | f32→C32, Q15→CQ15 | `deviation_hz` (runtime, 75e3) | `fm_mod` |
 | `resampler` | `ResamplerBlock<T>` | T → T (complex) and `ResamplerRealBlock<T>` (real) | `rate_out_hz` (build, required; together with the input rate defines L/M = reduce(rate_out/rate_in), L, M ≤ 1024), `cutoff_hz` (build, default 0.45·min(rate_in, rate_out)), `transition_hz`, `attenuation_db`, `ppm` (Ppm, **runtime**, 0, ±1000) | see §7 |
 | `spectrum` | `SpectrumBlock<T>` (FrameBlock) | C32/CQ15 → Frame | `fft_size` (build, 1024, power of two 16…65536), `window` (Choice hann/blackman_harris/kaiser, build), `kaiser_beta` (build, 8.6), `averaging` (I64, runtime, 1…1024, default 1), `interval_samples` (Samples, runtime, default = fft_size; ≥ fft_size·averaging not required — overlapping windows allowed when smaller) | see §8 |
@@ -310,7 +311,7 @@ Rules (tested): every text non-empty and without trailing whitespace; `summary` 
 
 ### 8. Spectrum
 
-For every frame: take `fft_size` consecutive input samples starting at the frame position, multiply by the window (`window` kernel; window generated with `Symmetry::Periodic`), FFT forward (C32: `Scaling::Default`; CQ15: `Scaling::BlockFloat`), `mag_sq`, convert to f32 power `P[k]`: C32 directly; CQ15 `P[k] = q15_to_f32(mag_sq) · 4^exponent` (exactly as in the M07 rule), accumulate over `averaging` frames (arithmetic mean of power), then `power_db` with reference `(fft_size · coherent_gain)²` so that a full-scale complex tone at a bin centre reads 0 dBFS, and finally **fftshift** (bin order −fs/2 … +fs/2, DC at index `fft_size/2`). Consecutive FFT windows start `interval_samples` apart (overlap if smaller than `fft_size`; samples are skipped if larger). `FrameMeta.first_sample` = index of the first sample of the **first** averaged window; `exponent` = 0 (already applied). Storage: input ring of `fft_size`, FFT buffer, twiddles, window, accumulator.
+For every frame: take `fft_size` consecutive input samples starting at the frame position, multiply by the window (`window` kernel; window generated with `Symmetry::Periodic`), FFT forward (C32: `Scaling::Default`; CQ15: `Scaling::BlockFloat`), power `P[k]`: C32 via `mag_sq`; CQ15 **not** via Q15 `mag_sq` (it saturates for |X| ≥ 1 and rounds weak bins to 0) but in f32 from the CQ15 bins: `P[k] = ((re as f32)² + (im as f32)²) · 2^(2·exponent − 30)` (M07 exponent rule), accumulate over `averaging` frames (arithmetic mean of power), then `power_db` with reference `(fft_size · coherent_gain)²` so that a full-scale complex tone at a bin centre reads 0 dBFS, and finally **fftshift** (bin order −fs/2 … +fs/2, DC at index `fft_size/2`). Consecutive FFT windows start `interval_samples` apart (overlap if smaller than `fft_size`; samples are skipped if larger). `FrameMeta.first_sample` = index of the first sample of the **first** averaged window; `exponent` = 0 (already applied). Storage: input ring of `fft_size`, FFT buffer, twiddles, window, accumulator.
 
 ### 9. Facade/core additions and documentation
 
@@ -334,8 +335,8 @@ For every frame: take `fft_size` consecutive input samples starting at the frame
 | `blocks/resampler_rational_c32_48k_to_44k1` | 312 | noise σ 0.2 low-passed by `firwin(63, 0.3)` | `upfirdn` with block taps | SNR ≥ 100 |
 | `blocks/resampler_tuned_c32_ppm` | 313 | same input, rate 48 kHz → 48 kHz, ppm +125 | Python implementation of §7 tuned mode in f64 (same bank, same fixed-point positions) | SNR ≥ 100 |
 | `blocks/resampler_tuned_cq15_ppm` | 314 | same, quantized | Python integer model of §7 | bit-exact |
-| `blocks/spectrum_c32_1024_hann_avg4` | 315 | tone at bin 100.0 (amp 1 − 2⁻¹⁵) + noise σ 0.01 | numpy: window periodic Hann, `fft`, `\|X\|²`, mean over 4 windows, `10·log10(P / (N·cg)²)`, `fftshift` | class `max_abs_err`: ≤ 0.01 dB, `min_ref_db` −100 |
-| `blocks/spectrum_cq15_1024_bfp` | 316 | same signal quantized | same numpy result | class `max_abs_err`: ≤ 0.2 dB, `min_ref_db` −60 |
+| `blocks/spectrum_c32_1024_hann_avg4` | 315 | tone at bin 100.0 (amp 1 − 2⁻¹⁵) + noise σ 0.01 | numpy: window periodic Hann, `fft`, `\|X\|²`, mean over 4 windows, `10·log10(P / (N·cg)²)`, `fftshift` | class `max_abs_err`: ≤ 0.01 dB, `min_ref_db` −100, `ref_unit` `db` |
+| `blocks/spectrum_cq15_1024_bfp` | 316 | same signal quantized | same numpy result | class `max_abs_err`: ≤ 0.2 dB, `min_ref_db` −60, `ref_unit` `db` |
 
 The Python block cases use `tests/golden/sdrk_golden/design.py`, a port of §3 that **calls SciPy** (`firwin`, `kaiserord`) — it is the reference; the Rust design must equal it.
 

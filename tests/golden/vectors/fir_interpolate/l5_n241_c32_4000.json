@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "l5_n241_c32_4000.expected.bin",
+      "len": 20000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "l5_n241_c32_4000.input.bin",
+      "len": 4000
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "l5_n241_c32_4000.taps.bin",
+      "len": 241
+    }
+  },
+  "case": "l5_n241_c32_4000",
+  "format_version": 1,
+  "kernel": "fir_interpolate",
+  "notes": "taps 5 * firwin(241, 0.18) with the interpolation gain; every input sample yields exactly 5 outputs",
+  "params": {
+    "factor": 5,
+    "outputs": 20000,
+    "taps": 241
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 90,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

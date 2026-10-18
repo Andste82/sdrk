@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "cs16_bigendian_from_c32_256.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "cs16_bigendian_from_c32_256.input.bin",
+      "len": 256
+    }
+  },
+  "case": "cs16_bigendian_from_c32_256",
+  "format_version": 1,
+  "kernel": "convert_out",
+  "notes": "float path: floor(x * full_scale + offset + 0.5) in float64, NaN as 0, saturated; bytes as in docs/device.md",
+  "params": {
+    "align": "lsb",
+    "bits": 16,
+    "container": "i16",
+    "endian": "big",
+    "full_scale": null,
+    "layout": "interleaved",
+    "samples": 256,
+    "signed": true,
+    "swap_iq": false
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 211,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

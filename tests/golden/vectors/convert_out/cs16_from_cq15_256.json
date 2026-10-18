@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "cs16_from_cq15_256.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cs16_from_cq15_256.input.bin",
+      "len": 256
+    }
+  },
+  "case": "cs16_from_cq15_256",
+  "format_version": 1,
+  "kernel": "convert_out",
+  "notes": "integer path: Q15 rounding right shift or left shift by the bit depth, explicit full scale by floor division",
+  "params": {
+    "align": "lsb",
+    "bits": 16,
+    "container": "i16",
+    "endian": "little",
+    "full_scale": null,
+    "layout": "interleaved",
+    "samples": 256,
+    "signed": true,
+    "swap_iq": false
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 222,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

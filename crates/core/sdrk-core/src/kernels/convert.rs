@@ -141,3 +141,82 @@ pub(crate) fn plan(
     }
     Ok(samples)
 }
+
+/// Encodes complex samples into raw bytes of a device format (the inverse of [`Convert`]).
+///
+/// ```
+/// use sdrk_core::{kernels::convert::ConvertOut, Fallback, C32};
+/// use sdrk_device::formats;
+///
+/// // Zero is at 127.5 for `U8`: 0.0 rounds half up to 128, -1.0 gives 0.
+/// let mut bytes = [0u8; 2];
+/// let n = Fallback.convert_out(&formats::CU8, &[C32::new(0.0, -1.0)], &mut bytes)?;
+/// assert_eq!((n, bytes), (2, [128, 0]));
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait ConvertOut<T: ComplexSample> {
+    /// Encode `input` into the raw bytes of `format` (layout Interleaved or Planar) and return
+    /// the number of bytes written.
+    ///
+    /// From `C32`: `v = x * full_scale + offset` in f64 (NaN counts as amplitude 0), the raw
+    /// value is `floor(v + 0.5)` saturated to the range of the format; `F32` containers copy
+    /// the bits. From `CQ15` the integer rules of `docs/kernels.md` apply. Alignment, packing,
+    /// I/Q swap, planar halves and byte order are the inverse of [`Convert`].
+    ///
+    /// Errors: `BufferTooSmall` if `output` cannot hold the bytes, `Unsupported` for `Bits1`,
+    /// `InvalidParameter` for a real layout or a sample count that does not fill whole packing
+    /// groups.
+    fn convert_out(&self, format: &SampleFormat, input: &[T], output: &mut [u8]) -> Result<usize>;
+}
+
+/// Encodes real samples into raw bytes (layout `Real`).
+///
+/// ```
+/// use sdrk_core::{kernels::convert::ConvertOutReal, Fallback, Q15};
+/// use sdrk_device::formats;
+///
+/// let mut bytes = [0u8; 4];
+/// let n = Fallback.convert_out_real(&formats::RS16, &[Q15(16384), Q15(-16384)], &mut bytes)?;
+/// assert_eq!((n, bytes), (4, [0x00, 0x40, 0x00, 0xC0]));
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait ConvertOutReal<T: RealSample> {
+    /// Same as [`ConvertOut::convert_out`] for `Layout::Real`.
+    fn convert_out_real(
+        &self,
+        format: &SampleFormat,
+        input: &[T],
+        output: &mut [u8],
+    ) -> Result<usize>;
+}
+
+/// Shared argument checks of the encoding kernels; returns the number of bytes to write.
+///
+/// Order: wrong layout, `Bits1`, incomplete packing group, output size.
+pub(crate) fn plan_out(
+    format: &SampleFormat,
+    samples: usize,
+    output_len: usize,
+    real: bool,
+) -> Result<usize> {
+    if (format.layout() == Layout::Real) != real {
+        return Err(Error::InvalidParameter(if real {
+            "convert_out_real needs a real layout"
+        } else {
+            "convert_out needs an interleaved or planar layout"
+        }));
+    }
+    if format.container() == Container::Bits1 {
+        return Err(Error::Unsupported("1-bit containers"));
+    }
+    let bytes = format
+        .bytes_for_samples(samples)
+        .map_err(|_| Error::InvalidParameter("sample count does not fill whole packing groups"))?;
+    if output_len < bytes {
+        return Err(Error::BufferTooSmall {
+            needed: bytes,
+            got: output_len,
+        });
+    }
+    Ok(bytes)
+}

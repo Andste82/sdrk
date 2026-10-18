@@ -2,11 +2,14 @@
 
 from . import (  # noqa: F401
     convert,
+    convert_out,
     dc_block,
     deemphasis,
     fft,
     fir,
     fir_decimate,
+    fir_interpolate,
+    fm_mod,
     mag_sq,
     power_db,
     q15_ops,

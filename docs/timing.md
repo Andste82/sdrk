@@ -22,11 +22,13 @@ Declared values:
 | `FirState` with `N` taps | `1/1` | `(N - 1) / 2`, built as `Delay::new(N - 1, 2)` (not reduced; call `reduced()` before comparing) |
 | `FirDecimState` with `N` taps, factor `M` | `1/M` | `(N - 1) / 2`, built as `Delay::new(N - 1, 2)` |
 | `ResampleState`, `ResampleRealState` with `N` taps, `L / M` | `L/M` | `(N - 1) / (2 L)`, built as `Delay::new(N - 1, 2 * L)` |
+| `FirInterpState`, `FirInterpRealState` with `N` taps, factor `L` | `L/1` | `(N - 1) / (2 L)`, built as `Delay::new(N - 1, 2 * L)` |
+| `FmModState` | `1/1` | 0 |
 | `QuadDemodState` | `1/1` | `1/2`, `Delay::new(1, 2)` (the discriminator looks at two samples) |
 | `DeemphasisState` | `1/1` | 0 (IIR; the real delay depends on the frequency and is not part of exact event timing) |
 | `DcBlockState` | `1/1` | 0 (one-pole high-pass; the delay depends on the frequency) |
 
-`window`, `mag_sq` and `power_db` are stateless per-sample kernels with ratio `1/1` and no delay. The window generators and the FFT-related timing follow with M07.
+`window`, `mag_sq` and `power_db` are stateless per-sample kernels with ratio `1/1` and no delay.
 
 The FIR group delay is exact for symmetric (linear-phase) taps. A filter with asymmetric taps still reports `(N - 1) / 2`; it is the declaration of the structure, not a measurement.
 
@@ -37,6 +39,12 @@ Output samples are a function of the absolute input position only, never of how 
 ## Rate-changing kernels
 
 `fir_decimate`, `resample` and `resample_real` return `Progress { consumed, produced }`. They consume input only as far as the output space allows and the caller resubmits `input[consumed..]`; the output depends only on the absolute input position, so the sequence of outputs is the same for any block size and any output buffer size. After `n` input samples since a reset the decimator has produced `ceil(n / M)` outputs and the resampler `floor((n * L - 1) / M) + 1` (see `docs/kernels.md`). A resampler whose output buffer ran full keeps the remaining outputs pending; they are produced by the next call (also with an empty input).
+
+## Transmit timing and lead time
+
+The transmit chain is the receive chain reversed: the interpolating filters delay the signal, so the first useful output sample appears later than the first input sample, and a burst that has to start at an exact sample index needs the *lead time* of the whole chain. The lead time (in output samples of the last stage) is the sum of the group delays of the interpolation filters, each converted to the output rate: a stage with group delay `d` (in its own input samples) contributes `d * R` output samples, where `R` is the total interpolation from the input rate of that stage to the output rate. For the FM transmitter of the end-to-end test (`fir_interpolate` by 5 with 241 taps, `fm_mod`, `duc` by 10 with 127 taps) this is `(240 / 10) * 50 + (126 / 20) * 10 = 1200 + 63 = 1263` output samples at 2.4 MHz (the audio filter dominates: 24 audio samples times 50). `Delay::add` builds such sums exactly; the pipeline of a later milestone does the accounting automatically.
+
+`fm_mod` has no delay (`Delay::ZERO`); its phase accumulator and the oscillator of a `duc` are part of the state and advance by exactly the number of samples processed, never by the number of samples offered. The fused `ddc` and `duc` kernels keep that property when the output buffer is too small (see `docs/kernels.md`).
 
 ## The NCO phase model
 

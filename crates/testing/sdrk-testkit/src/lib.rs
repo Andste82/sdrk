@@ -7,6 +7,10 @@
 //! The modules are:
 //!
 //! - `golden` (feature `std`): loader and comparison for the golden vectors,
+//! - [`e2e`]: the streaming FM receive and transmit chains of the end-to-end tests,
+//! - [`fm`]: the analytic FM baseband generator,
+//! - [`meters`]: tone fit, SINAD, frequency estimate and spectral mask,
+//! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
 //! - [`rng`]: deterministic PCG32 random numbers,
 //! - `r#gen` (`gen` is a reserved word in edition 2024): signal generators that depend only on the absolute sample index,
 //! - [`metrics`]: SNR, error and bit-exact comparison,
@@ -39,11 +43,15 @@
 extern crate std;
 
 pub mod arena;
+pub mod design_helpers;
+pub mod e2e;
 pub mod encode;
+pub mod fm;
 pub mod r#gen;
 #[cfg(feature = "std")]
 pub mod golden;
 pub mod invariance;
+pub mod meters;
 pub mod metrics;
 pub mod rng;
 pub mod suite;

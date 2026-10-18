@@ -6,7 +6,10 @@ pub mod decim;
 pub mod demod;
 pub mod fft;
 pub mod filter;
+pub mod fused;
+pub mod interp;
 pub mod mix;
+pub mod modulate;
 pub mod spectrum;
 
 /// `Ok` when both lengths are equal, else `LengthMismatch { expected, got }`.

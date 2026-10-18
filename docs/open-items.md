@@ -5,3 +5,4 @@ Items that remain open, are not covered by a later milestone, and need a decisio
 | Milestone | Item | Why it is open | Needed decision / input |
 | --- | --- | --- | --- |
 | M04 | The `golden-check` CI job cannot be confirmed green locally | the workflow only runs on GitHub; locally `python tests/golden/generate.py --check` passes with Python 3.12.15, NumPy 2.5.4, SciPy 1.18.1 | Confirm the first CI run is green after the branch is pushed. |
+| M08 | `python tests/golden/generate.py --check` could not be re-run in the final session (no NumPy in this environment) | the generator was verified green earlier in the milestone; the Rust golden tests over the committed vectors pass | Confirm the `golden-check` CI job is green on the M08 branch. |

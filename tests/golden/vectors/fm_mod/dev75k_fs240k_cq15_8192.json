@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "dev75k_fs240k_cq15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "dev75k_fs240k_cq15_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "dev75k_fs240k_cq15_8192",
+  "format_version": 1,
+  "kernel": "fm_mod",
+  "notes": "Q15 input as x = q / 32768; the Q15 table output has amplitude 1 - 2^-15",
+  "params": {
+    "deviation_hz": 75000.0,
+    "k": 1342177280.0,
+    "rate_hz": 240000.0,
+    "samples": 8192
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 93,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 80.0
+  }
+}

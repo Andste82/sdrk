@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "dev75k_fs240k_c32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "dev75k_fs240k_c32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "dev75k_fs240k_c32_8192",
+  "format_version": 1,
+  "kernel": "fm_mod",
+  "notes": "phase += floor(x * k + 0.5) with k = deviation / rate * 2^32, exact wrap modulo 2^32, unit amplitude output",
+  "params": {
+    "deviation_hz": 75000.0,
+    "k": 1342177280.0,
+    "rate_hz": 240000.0,
+    "samples": 8192
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 92,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 120.0
+  }
+}

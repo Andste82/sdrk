@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 2](../PLAN.md#phase-2--mvp-kernels-both-directions-large) · Depends on: [M07](M07-fft.md) · Next: [M09](M09-blocks.md)
 
+## Status
+
+**Fully completed:** `ConvertOut`/`ConvertOutReal` (`C32`, `CQ15`, `f32`, `Q15`; every integer format, planar, packed, swapped, big-endian and `F32` containers) with `Fallback`, `Reference` and facade; `FirInterpolate`/`FirInterpolateReal` with `FirInterpState`/`FirInterpRealState`; `FmMod` with `FmModState`; the fused traits `Ddc`, `Duc`, `FmDemod`, the chaining functions in `sdrk_core::fused` and `FirDecimState::max_input_for_output`, with the facade calling the chain; the testkit `fm`, `meters` and `design_helpers` modules plus the shared `e2e` chains; the golden cases of the milestone table (36 cases in total, the table's seeds 90 to 93 and 200 plus i / 220 plus i) with Rust golden tests in one piece and in chunks; 21 suite cases (kernel cases, `*_equals_chain`, `ddc_partial_output_keeps_phase`, `e2e_fm_rx_{f32,q15}`, `e2e_fm_txrx_{f32,q15}` for 0.1 s and the `_1s` variants for 1.0 s, `extremes_tx_kernels`); tests 1 to 7 of the milestone (golden, round trip, fused equals chain with random chunk plans and small buffers, `fm_mod` then `quad_demod`, both end-to-end chains in `f32` and Q15 above their thresholds, the meter self-tests, the suite on the host); `docs/kernels.md`, `docs/timing.md` (transmit lead time) and the changelog. All R1.2 commands, `python tests/golden/generate.py --check`, `cargo deny check` and `cargo test -p sdrk-core --features reference,static-twiddles` pass; no end-to-end test is `#[ignore]`d, so no extra CI step is needed.
+
+**Partial / deviations (decided, see [`decisions-log.md`](../decisions-log.md), M08 entries):** none of the numeric contracts was relaxed; the end-to-end thresholds stay at the specified values although the chains reach about 74 dB (receive) and 68 dB (transmit then receive); `estimate_frequency` looks at the first 2048 samples only and `spectral_mask` is a direct DFT (documented limits of the heap-free meters). No open item needs a decision from the owner.
+
 ## Goal
 
 Complete phase 2: the transmit kernels (`convert_out`, `fir_interpolate`, `fm_mod`), the fused kernels (`ddc`, `duc`, `fm_demod`) with a chained default, the testkit meters (tone, SINAD, spectral mask) and FM generator, and two end-to-end kernel-chain tests (FM receive from CU8, and FM transmit-then-receive) in f32 and Q15.
@@ -239,8 +245,8 @@ R1.2 commands; golden check; `cargo test -p sdrk-testkit --features std -- --inc
 
 ## Deliverables checklist
 
-- [ ] `convert_out`, `fir_interpolate` (+ real), `fm_mod`
-- [ ] Fused traits, chained functions, `max_input_for_output`
-- [ ] Testkit `fm`, `meters`, `design_helpers`
-- [ ] E2E tests f32 and Q15
-- [ ] Golden cases, suite cases, docs
+- [x] `convert_out`, `fir_interpolate` (+ real), `fm_mod`
+- [x] Fused traits, chained functions, `max_input_for_output`
+- [x] Testkit `fm`, `meters`, `design_helpers`
+- [x] E2E tests f32 and Q15
+- [x] Golden cases, suite cases, docs

@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "l5_n241_q15_4000.expected.bin",
+      "len": 20000
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "l5_n241_q15_4000.input.bin",
+      "len": 4000
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "l5_n241_q15_4000.taps.bin",
+      "len": 241
+    }
+  },
+  "case": "l5_n241_q15_4000",
+  "format_version": 1,
+  "kernel": "fir_interpolate_real",
+  "notes": "real Q15 signal; taps without the gain L (gain loss of 5); integer polyphase model",
+  "params": {
+    "factor": 5,
+    "outputs": 20000,
+    "taps": 241
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 95,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

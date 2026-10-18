@@ -15,7 +15,7 @@ fn table_error() -> Error {
 
 /// `(cos, sin)` of the phase with linear interpolation, in f32 without FMA.
 #[inline]
-fn cos_sin_f32(phase: u32) -> Result<(f32, f32)> {
+pub(super) fn cos_sin_f32(phase: u32) -> Result<(f32, f32)> {
     let interp = |p: u32| -> Option<f32> {
         let idx = (p >> 20) as usize;
         let f = (p & 0xF_FFFF) as f32 * (1.0 / 1_048_576.0);
@@ -30,7 +30,7 @@ fn cos_sin_f32(phase: u32) -> Result<(f32, f32)> {
 
 /// `(cos, sin)` of the phase as Q15 with linear interpolation in i64.
 #[inline]
-fn cos_sin_q15(phase: u32) -> Result<CQ15> {
+pub(super) fn cos_sin_q15(phase: u32) -> Result<CQ15> {
     let interp = |p: u32| -> Option<i16> {
         let idx = (p >> 20) as usize;
         let f15 = i64::from((p >> 5) & 0x7FFF);

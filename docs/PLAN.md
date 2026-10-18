@@ -135,7 +135,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - **Paper check:** GPU group and network split describable in `architecture.md`
 - **Benchmark:** latency in samples (from buffer sizes and group delays) and throughput as instructions per sample, reported together
 
-**Done when:** synthetic and real recordings are demodulated via a JSON flow, and all loopback tests pass.
+**Done when:** synthetic recordings are demodulated via a JSON flow, and all loopback tests pass. No real recordings are needed: correctness rests on golden samples from established implementations.
 
 ## Phases 4–9: speed, platforms, bindings
 

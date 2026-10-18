@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "c32_inv_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_inv_1024.input.bin",
+      "len": 1024
+    }
+  },
+  "case": "c32_inv_1024",
+  "format_version": 1,
+  "kernel": "fft",
+  "notes": "input = fft of complex noise cast to complex64; expected = numpy.fft.ifft (divided by N); exponent log2 N",
+  "params": {
+    "direction": "inverse",
+    "n": 1024
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 74,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

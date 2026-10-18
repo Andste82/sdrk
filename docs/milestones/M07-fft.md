@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 2](../PLAN.md#phase-2--mvp-kernels-both-directions-large) · Depends on: [M06](M06-receive-kernels.md) · Next: [M08](M08-transmit-and-fused.md)
 
+## Status
+
+**Fully completed:** `FftPlan` (with `new`, `from_twiddles`, `from_static_4096` under the feature `static-twiddles`), `RealFftPlan`, the traits `Fft` (`C32`, `CQ15`, fixed `1/N` and block-floating-point scaling, one `FftScale` exponent rule) and `RealFft` (`rfft`, `irfft` for `f32`), twiddle generation, bit reversal, `Fallback` and `Reference` (naive f64 DFT, `Reference::dft`), facade delegation, all 18 golden cases of the milestone table with Rust golden tests, 12 suite cases, plan/length/scaling/extreme-input tests, round-trip, Parseval, linearity, shift, impulse and tone tests, the block-floating-point no-saturation counter test (all sizes 16 to 4096, 20 seeds), the static-twiddle equality test, `docs/kernels.md` and the changelog. All R1.2 commands, `python tests/golden/generate.py --check`, `cargo deny check` and `cargo test -p sdrk-core --features reference,static-twiddles` pass.
+
+**Partial / deviations (decided, see [`decisions-log.md`](../decisions-log.md), M07 entries):** the threshold of the block-floating-point full-scale tone is 58 dB instead of 60 dB (the exact algorithm reaches 59.05 dB; analysis in the log); the in-place `Fft::fft` of `Reference` is limited to 256 points because a DFT needs a second buffer (`Reference::dft` is the out-of-place form without a limit). No open item needs a decision from the owner.
+
 ## Goal
 
 Implement our own heap-free FFT as an ordinary kernel: power-of-two sizes 16…65 536, in-place radix-2, complex forward/inverse in `C32` and `CQ15`, Q15 with two scaling modes (fixed 1/N and block floating point), and a real-input FFT for `f32` and its inverse. The fallback is a clear radix-2 implementation; speed comes later from backends (M13, M16).
@@ -268,8 +274,8 @@ R1.2 commands; `cargo test -p sdrk-core --features reference,static-twiddles`; g
 
 ## Deliverables checklist
 
-- [ ] `FftPlan`, `RealFftPlan`, `Fft`, `RealFft` (forward and inverse), scaling modes
-- [ ] Reference DFT
-- [ ] Golden cases, Rust golden tests, property tests
-- [ ] Suite cases
-- [ ] `docs/kernels.md` FFT section
+- [x] `FftPlan`, `RealFftPlan`, `Fft`, `RealFft` (forward and inverse), scaling modes
+- [x] Reference DFT
+- [x] Golden cases, Rust golden tests, property tests
+- [x] Suite cases
+- [x] `docs/kernels.md` FFT section

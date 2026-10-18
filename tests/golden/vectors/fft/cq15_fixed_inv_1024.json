@@ -1,0 +1,35 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "cq15_fixed_inv_1024.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_fixed_inv_1024.input.bin",
+      "len": 1024
+    }
+  },
+  "case": "cq15_fixed_inv_1024",
+  "format_version": 1,
+  "kernel": "fft",
+  "notes": "a white spectrum as input; expected = numpy.fft.ifft(quantized input); exponent log2 N",
+  "params": {
+    "direction": "inverse",
+    "n": 1024,
+    "scaling": "default"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 81,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 40.0
+  }
+}

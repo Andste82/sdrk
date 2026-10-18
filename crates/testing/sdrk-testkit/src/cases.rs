@@ -40,6 +40,18 @@
 //! | `mag_sq_vs_reference` | quick | about 30 KiB |
 //! | `power_db_vs_reference` | quick | about 18 KiB |
 //! | `extremes_rx_kernels` | full | about 30 KiB |
+//! | `fft_c32_vs_reference_64` | quick | about 3 KiB |
+//! | `fft_c32_vs_reference_1024` | quick | about 36 KiB |
+//! | `fft_cq15_fixed_vs_reference_1024` | quick | about 18 KiB |
+//! | `fft_cq15_bfp_vs_reference_1024` | quick | about 18 KiB |
+//! | `fft_roundtrip_c32` | quick | about 20 KiB |
+//! | `fft_roundtrip_cq15_bfp` | quick | about 10 KiB |
+//! | `rfft_vs_reference_1024` | quick | about 26 KiB |
+//! | `irfft_vs_reference_1024` | quick | about 30 KiB |
+//! | `rfft_roundtrip_f32` | quick | about 22 KiB |
+//! | `fft_weak_tone_bfp` | full | about 14 KiB |
+//! | `fft_parseval_c32` | quick | about 21 KiB |
+//! | `extremes_fft` | full | about 5 KiB |
 
 // The stack-frame lint counts every `Result<_, Failure>` temporary of an
 // unoptimised build separately (a `Failure` is about 200 bytes by
@@ -65,8 +77,9 @@ use crate::suite::{Failure, TestCase, Tier};
 
 mod m05;
 mod m06;
+mod m07;
 
-pub(crate) static CASES: [TestCase; 35] = [
+pub(crate) static CASES: [TestCase; 47] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -241,6 +254,66 @@ pub(crate) static CASES: [TestCase; 35] = [
         name: "extremes_rx_kernels",
         tier: Tier::Full,
         run: m06::extremes_rx_kernels,
+    },
+    TestCase {
+        name: "fft_c32_vs_reference_64",
+        tier: Tier::Quick,
+        run: m07::fft_c32_vs_reference_64,
+    },
+    TestCase {
+        name: "fft_c32_vs_reference_1024",
+        tier: Tier::Quick,
+        run: m07::fft_c32_vs_reference_1024,
+    },
+    TestCase {
+        name: "fft_cq15_fixed_vs_reference_1024",
+        tier: Tier::Quick,
+        run: m07::fft_cq15_fixed_vs_reference_1024,
+    },
+    TestCase {
+        name: "fft_cq15_bfp_vs_reference_1024",
+        tier: Tier::Quick,
+        run: m07::fft_cq15_bfp_vs_reference_1024,
+    },
+    TestCase {
+        name: "fft_roundtrip_c32",
+        tier: Tier::Quick,
+        run: m07::fft_roundtrip_c32,
+    },
+    TestCase {
+        name: "fft_roundtrip_cq15_bfp",
+        tier: Tier::Quick,
+        run: m07::fft_roundtrip_cq15_bfp,
+    },
+    TestCase {
+        name: "rfft_vs_reference_1024",
+        tier: Tier::Quick,
+        run: m07::rfft_vs_reference_1024,
+    },
+    TestCase {
+        name: "irfft_vs_reference_1024",
+        tier: Tier::Quick,
+        run: m07::irfft_vs_reference_1024,
+    },
+    TestCase {
+        name: "rfft_roundtrip_f32",
+        tier: Tier::Quick,
+        run: m07::rfft_roundtrip_f32,
+    },
+    TestCase {
+        name: "fft_weak_tone_bfp",
+        tier: Tier::Full,
+        run: m07::fft_weak_tone_bfp,
+    },
+    TestCase {
+        name: "fft_parseval_c32",
+        tier: Tier::Quick,
+        run: m07::fft_parseval_c32,
+    },
+    TestCase {
+        name: "extremes_fft",
+        tier: Tier::Full,
+        run: m07::extremes_fft,
     },
 ];
 

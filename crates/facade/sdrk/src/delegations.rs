@@ -9,6 +9,7 @@ use sdrk_core::kernels::decim::{
 use sdrk_core::kernels::demod::{
     DcBlock, DcBlockState, Deemphasis, DeemphasisState, QuadDemod, QuadDemodState,
 };
+use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::spectrum::{MagSq, PowerDb, Window};
@@ -43,4 +44,33 @@ crate::delegate! {
     MagSq<CQ15>::mag_sq(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> => Fallback;
     PowerDb<f32>::power_db(&self, input: &[f32], output: &mut [f32], offset_db: f32) -> Result<()> => Fallback;
     PowerDb<Q15>::power_db(&self, input: &[Q15], output: &mut [f32], offset_db: f32) -> Result<()> => Fallback;
+    Fft<C32>::fft[Tw: AsRef<[C32]>](&self, plan: &FftPlan<C32, Tw>, data: &mut [C32], dir: Direction, scaling: Scaling) -> Result<FftScale> => Fallback;
+    Fft<CQ15>::fft[Tw: AsRef<[CQ15]>](&self, plan: &FftPlan<CQ15, Tw>, data: &mut [CQ15], dir: Direction, scaling: Scaling) -> Result<FftScale> => Fallback;
+    @extra [("rfft", f32, Fallback), ("irfft", f32, Fallback)]
+}
+
+// `RealFft` has no sample-type parameter, so it is delegated by hand; the two rows above
+// register it in the `backend_for` table.
+impl RealFft for crate::Sdrk {
+    #[inline]
+    fn rfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(
+        &self,
+        plan: &RealFftPlan<Tw, Tw2>,
+        input: &[f32],
+        output: &mut [C32],
+        scratch: &mut [C32],
+    ) -> Result<FftScale> {
+        <Fallback as RealFft>::rfft(&Fallback, plan, input, output, scratch)
+    }
+
+    #[inline]
+    fn irfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(
+        &self,
+        plan: &RealFftPlan<Tw, Tw2>,
+        input: &[C32],
+        output: &mut [f32],
+        scratch: &mut [C32],
+    ) -> Result<FftScale> {
+        <Fallback as RealFft>::irfft(&Fallback, plan, input, output, scratch)
+    }
 }

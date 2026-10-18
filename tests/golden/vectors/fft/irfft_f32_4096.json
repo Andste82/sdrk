@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "irfft_f32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "irfft_f32_4096.input.bin",
+      "len": 2049
+    }
+  },
+  "case": "irfft_f32_4096",
+  "format_version": 1,
+  "kernel": "fft",
+  "notes": "input = numpy.fft.rfft of noise as complex64 with imag(X[0]) = imag(X[N/2]) = 0.5 (ignored); expected = numpy.fft.irfft(X, n=N); exponent log2 N",
+  "params": {
+    "n": 4096
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 87,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 110.0
+  }
+}

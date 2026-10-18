@@ -20,6 +20,8 @@ libm.workspace = true
 default = []
 # Executable specification (f64 / exact integer model); used by the testkit and tests only.
 reference = []
+# Emits the 4096-point twiddle tables (16 KiB C32, 8 KiB CQ15 of flash) for `FftPlan::from_static_4096`.
+static-twiddles = []
 
 [lints]
 workspace = true

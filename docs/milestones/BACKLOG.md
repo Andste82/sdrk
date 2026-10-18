@@ -24,7 +24,7 @@ These items are planned but not yet written as implementation-ready milestones. 
 
 - **Driver conformance suite complete** (all capabilities of M12, timed commands, async streams) and **`sdrk-device` 1.0** (API review, semver promise, MSRV policy).
 - **Kernels and blocks:** `iq_balance` (IQ imbalance correction), `real_to_complex` (real-sampling devices such as Airspy: fs/4 shift + halfband), `sigma_delta_decimate` (SX1255 mode A, 1-bit `Bits1` container from M01), `biquad`, CIC (decimate/interpolate), halfband (decimate/interpolate by 2), AGC, squelch, AM and SSB demodulators, pulse shaping (RRC), FM preemphasis (transmit), FM stereo and RDS, multi-input nodes (adder, mixer, multiplexer) in the pipeline.
-- **FFT extensions:** Q15 real FFT, inverse real FFT (f32 and Q15), FFT-based fast convolution (overlap-save) as a block.
+- **FFT extensions:** Q15 real FFT and its inverse, FFT-based fast convolution (overlap-save) as a block.
 - **Analysis blocks** with structured results (frames/events): signal detection (frequency, bandwidth, level, SNR), occupied bandwidth, noise floor, burst detection, instantaneous values and histograms, symbol-rate estimator.
 - **Digital building blocks:** generic OOK/ASK/FSK/PSK demodulators with clock recovery, bit slicer, preamble correlator, diagram data as frames (constellation, eye diagram).
 - **Real hardware:** the same `targets/` on boards via `probe-rs` (Cortex-M, ESP32 via `espflash`), DWT cycle counters / `mcycle`, real-time targets per platform (the plan defers them until hardware is in use).

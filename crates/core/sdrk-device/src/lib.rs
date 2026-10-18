@@ -5,7 +5,10 @@
 //! rely on it.
 //!
 //! ```
-//! use sdrk_device as _;
+//! use sdrk_device::{formats, Rate};
+//! assert_eq!(formats::CU8.bytes_for_samples(10)?, 20);
+//! assert_eq!(Rate::new(96_000, 2)?, Rate::hz(48_000)?);
+//! # Ok::<(), sdrk_device::Error>(())
 //! ```
 #![no_std]
 #![forbid(unsafe_code)]
@@ -17,3 +20,16 @@
     clippy::unimplemented,
     clippy::indexing_slicing
 )]
+
+#[cfg(target_endian = "big")]
+compile_error!("sdrk supports little-endian targets only");
+
+mod error;
+mod format;
+mod stream;
+mod time;
+
+pub use error::{Error, ErrorKind, Result, SdrkError};
+pub use format::{Align, Container, Endian, FullScale, Layout, SampleFormat, formats};
+pub use stream::{BlockFlags, BlockMeta, RxStream, TxStream};
+pub use time::{Rate, Ratio, SampleIndex, TimeAnchor, TimeSource};

@@ -1,0 +1,8 @@
+stack-size-threshold = 4096
+array-size-threshold = 4096
+# Otherwise clippy::doc_markdown rejects the project name in rustdoc.
+doc-valid-idents = ["SDRk", "SigMF", "SoapySDR", "HackRF", "AArch64", "WebUSB", ".."]
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

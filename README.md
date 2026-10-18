@@ -1,0 +1,38 @@
+# SDRk
+
+A Rust library of SDR building blocks for receiving and transmitting, from mixers and filters to complete demodulation chains, composed as JSON pipelines and controllable at runtime. The same kernels run heap-free on microcontrollers like the ESP32 and Cortex-M, on PCs and the Raspberry Pi, and as WebAssembly in the browser, each with dedicated SIMD optimizations from AVX-512 and NEON to the ESP32's PIE instructions. Sample-accurate timing, deterministic results on every platform, and a single test suite that runs in emulators and on real hardware make it a dependable foundation for firmware, desktop tools, web apps and AI-assisted signal analysis.
+
+## Name
+
+SDRk (Software-Defined Radio Kernels) is pronounced *shark*. Text, code comments and documentation use **SDRk**; in code (identifiers, crate and file names, string literals) it is lowercase `sdrk`.
+
+## Scope
+
+The repository contains only reusable SDR building blocks and what is needed to verify them. Applications, UIs, demos, services and device drivers live in their own repositories.
+
+## Status
+
+Foundation stage: the workspace, the layer rules and their automatic checks exist; the libraries are filled in milestone by milestone.
+
+## Documentation
+
+- Project plan: [docs/PLAN.md](docs/PLAN.md)
+- Milestones: [docs/milestones/README.md](docs/milestones/README.md)
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## Development
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo xtask check
+cargo xtask bare-metal
+```
+
+`cargo xtask test-all` runs all of the above.
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.

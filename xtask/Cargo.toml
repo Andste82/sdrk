@@ -1,0 +1,20 @@
+[package]
+name = "xtask"
+description = "Repository automation for SDRk: architecture checks, bare-metal build, test-all."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+cargo_metadata = "0.20.0"
+walkdir = "2.5.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"

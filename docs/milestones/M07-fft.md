@@ -176,7 +176,7 @@ Optional feature `static-twiddles` on `sdrk-core`: `build.rs` additionally emits
 | C32 | Forward | `X[k] = Σ x[n] e^{−j2πkn/N}` (unnormalized, like `numpy.fft.fft`) | 0 |
 | C32 | Inverse | `x[n] = (1/N) Σ X[k] e^{+j2πkn/N}` (like `numpy.fft.ifft`) | 0 |
 | CQ15 | Forward, Default (fixed) | `X[k] / N` | `log2 N` |
-| CQ15 | Inverse, Default (fixed) | `Σ X[k] e^{+j2πkn/N}` (no scaling, saturating; matches the plan decision "inverse unscaled", so forward-then-inverse returns the input) | 0 |
+| CQ15 | Inverse, Default (fixed) | `(1/N) Σ X[k] e^{+j2πkn/N}` (= `numpy.fft.ifft`; halves after every stage like CMSIS-DSP, so it cannot overflow; forward-then-inverse returns `x/N` — use BlockFloat when precision matters) | `log2 N` (relative to the unnormalized sum) |
 | CQ15 | Forward/Inverse, BlockFloat | transform divided by `2^e`, where `e` = sum of the per-stage shifts (0, 1 or 2 per stage) | `e` |
 
 For displaying spectra from a Q15 FFT: `power_db(|X_out|²) + 6.0206 · exponent` gives the level relative to the unnormalized transform (each halving = ×4 in power = +6.02 dB). Document this in `docs/kernels.md`.
@@ -187,7 +187,7 @@ For displaying spectra from a Q15 FFT: `power_db(|X_out|²) + 6.0206 · exponent
 2. For each stage `s = 1 … log2 N`: `half = 2^(s−1)`, `stride = N / 2^s`. For each block start `b` in steps of `2·half`, for `k = 0 … half−1`: `w = tw[k·stride·tw_stride]` (Inverse: `conj(w)`), `a = data[b+k]`, `c = data[b+k+half]`, `t = w·c`, then `data[b+k] = a + t`, `data[b+k+half] = a − t`.
 3. f32: complex multiply `(wr·cr − wi·ci, wr·ci + wi·cr)`, no FMA. Inverse: multiply every output by `1.0 / N as f32` (exact power of two) at the end.
 4. Q15 multiply `t = cq15_mul(w, c)`.
-   - **Fixed:** every stage stores `round_shift(a ± t, 1)` per component (i64 arithmetic, then `sat16`). Inverse fixed: store `sat16(a ± t)` without shift.
+   - **Fixed:** in both directions every stage stores `round_shift(a ± t, 1)` per component (i64 arithmetic, then `sat16`).
    - **BlockFloat:** before each stage compute `m = max |component|` over the whole block. A radix-2 butterfly output can grow to `(1 + √2)·m`. Choose the shift `s` of this stage: `m > 27145` (= ⌊2·32767/(1 + √2)⌋) → `s = 2`; else `m > 13572` (= ⌊32767/(1 + √2)⌋) → `s = 1`; else `s = 0`. The stage stores `sat16(round_shift(a ± t, s))` per component (i64 arithmetic) and adds `s` to `e`. With this rule no butterfly can saturate.
 5. Index arithmetic must not use unchecked slice indexing (R5.4); use `split_at_mut` per block to obtain `a`/`c` halves and iterate with `zip`.
 
@@ -209,7 +209,7 @@ Algorithm: `z[n] = x[2n] + j·x[2n+1]` (n < N/2) into `scratch`; `Z = FFT_{N/2}(
 
 ### 6. Facade, suite, docs
 
-Delegations for `Fft<C32>`, `Fft<CQ15>`, `RealFft`. Suite cases: `fft_c32_vs_reference_{64,1024}`, `fft_cq15_fixed_vs_reference_1024`, `fft_cq15_bfp_vs_reference_1024`, `fft_roundtrip_c32`, `fft_roundtrip_cq15_fixed`, `rfft_vs_reference_1024`, `fft_weak_tone_bfp` (full), `fft_parseval_c32`. `docs/kernels.md`: conventions table, scaling modes, dB offset rule, numeric contracts below.
+Delegations for `Fft<C32>`, `Fft<CQ15>`, `RealFft`. Suite cases: `fft_c32_vs_reference_{64,1024}`, `fft_cq15_fixed_vs_reference_1024`, `fft_cq15_bfp_vs_reference_1024`, `fft_roundtrip_c32`, `fft_roundtrip_cq15_bfp`, `rfft_vs_reference_1024`, `fft_weak_tone_bfp` (full), `fft_parseval_c32`. `docs/kernels.md`: conventions table, scaling modes, dB offset rule, numeric contracts below.
 
 ## Numeric contracts (initial thresholds)
 
@@ -236,7 +236,7 @@ All expected values from `numpy.fft` in complex128, computed from the **quantize
 | `rfft_f32_{32,1024,4096}` | 75–77 | real noise σ 0.3, float32 | `np.fft.rfft(x)` | SNR ≥ 110 |
 | `cq15_fixed_tone_1024` | 78 | full-scale tone at bin 37 (amplitude 1 − 2⁻¹⁵) quantized | `np.fft.fft(x)/1024` | SNR ≥ 55 |
 | `cq15_fixed_noise_{1024,4096}` | 79/80 | noise σ 0.3 quantized | `np.fft.fft(x)/N` | SNR ≥ 40 |
-| `cq15_fixed_inv_1024` | 81 | X = from_float(fft(noise σ 0.3)/1024) | `N · np.fft.ifft(X)` (= unscaled inverse) | SNR ≥ 40 |
+| `cq15_fixed_inv_1024` | 81 | X = complex noise σ 0.3, quantized (a white spectrum) | `np.fft.ifft(X)` | SNR ≥ 40 |
 | `cq15_bfp_tone_1024` | 82 | as fixed tone | `np.fft.fft(x)` (unnormalized); the Rust test multiplies the output by `2^exponent` before comparing | SNR ≥ 60 |
 | `cq15_bfp_noise_1024` | 83 | noise σ 0.3 | as above | SNR ≥ 55 |
 | `cq15_bfp_weak_tone_1024` | 84 | tone at bin 100, amplitude 10^(−60/20), quantized, no noise | `np.fft.fft(x)` | criterion from the table (computed in Rust) |
@@ -244,7 +244,7 @@ All expected values from `numpy.fft` in complex128, computed from the **quantize
 ## Tests
 
 1. Golden tests for all cases.
-2. Round trip: `inverse(forward(x)) ≈ x` (C32 SNR ≥ 110 dB; CQ15 fixed ≥ 40 dB for σ 0.3 noise).
+2. Round trip: C32 `inverse(forward(x)) ≈ x` (SNR ≥ 110 dB). CQ15 with BlockFloat in both directions: `out · 2^(e_fwd + e_inv) / N ≈ x` (SNR ≥ 40 dB for σ 0.3 noise). CQ15 fixed: `inverse(forward(x))` equals `x/N` within the fixed contract (documents the precision loss).
 3. Parseval (C32): `Σ|x|² · N ≈ Σ|X|²` within 1e-5 relative.
 4. Linearity and time-shift property on random inputs (C32, tolerance 1e-5 relative).
 5. Single impulse at 0 → flat spectrum; tone at bin k → energy concentrated in bin k (≥ 100 dB above others for C32).

@@ -14,7 +14,11 @@
       "status": "release"
     },
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
+    },
+    "sse4.2": {
+      "status": "dev"
     }
   },
   "convert_cs16": {
@@ -31,6 +35,9 @@
       "status": "release"
     },
     "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
       "status": "release"
     }
   },
@@ -52,6 +59,10 @@
     "sse2": {
       "status": "dev",
       "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
     }
   },
   "rotate": {
@@ -68,7 +79,12 @@
       "status": "release"
     },
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
     }
   },
   "fir": {
@@ -85,6 +101,9 @@
       "status": "release"
     },
     "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
       "status": "dev"
     }
   },
@@ -103,6 +122,9 @@
     },
     "sse2": {
       "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
     }
   },
   "mag_sq": {
@@ -120,6 +142,9 @@
     },
     "sse2": {
       "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
     }
   },
   "quad_demod": {
@@ -136,7 +161,12 @@
       "status": "release"
     },
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
     }
   },
   "fm_mod": {
@@ -153,6 +183,9 @@
       "status": "release"
     },
     "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
       "status": "release"
     }
   },
@@ -176,6 +209,10 @@
     "sse2": {
       "status": "dev",
       "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
     }
   },
   "fft_1024": {
@@ -194,6 +231,10 @@
       "status": "release"
     },
     "sse2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "sse4.2": {
       "status": "dev",
       "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
     }
@@ -216,6 +257,10 @@
     "sse2": {
       "status": "dev",
       "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
     }
   },
   "fft_cq15_1024": {
@@ -232,6 +277,9 @@
       "status": "release"
     },
     "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
       "status": "release"
     }
   }

@@ -368,7 +368,7 @@ jobs:
           grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' '
           echo
           echo "VOLK: $(pkg-config --modversion volk)"
-      - name: Count the x86-64 levels (sse2, avx2)
+      - name: Count the x86-64 levels (sse2, sse4.2, avx2)
         if: steps.changed.outputs.run == 'true'
         run: cargo xtask count --platform x86_64
       - name: Count the FM receiver pipeline

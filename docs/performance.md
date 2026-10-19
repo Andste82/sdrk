@@ -21,7 +21,7 @@ Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a 
 
 | Platform | Counter | Levels |
 | --- | --- | --- |
-| `x86_64` | Valgrind `callgrind` (Linux; not available on Windows, so the count job runs on Linux only) | `sse2` (default build), `avx2` (`-C target-cpu=x86-64-v3`), and `avx2-runtime` (default build with run-time detection, informational) |
+| `x86_64` | Valgrind `callgrind` (Linux; not available on Windows, so the count job runs on Linux only) | `sse2` (default build), `sse4.2` (`-C target-cpu=x86-64-v2`), `avx2` (`-C target-cpu=x86-64-v3`), and `avx2-runtime` (default build with run-time detection, informational) |
 | `x86_64-avx512` | Intel SDE, `sde64 -spr -mix` (the `*total` line of the mix report) | `avx512` (`-C target-cpu=sapphirerapids`) |
 | `aarch64` | `qemu-aarch64` in user mode with the `insn` plugin (`-plugin libinsn.so -d plugin`) | `neon` |
 | `wasm32` | wasmtime with fuel: the smallest fuel with which the run completes, found by bisection | `simd128` |
@@ -30,6 +30,13 @@ Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a 
 - **Comparisons.** On x86-64 the pairs of the table below (VOLK 3.3.0, which the count jobs build from the release tarball with a pinned checksum so that the comparison does not depend on the distribution's version; locally the distribution's 3.3.0 gives the same numbers; rustfft with `FftPlanner`, forward, in place). `fm_mod` and the `CQ15` FFT have no library; they are compared with our own fallback. On AArch64 and wasm32 there is no VOLK, so every kernel but the `C32` FFT (rustfft) is compared with our own fallback in the same binary. For the level `sse2` the VOLK dispatcher is restricted by a `volk_config` that xtask writes (`benches/target/volk-sse/volk/volk_config`) to the implementations that need no more than SSE3 (the generic C code where VOLK has none); for `avx2` and `avx2-runtime` a `volk_config` (`benches/target/volk-avx2/volk/volk_config`) restricts it to AVX2/FMA, because on a runner with AVX-512 VOLK would otherwise dispatch `rotator2`, `atan2` and `dot_prod` to their AVX-512 implementations and the comparison would depend on the CPU; at `avx512` it picks its best implementation itself, as our kernels use AVX-512 there too.
 - **Accuracy.** `count accuracy <kernel> <impl>` prints the SNR of one run against the f64 reference. A kernel fails if its SNR is more than 1 dB below the SNR of its comparison.
 - **VOLK is LGPL-3.0.** It is linked dynamically from the system by `benches/volk-sys` (hand-written `extern "C"` declarations; VOLK declares its kernels as function-pointer variables that its dispatcher fills in) and is never a dependency of a library crate. `benches/` is a Cargo workspace of its own that is not a member of the repository workspace (`exclude = ["benches"]`), so `cargo deny` does not see it.
+
+### Where VOLK has no implementation for a level
+
+VOLK has no SSE implementation of `rotator2` and `atan2`, and none below SSE4.1 of `volk_8i_s32f_convert_32f`. The only candidate is then the portable `generic` code, and that is not SSE code: VOLK compiles it once per instruction set and uses the copy of the best machine, which GCC has auto-vectorised with AVX2 (the library contains twelve copies of `volk_8i_s32f_convert_32f_generic`, four of them with `ymm` registers). Comparing our SSE2 build with it is not a comparison at the same instruction set.
+
+- The level `sse4.2` compares at SSE4.2 where VOLK has an implementation for it: `convert` CS8 and CS16 against the SSE4.1 versions, the rest as at `sse2`.
+- The level `sse2` is still measured, but the entries whose reference is `generic` (`convert_cs8`, `rotate`, `quad_demod`) are `info` in `limits.json`: reported with their numbers, never judged. `rotate` and `quad_demod` are `info` at `sse4.2` too, because VOLK has no SSE version of them.
 
 ## Limits
 

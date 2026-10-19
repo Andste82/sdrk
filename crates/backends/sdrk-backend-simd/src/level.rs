@@ -24,6 +24,21 @@ macro_rules! dispatch {
 }
 pub(crate) use dispatch;
 
+/// Whether the token is the plain SSE2 baseline of x86, which has no sign-extending widening
+/// (`pmovsx`, SSE4.1): the kernels that widen signed integers use shifts and interleaves instead.
+#[inline(always)]
+pub(crate) fn is_sse2_baseline<S: fearless_simd::Simd>(simd: S) -> bool {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        simd.level().as_sse4_2().is_none()
+    }
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        let _ = simd;
+        false
+    }
+}
+
 /// Name of the current level.
 pub(crate) fn name() -> &'static str {
     let level = current();

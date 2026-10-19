@@ -23,6 +23,9 @@ use sdrk_testkit::{
     ToneSource, VirtualRx, WriteReporter, check_block_invariance, run_suite,
 };
 
+// With `num-complex/std` (enabled by the dev-dependencies of other workspace crates through
+// feature unification) `Complex64::norm` is an inherent method and this trait is not needed.
+#[allow(dead_code)]
 trait Norm {
     fn norm(self) -> f64;
 }

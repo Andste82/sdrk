@@ -1,0 +1,24 @@
+[package]
+name = "sdrk-pipeline-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+sdrk = { path = "../../../facade/sdrk" }
+sdrk-pipeline = { path = ".." }
+
+[[bin]]
+name = "pipeline_json"
+path = "fuzz_targets/pipeline_json.rs"
+test = false
+doc = false
+bench = false
+
+# The fuzz crate is its own workspace (it needs a nightly toolchain and is not built by
+# `cargo test --workspace`).
+[workspace]

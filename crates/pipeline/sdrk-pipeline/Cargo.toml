@@ -1,0 +1,27 @@
+[package]
+name = "sdrk-pipeline"
+description = "SDRk pipeline: JSON-described signal-processing graphs, validation, build and push-mode runner."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk = { path = "../../facade/sdrk" }
+sdrk-blocks = { path = "../../blocks/sdrk-blocks" }
+sdrk-core = { path = "../../core/sdrk-core" }
+sdrk-device = { path = "../../core/sdrk-device" }
+bytemuck.workspace = true
+schemars = "1.2.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+jsonschema = { version = "0.59.0", default-features = false }
+num-complex.workspace = true
+proptest = "1.11.0"
+sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
+
+[lints]
+workspace = true

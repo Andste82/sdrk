@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "path": "nodes.g.params.frequency_hz",
+      "code": "rate_unsupported"
+    }
+  ]
+}

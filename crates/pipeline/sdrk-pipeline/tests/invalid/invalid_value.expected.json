@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "path": "nodes.g.params.window",
+      "code": "invalid_value"
+    }
+  ]
+}

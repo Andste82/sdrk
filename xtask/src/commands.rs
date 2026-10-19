@@ -9,8 +9,7 @@ use anyhow::{Context, bail};
 use crate::layers;
 use crate::scan::Finding;
 
-const USAGE: &str =
-    "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | test-all>";
+const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | schema [--check] | test-all>";
 
 /// The bare-metal target used to prove that heap-free crates need no allocator.
 pub const BARE_METAL_TARGET: &str = "thumbv7em-none-eabihf";
@@ -31,6 +30,8 @@ pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
         )),
         ["check", "docs"] => check_docs(root),
         ["bare-metal"] => bare_metal(root),
+        ["schema"] => schema(root, false),
+        ["schema", "--check"] => schema(root, true),
         ["test-all"] => test_all(root),
         _ => bail!("{USAGE}"),
     }
@@ -72,6 +73,38 @@ fn run_step(label: &str, mut cmd: Command, root: &Path) -> anyhow::Result<bool> 
         eprintln!("xtask: `{label}` failed");
     }
     Ok(status.success())
+}
+
+/// Path of the committed pipeline schema.
+fn schema_path(root: &Path) -> std::path::PathBuf {
+    root.join("schema").join("sdrk-pipeline-v1.json")
+}
+
+/// `schema`: writes `schema/sdrk-pipeline-v1.json` from the block descriptions; with
+/// `--check` only compares it with the committed file.
+fn schema(root: &Path, check: bool) -> anyhow::Result<bool> {
+    let text = sdrk_pipeline::Registry::standard().json_schema_text();
+    let path = schema_path(root);
+    if check {
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        // The file may have CRLF endings on a checkout without `.gitattributes`.
+        let same = committed.replace("\r\n", "\n") == text;
+        if same {
+            println!("schema: ok");
+        } else {
+            eprintln!(
+                "schema: {} is out of date; run `cargo xtask schema`",
+                path.display()
+            );
+        }
+        return Ok(same);
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    }
+    std::fs::write(&path, &text).with_context(|| format!("cannot write {}", path.display()))?;
+    println!("schema: wrote {}", path.display());
+    Ok(true)
 }
 
 fn check_docs(root: &Path) -> anyhow::Result<bool> {

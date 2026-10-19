@@ -1,0 +1,1143 @@
+{
+  "$defs": {
+    "AlignSpec": {
+      "description": "Bit position of a custom raw format.",
+      "oneOf": [
+        {
+          "const": "lsb",
+          "description": "Valid bits are the low bits.",
+          "type": "string"
+        },
+        {
+          "const": "msb",
+          "description": "Valid bits are the high bits.",
+          "type": "string"
+        }
+      ]
+    },
+    "ContainerSpec": {
+      "description": "Container of a custom raw format.",
+      "oneOf": [
+        {
+          "const": "u8",
+          "description": "Unsigned 8-bit.",
+          "type": "string"
+        },
+        {
+          "const": "i8",
+          "description": "Signed 8-bit.",
+          "type": "string"
+        },
+        {
+          "const": "i16",
+          "description": "Signed 16-bit.",
+          "type": "string"
+        },
+        {
+          "const": "i32",
+          "description": "Signed 32-bit.",
+          "type": "string"
+        },
+        {
+          "const": "f32",
+          "description": "32-bit float.",
+          "type": "string"
+        },
+        {
+          "const": "packed12",
+          "description": "Two 12-bit values in 3 bytes.",
+          "type": "string"
+        },
+        {
+          "const": "packed10",
+          "description": "Four 10-bit values in 5 bytes.",
+          "type": "string"
+        },
+        {
+          "const": "bits1",
+          "description": "Eight 1-bit values per byte.",
+          "type": "string"
+        }
+      ]
+    },
+    "CustomFormat": {
+      "additionalProperties": false,
+      "description": "A custom raw format, mapped to `sdrk_device::SampleFormat`.",
+      "properties": {
+        "align": {
+          "$ref": "#/$defs/AlignSpec",
+          "description": "Position of the valid bits inside the container."
+        },
+        "bits": {
+          "description": "Number of valid bits.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "container": {
+          "$ref": "#/$defs/ContainerSpec",
+          "description": "Storage container of one component."
+        },
+        "endian": {
+          "$ref": "#/$defs/EndianSpec",
+          "description": "Byte order of multi-byte containers."
+        },
+        "full_scale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FullScaleSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Raw value of amplitude 1.0 (default `power_of_two`)."
+        },
+        "layout": {
+          "$ref": "#/$defs/LayoutSpec",
+          "description": "Arrangement of the components."
+        },
+        "swap_iq": {
+          "description": "If true, the first value of each pair is Q (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "container",
+        "bits",
+        "align",
+        "layout",
+        "endian"
+      ],
+      "type": "object"
+    },
+    "DropPolicy": {
+      "description": "What happens when an output is full.\n\n```\nuse sdrk_pipeline::DropPolicy;\nassert_eq!(DropPolicy::default(), DropPolicy::Error);\nassert_eq!(serde_json::to_string(&DropPolicy::DropOldest)?, \"\\\"drop_oldest\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
+      "oneOf": [
+        {
+          "const": "error",
+          "description": "`push` fails with `OutputFull` before it consumes anything.",
+          "type": "string"
+        },
+        {
+          "const": "drop_oldest",
+          "description": "The oldest data of the output is discarded to make room.",
+          "type": "string"
+        },
+        {
+          "const": "drop_newest",
+          "description": "New data that does not fit is discarded.",
+          "type": "string"
+        }
+      ]
+    },
+    "EdgeSpec": {
+      "additionalProperties": false,
+      "description": "A connection from an input or node to a node or output.\n\n```\nuse sdrk_pipeline::EdgeSpec;\nlet e: EdgeSpec = serde_json::from_str(r#\"{\"from\":\"rf\",\"to\":\"tune\"}\"#)?;\nassert_eq!((e.from.as_str(), e.to.as_str()), (\"rf\", \"tune\"));\n# Ok::<(), serde_json::Error>(())\n```",
+      "properties": {
+        "from": {
+          "description": "Name of the source (an input or a node).",
+          "type": "string"
+        },
+        "to": {
+          "description": "Name of the destination (a node or an output).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "EndianSpec": {
+      "description": "Byte order of a custom raw format.",
+      "oneOf": [
+        {
+          "const": "le",
+          "description": "Little endian.",
+          "type": "string"
+        },
+        {
+          "const": "be",
+          "description": "Big endian.",
+          "type": "string"
+        }
+      ]
+    },
+    "FormatName": {
+      "description": "A well-known raw format by name.",
+      "oneOf": [
+        {
+          "const": "cu8",
+          "description": "RTL-SDR, unsigned 8-bit.",
+          "type": "string"
+        },
+        {
+          "const": "cs8",
+          "description": "HackRF, signed 8-bit.",
+          "type": "string"
+        },
+        {
+          "const": "cs16",
+          "description": "Signed 16-bit.",
+          "type": "string"
+        },
+        {
+          "const": "cs12_lsb16",
+          "description": "12-bit values sign-extended in 16 bits.",
+          "type": "string"
+        },
+        {
+          "const": "sc16_q11",
+          "description": "bladeRF, 12 bits in 16, full scale 2048.",
+          "type": "string"
+        },
+        {
+          "const": "cs16_planar",
+          "description": "Planar signed 16-bit.",
+          "type": "string"
+        },
+        {
+          "const": "packed12",
+          "description": "Two 12-bit values in 3 bytes.",
+          "type": "string"
+        },
+        {
+          "const": "packed10",
+          "description": "Four 10-bit values in 5 bytes.",
+          "type": "string"
+        },
+        {
+          "const": "i2s32_msb",
+          "description": "24 valid bits MSB-aligned in 32.",
+          "type": "string"
+        },
+        {
+          "const": "cf32",
+          "description": "Interleaved 32-bit float.",
+          "type": "string"
+        },
+        {
+          "const": "rf32",
+          "description": "Real 32-bit float.",
+          "type": "string"
+        },
+        {
+          "const": "rs16",
+          "description": "Real signed 16-bit.",
+          "type": "string"
+        }
+      ]
+    },
+    "FormatSpec": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FormatName",
+          "description": "One of the well-known formats, see [`FORMAT_NAMES`]."
+        },
+        {
+          "$ref": "#/$defs/CustomFormat",
+          "description": "A custom format."
+        }
+      ],
+      "description": "A raw sample format in the model: a name (`\"cu8\"`) or a [`CustomFormat`].\n\n```\nuse sdrk_pipeline::FormatSpec;\nlet f: FormatSpec = serde_json::from_str(\"\\\"cs16\\\"\")?;\nassert_eq!(f.to_format().unwrap(), sdrk_device::formats::CS16);\n# Ok::<(), serde_json::Error>(())\n```"
+    },
+    "FullScaleSpec": {
+      "description": "What raw value corresponds to amplitude 1.0.",
+      "oneOf": [
+        {
+          "const": "power_of_two",
+          "description": "`2^(bits-1)`.",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An explicit integer, e.g. 2048.",
+          "properties": {
+            "explicit": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "explicit"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InputSpec": {
+      "additionalProperties": false,
+      "description": "An input of the pipeline: raw bytes in a `format` or converted samples of a `type`.\n\n```\nuse sdrk_pipeline::InputSpec;\nlet i: InputSpec = serde_json::from_str(r#\"{\"format\":\"cu8\",\"rate_hz\":2400000}\"#)?;\nassert_eq!(i.rate_hz.0.num(), 2_400_000);\n# Ok::<(), serde_json::Error>(())\n```",
+      "properties": {
+        "description": {
+          "description": "Free text (at most 2000 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FormatSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Raw sample format; an automatic `convert` node follows the input. Exactly one of\n`format` and `type` must be given."
+        },
+        "rate_hz": {
+          "$ref": "#/$defs/RateHz",
+          "description": "Sample rate in Hz."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Type of already converted samples. Exactly one of `format` and `type` must be given."
+        }
+      },
+      "required": [
+        "rate_hz"
+      ],
+      "type": "object"
+    },
+    "InputType": {
+      "description": "The type of an input that delivers already converted samples.",
+      "oneOf": [
+        {
+          "const": "c32",
+          "description": "Complex `f32`.",
+          "type": "string"
+        },
+        {
+          "const": "cq15",
+          "description": "Complex Q15.",
+          "type": "string"
+        },
+        {
+          "const": "f32",
+          "description": "Real `f32`.",
+          "type": "string"
+        },
+        {
+          "const": "q15",
+          "description": "Real Q15.",
+          "type": "string"
+        }
+      ]
+    },
+    "LayoutSpec": {
+      "description": "Component layout of a custom raw format.",
+      "oneOf": [
+        {
+          "const": "interleaved",
+          "description": "I and Q alternate.",
+          "type": "string"
+        },
+        {
+          "const": "planar",
+          "description": "All I values, then all Q values.",
+          "type": "string"
+        },
+        {
+          "const": "real",
+          "description": "One real value per sample.",
+          "type": "string"
+        }
+      ]
+    },
+    "OutputSpec": {
+      "additionalProperties": false,
+      "description": "An output of the pipeline.\n\n```\nuse sdrk_pipeline::{DropPolicy, OutputSpec};\nlet o: OutputSpec = serde_json::from_str(r#\"{\"type\":\"frames\",\"queue\":2}\"#)?;\nassert_eq!(o.drop_policy(), DropPolicy::Error);\nassert_eq!(o.queue_frames(), 2);\n# Ok::<(), serde_json::Error>(())\n```",
+      "properties": {
+        "capacity": {
+          "description": "Stream outputs only: capacity in samples (default `4 * max_chunk`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "Free text (at most 2000 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "drop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DropPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What happens when the output is full (default `\"error\"`)."
+        },
+        "format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FormatSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Stream outputs only: convert to this raw format (an automatic `convert_out` node)."
+        },
+        "queue": {
+          "description": "Frame outputs only: queue length in frames (default 4).",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "type": {
+          "$ref": "#/$defs/OutputType",
+          "description": "`\"stream\"` or `\"frames\"`."
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "OutputType": {
+      "description": "The kind of an output.",
+      "oneOf": [
+        {
+          "const": "stream",
+          "description": "A stream of samples from a `Block`.",
+          "type": "string"
+        },
+        {
+          "const": "frames",
+          "description": "Frames of `f32` values from a `FrameBlock`.",
+          "type": "string"
+        }
+      ]
+    },
+    "Precision": {
+      "description": "Numeric precision of the whole pipeline.\n\n```\nuse sdrk_pipeline::Precision;\nassert_eq!(serde_json::to_string(&Precision::Q15)?, \"\\\"q15\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
+      "oneOf": [
+        {
+          "const": "f32",
+          "description": "Complex `C32` and real `f32`.",
+          "type": "string"
+        },
+        {
+          "const": "q15",
+          "description": "Complex `CQ15` and real `Q15`.",
+          "type": "string"
+        }
+      ]
+    },
+    "RateHz": {
+      "description": "Sample rate in Hz: a positive integer or an exact fraction \"num/den\".",
+      "oneOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "pattern": "^[1-9][0-9]*(/[1-9][0-9]*)?$",
+          "type": "string"
+        }
+      ]
+    },
+    "Settings": {
+      "additionalProperties": false,
+      "description": "The `settings` object.\n\n```\nuse sdrk_pipeline::{Precision, Settings};\nlet s: Settings = serde_json::from_str(\"{}\")?;\nassert_eq!((s.precision, s.max_chunk), (Precision::F32, 4096));\n# Ok::<(), serde_json::Error>(())\n```",
+      "properties": {
+        "max_chunk": {
+          "default": 4096,
+          "description": "Largest number of samples accepted per `push` and input (1 to 1 048 576).",
+          "format": "uint",
+          "maximum": 1048576,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "precision": {
+          "$ref": "#/$defs/Precision",
+          "default": "f32",
+          "description": "`\"f32\"` (complex `C32`, real `f32`) or `\"q15\"` (`CQ15`, `Q15`); one per pipeline."
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/Andste82/sdrk/schema/sdrk-pipeline-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A complete pipeline description.\n\n```\nuse sdrk_pipeline::PipelineSpec;\nlet json = r#\"{\n  \"sdrk\": 1,\n  \"name\": \"tone\",\n  \"settings\": { \"precision\": \"f32\", \"max_chunk\": 4096 },\n  \"inputs\": { \"iq\": { \"type\": \"c32\", \"rate_hz\": 48000 } },\n  \"nodes\": { \"gain\": { \"kind\": \"scale\", \"params\": { \"gain_db\": -6 } } },\n  \"edges\": [ { \"from\": \"iq\", \"to\": \"gain\" }, { \"from\": \"gain\", \"to\": \"out\" } ],\n  \"outputs\": { \"out\": { \"type\": \"stream\" } }\n}\"#;\nlet spec = PipelineSpec::from_json(json)?;\nassert_eq!(spec.nodes.len(), 1);\nassert_eq!(PipelineSpec::from_json(&spec.to_json())?, spec);\n# Ok::<(), sdrk_pipeline::Error>(())\n```",
+  "properties": {
+    "description": {
+      "description": "Free text (at most 2000 characters).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "edges": {
+      "default": [],
+      "description": "The connections.",
+      "items": {
+        "$ref": "#/$defs/EdgeSpec"
+      },
+      "type": "array"
+    },
+    "inputs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/InputSpec"
+      },
+      "default": {},
+      "description": "The inputs by name.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "type": "object"
+    },
+    "name": {
+      "description": "Name of the pipeline.",
+      "type": "string"
+    },
+    "nodes": {
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "Converts raw device bytes in a sample format to complex samples.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "convert"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "format": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "cu8",
+                          "cs8",
+                          "cs16",
+                          "cs12_lsb16",
+                          "sc16_q11",
+                          "cs16_planar",
+                          "packed12",
+                          "packed10",
+                          "i2s32_msb",
+                          "cf32",
+                          "rf32",
+                          "rs16"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/$defs/CustomFormat",
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Sample format of the input bytes, given by name (for example cu8). Typical: cu8 for RTL-SDR, cs16 for HackRF-class devices. Build-time."
+                  }
+                },
+                "required": [
+                  "format"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Converts complex samples to raw device bytes in a sample format.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "convert_out"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "format": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "cu8",
+                          "cs8",
+                          "cs16",
+                          "cs12_lsb16",
+                          "sc16_q11",
+                          "cs16_planar",
+                          "packed12",
+                          "packed10",
+                          "i2s32_msb",
+                          "cf32",
+                          "rf32",
+                          "rs16"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/$defs/CustomFormat",
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Sample format of the output bytes, given by name (for example cs8). Typical: cs8 for HackRF-class transmitters, cs16 for others. Build-time."
+                  }
+                },
+                "required": [
+                  "format"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Removes the DC offset of a complex signal with a one-pole high-pass.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "dc_block"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "cutoff_hz": {
+                    "default": 10.0,
+                    "description": "-3 dB corner of the high-pass in Hz; must be below half the sample rate. Unit: Hz. Typical: 10 for a 2.4 MHz receiver. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Shifts a signal to 0 Hz, low-pass filters it and decimates it.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "ddc"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "cutoff_hz": {
+                    "description": "Cutoff (-6 dB point) of the channel filter in Hz. The default is 0.4 * fs / decimation. Unit: Hz. Typical: 100e3 for FM broadcast; default 0.4 times the output rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "decimation": {
+                    "description": "Decimation factor, 1 to 1024. Required. Typical: 10 to go from 2.4 MHz to 240 kHz. Build-time.",
+                    "maximum": 1024,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "default": 0.0,
+                    "description": "Frequency of the wanted signal relative to the centre in Hz; it is shifted to 0 Hz. Within plus or minus half the input rate. Unit: Hz. Typical: 600e3 for a carrier 600 kHz above the tuner centre. Runtime.",
+                    "maximum": 1000000000000.0,
+                    "minimum": -1000000000000.0,
+                    "type": "number"
+                  },
+                  "max_chunk": {
+                    "default": 4096,
+                    "description": "Size of the scratch buffer in samples; larger input is processed in several steps. Unit: samples. Typical: 4096. Build-time.",
+                    "maximum": 1048576,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz. The default is 0.1 * fs / decimation. Unit: Hz. Typical: default 0.1 times the output rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "decimation"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Interpolates a signal, removes the images and shifts it up to a carrier frequency.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "duc"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Image attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "cutoff_hz": {
+                    "description": "Cutoff (-6 dB point) of the image filter in Hz. The default is 0.4 * input rate. Unit: Hz. Typical: 100e3 for FM broadcast; default 0.4 times the input rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "frequency_hz": {
+                    "default": 0.0,
+                    "description": "Carrier frequency relative to the centre in Hz, within plus or minus half the output rate. Unit: Hz. Typical: 600e3 to transmit 600 kHz above the centre. Runtime.",
+                    "maximum": 1000000000000.0,
+                    "minimum": -1000000000000.0,
+                    "type": "number"
+                  },
+                  "interpolation": {
+                    "description": "Interpolation factor, 1 to 1024. Required. Typical: 10 to go from 240 kHz to 2.4 MHz. Build-time.",
+                    "maximum": 1024,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "max_chunk": {
+                    "default": 4096,
+                    "description": "Size of the scratch buffer in output samples; it must be at least the interpolation factor. Unit: samples. Typical: 4096. Build-time.",
+                    "maximum": 1048576,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz. The default is 0.1 * input rate. Unit: Hz. Typical: default 0.1 times the input rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "interpolation"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Low-pass FIR filter designed from cutoff, transition width and attenuation.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "fir"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "cutoff_hz": {
+                    "description": "Cutoff (-6 dB point) in Hz; cutoff plus half the transition width must not exceed half the sample rate. Required. Unit: Hz. Typical: 15e3 for an audio-bandwidth filter at 48 kHz. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz, centred on the cutoff. Required. Unit: Hz. Typical: 0.1 times the cutoff. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "cutoff_hz",
+                  "transition_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates an FM signal to audio with de-emphasis and decimation.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "fm_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "audio_cutoff_hz": {
+                    "default": 15000.0,
+                    "description": "Cutoff of the audio low-pass in Hz (ignored when audio_decimation is 1). Unit: Hz. Typical: 15e3 for broadcast FM. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "audio_decimation": {
+                    "default": 1,
+                    "description": "Decimation factor of the audio, 1 to 64. Typical: 5 to go from 240 kHz to 48 kHz. Build-time.",
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "deemphasis_us": {
+                    "default": 50.0,
+                    "description": "Time constant of the de-emphasis in microseconds; 0 switches it off. Unit: us. Typical: 50 in Europe, 75 in North America, 0 to switch off. Build-time.",
+                    "maximum": 1000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "deviation_hz": {
+                    "default": 75000.0,
+                    "description": "Peak deviation in Hz that reads full scale (used by C32 only). Unit: Hz. Typical: 75e3 for broadcast FM, 5e3 for narrow-band voice. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Frequency-modulates a real signal onto a complex baseband carrier.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "fm_mod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "deviation_hz": {
+                    "default": 75000.0,
+                    "description": "Frequency deviation in Hz for a full-scale input; at most half the sample rate. Unit: Hz. Typical: 75e3 for FM broadcast, 5e3 for narrow-band voice. Runtime.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Changes the sample rate by a rational factor, optionally tunable in ppm.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "resampler"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "cutoff_hz": {
+                    "description": "Cutoff (-6 dB point) of the anti-alias filter in Hz. The default is 0.45 * min(rate_in, rate_out). Unit: Hz. Typical: default 0.45 times the lower of the input and output rates. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps (of the whole filter in the rational mode, per phase in the tunable mode); a design that needs more fails. Typical: 1023; 8192 for 48000 to 44100 in the rational mode. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "ppm": {
+                    "default": 0.0,
+                    "description": "Correction of the output rate in parts per million; changes only with tunable = true. Unit: ppm. Typical: 0; +100 makes the output rate 100 ppm higher. Runtime.",
+                    "maximum": 1000.0,
+                    "minimum": -1000.0,
+                    "type": "number"
+                  },
+                  "rate_out_hz": {
+                    "description": "Output sample rate in Hz, a whole number. Required. Unit: Hz. Typical: 48000 for audio. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz. The default is 0.1 * min(rate_in, rate_out). Unit: Hz. Typical: default 0.1 times the lower of the input and output rates. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "tunable": {
+                    "default": false,
+                    "description": "Use the 128-phase tunable resampler; required for the ppm parameter. Typical: false; true to follow a drifting clock. Build-time.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "rate_out_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Multiplies a complex signal by a gain given in decibels.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "scale"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "gain_db": {
+                    "default": 0.0,
+                    "description": "Gain in dB; at most +40 for C32 and at most 0 for CQ15. Unit: dB. Typical: 0 for unity gain, -6 to halve the amplitude. Runtime.",
+                    "maximum": 40.0,
+                    "minimum": -120.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Computes averaged power spectra in dB relative to full scale as frames.",
+            "properties": {
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "kind": {
+                "const": "spectrum"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "averaging": {
+                    "default": 1,
+                    "description": "Number of windows whose power is averaged into one frame. Typical: 1; 10 for a smoother display. Runtime.",
+                    "maximum": 1024,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "fft_size": {
+                    "default": 1024,
+                    "description": "Number of FFT points, a power of two from 16 to 65536. Typical: 1024; 4096 for finer resolution. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 16,
+                    "type": "integer"
+                  },
+                  "interval_samples": {
+                    "description": "Distance between the starts of consecutive windows in samples. The default is fft_size. Smaller values overlap the windows. Unit: samples. Typical: default fft_size; fft_size / 2 for 50 % overlap. Runtime.",
+                    "maximum": 1073741824,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "kaiser_beta": {
+                    "default": 8.6,
+                    "description": "Shape parameter of the Kaiser window (used only for window = kaiser). Typical: 8.6. Build-time.",
+                    "maximum": 50.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "window": {
+                    "default": "hann",
+                    "description": "Window function: hann, blackman_harris or kaiser. Typical: hann. Build-time.",
+                    "enum": [
+                      "hann",
+                      "blackman_harris",
+                      "kaiser"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "default": {},
+      "description": "The processing nodes by name.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "type": "object"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/OutputSpec"
+      },
+      "default": {},
+      "description": "The outputs by name.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "type": "object"
+    },
+    "sdrk": {
+      "const": 1,
+      "description": "Format version; must be 1."
+    },
+    "settings": {
+      "$ref": "#/$defs/Settings",
+      "default": {
+        "max_chunk": 4096,
+        "precision": "f32"
+      },
+      "description": "Precision and chunk size."
+    }
+  },
+  "required": [
+    "sdrk",
+    "name"
+  ],
+  "title": "sdrk pipeline description, format version 1",
+  "type": "object"
+}

@@ -5,9 +5,12 @@ members = [
     "crates/core/sdrk-core",
     "crates/facade/sdrk",
     "crates/blocks/sdrk-blocks",
+    "crates/pipeline/sdrk-pipeline",
     "crates/testing/sdrk-testkit",
     "xtask",
 ]
+
+exclude = ["crates/pipeline/sdrk-pipeline/fuzz"]
 
 [workspace.package]
 edition = "2024"

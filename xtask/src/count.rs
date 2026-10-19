@@ -334,6 +334,30 @@ pub enum Counter {
     Wasmtime,
 }
 
+/// Which VOLK implementations the dispatcher may choose, so that the comparison is made at the
+/// same instruction set as our kernels and does not depend on the CPU of the machine.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VolkPin {
+    /// VOLK picks its best implementation itself.
+    Free,
+    /// Implementations that need no more than SSE3.
+    Sse,
+    /// Implementations that need no more than AVX2 and FMA (no AVX-512).
+    Avx2,
+}
+
+impl VolkPin {
+    /// The `volk_config` that pins the dispatcher, and the directory name below `benches/target`.
+    #[must_use]
+    pub const fn config(self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Self::Free => None,
+            Self::Sse => Some(("volk-sse", VOLK_SSE_CONFIG)),
+            Self::Avx2 => Some(("volk-avx2", VOLK_AVX2_CONFIG)),
+        }
+    }
+}
+
 /// A level of a platform: how to build the binary and how to count it.
 #[derive(Clone, Copy, Debug)]
 #[allow(clippy::struct_excessive_bools)]
@@ -354,8 +378,8 @@ pub struct LevelPlan {
     pub counter: Counter,
     /// VOLK exists on this platform (it is the system library of the host).
     pub volk: bool,
-    /// Restrict VOLK to implementations that need no more than SSE3.
-    pub volk_sse: bool,
+    /// The VOLK implementations the dispatcher may choose.
+    pub volk_pin: VolkPin,
 }
 
 /// All levels, in the order they run.
@@ -369,7 +393,7 @@ pub const PLANS: [LevelPlan; 6] = [
         runtime_detect: false,
         counter: Counter::Callgrind,
         volk: true,
-        volk_sse: true,
+        volk_pin: VolkPin::Sse,
     },
     LevelPlan {
         platform: "x86_64",
@@ -380,7 +404,7 @@ pub const PLANS: [LevelPlan; 6] = [
         runtime_detect: false,
         counter: Counter::Callgrind,
         volk: true,
-        volk_sse: false,
+        volk_pin: VolkPin::Avx2,
     },
     LevelPlan {
         platform: "x86_64",
@@ -391,7 +415,7 @@ pub const PLANS: [LevelPlan; 6] = [
         runtime_detect: true,
         counter: Counter::Callgrind,
         volk: true,
-        volk_sse: false,
+        volk_pin: VolkPin::Avx2,
     },
     LevelPlan {
         platform: "x86_64-avx512",
@@ -404,7 +428,7 @@ pub const PLANS: [LevelPlan; 6] = [
         runtime_detect: false,
         counter: Counter::Sde,
         volk: true,
-        volk_sse: false,
+        volk_pin: VolkPin::Free,
     },
     LevelPlan {
         platform: "aarch64",
@@ -415,7 +439,7 @@ pub const PLANS: [LevelPlan; 6] = [
         runtime_detect: false,
         counter: Counter::Qemu,
         volk: false,
-        volk_sse: false,
+        volk_pin: VolkPin::Free,
     },
     LevelPlan {
         platform: "wasm32",
@@ -426,7 +450,7 @@ pub const PLANS: [LevelPlan; 6] = [
         runtime_detect: false,
         counter: Counter::Wasmtime,
         volk: false,
-        volk_sse: false,
+        volk_pin: VolkPin::Free,
     },
 ];
 
@@ -466,6 +490,21 @@ volk_32fc_32f_dot_prod_32fc a_sse u_sse
 volk_32fc_magnitude_squared_32f a_sse3 u_sse3
 volk_32fc_x2_multiply_conjugate_32fc a_sse3 u_sse3
 volk_32fc_s32f_atan2_32f generic generic
+";
+
+/// The VOLK implementations that need no more than AVX2 and FMA, for the levels `avx2` and
+/// `avx2-runtime`. Without this, a runner with AVX-512 makes VOLK dispatch to its AVX-512
+/// implementations (`rotator2`, `atan2`, `dot_prod` have them) and the AVX2 build of our kernels
+/// would be compared with a different instruction set than on a machine without AVX-512.
+const VOLK_AVX2_CONFIG: &str = "\
+volk_8i_s32f_convert_32f a_avx2 u_avx2
+volk_16i_s32f_convert_32f a_avx2 u_avx2
+volk_32f_s32f_convert_16i a_avx2 u_avx2
+volk_32fc_s32fc_x2_rotator2_32fc a_avx u_avx
+volk_32fc_32f_dot_prod_32fc a_avx2_fma u_avx2_fma
+volk_32fc_magnitude_squared_32f a_avx u_avx
+volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx
+volk_32fc_s32f_atan2_32f a_avx2_fma u_avx2_fma
 ";
 
 // ---------------------------------------------------------------------------------------------
@@ -829,13 +868,13 @@ fn measure_level(
     only: &[String],
 ) -> anyhow::Result<Vec<Measurement>> {
     let binary = build(root, plan)?;
-    let volk_config = if plan.volk_sse {
-        let dir = root.join("benches").join("target").join("volk-sse");
+    let volk_config = if let Some((name, config)) = plan.volk_pin.config() {
+        let dir = root.join("benches").join("target").join(name);
         let file = dir.join("volk").join("volk_config");
         if let Some(parent) = file.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&file, VOLK_SSE_CONFIG)?;
+        std::fs::write(&file, config)?;
         Some(dir)
     } else {
         None

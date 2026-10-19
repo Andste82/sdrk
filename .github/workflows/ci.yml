@@ -332,6 +332,14 @@ jobs:
       - name: Install valgrind and VOLK
         if: steps.changed.outputs.run == 'true'
         run: sudo apt-get update && sudo apt-get install -y valgrind libvolk-dev pkg-config
+      - name: CPU of the runner
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          grep -m1 'model name' /proc/cpuinfo
+          echo "flags:"
+          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' '
+          echo
+          echo "VOLK: $(pkg-config --modversion volk)"
       - name: Count the x86-64 levels (sse2, avx2)
         if: steps.changed.outputs.run == 'true'
         run: cargo xtask count --platform x86_64
@@ -363,6 +371,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install VOLK (the x86-64 comparison library)
         run: sudo apt-get update && sudo apt-get install -y valgrind libvolk-dev pkg-config
+      - name: CPU of the runner
+        run: |
+          grep -m1 'model name' /proc/cpuinfo || true
+          grep -m1 '^flags\|^Features' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx|asimd|neon|sve)' | sort | tr '\n' ' ' || true
+          echo
       - name: Intel SDE
         if: matrix.platform == 'x86_64-avx512'
         run: |

@@ -12,7 +12,7 @@ use sdrk_core::{C32, CQ15, Fallback, Result};
 use sdrk_device::{Align, Container, Endian, FullScale, Layout, SampleFormat};
 
 use crate::Simd;
-use crate::level::dispatch;
+use crate::level::{dispatch, is_sse2_baseline};
 
 /// The formats with a vector path.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -90,9 +90,47 @@ fn i16_to_f32<S: SimdToken>(simd: S, bytes: &[u8], out: &mut [f32]) {
     }
 }
 
+/// `CS8` to `f32` without a sign-extending widening: interleaving with zero puts every byte in
+/// the top of a 16-bit and then of a 32-bit lane (`x << 8`, then `x << 24`), the integer to float
+/// conversion makes `x * 2^24` (exact: eight significant bits) and `2^-31` brings it to `x * 2^-7`.
+/// Four interleaves and four conversions per 16 bytes replace the compare-and-unpack widening of
+/// the baseline SSE2 level.
+#[inline(always)]
+fn i8_to_f32_zip<S: SimdToken>(simd: S, bytes: &[u8], out: &mut [f32]) {
+    let n = S::i8s::LEN;
+    let h = S::f32s::LEN;
+    let scale = S::f32s::splat(simd, 1.0 / 2_147_483_648.0);
+    let zero8 = S::u8s::splat(simd, 0);
+    let zero16 = S::u16s::splat(simd, 0);
+    let mut ic = bytes.chunks_exact(n);
+    let mut oc = out.chunks_exact_mut(n);
+    for (b, o) in (&mut ic).zip(&mut oc) {
+        let v = S::u8s::from_slice(simd, b);
+        let w_lo: S::u16s = zero8.zip_low(v).bitcast();
+        let w_hi: S::u16s = zero8.zip_high(v).bitcast();
+        let d0: S::i32s = zero16.zip_low(w_lo).bitcast();
+        let d1: S::i32s = zero16.zip_high(w_lo).bitcast();
+        let d2: S::i32s = zero16.zip_low(w_hi).bitcast();
+        let d3: S::i32s = zero16.zip_high(w_hi).bitcast();
+        let (o01, o23) = o.split_at_mut(2 * h);
+        let (o0, o1) = o01.split_at_mut(h);
+        let (o2, o3) = o23.split_at_mut(h);
+        (d0.to_float::<S::f32s>() * scale).store_slice(o0);
+        (d1.to_float::<S::f32s>() * scale).store_slice(o1);
+        (d2.to_float::<S::f32s>() * scale).store_slice(o2);
+        (d3.to_float::<S::f32s>() * scale).store_slice(o3);
+    }
+    for (o, &b) in oc.into_remainder().iter_mut().zip(ic.remainder()) {
+        *o = f32::from(b as i8) * INV_128;
+    }
+}
+
 /// `CS8` to `f32`: `x * 2^-7`.
 #[inline(always)]
 fn i8_to_f32<S: SimdToken>(simd: S, bytes: &[u8], out: &mut [f32]) {
+    if is_sse2_baseline(simd) {
+        return i8_to_f32_zip(simd, bytes, out);
+    }
     let n = S::i8s::LEN;
     let h = S::f32s::LEN;
     let scale = S::f32s::splat(simd, INV_128);

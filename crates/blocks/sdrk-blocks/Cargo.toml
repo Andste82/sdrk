@@ -1,0 +1,23 @@
+[package]
+name = "sdrk-blocks"
+description = "SDRk blocks: filter design, storage abstraction and self-describing signal-processing blocks (heap-free)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk = { path = "../../facade/sdrk" }
+sdrk-core = { path = "../../core/sdrk-core" }
+sdrk-device = { path = "../../core/sdrk-device" }
+libm.workspace = true
+bytemuck.workspace = true
+heapless.workspace = true
+
+[dev-dependencies]
+num-complex.workspace = true
+sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
+
+[lints]
+workspace = true

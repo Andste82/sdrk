@@ -4,6 +4,7 @@ members = [
     "crates/core/sdrk-device",
     "crates/core/sdrk-core",
     "crates/facade/sdrk",
+    "crates/blocks/sdrk-blocks",
     "crates/testing/sdrk-testkit",
     "xtask",
 ]

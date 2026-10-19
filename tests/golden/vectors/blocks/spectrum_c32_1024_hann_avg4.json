@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "spectrum_c32_1024_hann_avg4.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "spectrum_c32_1024_hann_avg4.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "spectrum_c32_1024_hann_avg4",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "tone at bin 100.0 (amplitude 1 - 2^-15) plus noise sigma 0.01; 4 windows of 1024 samples",
+  "params": {
+    "averaging": 4,
+    "bin": 100,
+    "fft_size": 1024,
+    "interval_samples": 1024,
+    "window": "hann"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 315,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.01,
+    "min_ref_db": -100.0,
+    "ref_unit": "db",
+    "skip": 0
+  }
+}

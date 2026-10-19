@@ -10,6 +10,7 @@ use sdrk_core::kernels::decim::{
 use sdrk_core::kernels::demod::{
     DcBlock, DcBlockState, Deemphasis, DeemphasisState, QuadDemod, QuadDemodState,
 };
+use sdrk_core::kernels::dot::{Dot, DotReal};
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::fused::{Ddc, Duc, FmDemod};
@@ -62,6 +63,10 @@ crate::delegate! {
     FirInterpolateReal<Q15>::fir_interpolate_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut FirInterpRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fallback;
     FmMod<C32>::fm_mod(&self, s: &mut FmModState, input: &[f32], output: &mut [C32]) -> Result<()> => Fallback;
     FmMod<CQ15>::fm_mod(&self, s: &mut FmModState, input: &[Q15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    Dot<C32>::dot(&self, x: &[C32], taps: &[f32]) -> Result<C32> => Fallback;
+    Dot<CQ15>::dot(&self, x: &[CQ15], taps: &[Q15]) -> Result<CQ15> => Fallback;
+    DotReal<f32>::dot_real(&self, x: &[f32], taps: &[f32]) -> Result<f32> => Fallback;
+    DotReal<Q15>::dot_real(&self, x: &[Q15], taps: &[Q15]) -> Result<Q15> => Fallback;
     @extra [
         ("rfft", f32, Fallback),
         ("irfft", f32, Fallback),

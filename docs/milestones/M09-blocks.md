@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 3](../PLAN.md#phase-3--blocks-pipeline-files-large) · Depends on: [M08](M08-transmit-and-fused.md) · Next: [M10](M10-pipeline-core.md)
 
+## Status
+
+Fully completed: filter design checked against SciPy golden vectors, the storage abstraction (`Vec` and byte arena), the block interface with mandatory machine-readable descriptions, all listed blocks (`Convert`, `ConvertOut`, `Scale`, `DcBlock`, `Fir`, `Ddc`, `Duc`, `FmDemod`, `FmMod`, `Resampler`, `Spectrum`), the dot kernels with reference and fallback implementations, golden and end-to-end tests, `docs/blocks.md`, and the bare-metal build. All R1.2 commands pass on Linux x86_64.
+
+Open: CI confirmation on Windows x86_64 and Linux arm64 (and the first green CI run of `golden-check`, `bare-metal`, `test`) cannot be done locally; tracked in `docs/open-items.md`. Decisions taken are in `docs/decisions-log.md`.
+
 ## Goal
 
 Create the heap-free crate `crates/blocks/sdrk-blocks`: FIR filter design checked against SciPy, a storage abstraction that works with `Vec` (pipeline) and with a byte arena (microcontroller), the uniform block interface with **mandatory machine-readable descriptions**, and the blocks needed for FM receive/transmit and spectra: `Convert`, `ConvertOut`, `Scale`, `DcBlock`, `Fir`, `Ddc`, `Duc`, `FmDemod`, `FmMod`, `Resampler` (rational and ppm-tuned), `Spectrum`.
@@ -358,9 +364,13 @@ R1.2 commands; golden check; `cargo test -p sdrk-blocks --all-features`.
 
 ## Deliverables checklist
 
-- [ ] Crate, layer registered in `xtask`
-- [ ] `design`, `storage` (`ArenaStorage`, testkit `VecStorage`), `describe`, `block`
-- [ ] 11 blocks with descriptions, both sample types
-- [ ] Kernels `Dot`, `DotReal` (full kernel pattern)
-- [ ] Golden cases (design, dot, blocks), suite cases
-- [ ] `docs/blocks.md`, `docs/timing.md` update, CHANGELOG, decisions log
+- [x] Crate, layer registered in `xtask`
+- [x] `design`, `storage` (`ArenaStorage`, testkit `VecStorage`), `describe`, `block`
+- [x] 11 blocks with descriptions, both sample types
+- [x] Kernels `Dot`, `DotReal` (full kernel pattern)
+- [x] Golden cases (design, dot, blocks), suite cases
+- [x] `docs/blocks.md`, `docs/timing.md` update, CHANGELOG, decisions log
+
+## Status
+
+Completely done: everything in the Specification (sections 1 to 9), all golden cases of the table (27 cases: `design` 10, `dot` 10, `blocks` 7), the tests 1 to 9 of the Tests section (golden, descriptions with the generated table of `docs/blocks.md`, construction in exact arenas, `set_param` and `param`, `reset`, impulse timing, ppm count, `bare-metal` build with the 512-byte size test, the four suite cases `block_ddc_vs_chain`, `block_fm_demod_sinad`, `block_spectrum_tone_level`, `block_resampler_ppm_count`), the R1.2 commands and the golden check (run locally on Linux x86_64). Judgement calls are in [`docs/decisions-log.md`](../decisions-log.md) (M09). Open: confirmation of the CI run on the other two hosts (see [`docs/open-items.md`](../open-items.md)).

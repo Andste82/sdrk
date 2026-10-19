@@ -1,0 +1,32 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "firwin_kaiser_5p0.expected.bin",
+      "len": 101
+    }
+  },
+  "case": "firwin_kaiser_5p0",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "scipy.signal.firwin(101, 0.15, window=('kaiser', beta), fs=1.0)",
+  "params": {
+    "beta": 5.0,
+    "cutoff_hz": 0.15,
+    "fs_hz": 1.0,
+    "num_taps": 101,
+    "window": "kaiser"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-12,
+    "skip": 0
+  }
+}

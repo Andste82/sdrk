@@ -66,6 +66,26 @@ output[n]   = input[n] * exp(j * 2 * pi * phase_n / 2^32)
 
 Rotating by the cosine/sine of the phase uses a 4096-entry table with linear interpolation; the table is generated at build time (see `docs/kernels.md`).
 
+## Blocks
+
+Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, delay }` (see [blocks.md](blocks.md)); the values are exact fractions, derived from the kernel states, and tested against an impulse (peak position within 0.5 input samples) and against measured output counts.
+
+| Block | Ratio (out/in) | Kind | Group delay in input samples |
+| --- | --- | --- | --- |
+| `convert` | samples per byte of a packing group (for example `1/2` for `cu8`, `2/5` for `packed10`) | `Constant` | 0 |
+| `convert_out` | bytes per sample (the inverse) | `Constant` | 0 |
+| `scale`, `dc_block`, `fm_mod` | `1/1` | `Constant` | 0 (`dc_block`: the delay of the one-pole filter depends on the frequency and is not declared) |
+| `fir` with `N` taps | `1/1` | `Constant` | `(N - 1) / 2` |
+| `ddc` with `N` taps, decimation `M` | `1/M` | `Constant` | `(N - 1) / 2` |
+| `duc` with `N` taps, interpolation `L` | `L/1` | `Constant` | `(N - 1) / (2 L)` |
+| `fm_demod`, audio decimation `M`, audio filter of `N` taps | `1/M` | `Constant` | `1/2 + (N - 1) / 2` (`1/2` for `M = 1`, which has no audio filter) |
+| `resampler`, rational `L/M`, `N` taps at `L` times the input rate | `L/M` | `Constant` | `(N - 1) / (2 L)` |
+| `resampler`, tunable, `K` taps per phase | nominal `rate_out / rate_in` | `Variable` | `(128 K - 1) / 256` (the delay of the prototype filter at 128 times the input rate; a `ppm` correction does not change the declaration) |
+
+The `delay` of a decimating block is measured in *input* samples, so an impulse that enters at input index `i` leaves the output grid at the output sample nearest to `i + delay` (the tests align the impulse with the output grid before they compare). `fm_demod` adds the half sample of the discriminator (it looks at two samples) to the delay of the audio filter. The spectrum block has no timing: it emits frames, and `FrameMeta.first_sample` names the input index of the first sample of the frame's first window.
+
+The rational resampler outputs `floor((n L - 1) / M) + 1` samples for `n` input samples after a reset. The tunable resampler puts output `j` at the 32.32 position `j * step` (input samples, the first output at input sample 0, history of zeros in front) and emits it as soon as input sample `floor(pos)` has arrived (sample `floor(pos) + 1` when the phase is the last one of the bank). A million samples at 48 kHz with `ppm = +100` give `1 000 100` outputs (plus or minus 1).
+
 ## Further parts
 
-Block delay accounting in the pipeline, burst timing and timestamps follow with the blocks and pipeline milestones.
+Block delay accounting across a graph, burst timing and timestamps follow with the pipeline milestones.

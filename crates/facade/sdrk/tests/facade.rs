@@ -356,3 +356,31 @@ fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
     assert_eq!(a, b);
     Ok(())
 }
+
+#[test]
+fn m09_dot_kernels_delegate_to_the_fallback() -> Result<()> {
+    use sdrk::kernels::dot::{Dot, DotReal};
+    for (kernel, ty) in [
+        ("dot", SampleType::C32),
+        ("dot", SampleType::CQ15),
+        ("dot_real", SampleType::F32),
+        ("dot_real", SampleType::Q15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("dot", SampleType::F32), "none");
+    assert_eq!(backend_for("dot_real", SampleType::C32), "none");
+    let x = [C32::new(1.0, 2.0), C32::new(3.0, -1.0)];
+    let taps = [0.5f32, 2.0];
+    assert_eq!(Sdrk.dot(&x, &taps)?, Fallback.dot(&x, &taps)?);
+    let q = [Q15(16384), Q15(-8192)];
+    assert_eq!(Sdrk.dot_real(&q, &q)?, Fallback.dot_real(&q, &q)?);
+    let xq = [CQ15 {
+        re: Q15(1000),
+        im: Q15(-2000),
+    }; 2];
+    assert_eq!(Sdrk.dot(&xq, &q)?, Fallback.dot(&xq, &q)?);
+    assert_eq!(Sdrk.dot_real(&[1.0f32, 2.0], &[3.0, 4.0])?, 11.0);
+    assert!(Sdrk.dot(&x, &taps[..1]).is_err());
+    Ok(())
+}

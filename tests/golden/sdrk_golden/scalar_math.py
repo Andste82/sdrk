@@ -36,3 +36,38 @@ def angle(z):
     re, im = z.real.ravel(), z.imag.ravel()
     out = np.fromiter((math.atan2(i, r) for r, i in zip(re, im)), dtype=np.float64, count=re.size)
     return out.reshape(z.shape)
+
+
+def cos(x):
+    return _map(math.cos, x)
+
+
+def exp(x):
+    return _map(math.exp, x)
+
+
+def pow10(x):
+    """``10 ** x`` through ``pow``."""
+    return _map(lambda v: math.pow(10.0, v), x)
+
+
+def geomspace(start, stop, num):
+    """``numpy.geomspace`` for positive endpoints, from ``log10`` and ``pow`` evaluated per value."""
+    lin = np.linspace(math.log10(start), math.log10(stop), num)
+    out = pow10(lin)
+    out[0], out[-1] = start, stop
+    return out
+
+
+def dot(a, b):
+    """Dot product of two vectors with a fixed summation order, independent of the BLAS in use.
+
+    Every product is rounded to float64 and the sum is the exactly rounded ``math.fsum`` of the
+    products, so the result does not depend on the kernel that BLAS dispatches for the CPU. ``a`` may
+    be complex, ``b`` must be real.
+    """
+    a = np.asarray(a)
+    b = np.asarray(b, dtype=np.float64)
+    if np.iscomplexobj(a):
+        return complex(dot(a.real, b), dot(a.imag, b))
+    return math.fsum((a.astype(np.float64) * b).tolist())

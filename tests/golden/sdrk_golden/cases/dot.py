@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .. import q15
+from .. import q15, scalar_math
 from ..registry import Array, case
 
 ROWS = 256
@@ -11,7 +11,7 @@ ROWS = 256
 def sliding(x, taps):
     """Dot product of every window ``x[i : i + n]`` with ``taps``, i = 0 .. ROWS - 1 (float64)."""
     n = len(taps)
-    return np.array([np.dot(x[i : i + n], taps) for i in range(ROWS)])
+    return np.array([scalar_math.dot(x[i : i + n], taps) for i in range(ROWS)])
 
 
 def c32_case(rng, n):

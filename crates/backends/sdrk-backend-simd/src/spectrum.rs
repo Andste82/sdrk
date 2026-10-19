@@ -6,7 +6,7 @@ use sdrk_core::{C32, CQ15, Q15, Result};
 
 use crate::Simd;
 use crate::level::dispatch;
-use crate::util::{check_len, mac};
+use crate::util::check_len;
 
 /// `re*re + im*im` of `input` (interleaved floats) into `out`, bit-exact with the fallback.
 #[inline(always)]
@@ -18,8 +18,10 @@ fn mag_sq_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32]) {
         let (a, b) = i.split_at(l);
         let a = S::f32s::from_slice(simd, a);
         let b = S::f32s::from_slice(simd, b);
-        let (re, im) = (a.unzip_low(b), a.unzip_high(b));
-        mac::<S>(re, re, im * im).store_slice(o);
+        // Square first and unzip the squares: the lane shuffle of the two unzips is then the
+        // same, and the compiler applies it once to the sum instead of to every operand.
+        let (sa, sb) = (a * a, b * b);
+        (sa.unzip_low(sb) + sa.unzip_high(sb)).store_slice(o);
     }
     for (o, x) in out_chunks
         .into_remainder()

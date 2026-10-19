@@ -254,6 +254,10 @@ fn build_variant(root: &Path, variant: Variant, out: &Path, wanted: bool) -> any
     Ok(true)
 }
 
+#[allow(
+    clippy::large_stack_frames,
+    reason = "std::process::Command and the Windows file system calls are large; xtask is a host tool"
+)]
 fn copy_template(root: &Path, out: &Path) -> anyhow::Result<()> {
     let template = root.join("bindings").join("wasm").join("pkg-template");
     let version = workspace_version(&std::fs::read_to_string(root.join("Cargo.toml"))?)

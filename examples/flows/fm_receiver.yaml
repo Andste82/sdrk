@@ -1,0 +1,53 @@
+# SDRk pipeline: receive one FM broadcast station (YAML twin of fm_receiver.json).
+# YAML is accepted as input; JSON stays the canonical format.
+sdrk: 1
+name: fm-receiver
+description: "Receive one FM broadcast station and output 48 kHz audio."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # Quadrature FM demodulation with 50 us de-emphasis, 240 kHz -> 48 kHz.
+  demod:
+    kind: fm_demod
+    params:
+      audio_decimation: 5
+      deemphasis_us: 50
+      deviation_hz: 75000
+  # Averaged power spectrum of the raw input.
+  fft:
+    kind: spectrum
+    params:
+      averaging: 4
+      fft_size: 1024
+  # Digital down converter: +600 kHz to baseband, decimate by 10.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 100000
+      decimation: 10
+      frequency_hz: 600000
+# The input feeds the tuner and the spectrum; the tuner feeds the demodulator.
+edges:
+  - { from: rf, to: tune }
+  - { from: rf, to: fft }
+  - { from: tune, to: demod }
+  - { from: demod, to: audio }
+  - { from: fft, to: spectrum }
+# Audio samples (errors when full) and spectrum frames (drop the oldest).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error
+  spectrum:
+    type: frames
+    queue: 4
+    drop: drop_oldest

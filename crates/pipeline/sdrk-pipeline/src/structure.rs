@@ -7,7 +7,8 @@
 use serde_json::{Map, Value};
 
 use crate::model::{
-    FORMAT_NAMES, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, PipelineSpec, parse_rate_text,
+    FORMAT_NAMES, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, MAX_EVENT_QUEUE, MAX_PENDING_PARAMS,
+    PipelineSpec, parse_rate_text,
 };
 use crate::params::json_type;
 use crate::validate::{DiagCode, Report};
@@ -270,9 +271,29 @@ impl Checker {
     }
 
     fn settings(&mut self, value: &Value) {
-        let Some(map) = self.object(value, "settings", &["precision", "max_chunk"]) else {
+        let Some(map) = self.object(
+            value,
+            "settings",
+            &["precision", "max_chunk", "event_queue", "pending_params"],
+        ) else {
             return;
         };
+        for (key, max) in [
+            ("event_queue", MAX_EVENT_QUEUE),
+            ("pending_params", MAX_PENDING_PARAMS),
+        ] {
+            if let Some(v) = map.get(key) {
+                if let Some(u) = self.count(v, &join("settings", key)) {
+                    if u == 0 || u > max as u64 {
+                        self.report.error(
+                            join("settings", key),
+                            DiagCode::OutOfRange,
+                            format!("{key} is 1 to {max}, got {u}"),
+                        );
+                    }
+                }
+            }
+        }
         if let Some(v) = map.get("precision") {
             self.one_of(v, "settings.precision", &["f32", "q15"]);
         }
@@ -331,9 +352,19 @@ impl Checker {
         };
         for (name, entry) in entries {
             let path = join("nodes", name);
-            let Some(map) = self.object(entry, &path, &["kind", "params", "description"]) else {
+            let Some(map) = self.object(
+                entry,
+                &path,
+                &["kind", "params", "group", "backend", "description"],
+            ) else {
                 continue;
             };
+            if let Some(v) = map.get("group") {
+                self.string(v, &join(&path, "group"));
+            }
+            if let Some(v) = map.get("backend") {
+                self.backend(v, &join(&path, "backend"));
+            }
             if let Some(v) = self.required(map, "kind", &path) {
                 self.string(v, &join(&path, "kind"));
             }
@@ -346,6 +377,44 @@ impl Checker {
                     );
                 }
             }
+            if let Some(v) = map.get("description") {
+                self.description(v, &join(&path, "description"));
+            }
+        }
+    }
+
+    fn backend(&mut self, value: &Value, path: &str) {
+        let Some(map) = self.object(value, path, &["prefer", "require"]) else {
+            return;
+        };
+        for key in ["prefer", "require"] {
+            if let Some(v) = map.get(key) {
+                self.string(v, &join(path, key));
+            }
+        }
+        if map.len() != 1 {
+            self.report.error(
+                path,
+                DiagCode::InvalidValue,
+                "give exactly one of `prefer` and `require`",
+            );
+        }
+    }
+
+    fn groups(&mut self, value: &Value) {
+        let Value::Object(entries) = value else {
+            self.report.error(
+                "groups",
+                DiagCode::WrongType,
+                format!("expected an object, got {}", json_type(value)),
+            );
+            return;
+        };
+        for (name, entry) in entries {
+            let path = join("groups", name);
+            let Some(map) = self.object(entry, &path, &["description"]) else {
+                continue;
+            };
             if let Some(v) = map.get("description") {
                 self.description(v, &join(&path, "description"));
             }
@@ -388,10 +457,21 @@ impl Checker {
             let Some(map) = self.object(
                 entry,
                 &path,
-                &["type", "format", "capacity", "queue", "drop", "description"],
+                &[
+                    "type",
+                    "format",
+                    "capacity",
+                    "queue",
+                    "drop",
+                    "underrun",
+                    "description",
+                ],
             ) else {
                 continue;
             };
+            if let Some(v) = map.get("underrun") {
+                self.one_of(v, &join(&path, "underrun"), &["zeros", "short"]);
+            }
             if let Some(v) = self.required(map, "type", &path) {
                 self.one_of(v, &join(&path, "type"), &["stream", "frames"]);
             }
@@ -423,6 +503,7 @@ impl Checker {
             "description",
             "settings",
             "inputs",
+            "groups",
             "nodes",
             "edges",
             "outputs",
@@ -455,6 +536,9 @@ impl Checker {
         if let Some(v) = map.get("inputs") {
             self.inputs(v);
         }
+        if let Some(v) = map.get("groups") {
+            self.groups(v);
+        }
         if let Some(v) = map.get("nodes") {
             self.nodes(v);
         }
@@ -486,6 +570,12 @@ pub(crate) fn syntax_report(error: &serde_json::Error) -> Report {
 /// Parses JSON text into the typed model, or returns a report with every structural problem.
 pub(crate) fn parse(json: &str) -> Result<PipelineSpec, Report> {
     let value: Value = serde_json::from_str(json).map_err(|e| syntax_report(&e))?;
+    parse_value(value)
+}
+
+/// Checks the structure of a parsed document (from JSON or YAML) and converts it into the
+/// typed model.
+pub(crate) fn parse_value(value: Value) -> Result<PipelineSpec, Report> {
     let mut checker = Checker {
         report: Report::default(),
     };

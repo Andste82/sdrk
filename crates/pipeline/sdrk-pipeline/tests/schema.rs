@@ -30,7 +30,13 @@ use serde_json::{Value, json};
 
 use common::{flow, workspace_file};
 
-const FLOWS: [&str; 3] = ["fm_receiver", "spectrum_only", "resample_audio"];
+const FLOWS: [&str; 5] = [
+    "fm_receiver",
+    "spectrum_only",
+    "resample_audio",
+    "fm_receiver_grouped",
+    "fm_transmitter",
+];
 
 fn schema() -> Value {
     Registry::standard().json_schema()

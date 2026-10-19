@@ -42,7 +42,7 @@ Output samples are a function of the absolute input position only, never of how 
 
 ## Transmit timing and lead time
 
-The transmit chain is the receive chain reversed: the interpolating filters delay the signal, so the first useful output sample appears later than the first input sample, and a burst that has to start at an exact sample index needs the *lead time* of the whole chain. The lead time (in output samples of the last stage) is the sum of the group delays of the interpolation filters, each converted to the output rate: a stage with group delay `d` (in its own input samples) contributes `d * R` output samples, where `R` is the total interpolation from the input rate of that stage to the output rate. For the FM transmitter of the end-to-end test (`fir_interpolate` by 5 with 241 taps, `fm_mod`, `duc` by 10 with 127 taps) this is `(240 / 10) * 50 + (126 / 20) * 10 = 1200 + 63 = 1263` output samples at 2.4 MHz (the audio filter dominates: 24 audio samples times 50). `Delay::add` builds such sums exactly; the pipeline of a later milestone does the accounting automatically.
+The transmit chain is the receive chain reversed: the interpolating filters delay the signal, so the first useful output sample appears later than the first input sample, and a burst that has to start at an exact sample index needs the *lead time* of the whole chain. The lead time (in output samples of the last stage) is the sum of the group delays of the interpolation filters, each converted to the output rate: a stage with group delay `d` (in its own input samples) contributes `d * R` output samples, where `R` is the total interpolation from the input rate of that stage to the output rate. For the FM transmitter of the end-to-end test (`fir_interpolate` by 5 with 241 taps, `fm_mod`, `duc` by 10 with 127 taps) this is `(240 / 10) * 50 + (126 / 20) * 10 = 1200 + 63 = 1263` output samples at 2.4 MHz (the audio filter dominates: 24 audio samples times 50). `Delay::add` builds such sums exactly; the pipeline does the accounting automatically (`Pipeline::lead_time`, see [Transmit: lead time, bursts, index](#transmit-lead-time-bursts-index)).
 
 `fm_mod` has no delay (`Delay::ZERO`); its phase accumulator and the oscillator of a `duc` are part of the state and advance by exactly the number of samples processed, never by the number of samples offered. The fused `ddc` and `duc` kernels keep that property when the output buffer is too small (see `docs/kernels.md`).
 
@@ -86,6 +86,45 @@ The `delay` of a decimating block is measured in *input* samples, so an impulse 
 
 The rational resampler outputs `floor((n L - 1) / M) + 1` samples for `n` input samples after a reset. The tunable resampler puts output `j` at the 32.32 position `j * step` (input samples, the first output at input sample 0, history of zeros in front) and emits it as soon as input sample `floor(pos)` has arrived (sample `floor(pos) + 1` when the phase is the last one of the bank). A million samples at 48 kHz with `ppm = +100` give `1 000 100` outputs (plus or minus 1).
 
-## Further parts
+## Index domains in the pipeline
 
-Block delay accounting across a graph, burst timing and timestamps follow with the pipeline milestones.
+The pipeline never reads a clock; the sample index is the time base. Every stream (pipeline input, output of a node, pipeline output) has its own `u64` index at its own rate. The index of an input starts at the `start` of the first `BlockMeta` that is pushed (joining a stream in the middle), or at 0 with plain `push`.
+
+**Mapping rule.** A node with the exact rate ratio `r = L/M` (from `timing()`) maps the input index `n` to the first output sample whose computation includes it:
+
+```text
+m = n0_out + ceil((n - n0_in) * L / M)
+```
+
+`(n0_in, n0_out)` is the origin pair of the node: `n0_in = start`, `n0_out = ceil(start * L / M)` initially, and new values after a reset or a gap. Mapping through a chain applies the rule node by node. A block whose ratio is not exactly constant overrides `Block::map_index(rel_in)` (input samples since the last origin to output samples since the origin); the default is `ceil(rel_in * L / M)`. The tuned resampler counts the outputs `j` whose 32.32 position `j * step` lies before `rel_in * 2^32`, in `u128`, always relative to the origin so that nothing overflows at large indices. The rule is what the blocks do: after `N` input samples every node has produced `ceil(N * L / M)` samples (tested for `convert`, `ddc` and `fm_demod`; `crates/blocks/sdrk-blocks/tests/map_index.rs` for the blocks). Blocks count in elements (a raw stream has one element per byte), the pipeline converts the counts at the edges of raw streams so that indices are always in samples.
+
+## Gaps
+
+`push_with_meta` with a start above the expected index inserts a gap of `missing = start - expected` samples. Everything that depends on the input is reset. The origins move: the new input origin of the first node is `start`, and its new output origin is the end of what it had produced plus `ceil(missing * L / M)`; the output gap is the input gap of the next node, and so on. The output indices therefore jump by the mapped gap, and the data that follows equals the output of a pipeline that was reset (`reset()`) at that point. A `Gap { missing }` event, with `missing` counted at the input, is reported at the new output index of every output that depends on the input. The same arithmetic places the first block of an input (joining), without the event.
+
+## Anchors
+
+A `TimeAnchor { index, unix_ns }` on an input says that sample `index` was taken at that absolute time. On a downstream stream the anchor must name the time of the *signal* in the sample, not of the arrival of the sample; filters delay the signal. The anchor `(n, t)` on the input of a node becomes `(m, t')` on its output with `m` from the mapping rule and
+
+```text
+t' = t + ((m - n0_out) * M / L - (n - n0_in) - D) / rate_in * 1e9 ns
+```
+
+where `D` is the group delay of the node in its input samples (an exact `Delay`) and `rate_in` the rate at its input. The arithmetic is exact in `i128` with round half up. Applying this node by node gives the total delay compensation, including the rounding of the index. `Pipeline::time_of(output, index)` uses the latest anchor of the output (`TimeAnchor::time_of` with the rate of the output): for the FM receiver the time of an audio sample differs from the analytic time of the tone by less than half an audio sample (tested with the analytic FM generator of the testkit, de-emphasis off; the de-emphasis filter is a recursive filter whose phase delay is not part of a group delay).
+
+## Timed parameters
+
+`set_param_at` maps the target to the input index of the node, ends the next `process` call there, sets the parameter and continues. The change is visible at the first output sample computed after the set, and the `ParamApplied` event is at the mapped index of that sample. For a decimating node the first changed output sample is within one sample of the mapped index; for decimation 1 the oscillator of the `ddc` advances sample `n` with the old frequency, so the first changed output is `n + 1` (the output is bit-identical to a block that was split by hand at `n`; tested).
+
+## Latency
+
+`latency(output)` returns `Latency { group_delay, max_buffered }`; `Report.outputs` has the same figures per output.
+
+- `group_delay` is the sum of the group delays of the nodes on the path from the input to the output, each converted to samples of the output: a node with delay `d` in its own input samples and the rates `rate_in(node)` and `rate_out(output)` contributes `d * rate_out / rate_in(node)`. It is an exact fraction (`Delay`). For a frames output the unit is the sample at the input of the frame node, and the frame node adds nothing.
+- `max_buffered` is the number of samples that the nodes may hold back because they cannot start with fewer than `min_input` samples: `min_input - 1` per node, converted to samples of the output like the delay and rounded up, summed. The buffers of the outputs themselves are not counted: they hold results that were already delivered.
+
+Together they bound how late a sample can appear: the signal that entered at input index `n` appears in the output sample `m = map(n)` and is complete `group_delay` output samples later; up to `max_buffered` samples of the newest input may not have produced output yet.
+
+## Transmit: lead time, bursts, index
+
+The lead time of a transmit path is `latency(output).group_delay` (`Pipeline::lead_time`). A burst of `N` audio samples gives `N * R` output samples (`R` the total interpolation) plus the tail `ceil(lead_time)`: `end_burst` feeds `ceil(D_in)` zero samples (the delay of the path in input samples) to flush the filters and marks the burst end `ceil(lead_time)` samples after the sample that the last real input leads to (what the zero samples produce beyond is discarded). After the burst the nodes of the path are reset, so the next burst starts from silence with the same output as the first one. The output index continues across bursts and never goes back. `begin_burst(output, tx_time_ns)` marks the first sample of the burst, and a transmit driver that needs the burst to start at `tx_time_ns` is handed the block with `BURST_START` and that time.

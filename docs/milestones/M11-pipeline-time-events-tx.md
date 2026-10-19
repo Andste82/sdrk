@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 3](../PLAN.md#phase-3--blocks-pipeline-files-large), [Core concepts › Time](../PLAN.md#time), [Transmit](../PLAN.md#transmit), [Extensibility](../PLAN.md#extensibility) · Depends on: [M10](M10-pipeline-core.md) · Next: [M12](M12-io-device-loopback-examples.md)
 
+## Status
+
+Fully completed: every item in Scope (index domains and mapping with `Block::map_index`, `push_with_meta`, events and event queue, `set_param_at` with acknowledgement, per-output latency, pull mode with bursts and start times, groups and backend preferences in the model, `split_by_groups`, YAML under feature `yaml`, the `wire` module with `docs/wire-format.md` and example files, the two-thread probe test, the `architecture.md` paper check). All R1.2 commands, `cargo test -p sdrk-pipeline --all-features` and `cargo test -p sdrk-pipeline --no-default-features` pass on Linux x86_64. Self-taken decisions are in `docs/decisions-log.md`.
+
+Open: CI confirmation on Linux arm64 and Windows x86_64 and the `golden-check` job (no NumPy locally) could not be done here; tracked in `docs/open-items.md` (M11). The real raw-format output for real streams inherited from M10 is also tracked there.
+
 ## Goal
 
 Complete the pipeline: sample-index time base per stream, gaps/overflow/anchors from device metadata, events moved through the graph, parameter changes at an exact sample index with acknowledgement, joining mid-stream, latency per output, pull mode for transmit with bursts and start times, node groups and backend preferences in the model, YAML input, the versioned wire format for split pipelines, and the two-thread architecture probe proving that partitioning does not change results.
@@ -280,10 +286,10 @@ R1.2 commands; `cargo test -p sdrk-pipeline --all-features`; `cargo test -p sdrk
 
 ## Deliverables checklist
 
-- [ ] Index domains, mapping, `map_index` on `Block`
-- [ ] `push_with_meta`, gap reset, events + queue
-- [ ] `set_param_at`, acknowledgements, latency
-- [ ] Pull mode, bursts, lead time, device status, `fm_transmitter.json` (+ YAML twin)
-- [ ] Groups, backend preferences, `split_by_groups`
-- [ ] YAML feature, wire format + spec, probe test, architecture paper check
-- [ ] Docs (`pipeline.md`, `timing.md`, `wire-format.md`, `architecture.md`), CHANGELOG, decisions log
+- [x] Index domains, mapping, `map_index` on `Block`
+- [x] `push_with_meta`, gap reset, events + queue
+- [x] `set_param_at`, acknowledgements, latency
+- [x] Pull mode, bursts, lead time, device status, `fm_transmitter.json` (+ YAML twin)
+- [x] Groups, backend preferences, `split_by_groups`
+- [x] YAML feature, wire format + spec, probe test, architecture paper check
+- [x] Docs (`pipeline.md`, `timing.md`, `wire-format.md`, `architecture.md`), CHANGELOG, decisions log

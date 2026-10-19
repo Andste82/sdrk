@@ -4,17 +4,23 @@ use std::collections::BTreeMap;
 
 use sdrk_blocks::{FrameMeta, ParamValue, PortType};
 
+use sdrk::{Delay, Rate};
+
 use crate::analysis::{
-    OutSource, Plan, PlanDst, PlanInput, PlanNode, PlanOutput, PlanStream, elem_size,
+    OutPath, OutSource, Plan, PlanDst, PlanInput, PlanNode, PlanOutput, PlanStream, elem_size,
+    output_paths, output_unit_rate,
 };
-use crate::model::PipelineSpec;
+use crate::latency::{PathNode, path_latency};
+use crate::model::{PipelineSpec, UnderrunPolicy};
+use crate::node::{NodeInput, NodeOutput};
 use crate::registry::Registry;
 use crate::runner::{
-    Buffer, Dst, FrameQueue, InRt, NodeRt, NodeStats, OutKind, OutRt, Pipeline, Queue, Reach,
-    Stream,
+    Buffer, Burst, Dst, FrameQueue, InRt, NodeRt, NodeStats, OutKind, OutRt, Pipeline, QUEUE_MARKS,
+    Queue, Reach, Stream,
 };
 use crate::storage::{VecStorage, alloc_vec};
 use crate::structure::join;
+use crate::time::EventQueue;
 use crate::validate::{DiagCode, Diagnostic, Report};
 
 /// A problem found while building: it becomes an error of the report.
@@ -48,6 +54,7 @@ fn build_nodes(
     plan_nodes: &[PlanNode],
     streams: &mut [PlanStream],
     report: &mut Report,
+    pending_cap: usize,
 ) -> Result<Vec<NodeRt>, Failure> {
     let mut storage = VecStorage;
     let mut nodes: Vec<NodeRt> = Vec::with_capacity(plan_nodes.len());
@@ -75,6 +82,7 @@ fn build_nodes(
         let ratio = node
             .timing()
             .map_or((1, 1), |t| (t.ratio.num(), t.ratio.den()));
+        let delay = node.timing().map_or(Delay::ZERO, |t| t.delay);
         if let (Some(t), Some(r)) = (node.timing(), report.nodes.get_mut(i)) {
             r.delay_samples_in = t.delay;
         }
@@ -92,6 +100,15 @@ fn build_nodes(
             },
             ratio,
             changed: 0,
+            consumed: 0,
+            n0_in: 0,
+            n0_out: 0,
+            rate_in: pn.rate_in,
+            rate_out: pn.checked.rate_out,
+            delay,
+            input: streams.get(pn.src).map_or(0, |s| s.origin),
+            upstream: Vec::new(),
+            pending: Vec::with_capacity(pending_cap),
         });
     }
     Ok(nodes)
@@ -115,6 +132,10 @@ fn build_streams(
             buf,
             end: 0,
             readers: Vec::new(),
+            elems: s.elems,
+            origin_idx: 0,
+            origin_el: 0,
+            total_el: 0,
         });
     }
     for n in nodes {
@@ -156,6 +177,7 @@ fn frame_queue(len: usize, capacity: usize) -> Result<FrameQueue, sdrk_blocks::E
 /// Allocates the queue of one output.
 fn build_output(
     po: &PlanOutput,
+    rate: Rate,
     streams: &[PlanStream],
     rt_streams: &mut [Stream],
     memory: &mut usize,
@@ -165,6 +187,7 @@ fn build_output(
             let ty = streams.get(sid).map_or(PortType::Raw, |s| s.ty);
             let buf = Buffer::new(ty, po.capacity).map_err(|e| limit(e.to_string()))?;
             *memory = memory.saturating_add(po.capacity.saturating_mul(elem_size(ty)));
+            let elems = streams.get(sid).map_or((1, 1), |s| s.elems);
             let slot = rt_streams.get(sid).map_or(0, |s| s.readers.len());
             if let Some(s) = rt_streams.get_mut(sid) {
                 s.readers.push(0);
@@ -177,6 +200,10 @@ fn build_output(
                     buf,
                     start: 0,
                     end: 0,
+                    elems,
+                    total_in: 0,
+                    total_out: 0,
+                    marks: Vec::with_capacity(QUEUE_MARKS),
                 },
             }
         }
@@ -189,11 +216,32 @@ fn build_output(
             OutKind::Frames(q)
         }
     };
+    let raw = matches!(
+        &kind,
+        OutKind::Stream {
+            ty: PortType::Raw,
+            ..
+        }
+    );
     Ok(OutRt {
         name: po.name.clone(),
         policy: po.spec.drop_policy(),
         dropped: 0,
         kind,
+        input: 0,
+        path: Vec::new(),
+        rate,
+        anchor: None,
+        lead: Delay::ZERO,
+        lead_in: Delay::ZERO,
+        max_buffered: 0,
+        underrun: po.spec.underrun.unwrap_or(if raw {
+            UnderrunPolicy::Zeros
+        } else {
+            UnderrunPolicy::Short
+        }),
+        burst: Burst::Continuous,
+        silence: Vec::new(),
     })
 }
 
@@ -260,13 +308,41 @@ fn build_inputs(
                 });
             }
         }
+        let tree_nodes: Vec<usize> = plan_nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| streams.get(n.src).is_some_and(|s| s.origin == ii))
+            .map(|(i, _)| i)
+            .collect();
+        let tree_streams: Vec<usize> = streams
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.origin == ii)
+            .map(|(i, _)| i)
+            .collect();
         inputs.push(InRt {
             name: pi.name.clone(),
             stream: pi.stream,
             ty: pi.ty,
+            rate: pi.rate,
             max_len,
+            zeros: crate::pull::zero_input(
+                pi.ty,
+                if pi.ty == PortType::Raw {
+                    usize::try_from(crate::runner::elems_of(max_len as u64, elems))
+                        .unwrap_or(max_len)
+                } else {
+                    max_len
+                },
+            ),
+            min_input: origin.map_or(1, |s| s.min_input),
             readers,
             reach,
+            tree_nodes,
+            tree_streams,
+            outputs: Vec::new(),
+            anchor: None,
+            fresh: true,
         });
     }
     inputs
@@ -301,20 +377,40 @@ fn assemble(
         nodes: plan_nodes,
         outputs: plan_outputs,
     } = plan;
-    let mut nodes = build_nodes(registry, &plan_nodes, &mut streams, report)?;
+    let pending_cap = spec.settings.pending_params_len();
+    let mut nodes = build_nodes(registry, &plan_nodes, &mut streams, report, pending_cap)?;
     let mut memory: usize = plan_nodes.iter().map(|p| p.checked.memory_bytes).sum();
     let mut rt_streams = build_streams(&streams, &plan_inputs, &mut nodes, max_chunk, &mut memory)?;
+    let paths = output_paths(&plan_nodes, &streams, &plan_outputs);
     let mut outputs: Vec<OutRt> = Vec::with_capacity(plan_outputs.len());
     let mut output_index = BTreeMap::new();
-    for (oi, po) in plan_outputs.iter().enumerate() {
-        outputs.push(build_output(po, &streams, &mut rt_streams, &mut memory)?);
+    for (oi, (po, path)) in plan_outputs.iter().zip(&paths).enumerate() {
+        let rate = output_unit_rate(po, path, &plan_nodes, &streams)
+            .ok_or_else(|| limit("output without a source"))?;
+        outputs.push(build_output(
+            po,
+            rate,
+            &streams,
+            &mut rt_streams,
+            &mut memory,
+        )?);
         output_index.insert(po.name.clone(), oi);
     }
-    let inputs = build_inputs(
+    let mut inputs = build_inputs(
         (&plan_inputs, &plan_nodes, &plan_outputs),
         &streams,
         &nodes,
         max_chunk,
+    );
+    connect_paths(
+        registry,
+        (&plan_nodes, &plan_inputs, &plan_outputs),
+        &paths,
+        &streams,
+        &mut nodes,
+        &mut outputs,
+        &mut inputs,
+        report,
     );
     let input_index = plan_inputs
         .iter()
@@ -349,5 +445,124 @@ fn assemble(
         outputs,
         output_index,
         stats,
+        events: EventQueue::new(spec.settings.event_queue_len()),
+        pending_cap,
+        gap_scratch: vec![0; streams.len()],
     })
+}
+
+/// One packing group of silence for a raw output fed by a `convert_out` node: the node
+/// converts zero samples.
+fn silence_group(
+    registry: &Registry,
+    plan_nodes: &[PlanNode],
+    streams: &[PlanStream],
+    sid: usize,
+) -> Vec<u8> {
+    let Some(stream) = streams.get(sid) else {
+        return Vec::new();
+    };
+    let Some(pn) = plan_nodes.iter().find(|n| n.dst == PlanDst::Stream(sid)) else {
+        return Vec::new();
+    };
+    let Some(factory) = registry.factory(&pn.kind) else {
+        return Vec::new();
+    };
+    let Ok(mut node) = factory.build(&pn.checked, &mut VecStorage) else {
+        return Vec::new();
+    };
+    let (bytes, samples) = (stream.elems.0 as usize, stream.elems.1 as usize);
+    let mut out = vec![0u8; bytes];
+    let mut meta = None;
+    let progress = match streams.get(pn.src).map(|s| s.ty) {
+        Some(PortType::C32) => {
+            let zeros = vec![sdrk::C32::default(); samples];
+            node.process(NodeInput::C32(&zeros), NodeOutput::Raw(&mut out), &mut meta)
+        }
+        Some(PortType::CQ15) => {
+            let zeros = vec![sdrk::CQ15::default(); samples];
+            node.process(
+                NodeInput::CQ15(&zeros),
+                NodeOutput::Raw(&mut out),
+                &mut meta,
+            )
+        }
+        _ => return Vec::new(),
+    };
+    match progress {
+        Ok(p) if p.produced == bytes => out,
+        _ => Vec::new(),
+    }
+}
+
+/// Fills the path, delay and silence fields that need the whole plan.
+#[allow(clippy::too_many_arguments)]
+fn connect_paths(
+    registry: &Registry,
+    plan: (&[PlanNode], &[PlanInput], &[PlanOutput]),
+    paths: &[OutPath],
+    streams: &[PlanStream],
+    nodes: &mut [NodeRt],
+    outputs: &mut [OutRt],
+    inputs: &mut [InRt],
+    report: &mut Report,
+) {
+    let (plan_nodes, plan_inputs, plan_outputs) = plan;
+    // The nodes upstream of every node.
+    for k in 0..nodes.len() {
+        let mut up = Vec::new();
+        let mut cur = nodes.get(k).map(|n| n.src);
+        while let Some(sid) = cur {
+            match plan_nodes
+                .iter()
+                .position(|n| n.dst == PlanDst::Stream(sid))
+            {
+                Some(p) => {
+                    up.push(p);
+                    cur = plan_nodes.get(p).map(|n| n.src);
+                }
+                None => break,
+            }
+        }
+        up.reverse();
+        if let Some(n) = nodes.get_mut(k) {
+            n.upstream = up;
+        }
+    }
+    for (oi, ((out, path), po)) in outputs.iter_mut().zip(paths).zip(plan_outputs).enumerate() {
+        out.input = path.input;
+        out.path.clone_from(&path.nodes);
+        if let Some(i) = inputs.get_mut(path.input) {
+            i.outputs.push(oi);
+        }
+        let stream_nodes: Vec<PathNode> = path
+            .nodes
+            .iter()
+            .filter_map(|k| nodes.get(*k).zip(plan_nodes.get(*k)))
+            .filter(|(n, _)| matches!(n.dst, Dst::Stream(_)))
+            .map(|(n, pn)| PathNode {
+                rate_in: n.rate_in,
+                delay: n.delay,
+                min_input: pn.checked.min_input.max(n.node.min_input()),
+            })
+            .collect();
+        if let Some((lead, buffered)) = path_latency(&stream_nodes, out.rate) {
+            out.lead = lead;
+            out.max_buffered = buffered;
+        }
+        if let Some(rate_in) = plan_inputs.get(path.input).map(|i| i.rate) {
+            if let Some((lead_in, _)) = path_latency(&stream_nodes, rate_in) {
+                out.lead_in = lead_in;
+            }
+        }
+        if let Some(r) = report.outputs.get_mut(oi) {
+            r.group_delay = out.lead;
+            r.max_buffered = out.max_buffered;
+        }
+        if let OutSource::Stream(sid) = po.source {
+            if streams.get(sid).is_some_and(|s| s.ty == PortType::Raw) {
+                out.silence = silence_group(registry, plan_nodes, streams, sid);
+            }
+        }
+    }
 }

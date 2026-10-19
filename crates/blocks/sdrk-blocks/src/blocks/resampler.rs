@@ -519,6 +519,18 @@ impl<E: TunedElem, S: Storage> TunedCore<E, S> {
     fn min_input(&self) -> usize {
         (self.step >> 32) as usize + 3
     }
+
+    /// Number of outputs `j` whose position `j * step` lies before `rel_in * 2^32`.
+    fn map_index(&self, rel_in: u64) -> u64 {
+        let v = (u128::from(rel_in) << 32).div_ceil(u128::from(self.step.max(1)));
+        u64::try_from(v).unwrap_or(u64::MAX)
+    }
+}
+
+/// `ceil(rel_in * L / M)` for the exact ratio of a rational engine.
+fn map_nominal(ratio: Ratio, rel_in: u64) -> u64 {
+    let v = (u128::from(rel_in) * u128::from(ratio.num())).div_ceil(u128::from(ratio.den()));
+    u64::try_from(v).unwrap_or(u64::MAX)
 }
 
 fn tuned_delay(k: usize) -> Delay {
@@ -673,6 +685,13 @@ where
             Engine::Tuned(core) => core.min_input(),
         }
     }
+
+    fn map_index(&self, rel_in: u64) -> u64 {
+        match &self.engine {
+            Engine::Rational(_) => map_nominal(self.ratio, rel_in),
+            Engine::Tuned(core) => core.map_index(rel_in),
+        }
+    }
 }
 
 /// Resampler for real signals (`f32`, `Q15`), for example audio.
@@ -814,6 +833,13 @@ where
         match &self.engine {
             RealEngine::Rational(state) => state.down(),
             RealEngine::Tuned(core) => core.min_input(),
+        }
+    }
+
+    fn map_index(&self, rel_in: u64) -> u64 {
+        match &self.engine {
+            RealEngine::Rational(_) => map_nominal(self.ratio, rel_in),
+            RealEngine::Tuned(core) => core.map_index(rel_in),
         }
     }
 }

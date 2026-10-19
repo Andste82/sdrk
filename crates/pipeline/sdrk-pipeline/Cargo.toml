@@ -7,6 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["yaml"]
+# YAML input (`PipelineSpec::from_yaml`); the WASM binding disables it.
+yaml = ["dep:serde-saphyr"]
+
 [dependencies]
 sdrk = { path = "../../facade/sdrk" }
 sdrk-blocks = { path = "../../blocks/sdrk-blocks" }
@@ -16,6 +21,7 @@ bytemuck.workspace = true
 schemars = "1.2.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+serde-saphyr = { version = "=2.0.0", default-features = false, features = ["deserialize"], optional = true }
 
 [dev-dependencies]
 jsonschema = { version = "0.59.0", default-features = false }

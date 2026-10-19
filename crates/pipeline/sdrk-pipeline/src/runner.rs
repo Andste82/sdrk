@@ -6,14 +6,16 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
-use sdrk::{C32, CQ15, Progress, Q15, Sample, SampleType};
-use sdrk_blocks::{FrameMeta, PortType};
+use sdrk::{C32, CQ15, Delay, Progress, Q15, Rate, Sample, SampleType};
+use sdrk_blocks::{FrameMeta, ParamValue, PortType};
+use sdrk_device::TimeAnchor;
 use serde_json::Value;
 
 use crate::error::{Error, Result};
-use crate::model::{DropPolicy, PipelineSpec};
+use crate::model::{DropPolicy, PipelineSpec, UnderrunPolicy};
 use crate::node::{Node, NodeInput, NodeOutput};
 use crate::params::{to_json, to_param};
+use crate::time::EventQueue;
 use crate::validate::Report;
 
 /// Data pushed into one input of a pipeline.
@@ -59,7 +61,7 @@ impl InputData<'_> {
         self.len() == 0
     }
 
-    fn port_type(&self) -> PortType {
+    pub(crate) fn port_type(&self) -> PortType {
         match self {
             Self::Raw(_) => PortType::Raw,
             Self::C32(_) => PortType::C32,
@@ -69,14 +71,15 @@ impl InputData<'_> {
         }
     }
 
-    /// The data from element `from` on, as a node input.
-    fn view(&self, from: usize) -> Option<NodeInput<'_>> {
+    /// `limit` elements from element `from` on, as a node input.
+    fn view(&self, from: usize, limit: usize) -> Option<NodeInput<'_>> {
+        let to = from.checked_add(limit)?;
         Some(match self {
-            Self::Raw(s) => NodeInput::Raw(s.get(from..)?),
-            Self::C32(s) => NodeInput::C32(s.get(from..)?),
-            Self::CQ15(s) => NodeInput::CQ15(s.get(from..)?),
-            Self::F32(s) => NodeInput::F32(s.get(from..)?),
-            Self::Q15(s) => NodeInput::Q15(s.get(from..)?),
+            Self::Raw(s) => NodeInput::Raw(s.get(from..to)?),
+            Self::C32(s) => NodeInput::C32(s.get(from..to)?),
+            Self::CQ15(s) => NodeInput::CQ15(s.get(from..to)?),
+            Self::F32(s) => NodeInput::F32(s.get(from..to)?),
+            Self::Q15(s) => NodeInput::Q15(s.get(from..to)?),
         })
     }
 }
@@ -113,7 +116,7 @@ pub(crate) fn name_of(t: PortType) -> &'static str {
     }
 }
 
-fn sample_port(t: SampleType) -> PortType {
+pub(crate) fn sample_port(t: SampleType) -> PortType {
     match t {
         SampleType::C32 => PortType::C32,
         SampleType::CQ15 => PortType::CQ15,
@@ -122,15 +125,15 @@ fn sample_port(t: SampleType) -> PortType {
     }
 }
 
-fn internal(m: &'static str) -> Error {
+pub(crate) fn internal(m: &'static str) -> Error {
     Error::Internal(m)
 }
 
-fn at<T>(v: &[T], i: usize) -> Result<&T> {
+pub(crate) fn at<T>(v: &[T], i: usize) -> Result<&T> {
     v.get(i).ok_or_else(|| internal("index out of range"))
 }
 
-fn at_mut<T>(v: &mut [T], i: usize) -> Result<&mut T> {
+pub(crate) fn at_mut<T>(v: &mut [T], i: usize) -> Result<&mut T> {
     v.get_mut(i).ok_or_else(|| internal("index out of range"))
 }
 
@@ -306,11 +309,54 @@ pub(crate) struct Stream {
     pub(crate) buf: Buffer,
     pub(crate) end: usize,
     pub(crate) readers: Vec<usize>,
+    /// Bytes and samples of one packing group (`(1, 1)` unless the stream is raw).
+    pub(crate) elems: (u64, u64),
+    /// Sample index of the element counter value `origin_el`.
+    pub(crate) origin_idx: u64,
+    pub(crate) origin_el: u64,
+    /// Elements written since the build.
+    pub(crate) total_el: u64,
+}
+
+/// Samples in `el` elements of a stream with `elems` (bytes, samples) per packing group.
+pub(crate) fn samples_of(el: u64, elems: (u64, u64)) -> u64 {
+    let v = u128::from(el) * u128::from(elems.1) / u128::from(elems.0.max(1));
+    u64::try_from(v).unwrap_or(u64::MAX)
+}
+
+/// Elements that hold `samples` samples (rounded up to whole elements).
+pub(crate) fn elems_of(samples: u64, elems: (u64, u64)) -> u64 {
+    let v = (u128::from(samples) * u128::from(elems.0)).div_ceil(u128::from(elems.1.max(1)));
+    u64::try_from(v).unwrap_or(u64::MAX)
 }
 
 impl Stream {
     pub(crate) fn cap(&self) -> usize {
         self.buf.len()
+    }
+
+    /// Sample index of the element with the absolute counter value `total`.
+    pub(crate) fn idx_of(&self, total: u64) -> u64 {
+        self.origin_idx
+            .saturating_add(samples_of(total.saturating_sub(self.origin_el), self.elems))
+    }
+
+    /// Sample index of the next element that will be written.
+    pub(crate) fn next_idx(&self) -> u64 {
+        self.idx_of(self.total_el)
+    }
+
+    /// Sample index of the element at buffer position `pos`.
+    pub(crate) fn idx_of_pos(&self, pos: usize) -> u64 {
+        let behind = self.end.saturating_sub(pos) as u64;
+        self.idx_of(self.total_el.saturating_sub(behind))
+    }
+
+    /// Empties the buffer and starts a new index origin at `idx`.
+    pub(crate) fn rebase(&mut self, idx: u64) {
+        self.clear();
+        self.origin_idx = idx;
+        self.origin_el = self.total_el;
     }
 
     /// Moves the unread data to the front of the buffer.
@@ -345,18 +391,93 @@ pub(crate) struct Queue {
     pub(crate) buf: Buffer,
     pub(crate) start: usize,
     pub(crate) end: usize,
+    /// Bytes and samples of one packing group.
+    pub(crate) elems: (u64, u64),
+    /// Elements appended since the build.
+    pub(crate) total_in: u64,
+    /// Elements removed from the front (read or dropped) since the build.
+    pub(crate) total_out: u64,
+    /// `(element counter, sample index)` where the index sequence is not contiguous with the
+    /// previous element: the start, every gap and every drop.
+    pub(crate) marks: Vec<(u64, u64)>,
 }
 
+/// Room for index marks of one queue.
+pub(crate) const QUEUE_MARKS: usize = 64;
+
 impl Queue {
-    fn cap(&self) -> usize {
+    pub(crate) fn cap(&self) -> usize {
         self.buf.len()
     }
 
-    fn len(&self) -> usize {
+    /// The sample index of the element with counter value `at`.
+    pub(crate) fn idx_at(&self, at: u64) -> u64 {
+        self.marks
+            .iter()
+            .rev()
+            .find(|(pos, _)| *pos <= at)
+            .or_else(|| self.marks.first())
+            .map_or(0, |(pos, idx)| {
+                idx.saturating_add(samples_of(at.saturating_sub(*pos), self.elems))
+            })
+    }
+
+    /// Sample index of the first queued element.
+    pub(crate) fn first_idx(&self) -> u64 {
+        self.idx_at(self.total_out)
+    }
+
+    /// Records that the next appended element has the sample index `idx`.
+    fn note_next(&mut self, idx: u64) {
+        let contiguous = self.marks.last().is_some_and(|(pos, i)| {
+            i.saturating_add(samples_of(self.total_in - pos, self.elems)) == idx
+        });
+        if contiguous {
+            return;
+        }
+        if self.marks.len() >= QUEUE_MARKS {
+            self.marks.remove(0);
+        }
+        self.marks.push((self.total_in, idx));
+    }
+
+    /// Removes elements from the front for the bookkeeping of indices.
+    pub(crate) fn advance(&mut self, n: usize) {
+        self.start += n;
+        self.total_out += n as u64;
+        while self.marks.len() > 1
+            && self
+                .marks
+                .get(1)
+                .is_some_and(|(pos, _)| *pos <= self.total_out)
+        {
+            self.marks.remove(0);
+        }
+        if self.start == self.end {
+            self.start = 0;
+            self.end = 0;
+        }
+    }
+
+    /// Drops all queued elements; the index sequence continues.
+    pub(crate) fn clear(&mut self) {
+        self.start = 0;
+        self.end = 0;
+        self.total_out = self.total_in;
+    }
+
+    /// Drops all queued elements and restarts the index sequence at `idx`.
+    pub(crate) fn reset_to(&mut self, idx: u64) {
+        self.clear();
+        self.marks.clear();
+        self.marks.push((self.total_in, idx));
+    }
+
+    pub(crate) fn len(&self) -> usize {
         self.end.saturating_sub(self.start)
     }
 
-    fn free(&self) -> usize {
+    pub(crate) fn free(&self) -> usize {
         self.cap().saturating_sub(self.len())
     }
 
@@ -376,6 +497,7 @@ impl Queue {
         let ok = self.buf.copy_from(self.end, src, from, n);
         if ok {
             self.end += n;
+            self.total_in += n as u64;
         }
         ok
     }
@@ -429,22 +551,55 @@ pub(crate) enum OutKind {
     Frames(FrameQueue),
 }
 
+/// The state of the burst machine of an output (pull mode).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Burst {
+    /// `begin_burst` was never called: samples are produced all the time.
+    Continuous,
+    /// Between bursts: nothing is produced.
+    Idle,
+    /// `begin_burst` was called; the sample with index `at` starts the burst.
+    Armed { at: u64, tx_time_ns: Option<i64> },
+    /// Inside a burst.
+    Active,
+    /// `end_burst` was called; the burst ends before the sample with index `end`.
+    Ending { end: u64 },
+}
+
 pub(crate) struct OutRt {
     pub(crate) name: String,
     pub(crate) policy: DropPolicy,
     pub(crate) dropped: u64,
     pub(crate) kind: OutKind,
+    /// The pipeline input this output depends on.
+    pub(crate) input: usize,
+    /// The nodes from the input to the output in processing order (a frame node comes last).
+    pub(crate) path: Vec<usize>,
+    /// Rate of the samples of this output (frames: rate at the input of the frame node).
+    pub(crate) rate: Rate,
+    /// The latest anchor of this output (delay-compensated).
+    pub(crate) anchor: Option<TimeAnchor>,
+    /// Group delay in samples of the output.
+    pub(crate) lead: Delay,
+    /// Group delay of the path in samples of the pipeline input.
+    pub(crate) lead_in: Delay,
+    /// Worst-case buffered samples, in samples of the output.
+    pub(crate) max_buffered: u64,
+    pub(crate) underrun: UnderrunPolicy,
+    pub(crate) burst: Burst,
+    /// One packing group of silence for a raw output (empty otherwise).
+    pub(crate) silence: Vec<u8>,
 }
 
 impl OutRt {
-    fn free(&self) -> usize {
+    pub(crate) fn free(&self) -> usize {
         match &self.kind {
             OutKind::Stream { queue, .. } => queue.free(),
             OutKind::Frames(f) => f.cap - f.count,
         }
     }
 
-    fn capacity(&self) -> usize {
+    pub(crate) fn capacity(&self) -> usize {
         match &self.kind {
             OutKind::Stream { queue, .. } => queue.cap(),
             OutKind::Frames(f) => f.cap,
@@ -468,6 +623,34 @@ pub(crate) struct NodeRt {
     pub(crate) ratio: (u64, u64),
     /// Bit `i` is set when the run-time parameter `i` of the description was changed.
     pub(crate) changed: u64,
+    /// Elements consumed since the origin of the node.
+    pub(crate) consumed: u64,
+    /// The origin pair of the index mapping: the input index and the output index at which the
+    /// node started (build, reset or gap).
+    pub(crate) n0_in: u64,
+    pub(crate) n0_out: u64,
+    /// Sample rate at the input of the node.
+    pub(crate) rate_in: Rate,
+    /// Sample rate at the output of the node.
+    pub(crate) rate_out: Rate,
+    /// Group delay in input samples.
+    pub(crate) delay: Delay,
+    /// The pipeline input the node depends on.
+    pub(crate) input: usize,
+    /// The nodes between the input and this node, in processing order.
+    pub(crate) upstream: Vec<usize>,
+    /// Timed parameter changes, ordered by target index.
+    pub(crate) pending: Vec<Pending>,
+}
+
+/// A timed parameter change that has not taken effect yet.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Pending {
+    /// Sample index in the input stream of the node.
+    pub(crate) at: u64,
+    /// Index of the parameter in the description.
+    pub(crate) param: u16,
+    pub(crate) value: ParamValue,
 }
 
 /// How an output depends on an input: output elements (or frames) per input element.
@@ -482,10 +665,25 @@ pub(crate) struct InRt {
     pub(crate) name: String,
     pub(crate) stream: usize,
     pub(crate) ty: PortType,
+    pub(crate) rate: Rate,
     pub(crate) max_len: usize,
+    /// Zero samples for the flush of `end_burst`, allocated once in `build`.
+    pub(crate) zeros: crate::pull::ZeroInput,
+    /// Smallest chunk (in elements) that lets the readers produce output.
+    pub(crate) min_input: usize,
     /// Nodes that read the input stream, in processing order.
     pub(crate) readers: Vec<usize>,
     pub(crate) reach: Vec<Reach>,
+    /// Every node that depends on the input, in processing order.
+    pub(crate) tree_nodes: Vec<usize>,
+    /// Every stream that depends on the input, the input stream first.
+    pub(crate) tree_streams: Vec<usize>,
+    /// The outputs that depend on the input.
+    pub(crate) outputs: Vec<usize>,
+    /// The latest anchor pushed to the input.
+    pub(crate) anchor: Option<TimeAnchor>,
+    /// True until the first data or metadata arrives: the first block fixes the origin.
+    pub(crate) fresh: bool,
 }
 
 /// A built pipeline: owns every buffer and block; processing does not allocate.
@@ -519,6 +717,10 @@ pub struct Pipeline {
     pub(crate) outputs: Vec<OutRt>,
     pub(crate) output_index: BTreeMap<String, usize>,
     pub(crate) stats: Vec<NodeStats>,
+    pub(crate) events: EventQueue,
+    pub(crate) pending_cap: usize,
+    /// Scratch space of the gap handling: missing samples per stream.
+    pub(crate) gap_scratch: Vec<u64>,
 }
 
 impl core::fmt::Debug for Pipeline {
@@ -566,26 +768,8 @@ fn step_stream(
     let mut meta: Option<FrameMeta> = None;
     let p = if let Some((data, off)) = direct {
         let ds = at_mut(streams, d)?;
-        let input = data.view(off).ok_or_else(|| internal("input view"))?;
-        let out = ds
-            .buf
-            .view_mut(ds.end..ds.cap())
-            .ok_or_else(|| internal("output view"))?;
-        let p = n
-            .node
-            .process(input, out, &mut meta)
-            .map_err(|e| block_error(&n.name, e))?;
-        if p.consumed > avail || ds.end + p.produced > ds.cap() {
-            return Err(internal("block reported impossible progress"));
-        }
-        ds.end += p.produced;
-        p
-    } else {
-        let (ss, ds) = pair_mut(streams, n.src, d)?;
-        let pos = *at(&ss.readers, n.slot)?;
-        let input = ss
-            .buf
-            .view(pos..ss.end)
+        let input = data
+            .view(off, avail)
             .ok_or_else(|| internal("input view"))?;
         let out = ds
             .buf
@@ -599,6 +783,30 @@ fn step_stream(
             return Err(internal("block reported impossible progress"));
         }
         ds.end += p.produced;
+        ds.total_el += p.produced as u64;
+        n.consumed += p.consumed as u64;
+        p
+    } else {
+        let (ss, ds) = pair_mut(streams, n.src, d)?;
+        let pos = *at(&ss.readers, n.slot)?;
+        let input = ss
+            .buf
+            .view(pos..pos + avail)
+            .ok_or_else(|| internal("input view"))?;
+        let out = ds
+            .buf
+            .view_mut(ds.end..ds.cap())
+            .ok_or_else(|| internal("output view"))?;
+        let p = n
+            .node
+            .process(input, out, &mut meta)
+            .map_err(|e| block_error(&n.name, e))?;
+        if p.consumed > avail || ds.end + p.produced > ds.cap() {
+            return Err(internal("block reported impossible progress"));
+        }
+        ds.end += p.produced;
+        ds.total_el += p.produced as u64;
+        n.consumed += p.consumed as u64;
         *at_mut(&mut ss.readers, n.slot)? += p.consumed;
         p
     };
@@ -625,8 +833,11 @@ fn step_frames(
         return Ok(None);
     }
     let mut meta: Option<FrameMeta> = None;
+    let origin = at(streams, n.src)?.origin_idx;
     let p = if let Some((data, off)) = direct {
-        let input = data.view(off).ok_or_else(|| internal("input view"))?;
+        let input = data
+            .view(off, avail)
+            .ok_or_else(|| internal("input view"))?;
         n.node
             .process(input, NodeOutput::Frame(&mut fq.scratch), &mut meta)
             .map_err(|e| block_error(&n.name, e))?
@@ -635,7 +846,7 @@ fn step_frames(
         let pos = *at(&s.readers, n.slot)?;
         let input = s
             .buf
-            .view(pos..s.end)
+            .view(pos..pos + avail)
             .ok_or_else(|| internal("input view"))?;
         let p = n
             .node
@@ -647,8 +858,13 @@ fn step_frames(
         *at_mut(&mut s.readers, n.slot)? += p.consumed;
         p
     };
+    n.consumed += p.consumed as u64;
     let frames = usize::from(meta.is_some());
     if let Some(m) = meta {
+        let m = FrameMeta {
+            first_sample: m.first_sample.saturating_add(origin),
+            ..m
+        };
         out.dropped += fq.push(m, policy);
     }
     Ok(Some((
@@ -670,14 +886,25 @@ impl Pipeline {
     /// `OutputFull` (an output with the drop policy `error` could not take the worst-case
     /// result; nothing was consumed) and `Block` (a block failed).
     pub fn push(&mut self, input: &str, data: InputData<'_>) -> Result<()> {
-        let ii = *self
-            .input_index
+        let ii = self.input_pos(input)?;
+        self.check_push(ii, &data)?;
+        self.ingest(ii, &data)?;
+        self.run()
+    }
+
+    pub(crate) fn input_pos(&self, input: &str) -> Result<usize> {
+        self.input_index
             .get(input)
-            .ok_or_else(|| Error::UnknownInput(input.to_string()))?;
+            .copied()
+            .ok_or_else(|| Error::UnknownInput(input.to_string()))
+    }
+
+    /// The checks of `push` that must pass before anything is consumed.
+    pub(crate) fn check_push(&self, ii: usize, data: &InputData<'_>) -> Result<()> {
         let inp = at(&self.inputs, ii)?;
         if data.port_type() != inp.ty {
             return Err(Error::WrongType {
-                name: input.to_string(),
+                name: inp.name.clone(),
                 expected: name_of(inp.ty),
                 got: name_of(data.port_type()),
             });
@@ -705,15 +932,15 @@ impl Pipeline {
                 return Err(Error::OutputFull(out.name.clone()));
             }
         }
-        self.ingest(ii, &data)?;
-        self.run()
+        Ok(())
     }
 
     /// Hands the data to the first readers directly and keeps what they did not take.
-    fn ingest(&mut self, ii: usize, data: &InputData<'_>) -> Result<()> {
+    pub(crate) fn ingest(&mut self, ii: usize, data: &InputData<'_>) -> Result<()> {
         if data.is_empty() {
             return Ok(());
         }
+        at_mut(&mut self.inputs, ii)?.fresh = false;
         let sid = at(&self.inputs, ii)?.stream;
         if at(&self.streams, sid)?.end == 0 {
             self.ingest_direct(ii, sid, data)
@@ -730,6 +957,7 @@ impl Pipeline {
     )]
     fn ingest_direct(&mut self, ii: usize, sid: usize, data: &InputData<'_>) -> Result<()> {
         let len = data.len();
+        at_mut(&mut self.streams, sid)?.total_el += len as u64;
         let reader_count = at(&self.inputs, ii)?.readers.len();
         for k in 0..reader_count {
             let ni = *at(&at(&self.inputs, ii)?.readers, k)?;
@@ -763,6 +991,7 @@ impl Pipeline {
             return Err(Error::OutputFull(at(&self.inputs, ii)?.name.clone()));
         }
         s.end += len;
+        s.total_el += len as u64;
         Ok(())
     }
 
@@ -781,11 +1010,29 @@ impl Pipeline {
 
     /// One `process` call of node `ni`, reading from its stream or from `direct` (data and
     /// offset). `None` if the node cannot run (no input or no room).
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+    )]
     fn step(
         &mut self,
         ni: usize,
         direct: Option<(&InputData<'_>, usize)>,
     ) -> Result<Option<Progress>> {
+        let avail = {
+            let n = at(&self.nodes, ni)?;
+            if let Some((data, off)) = direct {
+                data.len().saturating_sub(off)
+            } else {
+                let s = at(&self.streams, n.src)?;
+                s.end.saturating_sub(*at(&s.readers, n.slot)?)
+            }
+        };
+        if avail == 0 {
+            return Ok(None);
+        }
+        // Timed parameter changes split the call at the exact sample.
+        let avail = self.apply_pending(ni, avail)?;
         let Self {
             nodes,
             streams,
@@ -794,15 +1041,6 @@ impl Pipeline {
             ..
         } = self;
         let n = at_mut(nodes, ni)?;
-        let avail = if let Some((data, off)) = direct {
-            data.len().saturating_sub(off)
-        } else {
-            let s = at(streams, n.src)?;
-            s.end.saturating_sub(*at(&s.readers, n.slot)?)
-        };
-        if avail == 0 {
-            return Ok(None);
-        }
         let st = at_mut(stats, ni)?;
         let progress = match n.dst {
             Dst::Stream(d) => step_stream(n, streams, d, avail, direct)?,
@@ -850,19 +1088,21 @@ impl Pipeline {
             DropPolicy::DropOldest => {
                 if avail >= cap {
                     out.dropped += (avail - cap + queue.len()) as u64;
-                    queue.start = 0;
-                    queue.end = 0;
+                    queue.advance(queue.len());
                     (avail - cap, cap)
                 } else {
                     let lost = avail.saturating_sub(free);
-                    queue.start += lost;
+                    queue.advance(lost);
                     out.dropped += lost as u64;
                     (0, avail)
                 }
             }
         };
-        if take > 0 && !queue.append(&s.buf, pos + skip, take) {
-            return Err(internal("output queue copy"));
+        if take > 0 {
+            queue.note_next(s.idx_of_pos(pos + skip));
+            if !queue.append(&s.buf, pos + skip, take) {
+                return Err(internal("output queue copy"));
+            }
         }
         let consumed = match policy {
             DropPolicy::Error => take,
@@ -873,7 +1113,7 @@ impl Pipeline {
     }
 
     /// Repeats passes over the nodes in topological order until nothing moves.
-    fn run(&mut self) -> Result<()> {
+    pub(crate) fn run(&mut self) -> Result<()> {
         loop {
             let mut progress = false;
             for ni in 0..self.nodes.len() {
@@ -896,7 +1136,7 @@ impl Pipeline {
         }
     }
 
-    fn output_pos(&self, name: &str) -> Result<usize> {
+    pub(crate) fn output_pos(&self, name: &str) -> Result<usize> {
         self.output_index
             .get(name)
             .copied()
@@ -930,11 +1170,7 @@ impl Pipeline {
         if !queue.buf.copy_to(queue.start, n, out) {
             return Err(internal("output queue read"));
         }
-        queue.start += n;
-        if queue.start == queue.end {
-            queue.start = 0;
-            queue.end = 0;
-        }
+        queue.advance(n);
         if n > 0 && policy == DropPolicy::Error {
             self.run()?;
         }
@@ -968,11 +1204,7 @@ impl Pipeline {
         if !queue.buf.copy_to(queue.start, n, out) {
             return Err(internal("output queue read"));
         }
-        queue.start += n;
-        if queue.start == queue.end {
-            queue.start = 0;
-            queue.end = 0;
-        }
+        queue.advance(n);
         if n > 0 && policy == DropPolicy::Error {
             self.run()?;
         }
@@ -1113,26 +1345,39 @@ impl Pipeline {
         &self.stats
     }
 
-    /// Resets all blocks, empties all buffers and queues; the statistics are kept.
+    /// Resets all blocks, empties all buffers, queues and events and starts every index at 0
+    /// again; the statistics are kept.
     pub fn reset(&mut self) {
         for n in &mut self.nodes {
             n.node.reset();
+            n.consumed = 0;
+            n.n0_in = 0;
+            n.n0_out = 0;
+            n.pending.clear();
         }
         for s in &mut self.streams {
-            s.clear();
+            s.rebase(0);
+        }
+        for i in &mut self.inputs {
+            i.anchor = None;
+            i.fresh = true;
         }
         for o in &mut self.outputs {
+            o.anchor = None;
+            o.burst = if o.burst == Burst::Continuous {
+                Burst::Continuous
+            } else {
+                Burst::Idle
+            };
             match &mut o.kind {
-                OutKind::Stream { queue, .. } => {
-                    queue.start = 0;
-                    queue.end = 0;
-                }
+                OutKind::Stream { queue, .. } => queue.reset_to(0),
                 OutKind::Frames(f) => {
                     f.head = 0;
                     f.count = 0;
                 }
             }
         }
+        self.events.clear();
     }
 
     /// The validation report, with the delays reported by the built blocks.

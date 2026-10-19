@@ -2,7 +2,7 @@
 
 The crate `sdrk-pipeline` (layer `crates/pipeline`, heap allowed) turns a description of a signal-processing graph into a running pipeline. The description is data: JSON is the canonical format, so host languages and AI agents never write code to describe processing. The pipeline is the only place with heap: it allocates once while building and then runs the heap-free blocks of [`sdrk-blocks`](blocks.md) deterministically. **Nothing allocates after `build()`** (tested with a counting global allocator in `tests/no_alloc.rs`).
 
-This page covers format version 1 and the push-mode runner. Events, gaps, time anchors, pull mode and transmit are added by M11.
+This page covers format version 1, the push-mode runner, metadata, events and timed parameters, pull mode for transmit, node groups, YAML input and the pointer to the wire format. The time base is explained in [timing.md](timing.md), the wire format in [wire-format.md](wire-format.md) and the partitioning in [architecture.md](architecture.md).
 
 ```text
 JSON text ──parse──▶ PipelineSpec ──validate──▶ Report (errors, warnings, figures)
@@ -36,6 +36,7 @@ A description is one JSON object. Keys are written in the order of the tables be
 | `description` | string, optional | Free text. |
 | `settings` | object, optional | See below; defaults apply when absent. |
 | `inputs` | object | Inputs by name. |
+| `groups` | object, optional | Node groups by name, see [Groups](#groups-and-backend-preferences). Written only when present. |
 | `nodes` | object | Processing nodes by name. |
 | `edges` | array | Connections. |
 | `outputs` | object | Outputs by name. |
@@ -46,6 +47,8 @@ A description is one JSON object. Keys are written in the order of the tables be
 | --- | --- | --- | --- |
 | `precision` | `"f32"` or `"q15"` | `"f32"` | `"f32"` uses complex `C32` and real `f32`, `"q15"` uses `CQ15` and `Q15`. One precision per pipeline. |
 | `max_chunk` | integer 1 to 1 048 576 | 4096 | Largest number of samples accepted per `push` and input. For a raw input the limit in bytes is `max_chunk` times the bytes of one sample, rounded up. |
+| `event_queue` | integer 1 to 65 536 | 256 | Capacity of the event queue (see [Metadata and events](#metadata-and-events)). Written only when given. |
+| `pending_params` | integer 1 to 4096 | 16 | Pending timed parameter changes per node (see [Timed parameters](#timed-parameters)). Written only when given. |
 
 ### Names
 
@@ -72,6 +75,8 @@ A raw input must be a streamable complex format: interleaved layout, no 1-bit co
 | --- | --- | --- |
 | `kind` | string | A block kind of the registry, e.g. `"ddc"`. The kinds, their ports and all parameters are listed in [blocks.md](blocks.md) and in the schema. |
 | `params` | object, optional | Parameters by name. |
+| `group` | string, optional | A key of `groups`; nodes without one are in the implicit group `"main"`. |
+| `backend` | object, optional | `{"prefer": name}` or `{"require": name}`, see [Groups](#groups-and-backend-preferences). |
 | `description` | string, optional | |
 
 A parameter value is a JSON number, a boolean or a string. Integers must be exact: `10` and `10.0` are accepted for an integer parameter, `10.5` is not. A `Choice` parameter (for example the `window` of `spectrum`) is given by its option name, a `Format` parameter (`convert`, `convert_out`) by a format name or object. A parameter that is not given takes the default of the description or the rate-dependent default of the block (for example the cutoff of the `ddc`). Parameters listed under `required` in the description (for example `decimation` of `ddc`, `rate_out_hz` of `resampler`) must be given.
@@ -93,6 +98,7 @@ An input may be connected directly to an output.
 | `capacity` | integer, optional | Stream outputs only: size of the output queue in samples (bytes for a raw output), 1 to 2^28. Default `4 * max_chunk`. |
 | `queue` | integer, optional | Frames outputs only: length of the queue in frames, 1 to 65 536. Default 4. |
 | `drop` | `"error"`, `"drop_oldest"`, `"drop_newest"`, optional | What happens when the output is full. Default `"error"`. |
+| `underrun` | `"zeros"`, `"short"`, optional | Pull mode: what `pull` does when the source is exhausted. Default `"zeros"` for raw outputs, `"short"` otherwise. |
 | `description` | string, optional | |
 
 Drop policies:
@@ -107,7 +113,7 @@ Drop policies:
 
 ### Rust types
 
-`PipelineSpec`, `Settings`, `InputSpec`, `NodeSpec`, `EdgeSpec`, `OutputSpec`, `Precision`, `DropPolicy` (and the helper types `RateHz`, `FormatSpec`, `FormatName`, `CustomFormat`, `InputType`, `OutputType`) are plain `serde` structs with `#[serde(deny_unknown_fields)]`.
+`PipelineSpec`, `Settings`, `InputSpec`, `NodeSpec`, `EdgeSpec`, `OutputSpec`, `GroupSpec`, `BackendSpec`, `Precision`, `DropPolicy`, `UnderrunPolicy` (and the helper types `RateHz`, `FormatSpec`, `FormatName`, `CustomFormat`, `InputType`, `OutputType`) are plain `serde` structs with `#[serde(deny_unknown_fields)]`.
 
 ```rust
 let spec = PipelineSpec::from_json(text)?;   // Err(Error::Json) with the position of a problem
@@ -143,11 +149,12 @@ Stage 2 runs only if stage 1 found no error, so a single typo does not cause a f
   "warnings": [],
   "memory_bytes": 0,
   "cost_per_input_sample": 0.0,
-  "nodes": []
+  "nodes": [],
+  "outputs": []
 }
 ```
 
-`path` uses dots and the JSON names: `nodes.tune.params.frequency_hz`, `edges[2].to`, `inputs.rf.format`. The node report lists name, kind, input and output rate (an integer, or `"num/den"`), the group delay in input samples (`"num/den"`) and whether the node is automatic.
+`path` uses dots and the JSON names: `nodes.tune.params.frequency_hz`, `edges[2].to`, `inputs.rf.format`. The node report lists name, kind, input and output rate (an integer, or `"num/den"`), the group delay in input samples (`"num/den"`) and whether the node is automatic. `outputs` has one entry per output with its `group_delay` (in samples of the output, `"num/den"`) and `max_buffered` (see [timing.md](timing.md#latency)). `group_edges` (only present with groups) lists the edges between nodes of different groups.
 
 ### Diagnostic codes
 
@@ -172,6 +179,8 @@ Stage 2 runs only if stage 1 found no error, so a single typo does not cause a f
 | `type_mismatch` | 2 | Port types that do not fit: a block fed with the wrong sample type, frames into a node, a stream output on frames or the other way round, an input type that does not fit the precision. | `edges[i].to`, `outputs.<name>.type`, `inputs.<name>.type` |
 | `rate_unsupported` | 2 | The block rejects its configuration for the sample rate at its input (frequency beyond Nyquist, a filter that does not fit, ...). | `nodes.<name>.params.<param>` |
 | `limit_exceeded` | 2 | A resource limit is exceeded. | `nodes.<name>` (taps), `nodes` (the rest) |
+| `unknown_group` | 1 | A node names a group that `groups` does not declare. | `nodes.<name>.group` |
+| `backend_unavailable` | 2 | A required backend does not implement the kernels of the node (an error for `require`, a warning for `prefer`). | `nodes.<name>.backend.require` / `.prefer` |
 
 The invalid-flow corpus in `crates/pipeline/sdrk-pipeline/tests/invalid` has one file per code, with the expected diagnostic in a sibling `.expected.json`.
 
@@ -234,6 +243,89 @@ pipeline.set_param("tune", "frequency_hz", serde_json::json!(610_000.0))?;
 - **`reset()`.** Resets all blocks, empties all buffers and queues; statistics are kept.
 - **`report()`.** The validation report with the exact delays of the built blocks.
 
+### Metadata and events
+
+```rust
+pipeline.push_with_meta("rf", InputData::Raw(&bytes), &meta)?;  // meta: BlockMeta { start, flags, anchor, .. }
+while let Some(event) = pipeline.poll_event() { /* Event { output, index, kind } */ }
+let name = pipeline.output_name(event.output);
+```
+
+Every stream has its own sample index (`u64`, see [timing.md](timing.md)). `push_with_meta` is `push` with the metadata of the block:
+
+- The **first** block of an input fixes the origin of its index (`meta.start`); with plain `push` it is 0. Joining a stream at sample 10^9 gives the same results as starting at 0, apart from the indices.
+- A start **above** the expected index is a gap: everything that depends on the input is reset and the origins move by the mapped gap, so the result equals two separately reset runs. A `Gap { missing }` event is reported on every output reachable from the input.
+- A start **below** the expected index is `InvalidState`: time does not go backwards. The expected index is `input_index(input)`.
+- The flags `OVERFLOW`, `UNDERRUN`, `RETUNED`, `LATE`, `BURST_START`, `BURST_END` and the anchor become events at the mapped positions of **every** output reachable from the input (one event per output). `BURST_END` is at the last sample of the block, the other flags at its first sample.
+- Raw data must hold whole packing groups (`LengthMismatch` otherwise).
+
+`Event { output: OutputId, index: u64, kind: EventKind }` with `EventKind` = `Gap { missing }`, `Overflow`, `Underrun`, `Anchor(TimeAnchor)`, `Retuned`, `BurstStart { tx_time_ns }`, `BurstEnd`, `Late`, `ParamApplied { node, param, value, late }`, `EventsLost { count }` (`#[non_exhaustive]`). For a frames output the index is the index in the input of the frame node; `FrameMeta.first_sample` of a frame is an absolute index of that input as well.
+
+The queue holds `settings.event_queue` events (default 256) and is allocated at build. When it is full the newest events are dropped and counted; once the queue is empty `poll_event` returns `EventsLost { count }` with the output and index of the first lost event. `poll_event` and `push_with_meta` never allocate (tested).
+
+Further accessors: `input_index(input)`, `read_index(output)` (index of the next sample `read_stream` returns), `time_of(output, index)` (absolute time from the latest anchor of the output, `None` without one), `node_id`, `output_id`, `node_name`, `output_name`, `latency(output)`.
+
+### Timed parameters
+
+```rust
+pipeline.set_param_at("tune", "frequency_hz", json!(610_000.0),
+    ParamTime::InputIndex { input: "rf".into(), index: 1_234_567 })?;
+```
+
+`ParamTime` is `Immediate`, `InputIndex { input, index }` (a sample of a pipeline input) or `UnixNs(i64)` (needs an anchor on the input of the node: `n = anchor.index + ceil((t - anchor.unix_ns) * rate / 1e9)`; without one `InvalidState`). The target is mapped to the index domain of the input of the node with the mapping rule. The runner ends the next `process` call of the node exactly at that sample, sets the parameter and continues, so the change is visible at the first output sample computed after it and never changes samples that were computed before. The acknowledgement is a `ParamApplied` event on every output that depends on the node, at the mapped index of the effective sample.
+
+Up to `settings.pending_params` changes (default 16) wait per node, ordered by their target (`PendingFull` when the list is full). A target that has already passed is applied at once with `late: true`. The calls validate the parameter like `set_param` (unknown, build-time, wrong type, out of range).
+
+### Pull mode (transmit)
+
+```rust
+struct Audio { /* ... */ }
+impl PullSource for Audio {
+    fn provide(&mut self, input: &str, max_samples: usize) -> Result<InputData<'_>, PullError> { /* ... */ }
+}
+let (n, meta) = pipeline.pull("rf", &mut bytes, &mut audio)?;       // raw output
+let (n, meta) = pipeline.pull_samples::<f32>("pcm", &mut pcm, &mut audio)?;
+```
+
+The output asks, the source supplies. `pull` produces exactly `out.len()` bytes (whole samples only; `pull_samples` samples) unless the source is exhausted: while the queue holds fewer elements than requested it asks `provide(input, ceil(missing / R) + min_input)`, at most `max_chunk`, pushes the result and runs. Surplus production stays in the output queue for the next call, so the bytes do not depend on the sizes of the pulls; they equal a push-mode run of the same input. An empty result from `provide` means that the source is exhausted. The output setting `underrun` then decides: `"zeros"` (default for raw outputs) fills the rest of the request with silence, flags the block `UNDERRUN` and reports an `Underrun` event at the first silent sample; `"short"` returns fewer samples. Silence is a zero sample **in the format of the output** (`0x80` bytes for `cu8`, found by converting a zero sample with the `convert_out` node of the output). The zero samples are not part of the index space of the output.
+
+The returned `BlockMeta.start` is the output index of the first sample. A block never spans a burst boundary:
+
+- `begin_burst(output, tx_time_ns)`: the next sample the output produces is the first sample of a burst. The block that contains it carries `BURST_START` and `tx_time_ns`; samples that were already buffered come first, in a block of their own. A `BurstStart` event is reported at the same index.
+- `end_burst(output)`: feeds `ceil(D_in)` zero samples to the input (`D_in` is the group delay of the path in *input* samples), so that the filter tails come out. The burst ends `ceil(lead_time)` samples after the sample that the last real input sample leads to (`lead_time(output)`), the block that ends there carries `BURST_END` and a `BurstEnd` event is reported. Whatever the zero samples produced beyond that is discarded and the nodes of the path are reset when the tail has been pulled. Pull the data of the burst before calling `end_burst`: the zero samples need room in the output (`OutputFull` otherwise).
+- Between `end_burst` (after the tail was pulled) and the next `begin_burst` nothing is produced and the source is not asked. Without any `begin_burst` the output runs continuously.
+- The output index continues across bursts and never goes back. (The samples that the flush produced beyond the end of the burst are skipped in the index space, fewer than the interpolation of the path.)
+
+`device_status(output, &meta)` forwards what `TxStream::poll_status` returned (underrun, late, burst done) as events of the output at index `meta.start`. `lead_time(output)` is the cumulative group delay of the path in output samples.
+
+`pull` does not allocate; `end_burst` does (the zero samples).
+
+### Latency
+
+`latency(output)` returns `Latency { group_delay, max_buffered }`, also reported per output in `Report.outputs`. [timing.md](timing.md#latency) explains how both add up.
+
+## Groups and backend preferences
+
+Groups and preferences are part of the model only; they have **no runtime effect yet**. They are the single extension point for threads, MCU cores, GPUs and network splits (see [architecture.md](architecture.md)).
+
+```json
+"groups": { "front": { "description": "DDC on core 0" }, "audio": {} },
+"nodes":  { "tune": { "kind": "ddc", "group": "front", "backend": { "require": "simd" } } }
+```
+
+- A node names a group (`UnknownGroup` if it is not declared); nodes without one are in the implicit group `"main"`, which may also be named without declaring it. A group name follows the name rule.
+- `Report.group_edges` lists every edge between nodes of different groups: these edges are the interfaces. Inputs and outputs have no group: an input belongs to every group that reads it, an output to the group of the node that feeds it.
+- `backend` is `{"prefer": name}` or `{"require": name}`. The factory names the kernels the block calls (`BlockFactory::kernels`); `require` fails with `backend_unavailable` if `sdrk::backend_for(kernel, type)` returns another name for one of them, `prefer` only warns. A kernel is looked up for the complex and the real type of the precision, whichever the facade lists; fused kernels (`chained`) are not judged, their parts are. Today the only backend is `fallback`.
+- `split_by_groups(&spec, &registry)` returns one description per group, sorted by group name. A cut edge `a -> b` becomes the output `edge__a__b` (a stream of the type of `a`) in the group of `a` and the input `edge__a__b` (the type and the exact rate) in the group of `b`. (The name rule does not allow a leading underscore, so the prefix is `edge__`.) Pipeline inputs are copied into every part that reads them.
+
+## YAML
+
+With the feature `yaml` (default; the WASM binding disables it) `PipelineSpec::from_yaml(text)` reads the same model from YAML, using `serde-saphyr` (version 2.0.0). Unknown fields are errors as in JSON, comments are allowed and errors carry line and column. `Registry::validate_yaml` and `Registry::build_yaml` give the same diagnostics (same codes, same paths) as the JSON functions; JSON text is also valid YAML. There is no YAML writer: JSON is canonical. Every example flow has a `.yaml` twin with comments.
+
+## Wire format
+
+[wire-format.md](wire-format.md) specifies the versioned messages (`wire` module) that carry samples, frames, events, stream descriptions and parameter changes between the parts of a split pipeline.
+
 ### Errors
 
 `Error` is `#[non_exhaustive]`, implements `SdrkError` and maps to the shared `ErrorKind`:
@@ -247,8 +339,10 @@ pipeline.set_param("tune", "frequency_hz", serde_json::json!(610_000.0))?;
 | `LengthMismatch` | `LengthMismatch` | A frame buffer of the wrong length. |
 | `InvalidParameter` | `InvalidArgument` | A runtime parameter value of the wrong JSON type or not a possible value. |
 | `Block { node, source }` | kind of `source` | A block failed (`UnknownParameter`, `ReadOnlyParameter`, `OutOfRange`, ...). |
+| `InvalidState` | `InvalidState` | Metadata that goes back in time, a timed change without an anchor, a node that the input does not feed, a burst call in the wrong state. |
+| `PendingFull` | `CapacityExceeded` | `settings.pending_params` changes wait already. |
 | `Build(Report)` | `Validation` | The description did not validate. |
-| `Json(String)` | `Parse` | The text could not be parsed into the model. |
+| `Json(String)`, `Yaml(String)`, `Wire(String)` | `Parse` | The text could not be parsed into the model, or a wire message is malformed. |
 | `Internal` | `Internal` | An invariant of the runner was violated; cannot happen after a successful build. |
 
 Errors are only created on the error path; the hot path never builds a string.
@@ -263,12 +357,14 @@ Errors are only created on the error path; the hot path never builds a string.
 
 ## Examples
 
-Three flows in `examples/flows`, all valid against the schema and covered by the tests:
+Five flows in `examples/flows`, each with a YAML twin (`.yaml`, with comments), all valid against the schema and covered by the tests:
 
 - `fm_receiver.json`: RTL-SDR IQ (`cu8`, 2.4 MHz) to a DDC, an FM demodulator and 48 kHz audio, plus an averaged spectrum frame output fed from the same input buffer.
 - `spectrum_only.json`: `cu8` IQ through a DC blocker into a Blackman-Harris spectrum with 8 averages.
 - `resample_audio.json`: real `f32` audio at 48 kHz converted to 44.1 kHz by the rational resampler (with `max_taps` raised, because the default of 1023 is too small for this ratio).
+- `fm_receiver_grouped.json`: the FM receiver with the tuner in the group `front` and the rest in `audio`.
+- `fm_transmitter.json`: 48 kHz audio to FM, 2.4 MS/s `cs8` output for pull mode: `resampler` 5/1, `fm_mod` with 75 kHz deviation, `duc` by 10 at +600 kHz.
 
 ## Tests
 
-`crates/pipeline/sdrk-pipeline/tests`: `model` (JSON round trip, canonical form, rates, formats), `schema` (the committed schema, examples against it with `jsonschema`), `validation` (the invalid-flow corpus, all errors at once, limits, cost and memory), `e2e` (the pipeline equals the hand-wired blocks bit for bit, block-size invariance with 10 chunk plans, fan-out, a run-time parameter change), `runner` (drop policies, errors, outputs, `set_param`, `config`, `stats`, `reset`), `no_alloc` (counting allocator) and `property` (random graphs, random bytes and JSON values). The fuzz target `fuzz_targets/pipeline_json.rs` (`cargo +nightly fuzz run pipeline_json` in `crates/pipeline/sdrk-pipeline`) runs in the nightly CI job for five minutes on Linux x86_64 only; fuzzing is not required on Windows and arm64.
+`crates/pipeline/sdrk-pipeline/tests`: `model` (JSON round trip, canonical form, rates, formats), `schema` (the committed schema, examples against it with `jsonschema`), `validation` (the invalid-flow corpus, all errors at once, limits, cost and memory), `e2e` (the pipeline equals the hand-wired blocks bit for bit, block-size invariance with 10 chunk plans, fan-out, a run-time parameter change), `runner` (drop policies, errors, outputs, `set_param`, `config`, `stats`, `reset`), `no_alloc` (counting allocator, also for metadata, events, timed parameters and `pull`), `property` (random graphs, random bytes and JSON values), `time_events` (gaps, anchors, joining, events, timed parameters), `pull` (transmit, underrun, bursts), `groups` (groups, backend preferences, `split_by_groups`), `yaml`, `wire` (round trips, the committed bytes in `tests/wire`, properties) and `probe_two_threads` (a split pipeline on two threads equals the single pipeline). The fuzz target `fuzz_targets/pipeline_json.rs` (`cargo +nightly fuzz run pipeline_json` in `crates/pipeline/sdrk-pipeline`) runs in the nightly CI job for five minutes on Linux x86_64 only; fuzzing is not required on Windows and arm64.

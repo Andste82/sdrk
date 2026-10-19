@@ -72,6 +72,16 @@ pub enum Error {
     Build(Report),
     /// The JSON text could not be parsed into the model (kind: `Parse`).
     Json(String),
+    /// The call does not fit the state of the pipeline, for example metadata that goes back in
+    /// time or a timed change without an anchor (kind: `InvalidState`).
+    InvalidState(String),
+    /// A node has as many pending timed parameter changes as `settings.pending_params` allows
+    /// (kind: `CapacityExceeded`).
+    PendingFull(String),
+    /// A wire message is malformed (kind: `Parse`).
+    Wire(String),
+    /// The YAML text could not be parsed into the model (kind: `Parse`).
+    Yaml(String),
     /// An invariant of the runner was violated; cannot happen after a successful build (kind:
     /// `Internal`).
     Internal(&'static str),
@@ -121,6 +131,10 @@ impl fmt::Display for Error {
                     .unwrap_or_default()
             ),
             Self::Json(m) => write!(f, "invalid pipeline JSON: {m}"),
+            Self::Yaml(m) => write!(f, "invalid pipeline YAML: {m}"),
+            Self::InvalidState(m) => write!(f, "invalid state: {m}"),
+            Self::PendingFull(n) => write!(f, "too many pending parameter changes for `{n}`"),
+            Self::Wire(m) => write!(f, "invalid wire message: {m}"),
             Self::Internal(m) => write!(f, "internal error: {m}"),
         }
     }
@@ -144,10 +158,11 @@ impl SdrkError for Error {
             | Self::WrongType { .. }
             | Self::InvalidParameter { .. } => ErrorKind::InvalidArgument,
             Self::ChunkTooLarge { .. } | Self::LengthMismatch { .. } => ErrorKind::LengthMismatch,
-            Self::OutputFull(_) => ErrorKind::CapacityExceeded,
+            Self::OutputFull(_) | Self::PendingFull(_) => ErrorKind::CapacityExceeded,
+            Self::InvalidState(_) => ErrorKind::InvalidState,
             Self::Block { source, .. } => source.kind(),
             Self::Build(_) => ErrorKind::Validation,
-            Self::Json(_) => ErrorKind::Parse,
+            Self::Json(_) | Self::Wire(_) | Self::Yaml(_) => ErrorKind::Parse,
             Self::Internal(_) => ErrorKind::Internal,
         }
     }

@@ -15,6 +15,27 @@
         }
       ]
     },
+    "BackendSpec": {
+      "additionalProperties": false,
+      "description": "A backend preference of a node: `{\"prefer\": name}` or `{\"require\": name}`.\n\n```\nuse sdrk_pipeline::BackendSpec;\nlet b: BackendSpec = serde_json::from_str(r#\"{\"require\":\"simd\"}\"#)?;\nassert_eq!(b.require.as_deref(), Some(\"simd\"));\n# Ok::<(), serde_json::Error>(())\n```",
+      "properties": {
+        "prefer": {
+          "description": "The backend the node would like to run on; a warning if it is not available.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "require": {
+          "description": "The backend the node must run on; `backend_unavailable` if it is not available.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ContainerSpec": {
       "description": "Container of a custom raw format.",
       "oneOf": [
@@ -272,6 +293,20 @@
         }
       ]
     },
+    "GroupSpec": {
+      "additionalProperties": false,
+      "description": "A node group: the unit that a later runner maps to a thread, a core, a GPU queue or a\nremote machine. In this version groups only partition the model.\n\n```\nuse sdrk_pipeline::GroupSpec;\nlet g: GroupSpec = serde_json::from_str(r#\"{\"description\":\"DDC on core 0\"}\"#)?;\nassert!(g.description.is_some());\n# Ok::<(), serde_json::Error>(())\n```",
+      "properties": {
+        "description": {
+          "description": "Free text (at most 2000 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "InputSpec": {
       "additionalProperties": false,
       "description": "An input of the pipeline: raw bytes in a `format` or converted samples of a `type`.\n\n```\nuse sdrk_pipeline::InputSpec;\nlet i: InputSpec = serde_json::from_str(r#\"{\"format\":\"cu8\",\"rate_hz\":2400000}\"#)?;\nassert_eq!(i.rate_hz.0.num(), 2_400_000);\n# Ok::<(), serde_json::Error>(())\n```",
@@ -414,6 +449,17 @@
         "type": {
           "$ref": "#/$defs/OutputType",
           "description": "`\"stream\"` or `\"frames\"`."
+        },
+        "underrun": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnderrunPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pull mode: what `pull` does when the source is exhausted (default `\"zeros\"` for raw\noutputs, `\"short\"` otherwise)."
         }
       },
       "required": [
@@ -468,6 +514,16 @@
       "additionalProperties": false,
       "description": "The `settings` object.\n\n```\nuse sdrk_pipeline::{Precision, Settings};\nlet s: Settings = serde_json::from_str(\"{}\")?;\nassert_eq!((s.precision, s.max_chunk), (Precision::F32, 4096));\n# Ok::<(), serde_json::Error>(())\n```",
       "properties": {
+        "event_queue": {
+          "description": "Capacity of the event queue (default 256, 1 to 65 536). When it is full, the newest\nevents are dropped and an `events_lost` event is reported later.",
+          "format": "uint",
+          "maximum": 65536,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "max_chunk": {
           "default": 4096,
           "description": "Largest number of samples accepted per `push` and input (1 to 1 048 576).",
@@ -476,6 +532,16 @@
           "minimum": 1,
           "type": "integer"
         },
+        "pending_params": {
+          "description": "Capacity of the list of pending timed parameter changes per node (default 16, 1 to\n4096).",
+          "format": "uint",
+          "maximum": 4096,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "precision": {
           "$ref": "#/$defs/Precision",
           "default": "f32",
@@ -483,6 +549,21 @@
         }
       },
       "type": "object"
+    },
+    "UnderrunPolicy": {
+      "description": "What `pull` does when the source has no more data.\n\n```\nuse sdrk_pipeline::UnderrunPolicy;\nassert_eq!(serde_json::to_string(&UnderrunPolicy::Zeros)?, \"\\\"zeros\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
+      "oneOf": [
+        {
+          "const": "zeros",
+          "description": "The rest of the request is filled with silence (zero samples) and an `underrun` event\nis reported.",
+          "type": "string"
+        },
+        {
+          "const": "short",
+          "description": "`pull` returns fewer samples than requested.",
+          "type": "string"
+        }
+      ]
     }
   },
   "$id": "https://github.com/Andste82/sdrk/schema/sdrk-pipeline-v1.json",
@@ -504,6 +585,16 @@
         "$ref": "#/$defs/EdgeSpec"
       },
       "type": "array"
+    },
+    "groups": {
+      "additionalProperties": {
+        "$ref": "#/$defs/GroupSpec"
+      },
+      "description": "The node groups by name (optional; nodes without a group are in `\"main\"`).",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "type": "object"
     },
     "inputs": {
       "additionalProperties": {
@@ -527,8 +618,16 @@
             "additionalProperties": false,
             "description": "Converts raw device bytes in a sample format to complex samples.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -580,8 +679,16 @@
             "additionalProperties": false,
             "description": "Converts complex samples to raw device bytes in a sample format.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -633,8 +740,16 @@
             "additionalProperties": false,
             "description": "Removes the DC offset of a complex signal with a one-pole high-pass.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -663,8 +778,16 @@
             "additionalProperties": false,
             "description": "Shifts a signal to 0 Hz, low-pass filters it and decimates it.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -736,8 +859,16 @@
             "additionalProperties": false,
             "description": "Interpolates a signal, removes the images and shifts it up to a carrier frequency.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -809,8 +940,16 @@
             "additionalProperties": false,
             "description": "Low-pass FIR filter designed from cutoff, transition width and attenuation.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -863,8 +1002,16 @@
             "additionalProperties": false,
             "description": "Demodulates an FM signal to audio with de-emphasis and decimation.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -914,8 +1061,16 @@
             "additionalProperties": false,
             "description": "Frequency-modulates a real signal onto a complex baseband carrier.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -944,8 +1099,16 @@
             "additionalProperties": false,
             "description": "Changes the sample rate by a rational factor, optionally tunable in ppm.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -1015,8 +1178,16 @@
             "additionalProperties": false,
             "description": "Multiplies a complex signal by a gain given in decibels.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {
@@ -1045,8 +1216,16 @@
             "additionalProperties": false,
             "description": "Computes averaged power spectra in dB relative to full scale as frames.",
             "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
               "description": {
                 "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
                 "type": "string"
               },
               "kind": {

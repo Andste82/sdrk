@@ -34,7 +34,13 @@ use serde_json::json;
 
 use common::flow;
 
-const FLOWS: [&str; 3] = ["fm_receiver", "spectrum_only", "resample_audio"];
+const FLOWS: [&str; 5] = [
+    "fm_receiver",
+    "spectrum_only",
+    "resample_audio",
+    "fm_receiver_grouped",
+    "fm_transmitter",
+];
 
 #[test]
 fn every_example_flow_round_trips() {

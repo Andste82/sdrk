@@ -8,19 +8,20 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use sdrk::Rate;
+use sdrk::{Delay, Rate};
 use sdrk_blocks::PortType;
 use sdrk_device::SampleFormat;
 use serde_json::{Map, Value};
 
+use crate::latency::{PathNode, path_latency};
 use crate::model::{
-    InputType, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, OutputSpec, OutputType, PipelineSpec,
-    Precision, is_valid_name,
+    BackendSpec, InputType, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, OutputSpec,
+    OutputType, PipelineSpec, Precision, is_valid_name,
 };
 use crate::params::check_params;
 use crate::registry::{BlockFactory, BuildOptions, Checked, PortKind, Registry};
 use crate::structure::join;
-use crate::validate::{DiagCode, Diagnostic, NodeReport, Report};
+use crate::validate::{DiagCode, Diagnostic, GroupEdge, NodeReport, OutputReport, Report};
 
 /// Largest `capacity` of a stream output in samples.
 const MAX_CAPACITY: usize = 1 << 28;
@@ -257,6 +258,7 @@ fn stage1(registry: &Registry, spec: &PipelineSpec, report: &mut Report) {
         );
     }
     check_names(spec, report);
+    check_groups(spec, report);
     check_inputs(spec, report);
     check_nodes(registry, spec, report);
     check_outputs(spec, report);
@@ -308,6 +310,34 @@ fn check_names(spec: &PipelineSpec, report: &mut Report) {
                 DiagCode::DuplicateName,
                 format!("`{auto}` collides with the automatic node of `{owner}`"),
             );
+        }
+    }
+}
+
+/// Group names and the references of the nodes to them.
+fn check_groups(spec: &PipelineSpec, report: &mut Report) {
+    for (name, group) in &spec.groups {
+        let path = join("groups", name);
+        if !is_valid_name(name) {
+            report.error(
+                path.clone(),
+                DiagCode::InvalidName,
+                format!("`{name}` does not match {}", crate::model::NAME_PATTERN),
+            );
+        }
+        check_description(group.description.as_ref(), &path, report);
+    }
+    for (name, node) in &spec.nodes {
+        if let Some(group) = &node.group {
+            if group != MAIN_GROUP && !spec.groups.contains_key(group) {
+                report.error(
+                    join(&join("nodes", name), "group"),
+                    DiagCode::UnknownGroup,
+                    format!(
+                        "the group `{group}` is not declared in `groups` (nodes without a group are in `{MAIN_GROUP}`)"
+                    ),
+                );
+            }
         }
     }
 }
@@ -414,6 +444,132 @@ fn check_range(value: Option<usize>, max: usize, key: &str, path: &str, report: 
             );
         }
     }
+}
+
+// ------------------------------------------------------------------ groups, paths, latency
+
+/// The group of a node (`main` without one).
+pub(crate) fn group_of<'a>(spec: &'a PipelineSpec, node: &str) -> &'a str {
+    spec.nodes
+        .get(node)
+        .and_then(|n| n.group.as_deref())
+        .unwrap_or(MAIN_GROUP)
+}
+
+/// Edges between nodes of different groups, in the order of `edges`.
+pub(crate) fn group_edges(spec: &PipelineSpec) -> Vec<GroupEdge> {
+    spec.edges
+        .iter()
+        .filter(|e| spec.nodes.contains_key(&e.from) && spec.nodes.contains_key(&e.to))
+        .filter_map(|e| {
+            let (a, b) = (group_of(spec, &e.from), group_of(spec, &e.to));
+            (a != b).then(|| GroupEdge {
+                from: e.from.clone(),
+                to: e.to.clone(),
+                from_group: a.to_string(),
+                to_group: b.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// The way from a pipeline input to an output: the input and the nodes in processing order.
+pub(crate) struct OutPath {
+    pub input: usize,
+    pub nodes: Vec<usize>,
+}
+
+/// The path of every output.
+pub(crate) fn output_paths(
+    nodes: &[PlanNode],
+    streams: &[PlanStream],
+    outputs: &[PlanOutput],
+) -> Vec<OutPath> {
+    let mut paths = Vec::with_capacity(outputs.len());
+    for (oi, out) in outputs.iter().enumerate() {
+        let mut chain: Vec<usize> = Vec::new();
+        let mut cur = match out.source {
+            OutSource::Stream(sid) => Some(sid),
+            OutSource::Frames { .. } => {
+                let k = nodes
+                    .iter()
+                    .position(|n| n.dst == PlanDst::Frames { output: oi });
+                if let Some(k) = k {
+                    chain.push(k);
+                }
+                k.and_then(|k| nodes.get(k)).map(|n| n.src)
+            }
+        };
+        while let Some(sid) = cur {
+            match nodes.iter().position(|n| n.dst == PlanDst::Stream(sid)) {
+                Some(k) => {
+                    chain.push(k);
+                    cur = nodes.get(k).map(|n| n.src);
+                }
+                None => break,
+            }
+        }
+        chain.reverse();
+        let input = chain
+            .first()
+            .and_then(|k| nodes.get(*k))
+            .and_then(|n| streams.get(n.src))
+            .map_or(0, |s| s.origin);
+        paths.push(OutPath {
+            input,
+            nodes: chain,
+        });
+    }
+    paths
+}
+
+/// The rate of the samples an output is counted in: its stream, or the input of its frame node.
+pub(crate) fn output_unit_rate(
+    out: &PlanOutput,
+    path: &OutPath,
+    nodes: &[PlanNode],
+    streams: &[PlanStream],
+) -> Option<Rate> {
+    match out.source {
+        OutSource::Stream(sid) => streams.get(sid).map(|s| s.rate),
+        OutSource::Frames { .. } => path
+            .nodes
+            .last()
+            .and_then(|k| nodes.get(*k))
+            .map(|n| n.rate_in),
+    }
+}
+
+/// Group delay and buffering of every output from the figures of the plan.
+fn latency_report(
+    paths: &[OutPath],
+    nodes: &[PlanNode],
+    streams: &[PlanStream],
+    outputs: &[PlanOutput],
+) -> Vec<OutputReport> {
+    let mut reports = Vec::with_capacity(outputs.len());
+    for (out, path) in outputs.iter().zip(paths) {
+        let stream_nodes: Vec<PathNode> = path
+            .nodes
+            .iter()
+            .filter_map(|k| nodes.get(*k))
+            .filter(|n| matches!(n.dst, PlanDst::Stream(_)))
+            .map(|n| PathNode {
+                rate_in: n.rate_in,
+                delay: n.checked.delay,
+                min_input: n.checked.min_input,
+            })
+            .collect();
+        let (group_delay, max_buffered) = output_unit_rate(out, path, nodes, streams)
+            .and_then(|unit| path_latency(&stream_nodes, unit))
+            .unwrap_or((Delay::ZERO, 0));
+        reports.push(OutputReport {
+            name: out.name.clone(),
+            group_delay,
+            max_buffered,
+        });
+    }
+    reports
 }
 
 // ------------------------------------------------------------------ stage 2
@@ -931,12 +1087,62 @@ impl<'a> Stage2<'a> {
             self.produced.insert(name.to_string(), Produced::Failed);
             return;
         }
+        if let Some(backend) = &node.backend {
+            self.check_backend(&path, factory, backend);
+        }
         let params = Self::params_map(&node.params);
         let id = |p: &str| p.to_string();
         let idx = self.check_node(name, &node.kind, false, &params, src, &path, &id);
         let result = idx.and_then(|i| self.finish_node(i));
         self.produced
             .insert(name.to_string(), result.unwrap_or(Produced::Failed));
+    }
+
+    /// Compares the backend that the facade uses for the kernels of the node with the
+    /// preference: `require` is an error, `prefer` a warning.
+    ///
+    /// A kernel exists for the complex or for the real sample type of the precision, whichever
+    /// the facade lists; a fused kernel (`chained`) is built from the single kernels of the
+    /// list and is not judged itself.
+    fn check_backend(&mut self, path: &str, factory: &dyn BlockFactory, backend: &BackendSpec) {
+        let (complex, real) = match self.spec.settings.precision {
+            Precision::F32 => (sdrk::SampleType::C32, sdrk::SampleType::F32),
+            Precision::Q15 => (sdrk::SampleType::CQ15, sdrk::SampleType::Q15),
+        };
+        for (wanted, required) in [(&backend.require, true), (&backend.prefer, false)] {
+            let Some(wanted) = wanted else {
+                continue;
+            };
+            let missing: Vec<String> = factory
+                .kernels()
+                .iter()
+                .filter_map(|k| {
+                    let c = sdrk::backend_for(k, complex);
+                    let actual = if c == "none" {
+                        sdrk::backend_for(k, real)
+                    } else {
+                        c
+                    };
+                    (actual != "chained" && actual != wanted).then(|| format!("{k} ({actual})"))
+                })
+                .collect();
+            if missing.is_empty() {
+                continue;
+            }
+            let key = if required { "require" } else { "prefer" };
+            let path = join(&join(path, "backend"), key);
+            let message = format!(
+                "the backend `{wanted}` does not implement: {}",
+                missing.join(", ")
+            );
+            if required {
+                self.report
+                    .error(path, DiagCode::BackendUnavailable, message);
+            } else {
+                self.report
+                    .warning(path, DiagCode::BackendUnavailable, message);
+            }
+        }
     }
 
     fn attach_outputs(&mut self) {
@@ -1162,6 +1368,11 @@ impl<'a> Stage2<'a> {
                 auto: n.auto,
             })
             .collect();
+        self.report.group_edges = group_edges(self.spec).into_boxed_slice();
+        let plan_view = (&self.nodes, &self.streams, &self.inputs, &self.outputs);
+        let paths = output_paths(plan_view.0, plan_view.1, plan_view.3);
+        self.report.outputs =
+            latency_report(&paths, plan_view.0, plan_view.1, plan_view.3).into_boxed_slice();
         Plan {
             max_chunk: self.spec.settings.max_chunk,
             inputs: self.inputs,

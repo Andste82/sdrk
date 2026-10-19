@@ -1,0 +1,42 @@
+# FM transmitter in pull mode (YAML twin of fm_transmitter.json).
+# The caller asks for bytes with Pipeline::pull; the audio is supplied on demand.
+sdrk: 1
+name: fm-transmitter
+description: "Modulate 48 kHz audio to FM and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+inputs:
+  audio:
+    type: f32
+    rate_hz: 48000
+    description: "mono audio"
+nodes:
+  # Digital up converter: x10 to 2.4 MS/s and shift to +600 kHz.
+  duc:
+    kind: duc
+    params:
+      frequency_hz: 600000
+      interpolation: 10
+  # FM modulator: 75 kHz deviation, at most 2*pi*75/240 radians per sample.
+  mod:
+    kind: fm_mod
+    params:
+      deviation_hz: 75000
+  # 48 kHz -> 240 kHz (ratio 5/1), real resampler.
+  up:
+    kind: resampler
+    params:
+      rate_out_hz: 240000
+edges:
+  - { from: audio, to: up }
+  - { from: up, to: mod }
+  - { from: mod, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

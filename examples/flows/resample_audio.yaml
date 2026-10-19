@@ -1,0 +1,28 @@
+# Resample audio (YAML twin of resample_audio.json).
+sdrk: 1
+name: resample-audio
+description: "Convert real audio from 48 kHz to 44.1 kHz."
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  audio_in:
+    type: f32
+    rate_hz: 48000
+    description: "Real audio samples"
+nodes:
+  # Rational resampler 147/160: the 44.1 kHz rate is exact.
+  to_cd:
+    kind: resampler
+    params:
+      max_taps: 8192
+      rate_out_hz: 44100
+# Audio in, one resampler, audio out.
+edges:
+  - { from: audio_in, to: to_cd }
+  - { from: to_cd, to: audio_out }
+outputs:
+  audio_out:
+    type: stream
+    capacity: 16384
+    drop: error

@@ -71,6 +71,14 @@
 //! | `e2e_fm_rx_f32_1s`, `e2e_fm_rx_q15_1s` | full | about 211 KiB |
 //! | `e2e_fm_txrx_f32_1s`, `e2e_fm_txrx_q15_1s` | full | about 217 KiB |
 //! | `extremes_tx_kernels` | full | about 16 KiB |
+//! | `dot_c32_vs_reference` | quick | about 6 KiB |
+//! | `dot_cq15_vs_reference` | quick | about 2 KiB |
+//! | `dot_real_vs_reference` | quick | about 5 KiB |
+//! | `extremes_dot` | full | about 2 KiB |
+//! | `block_ddc_vs_chain` | quick | about 30 KiB |
+//! | `block_fm_demod_sinad` | quick | about 45 KiB |
+//! | `block_spectrum_tone_level` | quick | about 34 KiB |
+//! | `block_resampler_ppm_count` | quick | about 24 KiB |
 
 // The stack-frame lint counts every `Result<_, Failure>` temporary of an
 // unoptimised build separately (a `Failure` is about 200 bytes by
@@ -98,8 +106,9 @@ mod m05;
 mod m06;
 mod m07;
 mod m08;
+mod m09;
 
-pub(crate) static CASES: [TestCase; 68] = [
+pub(crate) static CASES: [TestCase; 76] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -439,6 +448,46 @@ pub(crate) static CASES: [TestCase; 68] = [
         name: "extremes_tx_kernels",
         tier: Tier::Full,
         run: m08::extremes_tx_kernels,
+    },
+    TestCase {
+        name: "dot_c32_vs_reference",
+        tier: Tier::Quick,
+        run: m09::dot_c32_vs_reference,
+    },
+    TestCase {
+        name: "dot_cq15_vs_reference",
+        tier: Tier::Quick,
+        run: m09::dot_cq15_vs_reference,
+    },
+    TestCase {
+        name: "dot_real_vs_reference",
+        tier: Tier::Quick,
+        run: m09::dot_real_vs_reference,
+    },
+    TestCase {
+        name: "extremes_dot",
+        tier: Tier::Full,
+        run: m09::extremes_dot,
+    },
+    TestCase {
+        name: "block_ddc_vs_chain",
+        tier: Tier::Quick,
+        run: m09::block_ddc_vs_chain,
+    },
+    TestCase {
+        name: "block_fm_demod_sinad",
+        tier: Tier::Quick,
+        run: m09::block_fm_demod_sinad,
+    },
+    TestCase {
+        name: "block_spectrum_tone_level",
+        tier: Tier::Quick,
+        run: m09::block_spectrum_tone_level,
+    },
+    TestCase {
+        name: "block_resampler_ppm_count",
+        tier: Tier::Quick,
+        run: m09::block_resampler_ppm_count,
     },
 ];
 

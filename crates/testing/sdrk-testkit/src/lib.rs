@@ -6,6 +6,7 @@
 //!
 //! The modules are:
 //!
+//! - `storage` (feature `std`): `VecStorage`, the `Vec`-backed block storage for host tests,
 //! - `golden` (feature `std`): loader and comparison for the golden vectors,
 //! - [`e2e`]: the streaming FM receive and transmit chains of the end-to-end tests,
 //! - [`fm`]: the analytic FM baseband generator,
@@ -54,6 +55,8 @@ pub mod invariance;
 pub mod meters;
 pub mod metrics;
 pub mod rng;
+#[cfg(feature = "std")]
+pub mod storage;
 pub mod suite;
 pub mod virtual_rx;
 
@@ -63,6 +66,8 @@ pub use arena::{Arena, Carver};
 pub use invariance::{ChunkPlan, InvarianceReport, check_block_invariance};
 pub use metrics::{Comparison, bit_exact, compare_complex, compare_real};
 pub use rng::Pcg32;
+#[cfg(feature = "std")]
+pub use storage::VecStorage;
 #[cfg(feature = "std")]
 pub use suite::StdReporter;
 pub use suite::{Failure, Reporter, Summary, TestCase, Tier, WriteReporter, all_cases, run_suite};

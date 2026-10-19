@@ -571,6 +571,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdrk-blocks"
+version = "0.0.1"
+dependencies = [
+ "bytemuck",
+ "heapless",
+ "libm",
+ "num-complex",
+ "sdrk",
+ "sdrk-core",
+ "sdrk-device",
+ "sdrk-testkit",
+]
+
+[[package]]
 name = "sdrk-core"
 version = "0.0.1"
 dependencies = [
@@ -594,6 +608,7 @@ dependencies = [
  "num-complex",
  "proptest",
  "sdrk",
+ "sdrk-blocks",
  "sdrk-core",
  "sdrk-device",
  "serde",

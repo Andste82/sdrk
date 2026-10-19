@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "q15_1023.expected.bin",
+      "len": 256
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "q15_1023.input.bin",
+      "len": 1278
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "q15_1023.taps.bin",
+      "len": 1023
+    }
+  },
+  "case": "q15_1023",
+  "format_version": 1,
+  "kernel": "dot",
+  "notes": "Q30 accumulation in int64, one rounding and saturation, 256 windows",
+  "params": {
+    "rows": 256,
+    "taps": 1023
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 309,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

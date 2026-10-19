@@ -29,6 +29,7 @@ mod convert;
 mod convert_out;
 mod decim;
 mod demod;
+mod dot;
 mod fft;
 mod filter;
 mod fused;

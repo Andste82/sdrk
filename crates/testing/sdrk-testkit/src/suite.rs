@@ -100,6 +100,12 @@ impl From<sdrk_core::Error> for Failure {
     }
 }
 
+impl From<sdrk_blocks::Error> for Failure {
+    fn from(e: sdrk_blocks::Error) -> Self {
+        Failure::new("", "block error").detail(format_args!("{e}"))
+    }
+}
+
 impl From<sdrk_device::Error> for Failure {
     fn from(e: sdrk_device::Error) -> Self {
         Failure::new("", "device error").detail(format_args!("{e}"))

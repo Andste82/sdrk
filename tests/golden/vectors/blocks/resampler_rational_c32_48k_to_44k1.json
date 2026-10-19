@@ -1,0 +1,42 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "resampler_rational_c32_48k_to_44k1.expected.bin",
+      "len": 7350
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "resampler_rational_c32_48k_to_44k1.input.bin",
+      "len": 8000
+    }
+  },
+  "case": "resampler_rational_c32_48k_to_44k1",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "upfirdn(L * taps, x, 147, 160) with the taps designed at L * fs_in; K = floor((n L - 1) / M) + 1 outputs",
+  "params": {
+    "attenuation_db": 60.0,
+    "cutoff_hz": 19845.0,
+    "down": 160,
+    "max_taps": 8192,
+    "outputs": 7350,
+    "rate_in_hz": 48000.0,
+    "rate_out_hz": 44100.0,
+    "taps": 5803,
+    "transition_hz": 4410.0,
+    "up": 147
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 312,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

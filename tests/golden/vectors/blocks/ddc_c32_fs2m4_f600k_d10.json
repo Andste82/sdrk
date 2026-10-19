@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "ddc_c32_fs2m4_f600k_d10.expected.bin",
+      "len": 2000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "ddc_c32_fs2m4_f600k_d10.input.bin",
+      "len": 20000
+    }
+  },
+  "case": "ddc_c32_fs2m4_f600k_d10",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "rotate by exp(-j 2 pi f n / fs) in float64, taps from kaiserord + firwin(kaiser) rounded to f32, upfirdn(h, y, 1, 10) restricted to ceil(n / 10) outputs; tone at f + 50 kHz",
+  "params": {
+    "attenuation_db": 60.0,
+    "cutoff_hz": 96000.0,
+    "decimation": 10,
+    "frequency_hz": 600000.0,
+    "rate_hz": 2400000.0,
+    "taps": 365,
+    "transition_hz": 24000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 310,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

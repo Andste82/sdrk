@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "fm_demod_c32.expected.bin",
+      "len": 960
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "fm_demod_c32.input.bin",
+      "len": 4800
+    }
+  },
+  "case": "fm_demod_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "analytic FM tone (1 kHz, 75 kHz deviation scaled by 0.9, carrier offset 5 kHz) at 240 kHz; angle(x conj(x[-1])) * gain, one-pole de-emphasis via lfilter, audio filter (kaiserord + firwin, transition cutoff / 4) and upfirdn by 5",
+  "params": {
+    "alpha": 0.0799555853009224,
+    "audio_cutoff_hz": 15000.0,
+    "audio_decimation": 5,
+    "deemphasis_us": 50.0,
+    "deviation_hz": 75000.0,
+    "gain": 0.5092958211898804,
+    "rate_hz": 240000.0,
+    "taps": 235
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 311,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

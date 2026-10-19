@@ -1,0 +1,42 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "resampler_tuned_c32_ppm.expected.bin",
+      "len": 6001
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "resampler_tuned_c32_ppm.input.bin",
+      "len": 6000
+    }
+  },
+  "case": "resampler_tuned_c32_ppm",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "tuned mode of the specification in float64: 128-phase bank, 32.32 position j * step, phase = top 7 bits, mu = next 16 bits, bank[128] = bank[0] one sample later",
+  "params": {
+    "attenuation_db": 60.0,
+    "cutoff_hz": 21600.0,
+    "outputs": 6001,
+    "phases": 128,
+    "ppm": 125.0,
+    "rate_in_hz": 48000.0,
+    "rate_out_hz": 48000.0,
+    "step": 4294430492,
+    "taps_per_phase": 37,
+    "transition_hz": 4800.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 313,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

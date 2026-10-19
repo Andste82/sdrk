@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "firwin_blackman_31.expected.bin",
+      "len": 31
+    }
+  },
+  "case": "firwin_blackman_31",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "scipy.signal.firwin(N, cutoff, window, fs=1.0), symmetric window, DC gain 1",
+  "params": {
+    "cutoff_hz": 0.1,
+    "fs_hz": 1.0,
+    "num_taps": 31,
+    "window": "blackman"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-12,
+    "skip": 0
+  }
+}

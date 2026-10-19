@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "kaiserord_table.expected.bin",
+      "len": 20
+    },
+    "num_taps": {
+      "dtype": "i32",
+      "file": "kaiserord_table.num_taps.bin",
+      "len": 20
+    },
+    "ripple_db": {
+      "dtype": "f64",
+      "file": "kaiserord_table.ripple_db.bin",
+      "len": 20
+    },
+    "width": {
+      "dtype": "f64",
+      "file": "kaiserord_table.width.bin",
+      "len": 20
+    }
+  },
+  "case": "kaiserord_table",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "scipy.signal.kaiserord(ripple, width); num_taps (forced odd) must match exactly, expected is beta; width = 2 transition / fs, so fs = 2 makes transition_hz equal to width",
+  "params": {
+    "fs_hz": 2.0,
+    "pairs": 20
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-12,
+    "skip": 0
+  }
+}

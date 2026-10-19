@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "spectrum_cq15_1024_bfp.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "spectrum_cq15_1024_bfp.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "spectrum_cq15_1024_bfp",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the same signal quantized to Q15; the numpy result of the quantized values, compared above -60 dB",
+  "params": {
+    "averaging": 4,
+    "bin": 100,
+    "fft_size": 1024,
+    "interval_samples": 1024,
+    "window": "hann"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 316,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.2,
+    "min_ref_db": -60.0,
+    "ref_unit": "db",
+    "skip": 0
+  }
+}

@@ -9,6 +9,9 @@
 //! `fir_decimate` by 10), `fm_demod` at 240 kHz (de-emphasis 50 us), `resample_real` by 1/5 to
 //! 48 kHz audio.
 //!
+//! [`fm_rx_blocks`] is the same receive chain built from the blocks of `sdrk-blocks`
+//! (`ConvertBlock`, `DdcBlock`, `FmDemodBlock`).
+//!
 //! Transmit ([`FmTx`]): 48 kHz audio, `fir_interpolate_real` by 5, `fm_mod` at 240 kHz, `duc`
 //! (interpolation by 10, NCO at the carrier offset) and `convert_out` to raw bytes at 2.4 MHz.
 
@@ -20,9 +23,14 @@
 use core::f64::consts::PI;
 
 use num_complex::Complex64;
+use sdrk::Sdrk;
+use sdrk_blocks::{
+    ARENA_ALIGN, ArenaStorage, Block, BlockSample, ConvertBlock, ConvertConfig, DdcBlock,
+    DdcConfig, FmDemodBlock, FmDemodConfig,
+};
 use sdrk_core::kernels::convert::{Convert, ConvertOut};
 use sdrk_core::kernels::decim::{FirDecimState, ResampleReal, ResampleRealState};
-use sdrk_core::kernels::demod::{DeemphasisState, QuadDemodState};
+use sdrk_core::kernels::demod::{DeemphasisState, QuadDemod, QuadDemodState};
 use sdrk_core::kernels::fused::{Ddc, Duc, FmDemod};
 use sdrk_core::kernels::interp::{FirInterpRealState, FirInterpState, FirInterpolateReal};
 use sdrk_core::kernels::mix::Nco;
@@ -263,6 +271,120 @@ where
     Ok(produced_total)
 }
 
+/// The receive chain of [`fm_rx`] built from blocks: `ConvertBlock`, `DdcBlock` (600 kHz,
+/// decimation 10, default channel filter) and `FmDemodBlock` (75 kHz, 50 us, audio filter at
+/// 15 kHz, decimation 5). Same contract as [`fm_rx`]; the block storage comes from the carver.
+///
+/// # Errors
+/// A [`Failure`] if the carver is exhausted, a block fails or `samples` is not a multiple of
+/// [`CHUNK`].
+pub fn fm_rx_blocks<T>(
+    c: &mut Carver<'_>,
+    format: &SampleFormat,
+    source: &mut ByteSource<'_>,
+    samples: usize,
+    audio_skip: usize,
+    audio: &mut [f64],
+) -> Result<usize, Failure>
+where
+    T: E2eSample + BlockSample,
+    Sdrk:
+        Convert<T> + Ddc<T> + FmDemod<T> + QuadDemod<T> + ResampleReal<<T as ComplexSample>::Real>,
+{
+    if samples % CHUNK != 0 {
+        return Err(fail("sample count is not a multiple of the block size"));
+    }
+    let if_rate = Rate::hz(IF_RATE_HZ)?;
+    let bb_rate = Rate::hz(BASEBAND_RATE_HZ)?;
+    let ddc_cfg = DdcConfig {
+        frequency_hz: CARRIER_OFFSET_HZ,
+        decimation: 10,
+        max_chunk: CHUNK,
+        ..DdcConfig::default()
+    };
+    let demod_cfg = FmDemodConfig {
+        deviation_hz: DEVIATION_HZ,
+        deemphasis_us: DEEMPHASIS_TAU_S * 1e6,
+        audio_cutoff_hz: 15e3,
+        audio_decimation: 5,
+    };
+    let ddc_bytes =
+        DdcBlock::<T, ArenaStorage<'_>>::storage_bytes(&ddc_cfg, if_rate)? + ARENA_ALIGN;
+    let demod_bytes =
+        FmDemodBlock::<T, ArenaStorage<'_>>::storage_bytes(&demod_cfg, bb_rate)? + ARENA_ALIGN;
+    let mut ddc_store = ArenaStorage::new(c.take::<u8>(ddc_bytes)?);
+    let mut demod_store = ArenaStorage::new(c.take::<u8>(demod_bytes)?);
+    let mut convert = ConvertBlock::<T, _>::new(
+        &ConvertConfig { format: *format },
+        if_rate,
+        &mut ArenaStorage::new(&mut []),
+    )?;
+    let mut ddc = DdcBlock::<T, _>::new(&ddc_cfg, if_rate, &mut ddc_store)?;
+    let mut demod = FmDemodBlock::<T, _>::new(&demod_cfg, bb_rate, &mut demod_store)?;
+
+    let bytes = c.take::<u8>(format.bytes_for_samples(CHUNK)?)?;
+    let iq = c.take::<T>(CHUNK)?;
+    let low = c.take::<T>(CHUNK / 10 + 4)?;
+    let out = c.take::<T::Real>(CHUNK / 50 + 4)?;
+    let mut produced_total = 0usize;
+    for chunk in 0..samples / CHUNK {
+        source((chunk * CHUNK) as u64, bytes)?;
+        let p = convert.process(bytes, iq)?;
+        if p.consumed != bytes.len() || p.produced != CHUNK {
+            return Err(fail("convert did not take the whole block"));
+        }
+        let mut rest: &[T] = iq;
+        while !rest.is_empty() {
+            let p = ddc.process(rest, low)?;
+            if p.consumed == 0 && p.produced == 0 {
+                return Err(fail("ddc made no progress"));
+            }
+            rest = rest.get(p.consumed..).unwrap_or_default();
+            let mut low_rest = low.get(..p.produced).unwrap_or_default();
+            while !low_rest.is_empty() {
+                let q = demod.process(low_rest, out)?;
+                if q.consumed == 0 && q.produced == 0 {
+                    return Err(fail("fm_demod made no progress"));
+                }
+                for r in out.iter().take(q.produced) {
+                    let idx = produced_total;
+                    produced_total += 1;
+                    if let Some(slot) = idx.checked_sub(audio_skip).and_then(|i| audio.get_mut(i)) {
+                        *slot = r.to_f64();
+                    }
+                }
+                low_rest = low_rest.get(q.consumed..).unwrap_or_default();
+            }
+        }
+    }
+    Ok(produced_total)
+}
+
+/// E2E-RX built from blocks: like [`measure_rx`] with [`fm_rx_blocks`]. Memory: about the same
+/// as [`measure_rx`] plus the storage of the blocks (about 10 KiB).
+pub fn measure_rx_blocks<T>(arena: &mut Arena<'_>, samples: usize) -> Result<Measurement, Failure>
+where
+    T: E2eSample + BlockSample,
+    Sdrk:
+        Convert<T> + Ddc<T> + FmDemod<T> + QuadDemod<T> + ResampleReal<<T as ComplexSample>::Real>,
+{
+    let mut c = arena.carver();
+    let total_audio = samples / 50;
+    let skip = total_audio / 2;
+    let audio = c.take::<f64>(total_audio - skip)?;
+    let scratch = c.take::<Complex64>(CHUNK)?;
+    let mut source = fm_source(scratch, sdrk_device::formats::CU8);
+    let produced = fm_rx_blocks::<T>(
+        &mut c,
+        &sdrk_device::formats::CU8,
+        &mut source,
+        samples,
+        skip,
+        audio,
+    )?;
+    Ok(measure_audio(audio, produced))
+}
+
 /// The FM transmit chain as a byte source for [`fm_rx`] (or any consumer of raw bytes).
 ///
 /// Create it with [`FmTx::new`] and call [`FmTx::fill`] for consecutive blocks of [`CHUNK`]
@@ -384,7 +506,7 @@ pub struct Measurement {
     pub audio_samples: usize,
 }
 
-fn measure_audio(audio: &[f64], produced: usize) -> Measurement {
+pub(crate) fn measure_audio(audio: &[f64], produced: usize) -> Measurement {
     let rate = AUDIO_RATE_HZ as f64;
     Measurement {
         sinad_db: sinad_db(audio, rate, AUDIO_HZ),

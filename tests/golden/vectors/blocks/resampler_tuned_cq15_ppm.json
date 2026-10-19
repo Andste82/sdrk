@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "resampler_tuned_cq15_ppm.expected.bin",
+      "len": 6001
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "resampler_tuned_cq15_ppm.input.bin",
+      "len": 6000
+    }
+  },
+  "case": "resampler_tuned_cq15_ppm",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "integer model of the tuned mode: Q15 bank, dot = sat16(round_shift(sum, 15)), y = sat16(round_shift(a (65536 - mu) + b mu, 16))",
+  "params": {
+    "attenuation_db": 60.0,
+    "cutoff_hz": 21600.0,
+    "outputs": 6001,
+    "phases": 128,
+    "ppm": 125.0,
+    "rate_in_hz": 48000.0,
+    "rate_out_hz": 48000.0,
+    "step": 4294430492,
+    "taps_per_phase": 37,
+    "transition_hz": 4800.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 314,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

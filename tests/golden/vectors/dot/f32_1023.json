@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "f32_1023.expected.bin",
+      "len": 256
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "f32_1023.input.bin",
+      "len": 1278
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "f32_1023.taps.bin",
+      "len": 1023
+    }
+  },
+  "case": "f32_1023",
+  "format_version": 1,
+  "kernel": "dot",
+  "notes": "expected[i] = sum_k input[i + k] * taps[k] in float64, 256 windows",
+  "params": {
+    "rows": 256,
+    "taps": 1023
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 307,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 120.0
+  }
+}

@@ -1,10 +1,13 @@
 """Importing this package registers every case module."""
 
 from . import (  # noqa: F401
+    blocks,
     convert,
     convert_out,
     dc_block,
     deemphasis,
+    design,
+    dot,
     fft,
     fir,
     fir_decimate,

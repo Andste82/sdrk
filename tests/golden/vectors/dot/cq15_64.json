@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "cq15_64.expected.bin",
+      "len": 256
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_64.input.bin",
+      "len": 319
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "cq15_64.taps.bin",
+      "len": 64
+    }
+  },
+  "case": "cq15_64",
+  "format_version": 1,
+  "kernel": "dot",
+  "notes": "Q30 accumulation in int64, one rounding and saturation per component, 256 windows",
+  "params": {
+    "rows": 256,
+    "taps": 64
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 304,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

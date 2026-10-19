@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from .. import scalar_math
 from ..registry import Array, case
 
 OFFSET_DB = 1.5
@@ -15,7 +16,7 @@ def f32_4096(rng):
     p[: len(specials)] = np.asarray(specials, dtype=np.float32)
     p64 = p.astype(np.float64)
     floor_applied = np.where(np.isnan(p64) | (p64 < 1e-20), 1e-20, p64)
-    expected = 10.0 * np.log10(floor_applied) + OFFSET_DB
+    expected = 10.0 * scalar_math.log10(floor_applied) + OFFSET_DB
     return dict(
         params={"offset_db": OFFSET_DB, "special_entries": len(specials)},
         arrays={"input": Array("f32", p), "expected": Array("f64", expected)},

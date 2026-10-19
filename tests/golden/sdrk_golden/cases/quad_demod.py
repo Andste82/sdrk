@@ -2,22 +2,22 @@
 
 import numpy as np
 
-from .. import q15
+from .. import q15, scalar_math
 from ..registry import Array, case
 from .fir import noise
 
 
 def fm_signal(rng, n):
     k = np.arange(n)
-    phase = np.cumsum(2 * np.pi * 0.05 * np.sin(2 * np.pi * 0.002 * k))
-    return np.exp(1j * phase) + noise(rng, n, 1e-3)
+    phase = np.cumsum(2 * np.pi * 0.05 * scalar_math.sin(2 * np.pi * 0.002 * k))
+    return scalar_math.expj(phase) + noise(rng, n, 1e-3)
 
 
 def discriminate(x):
     """arg(x[n] * conj(x[n-1])) with x[-1] = 0, in float64."""
     x = np.asarray(x, dtype=np.complex128)
     prev = np.concatenate([[0.0 + 0.0j], x[:-1]])
-    return np.angle(x * np.conj(prev))
+    return scalar_math.angle(x * np.conj(prev))
 
 
 @case(kernel="quad_demod", name="fm_tone_c32_20000", seed=48)

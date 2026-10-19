@@ -317,3 +317,14 @@ One line per judgement call: date, milestone, decision, reason.
 | 2026-10-19 | M15 | the count report keeps the fallback only (`implementation: fallback`) and has no limits | the milestone: report only, CMSIS-DSP comes with the `arm-dsp` backend |
 | 2026-10-19 | M15 | `test-all` runs `wasm-pkg` and `node --test bindings/wasm/js-tests/*.test.mjs` when `node` is in `PATH`, then `emu --tier 1` (a missing QEMU fails it, as specified for `emu`) | the milestone; the `--skip-missing` flag is for hosts that cannot have a tool, not for the default test run |
 | 2026-10-19 | M15 | the root `rust-toolchain.toml` lists the three new Rust targets | `rustup toolchain install` of CI and developers then installs everything the tier 1 and tier 2 builds need except the Xtensa toolchain |
+| 2026-10-19 | M10 | a block `convert_out_real` will be added to `sdrk-blocks` so that real stream outputs accept a raw `format` | the user decided to implement what the milestone text promises ("or real converter"); the schema change is compatible |
+| 2026-10-19 | M13 | `convert_out` will round half to even instead of `floor(v + 0.5)` | the user decided to accept the change of the M08 numeric contract (and the golden vectors) to reach the VOLK instruction count |
+| 2026-10-19 | M13 | `FftPlan` may carry per-stage twiddle tables and scratch | the user accepted the change of the M07 plan API to approach rustfft; the limit is then set to a realistic value |
+| 2026-10-19 | M13 | the FFT gets a true radix-4 butterfly | the user chose accuracy over the waiver for N = 64 on wasm32 |
+| 2026-10-19 | M13 | the release 0.1 (version bump, tag `v0.1.0`) is not part of the plan for now | the user decided to ignore the release gate of the milestone; the workspace version stays 0.0.1 |
+| 2026-10-19 | M13 | `neon` will be counted natively with callgrind on an arm64 runner | the user decided for native counting instead of QEMU only |
+| 2026-10-19 | M13 | `sdrk-blocks` gets a `std` feature that forwards to `sdrk/std` | otherwise a crate that depends on `sdrk-blocks` alone silently runs at the compile-time level |
+| 2026-10-19 | M14 | the npm name and the publication stay undecided | the user decided to decide later |
+| 2026-10-19 | M15 | the ESP32-S3 target gets a cargo feature `hardware` that calls `esp_hal::init` | the emulator set-up stays the default; hardware runs do not depend on the QEMU fork's PLL model |
+| 2026-10-19 | M15 | the ESP32-P4 quick profile runs nightly and the full profile weekly; the tools stay pinned and unmirrored | `esp-emu` is about ten times slower than QEMU |
+| 2026-10-19 | M15 | the emulator jobs run on Linux x86-64 only | the emulator results do not depend on the host |

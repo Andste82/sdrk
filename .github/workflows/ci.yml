@@ -129,6 +129,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
+      VOLK_VERSION: "3.3.0"
+      VOLK_SHA256: 89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628
       SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
       SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
       SDE_DIR: sde-external-9.58.0-2025-06-16-lin
@@ -300,6 +302,9 @@ jobs:
 
   count:
     name: count (instructions against VOLK and rustfft, linux-x86_64)
+    env:
+      VOLK_VERSION: "3.3.0"
+      VOLK_SHA256: 89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628
     # On every pull request that touches kernels or backends (the paths are checked in the first
     # step) and nightly. The other platforms (AVX-512, AArch64, wasm32) run nightly.
     runs-on: ubuntu-24.04
@@ -329,9 +334,32 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         if: steps.changed.outputs.run == 'true'
-      - name: Install valgrind and VOLK
+      - name: VOLK 3.3.0 (the x86-64 comparison library, built from the release tarball)
         if: steps.changed.outputs.run == 'true'
-        run: sudo apt-get update && sudo apt-get install -y valgrind libvolk-dev pkg-config
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind pkg-config cmake ninja-build python3-mako
+      - name: Cache VOLK
+        if: steps.changed.outputs.run == 'true'
+        id: volk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/volk-prefix
+          key: volk-${{ env.VOLK_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Build VOLK
+        if: steps.changed.outputs.run == 'true' && steps.volk-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://github.com/gnuradio/volk/releases/download/v$VOLK_VERSION/volk-$VOLK_VERSION.tar.gz" -o volk.tar.gz
+          echo "$VOLK_SHA256  volk.tar.gz" | sha256sum -c -
+          tar -xzf volk.tar.gz
+          cmake -S "volk-$VOLK_VERSION" -B volk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/volk-prefix" -DENABLE_TESTING=OFF -DENABLE_MODTOOL=OFF -DENABLE_ORC=OFF
+          cmake --build volk-build
+          cmake --install volk-build
+      - name: Use VOLK
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          echo "PKG_CONFIG_PATH=$HOME/volk-prefix/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$HOME/volk-prefix/lib" >> "$GITHUB_ENV"
       - name: CPU of the runner
         if: steps.changed.outputs.run == 'true'
         run: |
@@ -369,8 +397,29 @@ jobs:
       - name: Install toolchain from rust-toolchain.toml
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - name: Install VOLK (the x86-64 comparison library)
-        run: sudo apt-get update && sudo apt-get install -y valgrind libvolk-dev pkg-config
+      - name: VOLK 3.3.0 (the x86-64 comparison library, built from the release tarball)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind pkg-config cmake ninja-build python3-mako
+      - name: Cache VOLK
+        id: volk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/volk-prefix
+          key: volk-${{ env.VOLK_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Build VOLK
+        if: steps.volk-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://github.com/gnuradio/volk/releases/download/v$VOLK_VERSION/volk-$VOLK_VERSION.tar.gz" -o volk.tar.gz
+          echo "$VOLK_SHA256  volk.tar.gz" | sha256sum -c -
+          tar -xzf volk.tar.gz
+          cmake -S "volk-$VOLK_VERSION" -B volk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/volk-prefix" -DENABLE_TESTING=OFF -DENABLE_MODTOOL=OFF -DENABLE_ORC=OFF
+          cmake --build volk-build
+          cmake --install volk-build
+      - name: Use VOLK
+        run: |
+          echo "PKG_CONFIG_PATH=$HOME/volk-prefix/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$HOME/volk-prefix/lib" >> "$GITHUB_ENV"
       - name: CPU of the runner
         run: |
           grep -m1 'model name' /proc/cpuinfo || true

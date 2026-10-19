@@ -89,7 +89,7 @@
         },
         "fir": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
-          "other_instr_per_sample": 203.0,
+          "other_instr_per_sample": 202.0,
           "ours_instr_per_sample": 144.43,
           "ratio": 0.71,
           "snr_db": {
@@ -101,9 +101,9 @@
         },
         "fir_decimate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
-          "other_instr_per_sample": 39.85,
+          "other_instr_per_sample": 38.94,
           "ours_instr_per_sample": 37.55,
-          "ratio": 0.94,
+          "ratio": 0.96,
           "snr_db": {
             "other": 139.01,
             "ours": 141.51
@@ -149,9 +149,9 @@
         },
         "rotate": {
           "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
-          "other_instr_per_sample": 5.31,
+          "other_instr_per_sample": 5.28,
           "ours_instr_per_sample": 6.52,
-          "ratio": 1.23,
+          "ratio": 1.24,
           "snr_db": {
             "other": 115.0,
             "ours": 141.14
@@ -243,9 +243,9 @@
         },
         "fir": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
-          "other_instr_per_sample": 203.0,
+          "other_instr_per_sample": 202.0,
           "ours_instr_per_sample": 144.44,
-          "ratio": 0.71,
+          "ratio": 0.72,
           "snr_db": {
             "other": 142.62,
             "ours": 142.33
@@ -254,9 +254,9 @@
         },
         "fir_decimate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
-          "other_instr_per_sample": 39.84,
+          "other_instr_per_sample": 38.94,
           "ours_instr_per_sample": 37.67,
-          "ratio": 0.95,
+          "ratio": 0.97,
           "snr_db": {
             "other": 139.01,
             "ours": 141.51
@@ -298,9 +298,9 @@
         },
         "rotate": {
           "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
-          "other_instr_per_sample": 5.31,
+          "other_instr_per_sample": 5.28,
           "ours_instr_per_sample": 6.66,
-          "ratio": 1.25,
+          "ratio": 1.26,
           "snr_db": {
             "other": 115.0,
             "ours": 141.14
@@ -326,15 +326,15 @@
         },
         "convert_cs8": {
           "compared_with": "volk_8i_s32f_convert_32f",
-          "other_instr_per_sample": 14.02,
-          "ours_instr_per_sample": 4.15,
-          "ratio": 0.3,
+          "other_instr_per_sample": 1.65,
+          "ours_instr_per_sample": 3.77,
+          "ratio": 2.29,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "convert_out_cs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
@@ -398,19 +398,19 @@
         },
         "fir": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
-          "other_instr_per_sample": 225.0,
+          "other_instr_per_sample": 235.0,
           "ours_instr_per_sample": 250.0,
-          "ratio": 1.11,
+          "ratio": 1.06,
           "snr_db": {
             "other": 142.26,
             "ours": 141.85
           },
           "status": "dev",
-          "verdict": "warn"
+          "verdict": "pass"
         },
         "fir_decimate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
-          "other_instr_per_sample": 41.15,
+          "other_instr_per_sample": 40.95,
           "ours_instr_per_sample": 54.63,
           "ratio": 1.33,
           "snr_db": {
@@ -436,7 +436,7 @@
           "compared_with": "volk_32fc_magnitude_squared_32f",
           "other_instr_per_sample": 2.52,
           "ours_instr_per_sample": 3.51,
-          "ratio": 1.39,
+          "ratio": 1.4,
           "snr_db": {
             "other": 149.02,
             "ours": 149.02
@@ -446,15 +446,15 @@
         },
         "quad_demod": {
           "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
-          "other_instr_per_sample": 154.04,
+          "other_instr_per_sample": 131.04,
           "ours_instr_per_sample": 55.52,
-          "ratio": 0.36,
+          "ratio": 0.42,
           "snr_db": {
             "other": 144.19,
             "ours": 144.19
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "rotate": {
           "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
@@ -465,8 +465,169 @@
             "other": 108.84,
             "ours": 140.76
           },
+          "status": "info",
+          "verdict": "info"
+        }
+      }
+    },
+    "sse4.2": {
+      "informational": false,
+      "kernels": {
+        "convert_cs16": {
+          "compared_with": "volk_16i_s32f_convert_32f",
+          "other_instr_per_sample": 3.52,
+          "ours_instr_per_sample": 3.78,
+          "ratio": 1.07,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
           "status": "release",
           "verdict": "pass"
+        },
+        "convert_cs8": {
+          "compared_with": "volk_8i_s32f_convert_32f",
+          "other_instr_per_sample": 3.02,
+          "ours_instr_per_sample": 3.4,
+          "ratio": 1.13,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
+        "convert_out_cs16": {
+          "compared_with": "volk_32f_s32f_convert_16i",
+          "other_instr_per_sample": 4.02,
+          "ours_instr_per_sample": 10.28,
+          "ratio": 2.56,
+          "snr_db": {
+            "other": 95.45,
+            "ours": 95.45
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fft_1024": {
+          "compared_with": "rustfft",
+          "other_instr_per_sample": 13.17,
+          "ours_instr_per_sample": 63.46,
+          "ratio": 4.82,
+          "snr_db": {
+            "other": 139.06,
+            "ours": 137.96
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fft_4096": {
+          "compared_with": "rustfft",
+          "other_instr_per_sample": 15.03,
+          "ours_instr_per_sample": 68.02,
+          "ratio": 4.53,
+          "snr_db": {
+            "other": 137.89,
+            "ours": 137.36
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fft_64": {
+          "compared_with": "rustfft",
+          "other_instr_per_sample": 6.53,
+          "ours_instr_per_sample": 56.84,
+          "ratio": 8.7,
+          "snr_db": {
+            "other": 141.45,
+            "ours": 141.01
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fft_cq15_1024": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 567.43,
+          "ours_instr_per_sample": 221.04,
+          "ratio": 0.39,
+          "snr_db": {
+            "other": 53.88,
+            "ours": 53.88
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fir": {
+          "compared_with": "volk_32fc_32f_dot_prod_32fc",
+          "other_instr_per_sample": 235.0,
+          "ours_instr_per_sample": 250.0,
+          "ratio": 1.06,
+          "snr_db": {
+            "other": 142.26,
+            "ours": 141.85
+          },
+          "status": "dev",
+          "verdict": "pass"
+        },
+        "fir_decimate": {
+          "compared_with": "volk_32fc_32f_dot_prod_32fc",
+          "other_instr_per_sample": 40.95,
+          "ours_instr_per_sample": 54.63,
+          "ratio": 1.33,
+          "snr_db": {
+            "other": 139.49,
+            "ours": 140.48
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
+        "fm_mod": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 61.91,
+          "ours_instr_per_sample": 19.52,
+          "ratio": 0.32,
+          "snr_db": {
+            "other": 133.15,
+            "ours": 133.15
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_sq": {
+          "compared_with": "volk_32fc_magnitude_squared_32f",
+          "other_instr_per_sample": 2.52,
+          "ours_instr_per_sample": 2.76,
+          "ratio": 1.1,
+          "snr_db": {
+            "other": 149.02,
+            "ours": 149.02
+          },
+          "status": "dev",
+          "verdict": "pass"
+        },
+        "quad_demod": {
+          "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
+          "other_instr_per_sample": 131.04,
+          "ours_instr_per_sample": 47.52,
+          "ratio": 0.36,
+          "snr_db": {
+            "other": 144.19,
+            "ours": 144.19
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "rotate": {
+          "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
+          "other_instr_per_sample": 32.11,
+          "ours_instr_per_sample": 15.27,
+          "ratio": 0.48,
+          "snr_db": {
+            "other": 108.84,
+            "ours": 140.76
+          },
+          "status": "info",
+          "verdict": "info"
         }
       }
     }

@@ -48,6 +48,10 @@ pub enum Status {
     Release,
     /// Under development: within [`DEV_LIMIT`].
     Dev,
+    /// Reported, never judged: the comparison is not valid for this level (the `waiver` text
+    /// says why, for example that VOLK has no implementation for the level and its portable
+    /// `generic` code is built for a better instruction set).
+    Info,
 }
 
 /// One entry of `benches/limits.json`.
@@ -88,6 +92,7 @@ impl Limits {
                 let status = match entry.get("status").and_then(Value::as_str) {
                     Some("release") => Status::Release,
                     Some("dev") => Status::Dev,
+                    Some("info") => Status::Info,
                     other => bail!("limits.json: `{kernel}.{level}`: unknown status {other:?}"),
                 };
                 let waiver = entry
@@ -157,6 +162,8 @@ pub enum Verdict {
     Fail(String),
     /// Above the limit, with a waiver in `limits.json`.
     Waived(String),
+    /// Not judged (`info` entry); carries the reason from `limits.json`.
+    Info(String),
 }
 
 /// Judges a measurement against its entry.
@@ -166,6 +173,7 @@ pub fn judge(limit: &Limit, m: &Measurement) -> Verdict {
     let cap = match limit.status {
         Status::Release => RELEASE_LIMIT,
         Status::Dev => DEV_LIMIT,
+        Status::Info => return Verdict::Info(limit.waiver.clone().unwrap_or_default()),
     };
     let mut problem = None;
     if ratio > cap {
@@ -174,7 +182,7 @@ pub fn judge(limit: &Limit, m: &Measurement) -> Verdict {
             m.compared_with,
             match limit.status {
                 Status::Release => "release",
-                Status::Dev => "dev",
+                Status::Dev | Status::Info => "dev",
             }
         ));
     } else if m.other_snr_db - m.ours_snr_db > SNR_MARGIN_DB {
@@ -222,10 +230,12 @@ pub fn evaluate(limits: &Limits, level: &str, measurements: &[Measurement]) -> R
                 ("FAIL", d.clone())
             }
             Verdict::Waived(d) => ("waived", d.clone()),
+            Verdict::Info(d) => ("info", d.clone()),
         };
         let status = match limit.status {
             Status::Release => "release",
             Status::Dev => "dev",
+            Status::Info => "info",
         };
         let mut line = format!(
             "{:<18} {:<8} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  [{status}]  {word}",
@@ -342,6 +352,8 @@ pub enum VolkPin {
     Free,
     /// Implementations that need no more than SSE3.
     Sse,
+    /// Implementations that need no more than SSE4.2.
+    Sse42,
     /// Implementations that need no more than AVX2 and FMA (no AVX-512).
     Avx2,
 }
@@ -353,6 +365,7 @@ impl VolkPin {
         match self {
             Self::Free => None,
             Self::Sse => Some(("volk-sse", VOLK_SSE_CONFIG)),
+            Self::Sse42 => Some(("volk-sse42", VOLK_SSE42_CONFIG)),
             Self::Avx2 => Some(("volk-avx2", VOLK_AVX2_CONFIG)),
         }
     }
@@ -383,7 +396,7 @@ pub struct LevelPlan {
 }
 
 /// All levels, in the order they run.
-pub const PLANS: [LevelPlan; 6] = [
+pub const PLANS: [LevelPlan; 7] = [
     LevelPlan {
         platform: "x86_64",
         level: "sse2",
@@ -394,6 +407,17 @@ pub const PLANS: [LevelPlan; 6] = [
         counter: Counter::Callgrind,
         volk: true,
         volk_pin: VolkPin::Sse,
+    },
+    LevelPlan {
+        platform: "x86_64",
+        level: "sse4.2",
+        info_only: false,
+        target: None,
+        rustflags: "-C target-cpu=x86-64-v2",
+        runtime_detect: false,
+        counter: Counter::Callgrind,
+        volk: true,
+        volk_pin: VolkPin::Sse42,
     },
     LevelPlan {
         platform: "x86_64",
@@ -484,6 +508,21 @@ pub fn volk_name(kernel: &str) -> &'static str {
 const VOLK_SSE_CONFIG: &str = "\
 volk_8i_s32f_convert_32f generic generic
 volk_16i_s32f_convert_32f a_sse u_sse
+volk_32f_s32f_convert_16i a_sse2 u_sse2
+volk_32fc_s32fc_x2_rotator2_32fc generic generic
+volk_32fc_32f_dot_prod_32fc a_sse u_sse
+volk_32fc_magnitude_squared_32f a_sse3 u_sse3
+volk_32fc_x2_multiply_conjugate_32fc a_sse3 u_sse3
+volk_32fc_s32f_atan2_32f generic generic
+";
+
+/// The VOLK implementations that need no more than SSE4.2, for the level `sse4.2`. Where VOLK
+/// has no SSE implementation at all (`rotator2`, `atan2`) the portable `generic` code remains;
+/// `generic` is compiled once per instruction set and VOLK uses the best one of the machine, so
+/// the entries of these kernels are `info` in `limits.json`.
+const VOLK_SSE42_CONFIG: &str = "\
+volk_8i_s32f_convert_32f a_sse4_1 u_sse4_1
+volk_16i_s32f_convert_32f a_sse4_1 u_sse4_1
 volk_32f_s32f_convert_16i a_sse2 u_sse2
 volk_32fc_s32fc_x2_rotator2_32fc generic generic
 volk_32fc_32f_dot_prod_32fc a_sse u_sse
@@ -1159,6 +1198,18 @@ mod tests {
         assert!(report.ok);
         assert!(report.lines[0].contains("waived") && report.lines[0].contains("M13-1"));
         assert_eq!(report.records["fft_4096"]["verdict"], "waived");
+    }
+
+    #[test]
+    fn an_info_entry_is_reported_but_never_judged() {
+        let l = limits(
+            r#"{ "rotate": { "sse2": { "status": "info", "waiver": "VOLK generic is built for AVX2" } } }"#,
+        );
+        let report = evaluate(&l, "sse2", &[m("rotate", 400.0, 10.0)]);
+        assert!(report.ok);
+        assert!(report.lines[0].contains("info") && report.lines[0].contains("AVX2"));
+        assert_eq!(report.records["rotate"]["verdict"], "info");
+        assert_eq!(report.records["rotate"]["status"], "info");
     }
 
     #[test]

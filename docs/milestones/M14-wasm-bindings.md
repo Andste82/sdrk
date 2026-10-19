@@ -2,6 +2,12 @@
 
 > Plan: [PLAN.md › Phase 5](../PLAN.md#phase-5--wasm-bindings-small-to-medium) · Depends on: [M13](M13-simd-backend.md) · Next: [M15](M15-emulator-targets.md)
 
+## Status
+
+Fully completed: the `sdrk-wasm` crate (cdylib + rlib) with JS loader, builder and TypeScript declarations; the two WASM builds (with and without SIMD128) selected at load time and the opt-in relaxed-SIMD build; `cargo xtask wasm-pkg` (including `--relaxed`) and the packed tarball; tests in Node, headless Chrome and headless Firefox plus `node --test` on the packed tarball; `docs/wasm.md`. All R1.2 commands pass locally.
+
+Partial / open (tracked in [`docs/open-items.md`](../open-items.md)): M14-1 (npm package name and publishing are a maintainer decision) and M14-2 (the CI jobs of M14 and the Windows and Linux arm64 runs could not be run here). Judgement calls are in [`docs/decisions-log.md`](../decisions-log.md).
+
 ## Goal
 
 Expose the pipeline API to JavaScript: build from JSON or a JS builder, set parameters (immediate and timed), push and pull data, read stream/frame outputs and events, introspect. Ship two WASM builds (with and without SIMD128) selected automatically at load time, an opt-in relaxed-SIMD build, an npm package, and tests in Node and headless Chrome and Firefox.
@@ -217,8 +223,19 @@ R1.2 commands; `cargo xtask wasm-pkg`; Node, Chrome and Firefox tests pass; the 
 
 ## Deliverables checklist
 
-- [ ] `sdrk-wasm` crate with the API above
-- [ ] Loader with SIMD detection, builder, TypeScript declarations, README
-- [ ] `cargo xtask wasm-pkg` (+ relaxed variant)
-- [ ] wasm-bindgen tests (Node/Chrome/Firefox), JS tests, fixtures
-- [ ] CI job, `docs/wasm.md`, CHANGELOG, decisions log
+- [x] `sdrk-wasm` crate with the API above (every function and method of §2, plus `chunkSize`, `dropped` and `BlockFlags`; `SdrkError` with `kind`, `code`, `path`, `diagnostics`; the feature `relaxed-simd` in `sdrk-backend-simd`, `sdrk` and `sdrk-wasm`; no `unsafe`; engine/wasm split so that the data path is tested on the host, see [wasm.md](../wasm.md))
+- [x] Loader with SIMD detection, builder, TypeScript declarations, README (`bindings/wasm/pkg-template`: `index.js`, `builder.js`, `index.d.ts`, `builder.d.ts`, `README.md`; the Worker pattern and cross-origin isolation are in the README and in `docs/wasm.md`)
+- [x] `cargo xtask wasm-pkg` (+ relaxed variant): checks the `wasm-bindgen-cli` version against the pinned one, builds the variants with their flags, `wasm-opt -O3` when present, assembles `target/wasm-pkg`, `npm pack`; sizes 0.95 MiB per variant (soft limit 1.5 MiB); additionally `cargo xtask wasm-test`
+- [x] wasm-bindgen tests (Node/Chrome/Firefox), JS tests, fixtures (13 `wasm-bindgen-test` tests pass for `simd`, `scalar` and `relaxed` in Node 24.22, headless Chrome 155 and headless Firefox 158; 24 JS tests on the installed tarball; 15 engine tests and 4 receive tests on the host; the scalar build reproduces the fixture checksum bit for bit in all three engines and through the JS loader)
+- [x] CI job, `docs/wasm.md`, CHANGELOG, decisions log (jobs `wasm-bindings`, `wasm-package`, a relaxed entry of `wasm-wasmtime`; written, but they could not run here, open item M14-2)
+- [ ] npm publication and the reservation of the name: **not done** (open item M14-1; `sdrk-wasm` was free on 2026-10-19)
+
+### Status of the acceptance criteria
+
+| Criterion | State |
+| --- | --- |
+| R1.2 commands (fmt, clippy, tests, `xtask check`, `xtask bare-metal`), `cargo deny check`, `cargo xtask schema --check` | pass locally on Linux x86_64 |
+| `cargo xtask wasm-pkg` | passes (`--relaxed`; tarball 1.1 MB) |
+| Node, Chrome and Firefox tests pass | pass locally for all three variants (CI jobs unconfirmed, M14-2) |
+| the packed tarball installs and runs in a fresh Node project | passes (`js-tests` install it with `npm install <tgz>` into a temporary project) |
+| backend, facade and block tests with the relaxed build under wasmtime | pass locally (wasmtime 49.0.3, `+simd128,+relaxed-simd`) |

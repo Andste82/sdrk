@@ -24,7 +24,7 @@ The folder of a crate is its layer. A crate may depend only on crates in lower l
 5. Receive and transmit are equal citizens.
 6. The sample index is the time base; the pipeline never reads a clock.
 7. Deterministic: same backend, bit-identical output regardless of block size or partitioning.
-8. Bindings configure, Rust processes.
+8. Bindings configure, Rust processes. The WebAssembly bindings (`bindings/wasm`) are the first: see [wasm.md](wasm.md).
 
 See [PLAN.md](PLAN.md) for the full list and the reasoning.
 

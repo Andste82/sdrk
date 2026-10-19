@@ -1,0 +1,31 @@
+[package]
+name = "sdrk-backend-simd"
+description = "SDRk SIMD backend: SSE2, AVX2, AVX-512, NEON and SIMD128 kernels (heap-free)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk-core = { path = "../../core/sdrk-core" }
+sdrk-device = { path = "../../core/sdrk-device" }
+bytemuck.workspace = true
+libm.workspace = true
+fearless_simd = { version = "1.1.0", default-features = false, features = ["libm"] }
+
+[dev-dependencies]
+sdrk-core = { path = "../../core/sdrk-core", features = ["reference"] }
+
+[features]
+default = []
+# Runtime CPU-feature detection at every kernel entry (x86-64: SSE2, AVX2 + FMA, AVX-512).
+# Without it the SIMD level is fixed at compile time by `-C target-cpu` / `target-feature`.
+std = ["fearless_simd/std"]
+# On wasm32 built with the target feature `relaxed-simd`: the C32 variants of `fir`,
+# `fir_decimate`, `fir_interpolate` and `mag_sq` use relaxed multiply-add (M14). Not bit-exact;
+# a no-op on every other target.
+relaxed-simd = []
+
+[lints]
+workspace = true

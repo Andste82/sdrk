@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "wav_pcm16_mono.expected.bin",
+      "len": 76
+    },
+    "samples": {
+      "dtype": "i16",
+      "file": "wav_pcm16_mono.samples.bin",
+      "len": 16
+    }
+  },
+  "case": "wav_pcm16_mono",
+  "format_version": 1,
+  "kernel": "io",
+  "notes": "header and payload written with the Python wave module",
+  "params": {
+    "channels": 1,
+    "format": "rs16",
+    "iq": false,
+    "rate": 8000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

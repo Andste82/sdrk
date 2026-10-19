@@ -263,7 +263,7 @@ Every stream has its own sample index (`u64`, see [timing.md](timing.md)). `push
 
 The queue holds `settings.event_queue` events (default 256) and is allocated at build. When it is full the newest events are dropped and counted; once the queue is empty `poll_event` returns `EventsLost { count }` with the output and index of the first lost event. `poll_event` and `push_with_meta` never allocate (tested).
 
-Further accessors: `input_index(input)`, `read_index(output)` (index of the next sample `read_stream` returns), `time_of(output, index)` (absolute time from the latest anchor of the output, `None` without one), `node_id`, `output_id`, `node_name`, `output_name`, `latency(output)`.
+Further accessors: `input_index(input)`, `read_index(output)` (index of the next sample `read_stream` returns), `time_of(output, index)` (absolute time from the latest anchor of the output, `None` without one), `node_id`, `output_id`, `node_name`, `output_name`, `latency(output)`, `input_rate(input)` and `output_rate(output)` (the exact `Rate` of a stream; for a frames output the rate at the input of the frame node), `input_port(input)` (`(PortType, max_len)`: the kind of data an input takes and the most elements one `push` accepts, bytes for a raw input) and `output_port(output)` (`PortKind::Stream(PortType)` or `PortKind::Frames { len }`). The last two let a binding size its buffers and pick the typed array without parsing the description ([wasm.md](wasm.md)).
 
 ### Timed parameters
 
@@ -315,7 +315,7 @@ Groups and preferences are part of the model only; they have **no runtime effect
 
 - A node names a group (`UnknownGroup` if it is not declared); nodes without one are in the implicit group `"main"`, which may also be named without declaring it. A group name follows the name rule.
 - `Report.group_edges` lists every edge between nodes of different groups: these edges are the interfaces. Inputs and outputs have no group: an input belongs to every group that reads it, an output to the group of the node that feeds it.
-- `backend` is `{"prefer": name}` or `{"require": name}`. The factory names the kernels the block calls (`BlockFactory::kernels`); `require` fails with `backend_unavailable` if `sdrk::backend_for(kernel, type)` returns another name for one of them, `prefer` only warns. A kernel is looked up for the complex and the real type of the precision, whichever the facade lists; fused kernels (`chained`) are not judged, their parts are. Today the only backend is `fallback`.
+- `backend` is `{"prefer": name}` or `{"require": name}`. The factory names the kernels the block calls (`BlockFactory::kernels`); `require` fails with `backend_unavailable` if `sdrk::backend_for(kernel, type)` returns another name for one of them, `prefer` only warns. A kernel is looked up for the complex and the real type of the precision, whichever the facade lists; fused kernels (`chained`) are not judged, their parts are. The backends are `simd` (the accelerated kernels, see [backends.md](backends.md)) and `fallback`; a build with `--cfg sdrk_fallback_only` reports `fallback` for every kernel.
 - `split_by_groups(&spec, &registry)` returns one description per group, sorted by group name. A cut edge `a -> b` becomes the output `edge__a__b` (a stream of the type of `a`) in the group of `a` and the input `edge__a__b` (the type and the exact rate) in the group of `b`. (The name rule does not allow a leading underscore, so the prefix is `edge__`.) Pipeline inputs are copied into every part that reads them.
 
 ## YAML

@@ -233,10 +233,8 @@ impl Splitter<'_> {
         };
         let part = self.part(group);
         part.outputs.insert(edge.to.clone(), output.clone());
-        if !from_node {
-            if let Some(input) = spec.inputs.get(&edge.from) {
-                part.inputs.insert(edge.from.clone(), input.clone());
-            }
+        if !from_node && let Some(input) = spec.inputs.get(&edge.from) {
+            part.inputs.insert(edge.from.clone(), input.clone());
         }
         part.edges.push(edge.clone());
     }

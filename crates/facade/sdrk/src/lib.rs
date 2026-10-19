@@ -3,6 +3,14 @@
 //!
 //! Layer `crates/facade`, heap-free; depends on `sdrk-core` and the backends.
 //!
+//! The accelerated kernels (`convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`,
+//! `fir_interpolate`, `resample`, `mag_sq`, `quad_demod`, `fm_mod`, `fft`) run on the SIMD
+//! backend (`sdrk-backend-simd`, feature `simd`, default) on x86, x86-64, AArch64 and wasm32 with
+//! `simd128`, everything else on `Fallback`. The feature `std` selects the SIMD level at run
+//! time; without it the level is fixed by the target features of the build. Building with
+//! `RUSTFLAGS="--cfg sdrk_fallback_only"` forces the fallback everywhere (see
+//! [`SIMD_BACKEND`]).
+//!
 //! ```
 //! use sdrk::{kernels::basic::Scale, Sdrk, C32};
 //! let mut out = [C32::default()];
@@ -44,6 +52,20 @@ impl BackendName for Fallback {
     const NAME: &'static str = "fallback";
 }
 
+#[cfg(all(
+    feature = "simd",
+    not(sdrk_fallback_only),
+    any(
+        target_arch = "x86",
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )
+))]
+impl BackendName for sdrk_backend_simd::Simd {
+    const NAME: &'static str = "simd";
+}
+
 /// Marker of the fused kernels (`ddc`, `duc`, `fm_demod`), which the facade builds by chaining
 /// its own single kernels; reported by [`backend_for`] as `"chained"`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -54,3 +76,23 @@ impl BackendName for Chained {
 }
 
 pub use delegations::backend_for;
+
+/// Whether the accelerated kernels run on the SIMD backend in this build: the feature `simd`
+/// is on, the build does not set `--cfg sdrk_fallback_only`, and the target has SIMD
+/// instructions (x86, x86-64, AArch64, wasm32 with `simd128`).
+///
+/// ```
+/// // `backend_for` reports the backend the constant announces.
+/// let name = sdrk::backend_for("rotate", sdrk::SampleType::C32);
+/// assert_eq!(name, if sdrk::SIMD_BACKEND { "simd" } else { "fallback" });
+/// ```
+pub const SIMD_BACKEND: bool = cfg!(all(
+    feature = "simd",
+    not(sdrk_fallback_only),
+    any(
+        target_arch = "x86",
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )
+));

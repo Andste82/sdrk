@@ -1,0 +1,45 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "sigmf_cf32_fractional_meta.expected.bin",
+      "len": 277
+    }
+  },
+  "case": "sigmf_cf32_fractional_meta",
+  "format_version": 1,
+  "kernel": "io",
+  "notes": "fractional sample rate 44100.5, start index 500, no annotations",
+  "params": {
+    "annotations": [],
+    "datatype": "cf32_le",
+    "rate_den": 2,
+    "rate_num": 88201,
+    "steps": [
+      {
+        "anchor": {
+          "index": 500,
+          "unix_ns": 951825600000000000
+        },
+        "op": "write",
+        "samples": 64,
+        "start": 500
+      },
+      {
+        "op": "write",
+        "samples": 64,
+        "start": 564
+      }
+    ]
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

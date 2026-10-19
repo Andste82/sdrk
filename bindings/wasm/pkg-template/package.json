@@ -1,0 +1,46 @@
+{
+  "name": "sdrk-wasm",
+  "version": "__VERSION__",
+  "description": "SDRk for JavaScript: describe a software-defined-radio signal chain as JSON and run it in WebAssembly (browsers and Node).",
+  "keywords": ["sdr", "dsp", "radio", "webassembly", "wasm", "fm", "rtl-sdr"],
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Andste82/sdrk.git"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./builder": {
+      "types": "./builder.d.ts",
+      "default": "./builder.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "builder.js",
+    "builder.d.ts",
+    "sdrk_simd.js",
+    "sdrk_simd.wasm",
+    "sdrk_scalar.js",
+    "sdrk_scalar.wasm",
+    "sdrk_relaxed.js",
+    "sdrk_relaxed.wasm",
+    "snippets/",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ]
+}

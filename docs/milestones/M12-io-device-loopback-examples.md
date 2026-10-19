@@ -2,6 +2,14 @@
 
 > Plan: [PLAN.md › Phase 3](../PLAN.md#phase-3--blocks-pipeline-files-large) · Depends on: [M11](M11-pipeline-time-events-tx.md) · Next: [M13](M13-simd-backend.md)
 
+## Status
+
+Fully completed: every item of Scope. Device control capabilities, `Capabilities`, the async stream traits and the SoapySDR mapping in `docs/device.md` (checked against the SoapySDR master headers); the crate `sdrk-io` with raw, SigMF (captures, gaps, anchors, retunes, annotations, own ISO 8601 code) and WAV (PCM16 and float32, mono and stereo-IQ, `WAVE_FORMAT_EXTENSIBLE` read); the testkit additions `VirtualTx`, `conformance::check_rx` and `check_tx` (run against `VirtualRx`, `VirtualTx`, `RawReader`, `SigmfReader`, `WavReader` and the writers) and `channel::Loopback`; the examples `fm-receiver` and `fm-transmitter` with smoke tests; the six system tests of section 5 (the ten-minute variant is `#[ignore]` and runs in the nightly CI job `system-long`); the golden I/O vectors (`io/*`, seed 0) and the Python generator `tests/golden/sdrk_golden/cases/io.py`; `docs/io.md`, `docs/testing.md`, `examples/README.md`, CHANGELOG and the decisions log. All commands of R1.2 and of the Acceptance section pass on Linux x86_64. **Phase 3 is complete.**
+
+Differences from the text, all in `docs/decisions-log.md` (M12): the delay accuracy test measures a Gaussian pulse by parabolic interpolation (the specified unit impulse gives a biased estimate) and checks the unit-impulse response tap by tap; `VirtualTx` records `TxRecord`s (without the anchor) because 64 `BlockMeta`s exceed 4 KiB; `check_rx`/`check_tx` have an internal buffer of at most 2048 bytes plus `check_rx_with`; `Pipeline::input_rate` and `Pipeline::output_rate` were added.
+
+Open: CI confirmation on Linux arm64 and Windows x86_64 and of the new nightly job could not be done here; tracked in `docs/open-items.md` (M12).
+
 ## Goal
 
 Finish phase 3: file I/O (SigMF with annotations, WAV, raw) as `RxStream`/`TxStream` implementations, the device control capabilities and async stream traits in `sdrk-device` (checked against SoapySDR), a first driver conformance suite, the loopback channel simulator, the `fm-receiver` and `fm-transmitter` CLI examples, and the system tests that close phase 3 (FM over loopback, burst timing ±1 sample, two stations, long runs, exact event propagation).
@@ -228,9 +236,9 @@ R1.2 commands; `cargo test -p sdrk-system-tests` (excluding `#[ignore]`); CI nig
 
 ## Deliverables checklist
 
-- [ ] `sdrk-device` control, capabilities, async traits; SoapySDR mapping in `docs/device.md`
-- [ ] `sdrk-io` raw, SigMF (captures, annotations), WAV
-- [ ] Testkit `VirtualTx`, `conformance`, `Loopback`
-- [ ] `fm-receiver`, `fm-transmitter`, example flows
-- [ ] System tests, golden I/O vectors
-- [ ] Docs, CHANGELOG, decisions log
+- [x] `sdrk-device` control, capabilities, async traits; SoapySDR mapping in `docs/device.md`
+- [x] `sdrk-io` raw, SigMF (captures, annotations), WAV
+- [x] Testkit `VirtualTx`, `conformance`, `Loopback`
+- [x] `fm-receiver`, `fm-transmitter`, example flows
+- [x] System tests, golden I/O vectors
+- [x] Docs, CHANGELOG, decisions log

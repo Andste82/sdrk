@@ -2,6 +2,14 @@
 
 > Plan: [PLAN.md › Phase 4](../PLAN.md#phase-4--simd-backend-and-comparative-benchmarks-large) and [Testing and performance](../PLAN.md#testing-and-performance) · Depends on: [M12](M12-io-device-loopback-examples.md) · Next: [M14](M14-wasm-bindings.md)
 
+## Status
+
+Fully completed: Scope items 1 to 5 of the Specification except the performance limits. The crate `sdrk-backend-simd` (x86-64 SSE2/AVX2/AVX-512, AArch64 NEON, wasm32 SIMD128) with `convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate` (and `resample`), `mag_sq`, `quad_demod`, `fm_mod` and the in-place FFT for `C32` and `CQ15`, run-time or compile-time level selection, the facade feature `simd` and the flag `sdrk_fallback_only`; the suite cases `backend_vs_fallback_*` and the tests of the crate; `benches/` (VOLK declarations, rustfft comparison, `limits.json`, results for four platforms and the pipeline benchmark); `cargo xtask count` for callgrind, Intel SDE, QEMU with the `insn` plugin and wasmtime fuel; the CI jobs; `docs/backends.md` and `docs/performance.md`. Verified here: the whole workspace (default build, `-C target-cpu=x86-64-v3`, `--cfg sdrk_fallback_only`, without `--all-features`), the backend tests at SSE2, AVX2, AVX-512 (SDE), NEON (QEMU) and wasm32 (wasmtime, with and without `simd128`), and `cargo xtask count` for all four platforms.
+
+Differences from the text, all in `docs/decisions-log.md` (M13): `rotate` `C32` uses polynomials instead of the table lookup (the table needs more instructions than VOLK allows); the FFT is a fused radix-2^2 transform on the bit-reversed order, not a radix-4 transform (the plan has no per-stage twiddles and the call no scratch); `iai-callgrind` is replaced by reading the `callgrind` total directly; the AVX-512 level needs the Ice Lake feature set (`fearless_simd`); `limits.json` has the optional key `waiver`; small kernels run more than `K = 16` calls; the facade keeps the fallback on targets without SIMD.
+
+Not met (open items M13-1 to M13-4 in `docs/open-items.md`): `convert_out` is about 2 times the instructions of VOLK on x86-64 and the `C32` FFT 2 to 5 times those of rustfft (1.3 to 1.8 times on NEON), both waived in `limits.json`; the accuracy of `fft` at N = 64 on wasm32 is 0.05 dB over the margin; therefore the release 0.1 (version bump and tag `v0.1.0`) is not made. The CI jobs could not run here (M13-5, M13-6, M13-7).
+
 ## Goal
 
 Create `sdrk-backend-simd` (x86-64 SSE2/AVX2/AVX-512, AArch64 NEON, wasm32 SIMD128) for `convert`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `mag_sq`, `quad_demod`, `fm_mod`, and a radix-4 SIMD FFT; wire it into the facade; build the instruction-counting infrastructure and comparative benchmarks against VOLK and rustfft; extend CI to AVX-512 (Intel SDE), AArch64 (QEMU), and wasm32 (wasmtime, with and without SIMD128). Release 0.1 (git tag) when every kernel meets the 1.15× hard limit.
@@ -228,9 +236,21 @@ R1.2 commands; all CI jobs in §5 green; `cargo xtask count --platform x86_64` p
 
 ## Deliverables checklist
 
-- [ ] `sdrk-backend-simd` with all kernels in §2, dispatch, unsafe policy
-- [ ] Facade feature `simd`, cfg flag `sdrk_fallback_only`
-- [ ] Suite backend cases
-- [ ] `benches/` workspace, VOLK FFI, rustfft comparison, `limits.json`, results
-- [ ] `cargo xtask count` (callgrind, SDE, QEMU plugin, wasmtime fuel)
-- [ ] CI jobs; `docs/performance.md`, `docs/backends.md`; tag `v0.1.0`
+- [x] `sdrk-backend-simd` with all kernels in §2, dispatch, unsafe policy (every kernel of §2 for `C32` and `CQ15`; no `unsafe` code, so no Miri job; the contract per kernel is in [backends.md](../backends.md))
+- [x] Facade feature `simd`, cfg flag `sdrk_fallback_only` (and `sdrk::SIMD_BACKEND`)
+- [x] Suite backend cases (`backend_vs_fallback_*`, ten cases) and the tests of the backend crate
+- [x] `benches/` workspace, VOLK FFI, rustfft comparison, `limits.json`, results (`benches/results/{x86_64,x86_64-avx512,aarch64,wasm32,pipeline}.json`)
+- [x] `cargo xtask count` (callgrind, SDE, QEMU plugin, wasmtime fuel), with unit tests of the limit logic and the parsers; run for all four platforms
+- [x] `docs/performance.md`, `docs/backends.md`
+- [x] CI jobs written (`tier1` extra runs, `avx512-sde`, `aarch64-qemu`, `wasm-wasmtime`, `count`, `count-nightly`); the same commands pass locally, the jobs themselves could not run (open item M13-5)
+- [ ] Every kernel within the 1.15x limit and the tag `v0.1.0`: **not met**. 9 of the 13 measured pairs are within the dev limit on every level (`convert` twice, `rotate`, `fir`, `fir_decimate`, `mag_sq`, `quad_demod`, `fm_mod`, the `CQ15` FFT); `convert_out` (about 2x VOLK on x86-64) and the `C32` FFT (2 to 5x rustfft on x86-64, 1.3 to 1.8x on NEON) are waived in `benches/limits.json` (open items M13-1, M13-2), `fft` at N = 64 on wasm32 is 0.05 dB over the accuracy margin (M13-3). The workspace version stays 0.0.1 and no tag is created (M13-4).
+
+### Status of the acceptance criteria
+
+| Criterion | State |
+| --- | --- |
+| R1.2 commands (fmt, clippy, tests, `xtask check`, `xtask bare-metal`) | pass locally on Linux x86_64 (also with `-C target-cpu=x86-64-v3` and `--cfg sdrk_fallback_only`) |
+| backend tests under SDE (AVX-512), QEMU (NEON), wasmtime (with and without `simd128`) | pass locally |
+| `cargo xtask count --platform x86_64` | passes (waivers for `convert_out` and the FFT) |
+| nightly counts `x86_64-avx512`, `aarch64`, `wasm32` | pass locally (waivers as above) |
+| all CI jobs of §5 green, tag `v0.1.0` | not confirmed / not made (M13-4, M13-5) |

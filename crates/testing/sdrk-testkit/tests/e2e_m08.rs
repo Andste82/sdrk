@@ -160,7 +160,13 @@ fn a_silent_carrier_has_no_audio() {
     .unwrap();
     assert_eq!(produced, samples / 50);
     let sinad = sdrk_testkit::meters::sinad_db(&audio, 48_000.0, 1000.0);
-    assert!(sinad < 15.0, "SINAD {sinad} dB for an unmodulated carrier");
+    // A backend whose arithmetic leaves a constant carrier exactly constant produces exact
+    // silence, for which the meter reports an infinite SINAD: there is no tone either way.
+    let energy: f64 = audio.iter().map(|x| x * x).sum();
+    assert!(
+        sinad < 15.0 || energy < 1e-12,
+        "SINAD {sinad} dB for an unmodulated carrier"
+    );
 }
 
 #[test]

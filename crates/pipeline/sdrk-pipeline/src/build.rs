@@ -550,19 +550,19 @@ fn connect_paths(
             out.lead = lead;
             out.max_buffered = buffered;
         }
-        if let Some(rate_in) = plan_inputs.get(path.input).map(|i| i.rate) {
-            if let Some((lead_in, _)) = path_latency(&stream_nodes, rate_in) {
-                out.lead_in = lead_in;
-            }
+        if let Some(rate_in) = plan_inputs.get(path.input).map(|i| i.rate)
+            && let Some((lead_in, _)) = path_latency(&stream_nodes, rate_in)
+        {
+            out.lead_in = lead_in;
         }
         if let Some(r) = report.outputs.get_mut(oi) {
             r.group_delay = out.lead;
             r.max_buffered = out.max_buffered;
         }
-        if let OutSource::Stream(sid) = po.source {
-            if streams.get(sid).is_some_and(|s| s.ty == PortType::Raw) {
-                out.silence = silence_group(registry, plan_nodes, streams, sid);
-            }
+        if let OutSource::Stream(sid) = po.source
+            && streams.get(sid).is_some_and(|s| s.ty == PortType::Raw)
+        {
+            out.silence = silence_group(registry, plan_nodes, streams, sid);
         }
     }
 }

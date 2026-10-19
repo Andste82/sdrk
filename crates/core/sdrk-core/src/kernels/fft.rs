@@ -172,6 +172,22 @@ impl<T: ComplexSample, Tw: AsRef<[T]>> FftPlan<T, Tw> {
     pub fn is_empty(&self) -> bool {
         false
     }
+
+    /// `log2` of the transform size.
+    pub fn log2_len(&self) -> u32 {
+        self.log2n
+    }
+
+    /// The twiddle storage: `e^(-j 2 pi k / N)` is at index `k * twiddle_stride()`.
+    pub fn twiddles(&self) -> &[T] {
+        self.twiddles.as_ref()
+    }
+
+    /// Distance between consecutive twiddles of this size in [`twiddles`](Self::twiddles)
+    /// (1, or `4096 / N` for a plan over the static 4096-point table).
+    pub fn twiddle_stride(&self) -> usize {
+        self.tw_stride
+    }
 }
 
 fn check_real_size(n: usize) -> Result<()> {

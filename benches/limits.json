@@ -1,0 +1,238 @@
+{
+  "_comment": "Release state per kernel and level. `release` kernels must stay within 1.15x the instructions per sample of the comparison, `dev` kernels within 1.50x; see docs/performance.md. A `waiver` names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers.",
+  "convert_cs8": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "release"
+    }
+  },
+  "convert_cs16": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "release"
+    }
+  },
+  "convert_out_cs16": {
+    "avx2": {
+      "status": "dev",
+      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+    },
+    "avx512": {
+      "status": "dev",
+      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "dev",
+      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+    }
+  },
+  "rotate": {
+    "avx2": {
+      "status": "dev"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "release"
+    }
+  },
+  "fir": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "dev"
+    }
+  },
+  "fir_decimate": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "dev"
+    }
+  },
+  "mag_sq": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "dev"
+    },
+    "sse2": {
+      "status": "dev"
+    }
+  },
+  "quad_demod": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "release"
+    }
+  },
+  "fm_mod": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "release"
+    }
+  },
+  "fft_64": {
+    "avx2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "avx512": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "neon": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "simd128": {
+      "status": "dev",
+      "waiver": "open item M13-3: on this one case the accuracy is 1.05 dB below rustfft (limit 1 dB); the instruction count is within the limit"
+    },
+    "sse2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    }
+  },
+  "fft_1024": {
+    "avx2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "avx512": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    }
+  },
+  "fft_4096": {
+    "avx2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "avx512": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "dev",
+      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+    }
+  },
+  "fft_cq15_1024": {
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "sse2": {
+      "status": "release"
+    }
+  }
+}

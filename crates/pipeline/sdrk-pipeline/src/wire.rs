@@ -414,7 +414,7 @@ impl Message {
 /// Reads a payload as a vector of `T` (any alignment); `None` if it is not a whole number.
 fn read_vec<T: bytemuck::Pod>(bytes: &[u8]) -> Option<Vec<T>> {
     let size = core::mem::size_of::<T>();
-    if size == 0 || bytes.len() % size != 0 {
+    if size == 0 || !bytes.len().is_multiple_of(size) {
         return None;
     }
     Some(
@@ -567,14 +567,13 @@ pub fn decode(buf: &[u8]) -> Result<Decoded> {
     let payload_type = PayloadType::from_code(payload_code)
         .ok_or_else(|| Error::Wire(format!("unknown payload type {payload_code}")))?;
     let count = le32(buf, 20);
-    if matches!(kind, MessageType::Samples | MessageType::Frame) {
-        if let Some(size) = payload_type.element_size() {
-            if (count as usize).checked_mul(size) != Some(payload_len) {
-                return Err(Error::Wire(format!(
-                    "{count} elements of {size} bytes do not fill a payload of {payload_len} bytes"
-                )));
-            }
-        }
+    if matches!(kind, MessageType::Samples | MessageType::Frame)
+        && let Some(size) = payload_type.element_size()
+        && (count as usize).checked_mul(size) != Some(payload_len)
+    {
+        return Err(Error::Wire(format!(
+            "{count} elements of {size} bytes do not fill a payload of {payload_len} bytes"
+        )));
     }
     if buf.len() < total {
         return Ok(Decoded::NeedMore(total - buf.len()));

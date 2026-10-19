@@ -13,7 +13,7 @@ default = ["yaml"]
 yaml = ["dep:serde-saphyr"]
 
 [dependencies]
-sdrk = { path = "../../facade/sdrk" }
+sdrk = { path = "../../facade/sdrk", features = ["std"] }
 sdrk-blocks = { path = "../../blocks/sdrk-blocks" }
 sdrk-core = { path = "../../core/sdrk-core" }
 sdrk-device = { path = "../../core/sdrk-device" }

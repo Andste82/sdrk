@@ -1,0 +1,15 @@
+{
+  "annotations": [],
+  "captures": [
+    {
+      "core:datetime": "2000-02-29T12:00:00Z",
+      "core:global_index": 500,
+      "core:sample_start": 0
+    }
+  ],
+  "global": {
+    "core:datatype": "cf32_le",
+    "core:sample_rate": 44100.5,
+    "core:version": "1.2.0"
+  }
+}

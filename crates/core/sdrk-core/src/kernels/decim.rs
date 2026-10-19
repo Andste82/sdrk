@@ -39,12 +39,16 @@ pub struct FirDecimState<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[
     _t: PhantomData<T>,
 }
 
-/// Borrowed parts of a [`FirDecimState`] for kernel implementations.
-pub(crate) struct DecimParts<'a, T: ComplexSample> {
-    pub(crate) taps: &'a [T::Real],
-    pub(crate) hist: &'a mut [T],
-    pub(crate) factor: usize,
-    pub(crate) countdown: &'a mut usize,
+/// Borrowed parts of a [`FirDecimState`] for kernel implementations in backend crates.
+pub struct DecimParts<'a, T: ComplexSample> {
+    /// The filter taps.
+    pub taps: &'a [T::Real],
+    /// The history, oldest sample first.
+    pub hist: &'a mut [T],
+    /// The decimation factor.
+    pub factor: usize,
+    /// Input samples still to skip before the next output.
+    pub countdown: &'a mut usize,
 }
 
 impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>>
@@ -123,7 +127,8 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>>
             .saturating_add(output_len.saturating_mul(self.factor))
     }
 
-    pub(crate) fn parts_mut(&mut self) -> DecimParts<'_, T> {
+    /// The borrowed parts of the state, for kernel implementations in backend crates.
+    pub fn parts_mut(&mut self) -> DecimParts<'_, T> {
         DecimParts {
             taps: self.taps.as_ref(),
             hist: self.hist.as_mut(),
@@ -182,13 +187,18 @@ pub(crate) struct ResampleCore<T, P, Taps, Hist> {
     _t: PhantomData<(T, P)>,
 }
 
-/// Borrowed parts of a resampler state for kernel implementations.
-pub(crate) struct ResampleParts<'a, P, T> {
-    pub(crate) taps: &'a [P],
-    pub(crate) hist: &'a mut [T],
-    pub(crate) up: usize,
-    pub(crate) down: usize,
-    pub(crate) q: &'a mut i64,
+/// Borrowed parts of a resampler state for kernel implementations in backend crates.
+pub struct ResampleParts<'a, P, T> {
+    /// The filter taps.
+    pub taps: &'a [P],
+    /// The history, oldest sample first.
+    pub hist: &'a mut [T],
+    /// The interpolation factor `L`.
+    pub up: usize,
+    /// The decimation factor `M`.
+    pub down: usize,
+    /// The phase counter `j * M - L * c`.
+    pub q: &'a mut i64,
 }
 
 impl<T: Copy + Default, P, Taps: AsRef<[P]>, Hist: AsRef<[T]> + AsMut<[T]>>
@@ -319,7 +329,8 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>>
 
     resample_state_api!();
 
-    pub(crate) fn parts_mut(&mut self) -> ResampleParts<'_, T::Real, T> {
+    /// The borrowed parts of the state, for kernel implementations in backend crates.
+    pub fn parts_mut(&mut self) -> ResampleParts<'_, T::Real, T> {
         self.core.parts_mut()
     }
 }
@@ -391,7 +402,8 @@ impl<T: RealSample, Taps: AsRef<[T]>, Hist: AsRef<[T]> + AsMut<[T]>>
 
     resample_state_api!();
 
-    pub(crate) fn parts_mut(&mut self) -> ResampleParts<'_, T, T> {
+    /// The borrowed parts of the state, for kernel implementations in backend crates.
+    pub fn parts_mut(&mut self) -> ResampleParts<'_, T, T> {
         self.core.parts_mut()
     }
 }

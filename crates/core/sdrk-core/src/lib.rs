@@ -29,7 +29,7 @@ mod macros;
 pub mod num;
 #[cfg(feature = "reference")]
 mod reference;
-mod tables;
+pub mod tables;
 pub mod timing;
 mod types;
 pub mod window;

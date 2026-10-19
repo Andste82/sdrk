@@ -136,12 +136,11 @@ fn parse_params<K: Kind>(
     }
     let mut cfg = K::default_cfg();
     for (name, value) in params {
-        if let Some(p) = desc.param(name) {
-            if let Ok(pv) = to_param(p, value) {
-                if let Err(e) = K::set(&mut cfg, name, pv) {
-                    diags.push(set_error(name, &e));
-                }
-            }
+        if let Some(p) = desc.param(name)
+            && let Ok(pv) = to_param(p, value)
+            && let Err(e) = K::set(&mut cfg, name, pv)
+        {
+            diags.push(set_error(name, &e));
         }
     }
     if diags.is_empty() {

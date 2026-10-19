@@ -1,0 +1,171 @@
+{
+  "levels": {
+    "simd128": {
+      "informational": false,
+      "kernels": {
+        "convert_cs16": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 242.06,
+          "ours_instr_per_sample": 10.54,
+          "ratio": 0.04,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "convert_cs8": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 184.06,
+          "ours_instr_per_sample": 8.04,
+          "ratio": 0.04,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "convert_out_cs16": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 308.03,
+          "ours_instr_per_sample": 23.29,
+          "ratio": 0.08,
+          "snr_db": {
+            "other": 95.45,
+            "ours": 95.45
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fft_1024": {
+          "compared_with": "rustfft",
+          "other_instr_per_sample": 226.47,
+          "ours_instr_per_sample": 134.18,
+          "ratio": 0.59,
+          "snr_db": {
+            "other": 138.75,
+            "ours": 137.96
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fft_4096": {
+          "compared_with": "rustfft",
+          "other_instr_per_sample": 274.79,
+          "ours_instr_per_sample": 144.35,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 137.72,
+            "ours": 137.36
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fft_64": {
+          "compared_with": "rustfft",
+          "other_instr_per_sample": 130.11,
+          "ours_instr_per_sample": 118.47,
+          "ratio": 0.91,
+          "snr_db": {
+            "other": 142.06,
+            "ours": 141.01
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fft_cq15_1024": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 1195.5,
+          "ours_instr_per_sample": 485.17,
+          "ratio": 0.41,
+          "snr_db": {
+            "other": 53.88,
+            "ours": 53.88
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fir": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 2646.13,
+          "ours_instr_per_sample": 623.71,
+          "ratio": 0.24,
+          "snr_db": {
+            "other": 136.29,
+            "ours": 141.85
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fir_decimate": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 544.12,
+          "ours_instr_per_sample": 143.28,
+          "ratio": 0.26,
+          "snr_db": {
+            "other": 133.29,
+            "ours": 140.48
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fm_mod": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 109.89,
+          "ours_instr_per_sample": 43.53,
+          "ratio": 0.4,
+          "snr_db": {
+            "other": 133.15,
+            "ours": 133.15
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_sq": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 8.03,
+          "ours_instr_per_sample": 11.03,
+          "ratio": 1.37,
+          "snr_db": {
+            "other": 149.02,
+            "ours": 149.02
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
+        "quad_demod": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 190.9,
+          "ours_instr_per_sample": 76.29,
+          "ratio": 0.4,
+          "snr_db": {
+            "other": 143.56,
+            "ours": 144.19
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "rotate": {
+          "compared_with": "sdrk fallback",
+          "other_instr_per_sample": 35.29,
+          "ours_instr_per_sample": 33.29,
+          "ratio": 0.94,
+          "snr_db": {
+            "other": 133.0,
+            "ours": 140.76
+          },
+          "status": "release",
+          "verdict": "pass"
+        }
+      }
+    }
+  },
+  "method": {
+    "counted": "(count(k = K) - count(k = 0)) / (K * samples)",
+    "k": 16,
+    "samples": 4096
+  },
+  "platform": "wasm32"
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Audio of examples/flows/fm_receiver.json for the E2E-RX signal (0.25 s, CU8, 2.4 MS/s) on the fallback backend. Written by tests/fm_native.rs with SDRK_UPDATE_FIXTURE=1 and RUSTFLAGS=--cfg sdrk_fallback_only; the scalar WASM build must reproduce audio_sha256 bit for bit.",
+  "input_sha256": "26ddad760d9060dec4957d952f6c5ac3d754ad1daf78c1ddcde9d52afa0b84a8",
+  "audio_samples": 12000,
+  "audio_sha256": "fe93b45d44e5635bdaf04b62a0edb574e3e25abca261a02cea88f2b130c322e0",
+  "sinad_db": 100.464
+}

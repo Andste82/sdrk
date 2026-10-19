@@ -1,0 +1,22 @@
+{
+  "flow": "examples/flows/fm_receiver.json",
+  "input": {
+    "format": "cu8",
+    "rate_hz": 2400000
+  },
+  "instructions_per_input_sample": 545.0,
+  "latency": {
+    "group_delay_samples": 27.14,
+    "latency_samples": 30.14,
+    "latency_us": 627.9,
+    "max_buffered_samples": 3,
+    "output": "audio",
+    "rate_hz": 48000
+  },
+  "method": {
+    "block_samples": 4096,
+    "blocks": 16,
+    "counted": "(count(k blocks) - count(0 blocks)) / (k * block_samples)"
+  },
+  "platform": "x86_64 (AVX2)"
+}

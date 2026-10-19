@@ -1,0 +1,98 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "sigmf_cu8_meta.expected.bin",
+      "len": 1234
+    }
+  },
+  "case": "sigmf_cu8_meta",
+  "format_version": 1,
+  "kernel": "io",
+  "notes": "expected .sigmf-meta bytes from Python json (sorted keys, indent 2, LF)",
+  "params": {
+    "annotations": [
+      {
+        "freq_lower_edge": -50000.0,
+        "freq_upper_edge": 50000.0,
+        "label": "carrier",
+        "sample_count": 100,
+        "sample_start": 0
+      },
+      {
+        "comment": "burst after the gap",
+        "sample_count": 300,
+        "sample_start": 1500
+      },
+      {
+        "sample_count": 10,
+        "sample_start": 1900
+      }
+    ],
+    "datatype": "cu8",
+    "description": "gap, retune and anchor test",
+    "rate_den": 1,
+    "rate_num": 2400000,
+    "steps": [
+      {
+        "hz": 100000000.0,
+        "op": "frequency"
+      },
+      {
+        "anchor": {
+          "index": 0,
+          "unix_ns": 1700000000123456789
+        },
+        "op": "write",
+        "samples": 1000,
+        "start": 0
+      },
+      {
+        "op": "write",
+        "samples": 500,
+        "start": 1000
+      },
+      {
+        "op": "write",
+        "samples": 300,
+        "start": 1700
+      },
+      {
+        "hz": 101000000.0,
+        "op": "frequency"
+      },
+      {
+        "op": "write",
+        "samples": 100,
+        "start": 2000
+      },
+      {
+        "flags": [
+          "retuned"
+        ],
+        "op": "write",
+        "samples": 100,
+        "start": 2100
+      },
+      {
+        "anchor": {
+          "index": 2200,
+          "unix_ns": 1700000001000000000
+        },
+        "op": "write",
+        "samples": 50,
+        "start": 2200
+      }
+    ]
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

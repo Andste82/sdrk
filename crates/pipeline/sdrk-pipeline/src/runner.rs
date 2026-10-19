@@ -1330,10 +1330,11 @@ impl Pipeline {
                 continue;
             };
             for (i, p) in desc.params.iter().enumerate() {
-                if i < 64 && n.changed & (1 << i) != 0 {
-                    if let Ok(v) = n.node.param(p.name) {
-                        node.params.insert(p.name.to_string(), to_json(p, v));
-                    }
+                if i < 64
+                    && n.changed & (1 << i) != 0
+                    && let Ok(v) = n.node.param(p.name)
+                {
+                    node.params.insert(p.name.to_string(), to_json(p, v));
                 }
             }
         }

@@ -102,6 +102,8 @@ pub fn layer_of(rel_dir: &Path, name: &str) -> Layer {
         ["crates", "pipeline", ..] => Layer::Pipeline,
         ["crates", "io", ..] => Layer::Io,
         ["crates", "testing", ..] => Layer::Testing,
+        // Everything else is the top layer: `examples/*`, `tests/system` (system tests),
+        // `bindings/*`, `targets/*`, `benches/*`, `xtask`.
         _ => Layer::App,
     }
 }
@@ -296,6 +298,7 @@ mod tests {
         );
         assert_eq!(l("xtask", "xtask"), Layer::App);
         assert_eq!(l("examples/fm-receiver", "fm-receiver"), Layer::App);
+        assert_eq!(l("tests/system", "sdrk-system-tests"), Layer::App);
     }
 
     #[test]

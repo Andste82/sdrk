@@ -1,0 +1,21 @@
+# The benchmark workspace of SDRk: instruction counts of our kernels against VOLK and rustfft.
+#
+# It is a workspace of its own and not a member of the repository workspace, because the
+# comparison links the system VOLK, which is licensed LGPL-3.0. VOLK is never a dependency of
+# a library crate and never ships with SDRk; `cargo deny` only checks the repository workspace.
+[workspace]
+members = ["kernels", "pipeline", "volk-sys"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+publish = false
+version = "0.0.0"
+
+[profile.release]
+debug = false
+lto = "thin"
+codegen-units = 1
+opt-level = 3

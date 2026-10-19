@@ -1,0 +1,22 @@
+[package]
+name = "fm-transmitter"
+description = "Command-line FM transmitter: modulates a WAV file through a pipeline flow to a raw or SigMF baseband file."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+sdrk-device = { path = "../../crates/core/sdrk-device" }
+sdrk-io = { path = "../../crates/io/sdrk-io" }
+sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline" }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit", features = ["std"] }
+tempfile = "3.27.0"
+
+[lints]
+workspace = true

@@ -49,7 +49,8 @@ impl<T: ComplexSample> QuadDemodState<T> {
         self.prev
     }
 
-    pub(crate) fn set_prev(&mut self, prev: T) {
+    /// Stores the last input sample; used by kernel implementations in backend crates.
+    pub fn set_prev(&mut self, prev: T) {
         self.prev = prev;
     }
 }

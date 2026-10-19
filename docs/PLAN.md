@@ -173,7 +173,9 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - First platform: ESP32-P4 PIE in esp-emulator; the most expensive kernels, including Q15 FFT
 - Instruction-count comparison against ESP-DSP and CMSIS-DSP, with the method per platform from *Testing and performance*
 - Compile-time composition via generics, heap-free, for MCU pipelines
-- Then as needed: `arm-dsp` (Cortex-M4/M7/M33), `rvv` (several vector lengths), `helium` (M55/M85), S3 PIE
+- Second platform: RISC-V Vector (`rvv`, vector-length agnostic, tested at VLEN 128–1024 in QEMU; bit-identical results for every vector length; milestone M17)
+- Third platform: Arm DSP extension for Cortex-M4/M7/M33 (`arm-dsp`, bit-exact Q15 with 64-bit accumulators, compared with CMSIS-DSP; milestone M18)
+- Then only on concrete demand: `helium` (M55/M85, small installed base) and S3 PIE (only after the emulator is shown to execute the `ee.*` instructions; see BACKLOG)
 
 **Done when:** per backend, the suite passes in the emulator and the instruction-count target is met.
 
@@ -254,7 +256,7 @@ Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filt
 | x86-64 | callgrind (iai-callgrind); Intel SDE instruction mix for AVX-512 | VOLK, rustfft |
 | AArch64 | QEMU user mode with the instruction-count plugin | VOLK |
 | Cortex-M4/M33/M55 | QEMU system mode with the instruction-count plugin | CMSIS-DSP |
-| ESP32-P4/S3 | S3: QEMU instruction-count plugin in the Espressif QEMU fork (plugin-enabled build); P4: static instruction count of the inner loops from the disassembly, as esp-emulator only samples | ESP-DSP |
+| ESP32-P4/S3 | S3: QEMU instruction-count plugin in the Espressif QEMU fork (plugin-enabled build; plugin support and PIE emulation unverified, otherwise static counting as for the P4); P4: static instruction count of the inner loops from the disassembly, as esp-emulator only samples | ESP-DSP |
 | RISC-V V | QEMU with the instruction-count plugin | own scalar fallback (no established library) |
 | WASM | wasmtime fuel metering | own scalar fallback |
 

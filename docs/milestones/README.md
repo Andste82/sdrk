@@ -27,6 +27,8 @@ Milestones are strictly sequential: each depends on all previous ones, and each 
 | M14 | [M14-wasm-bindings.md](M14-wasm-bindings.md) | 5 | WASM bindings, SIMD/scalar variants, npm package, Node/Chrome/Firefox tests |
 | M15 | [M15-emulator-targets.md](M15-emulator-targets.md) | 6 | Suite bare-metal in QEMU (Cortex-M4/M55, RISC-V), esp-emulator (P4), Espressif QEMU (S3) |
 | M16 | [M16-esp32-p4-pie-backend.md](M16-esp32-p4-pie-backend.md) | 7 | ESP32-P4 PIE backend, static instruction counting vs ESP-DSP |
+| M17 | [M17-rvv-backend.md](M17-rvv-backend.md) | 7 | `sdrk-backend-rvv` (RISC-V Vector 1.0, vector-length agnostic), VLEN matrix in QEMU (128–1024), digest test for VLEN independence, `qemu-riscv64-rvv` target, instruction counts vs fallback |
+| M18 | [M18-arm-dsp-backend.md](M18-arm-dsp-backend.md) | 7 | `sdrk-backend-arm-dsp` (Cortex-M4/M7/M33 DSP extension, bit-exact CQ15 with 64-bit accumulators), M7/M33 targets, instruction counts vs CMSIS-DSP |
 | — | [BACKLOG.md](BACKLOG.md) | 7–9, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -34,7 +36,7 @@ M00 → M01 → M02 → M03 → M04 → M05 → M06 → M07 → M08     (phases 
                                                    ↓
                          M12 ← M11 ← M10 ← M09 ←───┘     (phase 3: blocks, pipeline, I/O)
                           ↓
-                         M13 → M14 → M15 → M16 → BACKLOG (phases 4–7: speed, WASM, embedded)
+                         M13 → M14 → M15 → M16 → M17 → M18 → BACKLOG (phases 4–7: speed, WASM, embedded)
 ```
 
 ## How to work on a milestone
@@ -65,10 +67,13 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 200–299 | M08 `convert_out` (200 + i from C32, 220 + i from CQ15) |
 | 300–399 | M09 (`dot`, blocks) |
 | 400–409 | M16 (embedded FFT cases) |
-| 410–999 | free, for backlog milestones |
+| 410–499 | free, for backlog milestones |
+| 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
+| 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
+| 530–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory
 
-- `M00-…` to `M16-…`: the milestones (each contains the full ground rules).
-- `BACKLOG.md`: work after M16.
+- `M00-…` to `M18-…`: the milestones (each contains the full ground rules).
+- `BACKLOG.md`: work after M18.

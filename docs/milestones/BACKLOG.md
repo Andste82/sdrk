@@ -1,4 +1,4 @@
-# Backlog — work after M16
+# Backlog — work after M18
 
 > Plan: [PLAN.md › Phases 7–9 and Later](../PLAN.md#phases-49-speed-platforms-bindings) · Milestone index: [README.md](README.md)
 
@@ -6,12 +6,13 @@ These items are planned but not yet written as implementation-ready milestones. 
 
 ## Phase 7 — further embedded backends (same recipe as M13/M16)
 
+The RISC-V Vector backend is milestone [M17](M17-rvv-backend.md), the Arm DSP-extension backend (Cortex-M4/M7/M33, also the RP2350) is [M18](M18-arm-dsp-backend.md). Left for the backlog from it: 32-bit RISC-V with `V` and the embedded subsets `Zve32f`/`Zve64f` (no 64-bit lanes: the CQ15 filters need a chunked or fallback path), vectorised `quad_demod` and `fm_mod`.
+
+
 | Item | Content | Counting / comparison | Depends on |
 | --- | --- | --- | --- |
-| `sdrk-backend-arm-dsp` | Cortex-M4/M7/M33 DSP extension (SIMD32: `SMLAD`, `QADD16`, …) for CQ15 `fir`, `fir_decimate`, `dot`, `mag_sq`, `convert`, `fft` | QEMU system mode + instruction-count plugin vs **CMSIS-DSP** (`arm_fir_q15`, `arm_fir_decimate_q15`, `arm_cfft_q15`, `arm_cmplx_mag_squared_q15`), built in a separate `benches/` project | M15 |
-| `sdrk-backend-helium` | Cortex-M55/M85 MVE: Q15 and f32 kernels | QEMU `mps3-an547` + plugin vs CMSIS-DSP Helium variants | arm-dsp |
-| `sdrk-backend-rvv` | RISC-V Vector 1.0, vector-length agnostic; test with VLEN 128, 256, 512 (`qemu-riscv64 -cpu rv64,v=true,vlen=…`) | QEMU plugin vs own scalar fallback (no established library) | M15 |
-| ESP32-S3 PIE | `ee.*` instructions (different from P4); kernels as M16 | Espressif QEMU fork, plugin-enabled build, vs ESP-DSP `_aes3` variants | M16 |
+| `sdrk-backend-helium` | Cortex-M55/M85 MVE: Q15 and f32 kernels. **Low priority, only on concrete demand:** the chips (Alif Ensemble, STM32N6, Renesas RA8) are far less widespread than Cortex-M4/M7. Emulation is available: QEMU supports Armv8.1-M Helium and the Cortex-M55 since 6.0 ([release notes](https://linuxiac.com/qemu-6-0-0-released-with-focus-on-arm-and-risc-v/)), and the machine `mps3-an547` is used in practice (e.g. Zephyr CMSIS-NN tests). Counting as in M18 (one vector instruction counts as one; MVE executes in overlapping beats on real cores, so counts show instruction economy only). Intrinsics are not stable in Rust: whole-function assembly as in M17/M18 | QEMU `mps3-an547` + plugin vs CMSIS-DSP Helium variants | M18 |
+| ESP32-S3 PIE | `ee.*` instructions (Xtensa LX7, eight 128-bit `QR` registers for 8/16/32-bit elements, `QACC` accumulators of 2 × 160 bit, 40-bit `ACCX`; different from the P4's RISC-V PIE); kernels as M16. **Precondition (unverified in this plan): the Espressif QEMU fork must emulate the `ee.*` instructions.** Its documentation lists emulated peripherals only and says nothing about PIE ([ESP-IDF QEMU page](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-guides/tools/qemu.html), [fork README](https://github.com/espressif/esp-toolchain-docs/blob/main/qemu/README.md)); Espressif's [PIE introduction](https://developer.espressif.com/blog/2024/12/pie-introduction/) names no emulator or assembler, and the forum reports PIE instructions missing from the TRM. Whether TCG plug-ins work for Xtensa in the fork is likewise unconfirmed. **Start with a smoke test** (execute a few `ee.*` instructions in the fork and compare the results with the TRM); if they are not emulated, the S3 waits for hardware (phase 9) or for emulator support, because the plan's rule is emulator first. Counting: plug-in if it works, otherwise static from the disassembly as in M16. Needs the Espressif Rust toolchain (`espup`) | Espressif QEMU fork vs ESP-DSP `_aes3` variants | M16 |
 | Compile-time MCU pipelines | generic, heap-free composition of blocks into a fixed chain (`Chain<A, B>` with typed edges and caller storage), tested in `targets/` | — | M15 |
 
 ## Phase 8 — further bindings (optional, only on concrete demand)
@@ -41,4 +42,4 @@ These items are planned but not yet written as implementation-ready milestones. 
 
 ## Golden-vector seed ranges
 
-New cases must use seeds from a free range (see the table in [README.md](README.md#seed-ranges-for-golden-vectors)); the next free range for backlog items starts at **410**.
+New cases must use seeds from a free range (see the table in [README.md](README.md#seed-ranges-for-golden-vectors)); the next free range for backlog items starts at **530**.

@@ -3,3 +3,6 @@
 Cargo.lock.bak
 .venv/
 __pycache__/
+crates/pipeline/sdrk-pipeline/fuzz/Cargo.lock
+crates/pipeline/sdrk-pipeline/fuzz/corpus/
+crates/pipeline/sdrk-pipeline/fuzz/artifacts/

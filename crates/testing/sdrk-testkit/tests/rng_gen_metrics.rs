@@ -19,6 +19,9 @@ use sdrk_testkit::r#gen::{self, extreme};
 use sdrk_testkit::metrics::{bit_exact, compare_complex, compare_real};
 use sdrk_testkit::rng::Pcg32;
 
+// With `num-complex/std` (enabled by the dev-dependencies of other workspace crates through
+// feature unification) `Complex64::norm` is an inherent method and this trait is not needed.
+#[allow(dead_code)]
 trait Norm {
     fn norm(self) -> f64;
 }

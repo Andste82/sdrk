@@ -41,6 +41,8 @@ jobs:
         run: cargo xtask check
       - name: Bare-metal build
         run: cargo xtask bare-metal
+      - name: Pipeline schema is up to date
+        run: cargo xtask schema --check
       - uses: taiki-e/install-action@cargo-deny
       - name: Dependency policy
         run: cargo deny check
@@ -79,3 +81,19 @@ jobs:
       - name: Check committed vectors
         if: steps.changed.outputs.run == 'true'
         run: python tests/golden/generate.py --check
+
+  fuzz:
+    name: fuzz (pipeline_json, linux-x86_64)
+    # Nightly only, five minutes, Linux x86_64 only: fuzzing is not required on Windows and
+    # arm64.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly toolchain
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz from_json, validate and build for five minutes
+        working-directory: crates/pipeline/sdrk-pipeline
+        run: cargo +nightly fuzz run pipeline_json -- -max_total_time=300

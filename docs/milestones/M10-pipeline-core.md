@@ -10,6 +10,12 @@ Create `crates/pipeline/sdrk-pipeline`: the serde data model with JSON as canoni
 
 Host languages and AI agents describe processing as data, not code. The pipeline is the only place with heap; it allocates once at build time and then runs the heap-free blocks deterministically.
 
+## Status
+
+Complete on Linux x86_64: every item of the checklist is done, and `cargo fmt`, `cargo clippy -D warnings`, `cargo test --workspace --all-features` (including `no_alloc`), `cargo xtask check`, `cargo xtask bare-metal`, `cargo xtask schema --check` and `cargo deny check` pass. A 60 second local fuzz run of `pipeline_json` found nothing.
+
+Open (see `docs/open-items.md`): a real-valued stream output with a raw `format` is rejected because `sdrk-blocks` has no real converter block; the CI runs on Linux arm64 and Windows x86_64 and the first nightly fuzz job could not be confirmed here. Judgement calls are in `docs/decisions-log.md`.
+
 ## Ground rules (identical in every milestone — read them completely before you start)
 
 These rules apply to every line of code in this repository. They are repeated in every milestone file so that each milestone is self-contained. If a rule and a milestone-specific instruction ever conflict, stop and ask; do not guess.
@@ -313,10 +319,10 @@ R1.2 commands; `cargo xtask schema` leaves the tree clean; `cargo test -p sdrk-p
 
 ## Deliverables checklist
 
-- [ ] Crate, layer registered
-- [ ] Model + JSON + format names
-- [ ] Registry, factories, schema + `cargo xtask schema`
-- [ ] Validation with diagnostics, build, limits, cost, buffers
-- [ ] Push runner, outputs, drop policies, `set_param`, `config`, `stats`
-- [ ] Example flows, invalid-flow corpus, property tests, fuzz target
-- [ ] `docs/pipeline.md`, CHANGELOG, decisions log
+- [x] Crate, layer registered
+- [x] Model + JSON + format names
+- [x] Registry, factories, schema + `cargo xtask schema`
+- [x] Validation with diagnostics, build, limits, cost, buffers
+- [x] Push runner, outputs, drop policies, `set_param`, `config`, `stats`
+- [x] Example flows, invalid-flow corpus, property tests, fuzz target
+- [x] `docs/pipeline.md`, CHANGELOG, decisions log

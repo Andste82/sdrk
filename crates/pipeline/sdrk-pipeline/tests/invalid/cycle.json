@@ -1,0 +1,29 @@
+{
+  "sdrk": 1,
+  "name": "t",
+  "inputs": {
+    "iq": {
+      "type": "c32",
+      "rate_hz": 48000
+    }
+  },
+  "nodes": {
+    "a": {
+      "kind": "scale"
+    },
+    "b": {
+      "kind": "scale"
+    }
+  },
+  "edges": [
+    {
+      "from": "a",
+      "to": "b"
+    },
+    {
+      "from": "b",
+      "to": "a"
+    }
+  ],
+  "outputs": {}
+}

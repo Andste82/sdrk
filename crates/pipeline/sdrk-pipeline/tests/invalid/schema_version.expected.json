@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "path": "sdrk",
+      "code": "schema_version"
+    }
+  ]
+}

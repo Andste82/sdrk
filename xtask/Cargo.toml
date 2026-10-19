@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 anyhow = "1.0.104"
 cargo_metadata = "0.20.0"
+sdrk-pipeline = { path = "../crates/pipeline/sdrk-pipeline" }
 walkdir = "2.5.0"
 
 [dev-dependencies]

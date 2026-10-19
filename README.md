@@ -29,9 +29,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo xtask check
 cargo xtask bare-metal
+cargo xtask schema --check
 ```
 
-`cargo xtask test-all` runs all of the above.
+`cargo xtask test-all` runs the first five. `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json` after a change of a block description; the pipeline model and its JSON format are described in [docs/pipeline.md](docs/pipeline.md).
 
 ## License
 

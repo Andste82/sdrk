@@ -1,0 +1,40 @@
+{
+  "sdrk": 1,
+  "name": "t",
+  "inputs": {
+    "iq": {
+      "type": "c32",
+      "rate_hz": 48000
+    }
+  },
+  "nodes": {
+    "g": {
+      "kind": "scale",
+      "params": {
+        "gain_db": -6
+      }
+    },
+    "h": {
+      "kind": "scale"
+    }
+  },
+  "edges": [
+    {
+      "from": "iq",
+      "to": "g"
+    },
+    {
+      "from": "g",
+      "to": "out"
+    },
+    {
+      "from": "g",
+      "to": "h"
+    }
+  ],
+  "outputs": {
+    "out": {
+      "type": "stream"
+    }
+  }
+}

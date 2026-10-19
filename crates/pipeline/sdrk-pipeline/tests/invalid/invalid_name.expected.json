@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "path": "nodes.Gain",
+      "code": "invalid_name"
+    }
+  ]
+}

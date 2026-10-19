@@ -1,0 +1,53 @@
+{
+  "sdrk": 1,
+  "name": "spectrum-only",
+  "description": "Averaged power spectrum of an RTL-SDR recording.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 8192
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2400000,
+      "description": "RTL-SDR IQ"
+    }
+  },
+  "nodes": {
+    "dc": {
+      "kind": "dc_block",
+      "params": {
+        "cutoff_hz": 100
+      }
+    },
+    "fft": {
+      "kind": "spectrum",
+      "params": {
+        "averaging": 8,
+        "fft_size": 2048,
+        "window": "blackman_harris"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "dc"
+    },
+    {
+      "from": "dc",
+      "to": "fft"
+    },
+    {
+      "from": "fft",
+      "to": "spectrum"
+    }
+  ],
+  "outputs": {
+    "spectrum": {
+      "type": "frames",
+      "queue": 8,
+      "drop": "drop_oldest"
+    }
+  }
+}

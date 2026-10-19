@@ -140,3 +140,7 @@ Tools.
 ## CI
 
 `count` runs `cargo xtask count --platform x86_64` on every pull request that touches `crates/core`, `crates/backends`, `crates/facade`, `benches` or `xtask`; the nightly run adds the platforms `x86_64-avx512`, `aarch64` and `wasm32`, the pipeline benchmark, and checks that the committed results are up to date. Instruction counts are deterministic, so the committed `benches/results/*.json` change only when the code, the toolchain, VOLK or rustfft change.
+
+## Cortex-M4 (fallback, report only)
+
+`cargo xtask count --platform cortex-m4` counts eleven kernels of the portable fallback on a Cortex-M4F in `qemu-system-arm` (the `insn` plugin) and writes `benches/results/cortex-m4.json`; the nightly job `count-embedded` runs it. The method is the differential one above, with the workload binary `count` of `targets/qemu-cortex-m4`; there are no limits and no comparison library yet (CMSIS-DSP comes with the `arm-dsp` backend). Details in [embedded.md](embedded.md#instruction-counts-cortex-m4). Note that the M4F has a single-precision FPU only: `convert_out_cs16` rounds in `f64` (R7) and so counts about a thousand instructions per sample in software floating point.

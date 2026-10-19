@@ -450,3 +450,113 @@ jobs:
           echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
       - name: Count
         run: cargo xtask count --platform ${{ matrix.platform }}
+
+  emu-tier1:
+    name: emu-tier1 (qemu-cortex-m4, quick)
+    # The testkit suite bare-metal on a Cortex-M4F in QEMU, on every push and pull request.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+      - name: Run the suite on the Cortex-M4F (quick)
+        run: cargo xtask emu --target qemu-cortex-m4
+      - name: Self-check, a failing case must make `xtask emu` exit with 1
+        # The feature `inject-failure` of the target appends one always-failing case.
+        run: |
+          set +e
+          cargo xtask emu --target qemu-cortex-m4 --features inject-failure
+          code=$?
+          echo "xtask emu exited with $code"
+          test "$code" -eq 1
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-tier1-logs
+          path: target/emu/*.log
+
+  emu-tier2:
+    name: emu-tier2 (${{ matrix.target }})
+    # Nightly: every tier 2 target quick, then the full profile. One job per target so that the
+    # slow esp-emu run does not delay the others.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [qemu-cortex-m4, qemu-cortex-m55, qemu-riscv32, esp32p4, esp32s3]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install QEMU
+        # `qemu-system-misc` holds the RISC-V machines on Ubuntu 24.04; newer releases split them
+        # into `qemu-system-riscv`.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm qemu-system-misc
+          command -v qemu-system-riscv32 || sudo apt-get install -y qemu-system-riscv
+      - name: Install esp-emu, the Espressif QEMU fork, espflash and the Xtensa Rust toolchain (pinned)
+        if: startsWith(matrix.target, 'esp')
+        run: cargo xtask emu --install
+      - name: Quick profile
+        run: cargo xtask emu --target ${{ matrix.target }}
+      - name: Full profile
+        run: cargo xtask emu --target ${{ matrix.target }} --full
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-tier2-logs-${{ matrix.target }}
+          path: target/emu/*.log
+
+  count-embedded:
+    name: count-embedded (cortex-m4, report only)
+    # Nightly: instructions per sample of the fallback on a Cortex-M4F; no limits yet.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      QEMU_VERSION: 10.2.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache QEMU with plugins
+        id: qemu-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/qemu-prefix
+          key: qemu-arm-softmmu-${{ env.QEMU_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Build QEMU (system mode, Arm) with plugin support
+        # The plugin API must match the plugin that `xtask` builds from the same tag.
+        if: steps.qemu-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev python3-venv
+          curl -fsSL "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz" | tar -xJ
+          mkdir qemu-build && cd qemu-build
+          ../qemu-$QEMU_VERSION/configure --prefix="$HOME/qemu-prefix" --target-list=arm-softmmu --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          ninja
+          ninja install
+      - name: Use QEMU
+        run: |
+          sudo apt-get install -y libglib2.0-dev pkg-config
+          echo "SDRK_QEMU_ARM=$HOME/qemu-prefix/bin/qemu-system-arm" >> "$GITHUB_ENV"
+          echo "SDRK_QEMU_TAG=v$QEMU_VERSION" >> "$GITHUB_ENV"
+      - name: Count
+        run: cargo xtask count --platform cortex-m4
+      - name: Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortex-m4-counts
+          path: benches/results/cortex-m4.json

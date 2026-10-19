@@ -50,4 +50,4 @@ In both cases the changes are on the *outside* of the model: a new runner for a 
 
 ## Automatic checks
 
-`cargo xtask check` runs `layers`, `heap`, `global-state` and `docs`; `cargo xtask bare-metal` builds every heap-free crate for `thumbv7em-none-eabihf`. `cargo xtask schema` writes the JSON Schema of the pipeline description from the block descriptions (`schema/sdrk-pipeline-v1.json`); `cargo xtask schema --check` fails if the committed file is out of date.
+`cargo xtask check` runs `layers`, `heap`, `global-state` and `docs`; `cargo xtask bare-metal` builds every heap-free crate for `thumbv7em-none-eabihf`. `cargo xtask schema` writes the JSON Schema of the pipeline description from the block descriptions (`schema/sdrk-pipeline-v1.json`); `cargo xtask schema --check` fails if the committed file is out of date. `cargo xtask emu` runs the testkit suite bare-metal in emulators ([embedded.md](embedded.md)); the projects below `targets/` are outside the workspace.

@@ -1,0 +1,33 @@
+# The testkit suite on a RISC-V rv32imac in QEMU (machine virt), nightly.
+[package]
+name = "sdrk-target-qemu-riscv32"
+description = "SDRk on-target suite for QEMU virt (RISC-V rv32imac)."
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# A project of its own, outside the main workspace.
+[workspace]
+
+[dependencies]
+sdrk-target-common = { path = "../common" }
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit" }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
+
+riscv-rt = { version = "0.18.0", features = ["single-hart"] }
+riscv-semihosting = "0.2.1"
+
+[features]
+# Run every case (the default is the quick tier).
+full = ["sdrk-target-common/full"]
+
+[profile.emu]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"

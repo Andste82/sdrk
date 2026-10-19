@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use crate::layers;
 use crate::scan::Finding;
 
-const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | schema [--check] | test-all | count --platform <p> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
+const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | schema [--check] | test-all | emu [options] | count --platform <p> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
 
 /// The bare-metal target used to prove that heap-free crates need no allocator.
 pub const BARE_METAL_TARGET: &str = "thumbv7em-none-eabihf";
@@ -33,6 +33,7 @@ pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
         ["schema"] => schema(root, false),
         ["schema", "--check"] => schema(root, true),
         ["test-all"] => test_all(root),
+        ["emu", rest @ ..] => crate::emu::run(root, rest),
         ["count", rest @ ..] => crate::count::run(root, rest),
         ["wasm-pkg", rest @ ..] => crate::wasm::wasm_pkg(root, rest),
         ["wasm-test", rest @ ..] => crate::wasm::wasm_test(root, rest),
@@ -149,6 +150,8 @@ fn bare_metal(root: &Path) -> anyhow::Result<bool> {
     Ok(ok)
 }
 
+/// `test-all`: the commands of R1.2, the tests of the WebAssembly package when Node.js is
+/// present, and the tier 1 emulator run (`emu --tier 1`).
 fn test_all(root: &Path) -> anyhow::Result<bool> {
     let steps: [(&str, &[&str]); 3] = [
         (
@@ -180,5 +183,26 @@ fn test_all(root: &Path) -> anyhow::Result<bool> {
     }
     ok &= check_all(root)?;
     ok &= bare_metal(root)?;
+    ok &= wasm_package_tests(root)?;
+    println!("==> cargo xtask emu --tier 1");
+    ok &= crate::emu::run(root, &["--tier", "1"])?;
     Ok(ok)
+}
+
+/// The WebAssembly package and its JavaScript tests, if Node.js is installed.
+fn wasm_package_tests(root: &Path) -> anyhow::Result<bool> {
+    let Some(path) = std::env::var_os("PATH") else {
+        return Ok(true);
+    };
+    let Some(node) = crate::wasm::find_program("node", &path) else {
+        println!("==> wasm-pkg tests skipped: node is not in PATH");
+        return Ok(true);
+    };
+    println!("==> cargo xtask wasm-pkg");
+    if !crate::wasm::wasm_pkg(root, &[])? {
+        return Ok(false);
+    }
+    let mut cmd = Command::new(node);
+    cmd.args(["--test", "bindings/wasm/js-tests/*.test.mjs"]);
+    run_step("node --test bindings/wasm/js-tests", cmd, root)
 }

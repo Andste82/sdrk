@@ -1,0 +1,35 @@
+# The testkit suite on an ESP32-S3 (Xtensa LX7) in the Espressif QEMU fork, nightly.
+[package]
+name = "sdrk-target-esp32s3"
+description = "SDRk on-target suite for the ESP32-S3 in the Espressif QEMU fork."
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# A project of its own, outside the main workspace.
+[workspace]
+
+[dependencies]
+sdrk-target-common = { path = "../common" }
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit" }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
+
+esp-hal = { version = "=1.2.2", features = ["esp32s3"] }
+esp-println = { version = "=0.18.0", default-features = false, features = ["esp32s3", "uart"] }
+esp-bootloader-esp-idf = { version = "=0.6.0", features = ["esp32s3"] }
+
+[features]
+# Run every case (the default is the quick tier).
+full = ["sdrk-target-common/full"]
+
+# Fat LTO breaks the Xtensa literal pool placement (`dangerous relocation: l32r`), so LTO is off here.
+[profile.emu]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true
+opt-level = "s"
+lto = "off"
+codegen-units = 1
+panic = "abort"

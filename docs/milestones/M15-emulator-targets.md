@@ -2,6 +2,13 @@
 
 > Plan: [PLAN.md › Phase 6](../PLAN.md#phase-6--embedded-in-emulators-medium) · Depends on: [M14](M14-wasm-bindings.md) · Next: [M16](M16-esp32-p4-pie-backend.md)
 
+## Status
+
+Complete on Linux x86-64: all deliverables and all acceptance criteria below were met locally (see "Status of the acceptance criteria" at the end of this file for the details and run times).
+
+- Fully completed: the five targets (`qemu-cortex-m4`, `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4`, `esp32s3`) with the shared `targets/common`; `cargo xtask emu` (`--install`, `--skip-missing`, `--list`, `--judge`, quick and full profiles, timeouts, logs); the `test-all` extension; the protocol parser and its negative tests; the `inject-failure` self-check; the 256 KiB arena host test; the Cortex-M4 instruction-count report; `docs/embedded.md`; the CI job definitions; the changelog and the decisions log. Quick and full profiles pass for every target; R1.2 commands, `cargo xtask check` and `cargo xtask bare-metal` pass.
+- Partial / open (tracked in [`docs/open-items.md`](../open-items.md)): M15-1 (CI jobs written but not run here), M15-2 (arm64 and Windows hosts untested), M15-3 (the ESP32-S3 target is emulator-only, no `esp_hal::init`), M15-4 (long-term availability of the binary-only emulators and the long ESP32-P4 full run).
+
 ## Goal
 
 Run the testkit suite (kernels and blocks, receive and transmit) bare-metal inside emulators: QEMU Cortex-M4 on every commit, ESP32-P4 (esp-emulator), ESP32-S3 (Espressif QEMU fork), RISC-V and Cortex-M55 (QEMU) nightly, with quick and full profiles, all driven by `cargo xtask emu` and `cargo xtask test-all`.
@@ -204,7 +211,31 @@ R1.2 commands; `cargo xtask emu --target qemu-cortex-m4` and `--full`; `cargo xt
 
 ## Deliverables checklist
 
-- [ ] Five targets with reporters, linker scripts, panic handlers
-- [ ] `xtask emu` (+ `--install`, `--skip-missing`), `test-all` extension, parser tests
-- [ ] Cortex-M4 instruction-count report
-- [ ] CI jobs, `docs/embedded.md`, CHANGELOG, decisions log
+- [x] Five targets with reporters, linker scripts, panic handlers (`targets/qemu-cortex-m4`, `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4`, `esp32s3` and the shared `targets/common`; the ESP targets use `esp-hal` 1.2.2, so the ESP-IDF fallback was not needed; the S3 target is emulator-only, open item M15-3)
+- [x] `xtask emu` (+ `--install`, `--skip-missing`, `--list`, `--judge`), `test-all` extension, parser tests (`xtask/tests/emu.rs`: 25 tests for the protocol judge, the arguments, the selection and the process handling)
+- [x] Cortex-M4 instruction-count report (`cargo xtask count --platform cortex-m4`, `benches/results/cortex-m4.json`)
+- [x] CI jobs, `docs/embedded.md`, CHANGELOG, decisions log (jobs `emu-tier1`, `emu-tier2`, `count-embedded`; written, but they could not run here, open item M15-1)
+
+### Status of the acceptance criteria
+
+| Criterion | State |
+| --- | --- |
+| R1.2 commands (fmt, clippy, tests, `xtask check`, `xtask bare-metal`), `cargo deny check` | pass locally on Linux x86_64 |
+| `cargo xtask emu --target qemu-cortex-m4` | passes (75 cases, about 3 minutes) |
+| `cargo xtask emu --target qemu-cortex-m4 --full` | passes (86 cases, about 16 minutes) |
+| `cargo xtask emu --tier 2` | passes for `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4` and `esp32s3` (75 cases each; see the table below for the times) |
+| Full profile of every tier 2 target | passes (86 cases each; see the table below) |
+| Negative tests of the parser | pass (`xtask/tests/emu.rs`) |
+| `--features inject-failure` makes `xtask emu` exit 1 | verified locally (exit code 1, `FAIL injected_failure`); the CI self-check step is written, not run (M15-1) |
+| Host test: the full suite fits a 256 KiB arena | passes (`full_suite_passes_with_a_256_kib_arena`) |
+| Instruction counts of the Cortex-M4 | reported for eleven kernels |
+
+Measured on a loaded 16-core Linux x86-64 machine (QEMU 10.2.1, Espressif QEMU 9.2.2, `esp-emu` 0.49.0):
+
+| Target | Quick (75 cases) | Full (86 cases) |
+| --- | --- | --- |
+| `qemu-cortex-m4` | 3 min | 16 min |
+| `qemu-cortex-m55` | 4 min | 26 min |
+| `qemu-riscv32` | 3 min | 20 min |
+| `esp32p4` | 28 min | 2 h 3 min (a parser bug of that run, the quoted `Exit-on string 'SDRK-SUITE END'` line of `esp-emu`, was fixed afterwards; the saved output passes `cargo xtask emu --judge`, 86 passed, 0 failed) |
+| `esp32s3` | 4 min | 29 min |

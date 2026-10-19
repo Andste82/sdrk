@@ -3,6 +3,7 @@
 import numpy as np
 import scipy.signal
 
+from .. import scalar_math
 from ..registry import Array, case
 
 WINDOWS = ("hann", "hamming", "blackman")
@@ -57,7 +58,7 @@ for _beta, _tag in ((0.5, "0p5"), (5.0, "5p0"), (8.6, "8p6")):
 @case(kernel="design", name="kaiserord_table", seed=0)
 def kaiserord_table(rng):
     ripple = np.linspace(20.0, 100.0, 20)
-    width = np.geomspace(0.01, 0.2, 20)
+    width = scalar_math.geomspace(0.01, 0.2, 20)
     taps = []
     beta = []
     for a, w in zip(ripple, width):

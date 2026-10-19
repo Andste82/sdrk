@@ -10,7 +10,7 @@ import math
 import numpy as np
 import scipy.signal
 
-from .. import design, q15
+from .. import design, q15, scalar_math
 from ..registry import Array, case
 
 # ---------------------------------------------------------------------------------------------
@@ -26,11 +26,11 @@ def ddc_c32(rng):
     fs, freq, dec = 2.4e6, 600e3, 10
     n = 20000
     t = np.arange(n)
-    x = 0.5 * np.exp(2j * np.pi * (freq + 50e3) * t / fs) + noise(rng, n, 0.05)
+    x = 0.5 * scalar_math.expj(2 * np.pi * (freq + 50e3) * t / fs) + noise(rng, n, 0.05)
     x = x.astype(np.complex64)
     cutoff, transition, att = 0.4 * fs / dec, 0.1 * fs / dec, 60.0
     h = design.lowpass(cutoff, transition, att, fs).astype(np.float32).astype(np.float64)
-    rotated = x.astype(np.complex128) * np.exp(-2j * np.pi * freq * t / fs)
+    rotated = x.astype(np.complex128) * scalar_math.expj(-2 * np.pi * freq * t / fs)
     expected = scipy.signal.upfirdn(h, rotated, 1, dec)[: -(-n // dec)]
     return dict(
         params={
@@ -62,13 +62,13 @@ def fm_demod_c32(rng):
     k = np.arange(n)
     audio_hz, amp, offset = 1000.0, 0.9, 5e3
     beta = dev * amp / audio_hz
-    phase = 2 * np.pi * np.modf(offset * k / fs)[0] + beta * (1.0 - np.cos(2 * np.pi * np.modf(audio_hz * k / fs)[0]))
-    x = np.exp(1j * phase).astype(np.complex64)
+    phase = 2 * np.pi * np.modf(offset * k / fs)[0] + beta * (1.0 - scalar_math.cos(2 * np.pi * np.modf(audio_hz * k / fs)[0]))
+    x = scalar_math.expj(phase).astype(np.complex64)
     xd = x.astype(np.complex128)
     prev = np.concatenate([[0.0 + 0.0j], xd[:-1]])
     gain = float(np.float32(fs / (2 * np.pi * dev)))
-    disc = np.angle(xd * np.conj(prev)) * gain
-    alpha = float(np.float32(1.0 - np.exp(-1.0 / (fs * tau_us * 1e-6))))
+    disc = scalar_math.angle(xd * np.conj(prev)) * gain
+    alpha = float(np.float32(1.0 - math.exp(-1.0 / (fs * tau_us * 1e-6))))
     deemph = scipy.signal.lfilter([alpha], [1.0, alpha - 1.0], disc)
     h = design.lowpass(cutoff, cutoff / 4.0, 60.0, fs).astype(np.float32).astype(np.float64)
     audio = scipy.signal.upfirdn(h, deemph, 1, dec)[: (n - 1) // dec + 1]
@@ -178,8 +178,8 @@ def resampler_tuned_c32(rng):
 
     out = []
     for n, p, mu, wrap in design.tuned_positions(TUNED_N, step):
-        a = np.dot(bank32[p], window(n))
-        b = np.dot(bank32[0], window(n, 1)) if wrap else np.dot(bank32[p + 1], window(n))
+        a = scalar_math.dot(window(n), bank32[p])
+        b = scalar_math.dot(window(n, 1), bank32[0]) if wrap else scalar_math.dot(window(n), bank32[p + 1])
         m = np.float32(mu / 65536.0).astype(np.float64)
         out.append(a * (1.0 - m) + b * m)
     expected = np.array(out)
@@ -241,19 +241,19 @@ TONE_AMP = 1.0 - 2.0**-15
 def spectrum_signal(rng):
     n = FFT * AVG
     k = np.arange(n)
-    return TONE_AMP * np.exp(2j * np.pi * BIN * k / FFT) + noise(rng, n, 0.01)
+    return TONE_AMP * scalar_math.expj(2 * np.pi * BIN * k / FFT) + noise(rng, n, 0.01)
 
 
 def spectrum_db(x):
     """Periodic Hann window, FFT, mean power over the windows, dB relative to (N * coherent gain)^2, fftshift."""
-    w = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(FFT) / FFT)
+    w = 0.5 - 0.5 * scalar_math.cos(2 * np.pi * np.arange(FFT) / FFT)
     cg = w.mean()
     power = np.zeros(FFT)
     for i in range(AVG):
         seg = x[i * FFT : (i + 1) * FFT] * w
         power += np.abs(np.fft.fft(seg)) ** 2
     power /= AVG
-    db = 10.0 * np.log10(np.maximum(power, 1e-20) / (FFT * cg) ** 2)
+    db = 10.0 * scalar_math.log10(np.maximum(power, 1e-20) / (FFT * cg) ** 2)
     return np.fft.fftshift(db)
 
 

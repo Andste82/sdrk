@@ -5,5 +5,7 @@
 //! the checks can be tested against small fake workspaces.
 
 pub mod commands;
+pub mod count;
 pub mod layers;
 pub mod scan;
+pub mod wasm;

@@ -3,18 +3,24 @@ resolver = "3"
 members = [
     "crates/core/sdrk-device",
     "crates/core/sdrk-core",
+    "crates/backends/sdrk-backend-simd",
     "crates/facade/sdrk",
     "crates/blocks/sdrk-blocks",
     "crates/pipeline/sdrk-pipeline",
+    "crates/io/sdrk-io",
+    "bindings/wasm",
+    "examples/fm-receiver",
+    "examples/fm-transmitter",
+    "tests/system",
     "crates/testing/sdrk-testkit",
     "xtask",
 ]
 
-exclude = ["crates/pipeline/sdrk-pipeline/fuzz"]
+exclude = ["crates/pipeline/sdrk-pipeline/fuzz", "benches"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Andste82/sdrk"
 version = "0.0.1"
@@ -26,6 +32,8 @@ bytemuck = { version = "1.25.2", features = ["derive"] }
 heapless = "0.9.3"
 
 [workspace.lints.rust]
+# `--cfg sdrk_fallback_only` (RUSTFLAGS) forces the portable fallback everywhere (M13).
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(sdrk_fallback_only)'] }
 # `deny`, not `forbid`: backend crates later allow unsafe locally.
 # Every non-backend library crate adds `#![forbid(unsafe_code)]` itself.
 unsafe_code = "deny"
@@ -51,13 +59,31 @@ cast_sign_loss = "allow"
 cast_precision_loss = "allow"
 cast_possible_wrap = "allow"
 float_cmp = "allow"
+# `as_chunks` returns array chunks that the kernels would have to index again; the length of
+# the chunk is a vector width in the backends and a format constant in the converters.
+chunks_exact_to_as_chunks = "allow"
 missing_errors_doc = "allow"
 must_use_candidate = "allow"
 
 [profile.dev]
 overflow-checks = true
 
+# The SIMD backend is unusably slow without optimisation (every vector operation is a call), so
+# it and the vector library are optimised in the dev and test profiles as well.
+[profile.dev.package.fearless_simd]
+opt-level = 3
+[profile.dev.package.sdrk-backend-simd]
+opt-level = 3
+
 [profile.test]
+overflow-checks = true
+
+# Test runs in emulators (QEMU, Intel SDE): optimised so that the end-to-end tests finish, but
+# without the whole-program build time of `release`.
+[profile.emulated]
+inherits = "release"
+lto = false
+codegen-units = 16
 overflow-checks = true
 
 [profile.release]

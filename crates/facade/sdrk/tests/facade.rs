@@ -9,6 +9,27 @@
 use sdrk::kernels::basic::Scale;
 use sdrk::{C32, CQ15, Error, Fallback, Q15, Result, SampleType, Sdrk, backend_for};
 
+/// The name `backend_for` reports for the accelerated kernels.
+const ACCEL: &str = if sdrk::SIMD_BACKEND {
+    "simd"
+} else {
+    "fallback"
+};
+
+/// The two results agree to within `1e-5` of the largest magnitude (float kernels whose
+/// accelerated variant forms its sums in a different order).
+fn assert_close(want: &[f32], got: &[f32]) {
+    let scale = want.iter().fold(1e-6f32, |m, v| m.max(v.abs()));
+    for (i, (w, g)) in want.iter().zip(got).enumerate() {
+        assert!((w - g).abs() <= 1e-5 * scale, "i={i} want={w} got={g}");
+    }
+    assert_eq!(want.len(), got.len());
+}
+
+fn flat(x: &[C32]) -> Vec<f32> {
+    x.iter().flat_map(|v| [v.re, v.im]).collect()
+}
+
 fn lcg(state: &mut u64) -> u32 {
     *state = state
         .wrapping_mul(6364136223846793005)
@@ -77,12 +98,16 @@ fn backend_table_lists_the_m05_kernels() {
     for (kernel, ty) in [
         ("convert", SampleType::C32),
         ("convert", SampleType::CQ15),
-        ("convert_real", SampleType::F32),
-        ("convert_real", SampleType::Q15),
         ("rotate", SampleType::C32),
         ("rotate", SampleType::CQ15),
         ("fir", SampleType::C32),
         ("fir", SampleType::CQ15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
+    }
+    for (kernel, ty) in [
+        ("convert_real", SampleType::F32),
+        ("convert_real", SampleType::Q15),
     ] {
         assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
     }
@@ -93,7 +118,7 @@ fn backend_table_lists_the_m05_kernels() {
 }
 
 #[test]
-fn m05_kernels_delegate_to_the_fallback() -> Result<()> {
+fn m05_kernels_agree_with_the_fallback() -> Result<()> {
     use sdrk::kernels::convert::{Convert, ConvertReal};
     use sdrk::kernels::filter::{Fir, FirState};
     use sdrk::kernels::mix::{Nco, Rotate};
@@ -125,7 +150,8 @@ fn m05_kernels_delegate_to_the_fallback() -> Result<()> {
     let (mut na, mut nb) = (Nco::from_increment(1234567), Nco::from_increment(1234567));
     Sdrk.rotate(&mut na, &c32, &mut a)?;
     Fallback.rotate(&mut nb, &c32, &mut b)?;
-    assert_eq!((a, na), (b, nb));
+    assert_close(&flat(&b), &flat(&a));
+    assert_eq!(na, nb);
 
     let cq: Vec<CQ15> = (0..200)
         .map(|_| CQ15 {
@@ -147,7 +173,8 @@ fn m05_kernels_delegate_to_the_fallback() -> Result<()> {
     let (mut a, mut b) = (vec![C32::default(); 200], vec![C32::default(); 200]);
     Sdrk.fir(&mut sa, &c32, &mut a)?;
     Fallback.fir(&mut sb, &c32, &mut b)?;
-    assert_eq!((a, sa.history()), (b, sb.history()));
+    assert_close(&flat(&b), &flat(&a));
+    assert_eq!(sa.history(), sb.history());
 
     let taps = [Q15(1000), Q15(-2000), Q15(30000)];
     let (mut sa, mut sb) = (
@@ -168,18 +195,22 @@ fn backend_table_lists_the_m06_kernels() {
         ("fir_decimate", SampleType::CQ15),
         ("resample", SampleType::C32),
         ("resample", SampleType::CQ15),
-        ("resample_real", SampleType::F32),
-        ("resample_real", SampleType::Q15),
         ("quad_demod", SampleType::C32),
         ("quad_demod", SampleType::CQ15),
+        ("mag_sq", SampleType::C32),
+        ("mag_sq", SampleType::CQ15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
+    }
+    for (kernel, ty) in [
+        ("resample_real", SampleType::F32),
+        ("resample_real", SampleType::Q15),
         ("deemphasis", SampleType::F32),
         ("deemphasis", SampleType::Q15),
         ("dc_block", SampleType::C32),
         ("dc_block", SampleType::CQ15),
         ("window", SampleType::C32),
         ("window", SampleType::CQ15),
-        ("mag_sq", SampleType::C32),
-        ("mag_sq", SampleType::CQ15),
         ("power_db", SampleType::F32),
         ("power_db", SampleType::Q15),
     ] {
@@ -192,7 +223,7 @@ fn backend_table_lists_the_m06_kernels() {
 }
 
 #[test]
-fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
+fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     use sdrk::Rate;
     use sdrk::kernels::decim::{
         FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
@@ -229,7 +260,9 @@ fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
         Sdrk.fir_decimate(&mut sa, &c32, &mut a)?,
         Fallback.fir_decimate(&mut sb, &c32, &mut b)?,
     );
-    assert_eq!((pa, a, sa.history()), (pb, b, sb.history()));
+    assert_eq!(pa, pb);
+    assert_close(&flat(&b[..pb.produced]), &flat(&a[..pa.produced]));
+    assert_eq!(sa.history(), sb.history());
     let (mut sa, mut sb) = (
         FirDecimState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 2], 4)?,
         FirDecimState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 2], 4)?,
@@ -250,7 +283,9 @@ fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
         Sdrk.resample(&mut sa, &c32, &mut a)?,
         Fallback.resample(&mut sb, &c32, &mut b)?,
     );
-    assert_eq!((pa, a, sa.phase()), (pb, b, sb.phase()));
+    assert_eq!(pa, pb);
+    assert_close(&flat(&b[..pb.produced]), &flat(&a[..pa.produced]));
+    assert_eq!(sa.phase(), sb.phase());
     let (mut sa, mut sb) = (
         ResampleState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 1], 3, 2)?,
         ResampleState::<CQ15, _, _>::new(tapsq, [CQ15::default(); 1], 3, 2)?,
@@ -288,12 +323,16 @@ fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
     let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
     Sdrk.quad_demod(&mut sa, &c32, &mut a, 0.7)?;
     Fallback.quad_demod(&mut sb, &c32, &mut b, 0.7)?;
-    assert_eq!((a, sa), (b, sb));
+    assert_close(&b, &a);
+    assert_eq!(sa, sb);
     let (mut sa, mut sb) = (QuadDemodState::<CQ15>::new(), QuadDemodState::<CQ15>::new());
     let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
     Sdrk.quad_demod(&mut sa, &cq, &mut a, Q15(20000))?;
     Fallback.quad_demod(&mut sb, &cq, &mut b, Q15(20000))?;
-    assert_eq!((a, sa), (b, sb));
+    for (w, g) in b.iter().zip(&a) {
+        assert!((i32::from(w.0) - i32::from(g.0)).abs() <= 2);
+    }
+    assert_eq!(sa, sb);
 
     let rate = Rate::hz(48_000)?;
     let (mut sa, mut sb) = (
@@ -341,7 +380,18 @@ fn m06_kernels_delegate_to_the_fallback() -> Result<()> {
     let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
     Sdrk.mag_sq(&c32, &mut a)?;
     Fallback.mag_sq(&c32, &mut b)?;
-    assert_eq!(a, b);
+    if cfg!(all(
+        feature = "relaxed-simd",
+        target_arch = "wasm32",
+        target_feature = "relaxed-simd"
+    )) {
+        // Relaxed multiply-add: not bit-exact; at most a few ulp apart.
+        for (x, y) in a.iter().zip(&b) {
+            assert!((x - y).abs() <= 4.0 * f32::EPSILON * y.abs(), "{x} {y}");
+        }
+    } else {
+        assert_eq!(a, b);
+    }
     let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
     Sdrk.mag_sq(&cq, &mut a)?;
     Fallback.mag_sq(&cq, &mut b)?;
@@ -383,4 +433,48 @@ fn m09_dot_kernels_delegate_to_the_fallback() -> Result<()> {
     assert_eq!(Sdrk.dot_real(&[1.0f32, 2.0], &[3.0, 4.0])?, 11.0);
     assert!(Sdrk.dot(&x, &taps[..1]).is_err());
     Ok(())
+}
+
+#[test]
+fn m13_every_accelerated_kernel_reports_the_simd_backend() {
+    let accelerated = [
+        "convert",
+        "convert_out",
+        "rotate",
+        "fir",
+        "fir_decimate",
+        "fir_interpolate",
+        "resample",
+        "mag_sq",
+        "quad_demod",
+        "fm_mod",
+        "fft",
+    ];
+    // `simd` unless the feature is off, the build forces the fallback (`--cfg
+    // sdrk_fallback_only`) or the target has no SIMD instructions.
+    let expected = ACCEL;
+    #[cfg(sdrk_fallback_only)]
+    assert_eq!(expected, "fallback");
+    #[cfg(all(
+        not(sdrk_fallback_only),
+        feature = "simd",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ))]
+    assert_eq!(expected, "simd");
+    for kernel in accelerated {
+        for ty in [SampleType::C32, SampleType::CQ15] {
+            assert_eq!(backend_for(kernel, ty), expected, "{kernel} {ty:?}");
+        }
+    }
+    // Everything else stays with the fallback or the chained fused kernels.
+    for (kernel, ty) in [
+        ("scale", SampleType::C32),
+        ("window", SampleType::C32),
+        ("deemphasis", SampleType::F32),
+        ("rfft", SampleType::F32),
+        ("dot", SampleType::C32),
+    ] {
+        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("ddc", SampleType::C32), "chained");
 }

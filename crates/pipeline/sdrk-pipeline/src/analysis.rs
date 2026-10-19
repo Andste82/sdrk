@@ -223,14 +223,14 @@ pub(crate) fn analyze(registry: &Registry, spec: &PipelineSpec, opts: &BuildOpti
 // ------------------------------------------------------------------ stage 1
 
 fn check_description(description: Option<&String>, path: &str, report: &mut Report) {
-    if let Some(d) = description {
-        if d.chars().count() > MAX_DESCRIPTION_CHARS {
-            report.error(
-                join(path, "description"),
-                DiagCode::OutOfRange,
-                format!("a description has at most {MAX_DESCRIPTION_CHARS} characters"),
-            );
-        }
+    if let Some(d) = description
+        && d.chars().count() > MAX_DESCRIPTION_CHARS
+    {
+        report.error(
+            join(path, "description"),
+            DiagCode::OutOfRange,
+            format!("a description has at most {MAX_DESCRIPTION_CHARS} characters"),
+        );
     }
 }
 
@@ -328,16 +328,17 @@ fn check_groups(spec: &PipelineSpec, report: &mut Report) {
         check_description(group.description.as_ref(), &path, report);
     }
     for (name, node) in &spec.nodes {
-        if let Some(group) = &node.group {
-            if group != MAIN_GROUP && !spec.groups.contains_key(group) {
-                report.error(
+        if let Some(group) = &node.group
+            && group != MAIN_GROUP
+            && !spec.groups.contains_key(group)
+        {
+            report.error(
                     join(&join("nodes", name), "group"),
                     DiagCode::UnknownGroup,
                     format!(
                         "the group `{group}` is not declared in `groups` (nodes without a group are in `{MAIN_GROUP}`)"
                     ),
                 );
-            }
         }
     }
 }
@@ -435,14 +436,14 @@ fn check_outputs(spec: &PipelineSpec, report: &mut Report) {
 }
 
 fn check_range(value: Option<usize>, max: usize, key: &str, path: &str, report: &mut Report) {
-    if let Some(v) = value {
-        if !(1..=max).contains(&v) {
-            report.error(
-                join(path, key),
-                DiagCode::OutOfRange,
-                format!("{key} is 1 to {max}, got {v}"),
-            );
-        }
+    if let Some(v) = value
+        && !(1..=max).contains(&v)
+    {
+        report.error(
+            join(path, key),
+            DiagCode::OutOfRange,
+            format!("{key} is 1 to {max}, got {v}"),
+        );
     }
 }
 
@@ -743,16 +744,15 @@ impl<'a> Stage2<'a> {
         let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
         let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for name in spec.nodes.keys() {
-            if let Some(&k) = self.incoming.get(name.as_str()) {
-                if let Some(edge) = spec.edges.get(k) {
-                    if spec.nodes.contains_key(&edge.from) {
-                        parent.insert(name.as_str(), edge.from.as_str());
-                        children
-                            .entry(edge.from.as_str())
-                            .or_default()
-                            .push(name.as_str());
-                    }
-                }
+            if let Some(&k) = self.incoming.get(name.as_str())
+                && let Some(edge) = spec.edges.get(k)
+                && spec.nodes.contains_key(&edge.from)
+            {
+                parent.insert(name.as_str(), edge.from.as_str());
+                children
+                    .entry(edge.from.as_str())
+                    .or_default()
+                    .push(name.as_str());
             }
         }
         let mut ready: BTreeSet<(usize, &str)> = spec
@@ -790,12 +790,11 @@ impl<'a> Stage2<'a> {
                     match state.get(n) {
                         Some(1) => {
                             // A cycle: the walk from `n` onwards.
-                            if let Some(pos) = walk.iter().position(|w| *w == n) {
-                                if let Some(best) =
+                            if let Some(pos) = walk.iter().position(|w| *w == n)
+                                && let Some(best) =
                                     walk.iter().skip(pos).min_by_key(|w| (prio(w), **w))
-                                {
-                                    found.push(best);
-                                }
+                            {
+                                found.push(best);
                             }
                             break;
                         }

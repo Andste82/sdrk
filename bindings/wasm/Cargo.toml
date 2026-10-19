@@ -1,0 +1,39 @@
+[package]
+name = "sdrk-wasm"
+description = "SDRk WebAssembly bindings: the pipeline API for JavaScript (browsers and Node)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# Relaxed SIMD multiply-add in the C32 kernels; takes effect only when the build also sets the
+# target feature `relaxed-simd` (the `relaxed` variant of `cargo xtask wasm-pkg --relaxed`).
+relaxed-simd = ["sdrk/relaxed-simd"]
+
+[dependencies]
+sdrk = { path = "../../crates/facade/sdrk", features = ["std"] }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
+sdrk-device = { path = "../../crates/core/sdrk-device" }
+sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline", default-features = false }
+bytemuck.workspace = true
+serde_json = "1.0.154"
+# The exact version must equal the `wasm-bindgen-cli` that `cargo xtask wasm-pkg` runs (xtask
+# checks this).
+wasm-bindgen = "=0.2.129"
+js-sys = "0.3.106"
+console_error_panic_hook = "0.1.7"
+
+[dev-dependencies]
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit", features = ["std"] }
+num-complex.workspace = true
+wasm-bindgen-test = "0.3.79"
+
+[lints]
+workspace = true

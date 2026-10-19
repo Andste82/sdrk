@@ -66,7 +66,8 @@ impl FmModState {
         self.k
     }
 
-    pub(crate) fn parts_mut(&mut self) -> (f64, &mut u32) {
+    /// The scale and the phase accumulator at once, for kernel implementations in backend crates.
+    pub fn parts_mut(&mut self) -> (f64, &mut u32) {
         (self.k, &mut self.phase)
     }
 }

@@ -1,0 +1,16 @@
+[package]
+name = "pipeline-bench"
+description = "Instruction count and latency of the FM receiver flow at 2.4 MHz."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "pipeline"
+path = "src/main.rs"
+
+[dependencies]
+# The pipeline selects the SIMD level at run time (the facade feature `std`).
+sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline", default-features = false }

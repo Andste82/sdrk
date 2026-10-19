@@ -79,6 +79,19 @@
 //! | `block_fm_demod_sinad` | quick | about 45 KiB |
 //! | `block_spectrum_tone_level` | quick | about 34 KiB |
 //! | `block_resampler_ppm_count` | quick | about 24 KiB |
+//! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
+//! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
+//! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_fir` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_fir_decimate` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_fir_interpolate` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_mag_sq` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_quad_demod` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_fm_mod` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_fft` | quick | up to 62 KiB |
+//!
+//! The `backend_vs_fallback_*` cases take the lengths of the matrix (0 to 4096 samples) that
+//! fit the arena they get, so the quick tier runs the shorter ones and the full tier all.
 
 // The stack-frame lint counts every `Result<_, Failure>` temporary of an
 // unoptimised build separately (a `Failure` is about 200 bytes by
@@ -107,8 +120,9 @@ mod m06;
 mod m07;
 mod m08;
 mod m09;
+mod m13;
 
-pub(crate) static CASES: [TestCase; 76] = [
+pub(crate) static CASES: [TestCase; 86] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -488,6 +502,56 @@ pub(crate) static CASES: [TestCase; 76] = [
         name: "block_resampler_ppm_count",
         tier: Tier::Quick,
         run: m09::block_resampler_ppm_count,
+    },
+    TestCase {
+        name: "backend_vs_fallback_convert",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_convert,
+    },
+    TestCase {
+        name: "backend_vs_fallback_convert_out",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_convert_out,
+    },
+    TestCase {
+        name: "backend_vs_fallback_rotate",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_rotate,
+    },
+    TestCase {
+        name: "backend_vs_fallback_fir",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_fir,
+    },
+    TestCase {
+        name: "backend_vs_fallback_fir_decimate",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_fir_decimate,
+    },
+    TestCase {
+        name: "backend_vs_fallback_fir_interpolate",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_fir_interpolate,
+    },
+    TestCase {
+        name: "backend_vs_fallback_mag_sq",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_mag_sq,
+    },
+    TestCase {
+        name: "backend_vs_fallback_quad_demod",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_quad_demod,
+    },
+    TestCase {
+        name: "backend_vs_fallback_fm_mod",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_fm_mod,
+    },
+    TestCase {
+        name: "backend_vs_fallback_fft",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_fft,
     },
 ];
 

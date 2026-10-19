@@ -65,8 +65,8 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>>
         self.hist.as_ref()
     }
 
-    /// Taps and mutable history at once (for kernel implementations).
-    pub(crate) fn parts_mut(&mut self) -> (&[T::Real], &mut [T]) {
+    /// Taps and mutable history at once, for kernel implementations in backend crates.
+    pub fn parts_mut(&mut self) -> (&[T::Real], &mut [T]) {
         (self.taps.as_ref(), self.hist.as_mut())
     }
 }

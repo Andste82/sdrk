@@ -367,10 +367,10 @@ fn drain(p: &mut sdrk_pipeline::Pipeline, oname: &str) {
                 .map(|_| ())
                 .ok()
                 .and_then(|()| frame_len(p, oname));
-            if let Some(len) = len {
-                if let Ok(Some(_)) = p.read_frame(oname, &mut frame[..len]) {
-                    moved = true;
-                }
+            if let Some(len) = len
+                && let Ok(Some(_)) = p.read_frame(oname, &mut frame[..len])
+            {
+                moved = true;
             }
         }
         if !moved {

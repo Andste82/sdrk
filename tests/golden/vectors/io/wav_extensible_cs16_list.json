@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "file": {
+      "dtype": "u8",
+      "file": "wav_extensible_cs16_list.file.bin",
+      "len": 158
+    },
+    "samples": {
+      "dtype": "ci16",
+      "file": "wav_extensible_cs16_list.samples.bin",
+      "len": 16
+    }
+  },
+  "case": "wav_extensible_cs16_list",
+  "format_version": 1,
+  "kernel": "io",
+  "notes": "WAVE_FORMAT_EXTENSIBLE with a LIST chunk (odd size, pad byte) before data; read only",
+  "params": {
+    "channels": 2,
+    "format": "cs16",
+    "iq": true,
+    "rate": 96000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

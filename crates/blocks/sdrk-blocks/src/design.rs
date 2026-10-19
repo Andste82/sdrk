@@ -241,7 +241,7 @@ pub fn kaiserord(ripple_db: f64, transition_hz: f64, fs_hz: f64) -> Result<(usiz
         });
     }
     let mut n = libm::ceil(num) as usize;
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         n += 1;
     }
     Ok((n, kaiser_beta(a)))

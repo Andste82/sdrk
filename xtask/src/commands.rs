@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use crate::layers;
 use crate::scan::Finding;
 
-const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | schema [--check] | test-all>";
+const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | schema [--check] | test-all | count --platform <p> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
 
 /// The bare-metal target used to prove that heap-free crates need no allocator.
 pub const BARE_METAL_TARGET: &str = "thumbv7em-none-eabihf";
@@ -33,6 +33,9 @@ pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
         ["schema"] => schema(root, false),
         ["schema", "--check"] => schema(root, true),
         ["test-all"] => test_all(root),
+        ["count", rest @ ..] => crate::count::run(root, rest),
+        ["wasm-pkg", rest @ ..] => crate::wasm::wasm_pkg(root, rest),
+        ["wasm-test", rest @ ..] => crate::wasm::wasm_test(root, rest),
         _ => bail!("{USAGE}"),
     }
 }

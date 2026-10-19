@@ -112,7 +112,7 @@ fn an_undeclared_group_is_an_error() {
 #[test]
 fn a_required_backend_that_is_not_available_fails() {
     let mut v = grouped();
-    v["nodes"]["tune"]["backend"] = json!({ "require": "simd" });
+    v["nodes"]["tune"]["backend"] = json!({ "require": "gpu" });
     let report = validate(&v);
     assert_eq!(report.errors.len(), 1, "{}", report.to_json());
     assert_eq!(report.errors[0].code, DiagCode::BackendUnavailable);
@@ -122,7 +122,8 @@ fn a_required_backend_that_is_not_available_fails() {
         "{}",
         report.errors[0].message
     );
-    // The fallback is there for every kind of node of the example flows.
+    // Every kind of node of the example flows has a backend: the fallback is required when the
+    // build forces it, otherwise it is only preferred (the accelerated kernels run on `simd`).
     for name in [
         "fm_receiver",
         "spectrum_only",
@@ -130,12 +131,19 @@ fn a_required_backend_that_is_not_available_fails() {
         "fm_transmitter",
     ] {
         let mut v: Value = serde_json::from_str(&flow(name)).unwrap();
+        let key = if sdrk::SIMD_BACKEND {
+            "prefer"
+        } else {
+            "require"
+        };
         for node in v["nodes"].as_object_mut().unwrap().values_mut() {
-            node["backend"] = json!({ "require": "fallback" });
+            node["backend"] = json!({ key: "fallback" });
         }
         let report = validate(&v);
         assert!(report.is_ok(), "{name}: {}", report.to_json());
-        assert!(report.warnings.is_empty(), "{name}: {}", report.to_json());
+        if !sdrk::SIMD_BACKEND {
+            assert!(report.warnings.is_empty(), "{name}: {}", report.to_json());
+        }
     }
     // The block lists the kernels it calls.
     let registry = Registry::standard();
@@ -146,9 +154,34 @@ fn a_required_backend_that_is_not_available_fails() {
 }
 
 #[test]
+fn the_simd_backend_is_available_unless_the_build_forces_the_fallback() {
+    // `ddc` calls `rotate` and `fir_decimate` (both accelerated) and the chained `ddc`.
+    let mut v = grouped();
+    v["nodes"]["tune"]["backend"] = json!({ "require": "simd" });
+    let report = validate(&v);
+    if sdrk::SIMD_BACKEND {
+        assert!(report.is_ok(), "{}", report.to_json());
+    } else {
+        assert_eq!(report.errors.len(), 1, "{}", report.to_json());
+        assert_eq!(report.errors[0].code, DiagCode::BackendUnavailable);
+    }
+    // A node that calls a kernel without a SIMD variant cannot require it.
+    v["nodes"]["demod"]["backend"] = json!({ "require": "simd" });
+    let report = validate(&v);
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|d| d.path == "nodes.demod.backend.require"),
+        "{}",
+        report.to_json()
+    );
+}
+
+#[test]
 fn a_preferred_backend_that_is_not_available_is_a_warning() {
     let mut v = grouped();
-    v["nodes"]["tune"]["backend"] = json!({ "prefer": "simd" });
+    v["nodes"]["tune"]["backend"] = json!({ "prefer": "gpu" });
     let report = validate(&v);
     assert!(report.is_ok());
     assert_eq!(report.warnings.len(), 1);

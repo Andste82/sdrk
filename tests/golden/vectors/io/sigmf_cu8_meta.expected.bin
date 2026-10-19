@@ -1,0 +1,54 @@
+{
+  "annotations": [
+    {
+      "core:freq_lower_edge": -50000.0,
+      "core:freq_upper_edge": 50000.0,
+      "core:label": "carrier",
+      "core:sample_count": 100,
+      "core:sample_start": 0
+    },
+    {
+      "core:comment": "burst after the gap",
+      "core:sample_count": 300,
+      "core:sample_start": 1500
+    },
+    {
+      "core:sample_count": 10,
+      "core:sample_start": 1900
+    }
+  ],
+  "captures": [
+    {
+      "core:datetime": "2023-11-14T22:13:20.123456789Z",
+      "core:frequency": 100000000.0,
+      "core:sample_start": 0
+    },
+    {
+      "core:frequency": 100000000.0,
+      "core:global_index": 1700,
+      "core:sample_start": 1500
+    },
+    {
+      "core:frequency": 101000000.0,
+      "core:global_index": 2000,
+      "core:sample_start": 1800
+    },
+    {
+      "core:frequency": 101000000.0,
+      "core:global_index": 2100,
+      "core:sample_start": 1900
+    },
+    {
+      "core:datetime": "2023-11-14T22:13:21Z",
+      "core:frequency": 101000000.0,
+      "core:global_index": 2200,
+      "core:sample_start": 2000
+    }
+  ],
+  "global": {
+    "core:datatype": "cu8",
+    "core:description": "gap, retune and anchor test",
+    "core:sample_rate": 2400000,
+    "core:version": "1.2.0"
+  }
+}

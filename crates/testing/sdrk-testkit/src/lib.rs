@@ -19,6 +19,9 @@
 //! - [`arena`]: a bump allocator over a caller buffer (no heap),
 //! - [`encode`]: the independent raw-format encoder and decoder (oracle),
 //! - [`virtual_rx`]: a minimal virtual receiver,
+//! - [`virtual_tx`]: a virtual transmitter that records writes and injects statuses,
+//! - [`conformance`]: `check_rx` and `check_tx`, the conformance checks for stream implementations,
+//! - `channel` (feature `std`): the `Loopback` channel simulator (delay, attenuation, frequency offset, noise),
 //! - [`suite`]: the runner that executes registered cases on any target.
 //!
 //! ```
@@ -44,6 +47,9 @@
 extern crate std;
 
 pub mod arena;
+#[cfg(feature = "std")]
+pub mod channel;
+pub mod conformance;
 pub mod design_helpers;
 pub mod e2e;
 pub mod encode;
@@ -59,6 +65,7 @@ pub mod rng;
 pub mod storage;
 pub mod suite;
 pub mod virtual_rx;
+pub mod virtual_tx;
 
 mod cases;
 
@@ -72,3 +79,4 @@ pub use storage::VecStorage;
 pub use suite::StdReporter;
 pub use suite::{Failure, Reporter, Summary, TestCase, Tier, WriteReporter, all_cases, run_suite};
 pub use virtual_rx::{NoiseSource, SignalSource, SumSource, ToneSource, VirtualRx};
+pub use virtual_tx::{TxRecord, VirtualTx};

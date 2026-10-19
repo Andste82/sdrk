@@ -194,7 +194,7 @@ where
     T: E2eSample,
     K: RxKernels<T>,
 {
-    if samples % CHUNK != 0 {
+    if !samples.is_multiple_of(CHUNK) {
         return Err(fail("sample count is not a multiple of the block size"));
     }
     let if_rate = Rate::hz(IF_RATE_HZ)?;
@@ -291,7 +291,7 @@ where
     Sdrk:
         Convert<T> + Ddc<T> + FmDemod<T> + QuadDemod<T> + ResampleReal<<T as ComplexSample>::Real>,
 {
-    if samples % CHUNK != 0 {
+    if !samples.is_multiple_of(CHUNK) {
         return Err(fail("sample count is not a multiple of the block size"));
     }
     let if_rate = Rate::hz(IF_RATE_HZ)?;
@@ -443,7 +443,7 @@ where
     /// Writes the next block of [`CHUNK`] samples as raw bytes. `start` must be the index of
     /// the first sample of the block and follow the previous block directly.
     pub fn fill(&mut self, start: u64, bytes: &mut [u8]) -> Result<(), Failure> {
-        if start != self.next || start % CHUNK as u64 != 0 {
+        if start != self.next || !start.is_multiple_of(CHUNK as u64) {
             return Err(fail("transmit blocks must be consecutive"));
         }
         let first_audio = start / 50;

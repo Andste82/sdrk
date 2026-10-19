@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "file": {
+      "dtype": "u8",
+      "file": "wav_extensible_rf32_mono.file.bin",
+      "len": 132
+    },
+    "samples": {
+      "dtype": "f32",
+      "file": "wav_extensible_rf32_mono.samples.bin",
+      "len": 16
+    }
+  },
+  "case": "wav_extensible_rf32_mono",
+  "format_version": 1,
+  "kernel": "io",
+  "notes": "WAVE_FORMAT_EXTENSIBLE float mono; read only",
+  "params": {
+    "channels": 1,
+    "format": "rf32",
+    "iq": false,
+    "rate": 44100
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

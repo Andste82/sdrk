@@ -1,0 +1,19 @@
+[package]
+name = "sdrk-io"
+description = "SDRk file I/O: raw, SigMF (with captures and annotations) and WAV as RX/TX streams."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk-device = { path = "../../core/sdrk-device" }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
+tempfile = "3.27.0"
+
+[lints]
+workspace = true

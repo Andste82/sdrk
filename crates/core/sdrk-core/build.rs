@@ -78,14 +78,14 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     let mut src = String::new();
     src.push_str("/// `cos(2 pi k / 4096)` as f32 for `k` in `0..=4096` (the last entry closes the period).\n");
-    writeln!(src, "pub(crate) static COS_F32: [f32; {}] = [", SIZE + 1).unwrap();
+    writeln!(src, "pub static COS_F32: [f32; {}] = [", SIZE + 1).unwrap();
     for k in 0..=SIZE {
         let c = libm::cos(2.0 * core::f64::consts::PI * k as f64 / SIZE as f64);
         writeln!(src, "    {:?}_f32,", c as f32).unwrap();
     }
     src.push_str("];\n\n");
     src.push_str("/// The same table rounded to Q15 raw values.\n");
-    writeln!(src, "pub(crate) static COS_Q15: [i16; {}] = [", SIZE + 1).unwrap();
+    writeln!(src, "pub static COS_Q15: [i16; {}] = [", SIZE + 1).unwrap();
     for k in 0..=SIZE {
         let c = libm::cos(2.0 * core::f64::consts::PI * k as f64 / SIZE as f64);
         writeln!(src, "    {},", q15_from_f64(c)).unwrap();

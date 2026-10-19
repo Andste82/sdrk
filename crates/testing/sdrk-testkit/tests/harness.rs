@@ -147,7 +147,7 @@ fn invariance_handles_partial_consumption_and_decimation() {
         let n = i.len().min(3);
         let mut produced = 0;
         for x in &i[..n] {
-            if *phase % 2 == 0 {
+            if (*phase).is_multiple_of(2) {
                 o[produced] = *x;
                 produced += 1;
             }
@@ -668,7 +668,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[test]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 76);
+    assert_eq!(cases.len(), 86);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));

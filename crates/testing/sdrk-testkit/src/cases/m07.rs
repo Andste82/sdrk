@@ -107,13 +107,17 @@ fn c32_vs_reference(
         ensure(want == got && got == via, || {
             Failure::new(case, "exponent differs").detail(format_args!("{want:?} {got:?} {via:?}"))
         })?;
-        ensure(bit_exact(fb, fac).is_none(), || {
-            Failure::new(case, "facade differs from the fallback")
-        })?;
         min_snr(
             case,
             "below 110 dB against the reference",
             snr_db(to_c64(rf), to_c64(fb)),
+            110.0,
+        )?;
+        // The SIMD backend fuses stages: it meets the contract of the kernel.
+        min_snr(
+            case,
+            "facade below 110 dB against the reference",
+            snr_db(to_c64(rf), to_c64(fac)),
             110.0,
         )?;
     }

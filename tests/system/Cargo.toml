@@ -1,0 +1,23 @@
+[package]
+name = "sdrk-system-tests"
+description = "SDRk system tests: flows over the loopback channel, burst timing, long runs, event propagation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+num-complex.workspace = true
+sdrk = { path = "../../crates/facade/sdrk", features = ["std"] }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
+sdrk-device = { path = "../../crates/core/sdrk-device" }
+sdrk-io = { path = "../../crates/io/sdrk-io" }
+sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline" }
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit", features = ["std"] }
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+
+[lints]
+workspace = true

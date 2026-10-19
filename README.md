@@ -19,6 +19,10 @@ Foundation stage: the workspace, the layer rules and their automatic checks exis
 - Project plan: [docs/PLAN.md](docs/PLAN.md)
 - Milestones: [docs/milestones/README.md](docs/milestones/README.md)
 - Architecture: [docs/architecture.md](docs/architecture.md)
+- Device API and conformance checks: [docs/device.md](docs/device.md); file I/O: [docs/io.md](docs/io.md); virtual devices, loopback channel and system tests: [docs/testing.md](docs/testing.md)
+- Backends and the SIMD levels: [docs/backends.md](docs/backends.md); instruction counts against VOLK and rustfft: [docs/performance.md](docs/performance.md)
+- WebAssembly bindings and the npm package: [docs/wasm.md](docs/wasm.md)
+- Command-line examples: [examples/README.md](examples/README.md)
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Development
@@ -32,7 +36,9 @@ cargo xtask bare-metal
 cargo xtask schema --check
 ```
 
-`cargo xtask test-all` runs the first five. `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json` after a change of a block description; the pipeline model and its JSON format are described in [docs/pipeline.md](docs/pipeline.md).
+The WebAssembly package is built with `cargo xtask wasm-pkg` (needs `wasm-bindgen-cli`, see [docs/wasm.md](docs/wasm.md)).
+
+`cargo xtask test-all` runs the first five. `cargo xtask count --platform x86_64` measures the instructions per sample of the SIMD kernels against VOLK and rustfft (needs valgrind and `libvolk-dev`, see [docs/performance.md](docs/performance.md)); `RUSTFLAGS="--cfg sdrk_fallback_only"` makes the facade use the portable fallback everywhere. `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json` after a change of a block description; the pipeline model and its JSON format are described in [docs/pipeline.md](docs/pipeline.md).
 
 ## License
 

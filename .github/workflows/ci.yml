@@ -37,6 +37,17 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --workspace --all-features
+      - name: Test with AVX2 fixed at compile time (x86-64 hosts)
+        if: runner.arch == 'X64'
+        env:
+          RUSTFLAGS: "-C target-cpu=x86-64-v3"
+        run: cargo test --workspace --all-features --target-dir target/x86-64-v3
+      - name: Test with the fallback only
+        # `sdrk_fallback_only` is a cfg flag, not a feature: `--all-features` would switch a
+        # feature on and silently disable the backend.
+        env:
+          RUSTFLAGS: "--cfg sdrk_fallback_only"
+        run: cargo test --workspace --all-features --target-dir target/fallback-only
       - name: Pipeline tests without YAML
         run: cargo test -p sdrk-pipeline --no-default-features
       - name: Architecture checks
@@ -99,3 +110,281 @@ jobs:
       - name: Fuzz from_json, validate and build for five minutes
         working-directory: crates/pipeline/sdrk-pipeline
         run: cargo +nightly fuzz run pipeline_json -- -max_total_time=300
+
+  system-long:
+    name: system-long (ten minute run, linux-x86_64)
+    # Nightly only, Linux x86_64 only: the ten-minute variant of the long-run system test.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - name: Ten minutes of signal without drift
+        run: cargo test --release -p sdrk-system-tests --test long_run_no_drift -- --ignored
+
+  avx512-sde:
+    name: avx512-sde (Intel SDE, linux-x86_64)
+    # The whole test suite with the AVX-512 level of the SIMD backend, emulated by Intel SDE.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
+      SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
+      SDE_DIR: sde-external-9.58.0-2025-06-16-lin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache Intel SDE
+        id: sde-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/sde
+          key: sde-${{ env.SDE_SHA256 }}
+      - name: Download Intel SDE (pinned)
+        if: steps.sde-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/sde
+          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+          tar -xJf ~/sde.tar.xz -C ~/sde
+      - name: Test with the Sapphire Rapids target under SDE
+        # An explicit `--target` keeps RUSTFLAGS away from the build scripts, which run on the
+        # host without AVX-512.
+        env:
+          RUSTFLAGS: "-C target-cpu=sapphirerapids"
+        run: |
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$HOME/sde/$SDE_DIR/sde64 -spr --"
+          # Profile `emulated` (optimised, no whole-program LTO): the emulator is slow and the debug
+          # builds of the end-to-end tests would run for hours. The command-line examples start the program under test as a child
+          # process and are covered natively by tier1.
+          cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter \
+            --target x86_64-unknown-linux-gnu --target-dir target/avx512
+
+  aarch64-qemu:
+    name: aarch64-qemu (cross-compiled, linux-x86_64 host)
+    # Complements the native arm64 host of tier1: the NEON level in an emulator, from an x86-64
+    # machine.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install QEMU and the cross toolchain
+        run: sudo apt-get update && sudo apt-get install -y qemu-user gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      - name: Test under qemu-aarch64
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER: "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+        # Profile `emulated` (optimised, no whole-program LTO): the emulator is slow and the debug
+        # builds of the end-to-end tests would run for hours. The command-line examples start the program under test as a child
+        # process and are covered natively by tier1.
+        run: >
+          cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter
+          --target aarch64-unknown-linux-gnu --target-dir target/aarch64
+
+  wasm-wasmtime:
+    name: wasm-wasmtime (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: with simd128
+            rustflags: "-C target-feature=+simd128"
+            features: ""
+          - name: without simd128
+            rustflags: ""
+            features: ""
+          # Relaxed SIMD multiply-add in the C32 kernels (M14): the contracts must still hold.
+          - name: with simd128 and relaxed simd
+            rustflags: "-C target-feature=+simd128,+relaxed-simd"
+            features: "--features sdrk/relaxed-simd"
+    env:
+      WASMTIME_VERSION: v49.0.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasmtime
+        run: |
+          curl -fsSL https://wasmtime.dev/install.sh | bash -s -- --version "$WASMTIME_VERSION"
+          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+      - name: Test under wasmtime with its default stack size
+        # The default stack of wasmtime catches stack frames above the 4 KiB rule. The crates
+        # that need `proptest` or the file system of a host do not build for WASI.
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: "wasmtime run --dir=${{ github.workspace }} --"
+        run: >
+          cargo test --target wasm32-wasip1 --target-dir target/wasm
+          -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks ${{ matrix.features }}
+
+  wasm-bindings:
+    name: wasm-bindings (linux-x86_64, package, Node, Chrome, Firefox)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install wasm-bindgen-cli at the version the crate pins, and wasm-opt
+        run: |
+          version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' bindings/wasm/Cargo.toml)
+          cargo install wasm-bindgen-cli --version "$version" --locked
+          sudo apt-get update && sudo apt-get install -y binaryen
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+      - uses: browser-actions/setup-geckodriver@latest
+      - uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Clippy on the WebAssembly target (tests included)
+        run: cargo clippy -p sdrk-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
+      - name: Build the package (SIMD128, scalar and relaxed variants) and pack it
+        run: cargo xtask wasm-pkg --relaxed
+      - name: wasm-bindgen-test in Node
+        run: cargo xtask wasm-test --env node --variant all
+      - name: wasm-bindgen-test in headless Chrome
+        env:
+          CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+          WASM_BINDGEN_TEST_TIMEOUT: 120
+        run: cargo xtask wasm-test --env chrome --variant all
+      - name: wasm-bindgen-test in headless Firefox
+        env:
+          WASM_BINDGEN_TEST_TIMEOUT: 120
+        run: cargo xtask wasm-test --env firefox --variant all
+      - name: JavaScript tests on the packed tarball
+        run: node --test "bindings/wasm/js-tests/*.test.mjs"
+
+  wasm-package:
+    name: wasm-package (${{ matrix.name }}, build only)
+    # R1.3: the package builds on every host; the browsers run on Linux x86-64 only.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: windows-x86_64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install wasm-bindgen-cli at the version the crate pins
+        shell: bash
+        run: |
+          version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' bindings/wasm/Cargo.toml)
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: Build the package
+        run: cargo xtask wasm-pkg --relaxed
+
+  count:
+    name: count (instructions against VOLK and rustfft, linux-x86_64)
+    # On every pull request that touches kernels or backends (the paths are checked in the first
+    # step) and nightly. The other platforms (AVX-512, AArch64, wasm32) run nightly.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Decide whether kernels or backends changed
+        id: changed
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            base="${{ github.event.pull_request.base.sha || github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$base" 2>/dev/null; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            elif git diff --name-only "$base" "${{ github.sha }}" | grep -qE '^(crates/(core|backends|facade)/|benches/|xtask/)'; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - name: Install toolchain from rust-toolchain.toml
+        if: steps.changed.outputs.run == 'true'
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        if: steps.changed.outputs.run == 'true'
+      - name: Install valgrind and VOLK
+        if: steps.changed.outputs.run == 'true'
+        run: sudo apt-get update && sudo apt-get install -y valgrind libvolk-dev pkg-config
+      - name: Count the x86-64 levels (sse2, avx2)
+        if: steps.changed.outputs.run == 'true'
+        run: cargo xtask count --platform x86_64
+      - name: Count the FM receiver pipeline
+        if: steps.changed.outputs.run == 'true' && github.event_name == 'schedule'
+        run: cargo xtask count --pipeline
+      - name: Results are committed
+        if: steps.changed.outputs.run == 'true' && github.event_name == 'schedule'
+        run: git diff --exit-code -- benches/results
+
+  count-nightly:
+    name: count (${{ matrix.platform }}, nightly)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x86_64-avx512, aarch64, wasm32]
+    env:
+      SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
+      SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
+      QEMU_VERSION: 10.2.1
+      WASMTIME_VERSION: v49.0.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install VOLK (the x86-64 comparison library)
+        run: sudo apt-get update && sudo apt-get install -y valgrind libvolk-dev pkg-config
+      - name: Intel SDE
+        if: matrix.platform == 'x86_64-avx512'
+        run: |
+          mkdir -p ~/sde
+          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+          tar -xJf ~/sde.tar.xz -C ~/sde
+          echo "SDRK_SDE=$(ls -d $HOME/sde/sde-external-*)/sde64" >> "$GITHUB_ENV"
+      - name: QEMU user mode with plugins
+        # The distribution's qemu-user is built without plugin support: build QEMU from source.
+        if: matrix.platform == 'aarch64'
+        run: |
+          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev gcc-aarch64-linux-gnu libc6-dev-arm64-cross python3-venv
+          curl -fsSL "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz" | tar -xJ
+          mkdir qemu-build && cd qemu-build
+          ../qemu-$QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          ninja qemu-aarch64
+          echo "SDRK_QEMU_AARCH64=$PWD/qemu-aarch64" >> "$GITHUB_ENV"
+      - name: wasmtime
+        if: matrix.platform == 'wasm32'
+        run: |
+          curl -fsSL https://wasmtime.dev/install.sh | bash -s -- --version "$WASMTIME_VERSION"
+          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+      - name: Count
+        run: cargo xtask count --platform ${{ matrix.platform }}

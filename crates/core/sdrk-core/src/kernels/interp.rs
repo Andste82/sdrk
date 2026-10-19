@@ -75,7 +75,8 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>>
 
     interp_state_api!();
 
-    pub(crate) fn inner_mut(&mut self) -> &mut ResampleState<T, Taps, Hist> {
+    /// The underlying resampler state (`down = 1`), for kernel implementations in backend crates.
+    pub fn inner_mut(&mut self) -> &mut ResampleState<T, Taps, Hist> {
         &mut self.inner
     }
 }
@@ -148,7 +149,8 @@ impl<T: RealSample, Taps: AsRef<[T]>, Hist: AsRef<[T]> + AsMut<[T]>>
 
     interp_state_api!();
 
-    pub(crate) fn inner_mut(&mut self) -> &mut ResampleRealState<T, Taps, Hist> {
+    /// The underlying resampler state (`down = 1`), for kernel implementations in backend crates.
+    pub fn inner_mut(&mut self) -> &mut ResampleRealState<T, Taps, Hist> {
         &mut self.inner
     }
 }

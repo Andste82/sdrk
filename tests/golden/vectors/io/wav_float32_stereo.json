@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "u8",
+      "file": "wav_float32_stereo.expected.bin",
+      "len": 172
+    },
+    "samples": {
+      "dtype": "cf32",
+      "file": "wav_float32_stereo.samples.bin",
+      "len": 16
+    }
+  },
+  "case": "wav_float32_stereo",
+  "format_version": 1,
+  "kernel": "io",
+  "notes": "canonical 44-byte header built with struct (IEEE float, 16-byte fmt chunk)",
+  "params": {
+    "channels": 2,
+    "format": "cf32",
+    "iq": true,
+    "rate": 48000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

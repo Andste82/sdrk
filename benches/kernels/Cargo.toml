@@ -1,0 +1,27 @@
+[package]
+name = "kernels"
+description = "Instruction-count measurements of the SDRk kernels against VOLK and rustfft."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "count"
+path = "src/bin/count.rs"
+
+[dependencies]
+# The kernels as users call them: through the facade. The feature `std` selects the SIMD level
+# at run time (the `x86_64` and `x86_64-avx512` platforms); without it the level is fixed at
+# compile time by `-C target-cpu`.
+sdrk = { path = "../../crates/facade/sdrk" }
+sdrk-core = { path = "../../crates/core/sdrk-core", features = ["reference"] }
+sdrk-device = { path = "../../crates/core/sdrk-device" }
+sdrk-backend-simd = { path = "../../crates/backends/sdrk-backend-simd" }
+rustfft = "6.4"
+volk-sys = { path = "../volk-sys" }
+
+[features]
+default = []
+std = ["sdrk/std"]

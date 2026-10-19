@@ -13,6 +13,7 @@ from . import (  # noqa: F401
     fir_decimate,
     fir_interpolate,
     fm_mod,
+    io,
     mag_sq,
     power_db,
     q15_ops,

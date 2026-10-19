@@ -66,14 +66,14 @@ impl Checker {
     }
 
     fn description(&mut self, value: &Value, path: &str) {
-        if let Some(s) = self.string(value, path) {
-            if s.chars().count() > MAX_DESCRIPTION_CHARS {
-                self.report.error(
-                    path,
-                    DiagCode::OutOfRange,
-                    format!("a description has at most {MAX_DESCRIPTION_CHARS} characters"),
-                );
-            }
+        if let Some(s) = self.string(value, path)
+            && s.chars().count() > MAX_DESCRIPTION_CHARS
+        {
+            self.report.error(
+                path,
+                DiagCode::OutOfRange,
+                format!("a description has at most {MAX_DESCRIPTION_CHARS} characters"),
+            );
         }
     }
 
@@ -141,11 +141,11 @@ impl Checker {
     fn rate(&mut self, value: &Value, path: &str) {
         match value {
             Value::Number(_) => {
-                if let Some(u) = self.count(value, path) {
-                    if u == 0 {
-                        self.report
-                            .error(path, DiagCode::OutOfRange, "the rate must be positive");
-                    }
+                if let Some(u) = self.count(value, path)
+                    && u == 0
+                {
+                    self.report
+                        .error(path, DiagCode::OutOfRange, "the rate must be positive");
                 }
             }
             Value::String(s) => {
@@ -211,28 +211,27 @@ impl Checker {
                         self.one_of(v, &join(path, key), options);
                     }
                 }
-                if let Some(v) = self.required(map, "bits", path) {
-                    if let Some(bits) = self.count(v, &join(path, "bits")) {
-                        if bits > 255 {
-                            self.report.error(
-                                join(path, "bits"),
-                                DiagCode::OutOfRange,
-                                "bits must be at most 255",
-                            );
-                        }
-                    }
+                if let Some(v) = self.required(map, "bits", path)
+                    && let Some(bits) = self.count(v, &join(path, "bits"))
+                    && bits > 255
+                {
+                    self.report.error(
+                        join(path, "bits"),
+                        DiagCode::OutOfRange,
+                        "bits must be at most 255",
+                    );
                 }
                 if let Some(v) = map.get("full_scale") {
                     self.full_scale(v, &join(path, "full_scale"));
                 }
-                if let Some(v) = map.get("swap_iq") {
-                    if !v.is_boolean() {
-                        self.report.error(
-                            join(path, "swap_iq"),
-                            DiagCode::WrongType,
-                            format!("expected a boolean, got {}", json_type(v)),
-                        );
-                    }
+                if let Some(v) = map.get("swap_iq")
+                    && !v.is_boolean()
+                {
+                    self.report.error(
+                        join(path, "swap_iq"),
+                        DiagCode::WrongType,
+                        format!("expected a boolean, got {}", json_type(v)),
+                    );
                 }
             }
             _ => self.report.error(
@@ -250,16 +249,15 @@ impl Checker {
         match value {
             Value::String(s) if s == "power_of_two" => {}
             Value::Object(map) if map.len() == 1 && map.contains_key("explicit") => {
-                if let Some(v) = map.get("explicit") {
-                    if let Some(u) = self.count(v, &join(path, "explicit")) {
-                        if u == 0 || u > u64::from(u32::MAX) {
-                            self.report.error(
-                                join(path, "explicit"),
-                                DiagCode::OutOfRange,
-                                "the explicit full scale is 1 to 4294967295",
-                            );
-                        }
-                    }
+                if let Some(v) = map.get("explicit")
+                    && let Some(u) = self.count(v, &join(path, "explicit"))
+                    && (u == 0 || u > u64::from(u32::MAX))
+                {
+                    self.report.error(
+                        join(path, "explicit"),
+                        DiagCode::OutOfRange,
+                        "the explicit full scale is 1 to 4294967295",
+                    );
                 }
             }
             _ => self.report.error(
@@ -282,31 +280,29 @@ impl Checker {
             ("event_queue", MAX_EVENT_QUEUE),
             ("pending_params", MAX_PENDING_PARAMS),
         ] {
-            if let Some(v) = map.get(key) {
-                if let Some(u) = self.count(v, &join("settings", key)) {
-                    if u == 0 || u > max as u64 {
-                        self.report.error(
-                            join("settings", key),
-                            DiagCode::OutOfRange,
-                            format!("{key} is 1 to {max}, got {u}"),
-                        );
-                    }
-                }
+            if let Some(v) = map.get(key)
+                && let Some(u) = self.count(v, &join("settings", key))
+                && (u == 0 || u > max as u64)
+            {
+                self.report.error(
+                    join("settings", key),
+                    DiagCode::OutOfRange,
+                    format!("{key} is 1 to {max}, got {u}"),
+                );
             }
         }
         if let Some(v) = map.get("precision") {
             self.one_of(v, "settings.precision", &["f32", "q15"]);
         }
-        if let Some(v) = map.get("max_chunk") {
-            if let Some(u) = self.count(v, "settings.max_chunk") {
-                if u == 0 || u > MAX_CHUNK_LIMIT as u64 {
-                    self.report.error(
-                        "settings.max_chunk",
-                        DiagCode::OutOfRange,
-                        format!("max_chunk is 1 to {MAX_CHUNK_LIMIT}, got {u}"),
-                    );
-                }
-            }
+        if let Some(v) = map.get("max_chunk")
+            && let Some(u) = self.count(v, "settings.max_chunk")
+            && (u == 0 || u > MAX_CHUNK_LIMIT as u64)
+        {
+            self.report.error(
+                "settings.max_chunk",
+                DiagCode::OutOfRange,
+                format!("max_chunk is 1 to {MAX_CHUNK_LIMIT}, got {u}"),
+            );
         }
     }
 
@@ -368,14 +364,14 @@ impl Checker {
             if let Some(v) = self.required(map, "kind", &path) {
                 self.string(v, &join(&path, "kind"));
             }
-            if let Some(v) = map.get("params") {
-                if !v.is_object() {
-                    self.report.error(
-                        join(&path, "params"),
-                        DiagCode::WrongType,
-                        format!("expected an object, got {}", json_type(v)),
-                    );
-                }
+            if let Some(v) = map.get("params")
+                && !v.is_object()
+            {
+                self.report.error(
+                    join(&path, "params"),
+                    DiagCode::WrongType,
+                    format!("expected an object, got {}", json_type(v)),
+                );
             }
             if let Some(v) = map.get("description") {
                 self.description(v, &join(&path, "description"));

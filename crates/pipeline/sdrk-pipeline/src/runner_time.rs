@@ -1,8 +1,8 @@
 //! Index domains, metadata input, events, timed parameters and latency of the runner.
 
 use sdrk::Delay;
-use sdrk_blocks::{Mutability, ParamValue};
-use sdrk_device::{BlockFlags, BlockMeta, SampleIndex, TimeAnchor};
+use sdrk_blocks::{Mutability, ParamValue, PortType};
+use sdrk_device::{BlockFlags, BlockMeta, Rate, SampleIndex, TimeAnchor};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
@@ -147,6 +147,53 @@ impl Pipeline {
         self.events.pop()
     }
 
+    // ------------------------------------------------------------------ ports
+
+    /// The kind of data an input takes and the most elements one `push` accepts (bytes for a
+    /// raw input).
+    ///
+    /// ```
+    /// use sdrk_blocks::PortType;
+    /// use sdrk_pipeline::{BuildOptions, Registry};
+    /// let p = Registry::standard().build_json(
+    ///     include_str!("../../../../examples/flows/fm_receiver.json"),
+    ///     &BuildOptions::default(),
+    /// )?;
+    /// assert_eq!(p.input_port("rf")?, (PortType::Raw, 8192));
+    /// # Ok::<(), sdrk_pipeline::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    /// `UnknownInput`.
+    pub fn input_port(&self, input: &str) -> Result<(PortType, usize)> {
+        let i = at(&self.inputs, self.input_pos(input)?)?;
+        Ok((i.ty, i.max_len))
+    }
+
+    /// What an output delivers: a stream of one sample type (`Raw` for bytes) or frames.
+    ///
+    /// ```
+    /// use sdrk_blocks::PortType;
+    /// use sdrk_pipeline::{BuildOptions, PortKind, Registry};
+    /// let p = Registry::standard().build_json(
+    ///     include_str!("../../../../examples/flows/fm_receiver.json"),
+    ///     &BuildOptions::default(),
+    /// )?;
+    /// assert_eq!(p.output_port("audio")?, PortKind::Stream(PortType::F32));
+    /// assert_eq!(p.output_port("spectrum")?, PortKind::Frames { len: 1024 });
+    /// # Ok::<(), sdrk_pipeline::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    /// `UnknownOutput`.
+    pub fn output_port(&self, output: &str) -> Result<crate::PortKind> {
+        let o = at(&self.outputs, self.output_pos(output)?)?;
+        Ok(match &o.kind {
+            crate::runner::OutKind::Stream { ty, .. } => crate::PortKind::Stream(*ty),
+            crate::runner::OutKind::Frames(f) => crate::PortKind::Frames { len: f.len },
+        })
+    }
+
     // ------------------------------------------------------------------ indices
 
     /// Sample index of the next sample that the pipeline expects at an input.
@@ -236,6 +283,42 @@ impl Pipeline {
         }
     }
 
+    /// Sample rate of an output (frames outputs: the rate at the input of the frame node).
+    ///
+    /// ```
+    /// use sdrk_pipeline::{BuildOptions, Registry};
+    /// let p = Registry::standard().build_json(
+    ///     include_str!("../../../../examples/flows/fm_receiver.json"),
+    ///     &BuildOptions::default(),
+    /// )?;
+    /// assert_eq!(p.output_rate("audio")?.num(), 48_000);
+    /// # Ok::<(), sdrk_pipeline::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    /// `UnknownOutput`.
+    pub fn output_rate(&self, output: &str) -> Result<Rate> {
+        Ok(at(&self.outputs, self.output_pos(output)?)?.rate)
+    }
+
+    /// Sample rate of an input.
+    ///
+    /// ```
+    /// use sdrk_pipeline::{BuildOptions, Registry};
+    /// let p = Registry::standard().build_json(
+    ///     include_str!("../../../../examples/flows/fm_receiver.json"),
+    ///     &BuildOptions::default(),
+    /// )?;
+    /// assert_eq!(p.input_rate("rf")?.num(), 2_400_000);
+    /// # Ok::<(), sdrk_pipeline::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    /// `UnknownInput`.
+    pub fn input_rate(&self, input: &str) -> Result<Rate> {
+        Ok(at(&self.inputs, self.input_pos(input)?)?.rate)
+    }
+
     /// Group delay and buffering from the input to an output, see `docs/timing.md`.
     ///
     /// # Errors
@@ -305,7 +388,8 @@ impl Pipeline {
         self.check_push(ii, &data)?;
         let sid = at(&self.inputs, ii)?.stream;
         let elems = at(&self.streams, sid)?.elems;
-        if matches!(data, InputData::Raw(_)) && data.len() as u64 % elems.0.max(1) != 0 {
+        if matches!(data, InputData::Raw(_)) && !(data.len() as u64).is_multiple_of(elems.0.max(1))
+        {
             return Err(Error::LengthMismatch {
                 expected: usize::try_from(elems.0).unwrap_or(usize::MAX),
                 got: data.len(),
@@ -436,15 +520,15 @@ impl Pipeline {
                     kind: EventKind::BurstEnd,
                 });
             }
-            if let Some(a) = meta.anchor {
-                if let Some(mapped) = anchor_along(nodes, streams, &o.path, a) {
-                    o.anchor = Some(mapped);
-                    events.push(Event {
-                        output: id,
-                        index: mapped.index.0,
-                        kind: EventKind::Anchor(mapped),
-                    });
-                }
+            if let Some(a) = meta.anchor
+                && let Some(mapped) = anchor_along(nodes, streams, &o.path, a)
+            {
+                o.anchor = Some(mapped);
+                events.push(Event {
+                    output: id,
+                    index: mapped.index.0,
+                    kind: EventKind::Anchor(mapped),
+                });
             }
         }
         Ok(())

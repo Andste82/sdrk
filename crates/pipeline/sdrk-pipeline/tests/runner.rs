@@ -686,6 +686,29 @@ fn public_types_are_send() {
     is_send::<Box<dyn sdrk_pipeline::Node>>();
     is_send::<sdrk_pipeline::NodeStats>();
     is_send::<sdrk_pipeline::BuildOptions>();
+    // M11: time, events, groups, wire.
+    is_send::<sdrk_pipeline::Event>();
+    is_send::<sdrk_pipeline::EventKind>();
+    is_send::<sdrk_pipeline::NodeId>();
+    is_send::<sdrk_pipeline::OutputId>();
+    is_send::<sdrk_pipeline::ParamTime>();
+    is_send::<sdrk_pipeline::Latency>();
+    is_send::<sdrk_pipeline::GroupSpec>();
+    is_send::<sdrk_pipeline::BackendSpec>();
+    is_send::<sdrk_pipeline::UnderrunPolicy>();
+    is_send::<sdrk_pipeline::GroupEdge>();
+    is_send::<sdrk_pipeline::OutputReport>();
+    is_send::<sdrk_pipeline::wire::Message>();
+    is_send::<sdrk_pipeline::wire::MessageType>();
+    is_send::<sdrk_pipeline::wire::PayloadType>();
+    is_send::<sdrk_pipeline::wire::Decoded>();
+    is_send::<sdrk_pipeline::wire::OwnedData>();
+    is_send::<sdrk_pipeline::wire::Hello>();
+    is_send::<sdrk_pipeline::wire::WireEvent>();
+    is_send::<sdrk_pipeline::wire::WireAnchor>();
+    is_send::<sdrk_pipeline::wire::WireParamValue>();
+    is_send::<sdrk_pipeline::wire::WireParamSet>();
+    is_send::<sdrk_pipeline::wire::WireParamAck>();
     let _ = ParamValue::F64(0.0);
     let _ = DropPolicy::Error;
 }

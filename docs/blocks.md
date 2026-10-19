@@ -1,6 +1,6 @@
 # Blocks
 
-`sdrk-blocks` (layer `crates/blocks`, `no_std`, no heap) turns kernels into blocks that think in parameters with units ("DDC to 600 kHz, decimate by 10, cutoff 100 kHz") and describe themselves. A block translates its parameters into kernel states, owns no memory of its own and calls the facade `sdrk::Sdrk` for every kernel, so backends speed up the blocks automatically. The pipeline of a later milestone builds blocks from JSON with the same names and ranges that are written down here.
+`sdrk-blocks` (layer `crates/blocks`, `no_std`, no heap) turns kernels into blocks that think in parameters with units ("DDC to 600 kHz, decimate by 10, cutoff 100 kHz") and describe themselves. A block translates its parameters into kernel states, owns no memory of its own and calls the facade `sdrk::Sdrk` for every kernel, so backends speed up the blocks automatically. The pipeline ([pipeline.md](pipeline.md)) builds blocks from JSON with the same names and ranges that are written down here.
 
 ## The block interface
 
@@ -15,11 +15,13 @@ pub trait Block: Send {
     fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()>;
     fn param(&self, name: &str) -> Result<ParamValue>;
     fn min_input(&self) -> usize;
+    fn map_index(&self, rel_in: u64) -> u64;       // default: ceil(rel_in * L / M)
 }
 ```
 
 - `process` follows the contract of the rate-changing kernels: it consumes as much input as it can and produces at most `output.len()` samples; the caller resubmits `input[consumed..]`. A call that can neither consume nor produce returns `Progress { 0, 0 }` (no input, no output room, or less than one packing group). A resampler that ran out of output room keeps the remaining outputs pending and delivers them in the next call, also with an empty input.
 - The output depends only on the absolute input position, never on how the input was cut into calls or how big the output buffer was (tested for every block with random chunk plans, including 1-sample chunks).
+- `map_index(rel_in)` maps a count of input samples since the last origin (construction or `reset`) to the number of output samples that include them: the first output sample that includes input sample `n` is `map_index(n)`. The default is `ceil(rel_in * L / M)` with the exact ratio of `timing()`; the tunable resampler overrides it with its position step (`ceil(rel_in * 2^32 / step)` in `u128`). The pipeline uses it for the index domains of [timing.md](timing.md#index-domains-in-the-pipeline).
 - `timing()` is exact: `ratio` is output rate divided by input rate (`Ratio`), `kind` is `Constant` or `Variable` (the tunable resampler), `delay` the group delay in input samples as an exact fraction (see [timing.md](timing.md)).
 - `reset()` clears all history (the pipeline calls it on gaps) and keeps the parameters; the output after a reset equals that of a fresh block.
 - `set_param` changes a *runtime* parameter from the first sample of the next `process` call. Errors: `UnknownParameter` (name not in the description), `ReadOnlyParameter` (a build parameter), `WrongParamType`, `OutOfRange { name, min, max, got }` (also for NaN). A rejected value changes nothing. `param` returns the value in use, also for build parameters and for defaults that depend on the sample rate (`cutoff_hz` of a `ddc` reads `0.4 * fs / decimation`).

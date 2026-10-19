@@ -1,0 +1,56 @@
+# FM receiver with node groups (YAML twin of fm_receiver_grouped.json).
+# Groups only partition the model; they have no runtime effect yet.
+sdrk: 1
+name: fm-receiver-grouped
+description: "The FM receiver with the tuner in the group `front` and the audio and spectrum nodes in the group `audio`."
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+# Two groups: the tuner on one core, the rest on another.
+groups:
+  audio:
+    description: "FM demodulation and spectrum"
+  front:
+    description: "Tuner (DDC)"
+nodes:
+  demod:
+    kind: fm_demod
+    params:
+      audio_decimation: 5
+      deemphasis_us: 50
+      deviation_hz: 75000
+    group: audio
+  fft:
+    kind: spectrum
+    params:
+      averaging: 4
+      fft_size: 1024
+    group: audio
+  # Digital down converter: +600 kHz to baseband, decimate by 10.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 100000
+      decimation: 10
+      frequency_hz: 600000
+    group: front
+edges:
+  - { from: rf, to: tune }
+  - { from: rf, to: fft }
+  - { from: tune, to: demod }
+  - { from: demod, to: audio }
+  - { from: fft, to: spectrum }
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error
+  spectrum:
+    type: frames
+    queue: 4
+    drop: drop_oldest

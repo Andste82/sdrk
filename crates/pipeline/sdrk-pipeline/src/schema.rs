@@ -78,6 +78,10 @@ fn param_schema(p: &ParamDesc) -> Value {
     Value::Object(m)
 }
 
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+)]
 fn node_schema(desc: &BlockDescription) -> Value {
     let mut params = Map::new();
     for p in desc.params {
@@ -101,6 +105,12 @@ fn node_schema(desc: &BlockDescription) -> Value {
         "properties": {
             "kind": { "const": desc.kind },
             "params": Value::Object(params_schema),
+            "group": {
+                "type": "string",
+                "pattern": NAME_PATTERN,
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`."
+            },
+            "backend": { "$ref": "#/$defs/BackendSpec" },
             "description": { "type": "string", "maxLength": MAX_DESCRIPTION_CHARS }
         },
         "required": required
@@ -153,7 +163,7 @@ pub(crate) fn json_schema(registry: &Registry) -> Value {
                     "additionalProperties": { "oneOf": kinds }
                 }),
             );
-            for key in ["inputs", "outputs"] {
+            for key in ["inputs", "outputs", "groups"] {
                 if let Some(section) = props.get_mut(key).and_then(Value::as_object_mut) {
                     section.insert("propertyNames".into(), json!({ "pattern": NAME_PATTERN }));
                 }

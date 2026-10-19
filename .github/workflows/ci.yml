@@ -37,6 +37,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --workspace --all-features
+      - name: Pipeline tests without YAML
+        run: cargo test -p sdrk-pipeline --no-default-features
       - name: Architecture checks
         run: cargo xtask check
       - name: Bare-metal build

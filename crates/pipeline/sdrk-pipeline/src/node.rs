@@ -105,6 +105,9 @@ pub trait Node: Send {
     fn min_input(&self) -> usize;
     /// The description of the block kind.
     fn description(&self) -> &'static BlockDescription;
+    /// Input samples since the last origin to output samples (see `Block::map_index`); frame
+    /// nodes map every index to itself.
+    fn map_index(&self, rel_in: u64) -> u64;
 }
 
 /// A [`Node`] around a [`Block`].
@@ -173,6 +176,10 @@ where
 
     fn description(&self) -> &'static BlockDescription {
         self.block.description()
+    }
+
+    fn map_index(&self, rel_in: u64) -> u64 {
+        self.block.map_index(rel_in)
     }
 }
 
@@ -250,5 +257,9 @@ where
 
     fn description(&self) -> &'static BlockDescription {
         self.block.description()
+    }
+
+    fn map_index(&self, rel_in: u64) -> u64 {
+        rel_in
     }
 }

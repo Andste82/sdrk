@@ -151,6 +151,19 @@ pub trait Block: Send {
     /// Smallest input count that is guaranteed to produce at least one output (used for
     /// buffer sizing).
     fn min_input(&self) -> usize;
+
+    /// Maps a count of input samples since the last origin (construction or `reset`) to the
+    /// number of output samples whose computation includes at least one of them: the first
+    /// output sample that includes input sample `n` is `map_index(n)` (relative to the origin).
+    ///
+    /// The default uses the nominal ratio `L/M` of [`Block::timing`]: `ceil(rel_in * L / M)`.
+    /// A block whose ratio is not exactly constant (the tuned resampler) overrides it. The
+    /// result saturates at `u64::MAX`.
+    fn map_index(&self, rel_in: u64) -> u64 {
+        let ratio = self.timing().ratio;
+        let v = (u128::from(rel_in) * u128::from(ratio.num())).div_ceil(u128::from(ratio.den()));
+        u64::try_from(v).unwrap_or(u64::MAX)
+    }
 }
 
 /// Metadata of a completed frame.

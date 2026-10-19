@@ -26,6 +26,8 @@ use serde::{Serialize, Serializer};
 /// | `TypeMismatch` | the port types of source and destination do not fit |
 /// | `RateUnsupported` | the block rejects its configuration for the sample rate at its input |
 /// | `LimitExceeded` | a resource limit is exceeded |
+/// | `UnknownGroup` | a node names a group that `groups` does not declare |
+/// | `BackendUnavailable` | a backend preference names a backend that does not implement the kernels of the node (an error for `require`, a warning for `prefer`) |
 ///
 /// ```
 /// use sdrk_pipeline::DiagCode;
@@ -75,6 +77,10 @@ pub enum DiagCode {
     RateUnsupported,
     /// A resource limit is exceeded.
     LimitExceeded,
+    /// A node names a group that is not declared.
+    UnknownGroup,
+    /// A required (or, as a warning, preferred) backend does not implement the kernels.
+    BackendUnavailable,
 }
 
 impl DiagCode {
@@ -100,6 +106,8 @@ impl DiagCode {
             Self::TypeMismatch => "type_mismatch",
             Self::RateUnsupported => "rate_unsupported",
             Self::LimitExceeded => "limit_exceeded",
+            Self::UnknownGroup => "unknown_group",
+            Self::BackendUnavailable => "backend_unavailable",
         }
     }
 }
@@ -152,6 +160,49 @@ pub struct NodeReport {
     pub auto: bool,
 }
 
+/// An edge between two nodes of different groups: an interface of the partitioning.
+///
+/// ```
+/// use sdrk_pipeline::{BuildOptions, Registry};
+/// let json = include_str!("../../../../examples/flows/fm_receiver_grouped.json");
+/// let report = Registry::standard().validate_json(json, &BuildOptions::default());
+/// assert_eq!(report.group_edges.len(), 1);
+/// assert_eq!((report.group_edges[0].from.as_str(), report.group_edges[0].to.as_str()), ("tune", "demod"));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GroupEdge {
+    /// Source node.
+    pub from: String,
+    /// Destination node.
+    pub to: String,
+    /// Group of the source node.
+    pub from_group: String,
+    /// Group of the destination node.
+    pub to_group: String,
+}
+
+/// Latency figures of one output, see `docs/timing.md`.
+///
+/// ```
+/// # use sdrk_pipeline::{BuildOptions, Registry};
+/// let json = include_str!("../../../../examples/flows/fm_receiver.json");
+/// let report = Registry::standard().validate_json(json, &BuildOptions::default());
+/// let audio = report.outputs.iter().find(|o| o.name == "audio").unwrap();
+/// assert!(audio.group_delay.num() > 0);
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct OutputReport {
+    /// Output name.
+    pub name: String,
+    /// Group delay from the input to this output in samples of the output (samples at the
+    /// input of the last node for a frames output).
+    #[serde(serialize_with = "serialize_delay")]
+    pub group_delay: Delay,
+    /// Worst-case number of samples held back in the buffers along the path, in samples of
+    /// the output.
+    pub max_buffered: u64,
+}
+
 fn serialize_rate<S: Serializer>(rate: &Rate, s: S) -> Result<S::Ok, S::Error> {
     if rate.den() == 1 {
         s.serialize_u64(rate.num())
@@ -192,6 +243,11 @@ pub struct Report {
     pub cost_per_input_sample: f64,
     /// The nodes in processing order, automatic ones included.
     pub nodes: Vec<NodeReport>,
+    /// Latency of every output. (A boxed slice keeps `Report`, and with it `Error`, small.)
+    pub outputs: Box<[OutputReport]>,
+    /// Edges between nodes of different groups (empty without groups).
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub group_edges: Box<[GroupEdge]>,
 }
 
 impl Report {

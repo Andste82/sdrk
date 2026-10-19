@@ -32,7 +32,8 @@ mod common;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
-use sdrk_pipeline::InputData;
+use sdrk_device::{BlockFlags, BlockMeta, SampleIndex, TimeAnchor, TimeSource};
+use sdrk_pipeline::{EventKind, InputData, ParamTime, PullError, PullSource};
 use serde_json::json;
 
 thread_local! {
@@ -137,4 +138,144 @@ fn the_counter_notices_allocations() {
     // Guards the test above against a counter that never counts.
     let (_, n) = count_allocations(|| std::hint::black_box(vec![1u8; 100]));
     assert!(n >= 1);
+}
+
+#[test]
+fn metadata_events_timed_parameters_and_pull_do_not_allocate() {
+    let bytes = common::cu8_recording(8_000);
+    let mut pipeline = common::build(&common::flow("fm_receiver"));
+    let mut audio = vec![0f32; 4096];
+    let mut frame = vec![0f32; 1024];
+    // One block is 2000 samples; every 50th block follows a gap of 777 samples.
+    let starts: Vec<u64> = (0..1000u64).map(|i| i * 2000 + (i / 50) * 777).collect();
+    // The values are built before the measurement: a `ParamTime` owns a `String`.
+    let mut times: Vec<ParamTime> = starts
+        .iter()
+        .rev()
+        .map(|s| ParamTime::InputIndex {
+            input: "rf".to_string(),
+            index: s + 2500,
+        })
+        .collect();
+    let freqs = [json!(600_000.0), json!(610_000.0), json!(590_000)];
+    // Warm up outside the measurement.
+    pipeline.push("rf", InputData::Raw(&bytes[..2000])).unwrap();
+    pipeline.reset();
+
+    let ((events, produced), allocations) = count_allocations(|| {
+        let mut events = 0usize;
+        let mut produced = 0usize;
+        let mut anchors = 0usize;
+        for i in 0..1000usize {
+            let start = (i * 997) % (bytes.len() - 4096);
+            let meta = BlockMeta {
+                start: SampleIndex(starts[i]),
+                flags: if i % 3 == 0 {
+                    BlockFlags::OVERFLOW.union(BlockFlags::RETUNED)
+                } else {
+                    BlockFlags::empty()
+                },
+                anchor: (i % 10 == 0).then_some(TimeAnchor {
+                    index: SampleIndex(starts[i]),
+                    unix_ns: 1_000_000_000 + i as i64,
+                    source: TimeSource::Host,
+                }),
+                tx_time_ns: None,
+            };
+            pipeline
+                .push_with_meta("rf", InputData::Raw(&bytes[start..start + 4000]), &meta)
+                .unwrap();
+            let t = times.pop().unwrap();
+            pipeline
+                .set_param_at("tune", "frequency_hz", freqs[i % 3].clone(), t)
+                .unwrap();
+            produced += pipeline.read_stream("audio", &mut audio).unwrap();
+            while pipeline
+                .read_frame("spectrum", &mut frame)
+                .unwrap()
+                .is_some()
+            {}
+            produced += pipeline.read_index("audio").unwrap() as usize % 2;
+            if let Some(Some(t)) = (i % 10 == 5).then(|| pipeline.time_of("audio", 1).unwrap()) {
+                produced += usize::from(t > 0);
+            }
+            while let Some(e) = pipeline.poll_event() {
+                events += 1;
+                anchors += usize::from(matches!(e.kind, EventKind::Anchor(_)));
+            }
+            let _ = pipeline.latency("audio").unwrap();
+        }
+        assert!(anchors > 100, "{anchors}");
+        (events, produced)
+    });
+    assert!(events > 1000, "events were reported: {events}");
+    assert!(produced > 1000, "the pipeline did work: {produced}");
+    assert_eq!(
+        allocations, 0,
+        "allocations in 1000 iterations with metadata"
+    );
+}
+
+#[test]
+fn pull_does_not_allocate() {
+    struct Tone {
+        data: Vec<f32>,
+        pos: usize,
+    }
+    impl PullSource for Tone {
+        fn provide(&mut self, _input: &str, max: usize) -> Result<InputData<'_>, PullError> {
+            let from = self.pos % (self.data.len() - 4800);
+            self.pos += max;
+            Ok(InputData::F32(&self.data[from..from + max]))
+        }
+    }
+    let data: Vec<f32> = (0..20_000)
+        .map(|i| ((i % 48) as f32 - 24.0) / 30.0)
+        .collect();
+    let mut source = Tone { data, pos: 0 };
+    let mut pipeline = common::build(&common::flow("fm_transmitter"));
+    let mut out = vec![0u8; 3000];
+    pipeline.pull("rf", &mut out, &mut source).unwrap();
+    let (total, allocations) = count_allocations(|| {
+        let mut total = 0usize;
+        for i in 0..1000usize {
+            let len = 2 * (1 + (i * 37) % 1500);
+            let (n, _) = pipeline.pull("rf", &mut out[..len], &mut source).unwrap();
+            total += n;
+        }
+        total
+    });
+    assert!(total > 1_000_000, "{total}");
+    assert_eq!(allocations, 0, "allocations in 1000 pulls");
+}
+
+#[test]
+fn burst_cycles_do_not_allocate() {
+    struct Tone {
+        data: Vec<f32>,
+    }
+    impl PullSource for Tone {
+        fn provide(&mut self, _input: &str, max: usize) -> Result<InputData<'_>, PullError> {
+            let n = max.min(self.data.len());
+            Ok(InputData::F32(&self.data[..n]))
+        }
+    }
+    let data: Vec<f32> = (0..20_000)
+        .map(|i| ((i % 48) as f32 - 24.0) / 30.0)
+        .collect();
+    let mut source = Tone { data };
+    let mut pipeline = common::build(&common::flow("fm_transmitter"));
+    let mut out = vec![0u8; 3000];
+    pipeline.pull("rf", &mut out, &mut source).unwrap();
+    let ((), allocations) = count_allocations(|| {
+        for _ in 0..50 {
+            pipeline.begin_burst("rf", None).unwrap();
+            pipeline.pull("rf", &mut out, &mut source).unwrap();
+            pipeline.end_burst("rf").unwrap();
+            for _ in 0..4 {
+                pipeline.pull("rf", &mut out, &mut source).unwrap();
+            }
+        }
+    });
+    assert_eq!(allocations, 0, "allocations in burst cycles");
 }

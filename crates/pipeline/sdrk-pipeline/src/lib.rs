@@ -39,27 +39,40 @@
 mod analysis;
 mod build;
 mod error;
+mod groups;
 mod kinds;
+mod latency;
 mod model;
 mod node;
 mod params;
+mod pull;
 mod registry;
 mod runner;
+mod runner_time;
 mod schema;
 mod storage;
 mod structure;
+mod time;
 mod validate;
+pub mod wire;
+#[cfg(feature = "yaml")]
+mod yaml;
 
 pub use error::{Error, Result};
+pub use groups::split_by_groups;
 pub use model::{
-    AlignSpec, ContainerSpec, CustomFormat, DEFAULT_MAX_CHUNK, DEFAULT_QUEUE, DropPolicy, EdgeSpec,
-    EndianSpec, FORMAT_NAMES, FORMAT_VERSION, FormatName, FormatSpec, FullScaleSpec, InputSpec,
-    InputType, LayoutSpec, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, NAME_PATTERN, NodeSpec,
-    OutputSpec, OutputType, PipelineSpec, Precision, RateHz, Settings, is_valid_name,
+    AlignSpec, BackendSpec, ContainerSpec, CustomFormat, DEFAULT_EVENT_QUEUE, DEFAULT_MAX_CHUNK,
+    DEFAULT_PENDING_PARAMS, DEFAULT_QUEUE, DropPolicy, EdgeSpec, EndianSpec, FORMAT_NAMES,
+    FORMAT_VERSION, FormatName, FormatSpec, FullScaleSpec, GroupSpec, InputSpec, InputType,
+    LayoutSpec, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, MAX_EVENT_QUEUE,
+    MAX_PENDING_PARAMS, NAME_PATTERN, NodeSpec, OutputSpec, OutputType, PipelineSpec, Precision,
+    RateHz, Settings, UnderrunPolicy, is_valid_name,
 };
 pub use node::{FrameNode, Node, NodeElem, NodeInput, NodeOutput, StreamNode};
+pub use pull::{PullError, PullSource};
 pub use registry::{BlockFactory, BuildOptions, Checked, Limits, PortKind, Registry};
 pub use runner::{InputData, NodeStats, Pipeline};
 pub use schema::{SCHEMA_FILE, SCHEMA_ID};
 pub use storage::VecStorage;
-pub use validate::{DiagCode, Diagnostic, NodeReport, Report};
+pub use time::{Event, EventKind, Latency, NodeId, OutputId, ParamTime};
+pub use validate::{DiagCode, Diagnostic, GroupEdge, NodeReport, OutputReport, Report};

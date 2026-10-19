@@ -131,16 +131,25 @@ fn run(args: &[String]) -> Result<(), Failure> {
     Ok(())
 }
 
-fn open_input(
-    o: &Options,
-    path: &str,
-    chunk: usize,
-) -> Result<Box<dyn RxStream<Error = sdrk_io::Error>>, Failure> {
-    let is_sigmf = path.ends_with(".sigmf-meta") || path.ends_with(".sigmf-data");
-    if is_sigmf {
-        let r = SigmfReader::open(Path::new(path))?.with_chunk_samples(chunk)?;
-        return Ok(Box::new(r));
+type Input = Box<dyn RxStream<Error = sdrk_io::Error>>;
+
+fn open_input(o: &Options, path: &str, chunk: usize) -> Result<Input, Failure> {
+    if path.ends_with(".sigmf-meta") || path.ends_with(".sigmf-data") {
+        open_sigmf(path, chunk)
+    } else {
+        open_raw(o, path, chunk)
     }
+}
+
+// Kept out of line so each reader's stack frame stays small (clippy::large_stack_frames).
+#[inline(never)]
+fn open_sigmf(path: &str, chunk: usize) -> Result<Input, Failure> {
+    let r = SigmfReader::open(Path::new(path))?.with_chunk_samples(chunk)?;
+    Ok(Box::new(r))
+}
+
+#[inline(never)]
+fn open_raw(o: &Options, path: &str, chunk: usize) -> Result<Input, Failure> {
     let name = o.required("format")?;
     let format = sdrk_pipeline::FormatName::from_name(name)
         .ok_or_else(|| Failure::Usage(format!("unknown format `{name}`")))?

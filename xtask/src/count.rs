@@ -819,6 +819,10 @@ fn build(root: &Path, plan: &LevelPlan) -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
+#[allow(
+    clippy::large_stack_frames,
+    reason = "std::process::Command and the Windows file system calls are large; xtask is a host tool"
+)]
 fn measure_level(
     root: &Path,
     plan: &LevelPlan,

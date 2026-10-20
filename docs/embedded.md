@@ -12,7 +12,7 @@ The heap-free promise is only real if the code runs on microcontrollers. The tes
 | `esp32p4` | 2 | `riscv32imafc-unknown-none-elf` | `esp-emu --chip esp32p4` | UART0 | the host stops the emulator after `SDRK-SUITE END` |
 | `esp32s3` | 2 | `xtensa-esp32s3-none-elf` | Espressif QEMU fork, `qemu-system-xtensa -machine esp32s3` | UART0 | the host stops the emulator after `SDRK-SUITE END` |
 
-Tier 1 runs on every push and pull request (quick profile), tier 2 nightly (quick and full). All five targets pass both profiles on Linux x86-64.
+Tier 1 runs on every push and pull request (quick profile), tier 2 nightly (quick and full; the full profile of the ESP32-P4 weekly). All five targets pass both profiles on Linux x86-64.
 
 ### Structure
 

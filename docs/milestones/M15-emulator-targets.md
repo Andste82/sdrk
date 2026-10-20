@@ -191,7 +191,7 @@ All `TestCase`s from the testkit run (they are `no_std`): kernels both direction
 | Job | Trigger | What |
 | --- | --- | --- |
 | `emu-tier1` | every push/PR (ubuntu-24.04) | `xtask emu --target qemu-cortex-m4` (quick) |
-| `emu-tier2` | nightly | `xtask emu --tier 2` quick + `xtask emu --all --full` |
+| `emu-tier2` | nightly; the full profile of the ESP32-P4 weekly | `xtask emu --tier 2` quick + `xtask emu --all --full` |
 | `count-embedded` | nightly | `xtask count --platform cortex-m4` (report) |
 
 ## Test vectors

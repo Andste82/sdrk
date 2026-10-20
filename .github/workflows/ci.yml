@@ -4,7 +4,10 @@ on:
   push:
   pull_request:
   schedule:
+    # Nightly: the long jobs. Weekly (Sunday): only the full profile of the ESP32-P4 in
+    # `emu-tier2`; every other job skips the weekly trigger (`github.event.schedule`).
     - cron: "17 3 * * *"
+    - cron: "43 4 * * 0"
 
 env:
   CARGO_TERM_COLOR: always
@@ -62,6 +65,7 @@ jobs:
 
   golden-check:
     name: golden-check
+    if: github.event.schedule != '43 4 * * 0'
     # On changes under tests/golden/** (the paths are checked in the first step) and nightly.
     runs-on: ubuntu-24.04
     steps:
@@ -99,7 +103,7 @@ jobs:
     name: fuzz (pipeline_json, linux-x86_64)
     # Nightly only, five minutes, Linux x86_64 only: fuzzing is not required on Windows and
     # arm64.
-    if: github.event_name == 'schedule'
+    if: github.event.schedule == '17 3 * * *'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -114,7 +118,7 @@ jobs:
   system-long:
     name: system-long (ten minute run, linux-x86_64)
     # Nightly only, Linux x86_64 only: the ten-minute variant of the long-run system test.
-    if: github.event_name == 'schedule'
+    if: github.event.schedule == '17 3 * * *'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +129,7 @@ jobs:
 
   avx512-sde:
     name: avx512-sde (Intel SDE, linux-x86_64)
+    if: github.event.schedule != '43 4 * * 0'
     # The whole test suite with the AVX-512 level of the SIMD backend, emulated by Intel SDE.
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -167,6 +172,7 @@ jobs:
 
   aarch64-qemu:
     name: aarch64-qemu (cross-compiled, linux-x86_64 host)
+    if: github.event.schedule != '43 4 * * 0'
     # Complements the native arm64 host of tier1: the NEON level in an emulator, from an x86-64
     # machine.
     runs-on: ubuntu-24.04
@@ -191,6 +197,7 @@ jobs:
 
   wasm-wasmtime:
     name: wasm-wasmtime (${{ matrix.name }})
+    if: github.event.schedule != '43 4 * * 0'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -230,6 +237,7 @@ jobs:
 
   wasm-bindings:
     name: wasm-bindings (linux-x86_64, package, Node, Chrome, Firefox)
+    if: github.event.schedule != '43 4 * * 0'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -274,6 +282,7 @@ jobs:
 
   wasm-package:
     name: wasm-package (${{ matrix.name }}, build only)
+    if: github.event.schedule != '43 4 * * 0'
     # R1.3: the package builds on every host; the browsers run on Linux x86-64 only.
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -302,6 +311,7 @@ jobs:
 
   count:
     name: count (instructions against VOLK and rustfft, linux-x86_64)
+    if: github.event.schedule != '43 4 * * 0'
     env:
       VOLK_VERSION: "3.3.0"
       VOLK_SHA256: 89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628
@@ -380,7 +390,7 @@ jobs:
 
   count-nightly:
     name: count (${{ matrix.platform }}, nightly)
-    if: github.event_name == 'schedule'
+    if: github.event.schedule == '17 3 * * *'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -483,6 +493,7 @@ jobs:
 
   esp32s3-hardware-build:
     name: esp32s3-hardware-build (build only)
+    if: github.event.schedule != '43 4 * * 0'
     # The ESP32-S3 target with the cargo feature `hardware` (esp_hal::init) cannot run in the
     # emulator; this job guards that it compiles, next to the default (emulator) configuration.
     runs-on: ubuntu-24.04
@@ -501,8 +512,10 @@ jobs:
 
   emu-tier2:
     name: emu-tier2 (${{ matrix.target }})
-    # Nightly: every tier 2 target quick, then the full profile. One job per target so that the
-    # slow esp-emu run does not delay the others.
+    # Nightly: every tier 2 target runs the quick profile, and every target except the
+    # ESP32-P4 also the full profile. The full profile of the ESP32-P4 (the slow esp-emu run)
+    # runs weekly (Sunday), on its own trigger and alone. One job per target so that the slow
+    # esp-emu run does not delay the others; on the weekly trigger the other targets do nothing.
     if: github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
@@ -510,12 +523,34 @@ jobs:
       fail-fast: false
       matrix:
         target: [qemu-cortex-m4, qemu-cortex-m55, qemu-riscv32, esp32p4, esp32s3]
+    env:
+      NIGHTLY: ${{ github.event.schedule == '17 3 * * *' }}
+      WEEKLY: ${{ github.event.schedule == '43 4 * * 0' }}
     steps:
+      - name: Decide which profiles this trigger runs for the target
+        id: plan
+        shell: bash
+        run: |
+          quick=false
+          full=false
+          if [ "$NIGHTLY" = "true" ]; then
+            quick=true
+            [ "${{ matrix.target }}" != "esp32p4" ] && full=true
+          elif [ "$WEEKLY" = "true" ]; then
+            [ "${{ matrix.target }}" = "esp32p4" ] && full=true
+          fi
+          echo "quick=$quick" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          if [ "$quick" = "true" ] || [ "$full" = "true" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
+        if: steps.plan.outputs.any == 'true'
       - name: Install toolchain from rust-toolchain.toml
+        if: steps.plan.outputs.any == 'true'
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+        if: steps.plan.outputs.any == 'true'
       - name: Install QEMU
+        if: steps.plan.outputs.any == 'true'
         # `qemu-system-misc` holds the RISC-V machines on Ubuntu 24.04; newer releases split them
         # into `qemu-system-riscv`.
         run: |
@@ -523,14 +558,16 @@ jobs:
           sudo apt-get install -y qemu-system-arm qemu-system-misc
           command -v qemu-system-riscv32 || sudo apt-get install -y qemu-system-riscv
       - name: Install esp-emu, the Espressif QEMU fork, espflash and the Xtensa Rust toolchain (pinned)
-        if: startsWith(matrix.target, 'esp')
+        if: steps.plan.outputs.any == 'true' && startsWith(matrix.target, 'esp')
         run: cargo xtask emu --install
       - name: Quick profile
+        if: steps.plan.outputs.quick == 'true'
         run: cargo xtask emu --target ${{ matrix.target }}
       - name: Full profile
+        if: steps.plan.outputs.full == 'true'
         run: cargo xtask emu --target ${{ matrix.target }} --full
       - name: Logs
-        if: always()
+        if: always() && steps.plan.outputs.any == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: emu-tier2-logs-${{ matrix.target }}
@@ -539,7 +576,7 @@ jobs:
   count-embedded:
     name: count-embedded (cortex-m4, report only)
     # Nightly: instructions per sample of the fallback on a Cortex-M4F; no limits yet.
-    if: github.event_name == 'schedule'
+    if: github.event.schedule == '17 3 * * *'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:

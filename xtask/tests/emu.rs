@@ -158,7 +158,10 @@ fn build_only_needs_no_emulator_and_the_s3_hardware_feature_is_guarded() {
     assert!(!parse_args(&[]).unwrap().build_only);
     let s3 = target_named("esp32s3").unwrap();
     assert!(build_tools_of(s3).len() < xtask::emu::tools_of(s3).len());
-    assert!(build_tools_of(target_named("esp32p4").unwrap()).is_empty());
+    assert_eq!(
+        build_tools_of(target_named("esp32p4").unwrap()),
+        Vec::<xtask::emu::Tool>::new()
+    );
 
     // The target source keeps both configurations: the default is the emulator set-up, the
     // feature `hardware` switches to `esp_hal::init`.

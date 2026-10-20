@@ -23,6 +23,9 @@ esp-bootloader-esp-idf = { version = "=0.6.0", features = ["esp32s3"] }
 [features]
 # Run every case (the default is the quick tier).
 full = ["sdrk-target-common/full"]
+# A real board: call `esp_hal::init` (clock, interrupts, timers) instead of the manual set-up of
+# the emulator (watchdogs off, FPU enable). Build only; the emulator cannot run it.
+hardware = []
 
 # Fat LTO breaks the Xtensa literal pool placement (`dangerous relocation: l32r`), so LTO is off here.
 [profile.emu]

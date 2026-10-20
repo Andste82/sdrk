@@ -481,6 +481,24 @@ jobs:
           name: emu-tier1-logs
           path: target/emu/*.log
 
+  esp32s3-hardware-build:
+    name: esp32s3-hardware-build (build only)
+    # The ESP32-S3 target with the cargo feature `hardware` (esp_hal::init) cannot run in the
+    # emulator; this job guards that it compiles, next to the default (emulator) configuration.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the Xtensa Rust toolchain (pinned)
+        run: cargo xtask emu --install
+      - name: Build, emulator configuration (default)
+        run: cargo xtask emu --target esp32s3 --build-only
+      - name: Build, hardware configuration
+        run: cargo xtask emu --target esp32s3 --build-only --features hardware
+
   emu-tier2:
     name: emu-tier2 (${{ matrix.target }})
     # Nightly: every tier 2 target quick, then the full profile. One job per target so that the

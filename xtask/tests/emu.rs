@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use xtask::emu::{
-    FULL_TIMEOUT_S, Options, Outcome, QUICK_TIMEOUT_S, Row, TARGETS, build_features, judge,
-    parse_args, select, strip_ansi, summary_table, target_named,
+    FULL_TIMEOUT_S, Options, Outcome, QUICK_TIMEOUT_S, Row, TARGETS, build_features,
+    build_tools_of, judge, parse_args, select, strip_ansi, summary_table, target_named,
 };
 
 const GOOD: &str = "\
@@ -141,6 +141,46 @@ fn the_full_profile_adds_the_feature_full() {
         vec!["inject-failure".to_string(), "full".to_string()]
     );
     assert_eq!(build_features(&Options::default()), Vec::<String>::new());
+}
+
+#[test]
+fn build_only_needs_no_emulator_and_the_s3_hardware_feature_is_guarded() {
+    let o = parse_args(&[
+        "--target",
+        "esp32s3",
+        "--build-only",
+        "--features",
+        "hardware",
+    ])
+    .unwrap();
+    assert!(o.build_only);
+    assert_eq!(build_features(&o), vec!["hardware".to_string()]);
+    assert!(!parse_args(&[]).unwrap().build_only);
+    let s3 = target_named("esp32s3").unwrap();
+    assert!(build_tools_of(s3).len() < xtask::emu::tools_of(s3).len());
+    assert!(build_tools_of(target_named("esp32p4").unwrap()).is_empty());
+
+    // The target source keeps both configurations: the default is the emulator set-up, the
+    // feature `hardware` switches to `esp_hal::init`.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let dir = root.join("targets").join("esp32s3");
+    let manifest = std::fs::read_to_string(dir.join("Cargo.toml")).unwrap();
+    assert!(manifest.contains("hardware = []"));
+    let default_line = manifest
+        .lines()
+        .find(|l| l.starts_with("default"))
+        .unwrap_or("");
+    assert!(
+        !default_line.contains("hardware"),
+        "hardware must not be a default feature"
+    );
+    let main = std::fs::read_to_string(dir.join("src").join("main.rs")).unwrap();
+    assert!(main.contains("#[cfg(feature = \"hardware\")]"));
+    assert!(main.contains("esp_hal::init("));
+    assert!(main.contains("#[cfg(not(feature = \"hardware\"))]"));
+    assert!(main.contains("emulator::prepare()"));
 }
 
 fn names(o: &Options) -> Vec<&'static str> {

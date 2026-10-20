@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! cargo xtask emu [--target <name>]... [--tier 1|2] [--all] [--full]
-//!                 [--features a,b] [--timeout <s>] [--skip-missing] [--install] [--list]
+//!                 [--features a,b] [--build-only] [--timeout <s>] [--skip-missing] [--install] [--list]
 //! ```
 //!
 //! The protocol (see `sdrk_testkit::suite`) is
@@ -36,7 +36,7 @@ use anyhow::{Context, anyhow, bail};
 use sha2::{Digest, Sha256};
 
 const USAGE: &str = "usage: cargo xtask emu [--target <name>]... [--tier 1|2] [--all] [--full] \
-[--features a,b] [--timeout <s>] [--skip-missing] [--install] [--list] [--judge <log>]";
+[--features a,b] [--build-only] [--timeout <s>] [--skip-missing] [--install] [--list] [--judge <log>]";
 
 /// Default timeout of one target in seconds: quick profile.
 pub const QUICK_TIMEOUT_S: u64 = 300;
@@ -336,6 +336,8 @@ pub struct Options {
     pub full: bool,
     /// `--features`, already split.
     pub features: Vec<String>,
+    /// `--build-only`: build the target and stop, without an image or an emulator.
+    pub build_only: bool,
     /// `--timeout` in seconds.
     pub timeout_s: Option<u64>,
     /// `--skip-missing`.
@@ -386,6 +388,7 @@ pub fn parse_args(args: &[&str]) -> anyhow::Result<Options> {
                         .context("--timeout is seconds")?,
                 );
             }
+            "--build-only" => o.build_only = true,
             "--skip-missing" => o.skip_missing = true,
             "--install" => o.install = true,
             "--list" => o.list = true,
@@ -624,6 +627,15 @@ pub fn tools_of(t: &Target) -> Vec<Tool> {
         Runner::QemuRiscv32 => vec![Tool::QemuRiscv32],
         Runner::EspEmu { .. } => vec![Tool::EspEmu, Tool::Espflash],
         Runner::EspQemu { .. } => vec![Tool::EspQemu, Tool::Espflash, Tool::XtensaGcc],
+    }
+}
+
+/// The tools that only building `t` needs (`--build-only`): the Xtensa linker for the S3.
+#[must_use]
+pub fn build_tools_of(t: &Target) -> Vec<Tool> {
+    match t.runner {
+        Runner::EspQemu { .. } => vec![Tool::XtensaGcc],
+        _ => Vec::new(),
     }
 }
 
@@ -1139,7 +1151,12 @@ fn run_one(root: &Path, t: &Target, o: &Options, features: &[String]) -> Row {
         elapsed: started.elapsed(),
         log: log.clone(),
     };
-    let missing: Vec<Tool> = tools_of(t)
+    let needed = if o.build_only {
+        build_tools_of(t)
+    } else {
+        tools_of(t)
+    };
+    let missing: Vec<Tool> = needed
         .into_iter()
         .filter(|tool| find_tool(root, *tool).is_none())
         .collect();
@@ -1161,6 +1178,12 @@ fn run_one(root: &Path, t: &Target, o: &Options, features: &[String]) -> Row {
     let timeout = o
         .timeout_s
         .map_or_else(|| t.timeout(o.full), Duration::from_secs);
+    if o.build_only {
+        return match build(root, t, features) {
+            Ok(_) => row(Outcome::Pass, None),
+            Err(e) => row(Outcome::Fail(format!("{e:#}")), None),
+        };
+    }
     let result = build(root, t, features)
         .and_then(|elf| make_image(root, t, &elf))
         .and_then(|image| {

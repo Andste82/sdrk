@@ -7,7 +7,7 @@
 Complete on Linux x86-64: all deliverables and all acceptance criteria below were met locally (see "Status of the acceptance criteria" at the end of this file for the details and run times).
 
 - Fully completed: the five targets (`qemu-cortex-m4`, `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4`, `esp32s3`) with the shared `targets/common`; `cargo xtask emu` (`--install`, `--skip-missing`, `--list`, `--judge`, quick and full profiles, timeouts, logs); the `test-all` extension; the protocol parser and its negative tests; the `inject-failure` self-check; the 256 KiB arena host test; the Cortex-M4 instruction-count report; `docs/embedded.md`; the CI job definitions; the changelog and the decisions log. Quick and full profiles pass for every target; R1.2 commands, `cargo xtask check` and `cargo xtask bare-metal` pass.
-- Partial / open (tracked in [`docs/open-items.md`](../open-items.md)): M15-1 (CI jobs written but not run here), M15-2 (arm64 and Windows hosts untested), M15-3 (the ESP32-S3 target is emulator-only, no `esp_hal::init`), M15-4 (long-term availability of the binary-only emulators and the long ESP32-P4 full run).
+- Partial / open (tracked in [`docs/open-items.md`](../open-items.md)): M15-1 (CI jobs written but not run here), M15-2 (arm64 and Windows hosts untested), M15-3 (the `hardware` feature of the ESP32-S3 target calls `esp_hal::init`; it is compile-checked only, not run on a board), M15-4 (long-term availability of the binary-only emulators and the long ESP32-P4 full run).
 
 ## Goal
 
@@ -211,7 +211,7 @@ R1.2 commands; `cargo xtask emu --target qemu-cortex-m4` and `--full`; `cargo xt
 
 ## Deliverables checklist
 
-- [x] Five targets with reporters, linker scripts, panic handlers (`targets/qemu-cortex-m4`, `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4`, `esp32s3` and the shared `targets/common`; the ESP targets use `esp-hal` 1.2.2, so the ESP-IDF fallback was not needed; the S3 target is emulator-only, open item M15-3)
+- [x] Five targets with reporters, linker scripts, panic handlers (`targets/qemu-cortex-m4`, `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4`, `esp32s3` and the shared `targets/common`; the ESP targets use `esp-hal` 1.2.2, so the ESP-IDF fallback was not needed; the S3 target runs `esp_hal::init` only with the cargo feature `hardware`, which is compile-checked only, open item M15-3)
 - [x] `xtask emu` (+ `--install`, `--skip-missing`, `--list`, `--judge`), `test-all` extension, parser tests (`xtask/tests/emu.rs`: 25 tests for the protocol judge, the arguments, the selection and the process handling)
 - [x] Cortex-M4 instruction-count report (`cargo xtask count --platform cortex-m4`, `benches/results/cortex-m4.json`)
 - [x] CI jobs, `docs/embedded.md`, CHANGELOG, decisions log (jobs `emu-tier1`, `emu-tier2`, `count-embedded`; written, but they could not run here, open item M15-1)

@@ -257,6 +257,11 @@ jobs:
           esac
           cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
             --test convert_out_sweep -- --ignored
+      - name: Every f32 through the integer path of the fallback's convert_out
+        # The path is only compiled in on bare-metal Arm and RISC-V; its equality with the f64
+        # formula does not depend on the target, so one native run covers it.
+        if: matrix.name == 'sse2'
+        run: cargo test --release -p sdrk-core --lib integer_path_for_every_f32 -- --ignored
 
   avx512-sde:
     name: avx512-sde (Intel SDE, linux-x86_64)

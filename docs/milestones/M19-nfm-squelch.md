@@ -149,6 +149,8 @@ Additional rules:
 
 General rules from M02/M05/M06 apply: one trait per kernel, `Fallback` + `Reference` + facade delegation, no allocation, validation at entry, `Timing` implemented by every state. All f32 arithmetic is written without FMA in exactly the order given; Q15 arithmetic is in `i64` with `round_shift` and `sat16` from `sdrk_core::num` (R7).
 
+**Thresholds and limits are not relaxed.** If a threshold, tolerance or count limit of this milestone is not met, do not change it in code, case files or `benches/limits.json`. Measure it, record the measured value and the reason in `docs/decisions-log.md` and an open item in `docs/open-items.md`, and report it in the pull request; a changed threshold needs the maintainer's approval. The only pre-approved changes are the ones stated in this file.
+
 ### 1. `squelch` — power gate (bit-exact in both types)
 
 ```rust
@@ -187,7 +189,8 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 
 ### 4. Pipeline kind and example flow
 
-- Kind `squelch` in `sdrk-pipeline` (`kinds.rs`: `Kind` with `kernels()` = `["squelch"]`, `plan`, cost and memory figures); `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json`; adding a kind keeps the schema version (record in the decisions log).
+- Kind `squelch` in `sdrk-pipeline` (`kinds.rs`: `Kind` with `kernels()` = `["squelch"]`). `plan` returns `Figures` exactly like `FmDemodKind::plan` (`crates/pipeline/sdrk-pipeline/src/kinds.rs`): `rate_out` and `memory_bytes` from the block's `rate_out` and `storage_bytes`, `delay` from its timing, `min_input` from `min_input()`, and `cost` per input sample by this formula, which is also added to the cost table of `docs/pipeline.md`: `squelch` **3**.
+- `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json`; adding a kind keeps the schema version (record in the decisions log).
 - `examples/flows/nfm_receiver.json` with a YAML twin (M11 test 8 covers it): input `cu8` at 2.4 MS/s → `ddc` (decimation 50 → 48 kHz, `cutoff_hz` 6000, `transition_hz` 3000) → `squelch` (defaults) → `fm_demod` (`deviation_hz` 5000, `deemphasis_us` 0, `audio_cutoff_hz` 4000) → output `f32`. The YAML comments explain the parameters for 12.5 kHz (`deviation_hz` 2500) and 25 kHz channels.
 - If the WASM bindings list block kinds anywhere (`index.d.ts`, `FlowBuilder`), add the new kind there.
 

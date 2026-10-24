@@ -20,12 +20,48 @@ fn the_level_name_is_one_of_the_documented_names() {
         .contains(&name),
         "{name}"
     );
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", not(feature = "std")))]
+    // The level fixed at compile time (the target features of `-C target-cpu=...`).
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse2",
+        not(target_feature = "sse4.2"),
+        not(feature = "std")
+    ))]
+    assert_eq!(name, "sse2");
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse4.2",
+        target_feature = "popcnt",
+        not(target_feature = "avx2"),
+        not(feature = "std")
+    ))]
+    assert_eq!(name, "sse4.2");
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "avx2",
+        not(feature = "std")
+    ))]
     assert!(["avx2", "avx512"].contains(&name), "{name}");
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "avx512vbmi",
+        not(feature = "std")
+    ))]
+    assert_eq!(name, "avx512");
     #[cfg(all(target_arch = "aarch64", not(feature = "std")))]
     assert_eq!(name, "neon");
     #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
     assert_eq!(name, "simd128");
+}
+
+/// The level a CI step means to test, also with run-time detection (under SDE with the CPUID of
+/// a level, or on a host of known level): `SDRK_EXPECT_LEVEL` names it. Without the variable the
+/// test checks nothing, so that a run on any host passes.
+#[test]
+fn the_level_is_the_one_the_run_expects() {
+    if let Ok(want) = std::env::var("SDRK_EXPECT_LEVEL") {
+        assert_eq!(level_name(), want);
+    }
 }
 
 #[test]

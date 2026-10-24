@@ -14,7 +14,7 @@
   "case": "sc16_q11_from_c32_256",
   "format_version": 1,
   "kernel": "convert_out",
-  "notes": "float path: floor(x * full_scale + offset + 0.5) in float64, NaN as 0, saturated; bytes as in docs/device.md",
+  "notes": "float path: x * full_scale + offset in float64 rounded to nearest, ties to even, NaN as 0, saturated; bytes as in docs/device.md",
   "params": {
     "align": "lsb",
     "bits": 12,

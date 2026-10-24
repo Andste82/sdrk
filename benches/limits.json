@@ -1,6 +1,19 @@
 {
-  "_comment": "Release state per kernel and level. `release` kernels must stay within 1.15x the instructions per sample of the comparison, `dev` kernels within 1.50x; see docs/performance.md. A `waiver` names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers.",
+  "_comment": "Release state per kernel and level (decision D14). `release` entries must stay within `_limits.release` times the instructions per sample of the comparison, `dev` entries within `_limits.dev`; `goal` marks the entries at or below it in the results. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged against our own `avx2` numbers with `_limits.runtime`; entries for it are needed only to relax that. See docs/performance.md.",
+  "_limits": {
+    "release": 1.1,
+    "dev": 1.5,
+    "warn": 1.1,
+    "goal": 1.0,
+    "runtime": 1.02
+  },
   "convert_cs8": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -12,16 +25,15 @@
     },
     "simd128": {
       "status": "release"
-    },
-    "sse2": {
-      "status": "info",
-      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
-    },
-    "sse4.2": {
-      "status": "dev"
     }
   },
   "convert_cs16": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -33,41 +45,120 @@
     },
     "simd128": {
       "status": "release"
-    },
+    }
+  },
+  "convert_cu8": {
     "sse2": {
       "status": "release"
     },
     "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
       "status": "release"
     }
   },
   "convert_out_cs16": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
-      "status": "dev",
-      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+      "status": "release"
     },
     "avx512": {
-      "status": "dev",
-      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+      "status": "release"
     },
     "neon": {
       "status": "release"
     },
     "simd128": {
       "status": "release"
-    },
+    }
+  },
+  "convert_out_cs8": {
     "sse2": {
-      "status": "dev",
-      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "open item M13-1: floor(v + 0.5) rounding and NaN handling need about twice the instructions of the rounding-to-even conversion of VOLK"
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_out_cu8": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
     }
   },
   "rotate": {
+    "sse2": {
+      "status": "info",
+      "waiver": "VOLK has no SSE implementation of `rotator2`: the dispatcher of its `sse2_64_mmx` machine takes the scalar `generic` protokernel, so the comparison is information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "VOLK has no SSE implementation of `rotator2`: the dispatcher of its `sse4_2_64_mmx` machine takes the scalar `generic` protokernel, so the comparison is information"
+    },
     "avx2": {
-      "status": "dev"
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "rotate_cq15": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -77,17 +168,15 @@
     },
     "simd128": {
       "status": "release"
-    },
-    "sse2": {
-      "status": "info",
-      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
-    },
-    "sse4.2": {
-      "status": "info",
-      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
     }
   },
   "fir": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -98,16 +187,17 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
-    },
-    "sse2": {
-      "status": "dev"
-    },
-    "sse4.2": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
   "fir_decimate": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -118,16 +208,59 @@
       "status": "release"
     },
     "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "fir_interpolate": {
+    "sse2": {
       "status": "release"
     },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "resample": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
   "mag_sq": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -135,19 +268,62 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
-      "status": "dev"
-    },
+      "status": "release"
+    }
+  },
+  "mag_sq_q15": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
     }
   },
   "quad_demod": {
+    "sse2": {
+      "status": "info",
+      "waiver": "VOLK has no SSE implementation of `atan2` (nor of `multiply_conjugate` below SSE3): the dispatcher of its `sse2_64_mmx` machine takes the scalar `generic` protokernels, so the comparison is information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "VOLK has no SSE implementation of `atan2`: the dispatcher of its `sse4_2_64_mmx` machine takes the scalar `generic` protokernel, so the comparison is information"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "quad_demod_cq15": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -159,17 +335,15 @@
     },
     "simd128": {
       "status": "release"
-    },
-    "sse2": {
-      "status": "info",
-      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
-    },
-    "sse4.2": {
-      "status": "info",
-      "waiver": "VOLK has no implementation for this level: its portable `generic` code is compiled once per instruction set and VOLK uses the one of the best machine (AVX2), so the comparison is not at the same instruction set"
     }
   },
   "fm_mod": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -180,90 +354,79 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
-    },
-    "sse2": {
-      "status": "release"
-    },
-    "sse4.2": {
       "status": "release"
     }
   },
   "fft_64": {
-    "avx2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
-    },
-    "avx512": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
-    },
-    "neon": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
-    },
-    "simd128": {
-      "status": "dev",
-      "waiver": "open item M13-3: on this one case the accuracy is 1.05 dB below rustfft (limit 1 dB); the instruction count is within the limit"
-    },
     "sse2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "dev"
     }
   },
   "fft_1024": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+      "status": "release"
     },
     "avx512": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+      "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
-    },
-    "sse2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
-    },
-    "sse4.2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
     }
   },
   "fft_4096": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+      "status": "release"
     },
     "avx512": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
+      "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
-    },
-    "sse2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
-    },
-    "sse4.2": {
-      "status": "dev",
-      "waiver": "open item M13-2: in-place FFT without precomputed per-stage twiddles; rustfft is 2 to 5 times cheaper"
     }
   },
   "fft_cq15_1024": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
     "avx2": {
       "status": "release"
     },
@@ -275,11 +438,65 @@
     },
     "simd128": {
       "status": "release"
-    },
+    }
+  },
+  "fft_cq15_1024_default": {
     "sse2": {
       "status": "release"
     },
     "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "fft_cq15_1024_full_scale": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "rfft_1024": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
       "status": "release"
     }
   }

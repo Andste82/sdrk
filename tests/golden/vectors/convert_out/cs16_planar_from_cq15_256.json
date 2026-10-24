@@ -14,7 +14,7 @@
   "case": "cs16_planar_from_cq15_256",
   "format_version": 1,
   "kernel": "convert_out",
-  "notes": "integer path: Q15 rounding right shift or left shift by the bit depth, explicit full scale by floor division",
+  "notes": "integer path: Q15 division by a power of two or by the explicit full scale rounded to nearest, ties to even, or left shift by the bit depth",
   "params": {
     "align": "lsb",
     "bits": 16,

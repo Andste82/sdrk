@@ -13,7 +13,6 @@ use sdrk_core::{C32, CQ15, ComplexSample, Error, Fallback, Q15, Reference};
 
 use super::ensure;
 use crate::arena::Arena;
-use crate::metrics::bit_exact;
 use crate::rng::Pcg32;
 use crate::suite::Failure;
 
@@ -160,14 +159,15 @@ pub(super) fn fft_cq15_fixed_vs_reference_1024(arena: &mut Arena<'_>) -> Result<
         ensure(want == got && got == via && got.exponent == log2(N), || {
             Failure::new(CASE, "exponent differs").detail(format_args!("{want:?} {got:?}"))
         })?;
-        ensure(bit_exact(fb, fac).is_none(), || {
-            Failure::new(CASE, "facade differs from the fallback")
-        })?;
+        // The backend need not match the fallback bit for bit (decision D10), but stays within
+        // 1 dB of it.
+        let fallback = snr_db(to_c64(rf), to_c64(fb));
+        min_snr(CASE, "fixed scaling below the contract", fallback, min)?;
         min_snr(
             CASE,
-            "fixed scaling below the contract",
-            snr_db(to_c64(rf), to_c64(fb)),
-            min,
+            "facade more than 1 dB below the fallback",
+            snr_db(to_c64(rf), to_c64(fac)),
+            min.max(fallback - 1.0),
         )?;
     }
     Ok(())
@@ -197,17 +197,24 @@ pub(super) fn fft_cq15_bfp_vs_reference_1024(arena: &mut Arena<'_>) -> Result<()
         let got = Fft::<CQ15>::fft(&Fallback, &plan, fb, FWD, Scaling::BlockFloat)?;
         fac.copy_from_slice(x);
         let via = Fft::<CQ15>::fft(&Sdrk, &plan, fac, FWD, Scaling::BlockFloat)?;
-        ensure(got == via && bit_exact(fb, fac).is_none(), || {
-            Failure::new(CASE, "facade differs from the fallback")
-        })?;
-        ensure((0..=2 * log2(N)).contains(&got.exponent), || {
-            Failure::new(CASE, "exponent out of range").detail(format_args!("{got:?}"))
-        })?;
-        // Both sides are compared after multiplying by their own `2^exponent`.
+        // The backend need not match the fallback bit for bit (decision D10); its exponent may
+        // differ as well. Both meet the contract.
+        for s in [got, via] {
+            ensure((0..=2 * log2(N)).contains(&s.exponent), || {
+                Failure::new(CASE, "exponent out of range").detail(format_args!("{s:?}"))
+            })?;
+        }
+        // Every side is compared after multiplying by its own `2^exponent`.
         min_snr(
             CASE,
             "block floating point below the contract",
             snr_db(scaled(rf, want.exponent), scaled(fb, got.exponent)),
+            min,
+        )?;
+        min_snr(
+            CASE,
+            "facade below the contract",
+            snr_db(scaled(rf, want.exponent), scaled(fac, via.exponent)),
             min,
         )?;
     }
@@ -303,13 +310,18 @@ pub(super) fn rfft_vs_reference_1024(arena: &mut Arena<'_>) -> Result<(), Failur
     ensure(want == got && got == via, || {
         Failure::new(CASE, "exponent differs")
     })?;
-    ensure(bit_exact(fb, fac).is_none(), || {
-        Failure::new(CASE, "facade differs from the fallback")
-    })?;
+    // The facade runs the inner complex FFT on the SIMD backend: the same contract, not the
+    // same bits.
     min_snr(
         CASE,
         "below 110 dB against the reference",
         snr_db(to_c64(rf), to_c64(fb)),
+        110.0,
+    )?;
+    min_snr(
+        CASE,
+        "facade below 110 dB against the reference",
+        snr_db(to_c64(rf), to_c64(fac)),
         110.0,
     )
 }
@@ -341,13 +353,18 @@ pub(super) fn irfft_vs_reference_1024(arena: &mut Arena<'_>) -> Result<(), Failu
     ensure(want == got && got == via && got.exponent == log2(N), || {
         Failure::new(CASE, "exponent differs")
     })?;
-    ensure(bit_exact(fb, fac).is_none(), || {
-        Failure::new(CASE, "facade differs from the fallback")
-    })?;
+    // The facade runs the inner complex FFT on the SIMD backend: the same contract, not the
+    // same bits.
     min_snr(
         CASE,
         "below 110 dB against the reference",
         snr_db(real_c64(rf), real_c64(fb)),
+        110.0,
+    )?;
+    min_snr(
+        CASE,
+        "facade below 110 dB against the reference",
+        snr_db(real_c64(rf), real_c64(fac)),
         110.0,
     )?;
     min_snr(

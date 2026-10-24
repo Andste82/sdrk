@@ -9,23 +9,10 @@
 
 mod common;
 
-use common::{Rng, c32_noise, cq15_noise};
+use common::{Rng, c32_noise, cq15_noise, cq15_plan, snr_db_exact as snr_db};
 use sdrk_backend_simd::Simd;
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, Scaling};
 use sdrk_core::{C32, CQ15, Fallback, Q15};
-
-fn snr_db(want: &[(f64, f64)], got: &[C32]) -> f64 {
-    let (mut sig, mut err) = (0f64, 0f64);
-    for (w, g) in want.iter().zip(got) {
-        sig += w.0 * w.0 + w.1 * w.1;
-        err += (w.0 - f64::from(g.re)).powi(2) + (w.1 - f64::from(g.im)).powi(2);
-    }
-    if err == 0.0 {
-        f64::INFINITY
-    } else {
-        10.0 * (sig / err).log10()
-    }
-}
 
 /// Exact DFT in f64 (direct sum, small sizes only).
 fn dft(x: &[C32], inverse: bool) -> Vec<(f64, f64)> {
@@ -145,8 +132,10 @@ fn fft_c32_errors_match_the_fallback() {
 }
 
 #[test]
-fn fft_c32_static_twiddle_stride() {
-    // A plan whose table is the 4096-point table: sizes below 4096 use every k-th entry.
+fn fft_c32_subsampled_twiddle_table() {
+    // A plan over every k-th entry of the 4096-point table, copied into a table of its own
+    // (`from_twiddles`, a table stride of 1); `fft_c32_sizes.rs` covers the plans of
+    // `from_static_4096`, which read the static table with the stride k.
     let big = plan_c32(4096);
     let table: Vec<C32> = big.twiddles().to_vec();
     let mut rng = Rng::new(42);
@@ -166,16 +155,32 @@ fn fft_c32_static_twiddle_stride() {
     }
 }
 
-fn plan_q15(n: usize) -> FftPlan<CQ15, Vec<CQ15>> {
-    FftPlan::new(n, vec![CQ15::default(); n / 2]).unwrap()
+/// The output of a `CQ15` transform times `2^exponent`.
+fn scaled(x: &[CQ15], exponent: i32) -> Vec<(f64, f64)> {
+    let g = 2f64.powi(exponent);
+    x.iter()
+        .map(|v| (f64::from(v.re.0) * g, f64::from(v.im.0) * g))
+        .collect()
 }
 
+/// Bit-exact with the fallback, exponent included, where the generic code runs (the levels without
+/// a level-specific path, and the sizes below it: see `fft_q15_generic.rs`); elsewhere (radix 4
+/// with the twiddle products rounded per part, a tolerance kernel) the outputs times `2^exponent`
+/// stay within 40 dB of the fallback's, except for the weak signal, whose few LSB both round
+/// differently (the accuracy of weak signals is in `fft_q15_accuracy.rs`).
 #[test]
-fn fft_cq15_is_bit_exact_including_the_exponent() {
+fn fft_cq15_matches_the_fallback_including_the_exponent() {
+    let generic_below = match sdrk_backend_simd::level_name() {
+        "scalar" => usize::MAX,
+        "avx2" | "neon" => 64,
+        "avx512" => 256,
+        _ => 16,
+    };
     let mut rng = Rng::new(43);
     for log in 4..=13 {
         let n = 1usize << log;
-        let plan = plan_q15(n);
+        let generic = n < generic_below;
+        let plan = cq15_plan(n);
         for dir in [Direction::Forward, Direction::Inverse] {
             for scaling in [Scaling::Default, Scaling::BlockFloat] {
                 let inputs = [
@@ -209,12 +214,31 @@ fn fft_cq15_is_bit_exact_including_the_exponent() {
                         .collect(),
                     vec![CQ15::default(); n],
                 ];
-                for x in inputs {
+                for (i, x) in inputs.into_iter().enumerate() {
                     let (mut want, mut got) = (x.clone(), x.clone());
                     let sw = Fallback.fft(&plan, &mut want, dir, scaling).unwrap();
                     let sg = Simd.fft(&plan, &mut got, dir, scaling).unwrap();
-                    assert_eq!(sw, sg, "n={n} {dir:?} {scaling:?}");
-                    assert_eq!(want, got, "n={n} {dir:?} {scaling:?}");
+                    if generic {
+                        assert_eq!(sw, sg, "n={n} {dir:?} {scaling:?}");
+                        assert_eq!(want, got, "n={n} {dir:?} {scaling:?}");
+                        continue;
+                    }
+                    if scaling == Scaling::Default {
+                        assert_eq!(sw, sg, "n={n} {dir:?} {scaling:?}");
+                    }
+                    if i == 4 {
+                        continue;
+                    }
+                    let (want, got) = (scaled(&want, sw.exponent), scaled(&got, sg.exponent));
+                    let (mut sig, mut err) = (0f64, 0f64);
+                    for (w, g) in want.iter().zip(&got) {
+                        sig += w.0 * w.0 + w.1 * w.1;
+                        err += (w.0 - g.0).powi(2) + (w.1 - g.1).powi(2);
+                    }
+                    assert!(
+                        err == 0.0 || 10.0 * (sig / err).log10() >= 40.0,
+                        "input {i} n={n} {dir:?} {scaling:?}: {sig} / {err}"
+                    );
                 }
             }
         }
@@ -223,7 +247,7 @@ fn fft_cq15_is_bit_exact_including_the_exponent() {
 
 #[test]
 fn fft_cq15_errors_match_the_fallback() {
-    let plan = plan_q15(64);
+    let plan = cq15_plan(64);
     let mut data = vec![CQ15::default(); 32];
     assert_eq!(
         Fallback.fft(&plan, &mut data, Direction::Forward, Scaling::Default),

@@ -148,7 +148,7 @@ pub(crate) fn plan(
 /// use sdrk_core::{kernels::convert::ConvertOut, Fallback, C32};
 /// use sdrk_device::formats;
 ///
-/// // Zero is at 127.5 for `U8`: 0.0 rounds half up to 128, -1.0 gives 0.
+/// // Zero is at 127.5 for `U8`: 0.0 rounds to the even neighbour 128, -1.0 gives 0.
 /// let mut bytes = [0u8; 2];
 /// let n = Fallback.convert_out(&formats::CU8, &[C32::new(0.0, -1.0)], &mut bytes)?;
 /// assert_eq!((n, bytes), (2, [128, 0]));
@@ -159,9 +159,10 @@ pub trait ConvertOut<T: ComplexSample> {
     /// the number of bytes written.
     ///
     /// From `C32`: `v = x * full_scale + offset` in f64 (NaN counts as amplitude 0), the raw
-    /// value is `floor(v + 0.5)` saturated to the range of the format; `F32` containers copy
-    /// the bits. From `CQ15` the integer rules of `docs/kernels.md` apply. Alignment, packing,
-    /// I/Q swap, planar halves and byte order are the inverse of [`Convert`].
+    /// value is `v` rounded to the nearest integer, ties to even, saturated to the range of the
+    /// format; `F32` containers copy the bits. From `CQ15` the integer rules of
+    /// `docs/kernels.md` apply. Alignment, packing, I/Q swap, planar halves and byte order are
+    /// the inverse of [`Convert`].
     ///
     /// Errors: `BufferTooSmall` if `output` cannot hold the bytes, `Unsupported` for `Bits1`,
     /// `InvalidParameter` for a real layout or a sample count that does not fill whole packing

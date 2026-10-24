@@ -8,7 +8,7 @@ Fully completed: Scope items 1 to 5 of the Specification except the performance 
 
 Differences from the text, all in `docs/decisions-log.md` (M13): `rotate` `C32` uses polynomials instead of the table lookup (the table needs more instructions than VOLK allows); the FFT is a fused radix-2^2 transform on the bit-reversed order, not a radix-4 transform (the plan has no per-stage twiddles and the call no scratch); `iai-callgrind` is replaced by reading the `callgrind` total directly; the AVX-512 level needs the Ice Lake feature set (`fearless_simd`); `limits.json` has the optional key `waiver`; small kernels run more than `K = 16` calls; the facade keeps the fallback on targets without SIMD.
 
-Not met (open items M13-1 to M13-4 in `docs/open-items.md`): `convert_out` is about 2 times the instructions of VOLK on x86-64 and the `C32` FFT 2 to 5 times those of rustfft (1.3 to 1.8 times on NEON), both waived in `limits.json`; the accuracy of `fft` at N = 64 on wasm32 is 0.05 dB over the margin; therefore the release 0.1 (version bump and tag `v0.1.0`) is not made. The CI jobs could not run here (M13-5, M13-6, M13-7).
+Not met (open items M13-4, M13-8 and M13-9 in `docs/open-items.md`): after the optimization (decisions D1 to D14) 156 of the 168 gated entries are `release` and pass, 143 of them at or below the goal ratio 1.00 against their fair reference; the release limit is 1.10. Two entries are `dev`: `convert_out` CU8 at `sse2` (1.35, M13-8) and `fft` `C32` at N = 64 with run-time detection (1.07 of the same kernel at compile-time `avx2`, limit 1.02, M13-9). Ten entries are `info` because the reference has no SIMD code at that level (VOLK's `rotate` and `quad_demod` at `sse2`/`sse4.2`, and `rotate`, the FIR family and `quad_demod` on wasm32, decision D12). `cargo xtask count --strict` therefore fails on x86_64 and wasm32, and the release 0.1 (version bump and tag `v0.1.0`) is not made.
 
 ## Goal
 
@@ -242,8 +242,8 @@ R1.2 commands; all CI jobs in §5 green; `cargo xtask count --platform x86_64` p
 - [x] `benches/` workspace, VOLK FFI, rustfft comparison, `limits.json`, results (`benches/results/{x86_64,x86_64-avx512,aarch64,wasm32,pipeline}.json`)
 - [x] `cargo xtask count` (callgrind, SDE, QEMU plugin, wasmtime fuel), with unit tests of the limit logic and the parsers; run for all four platforms
 - [x] `docs/performance.md`, `docs/backends.md`
-- [x] CI jobs written (`tier1` extra runs, `avx512-sde`, `aarch64-qemu`, `wasm-wasmtime`, `count`, `count-nightly`); the same commands pass locally, the jobs themselves could not run (open item M13-5)
-- [ ] Every kernel within the 1.15x limit and the tag `v0.1.0`: **not met**. 9 of the 13 measured pairs are within the dev limit on every level (`convert` twice, `rotate`, `fir`, `fir_decimate`, `mag_sq`, `quad_demod`, `fm_mod`, the `CQ15` FFT); `convert_out` (about 2x VOLK on x86-64) and the `C32` FFT (2 to 5x rustfft on x86-64, 1.3 to 1.8x on NEON) are waived in `benches/limits.json` (open items M13-1, M13-2), `fft` at N = 64 on wasm32 is 0.05 dB over the accuracy margin (M13-3). The workspace version stays 0.0.1 and no tag is created (M13-4).
+- [x] CI jobs written (`tier1` extra runs, `avx512-sde`, `aarch64-qemu`, `wasm-wasmtime`, `count`, `count-nightly`); the jobs ran on the pull request of the SIMD optimization and passed except `wasm-bindings` (Chrome and chromedriver of the runner differ, open item M13-5)
+- [ ] Every kernel within the limit and the tag `v0.1.0`: **not met**, see the status above. The old waivers for `convert_out`, the `C32` FFT and `fft` at N = 64 on wasm32 are gone: those entries pass the release limit of 1.10 now. What remains are M13-8, M13-9 and the `info` entries (decision pending in M13-4). The workspace version stays 0.0.1 and no tag is created.
 
 ### Status of the acceptance criteria
 
@@ -251,6 +251,6 @@ R1.2 commands; all CI jobs in §5 green; `cargo xtask count --platform x86_64` p
 | --- | --- |
 | R1.2 commands (fmt, clippy, tests, `xtask check`, `xtask bare-metal`) | pass locally on Linux x86_64 (also with `-C target-cpu=x86-64-v3` and `--cfg sdrk_fallback_only`) |
 | backend tests under SDE (AVX-512), QEMU (NEON), wasmtime (with and without `simd128`) | pass locally |
-| `cargo xtask count --platform x86_64` | passes (waivers for `convert_out` and the FFT) |
-| nightly counts `x86_64-avx512`, `aarch64`, `wasm32` | pass locally (waivers as above) |
-| all CI jobs of §5 green, tag `v0.1.0` | not confirmed / not made (M13-4, M13-5) |
+| `cargo xtask count --platform x86_64` | passes; `--strict` fails on the `dev` and `info` entries listed in the status |
+| nightly counts `x86_64-avx512`, `aarch64`, `wasm32` | pass locally; `--strict` passes at AVX-512 and AArch64, fails on wasm32 (`info` entries) |
+| all CI jobs of §5 green, tag `v0.1.0` | all green on the pull request except `wasm-bindings` (M13-5); the nightly jobs have not run on the branch; the tag is not made (M13-4) |

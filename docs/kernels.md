@@ -27,7 +27,7 @@ For every kernel `foo` there is:
 
 ## Numeric contract
 
-Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance* (minimum SNR against the f64 reference). Q15 rules: round half up, saturate, `-1 * -1 = 32767`.
+Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance* (minimum SNR against the f64 reference). Q15 rules: round half up, saturate, `-1 * -1 = 32767` (except the encoding rules of `convert_out`, which round half to even, see there).
 
 | Kernel | Trait | Sample types | Class | Contract |
 | --- | --- | --- | --- | --- |
@@ -37,11 +37,11 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 | `convert_real` | `kernels::convert::ConvertReal` | `f32`, `Q15` | bit-exact | same rules for `Layout::Real` |
 | `rotate` | `kernels::mix::Rotate` | `C32` | tolerance | SNR >= 120 dB vs. the golden f64 expected value; table interpolation in f32 without FMA |
 | `rotate` | `kernels::mix::Rotate` | `CQ15` | tolerance | SNR >= 80 dB vs. the golden f64 expected value; Q15 table, `i64` interpolation, `cq15_mul` |
-| `fir` | `kernels::filter::Fir` | `C32` | tolerance | SNR >= 110 dB vs. the f64 reference; f32 accumulation, taps ascending, no FMA |
+| `fir` | `kernels::filter::Fir` | `C32` | tolerance | SNR >= 110 dB vs. the f64 reference; f32 accumulation; the fallback sums taps ascending without FMA; the SIMD backend sums in its own order and uses FMA on AVX2, AVX-512 and NEON (decision D5) |
 | `fir` | `kernels::filter::Fir` | `CQ15` | bit-exact | Q30 products summed in `i64`, one rounding and saturation per component |
-| `fir_decimate` | `kernels::decim::FirDecimate` | `C32` | tolerance | SNR >= 110 dB vs. the f64 reference; accumulation as `fir` (f32 ascending, no FMA); only the emitted outputs are computed |
+| `fir_decimate` | `kernels::decim::FirDecimate` | `C32` | tolerance | SNR >= 110 dB vs. the f64 reference; accumulation as `fir` (backend: own order, FMA on AVX2/AVX-512/NEON); only the emitted outputs are computed |
 | `fir_decimate` | `kernels::decim::FirDecimate` | `CQ15` | bit-exact | `Acc64` per component, one rounding and saturation per emitted output |
-| `resample` | `kernels::decim::Resample` | `C32` | tolerance | SNR >= 110 dB (100 dB for L/M = 147/160 with 1470 taps) vs. `scipy.signal.upfirdn`; polyphase, f32 ascending, no FMA |
+| `resample` | `kernels::decim::Resample` | `C32` | tolerance | SNR >= 110 dB (100 dB for L/M = 147/160 with 1470 taps) vs. `scipy.signal.upfirdn`; polyphase, f32 ascending, no FMA (backend: the branches in the forms of `fir`/`fir_decimate`, own order, FMA on AVX2/AVX-512/NEON) |
 | `resample` | `kernels::decim::Resample` | `CQ15` | bit-exact | `Acc64` per component over the polyphase branch |
 | `resample_real` | `kernels::decim::ResampleReal` | `f32` | tolerance | same as complex `resample` |
 | `resample_real` | `kernels::decim::ResampleReal` | `Q15` | bit-exact | same as complex `resample` |
@@ -53,7 +53,7 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 | `dc_block` | `kernels::demod::DcBlock` | `CQ15` | bit-exact | `y = sat16((x - x_prev) + round_shift(r * y_prev, 15))` per component |
 | `window` | `kernels::spectrum::Window` | `C32` | bit-exact | f32 multiply per component (equal to the f64 product rounded once) |
 | `window` | `kernels::spectrum::Window` | `CQ15` | bit-exact | `q15_mul` per component |
-| `mag_sq` | `kernels::spectrum::MagSq` | `C32` | tolerance | SNR >= 140 dB; `re * re + im * im` without FMA |
+| `mag_sq` | `kernels::spectrum::MagSq` | `C32` | tolerance | SNR >= 140 dB; `re * re + im * im` without FMA; the SIMD backend equals the fallback bit for bit in every build, the relaxed WASM build included |
 | `mag_sq` | `kernels::spectrum::MagSq` | `CQ15` | bit-exact | `sat16(round_shift(re^2 + im^2, 15))`; full scale saturates |
 | `power_db` | `kernels::spectrum::PowerDb` | `f32`, `Q15` | tolerance | largest absolute error <= 1e-4 dB; `10 * log10f(max(p, 1e-20)) + offset` |
 | `fft` | `kernels::fft::Fft` | `C32` | tolerance | SNR >= 110 dB (N <= 4096, noise sigma 0.3) vs. `numpy.fft`; radix-2 in f32 without FMA, f64 twiddles cast to f32 |
@@ -62,7 +62,7 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 | `rfft`, `irfft` | `kernels::fft::RealFft` | `f32` | tolerance | SNR >= 110 dB vs. `numpy.fft.rfft`/`irfft` |
 | `convert_out` | `kernels::convert::ConvertOut` | `C32`, `CQ15` | bit-exact | exact encoding rules below; fallback equals the reference bit for bit |
 | `convert_out_real` | `kernels::convert::ConvertOutReal` | `f32`, `Q15` | bit-exact | same rules for `Layout::Real` |
-| `fir_interpolate` | `kernels::interp::FirInterpolate` | `C32` | tolerance | SNR >= 110 dB vs. `scipy.signal.upfirdn(h, x, L, 1)`; the resampler with `down = 1`, f32 ascending, no FMA |
+| `fir_interpolate` | `kernels::interp::FirInterpolate` | `C32` | tolerance | SNR >= 110 dB vs. `scipy.signal.upfirdn(h, x, L, 1)`; the resampler with `down = 1`, f32 ascending, no FMA (backend: as `resample`) |
 | `fir_interpolate` | `kernels::interp::FirInterpolate` | `CQ15` | bit-exact | `Acc64` per component over the polyphase branch, as `resample` |
 | `fir_interpolate_real` | `kernels::interp::FirInterpolateReal` | `f32`, `Q15` | tolerance (`f32`), bit-exact (`Q15`) | same as the complex variants |
 | `fm_mod` | `kernels::modulate::FmMod` | `C32` | tolerance | SNR >= 120 dB vs. the golden f64 expected value; integer phase accumulator, cosine table of `rotate` in f32 |
@@ -90,6 +90,7 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 - **Fallback `C32`:** `idx = phase >> 20`, `f = (phase & 0xFFFFF) / 2^20` in f32, `c = a + (b - a) * f` (no FMA), result `(re c - im s, re s + im c)`.
 - **Fallback `CQ15`:** `f15 = (phase >> 5) & 0x7FFF`, `c = sat16(a + round_shift((b - a) * f15, 15))` in `i64`, then `cq15_mul`.
 - **Reference:** `theta = 2 pi phase / 2^32` in f64, `libm::cos/sin`, f64 complex product, rounded once.
+- **SIMD backend `C32`:** a block oscillator instead of the table (see [backends.md](backends.md)); an output sample is a function of `(phase_n, inc)` and the input sample, so it does not depend on the split into calls, but after a retune its bits can depend on the increment as well as on the phase (decision D8, [timing.md](timing.md#block-size-invariance)). Contract: SNR >= 120 dB as above.
 - The table value at angle 0 is `32767/32768` (not 1.0), so `CQ15` rotation by zero is the identity only for `|x| <= 16384` and within one LSB for larger values. In `C32` the sine of angle 0 is the table entry for 3 pi / 2 (about -1.8e-16), so rotation by zero is exact whenever `|im| * 1.8e-16` is below half an ULP of `re` (always true for ordinary signals; an input with `re = 0` and `im != 0` receives a residue of about 1e-16).
 - A rotated `CQ15` sample whose magnitude exceeds 1 saturates one component; the golden cases clip their expected value the same way.
 
@@ -135,6 +136,12 @@ The Q15 variants cannot hold a tap gain of `L` above 1; the golden case `resampl
 
 `kernels::fft` provides the heap-free FFT as an ordinary kernel: power-of-two sizes 16 to 65 536, in place, iterative radix-2 decimation in time, for `C32` and `CQ15` (trait `Fft<T>`), plus a real-input FFT and its inverse for `f32` (trait `RealFft`). `FftPlan<T, Tw>` holds the size and the twiddle table `tw[k] = e^(-j 2 pi k / N)` (`k < N/2`) in caller storage (`[T; N/2]`, `&mut [T]`, `Vec<T>`, a `static`); `FftPlan::new` fills it (f64 `libm::cos`/`libm::sin`, then a cast for `C32` or the Q15 rule for `CQ15`), `FftPlan::from_twiddles` only validates the length. `RealFftPlan` wraps a complex plan of size `N/2` plus the post-processing twiddles `post[k] = e^(-j 2 pi k / N)`; one plan serves `rfft` and `irfft`. The optional feature `static-twiddles` adds `TWIDDLES_C32_4096` (16 KiB of flash) and `TWIDDLES_CQ15_4096` (8 KiB) emitted by `build.rs` and `FftPlan::<T, _>::from_static_4096(n)` for `n <= 4096`, which uses every `4096 / n`-th entry; the result equals a plan from `new` bit for bit.
 
+**Twiddles in the SIMD backend.** A plan's table is the only twiddle source of the fallback. The SIMD backend can use other sources (decision D4), so for a plan from `FftPlan::from_twiddles` with values other than those of `new` its result is not the transform of those twiddles:
+
+- `C32` with the backend feature `fft-tables` (on by default on x86-64 and AArch64 through the facade, opt-in on wasm32 and 32-bit x86 with the facade feature `fft-tables`): the passes of spans up to 4096 read static per-span tables equal to the twiddles of `new`; the plan's table serves only the spans above 4096. Without the feature, `W^3k` is the product `W^k W^2k` of two plan entries.
+- `rfft`: the bins `N/2 - k` use `-conj(post[k])` in place of `post[N/2 - k]` (the identity of the twiddles of `RealFftPlan::new`), and with `fft-tables` the post-processing of up to 4096 points reads the static table of the span `N` instead of `post`.
+- `CQ15`: the generic bit-exact path relies on `|wr| + |wi| <= 46341`, which holds for plans from `new` and `from_static_4096`; the radix-4 level paths clamp twiddles to `>= -32767`. Stride plans with a twiddle step above 4 per stage square `w^k` instead of loading `w^2k`, which costs up to about 1 dB at N = 16.
+
 **One scale rule for every type and direction.** The call returns `FftScale { exponent }`; the unnormalised sum `sum x[n] e^(-+j 2 pi k n / N)` equals `output * 2^exponent`.
 
 | Type | Direction | Output | `exponent` |
@@ -163,8 +170,8 @@ The Q15 variants cannot hold a tap gain of `L` above 1; the golden case `resampl
 
 `ConvertOut<T>::convert_out(&format, input, output) -> Result<usize>` encodes whole samples into the raw bytes of `format` (layout `Interleaved` or `Planar`) and returns the number of bytes written; `ConvertOutReal<T>` does the same for `Layout::Real`. It is the inverse of `convert` with rounding and saturation. The effective integer value `e` of a component is first computed as below, then stored as in `docs/device.md`: `Msb` alignment shifts `e` left by `container_bits - bits`, `Lsb` alignment stores `e` sign-extended in the container (the decoder ignores the bits above `bits`), the I/Q swap puts Q first in every pair, a planar stream holds all I values and then all Q values, `Endian::Big` writes multi-byte containers big-endian, and `Packed12`/`Packed10` pack their values LSB-first (alignment and byte order do not apply). Errors: `BufferTooSmall { needed, got }` when `output` cannot hold `format.bytes_for_samples(input.len())` bytes, `Unsupported` for `Bits1`, `InvalidParameter` for a layout of the wrong kind and for a sample count that does not fill whole packing groups (checked in this order: layout, `Bits1`, packing, buffer). Bytes beyond the returned count are not touched.
 
-- **From `C32`/`f32`:** `v = x * full_scale + offset` in f64 (`offset = 127.5` for `U8`, else 0; NaN counts as amplitude 0), `e = floor(v + 0.5)` (round half up) saturated to the range of the format: `0 ..= 2^bits - 1` for `U8`, `-2^(bits-1) ..= 2^(bits-1) - 1` for signed formats; infinities saturate. `F32` containers copy the bits of `x` (NaN payloads and `-0.0` included).
-- **From `CQ15`/`Q15` (integer only):** `U8` with a power-of-two full scale: `e = clamp(round_shift(q + 255 * 2^(15 - bits), 16 - bits), 0, 2^bits - 1)`, which is `round_shift(q + 32640, 8)` for 8 bits; `U8` with the explicit full scale `n`: `floor((q * n + 255 * 16384 + 16384) / 32768)`; signed with a power-of-two full scale and at most 16 bits: `sat_b(round_shift(q, 16 - bits))`; more than 16 bits: `q << (bits - 16)`; signed with the explicit full scale `n`: `sat_b(floor((q * 2n + 32768) / 65536))`. `F32` containers get the exact `q / 32768`. These integer rules equal the f64 formula applied to `x = q / 32768` for every format, which the reference uses.
+- **From `C32`/`f32`:** `v = x * full_scale + offset` in f64 (`offset = 127.5` for `U8`, else 0; NaN counts as amplitude 0). `e` is `v` rounded to the nearest integer with ties to even (like VOLK; `libm::roundeven`), saturated to the range of the format: `0 ..= 2^bits - 1` for `U8`, `-2^(bits-1) ..= 2^(bits-1) - 1` for signed formats; infinities saturate. `F32` containers copy the bits of `x` (NaN payloads and `-0.0` included). For `U8` every amplitude that is a multiple of `1 / full_scale` is a tie: 0.0 gives 128 and 1/128 also gives 128.
+- **From `CQ15`/`Q15` (integer only):** `div_even(a, d)` is `a / d` rounded to the nearest integer, ties to even. `U8` with a power-of-two full scale: `e = clamp(div_even(q + 255 * 2^(15 - bits), 2^(16 - bits)), 0, 2^bits - 1)`, which is `div_even(q + 32640, 256)` for 8 bits. `U8` with the explicit full scale `n`: `div_even(q * n + 255 * 16384, 32768)`. Signed with a power-of-two full scale and at most 16 bits: `sat_b(div_even(q, 2^(16 - bits)))`. More than 16 bits: `q << (bits - 16)`. Signed with the explicit full scale `n`: `sat_b(div_even(q * n, 32768))`. `F32` containers get the exact `q / 32768`. These integer rules equal the f64 formula applied to `x = q / 32768` for every format, which the reference uses.
 - **Round trips:** decoding then encoding the raw bytes of a non-lossy format (at most 24 bits for `C32`, at most 16 bits and a power-of-two full scale for `CQ15`) reproduces them exactly; encoding then decoding stays within half an LSB of the format for amplitudes inside its range.
 - **Reference:** the f64 formula with a bit-by-bit writer. The fallback uses the integer formulas above for `Q15`.
 
@@ -224,9 +231,9 @@ Golden vectors are produced by `tests/golden/generate.py` with NumPy/SciPy (pinn
 
 ## Backends and the numeric contract
 
-The SIMD backend ([backends.md](backends.md)) implements `convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `resample`, `mag_sq`, `quad_demod`, `fm_mod` and `fft` for `C32` and `CQ15`.
+The SIMD backend ([backends.md](backends.md)) implements `convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `resample`, `mag_sq`, `quad_demod`, `fm_mod` and `fft` for `C32` and `CQ15`, and `rfft`/`irfft` for `f32` around its `C32` FFT.
 
-- **Bit-exact with the fallback:** `convert`, `convert_out`, `mag_sq` and `fm_mod` (both types; `C32` `mag_sq` not in the relaxed WASM build, see [backends.md](backends.md)), and for `CQ15` also `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `resample` and `fft` (the block-floating-point exponent included).
-- **Tolerance kernels in the backend:** `C32` `rotate` (120 dB), `fir`, `fir_decimate`, `fir_interpolate`, `resample` and `fft` (110 dB), and `quad_demod` (100 dB `C32`, 70 dB `CQ15`). They reach the minimum SNR of their contract against the f64 reference but not the bits of the fallback, and different levels (SSE2, AVX2, NEON) give different bits within that tolerance. In the relaxed WASM build (feature `relaxed-simd`, [backends.md](backends.md)) the `C32` variants of `fir`, `fir_decimate`, `fir_interpolate`, `resample`, `rotate`, `fft` and `mag_sq` use relaxed multiply-add: they stay within their contracts, but the bits depend on the host CPU.
+- **Bit-exact with the fallback:** `convert`, `convert_out`, `mag_sq` and `fm_mod` (both types, in every build), and for `CQ15` also `rotate`, `fir`, `fir_decimate`, `fir_interpolate` and `resample`.
+- **Tolerance kernels in the backend:** `C32` `rotate` (120 dB), `fir`, `fir_decimate`, `fir_interpolate`, `resample` and `fft` (110 dB), `f32` `rfft` and `irfft` (110 dB), `quad_demod` (100 dB `C32`, 70 dB `CQ15`), and `CQ15` `fft` (the SNR contract of the table: 58/55 dB block float, 55/40 dB fixed scaling; fixed scaling within 1 dB of the fallback at every size; the block-floating-point exponent may differ from the fallback's). They reach the minimum SNR of their contract against the f64 reference but not the bits of the fallback, and different levels (SSE2, AVX2, NEON) give different bits within that tolerance. In the relaxed WASM build (feature `relaxed-simd`, [backends.md](backends.md)) the `C32` variants of `fir`, `fir_decimate`, `fir_interpolate`, `resample`, `rotate` and `fft` use relaxed multiply-add (and with it `rfft` and `irfft`, through the `C32` FFT): they stay within their contracts, but the bits depend on the host CPU.
 
 Block-size invariance (R6.2) holds for each kernel of the backend, per level.

@@ -5,8 +5,33 @@ use sdrk_device::{Align, Container, Endian, FullScale, Layout, SampleFormat};
 use crate::Fallback;
 use crate::error::{Error, Result};
 use crate::kernels::convert::{ConvertOut, ConvertOutReal, plan_out};
-use crate::num::round_shift;
 use crate::types::{C32, CQ15, Q15};
+
+/// `x / 2^s` rounded to the nearest integer, ties to even (arithmetic shift, `s < 63`).
+fn shift_even(x: i64, s: u32) -> i64 {
+    if s == 0 {
+        return x;
+    }
+    let q = x >> s;
+    let r = x - (q << s);
+    let half = 1i64 << (s - 1);
+    if r > half || (r == half && q & 1 == 1) {
+        q + 1
+    } else {
+        q
+    }
+}
+
+/// `a / d` for `d > 0` rounded to the nearest integer, ties to even.
+fn div_even(a: i64, d: i64) -> i64 {
+    let q = a.div_euclid(d);
+    let r2 = 2 * a.rem_euclid(d);
+    if r2 > d || (r2 == d && q & 1 == 1) {
+        q + 1
+    } else {
+        q
+    }
+}
 
 /// Everything the encoder needs to know about a format.
 #[derive(Clone, Copy)]
@@ -73,11 +98,11 @@ impl Enc {
         raw.clamp(self.lo, self.hi)
     }
 
-    /// The effective raw value of an f32 amplitude: `floor(x * full_scale + offset + 0.5)`,
-    /// computed in f64 (NaN counts as 0), saturated.
+    /// The effective raw value of an f32 amplitude: `x * full_scale + offset` computed in f64
+    /// (NaN counts as 0), rounded to the nearest integer with ties to even, saturated.
     fn f32_raw(&self, x: f32) -> i64 {
         let a = if x.is_nan() { 0.0 } else { f64::from(x) };
-        let v = libm::floor(a * self.full_scale + self.offset + 0.5);
+        let v = libm::roundeven(a * self.full_scale + self.offset);
         if v >= self.hi as f64 {
             self.hi
         } else if v <= self.lo as f64 {
@@ -87,17 +112,18 @@ impl Enc {
         }
     }
 
-    /// The effective raw value of a Q15 sample by the integer rules.
+    /// The effective raw value of a Q15 sample by the integer rules (ties to even, like the f64
+    /// formula on `q / 32768`).
     fn q15_raw(&self, q: Q15) -> i64 {
         let q = i64::from(q.0);
         let raw = match (self.u8_container, self.explicit) {
             (true, None) => {
                 let s = 15 - self.bits.min(15);
-                round_shift(q + (255 << s), s + 1)
+                shift_even(q + (255 << s), s + 1)
             }
-            (true, Some(n)) => (q * n + 255 * 16384 + 16384).div_euclid(32768),
-            (false, Some(n)) => (q * 2 * n + 32768).div_euclid(65536),
-            (false, None) if self.bits <= 16 => round_shift(q, 16 - self.bits),
+            (true, Some(n)) => div_even(q * n + 255 * 16384, 32768),
+            (false, Some(n)) => div_even(q * n, 32768),
+            (false, None) if self.bits <= 16 => shift_even(q, 16 - self.bits),
             (false, None) => q << (self.bits - 16),
         };
         self.clamp(raw)

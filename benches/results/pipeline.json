@@ -4,7 +4,7 @@
     "format": "cu8",
     "rate_hz": 2400000
   },
-  "instructions_per_input_sample": 545.0,
+  "instructions_per_input_sample": 461.15,
   "latency": {
     "group_delay_samples": 27.14,
     "latency_samples": 30.14,

@@ -164,7 +164,8 @@ fn encode_cq15(f: &SampleFormat, input: &[CQ15]) -> Vec<u8> {
 #[test]
 fn convert_out_spot_values() {
     let c = C32::new;
-    // CU8: zero is at 127.5, so 0.0 rounds half up to 128; the range saturates.
+    // CU8: zero is at 127.5, so 0.0 rounds to the even neighbour 128; the range saturates.
+    // -0.5 gives 63.5, which rounds to 64.
     assert_eq!(encode_c32(&formats::CU8, &[c(0.0, -1.0)]), [128, 0]);
     assert_eq!(encode_c32(&formats::CU8, &[c(1.0, 2.0)]), [255, 255]);
     assert_eq!(encode_c32(&formats::CU8, &[c(-0.5, f32::NAN)]), [64, 128]);
@@ -174,10 +175,13 @@ fn convert_out_spot_values() {
         encode_c32(&formats::CS8, &[c(0.5, f32::INFINITY)]),
         [64, 127]
     );
-    // Round half up at the half-LSB boundary: 0.5 / 128 is exactly half an LSB.
+    // Ties to even at the half-LSB boundaries: 0.5 / 128 is exactly half an LSB.
     assert_eq!(
-        encode_c32(&formats::CS8, &[c(0.5 / 128.0, -0.5 / 128.0)]),
-        [1, 0]
+        encode_c32(
+            &formats::CS8,
+            &[c(0.5 / 128.0, -0.5 / 128.0), c(1.5 / 128.0, -1.5 / 128.0)]
+        ),
+        [0, 0, 2, 254]
     );
     // CS16 little endian.
     assert_eq!(
@@ -235,22 +239,28 @@ fn convert_out_q15_integer_rules() {
         re: Q15(re),
         im: Q15(im),
     };
-    // U8: round_shift(q + 32640, 8) clamped to 0..=255.
+    // U8: (q + 32640) / 256 rounded to the nearest integer, ties to even, clamped to 0..=255.
     assert_eq!(encode_cq15(&formats::CU8, &[q(0, 32767)]), [128, 255]);
     assert_eq!(encode_cq15(&formats::CU8, &[q(-32768, 32640)]), [0, 255]);
     assert_eq!(encode_cq15(&formats::CU8, &[q(-127, -128)]), [127, 127]);
-    // Signed 8 bit: round_shift(q, 8), saturated.
-    assert_eq!(encode_cq15(&formats::CS8, &[q(127, 128)]), [0, 1]);
+    assert_eq!(encode_cq15(&formats::CU8, &[q(256, 512)]), [128, 130]);
+    // Signed 8 bit: q / 256 rounded, ties to even, saturated.
+    assert_eq!(encode_cq15(&formats::CS8, &[q(127, 128)]), [0, 0]);
+    assert_eq!(encode_cq15(&formats::CS8, &[q(384, -384)]), [2, 254]);
     assert_eq!(encode_cq15(&formats::CS8, &[q(32767, -32768)]), [127, 128]);
     assert_eq!(encode_cq15(&formats::CS8, &[q(-128, -129)]), [0, 255]);
-    // 16 bit: identity. 12 bit: round_shift(q, 4).
+    // 16 bit: identity. 12 bit: q / 16 rounded, ties to even.
     assert_eq!(
         encode_cq15(&formats::CS16, &[q(-32768, 32767)]),
         [0x00, 0x80, 0xFF, 0x7F]
     );
     assert_eq!(
         encode_cq15(&formats::CS12_LSB16, &[q(7, 8)]),
-        [0x00, 0x00, 0x01, 0x00]
+        [0x00, 0x00, 0x00, 0x00]
+    );
+    assert_eq!(
+        encode_cq15(&formats::CS12_LSB16, &[q(24, 40)]),
+        [0x02, 0x00, 0x02, 0x00]
     );
     assert_eq!(
         encode_cq15(&formats::CS12_LSB16, &[q(32767, -32768)]),
@@ -261,14 +271,18 @@ fn convert_out_q15_integer_rules() {
         encode_cq15(&formats::I2S32_MSB, &[q(1, -1)]),
         [0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xFF, 0xFF]
     );
-    // Explicit full scale 2048: floor((q * 4096 + 32768) / 65536).
+    // Explicit full scale 2048: q * 2048 / 32768 rounded, ties to even.
     assert_eq!(
         encode_cq15(&formats::SC16_Q11, &[q(16, -16)]),
         [0x01, 0x00, 0xFF, 0xFF]
     );
     assert_eq!(
         encode_cq15(&formats::SC16_Q11, &[q(8, -8)]),
-        [0x01, 0x00, 0x00, 0x00]
+        [0x00, 0x00, 0x00, 0x00]
+    );
+    assert_eq!(
+        encode_cq15(&formats::SC16_Q11, &[q(24, -24)]),
+        [0x02, 0x00, 0xFE, 0xFF]
     );
     // F32 containers get the exact f32 value.
     let cf = encode_cq15(&formats::CF32, &[q(16384, -32768)]);
@@ -554,8 +568,8 @@ fn encoding_then_decoding_stays_within_half_an_lsb() {
 }
 
 #[test]
-fn explicit_full_scale_and_u8_rounding_half_up() {
-    // Explicit(3): q = 16384 is amplitude 0.5, times 3 = 1.5, which rounds half up to 2.
+fn explicit_full_scale_and_u8_rounding_to_even() {
+    // Explicit(3): q = 16384 is amplitude 0.5, times 3 = 1.5, which rounds to the even 2.
     let f = formats::CS16
         .with_full_scale(FullScale::Explicit(3))
         .unwrap();
@@ -563,10 +577,10 @@ fn explicit_full_scale_and_u8_rounding_half_up() {
         re: Q15(v),
         im: Q15(-v),
     };
-    assert_eq!(encode_cq15(&f, &[q(16384)]), [2, 0, 0xFF, 0xFF]);
-    // The mirrored value -1.5 rounds half up to -1.
-    assert_eq!(encode_c32(&f, &[C32::new(0.5, -0.5)]), [2, 0, 0xFF, 0xFF]);
-    // CU8 with explicit full scale: amplitude * n + 127.5.
+    assert_eq!(encode_cq15(&f, &[q(16384)]), [2, 0, 0xFE, 0xFF]);
+    // The mirrored value -1.5 rounds to the even -2.
+    assert_eq!(encode_c32(&f, &[C32::new(0.5, -0.5)]), [2, 0, 0xFE, 0xFF]);
+    // CU8 with explicit full scale: amplitude * n + 127.5; 177.5 and 77.5 round to even.
     let u = formats::CU8
         .with_full_scale(FullScale::Explicit(100))
         .unwrap();

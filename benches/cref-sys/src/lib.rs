@@ -1,0 +1,370 @@
+//! The C FFT libraries the SDRk benchmarks compare with, each behind a small owning wrapper:
+//!
+//! - [`Fftw`]: FFTW 3 in single precision (GPL-2.0-or-later), a forward transform in place or
+//!   out of place, planned with `FFTW_ESTIMATE`, so that the plan does not depend on timing.
+//! - [`FftwR2c`]: FFTW's real-input forward transform (`N` real samples to `N / 2 + 1` bins),
+//!   out of place, planned in the same way.
+//! - [`KissFft16`]: KissFFT built with `FIXED_POINT=16` (BSD-3-Clause), out of place; every
+//!   stage divides by its radix, so the result is the DFT divided by N.
+//! - [`Ne10Int16`]: the int16 NEON transform of Ne10 (BSD-3-Clause), out of place, scaled by
+//!   1/N (AArch64 only).
+//!
+//! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
+//! constructor returns `None` when its library is not linked. All three use the interleaved
+//! complex layout of `repr(C)` pairs.
+
+/// FFTW's single-precision forward transform, planned for one pair of buffers: in place
+/// (input and output are the same buffer) or out of place.
+pub struct Fftw {
+    #[cfg(has_fftw)]
+    plan: *mut core::ffi::c_void,
+    len: usize,
+    in_place: bool,
+}
+
+#[cfg(has_fftw)]
+mod fftw_ffi {
+    use core::ffi::{c_int, c_uint, c_void};
+
+    pub const FFTW_FORWARD: c_int = -1;
+    pub const FFTW_ESTIMATE: c_uint = 1 << 6;
+
+    unsafe extern "C" {
+        pub fn fftwf_plan_dft_1d(
+            n: c_int,
+            input: *mut [f32; 2],
+            output: *mut [f32; 2],
+            sign: c_int,
+            flags: c_uint,
+        ) -> *mut c_void;
+        pub fn fftwf_execute_dft(plan: *mut c_void, input: *mut [f32; 2], output: *mut [f32; 2]);
+        pub fn fftwf_plan_dft_r2c_1d(
+            n: c_int,
+            input: *mut f32,
+            output: *mut [f32; 2],
+            flags: c_uint,
+        ) -> *mut c_void;
+        pub fn fftwf_execute_dft_r2c(plan: *mut c_void, input: *mut f32, output: *mut [f32; 2]);
+        pub fn fftwf_destroy_plan(plan: *mut c_void);
+    }
+}
+
+impl Fftw {
+    /// Plans the forward transform of `data` in place; `None` without FFTW or if planning
+    /// fails. FFTW chooses its SIMD codelets from the alignment of the planned buffers, so
+    /// every later call must pass buffers with the same alignment (see [`Fftw::forward`]).
+    pub fn in_place(data: &mut [[f32; 2]]) -> Option<Self> {
+        let p = data.as_mut_ptr();
+        Self::plan(data.len(), p, p)
+    }
+
+    /// Plans the forward transform from `input` to `output` (as GNU Radio's `fft_vcc` uses
+    /// FFTW); `None` without FFTW, if planning fails or if the lengths differ. The alignment
+    /// rule of [`Fftw::in_place`] applies to both buffers. For a complex transform out of place
+    /// FFTW preserves the input.
+    pub fn out_of_place(input: &mut [[f32; 2]], output: &mut [[f32; 2]]) -> Option<Self> {
+        if input.len() != output.len() {
+            return None;
+        }
+        Self::plan(input.len(), input.as_mut_ptr(), output.as_mut_ptr())
+    }
+
+    /// The plan of `len` points from `input` to `output`, which point to `len` complex values
+    /// each (or are the same pointer).
+    #[cfg(has_fftw)]
+    fn plan(len: usize, input: *mut [f32; 2], output: *mut [f32; 2]) -> Option<Self> {
+        let n = core::ffi::c_int::try_from(len).ok()?;
+        // SAFETY: both pointers come from live slices of `len` complex values (see the
+        // callers); with `FFTW_ESTIMATE` the planner does not write to the arrays.
+        let plan = unsafe {
+            fftw_ffi::fftwf_plan_dft_1d(
+                n,
+                input,
+                output,
+                fftw_ffi::FFTW_FORWARD,
+                fftw_ffi::FFTW_ESTIMATE,
+            )
+        };
+        (!plan.is_null()).then_some(Fftw {
+            plan,
+            len,
+            in_place: input == output,
+        })
+    }
+
+    /// Without FFTW: `None`.
+    #[cfg(not(has_fftw))]
+    fn plan(len: usize, input: *mut [f32; 2], output: *mut [f32; 2]) -> Option<Self> {
+        let _ = (len, input, output);
+        None
+    }
+
+    /// The unnormalised forward DFT of `data` in place.
+    ///
+    /// The alignment is not checked, because a check would enter the instruction counts of the
+    /// comparison.
+    ///
+    /// # Safety
+    /// `data` must have the alignment of the buffer the plan was made for (modulo 64 bytes, so
+    /// that FFTW's `fftwf_alignment_of` agrees); FFTW's new-array execute is undefined
+    /// otherwise.
+    ///
+    /// # Panics
+    /// If the plan is out of place or `data` does not have the planned length.
+    pub unsafe fn forward(&mut self, data: &mut [[f32; 2]]) {
+        assert!(self.in_place, "FFTW: the plan is out of place");
+        assert_eq!(data.len(), self.len, "FFTW: length differs from the plan");
+        #[cfg(has_fftw)]
+        // SAFETY: the plan is valid until `drop` and was made for one buffer of this length;
+        // `data` has the alignment of the planned buffer (the caller's contract).
+        unsafe {
+            fftw_ffi::fftwf_execute_dft(self.plan, data.as_mut_ptr(), data.as_mut_ptr());
+        }
+    }
+
+    /// The unnormalised forward DFT of `input` into `output`. The alignment is not checked, as
+    /// in [`Fftw::forward`].
+    ///
+    /// # Safety
+    /// `input` and `output` must have the alignments of the buffers the plan was made for
+    /// (modulo 64 bytes); FFTW's new-array execute is undefined otherwise.
+    ///
+    /// # Panics
+    /// If the plan is in place or a buffer does not have the planned length.
+    pub unsafe fn forward_to(&mut self, input: &mut [[f32; 2]], output: &mut [[f32; 2]]) {
+        assert!(!self.in_place, "FFTW: the plan is in place");
+        assert_eq!(input.len(), self.len, "FFTW: length differs from the plan");
+        assert_eq!(output.len(), self.len, "FFTW: length differs from the plan");
+        #[cfg(has_fftw)]
+        // SAFETY: the plan is valid until `drop` and was made for two distinct buffers of this
+        // length (the borrows here cannot alias either); both have the alignments of the
+        // planned buffers (the caller's contract).
+        unsafe {
+            fftw_ffi::fftwf_execute_dft(self.plan, input.as_mut_ptr(), output.as_mut_ptr());
+        }
+    }
+}
+
+#[cfg(has_fftw)]
+impl Drop for Fftw {
+    fn drop(&mut self) {
+        // SAFETY: the plan came from `fftwf_plan_dft_1d` and is destroyed once.
+        unsafe { fftw_ffi::fftwf_destroy_plan(self.plan) }
+    }
+}
+
+/// FFTW's single-precision real-input forward transform, planned for one pair of buffers, out
+/// of place (FFTW's default for a real-input transform preserves the input).
+pub struct FftwR2c {
+    #[cfg(has_fftw)]
+    plan: *mut core::ffi::c_void,
+    len: usize,
+}
+
+impl FftwR2c {
+    /// Plans the transform of the `N` real samples of `input` into the `N / 2 + 1` bins of
+    /// `output`; `None` without FFTW, if planning fails or if the lengths do not match. The
+    /// alignment rule of [`Fftw::in_place`] applies to both buffers.
+    #[cfg(has_fftw)]
+    pub fn new(input: &mut [f32], output: &mut [[f32; 2]]) -> Option<Self> {
+        let len = input.len();
+        if output.len() != len / 2 + 1 {
+            return None;
+        }
+        let n = core::ffi::c_int::try_from(len).ok()?;
+        // SAFETY: both pointers come from live slices of the planned lengths; with
+        // `FFTW_ESTIMATE` the planner does not write to the arrays.
+        let plan = unsafe {
+            fftw_ffi::fftwf_plan_dft_r2c_1d(
+                n,
+                input.as_mut_ptr(),
+                output.as_mut_ptr(),
+                fftw_ffi::FFTW_ESTIMATE,
+            )
+        };
+        (!plan.is_null()).then_some(FftwR2c { plan, len })
+    }
+
+    /// Without FFTW: `None`.
+    #[cfg(not(has_fftw))]
+    pub fn new(input: &mut [f32], output: &mut [[f32; 2]]) -> Option<Self> {
+        let _ = (input, output);
+        None
+    }
+
+    /// The unnormalised forward DFT of the real `input` into the `N / 2 + 1` bins of `output`.
+    /// The alignment is not checked, as in [`Fftw::forward`].
+    ///
+    /// # Safety
+    /// `input` and `output` must have the alignments of the buffers the plan was made for
+    /// (modulo 64 bytes); FFTW's new-array execute is undefined otherwise.
+    ///
+    /// # Panics
+    /// If a buffer does not have the planned length.
+    pub unsafe fn forward(&mut self, input: &mut [f32], output: &mut [[f32; 2]]) {
+        assert_eq!(input.len(), self.len, "FFTW: length differs from the plan");
+        assert_eq!(
+            output.len(),
+            self.len / 2 + 1,
+            "FFTW: length differs from the plan"
+        );
+        #[cfg(has_fftw)]
+        // SAFETY: the plan is valid until `drop` and was made for two distinct buffers of these
+        // lengths (the borrows here cannot alias either); both have the alignments of the
+        // planned buffers (the caller's contract).
+        unsafe {
+            fftw_ffi::fftwf_execute_dft_r2c(self.plan, input.as_mut_ptr(), output.as_mut_ptr());
+        }
+    }
+}
+
+#[cfg(has_fftw)]
+impl Drop for FftwR2c {
+    fn drop(&mut self) {
+        // SAFETY: the plan came from `fftwf_plan_dft_r2c_1d` and is destroyed once.
+        unsafe { fftw_ffi::fftwf_destroy_plan(self.plan) }
+    }
+}
+
+/// KissFFT with 16-bit fixed point, forward, out of place.
+pub struct KissFft16 {
+    #[cfg(has_kissfft)]
+    cfg: *mut core::ffi::c_void,
+    len: usize,
+}
+
+#[cfg(has_kissfft)]
+mod kiss_ffi {
+    use core::ffi::{c_int, c_void};
+
+    unsafe extern "C" {
+        pub fn kiss_fft_alloc(
+            nfft: c_int,
+            inverse_fft: c_int,
+            mem: *mut c_void,
+            lenmem: *mut usize,
+        ) -> *mut c_void;
+        pub fn kiss_fft(cfg: *mut c_void, fin: *const [i16; 2], fout: *mut [i16; 2]);
+        // `kiss_fft_free` is a macro for `free` when KissFFT allocates the configuration.
+        pub fn free(ptr: *mut c_void);
+    }
+}
+
+impl KissFft16 {
+    /// The configuration of a forward transform of `len` points; `None` without KissFFT.
+    #[cfg(has_kissfft)]
+    pub fn new(len: usize) -> Option<Self> {
+        let n = core::ffi::c_int::try_from(len).ok()?;
+        // SAFETY: with a null `mem` KissFFT allocates the configuration itself.
+        let cfg =
+            unsafe { kiss_ffi::kiss_fft_alloc(n, 0, core::ptr::null_mut(), core::ptr::null_mut()) };
+        (!cfg.is_null()).then_some(KissFft16 { cfg, len })
+    }
+
+    /// Without KissFFT: `None`.
+    #[cfg(not(has_kissfft))]
+    pub fn new(len: usize) -> Option<Self> {
+        let _ = len;
+        None
+    }
+
+    /// `output = DFT(input) / N` (each radix stage divides with rounding).
+    ///
+    /// # Panics
+    /// If a buffer does not have the configured length.
+    pub fn forward(&mut self, input: &[[i16; 2]], output: &mut [[i16; 2]]) {
+        assert!(
+            input.len() == self.len && output.len() == self.len,
+            "KissFFT: length differs from the configuration"
+        );
+        #[cfg(has_kissfft)]
+        // SAFETY: the configuration is valid until `drop`; both buffers hold `len` values and
+        // do not overlap (one is borrowed shared, the other exclusively).
+        unsafe {
+            kiss_ffi::kiss_fft(self.cfg, input.as_ptr(), output.as_mut_ptr());
+        }
+    }
+}
+
+#[cfg(has_kissfft)]
+impl Drop for KissFft16 {
+    fn drop(&mut self) {
+        // SAFETY: KissFFT allocated the configuration with `malloc`; it is freed once.
+        unsafe { kiss_ffi::free(self.cfg) }
+    }
+}
+
+/// Ne10's int16 NEON transform, forward, out of place, scaled by 1/N.
+pub struct Ne10Int16 {
+    #[cfg(has_ne10)]
+    cfg: *mut core::ffi::c_void,
+    len: usize,
+}
+
+#[cfg(has_ne10)]
+mod ne10_ffi {
+    use core::ffi::c_void;
+
+    unsafe extern "C" {
+        pub fn ne10_fft_alloc_c2c_int16(nfft: i32) -> *mut c_void;
+        pub fn ne10_fft_c2c_1d_int16_neon(
+            fout: *mut [i16; 2],
+            fin: *mut [i16; 2],
+            cfg: *mut c_void,
+            inverse_fft: i32,
+            scaled_flag: i32,
+        );
+        pub fn ne10_fft_destroy_c2c_int16(cfg: *mut c_void);
+    }
+}
+
+impl Ne10Int16 {
+    /// The configuration of a transform of `len` points; `None` without Ne10.
+    #[cfg(has_ne10)]
+    pub fn new(len: usize) -> Option<Self> {
+        let n = i32::try_from(len).ok()?;
+        // SAFETY: plain allocation of a configuration for `n` points.
+        let cfg = unsafe { ne10_ffi::ne10_fft_alloc_c2c_int16(n) };
+        (!cfg.is_null()).then_some(Ne10Int16 { cfg, len })
+    }
+
+    /// Without Ne10: `None`.
+    #[cfg(not(has_ne10))]
+    pub fn new(len: usize) -> Option<Self> {
+        let _ = len;
+        None
+    }
+
+    /// `output = DFT(input) / N`. `input` may be overwritten: Ne10 does not document that it
+    /// preserves it.
+    ///
+    /// # Panics
+    /// If a buffer does not have the configured length.
+    pub fn forward(&mut self, input: &mut [[i16; 2]], output: &mut [[i16; 2]]) {
+        assert!(
+            input.len() == self.len && output.len() == self.len,
+            "Ne10: length differs from the configuration"
+        );
+        #[cfg(has_ne10)]
+        // SAFETY: the configuration is valid until `drop`; both buffers hold `len` values and
+        // do not overlap (two distinct mutable borrows). Ne10 takes the input as mutable and may
+        // write to it, which the exclusive borrow of `input` allows.
+        unsafe {
+            ne10_ffi::ne10_fft_c2c_1d_int16_neon(
+                output.as_mut_ptr(),
+                input.as_mut_ptr(),
+                self.cfg,
+                0,
+                1,
+            );
+        }
+    }
+}
+
+#[cfg(has_ne10)]
+impl Drop for Ne10Int16 {
+    fn drop(&mut self) {
+        // SAFETY: the configuration came from `ne10_fft_alloc_c2c_int16` and is freed once.
+        unsafe { ne10_ffi::ne10_fft_destroy_c2c_int16(self.cfg) }
+    }
+}

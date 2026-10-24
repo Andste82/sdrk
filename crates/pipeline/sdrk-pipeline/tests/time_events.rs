@@ -499,8 +499,18 @@ fn timed_change(decimation: u64) {
     );
     if decimation == 1 {
         // The oscillator phase of sample `at` is still advanced with the old frequency; the new
-        // one acts from the next sample on. Exactly one sample, no more.
-        assert_eq!(first_diff, at + 1, "exact for decimation 1");
+        // one acts from the next sample on, not a sample later. The SIMD oscillator may round
+        // the value of the old phase differently once the increment has changed (about 1e-7 of
+        // one input sample), so the first output that changes by more than 1e-6 of the peak
+        // counts: the new frequency changes sample `at + 1` by 8.7e-6 of the peak, a margin of
+        // about 9 over the threshold.
+        let peak = unchanged.iter().map(|c| c.norm()).fold(0f32, f32::max);
+        let first_change = changed
+            .iter()
+            .zip(&unchanged)
+            .position(|(a, b)| (a - b).norm() > 1e-6 * peak)
+            .unwrap() as u64;
+        assert_eq!(first_change, at + 1, "exact for decimation 1");
     }
 
     // The acknowledgement: on the output, at the mapped index, not late.

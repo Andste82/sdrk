@@ -1,12 +1,5 @@
 //! Small helpers shared by the kernels.
 
-use fearless_simd::Simd as SimdToken;
-#[cfg(all(
-    feature = "relaxed-simd",
-    target_arch = "wasm32",
-    target_feature = "relaxed-simd"
-))]
-use fearless_simd::prelude::*;
 use sdrk_core::{Error, Result};
 
 /// `Ok` when both lengths are equal, else `LengthMismatch { expected, got }`.
@@ -19,34 +12,31 @@ pub(crate) fn check_len(expected: usize, got: usize) -> Result<()> {
     }
 }
 
+/// Runs `body` on every pair of whole blocks of `in_step` elements of `input` and `out_step`
+/// elements of `out`; returns the number of pairs. The plain chunk iterators zip to one counted
+/// loop (zipping `&mut ChunksExact` would test both ends in every iteration).
+#[inline(always)]
+pub(crate) fn blocks<T, U>(
+    input: &[T],
+    out: &mut [U],
+    in_step: usize,
+    out_step: usize,
+    mut body: impl FnMut(&[T], &mut [U]),
+) -> usize {
+    let n = (input.len() / in_step).min(out.len() / out_step);
+    let (input, _) = input.split_at(n * in_step);
+    let (out, _) = out.split_at_mut(n * out_step);
+    for (i, o) in input
+        .chunks_exact(in_step)
+        .zip(out.chunks_exact_mut(out_step))
+    {
+        body(i, o);
+    }
+    n
+}
+
 /// The error for a violated internal invariant.
 #[cold]
 pub(crate) fn internal(what: &'static str) -> Error {
     Error::Internal(what)
-}
-
-/// `acc + a * b` on `f32` vectors for the `C32` accumulations of the FIR family and `mag_sq`.
-///
-/// With the feature `relaxed-simd` on `wasm32` built with the target feature `relaxed-simd` this
-/// is one relaxed multiply-add (`f32x4.relaxed_madd`): fused or not, whichever the host runs
-/// faster, so the result is not bit-exact across hosts but within the contract of
-/// `docs/kernels.md`. In every other build it is the separate multiplication and addition.
-#[inline(always)]
-pub(crate) fn mac<S: SimdToken>(a: S::f32s, b: S::f32s, acc: S::f32s) -> S::f32s {
-    #[cfg(all(
-        feature = "relaxed-simd",
-        target_arch = "wasm32",
-        target_feature = "relaxed-simd"
-    ))]
-    {
-        a.mul_add(b, acc)
-    }
-    #[cfg(not(all(
-        feature = "relaxed-simd",
-        target_arch = "wasm32",
-        target_feature = "relaxed-simd"
-    )))]
-    {
-        acc + a * b
-    }
 }

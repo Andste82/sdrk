@@ -21,10 +21,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "convert_out",
     summary: "Converts complex samples to raw device bytes in a sample format.",
     details: "Writes C32 or CQ15 samples as interleaved bytes in any supported device format, \
-        rounding half up and saturating at full scale. The output is bytes; the block only \
-        produces whole packing groups (for example two 12 bit samples in 3 bytes) and leaves \
-        the remaining input for the next call. Planar and real layouts cannot be streamed in \
-        arbitrary pieces and are rejected. The sample rate does not change.",
+        rounding to the nearest integer (ties to even) and saturating at full scale. The output \
+        is bytes; the block only produces whole packing groups (for example two 12 bit samples \
+        in 3 bytes) and leaves the remaining input for the next call. Planar and real layouts \
+        cannot be streamed in arbitrary pieces and are rejected. The sample rate does not \
+        change.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32, PortType::CQ15],

@@ -705,7 +705,12 @@ pub(super) fn backend_vs_fallback_fm_mod(arena: &mut Arena<'_>) -> Result<(), Fa
 
 // ---------------------------------------------------------------------------------------- fft
 
-fn snr_c64<T: sdrk_core::ComplexSample>(want: &[T], got: &[T], want_exp: i32, got_exp: i32) -> f64 {
+fn snr_c64<W: sdrk_core::ComplexSample, G: sdrk_core::ComplexSample>(
+    want: &[W],
+    got: &[G],
+    want_exp: i32,
+    got_exp: i32,
+) -> f64 {
     let (mut sig, mut err) = (0.0f64, 0.0f64);
     let (gw, gg) = (libm::ldexp(1.0, want_exp), libm::ldexp(1.0, got_exp));
     for (w, g) in want.iter().zip(got) {
@@ -748,44 +753,64 @@ pub(super) fn backend_vs_fallback_fft(arena: &mut Arena<'_>) -> Result<(), Failu
             })?;
         }
     }
+    // The CQ15 FFT of the backend is not bit-exact with the fallback (decision D10): both are
+    // measured against the exact transform (the C32 reference of the same input, unnormalised).
+    // Fixed scaling must stay within 1 dB of the fallback and give its exponent. The inputs
+    // here (near full scale with corner values, or a few LSB) are outside the block floating
+    // point contract, which `fft_cq15_bfp_vs_reference_1024` checks: the backend, which picks
+    // one shift per stage from the largest norm, may be up to 8 dB below the fallback there.
     for n in [16usize, 64, 256, 1024, 4096] {
-        if n * 4 * 4 + n * 2 > arena.remaining().saturating_sub(4096) {
+        if n * 4 * 4 + n * 2 + n * 8 * 2 > arena.remaining().saturating_sub(4096) {
             continue;
         }
         let mut c = arena.carver();
         let (x, fb, fac) = (c.take::<CQ15>(n)?, c.take::<CQ15>(n)?, c.take::<CQ15>(n)?);
+        let (xc, rc) = (c.take::<C32>(n)?, c.take::<C32>(n)?);
         let plan = FftPlan::<CQ15, _>::new(n, c.take::<CQ15>(n / 2)?)?;
-        for scaling in [Scaling::Default, Scaling::BlockFloat] {
-            for weak in [false, true] {
-                for (k, s) in x.iter_mut().enumerate() {
-                    *s = if weak {
-                        CQ15 {
-                            re: Q15((rng.below(64) as i16) - 32),
-                            im: Q15(0),
-                        }
-                    } else if k % 9 == 0 {
-                        CQ15 {
-                            re: Q15(-32768),
-                            im: Q15(32767),
-                        }
-                    } else {
-                        random_cq15(&mut rng, 0.9)
-                    };
-                }
+        for weak in [false, true] {
+            for (k, s) in x.iter_mut().enumerate() {
+                *s = if weak {
+                    CQ15 {
+                        re: Q15((rng.below(64) as i16) - 32),
+                        im: Q15(0),
+                    }
+                } else if k % 9 == 0 {
+                    CQ15 {
+                        re: Q15(-32768),
+                        im: Q15(32767),
+                    }
+                } else {
+                    random_cq15(&mut rng, 0.9)
+                };
+            }
+            for (d, s) in xc.iter_mut().zip(x.iter()) {
+                *d = C32::new(f32::from(s.re.0) / 32768.0, f32::from(s.im.0) / 32768.0);
+            }
+            let exact = Reference.dft(xc, rc, Direction::Forward, Scaling::Default)?;
+            for scaling in [Scaling::Default, Scaling::BlockFloat] {
                 fb.copy_from_slice(x);
                 fac.copy_from_slice(x);
                 let a = Fft::<CQ15>::fft(&Fallback, &plan, fb, Direction::Forward, scaling)?;
                 let b = Fft::<CQ15>::fft(&Sdrk, &plan, fac, Direction::Forward, scaling)?;
-                // The block-floating-point exponent may differ from the fallback; compare after
-                // applying `2^exponent`. This backend reproduces the fallback exactly.
-                let snr = snr_c64(fb, fac, a.exponent, b.exponent);
-                ensure(
-                    snr >= 80.0 || (a == b && bit_exact(fb, fac).is_none()),
-                    || {
-                        Failure::new(CASE, "cq15 differs from the fallback")
-                            .detail(format_args!("n={n} {snr} dB"))
-                    },
-                )?;
+                let want = snr_c64(rc, fb, exact.exponent, a.exponent);
+                let got = snr_c64(rc, fac, exact.exponent, b.exponent);
+                let (ok, what) = if scaling == Scaling::Default {
+                    (
+                        a == b && got >= want - 1.0,
+                        "cq15 fixed scaling differs from the fallback",
+                    )
+                } else {
+                    (
+                        got >= want - 8.0,
+                        "cq15 block floating point far below the fallback",
+                    )
+                };
+                ensure(ok, || {
+                    Failure::new(CASE, what).detail(format_args!(
+                        "n={n} weak={weak} {got} dB (fallback {want} dB), exponents {} {}",
+                        a.exponent, b.exponent
+                    ))
+                })?;
             }
         }
     }

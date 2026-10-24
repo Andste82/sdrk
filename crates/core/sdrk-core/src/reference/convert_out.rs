@@ -34,7 +34,7 @@ fn amplitude_raw(format: &SampleFormat, x: f64) -> i64 {
     } else {
         (0, (1i64 << bits) - 1)
     };
-    let v = libm::floor(x * format.full_scale_value() + offset + 0.5);
+    let v = libm::roundeven(x * format.full_scale_value() + offset);
     v.clamp(lo as f64, hi as f64) as i64
 }
 

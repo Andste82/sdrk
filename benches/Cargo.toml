@@ -1,10 +1,13 @@
-# The benchmark workspace of SDRk: instruction counts of our kernels against VOLK and rustfft.
+# The benchmark workspace of SDRk: instruction counts of our kernels against VOLK, rustfft,
+# FFTW, KissFFT and Ne10.
 #
 # It is a workspace of its own and not a member of the repository workspace, because the
-# comparison links the system VOLK, which is licensed LGPL-3.0. VOLK is never a dependency of
-# a library crate and never ships with SDRk; `cargo deny` only checks the repository workspace.
+# comparisons link C libraries under their own licenses (VOLK LGPL-3.0-or-later, FFTW
+# GPL-2.0-or-later, KissFFT and Ne10 BSD-3-Clause), which `benches/refs/build.sh` builds from
+# pinned tarballs. They are never a dependency of a library crate and never ship with SDRk;
+# `cargo deny` only checks the repository workspace.
 [workspace]
-members = ["kernels", "pipeline", "volk-sys"]
+members = ["cref-sys", "kernels", "pipeline", "volk-sys"]
 resolver = "3"
 
 [workspace.package]

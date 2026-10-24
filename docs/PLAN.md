@@ -147,7 +147,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - Instruction counting in CI (iai-callgrind)
 - CI matrix: x86 native, AVX-512 via Intel SDE, AArch64 via QEMU, WASM under wasmtime (with/without SIMD128, with WASM's default stack limit to catch oversized stack buffers)
 
-**Done when:** the suite passes everywhere and the instruction-count target (at most 1.15× VOLK/rustfft) is met. Then release 0.1.
+**Done when:** the suite passes everywhere and the instruction-count target (at most 1.10× the reference, decision D14; [performance.md](performance.md)) is met. Then release 0.1.
 
 ### Phase 5 – WASM bindings (small to medium)
 
@@ -258,14 +258,15 @@ Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filt
 | Cortex-M4/M33/M55 | QEMU system mode with the instruction-count plugin | CMSIS-DSP |
 | ESP32-P4/S3 | S3: QEMU instruction-count plugin in the Espressif QEMU fork (plugin-enabled build; plugin support and PIE emulation unverified, otherwise static counting as for the P4); P4: static instruction count of the inner loops from the disassembly, as esp-emulator only samples | ESP-DSP |
 | RISC-V V | QEMU with the instruction-count plugin | own scalar fallback (no established library) |
-| WASM | wasmtime fuel metering | own scalar fallback |
+| WASM | wasmtime fuel metering | rustfft (`wasm_simd`) for the `C32` FFT and `rfft`, KissFFT for the `CQ15` FFT, VOLK compiled for wasm32 for `mag_sq` and the conversions (its other kernels as information, decision D12); our fallback for the kernels without an established library |
 
 | Instructions per sample vs. reference library | Meaning |
 | --- | --- |
-| ≤ 1.00× | goal: equal or better |
-| ≤ 1.10× | accepted |
-| ≤ 1.15× | hard limit; CI fails above it |
-| ≤ 1.50× | allowed only while a kernel is under development, never in a release |
+| ≤ 1.00× | goal: equal or better (marked in the results) |
+| ≤ 1.10× | release limit; CI fails above it for a `release` entry (decision D14) |
+| ≤ 1.50× | allowed only while a kernel is under development (`dev`), never in a release; `--strict` (the gate of the 0.1 tag) fails for every entry that is not a clean `release` entry |
+
+`docs/performance.md` and `benches/limits.json` are the current contract; they supersede these tables where they differ.
 
 Comparisons always hold accuracy equal, shown by the error against the f64 reference. Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels; real-time targets per platform are set once real hardware is in use.
 
@@ -341,7 +342,7 @@ A server with an SDR, a web UI and MCP access: mark a signal in the waterfall, t
 | Byte order | little-endian targets only (all current targets are); zero-copy reinterpretation relies on it; big-endian is not supported |
 | Bit-exactness | reference and fallback always; accelerated variants bit-exact for simple kernels, minimum SNR otherwise; WASM relaxed SIMD is opt-in and only bound to the numeric contract's tolerance |
 | Fused kernels | kept only if their instruction count beats the chained single kernels |
-| Performance target | instruction count in the emulator vs. the established library: goal ≤ 1.00×, accepted ≤ 1.10×, hard limit 1.15× |
+| Performance target | instruction count in the emulator vs. the established library: goal ≤ 1.00×, release limit ≤ 1.10×, dev ≤ 1.50× (decision D14) |
 | Counting on ESP32 | S3: QEMU instruction-count plugin (plugin-enabled build of the Espressif fork); P4: static count of the inner loops from the disassembly; exact counting in esp-emulator would be a welcome upstream contribution |
 | Real-time targets | deferred until real hardware is in use |
 | YAML crate | `serde-saphyr` (pure Rust, no `unsafe-libyaml`), behind the `yaml` feature, not in the WASM build; version pinned at the start of phase 3 |

@@ -94,8 +94,8 @@ crate::delegate! {
     DotReal<f32>::dot_real(&self, x: &[f32], taps: &[f32]) -> Result<f32> => Fallback;
     DotReal<Q15>::dot_real(&self, x: &[Q15], taps: &[Q15]) -> Result<Q15> => Fallback;
     @extra [
-        ("rfft", f32, Fallback),
-        ("irfft", f32, Fallback),
+        ("rfft", f32, Fast),
+        ("irfft", f32, Fast),
         ("ddc", C32, Chained),
         ("ddc", CQ15, Chained),
         ("duc", C32, Chained),
@@ -116,7 +116,7 @@ impl RealFft for crate::Sdrk {
         output: &mut [C32],
         scratch: &mut [C32],
     ) -> Result<FftScale> {
-        <Fallback as RealFft>::rfft(&Fallback, plan, input, output, scratch)
+        <Fast as RealFft>::rfft(&Fast, plan, input, output, scratch)
     }
 
     #[inline]
@@ -127,7 +127,7 @@ impl RealFft for crate::Sdrk {
         output: &mut [f32],
         scratch: &mut [C32],
     ) -> Result<FftScale> {
-        <Fallback as RealFft>::irfft(&Fallback, plan, input, output, scratch)
+        <Fast as RealFft>::irfft(&Fast, plan, input, output, scratch)
     }
 }
 

@@ -1,113 +1,193 @@
 # Performance
 
-Performance is measured in executed instructions per sample in an emulator and compared with an established library (VOLK, rustfft, CMSIS-DSP, ESP-DSP) at equal accuracy against the f64 reference.
+Performance is measured in executed instructions per sample in an emulator and compared with an established library (VOLK, FFTW, rustfft, KissFFT; CMSIS-DSP and ESP-DSP for the embedded backends to come) at equal accuracy against the f64 reference.
 
 | Instructions per sample vs. reference library | Meaning |
 | --- | --- |
-| ≤ 1.00× | goal: equal or better |
-| ≤ 1.10× | accepted |
-| ≤ 1.15× | hard limit; CI fails above it |
-| ≤ 1.50× | allowed only while a kernel is under development, never in a release |
+| ≤ 1.00× | goal: equal or better (recorded as `goal` in the results) |
+| ≤ 1.10× | release limit; CI fails above it for a `release` entry |
+| ≤ 1.50× | allowed only while a kernel is under development (`dev`), never in a release |
 
-Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels. They say nothing about cache behaviour, the cost of one instruction (a gather is one instruction and many cycles) or the clock; they are the portable, reproducible measure of how much work a kernel does.
+Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels. They say nothing about cache behaviour, the cost of one instruction (a gather is one instruction and many cycles) or the clock; they are the portable, reproducible measure of how much work a kernel does. Kernels that use gathers (`fm_mod` at `avx512`, and the NCO lookups of `rotate` `CQ15` there) need a wall-clock check on real AVX-512 hardware (Zen 4, Sapphire Rapids) before their counts are taken as a gain.
 
 ## Method
 
-`cargo xtask count --platform <platform>` builds the measurement binary of `benches/kernels` for the platform and runs it under an instruction counter.
+`cargo xtask count --platform <platform>` builds the measurement binary of `benches/kernels` for every level of the platform and runs it under an instruction counter.
 
-- **Differential count.** `count run <kernel> <impl> <k>` does one warm-up call and then `k` calls on the same buffers. It is started twice, with `k = 0` and with `k = K`, and the instructions per sample are `(count(K) - count(0)) / (K * samples)`. Process start, allocation, set-up (the plan of rustfft, the VOLK dispatcher) and the warm-up call cancel. `K = 16` calls of 4096 samples; a kernel with fewer samples per call (the FFT sizes 64 and 1024) gets proportionally more calls, so every measurement covers 65 536 samples and the difference stays far above the run-to-run noise of the process.
-- **Inputs.** PCG32 noise with the seed `1000 + index of the kernel`, 4096 samples (`N`), buffers aligned to 64 bytes for both sides. The FFT is measured in place on the same buffer; its values grow with every call, which does not change the number of instructions.
+- **Differential count.** `count run <kernel> <impl> <k>` does one warm-up call and then `k` calls on the same buffers. It is started twice, with `k = 0` and with `k = K`, and the instructions per sample are `(count(K) - count(0)) / (K * samples)`. Process start, allocation, set-up (the plans of rustfft, FFTW and KissFFT, the VOLK dispatcher) and the warm-up call cancel. `K = 16` calls of 4096 samples; a kernel with fewer samples per call (the FFT sizes 64 and 1024) gets proportionally more calls, so every measurement covers 65 536 samples.
+- **Inputs.** PCG32 noise with the seed `1000 + index of the kernel`, 4096 samples, buffers aligned to 64 bytes for both sides. The FFTs are in place: every call first restores the input, and the count of the restore alone is subtracted from both sides, so the transforms always see the same finite data.
+- **Variants (information).** The streaming kernels are also measured with buffers misaligned by one sample, and the conversions with blocks of 64 and 100 samples. These lines are reported in the results and never judged.
 - **Counters.**
 
-| Platform | Counter | Levels |
+| Level | Build | Counter |
 | --- | --- | --- |
-| `x86_64` | Valgrind `callgrind` (Linux; not available on Windows, so the count job runs on Linux only) | `sse2` (default build), `sse4.2` (`-C target-cpu=x86-64-v2`), `avx2` (`-C target-cpu=x86-64-v3`), and `avx2-runtime` (default build with run-time detection, informational) |
-| `x86_64-avx512` | Intel SDE, `sde64 -spr -mix` (the `*total` line of the mix report) | `avx512` (`-C target-cpu=sapphirerapids`) |
-| `aarch64` | `qemu-aarch64` in user mode with the `insn` plugin (`-plugin libinsn.so -d plugin`) | `neon` |
-| `wasm32` | wasmtime with fuel: the smallest fuel with which the run completes, found by bisection | `simd128` |
+| `sse2` | default x86-64 build | Intel SDE with the CPUID of a strict SSE2 x86-64 CPU (`-cpuid_in`, `-chip_check_cpuid 1`): VOLK, rustfft and FFTW choose the code of that level themselves, and any instruction above it stops the run |
+| `sse4.2` | `-C target-cpu=x86-64-v2` | Intel SDE with the CPUID of an x86-64-v2 CPU (up to SSE4.2 and POPCNT), as for `sse2` |
+| `avx2` | `-C target-cpu=x86-64-v3` | Valgrind `callgrind` (Linux; not available on Windows, so the count job runs on Linux only) |
+| `avx2-runtime` | default build with the feature `std` (run-time detection) | Valgrind `callgrind`; judged against our own numbers at `avx2` (at most 1.02×, the cost of the dispatch) |
+| `avx512` | `-C target-cpu=sapphirerapids` | Intel SDE `-spr` |
+| `neon` | `aarch64-unknown-linux-gnu` | `qemu-aarch64` in user mode with the `insn` plugin and a reserved guest address space (`-R 0x200000000`), which fixes the memory layout: identical runs give identical counts |
+| `simd128` | `wasm32-wasip1`, `+simd128` | wasmtime with fuel: the smallest fuel with which the run completes, found by bisection |
 
-  `iai-callgrind` is not used: it needs a runner binary installed in the version of the library and adds nothing to the raw `callgrind` total that xtask reads.
-- **Comparisons.** On x86-64 the pairs of the table below (VOLK 3.3.0, which the count jobs build from the release tarball with a pinned checksum so that the comparison does not depend on the distribution's version; locally the distribution's 3.3.0 gives the same numbers; rustfft with `FftPlanner`, forward, in place). `fm_mod` and the `CQ15` FFT have no library; they are compared with our own fallback. On AArch64 and wasm32 there is no VOLK, so every kernel but the `C32` FFT (rustfft) is compared with our own fallback in the same binary. For the level `sse2` the VOLK dispatcher is restricted by a `volk_config` that xtask writes (`benches/target/volk-sse/volk/volk_config`) to the implementations that need no more than SSE3 (the generic C code where VOLK has none); for `avx2` and `avx2-runtime` a `volk_config` (`benches/target/volk-avx2/volk/volk_config`) restricts it to AVX2/FMA, because on a runner with AVX-512 VOLK would otherwise dispatch `rotator2`, `atan2` and `dot_prod` to their AVX-512 implementations and the comparison would depend on the CPU; at `avx512` it picks its best implementation itself, as our kernels use AVX-512 there too.
-- **Accuracy.** `count accuracy <kernel> <impl>` prints the SNR of one run against the f64 reference. A kernel fails if its SNR is more than 1 dB below the SNR of its comparison.
-- **VOLK is LGPL-3.0.** It is linked dynamically from the system by `benches/volk-sys` (hand-written `extern "C"` declarations; VOLK declares its kernels as function-pointer variables that its dispatcher fills in) and is never a dependency of a library crate. `benches/` is a Cargo workspace of its own that is not a member of the repository workspace (`exclude = ["benches"]`), so `cargo deny` does not see it.
+  Under SDE only the region between two SSC markers of the binary (`benches/kernels`, `region_start`/`region_stop`) is counted, which makes the counts exact; each count is still the median of up to three runs (the third run is made only when the first two differ). The CPUID definitions keep the XSAVE state to x87 and SSE: on a CPU without OSXSAVE the `cpu_features` library inside VOLK would read the SSE flags of the host from `/proc/cpuinfo` and select a machine that the emulated CPU does not have. SDE's own `-p4` does not run 64-bit code, so it cannot be used for `sse2`.
+- **Reproducibility.** The measurement binary is built with `--remap-path-prefix` for the checkout (`/sdrk`) and the Cargo home (`/cargo`), passed through `CARGO_ENCODED_RUSTFLAGS`. Otherwise these paths end up in the panic locations of the binary, and their length moves its data and with it some counts. The two runs of a measurement get arguments of the same length: `k` is written with as many digits as the number of calls (`0000` and `1024`). The start-up code of a process depends on the length of its arguments and environment; with the same length, the start-ups are identical and cancel exactly. With both measures the counts no longer depend on the path of the checkout or on the environment of the caller: a checkout at another path gives identical lines on every platform.
+- **Run time.** The levels of a platform are counted in parallel: first the levels judged against the references, then the run-time detection level, which is judged against our numbers at `avx2`. The C references are built once before. `x86_64` with the variants takes about 14 minutes instead of 20 on four cores.
+- **Accuracy.** `count accuracy <kernel> <impl>` prints the SNR of one run against the f64 reference. An entry fails if its SNR is more than 1 dB below the SNR of its comparison, unless it carries an `accuracy_waiver`. The instruction ratio and the accuracy are judged independently.
 
-### Where VOLK has no implementation for a level
+### References
 
-VOLK has no SSE implementation of `rotator2` and `atan2`, and none below SSE4.1 of `volk_8i_s32f_convert_32f`. The only candidate is then the portable `generic` code, and that is not SSE code: VOLK compiles it once per instruction set and uses the copy of the best machine, which GCC has auto-vectorised with AVX2 (the library contains twelve copies of `volk_8i_s32f_convert_32f_generic`, four of them with `ymm` registers). Comparing our SSE2 build with it is not a comparison at the same instruction set.
+The C references are built by `benches/refs/build.sh <x86_64|aarch64|wasm32> <prefix>` from pinned release tarballs (each checked against its SHA-256) into `benches/target/refs/<platform>`; xtask runs the script before it builds a platform and copies its manifest (versions, compilers, flags) into the results. Only these builds are used, never a VOLK of the system: the distribution's libvolk is built differently (`-O2`, LTO, ORC) and gives other counts (with the earlier callgrind method, which ran VOLK's `generic` code compiled for AVX2 at `sse2`, `convert_cs8` needed 14.02 instructions per sample with the distribution's library against 1.65 with this build).
 
-- The level `sse4.2` compares at SSE4.2 where VOLK has an implementation for it: `convert` CS8 and CS16 against the SSE4.1 versions, the rest as at `sse2`.
-- The level `sse2` is still measured, but the entries whose reference is `generic` (`convert_cs8`, `rotate`, `quad_demod`) are `info` in `limits.json`: reported with their numbers, never judged. `rotate` and `quad_demod` are `info` at `sse4.2` too, because VOLK has no SSE version of them.
+| Library | Version | License | Platforms | Use |
+| --- | --- | --- | --- | --- |
+| VOLK | 3.3.0 | LGPL-3.0-or-later | x86_64, aarch64 (shared, CMake Release, no ORC); wasm32 (the `generic` protokernels, static, `benches/refs/volk-wasm.c`) | the reference of the streaming kernels |
+| FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision, `FFTW_ESTIMATE` | the `C32` FFT reference at `sse2` (out of place, its usual use; in place as information), information on `neon` |
+| KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the `CQ15` FFT reference |
+| Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
+| rustfft | 6.4 (Cargo dependency of `benches/kernels`) | MIT OR Apache-2.0 | all; `wasm_simd` on wasm32 (target-specific) | the `C32` FFT reference except at `sse2` |
+
+The libraries are linked only into the measurement binary of `benches/kernels`, which is built on the measuring machine and never distributed; none of them is a dependency of a library crate of SDRk. `benches/` is a Cargo workspace of its own that is not a member of the repository workspace (`exclude = ["benches"]`), so `cargo deny` does not see it. VOLK is linked dynamically (`benches/volk-sys`, hand-written `extern "C"` declarations; VOLK declares its kernels as function-pointer variables that its dispatcher fills in), FFTW, KissFFT and Ne10 statically through `benches/cref-sys`.
+
+What each kernel is compared with:
+
+| Kernel | Comparison |
+| --- | --- |
+| `convert` CS8 / CS16 to C32 | `volk_8i_s32f_convert_32f` / `volk_16i_s32f_convert_32f` on 2N values |
+| `convert` CU8 to C32 | `volk_8i_s32f_convert_32f` on the same 2N bytes with the sign bit flipped (the same work apart from the offset of 0.5 / 128, which VOLK, having no unsigned 8-bit input, does not add); our fallback as information |
+| `convert_out` C32 to CS16 / CS8 / CU8 | `volk_32f_s32f_convert_16i` / `volk_32f_s32f_convert_8i` / `volk_32f_s32f_x2_convert_8u` on 2N values |
+| `rotate` C32 | `volk_32fc_s32fc_x2_rotator2_32fc` |
+| `fir` C32, 64 taps; `fir_decimate` C32, 127 taps, M = 10 | `volk_32fc_32f_dot_prod_32fc` per output, called as GNU Radio's FIR filters call it (aligned entry point, taps pre-shifted, D6) |
+| `fir_interpolate` C32, L = 2, 128 taps; `resample` C32, 3 / 2, 192 taps (64 per branch; per output sample) | the same dot product per output with the taps of the output's branch, as GNU Radio's `interp_fir_filter_ccf` and `rational_resampler_ccf` call it |
+| `mag_sq` C32 | `volk_32fc_magnitude_squared_32f` |
+| `quad_demod` C32 | `volk_32fc_x2_multiply_conjugate_32fc` + `volk_32fc_s32f_atan2_32f` |
+| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32 | our fallback (no established library) |
+| `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
+| `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
+| `rfft` f32, N = 1024 | FFTW's real-input transform (`fftwf_plan_dft_r2c_1d`, out of place) at `sse2` and `sse4.2` (FFTW has no codelets above SSE2, so it is the stronger reference there too), rustfft's real-input planner (`realfft` 3.5, forward, out of place) elsewhere; the other of the two and our fallback as information (FFTW also on `neon`) |
+
+VOLK's dispatcher is pinned per level by a `volk_config` that xtask writes (`benches/target/<level>/volk-pinned/volk/volk_config`), and the measured processes run without `VOLK_GENERIC` and without the variables that override single kernels:
+
+- `sse2`, `sse4.2`: the defaults of VOLK's `sse2_64_mmx` and `sse4_2_64_mmx` machines, which the emulated CPUs select.
+- `avx2`, `avx2-runtime`: the implementations that need no more than AVX2 and FMA, so that a runner with AVX-512 does not dispatch `rotator2`, `atan2` and `dot_prod` to AVX-512 code.
+- `avx512`: VOLK's own choice, as our kernels use AVX-512 there too.
+- `neon`: the default dispatch of VOLK's `neonv8` machine (D11), pinned so that a change of VOLK's ranking shows up as a missing implementation instead of a silently different reference. Every VOLK kernel also gets the cheapest combination of VOLK implementations of the machine as information (`goal: cheapest VOLK implementation`).
+- `simd128`: VOLK has no wasm32 machine; its `generic` protokernels compiled for wasm32 with `simd128` are what its dispatcher would take. They gate `mag_sq` and the conversions only (D12); for `rotate`, the FIR family and `quad_demod` they are scalar code and the entries are `info`.
+
+### Where no fair reference exists
+
+- VOLK has no SSE implementation of `rotator2` and `atan2`; at `sse2` and `sse4.2` the dispatcher takes their scalar `generic` code, so `rotate` and `quad_demod` are `info` at both levels. VOLK has no implementation of `multiply_conjugate` and `8i_s32f_convert_32f` below SSE3 and SSE4.1 either, but the `generic` code of the conversion is vectorized with SSE2 by the compiler, so `convert_cs8` and `convert_cu8` are judged against it at `sse2`.
+- At `simd128`, see above.
+- `info` entries are reported with their numbers and never judged; the reason is the `waiver` text of the entry.
 
 ## Limits
 
-`benches/limits.json` names, per kernel and level, `{ "status": "release" | "dev" }`. `cargo xtask count` writes `benches/results/<platform>.json` (counts, ratio, SNR of ours and of the comparison) and fails if a `release` entry exceeds **1.15×** or a `dev` entry exceeds **1.50×**; between 1.10× and 1.15× it prints a warning. A kernel that is not listed counts as `dev`. A `release` entry is set only where the measured ratio is at most 1.10×, so that a different version of VOLK on the runner does not fail the job at once.
+`benches/limits.json` names, per kernel and level, `{ "status": "release" | "dev" | "info" }`, and the caps in `_limits` (`release` 1.10, `dev` 1.50, `warn` 1.10, `goal` 1.00, `runtime` 1.02; D14). `cargo xtask count` writes `benches/results/<platform>.json` (counts, ratio, SNR of ours and of the comparison, the verdict and whether the entry reaches the goal) and fails if a `release` entry exceeds 1.10× or a `dev` entry 1.50×, or if an entry is less accurate than its comparison by more than 1 dB. A kernel and level that is not listed fails. The level `avx2-runtime` needs no entries: it is judged against our own `avx2` numbers with the cap `runtime`.
 
-An entry may carry a `"waiver"` text that names the open item in `docs/open-items.md` which tracks a limit that is not met yet. A waived exceedance is printed (`waived`) and recorded in the results file, but does not fail the command; the numbers are never hidden. The unit tests of the limit logic (`xtask/src/count.rs`) include a deliberately slow dummy kernel with status `release`, which makes the command fail.
+An entry may carry a `"waiver"` (ratio) or an `"accuracy_waiver"` text that names the open item in `docs/open-items.md` which tracks a limit that is not met yet. A waived exceedance is printed (`waived`) and recorded in the results file, but does not fail the command; the numbers are never hidden. A waiver that no longer covers anything, and a `dev` entry at or below 1.10×, are reported as a warning; a passing entry above `warn` (a `dev` entry between 1.10× and 1.50×) gets the verdict `warn`. `--strict` (the release gate of open item M13-4) additionally fails for every entry that is not a clean `release` entry: `dev`, `info`, a waiver, or a failure. The unit tests of the limit logic (`xtask/src/count.rs`) include a deliberately slow dummy kernel with status `release`, which makes the command fail.
 
 ## Results
 
-Instructions per sample of our kernel divided by those of the comparison (lower is better); `dev` marks an entry whose status is `dev`, `waived` one with a waiver. All other entries are `release`. Measured with VOLK 3.3 and rustfft 6.4 on the development machine; the CI runner may differ in the version of VOLK.
+Instructions per sample of our kernel divided by those of the comparison (lower is better), from the committed `benches/results/*.json`; `dev` marks an entry whose status is `dev`, `info` one that is reported but not judged, `waived` one with a waiver. All other entries are `release`, and every entry at or below 1.00 reaches the goal. Measured with VOLK 3.3.0, FFTW 3.3.10, KissFFT 131.1.0 and rustfft 6.4 as built by `benches/refs/build.sh` on the development machine (the counts are deterministic: two complete runs gave identical lines on every platform).
 
-| Kernel | Compared with (x86-64) | sse2 | avx2 | avx512 | neon | simd128 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `convert` CS8 to C32 | `volk_8i_s32f_convert_32f` on 2N values | 0.30 | 0.90 | 0.96 | 0.03 | 0.04 |
-| `convert` CS16 to C32 | `volk_16i_s32f_convert_32f` on 2N values | 1.06 | 0.93 | 0.97 | 0.03 | 0.04 |
-| `convert_out` C32 to CS16 | `volk_32f_s32f_convert_16i` on 2N values | 2.31 waived | 1.99 waived | 2.25 waived | 0.06 | 0.08 |
-| `rotate` C32 | `volk_32fc_s32fc_x2_rotator2_32fc` | 0.53 | 1.23 dev | 0.52 | 0.46 | 0.94 |
-| `fir` C32, 64 taps | `volk_32fc_32f_dot_prod_32fc` per output | 1.11 dev | 0.71 | 0.52 | 0.51 | 0.24 |
-| `fir_decimate` C32, 127 taps, M = 10 | `volk_32fc_32f_dot_prod_32fc` per output | 1.33 dev | 0.94 | 0.94 | 0.50 | 0.26 |
-| `mag_sq` C32 | `volk_32fc_magnitude_squared_32f` | 1.39 dev | 1.00 | 0.45 | 1.29 dev | 1.37 dev |
-| `quad_demod` C32 | `volk_32fc_x2_multiply_conjugate_32fc` + `volk_32fc_s32f_atan2_32f` | 0.36 | 0.86 | 0.52 | 0.27 | 0.40 |
-| `fm_mod` C32 | our fallback | 0.78 | 0.22 | 0.07 | 0.45 | 0.40 |
-| `fft` C32, N = 64 | `rustfft` | 10.36 waived | 5.22 waived | 4.92 waived | 1.78 waived | 0.91 waived |
-| `fft` C32, N = 1024 | `rustfft` | 6.15 waived | 2.54 waived | 1.59 waived | 1.46 dev | 0.59 |
-| `fft` C32, N = 4096 | `rustfft` | 5.65 waived | 2.27 waived | 1.50 dev | 1.30 dev | 0.53 |
-| `fft` CQ15, N = 1024 | our fallback | 0.55 | 0.37 | 0.40 | 0.42 | 0.41 |
-
-Instructions per sample, ours / comparison:
-
-| Kernel | sse2 | avx2 | avx2, run-time detection | avx512 | neon | simd128 |
+| Kernel | sse2 | sse4.2 | avx2 | avx512 | neon | simd128 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `convert` CS8 to C32 | 4.15 / 14.02 | 1.59 / 1.77 | 1.60 / 1.77 | 0.92 / 0.96 | 2.26 / 77.03 | 8.04 / 184.06 |
-| `convert` CS16 to C32 | 4.28 / 4.02 | 1.65 / 1.77 | 1.66 / 1.77 | 0.87 / 0.90 | 2.50 / 99.03 | 10.54 / 242.06 |
-| `convert_out` C32 to CS16 | 9.28 / 4.02 | 4.28 / 2.14 | 4.28 / 2.14 | 2.09 / 0.93 | 8.02 / 124.01 | 23.29 / 308.03 |
-| `rotate` C32 | 17.02 / 32.11 | 6.52 / 5.31 | 6.66 / 5.31 | 2.65 / 5.09 | 12.28 / 26.51 | 33.29 / 35.29 |
-| `fir` C32, 64 taps | 250.00 / 225.00 | 144.43 / 203.00 | 144.44 / 203.00 | 113.62 / 217.01 | 212.54 / 413.42 | 623.71 / 2646.13 |
-| `fir_decimate` C32, 127 taps, M = 10 | 54.63 / 41.15 | 37.55 / 39.85 | 37.67 / 39.84 | 41.99 / 44.80 | 46.19 / 91.54 | 143.28 / 544.12 |
-| `mag_sq` C32 | 3.51 / 2.52 | 1.51 / 1.52 | 1.52 / 1.52 | 0.72 / 1.62 | 2.26 / 1.76 | 11.03 / 8.03 |
-| `quad_demod` C32 | 55.52 / 154.04 | 9.40 / 10.92 | 9.41 / 10.92 | 3.49 / 6.71 | 29.53 / 110.51 | 76.29 / 190.90 |
-| `fm_mod` C32 | 48.42 / 61.91 | 13.65 / 60.91 | 13.66 / 61.91 | 3.87 / 56.89 | 19.02 / 41.94 | 43.53 / 109.89 |
-| `fft` C32, N = 64 | 62.64 / 6.05 | 31.06 / 5.95 | 32.42 / 5.99 | 27.45 / 5.57 | 32.34 / 18.17 | 118.47 / 130.11 |
-| `fft` C32, N = 1024 | 69.39 / 11.28 | 28.83 / 11.33 | 30.00 / 11.27 | 17.66 / 11.08 | 37.67 / 25.84 | 134.18 / 226.47 |
-| `fft` C32, N = 4096 | 73.97 / 13.10 | 30.13 / 13.28 | 31.46 / 13.10 | 17.89 / 11.92 | 40.12 / 30.86 | 144.36 / 274.79 |
-| `fft` CQ15, N = 1024 | 327.73 / 594.80 | 204.81 / 549.51 | 206.62 / 594.80 | 211.12 / 529.15 | 173.59 / 415.51 | 485.17 / 1195.50 |
+| `convert` CS8 to C32 | 0.62 | 0.70 | 0.61 | 0.62 | 0.57 | 0.38 |
+| `convert` CS16 to C32 | 0.43 | 0.56 | 0.61 | 0.62 | 0.48 | 0.43 |
+| `convert` CU8 to C32 | 0.62 | 0.83 | 0.61 | 0.62 | 0.62 | 0.36 |
+| `convert_out` C32 to CS16 | 0.91 | 0.91 | 0.80 | 0.70 | 0.60 | 0.20 |
+| `convert_out` C32 to CS8 | 0.99 | 1.02 | 0.84 | 0.72 | 0.65 | 0.32 |
+| `convert_out` C32 to CU8 | 1.35 dev | 1.05 | 1.06 | 0.69 | 0.96 | 0.52 |
+| `rotate` C32 | 0.16 info | 0.18 info | 0.45 | 0.25 | 0.60 | 0.20 info |
+| `rotate` CQ15 | 0.43 | 0.23 | 0.28 | 0.22 | 0.22 | 0.53 |
+| `fir` C32, 64 taps | 0.49 | 0.48 | 0.13 | 0.06 | 0.36 | 0.11 info |
+| `fir_decimate` C32, 127 taps, M = 10 | 0.51 | 0.50 | 0.21 | 0.18 | 0.52 | 0.14 info |
+| `fir_interpolate` C32, L = 2, 128 taps | 0.51 | 0.51 | 0.20 | 0.13 | 0.40 | 0.12 info |
+| `resample` C32, 3 / 2, 192 taps | 0.52 | 0.51 | 0.26 | 0.20 | 0.50 | 0.16 info |
+| `mag_sq` C32 | 0.71 | 0.62 | 0.61 | 0.39 | 0.52 | 0.60 |
+| `mag_sq` CQ15 | 0.11 | 0.15 | 0.18 | 0.18 | 0.31 | 0.13 |
+| `quad_demod` C32 | 0.13 info | 0.14 info | 0.68 | 0.50 | 0.62 | 0.18 info |
+| `quad_demod` CQ15 | 0.22 | 0.16 | 0.07 | 0.02 | 0.10 | 0.13 |
+| `fm_mod` C32 | 0.27 | 0.22 | 0.13 | 0.06 | 0.27 | 0.32 |
+| `fft` C32, N = 64 | 0.80 | 0.60 | 0.99 | 0.95 | 0.58 | 0.56 |
+| `fft` C32, N = 1024 | 0.98 | 0.74 | 0.91 | 0.50 | 0.59 | 0.64 |
+| `fft` C32, N = 4096 | 0.93 | 0.73 | 0.86 | 0.50 | 0.56 | 0.64 |
+| `fft` CQ15, N = 1024, block float | 0.12 | 0.10 | 0.04 | 0.02 | 0.09 | 0.11 |
+| `fft` CQ15, N = 1024, fixed scaling | 0.11 | 0.08 | 0.04 | 0.02 | 0.07 | 0.09 |
+| `fft` CQ15, N = 1024, fixed scaling, full scale | 0.12 | 0.09 | 0.04 | 0.02 | 0.08 | 0.10 |
+| `rfft` f32, N = 1024 | 1.09 | 1.09 | 0.61 | 0.43 | 0.56 | 0.71 |
 
-Accuracy (SNR in dB against the f64 reference), ours / comparison, `exact` where both are bit-exact with the reference:
+Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
-| Kernel | sse2 | avx2 | avx512 | neon | simd128 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `convert` CS8 to C32 | exact | exact | exact | exact | exact |
-| `convert` CS16 to C32 | exact | exact | exact | exact | exact |
-| `convert_out` C32 to CS16 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 |
-| `rotate` C32 | 140.8 / 108.8 | 141.1 / 115.0 | 141.1 / 114.5 | 141.1 / 133.0 | 140.8 / 133.0 |
-| `fir` C32, 64 taps | 141.8 / 142.3 | 142.3 / 142.6 | 142.3 / 142.3 | 141.8 / 136.3 | 141.8 / 136.3 |
-| `fir_decimate` C32, 127 taps, M = 10 | 140.5 / 139.5 | 141.5 / 139.0 | 141.8 / 141.2 | 140.5 / 133.3 | 140.5 / 133.3 |
-| `mag_sq` C32 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 |
-| `quad_demod` C32 | 144.2 / 144.2 | 141.8 / 126.5 | 141.8 / 126.5 | 144.2 / 143.6 | 144.2 / 143.6 |
-| `fm_mod` C32 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 |
-| `fft` C32, N = 64 | 141.0 / 141.4 | 140.9 / 141.4 | 141.7 / 141.4 | 142.2 / 142.3 | 141.0 / 142.1 |
-| `fft` C32, N = 1024 | 138.0 / 139.1 | 138.4 / 139.1 | 138.7 / 139.1 | 138.4 / 139.1 | 138.0 / 138.8 |
-| `fft` C32, N = 4096 | 137.4 / 137.9 | 137.7 / 137.9 | 137.7 / 137.9 | 137.7 / 138.3 | 137.4 / 137.7 |
-| `fft` CQ15, N = 1024 | 53.9 / 53.9 | 53.9 / 53.9 | 53.9 / 53.9 | 53.9 / 53.9 | 53.9 / 53.9 |
+| Kernel | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `convert` CS8 to C32 | 2.50 / 4.02 | 2.12 / 3.02 | 1.08 / 1.77 | 1.09 | 0.56 / 0.89 | 1.40 / 2.46 | 4.22 / 11.03 |
+| `convert` CS16 to C32 | 2.38 / 5.52 | 2.12 / 3.77 | 1.08 / 1.77 | 1.09 | 0.55 / 0.89 | 1.46 / 3.02 | 4.34 / 10.03 |
+| `convert` CU8 to C32 | 2.50 / 4.02 | 2.50 / 3.02 | 1.08 / 1.77 | 1.09 | 0.56 / 0.90 | 1.53 / 2.46 | 3.96 / 11.03 |
+| `convert_out` C32 to CS16 | 3.67 / 4.02 | 3.67 / 4.02 | 1.71 / 2.14 | 1.72 | 0.72 / 1.02 | 2.03 / 3.39 | 5.67 / 29.03 |
+| `convert_out` C32 to CS8 | 3.61 / 3.65 | 3.61 / 3.52 | 1.65 / 1.96 | 1.66 | 0.73 / 1.02 | 2.16 / 3.33 | 9.17 / 29.03 |
+| `convert_out` C32 to CU8 | 5.42 / 4.02 | 5.30 / 5.02 | 2.34 / 2.21 | 2.35 | 1.52 / 2.21 | 3.97 / 4.14 | 15.17 / 29.03 |
+| `rotate` C32 | 7.26 / 46.11 | 7.26 / 41.11 | 2.37 / 5.28 | 2.39 | 1.23 / 4.99 | 3.57 / 5.99 | 15.94 / 79.23 |
+| `rotate` CQ15 | 24.53 / 57.02 | 13.27 / 57.02 | 7.53 / 26.53 | 7.54 | 2.78 / 12.52 | 10.77 / 50.01 | 45.04 / 84.29 |
+| `fir` C32, 64 taps | 118.50 / 244.02 | 117.97 / 247.02 | 24.92 / 193.77 | 24.94 | 11.16 / 197.52 | 55.59 / 153.02 | 209.41 / 1980.03 |
+| `fir_decimate` C32, 127 taps, M = 10 | 23.59 / 46.47 | 23.59 / 47.27 | 6.87 / 32.55 | 6.82 | 4.47 / 25.03 | 14.08 / 26.84 | 55.44 / 383.41 |
+| `fir_interpolate` C32, L = 2, 128 taps | 133.77 / 262.02 | 134.57 / 265.02 | 41.88 / 211.77 | 41.70 | 28.01 / 215.52 | 68.54 / 172.51 | 245.10 / 2024.03 |
+| `resample` C32, 3 / 2, 192 taps | 137.53 / 266.35 | 137.72 / 269.35 | 55.19 / 215.52 | 55.80 | 43.78 / 218.42 | 86.61 / 174.35 | 317.99 / 2026.03 |
+| `mag_sq` C32 | 2.32 / 3.27 | 1.57 / 2.52 | 0.92 / 1.52 | 0.93 | 0.60 / 1.52 | 1.18 / 2.27 | 4.96 / 8.28 |
+| `mag_sq` CQ15 | 1.31 / 11.51 | 1.31 / 8.51 | 0.73 / 4.08 | 0.75 | 0.36 / 1.95 | 1.02 / 3.26 | 3.02 / 23.90 |
+| `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.43 / 10.92 | 7.44 | 3.36 / 6.73 | 12.30 / 19.79 | 36.15 / 201.21 |
+| `quad_demod` CQ15 | 38.15 / 170.85 | 26.77 / 171.16 | 11.27 / 162.72 | 11.29 | 4.03 / 163.66 | 17.78 / 173.61 | 42.91 / 332.25 |
+| `fm_mod` C32 | 16.51 / 61.91 | 13.74 / 61.91 | 7.51 / 58.92 | 7.65 | 3.40 / 55.92 | 11.22 / 41.95 | 34.78 / 109.89 |
+| `fft` C32, N = 64 | 15.06 / 18.88 | 15.06 / 25.30 | 5.84 / 5.88 | 6.28 | 5.28 / 5.53 | 10.52 / 18.28 | 35.50 / 63.23 |
+| `fft` C32, N = 1024 | 25.16 / 25.56 | 25.16 / 33.81 | 10.33 / 11.33 | 10.37 | 5.57 / 11.07 | 15.14 / 25.85 | 58.57 / 91.17 |
+| `fft` C32, N = 4096 | 28.93 / 31.17 | 28.93 / 39.44 | 11.45 / 13.27 | 11.49 | 5.92 / 11.81 | 17.37 / 30.85 | 67.64 / 105.58 |
+| `fft` CQ15, N = 1024, block float | 28.51 / 233.83 | 22.26 / 233.83 | 10.19 / 233.83 | 10.24 | 5.80 / 233.83 | 15.79 / 179.33 | 48.92 / 460.87 |
+| `fft` CQ15, N = 1024, fixed scaling | 25.27 / 233.83 | 19.87 / 233.83 | 9.11 / 233.83 | 9.18 | 5.29 / 233.83 | 12.79 / 179.33 | 43.57 / 460.87 |
+| `fft` CQ15, N = 1024, fixed scaling, full scale | 27.07 / 233.83 | 20.81 / 233.83 | 9.61 / 233.83 | 9.65 | 5.44 / 233.83 | 13.83 / 179.33 | 46.16 / 460.87 |
+| `rfft` f32, N = 1024 | 16.72 / 15.32 | 16.72 / 15.32 | 8.24 / 13.54 | 8.30 | 5.51 / 12.82 | 10.43 / 18.75 | 41.91 / 59.40 |
+
+Accuracy (SNR in dB against the f64 reference), ours / comparison:
+
+| Kernel | sse2 | sse4.2 | avx2 | avx512 | neon | simd128 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `convert` CS8 to C32 | exact | exact | exact | exact | exact | exact |
+| `convert` CS16 to C32 | exact | exact | exact | exact | exact | exact |
+| `convert` CU8 to C32 | exact | exact | exact | exact | exact | exact |
+| `convert_out` C32 to CS16 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 |
+| `convert_out` C32 to CS8 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 |
+| `convert_out` C32 to CU8 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 |
+| `rotate` C32 | 142.8 / 107.8 | 142.8 / 107.8 | 142.7 / 115.0 | 142.7 / 114.5 | 143.9 / 115.2 | 142.8 / 107.8 |
+| `rotate` CQ15 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 |
+| `fir` C32, 64 taps | 141.7 / 141.7 | 141.7 / 141.7 | 142.1 / 142.3 | 142.1 / 141.9 | 142.1 / 141.0 | 141.3 / 136.4 |
+| `fir_decimate` C32, 127 taps, M = 10 | 141.0 / 139.0 | 141.0 / 139.0 | 142.0 / 141.2 | 141.9 / 141.1 | 141.8 / 138.5 | 141.0 / 134.3 |
+| `fir_interpolate` C32, L = 2, 128 taps | 141.9 / 141.5 | 141.9 / 141.5 | 141.8 / 142.4 | 141.8 / 141.9 | 141.8 / 141.2 | 141.2 / 136.5 |
+| `resample` C32, 3 / 2, 192 taps | 141.6 / 141.4 | 141.6 / 141.4 | 142.2 / 142.2 | 142.3 / 141.9 | 142.2 / 140.8 | 141.6 / 136.3 |
+| `mag_sq` C32 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 |
+| `mag_sq` CQ15 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 |
+| `quad_demod` C32 | 143.5 / 144.2 | 143.5 / 144.2 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 143.6 |
+| `quad_demod` CQ15 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 |
+| `fm_mod` C32 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 |
+| `fft` C32, N = 64 | 142.1 / 140.2 | 142.1 / 142.1 | 140.7 / 141.4 | 140.7 / 141.4 | 141.7 / 142.3 | 142.5 / 141.6 |
+| `fft` C32, N = 1024 | 138.7 / 137.9 | 138.7 / 138.7 | 139.1 / 139.1 | 139.1 / 139.1 | 138.8 / 139.1 | 138.2 / 138.9 |
+| `fft` C32, N = 4096 | 137.8 / 137.2 | 137.8 / 137.8 | 138.2 / 137.9 | 138.2 / 137.9 | 138.0 / 138.3 | 137.4 / 137.7 |
+| `fft` CQ15, N = 1024, block float | 65.3 / 43.7 | 63.5 / 43.7 | 63.5 / 43.7 | 63.5 / 43.7 | 63.5 / 43.7 | 63.5 / 43.7 |
+| `fft` CQ15, N = 1024, fixed scaling | 47.9 / 43.5 | 46.7 / 43.5 | 46.7 / 43.5 | 46.7 / 43.5 | 48.0 / 43.5 | 46.7 / 43.5 |
+| `fft` CQ15, N = 1024, fixed scaling, full scale | 60.0 / 55.1 | 58.9 / 55.1 | 58.9 / 55.1 | 58.9 / 55.1 | 59.9 / 55.1 | 58.9 / 55.1 |
+| `rfft` f32, N = 1024 | 138.6 / 138.5 | 138.6 / 138.5 | 138.7 / 138.1 | 138.3 / 138.1 | 138.5 / 138.4 | 137.8 / 138.5 |
 
 Notes.
 
-- **Levels.** `neon` and `simd128` are compared with our own fallback (except the FFT), which the compiler vectorises where the loop allows (the squares of `mag_sq` on NEON). Where the comparison is VOLK at `avx2`, VOLK's own kernels are hand-written intrinsics.
-- **Run-time detection** costs nothing measurable per call: the `avx2-runtime` column is within 0.15 instruction per sample of `avx2` for every kernel but the two FFTs (1.2 to 1.8 more per sample, another inlining of the same code).
-- **`convert_out`.** The specified rounding is `floor(v + 0.5)` with NaN as zero; VOLK rounds to nearest even and does not look at NaN. Making the ties come out right costs about as many instructions again as the conversion itself (waiver, open item M13-1).
-- **`rotate` at `avx2`.** The polynomial oscillator needs 6.5 instructions per sample against 5.3 for the recurrence of VOLK. The recurrence is not a function of the phase alone, so its result depends on the block size, and it is less accurate (115 dB against our 141 dB).
-- **`fir`/`fir_decimate` at `sse2`.** The vectors have two complex samples; the VOLK variant of the same level reduces with SSE3 shuffles.
-- **FFT.** `C32`: the in-place transform without per-stage twiddle tables and without scratch needs two to five times the instructions of rustfft on x86-64, 1.3 to 1.8 times on NEON and fewer on wasm32 (where rustfft is scalar). Waiver, open item M13-2. At N = 64 on wasm32 the accuracy is 1.05 dB below rustfft (limit 1 dB; waiver, open item M13-3).
+- **Comparisons per level.** The `sse2` FFT is judged against FFTW out of place (D3). In place, FFTW needs 31.5 / 35.1 / 40.7 instructions per sample at N = 64 / 1024 / 4096 (ours 0.48 / 0.72 / 0.71 of that), and rustfft, which has no planner below SSE4.1, is scalar there (56.8 / 93.1 / 112.2). On `neon` FFTW (`--enable-neon`, out of place) is information: 15.9 / 26.8 / 39.7. The `CQ15` FFT is judged against KissFFT, whose fixed-point code is scalar on every platform; Ne10 int16 on `neon` needs 19.8 instructions per sample at 44.6 dB (ours 0.80 with block float, 0.65 with fixed scaling). The cheapest VOLK implementation on `neon` is the default dispatch for every kernel but `convert_cs16` (`neon`, 2.52), `fir`, `fir_decimate`, `fir_interpolate` and `resample` (`neon_unroll`, 150.0, 26.7, 169.5 and 171.4), `mag_sq` (`neon`, 1.52), `quad_demod` (19.3) and `convert_out` to `CU8` (`neon`, 4.02); ours is below all of them (`convert_out` to `CU8` 0.99 of the cheapest).
+- **Run-time detection** (`avx2-runtime`) costs at most 0.02 times the instructions of the fixed `avx2` build for every kernel but `fft` C32 at N = 64 (1.07, 6.28 against 5.84 instructions per sample: about 28 instructions more per call, 18 of them in `level::dispatch_fn!`); that entry is `dev` (open item M13-9). Against rustfft it is 1.07 as well (5.88).
+- **`convert_out`.** Rounds to nearest even like VOLK (decision D7) and keeps NaN as zero; that costs one compare and one AND per vector at SSE/AVX2 (VOLK does not look at NaN), and nothing on NEON and SIMD128. The `U8` encoding reproduces the f64 rounding exactly, which costs one byte bound per value more than VOLK at `sse2`, `sse4.2`, `avx2` and `neon` (a pack and two minimums on x86, a compare and a narrowing on NEON) and a floor and a compare at `avx512`. At `sse2` that is 1.35 times VOLK (open item M13-8); at `sse4.2` and `avx2` 1.05 and 1.06, within the release limit.
+- **`rotate`.** The block oscillator needs 2.37 instructions per sample at `avx2` against 5.28 for VOLK 3.3 (and 3.07 for the VOLK 3.1 of Ubuntu 24.04) and is more accurate (142.7 dB against 115.0 dB). Its per-call cost (about 450 instructions at `avx2`) shows in short calls: 9.1 instructions per sample at n = 64 and 32.6 at n = 16.
+- **`fir_interpolate`, `resample`.** Every branch of the polyphase filter runs as a contiguous filter in the forms of `fir` (`M = 1`) and `fir_decimate`, with its outputs written at the stride `L`; the comparison makes one VOLK dot product per output with the taps of its branch, as GNU Radio does. The counts are per output sample.
+- **`rfft`.** The inner complex FFT of `N / 2` points is the backend's. The post-processing forms 4 bins and their mirrors per vector at `sse2`, `sse4.2`, `neon` and `simd128`; at `avx2` and `avx512` the fallback's loop, compiled at the level, is cheaper. At `sse2` and `sse4.2` the comparison is FFTW's real-input transform (15.32 instructions per sample at both levels): ours is 1.09 times that, within the release limit (the fallback's loop was 1.22 times). rustfft's real planner needs 50.96 at `sse2` (scalar) and 24.54 at `sse4.2`.
+- **`fir`, `fir_decimate`.** The comparison is GNU Radio's `fir_filter_ccf` (one aligned VOLK dot product per output, D6). Ours is at most 0.2 dB below the comparison (`fir` at `avx2`, 142.1 against 142.3 dB) and above it elsewhere, within the 1 dB rule.
+- **`quad_demod`.** At `sse2` and `sse4.2` VOLK has no SSE `atan2`; the comparison is the correctly rounded `generic` code (144.2 dB), 0.7 dB above ours, which is within the rule (decision D9).
+- **FFT.** `C32` reads its twiddles from static per-span tables on x86-64 and AArch64 (feature `fft-tables`, [backends.md](backends.md)); wasm32 is measured without them (with them: 31.0 / 53.1 / 61.8 fuel per sample). The accuracy of the single-vector transform at N = 64 scatters by about 1.9 dB between levels (140.7 to 142.5 dB), with the comparisons between 140.2 and 142.3 dB. `CQ15`: the radix-4 transform is not bit-identical with the fallback (decision D10); on the bench input it is far more accurate than KissFFT (which rounds every stage of its fixed-point code).
+- **`fm_mod`.** On wasm32 it is measured without the NCO tables (feature `nco-tables`, off there by default): 34.78 fuel per sample, 27.77 with the tables. At `avx512` it uses gathers (see the caveat at the top).
+- **AVX-512** counts come from SDE between the SSC markers and are exact; an earlier version of the method without markers varied by up to 0.07 instructions per sample.
+- **Variants.** The misaligned and small-block lines of the results files are information; they show the per-call cost of the conversions (for example `convert` CS16 at `avx512`, n = 64: 2.63 against 2.08 for VOLK).
 
 ## Pipeline benchmark
 
@@ -115,28 +195,35 @@ Notes.
 
 | Measure | Value |
 | --- | --- |
-| instructions per input sample | 545 |
+| instructions per input sample | 461.2 (545 before the SIMD optimization) |
 | latency of `audio` (`Pipeline::latency`) | 30.14 samples of 48 kHz, 627.9 µs (group delay 27.14 samples, up to 3 samples buffered) |
 
-At 2.4 Msps this is about 1.3 G instructions per second of signal.
+At 2.4 Msps this is about 1.1 G instructions per second of signal.
 
 ## Running the measurements
 
 ```sh
-cargo xtask count --platform x86_64          # needs valgrind, libvolk-dev, pkg-config
-cargo xtask count --platform x86_64-avx512   # needs Intel SDE; SDRK_SDE=<path to sde64>
-cargo xtask count --platform aarch64         # needs a QEMU user-mode build with plugins
-cargo xtask count --platform wasm32          # needs wasmtime
+cargo xtask count --platform x86_64          # needs valgrind and Intel SDE (SDRK_SDE=<path to sde64>)
+cargo xtask count --platform x86_64-avx512   # needs Intel SDE
+cargo xtask count --platform aarch64         # needs a QEMU user-mode build with plugins and the aarch64 cross compilers
+cargo xtask count --platform wasm32          # needs wasmtime and clang with the wasi-libc headers
 cargo xtask count --pipeline                 # needs valgrind
 ```
 
+Options: `--level L` and `--kernel NAME` (repeatable) restrict the run (the results file is written only for a complete run), `--no-write` keeps `benches/results` unchanged, `--no-variants` skips the informational misaligned and small-block runs, and `--strict` fails for every entry that is not a clean `release` entry (the release check of open item M13-4).
+
 Tools.
 
+- **The C references** need `curl`, `sha256sum`, `tar`, `make`, `cmake`, `ninja` and `python3` with `mako` (VOLK), and for `aarch64` and `wasm32` the cross compilers (`gcc-aarch64-linux-gnu`, `g++-aarch64-linux-gnu`; `clang` and `llvm-ar` with the wasi-libc headers). `benches/refs/build.sh` returns at once when the prefix already holds a build of the same script with the same compilers. Environment: `SDRK_REFS_DOWNLOADS` (download cache), `SDRK_REFS_JOBS` (default 2).
 - **Intel SDE** is pinned in CI to version 9.58.0 (`https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz`, sha256 `f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0`) and cached; it is proprietary freeware of Intel and is not part of the repository.
 - **QEMU** must be configured with `--enable-plugins`; the packaged `qemu-aarch64` of the distributions is not. CI builds QEMU 10.2.1 (`configure --target-list=aarch64-linux-user --enable-plugins`, then `ninja qemu-aarch64`) in the nightly job. Point `SDRK_QEMU_AARCH64` at the binary. xtask builds the `insn` plugin into `target/tools/libinsn.so` if it is missing, from the QEMU tree named by `SDRK_QEMU_SRC` or from the two files `tests/tcg/plugins/insn.c` and `include/qemu/qemu-plugin.h` that it downloads for the tag `SDRK_QEMU_TAG` (default `v10.2.1`; the location of the plugin source has moved between QEMU releases). Needs `gcc`, `pkg-config` and `libglib2.0-dev`. `SDRK_AARCH64_SYSROOT` (default `/usr/aarch64-linux-gnu`, from `libc6-dev-arm64-cross`) is the sysroot of the target libc.
 - **wasmtime** with fuel (`-W fuel=N`).
-- For `aarch64-unknown-linux-gnu` cross builds xtask sets `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc` (package `gcc-aarch64-linux-gnu`).
+- For `aarch64-unknown-linux-gnu` cross builds xtask sets `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc`.
 
 ## CI
 
-`count` runs `cargo xtask count --platform x86_64` on every pull request that touches `crates/core`, `crates/backends`, `crates/facade`, `benches` or `xtask`; the nightly run adds the platforms `x86_64-avx512`, `aarch64` and `wasm32`, the pipeline benchmark, and checks that the committed results are up to date. Instruction counts are deterministic, so the committed `benches/results/*.json` change only when the code, the toolchain, VOLK or rustfft change.
+The count jobs run in a pinned container image (`ubuntu:26.04` by digest) with the packages of a pinned apt snapshot, so that the compilers of the C references do not change under the counts; the references are cached by the build script, the image and the snapshot.
+
+- `count` counts `x86_64` on every pull request that touches `crates/core`, `crates/backends`, `crates/facade`, `benches` or `xtask`, with `--no-variants --no-write`: the misaligned and small-block variants are information and are not judged.
+- In the nightly run `count` measures `x86_64` with the variants and the pipeline benchmark, and `count-nightly` the platforms `x86_64-avx512`, `aarch64` and `wasm32`; both check that `benches/results` matches what is committed (`git diff --exit-code`). Instruction counts are deterministic, so the committed results change only when the code, the toolchain or a reference changes.
+- wasmtime is installed from its GitHub release tarball, pinned by version and SHA-256 (`WASMTIME_SHA256`).

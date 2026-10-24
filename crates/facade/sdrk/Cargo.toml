@@ -16,6 +16,16 @@ sdrk-device = { path = "../../core/sdrk-device" }
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32"))'.dependencies]
 sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true }
 
+# The static twiddle tables of the C32 FFT (41 KiB) on x86-64 and AArch64; elsewhere (wasm32,
+# 32-bit x86) they are opt-in (feature `fft-tables`).
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true, features = ["fft-tables"] }
+
+# The static NCO interpolation tables (96 KiB) where flash is not scarce; on wasm32 they are
+# opt-in (feature `nco-tables`).
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true, features = ["nco-tables"] }
+
 [features]
 default = ["simd"]
 # The SIMD backend for the accelerated kernels (compile-time level selection).
@@ -25,6 +35,12 @@ std = ["sdrk-backend-simd?/std"]
 # Relaxed SIMD multiply-add in the C32 kernels on wasm32 with the target feature
 # `relaxed-simd`; a no-op elsewhere.
 relaxed-simd = ["sdrk-backend-simd?/relaxed-simd"]
+# The static twiddle tables of the C32 FFT on every target (they are on by default on x86-64 and
+# AArch64).
+fft-tables = ["sdrk-backend-simd?/fft-tables"]
+# The static NCO interpolation tables on every target (they are on by default on x86, x86-64 and
+# AArch64).
+nco-tables = ["sdrk-backend-simd?/nco-tables"]
 
 [lints]
 workspace = true

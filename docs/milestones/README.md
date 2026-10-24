@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M14 are delivered; M15 is in a pull request and not merged; M16 to M18 are planned (M16 to M18 depend on M15).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 are delivered; M16 to M18 are planned.
 
 | # | File | Plan phase | Delivers |
 | --- | --- | --- | --- |

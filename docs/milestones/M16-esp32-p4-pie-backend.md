@@ -149,6 +149,8 @@ Additional rules:
   - `src/encodings.rs` is committed; a CI nightly job regenerates it in the ESP-IDF image and fails on differences.
 - Source of truth for semantics: the ESP32-P4 Technical Reference Manual (PIE chapter) and ESP-DSP's P4 assembly sources (`*_arp4.S`); cite the exact documents and versions in `docs/backends.md`. Where documentation is missing, determine behaviour by experiment in esp-emulator with a small test program and record the finding in the decisions log.
 - `unsafe` policy as in M13 (`#[allow(unsafe_code)]` locally, `// SAFETY:` comments, `undocumented_unsafe_blocks` denied). Every `asm!` block documents clobbered registers and PIE state (vector registers, accumulators) and leaves the PIE state as the ABI expects (verify whether PIE registers are caller- or callee-saved under the ESP-IDF ABI; bare-metal code here has no other users, but document it).
+- **Silicon revision (spike, section 6).** The encodings depend on the silicon revision: `riscv32-esp-elf-as -march=rv32imafc_zicsr_zifencei_xespv2p1` and `…_xespv2p2` emit different words for the same mnemonic (`esp.zero.xacc` is `0x0000005b` for v2p1 and `0x0000001b` for v2p2), and the v2p1 words trap as illegal instructions on the v3.1 chip that esp-emu emulates. The generator targets **`xespv2p2` (silicon v3) only** (plus `xesploop2p1` for the `esp.lp.*` hardware-loop instructions); it records the assembler version and the extension names in the header of `encodings.rs`, and `xtask pie-encode --check` fails if a word of another revision appears. Boards below v3 are out of scope; say so in `docs/backends.md` and log it.
+- Some mnemonics carry mode fields that only the disassembly shows (`esp.vmulas.s16.xacc q0,q1,sat`, `esp.srcmb.s16.qacc q2,a2,trunc,dyn`). `instructions.txt` names the exact form, and the generator compares the `objdump` output with the template.
 
 ### 2. Crate and facade
 
@@ -156,6 +158,7 @@ Additional rules:
 - `pub struct EspPie;` implements: `Fir<CQ15>`, `FirDecimate<CQ15>`, `Dot<CQ15>`, `MagSq<CQ15>`, `Convert<CQ15>` (CU8, CS8, CS16 interleaved), `Fft<CQ15>`.
 - Facade feature `esp-pie` → `delegate!(… => EspPie)` for those kernels under the cfg above; `backend_for` returns `"esp-pie"`.
 - Alignment: PIE 128-bit loads need 16-byte alignment; kernels handle unaligned heads/tails with the fallback for the remainder, or require aligned storage through state constructors (document per kernel; `ArenaStorage` can align to 16 when requested — add `alloc_aligned::<T>(len, align)` to the `Storage` trait with a default implementation; log the API addition). `storage_bytes` of every block that uses `alloc_aligned` includes that padding (deterministic for a 16-byte aligned arena), so M09 test 3 still passes.
+- **The PIE unit is off after reset.** The first PIE instruction raises "Illegal instruction" until the CSR `CSR_PIE_STATE_REG` (`0x7f2`; low bits 00 off, 01 initial, 10 clean, 11 dirty) is set: `csrwi 0x7f2, 1`. The backend crate exposes `pub unsafe fn enable()` that does this; it is a documented precondition of every `EspPie` kernel, and `targets/esp32p4` calls it before the suite. (ESP-IDF's FreeRTOS enables the unit lazily per task; bare-metal code has no such handler.) Log the API addition.
 
 ### 3. Kernel contracts (unchanged from the fallback)
 
@@ -166,10 +169,13 @@ Additional rules:
 | `dot`, `fir`, `fir_decimate` CQ15 | **bit-exact** | MAC into the PIE accumulators; analyse the accumulator width: if a lane accumulator could overflow for the tap count, split the taps into chunks that cannot overflow and add the partial sums in scalar `i64`; extract the full-precision sum and apply R7 rounding (`round_shift(·, 15)` + saturation) in scalar unless a PIE shift/round instruction is proven to round half up identically |
 | `fft` CQ15 fixed and BFP | M07 contract table | radix-2 or radix-4 butterflies with PIE complex multiply; BFP: block maximum via vector max/abs; exponent semantics as in M07 |
 
+**Accumulator facts (measured in esp-emu, section 6).** `esp.vmulas.s16.xacc` assembles as the saturating form, and the accumulator XACC is 40 bits wide: 512 products of −32768 × −32768 (2³⁹) give 2³⁹ − 1. One instruction adds at most 8 × 2³⁰ = 2³³, so a chunk holds at most **63 vectors (504 elements)**; then it is read out (`esp.movx.r.xacc.l` and `.h`, the high word carries bits 32 to 39, sign-extend from 8 bits), cleared and added in `i64`. The `len % 8` tail is scalar code.
+
 ### 4. Verification
 
 - Suite in esp-emulator with the backend: `targets/esp32p4` gets feature `esp-pie`; `xtask emu --target esp32p4 --features esp-pie` runs quick and full (M15 §3 defines `--features <list>`, passed through to the target build). All `backend_vs_fallback_*` cases (M13) cover the new kernels automatically because they go through the facade.
-- Extra stress cases (testkit, quick tier): lengths 0…40 and 4093…4100, unaligned slices (offset by 1 sample), taps 1…300 (crosses the chunk split), −32768 everywhere.
+- esp-emu version: the complete PIE instruction set (checked against silicon by the emulator's authors) exists from v0.49.0, so the M15 pin must be at least that. The emulated chip is revision v3.1; esp-emu v0.50.0 refuses images built for silicon below v3.
+- Extra stress cases (testkit, quick tier): lengths 0…40 and 4093…4100, unaligned slices (offset by 1 sample), taps 1…300 (crosses the chunk split), −32768 everywhere. Accumulator edge: −32768 × −32768 and 32767 × −32768 at lengths 496, 504, 512, 520 and 4096 (the spike saturated from 512 elements on).
 
 ### 5. Comparison with ESP-DSP (static instruction count)
 
@@ -177,6 +183,18 @@ Additional rules:
 - Our side: the same kernels from `sdrk-backend-esp-pie`, compiled in release.
 - **Method (static, as decided in the plan, because esp-emulator only samples PCs):** `cargo xtask count --platform esp32p4` disassembles both binaries (`riscv32-esp-elf-objdump` in the Docker image, or `llvm-objdump` with `--mattr` where it suffices — raw encodings print as `.insn`, which is fine for counting) and evaluates `benches/esp32p4/loops.json`: per kernel and implementation, the function symbol, the address ranges of setup, outer loop body and inner loop body (identified by our local labels `.Lsdrk_<kernel>_inner` etc.; for ESP-DSP by symbol + loop structure, written down once by hand and checked by a test that the instruction at each boundary matches the recorded mnemonic), and the trip-count formulas in `N` and `taps`. Hardware loops (`esp.lp.setup`) count the body per iteration and the setup once. Result: instructions per output sample at N = 4096 (taps 64 for FIR), written to `benches/results/esp32p4.json`, limits from `benches/limits.json` (release ≤ 1.15×, dev ≤ 1.50×).
 - Report that static counting ignores stalls and memory waits (P4 is in-order, so it is a reasonable proxy), and that both sides are measured identically.
+- **What the comparison means (spike, section 6).** ESP-DSP and our kernels do not solve the same task. `dsps_dotprod_s16_arp4(src1, src2, int16_t *dest, len, shift)` stores a 16-bit result of `(sum + (0x7fff >> shift)) >> (15 − shift)` taken with `esp.srs.s.xacc` (this rounds up, not half up as R7 does), takes the vector path only for `len % 8 == 0` and otherwise jumps to its C version `dsps_dotprod_s16_ansi`, sets bit 1 of the PIE configuration register for unaligned access, and works on real `s16` samples where ours are `CQ15`. Therefore: (a) ESP-DSP is never a correctness reference, only a density reference for the inner loop; (b) the limits apply **per multiply-accumulate of the inner loop**, and the extra work of our contract (XACC read-out, `i64` sum, R7 rounding and saturation, a chunk every 63 vectors, the scalar tail) is reported separately as contract overhead per call and per output sample; (c) for `fir` and `fir_decimate` with 64 taps the overhead is a visible share of every output, so after the first measurement the numbers and the decision on those limits go into the decisions log instead of assuming 1.15× for the whole kernel.
+- **Inner-loop baseline.** The spike's naive `dot` loop (`vld`, `vld`, `vmulas.s16.xacc`, `addi`, `bnez`) costs 5 instructions per 8 MACs; ESP-DSP's costs 4 (the second load fused into `esp.vmulas.s16.xacc.ld.ip`); a hardware loop (`esp.lp.setup`) reaches 2. The kernels use the fused forms and hardware loops from the start.
+- The ESP-DSP build must target silicon v3: ESP-IDF v5.4 and v5.5 build for pre-v3 silicon by default, and esp-emu refuses those images. Pin an ESP-IDF version and the sdkconfig option for it when implementing and record both.
+
+### 6. Spike results (2026-10-24)
+
+A throw-away program (esp-hal 1.2.2, `espflash save-image --merge`, esp-emu v0.50.0, `riscv32-esp-elf` 16.1.0_20260609, assembler 2.46) ran a `dot` kernel in PIE assembler (five instructions per vector, encodings as `.insn` words from the assembler) against scalar Rust on random data and extremes. Result: 15 of 18 cases bit-exact; the three failures are the XACC saturation above. What it established:
+
+- esp-emu runs PIE as specified here, on a v3.1 chip, with the real ROM and the ESP-IDF second stage bootloader.
+- The encodings are revision dependent (section 1), the unit must be enabled (section 2), XACC saturates at ±2³⁹ (section 3), and ESP-DSP computes a different contract (section 5).
+- The `esp.lp.*` instructions need the extension `xesploop2p1`; the PIE instructions need `xespv2p2`. The extension name `xesppie` is not accepted.
+- Not covered: rounding behaviour of `srcmb` and the shifts, hardware loops, `fir` and `fft`, behaviour on real silicon (the emulator's authors report a bit-exact comparison with boards; not verified here).
 
 ## Test vectors
 
@@ -188,6 +206,7 @@ Golden files run on the host only, so add **embedded golden checks**. New Python
 2. `xtask pie-encode --check` passes in the nightly ESP-IDF job.
 3. `xtask count --platform esp32p4` meets the limits for every kernel marked `release`.
 4. Host builds (`cargo build --workspace`) are unaffected (crate empty on non-riscv32).
+5. The accumulator-edge stress cases of section 4 pass; without the chunking they fail (the spike's saturation reproduces), so the test guards the chunk size.
 
 ## Acceptance
 
@@ -197,7 +216,8 @@ R1.2 commands; `cargo xtask emu --target esp32p4 --features esp-pie --full`; `ca
 
 - [ ] `pie-encode` tool, committed encodings, nightly check
 - [ ] `sdrk-backend-esp-pie` with six kernels, facade feature
+- [ ] `enable()` for the PIE unit, `xespv2p2`-only encodings with the revision recorded in the header, chunking at 63 vectors
 - [ ] `Storage::alloc_aligned`
 - [ ] Embedded golden checks, stress cases
-- [ ] ESP-DSP comparison project, static counting tool, `loops.json`, results
+- [ ] ESP-DSP comparison project (built for silicon v3), static counting tool, `loops.json`, results per MAC with the contract overhead reported separately
 - [ ] `docs/backends.md` (P4 section with sources), CHANGELOG, decisions log

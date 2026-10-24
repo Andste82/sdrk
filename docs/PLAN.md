@@ -5,7 +5,7 @@
 > If the two differ, the living document wins; update this snapshot when you notice a difference.
 > Milestones derived from this plan: [`docs/milestones/README.md`](milestones/README.md).
 >
-> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9; the receive basics of phase 9 (biquad, halfband, AGC, squelch, AM and SSB) are specified as milestone M19. The release 0.1 (tag `v0.1.0`) is not made yet.
+> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9; the receive features of phase 9 are specified as milestones M19 to M23 (NFM with squelch, AM, SSB, audio filters, real-sampling devices). The release 0.1 (tag `v0.1.0`) is not made yet.
 
 ## Project
 

@@ -1,4 +1,4 @@
-# Backlog — work after M19
+# Backlog — work after M18 and M23
 
 > Plan: [PLAN.md › Phases 7–9 and Later](../PLAN.md#phases-49-speed-platforms-bindings) · Milestone index: [README.md](README.md)
 
@@ -24,7 +24,7 @@ The RISC-V Vector backend is milestone [M17](M17-rvv-backend.md), the Arm DSP-ex
 ## Phase 9 — stabilization and extensions
 
 - **Driver conformance suite complete** (all capabilities of M12, timed commands, async streams) and **`sdrk-device` 1.0** (API review, semver promise, MSRV policy).
-- **Kernels and blocks** (`biquad`, halfband decimation, AGC, squelch and the AM and SSB demodulators are milestone [M19](M19-receive-basics.md)): `iq_balance` (IQ imbalance correction), `real_to_complex` (real-sampling devices such as Airspy: fs/4 shift + halfband), `sigma_delta_decimate` (SX1255 mode A, 1-bit `Bits1` container from M01), CIC (decimate/interpolate), halfband interpolation by 2, pulse shaping (RRC), FM preemphasis (transmit), FM stereo and RDS, multi-input nodes (adder, mixer, multiplexer) in the pipeline.
+- **Kernels and blocks** (squelch, AGC, AM, SSB, `biquad`, halfband decimation and `real_to_complex` are the milestones [M19](M19-nfm-squelch.md) to [M23](M23-real-sampling-input.md)): `iq_balance` (IQ imbalance correction), `sigma_delta_decimate` (SX1255 mode A, 1-bit `Bits1` container from M01), CIC (decimate/interpolate), halfband interpolation by 2, pulse shaping (RRC), FM preemphasis (transmit), FM stereo and RDS, multi-input nodes (adder, mixer, multiplexer) in the pipeline.
 - **FFT extensions:** Q15 real FFT and its inverse, FFT-based fast convolution (overlap-save) as a block.
 - **Analysis blocks** with structured results (frames/events): signal detection (frequency, bandwidth, level, SNR), occupied bandwidth, noise floor, burst detection, instantaneous values and histograms, symbol-rate estimator.
 - **Digital building blocks:** generic OOK/ASK/FSK/PSK demodulators with clock recovery, bit slicer, preamble correlator, diagram data as frames (constellation, eye diagram).

@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 are delivered; M16 to M19 are planned (M19 uses nothing from M16 to M18, see its *Order* section).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 are delivered; M16 to M23 are planned (the receive series M19 to M23 uses nothing from M16 to M18, see the *Order* section of M19).
 
 | # | File | Plan phase | Delivers |
 | --- | --- | --- | --- |
@@ -29,7 +29,11 @@ Milestones are strictly sequential: each depends on all previous ones, and each 
 | M16 | [M16-esp32-p4-pie-backend.md](M16-esp32-p4-pie-backend.md) | 7 | ESP32-P4 PIE backend, static instruction counting vs ESP-DSP |
 | M17 | [M17-rvv-backend.md](M17-rvv-backend.md) | 7 | `sdrk-backend-rvv` (RISC-V Vector 1.0, vector-length agnostic), VLEN matrix in QEMU (128–1024), digest test for VLEN independence, `qemu-riscv64-rvv` target, instruction counts vs fallback |
 | M18 | [M18-arm-dsp-backend.md](M18-arm-dsp-backend.md) | 7 | `sdrk-backend-arm-dsp` (Cortex-M4/M7/M33 DSP extension, bit-exact CQ15 with 64-bit accumulators), M7/M33 targets, instruction counts vs CMSIS-DSP |
-| M19 | [M19-receive-basics.md](M19-receive-basics.md) | 9 | Kernels `biquad`, `halfband_decimate`, `mag`, `agc`, `squelch`, `dc_block_real`; blocks `biquad`, `halfband`, `agc`, `squelch`, `am_demod`, `ssb_demod`; AM and SSB example flows and end-to-end tests |
+| M19 | [M19-nfm-squelch.md](M19-nfm-squelch.md) | 9 | NFM receive: kernel and block `squelch`, flow `nfm_receiver`, E2E-NFM; introduces the exact float32 golden model |
+| M20 | [M20-am-receive.md](M20-am-receive.md) | 9 | AM receive: kernels `mag` (SIMD), `dc_block_real`, `agc`; blocks `agc`, `am_demod`; flows `am_receiver`, `airband_receiver`; E2E-AM |
+| M21 | [M21-ssb-receive.md](M21-ssb-receive.md) | 9 | SSB receive: block `ssb_demod` from existing kernels, flow `ssb_receiver`, E2E-SSB with sideband rejection |
+| M22 | [M22-audio-filters.md](M22-audio-filters.md) | 9 | Audio filters: kernels `biquad`/`biquad_real`, RBJ and Butterworth design, block `biquad`, CTCSS removal and audio low-pass in the flows |
+| M23 | [M23-real-sampling-input.md](M23-real-sampling-input.md) | 9 | Real-sampling devices: `halfband_decimate`, `real_to_complex` (SIMD), real formats in `convert`, blocks `halfband`, `real_to_complex`, E2E-REAL |
 | — | [BACKLOG.md](BACKLOG.md) | 7–9, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -37,7 +41,9 @@ M00 → M01 → M02 → M03 → M04 → M05 → M06 → M07 → M08     (phases 
                                                    ↓
                          M12 ← M11 ← M10 ← M09 ←───┘     (phase 3: blocks, pipeline, I/O)
                           ↓
-                         M13 → M14 → M15 → M16 → M17 → M18 → M19 → BACKLOG (phases 4–7 and 9: speed, WASM, embedded, receive basics)
+                         M13 → M14 → M15 → M16 → M17 → M18 → BACKLOG                (phases 4–7: speed, WASM, embedded)
+                                      ↓
+                                     M19 → M20 → M21 → M22 → M23 → BACKLOG    (phase 9: NFM, AM, SSB, audio filters, real-sampling input)
 ```
 
 ## How to work on a milestone
@@ -68,8 +74,12 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 200–299 | M08 `convert_out` (200 + i from C32, 220 + i from CQ15) |
 | 300–399 | M09 (`dot`, blocks) |
 | 400–409 | M16 (embedded FFT cases) |
-| 410–429 | M19 |
-| 430–499 | free, for backlog milestones |
+| 410–412 | M19 |
+| 413–420 | M20 |
+| 421–423 | M21 |
+| 424–429 | M22 |
+| 430–435 | M23 |
+| 436–499 | free, for backlog milestones |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
 | 530–999 | free, for backlog milestones |
@@ -77,5 +87,5 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 
 ## Files in this directory
 
-- `M00-…` to `M19-…`: the milestones (each contains the full ground rules).
-- `BACKLOG.md`: work after M19.
+- `M00-…` to `M23-…`: the milestones (each contains the full ground rules).
+- `BACKLOG.md`: work after M18 and M23.

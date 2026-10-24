@@ -2,9 +2,16 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "17 3 * * *"
+
+# A newer push to a pull request makes the older run obsolete. main and the nightly run are
+# never cancelled, so every commit on main keeps a result.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always

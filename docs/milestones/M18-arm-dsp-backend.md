@@ -1,6 +1,6 @@
 # M18 — Arm DSP-extension backend (Cortex-M4/M7/M33) with CMSIS-DSP comparison
 
-> Plan: [PLAN.md › Phase 7](../PLAN.md#phase-7--embedded-backends-large-incremental) · Depends on: [M15](M15-emulator-targets.md) (and the backend pattern of [M13](M13-simd-backend.md), [M16](M16-esp32-p4-pie-backend.md) and [M17](M17-rvv-backend.md)) · Next: [M19](M19-receive-basics.md)
+> Plan: [PLAN.md › Phase 7](../PLAN.md#phase-7--embedded-backends-large-incremental) · Depends on: [M15](M15-emulator-targets.md) (and the backend pattern of [M13](M13-simd-backend.md), [M16](M16-esp32-p4-pie-backend.md) and [M17](M17-rvv-backend.md)) · Next: see [BACKLOG.md](BACKLOG.md); the receive series [M19](M19-nfm-squelch.md)–M23 is independent of M16–M18
 
 ## Goal
 

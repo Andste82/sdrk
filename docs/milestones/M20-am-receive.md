@@ -149,6 +149,8 @@ Additional rules:
 
 General rules from M02/M05/M06 apply (see M19). All f32 arithmetic is written without FMA in exactly the order given; Q15 arithmetic is in `i64` (and `i128` where stated) with `round_shift` and `sat16` (R7).
 
+**Thresholds and limits are not relaxed.** If a threshold, tolerance or count limit of this milestone is not met, do not change it in code, case files or `benches/limits.json`. Measure it, record the measured value and the reason in `docs/decisions-log.md` and an open item in `docs/open-items.md`, and report it in the pull request; a changed threshold needs the maintainer's approval. The only pre-approved changes are the ones stated in this file.
+
 ### 1. `mag` — envelope (C32 tolerance ≥ 130 dB, CQ15 bit-exact)
 
 ```rust
@@ -187,6 +189,7 @@ Rates per sample (f64): `r_a = 1 − exp(−1 / (fs·attack_s))`, `r_r = 1 − e
 - **C32**, constants as f32 (cast from f64): `ref`, `k_a = r_a / ref`, `k_r = r_r / ref`, `g`, `g_min = 10^(min/20)`, `g_max = 10^(max/20)`. Per sample, in this order: `y = (g·x.re, g·x.im)` (written to the output); `m = sqrtf(y.re·y.re + y.im·y.im)`; if `m` is NaN the gain is not updated; otherwise `e = ref − m`, `k = if e < 0 { k_a } else { k_r }`, `g = g · (1 + k·e)`, then `g = g.max(g_min).min(g_max)` (an infinite input drives `g` to `g_min`).
 - **CQ15**, gain `g: i64` in Q.32 (value = raw / 2^32; `g_max` ≤ 31 623 · 2^32 < 2^47): `ref_raw = floor(reference · 32768 + 0.5)` (≥ 1024), `k_raw = floor(r · 2^48 / ref_raw + 0.5)` (≤ 2^37), limits `floor(10^(db/20) · 2^32 + 0.5)`. Per sample: `y.c = sat16(round_shift(x.c · g, 32))` per component; `s = y.re² + y.im²`; `m` = the rounded square root of §1 **without** saturation (≤ 46 341); `e = ref_raw − m`; `k_raw = e < 0 ? k_a : k_r`; `delta = (g · e · k_raw + 2^47) >> 48` computed in `i128` (bounded by 2^100); `g = clamp(g + delta, g_min, g_max)`.
 - **Reference:** C32 the same algorithm in f64 with the f64 values of the f32 constants; CQ15 the integer model.
+- **Pre-approved fallback for the C32 class:** in a feedback loop the f32 and f64 gains may drift apart. If the C32 golden case `steps_c32_24000` stays below 80 dB although the fallback follows §3 exactly, make the C32 `agc` bit-exact like `squelch` (M19): the `Reference` uses the same f32 arithmetic, the golden case uses the float32 model of M19 with class `bit_exact`, and a separate Rust test keeps the f64 model as a check with the SNR that was measured (recorded in the decisions log).
 
 ### 4. Blocks
 
@@ -201,7 +204,8 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 
 ### 5. Pipeline kinds and example flows
 
-- Kinds `agc` (`kernels()` = `["agc"]`) and `am_demod` (`["mag", "dc_block_real", "resample_real"]`); `cargo xtask schema` regenerates the schema (version unchanged). Add the kinds to the WASM declarations if they list kinds.
+- Kinds `agc` (`kernels()` = `["agc"]`) and `am_demod` (`["mag", "dc_block_real", "resample_real"]`). `plan` returns `Figures` exactly like `FmDemodKind::plan` (`crates/pipeline/sdrk-pipeline/src/kinds.rs`): `rate_out` and `memory_bytes` from the block's `rate_out` and `storage_bytes`, `delay` from its timing, `min_input` from `min_input()`, and `cost` per input sample by this formula, which is also added to the cost table of `docs/pipeline.md`: `agc` **6**, `am_demod` **`4 + taps / audio_decimation`** (`taps` of the audio filter, 0 without it).
+- `cargo xtask schema` regenerates the schema (version unchanged). Add the kinds to the WASM declarations if they list kinds.
 - `examples/flows/am_receiver.json` + YAML: input `cu8` at 2.4 MS/s → `ddc` (decimation 50 → 48 kHz, `cutoff_hz` 5000, `transition_hz` 2000) → `agc` (attack 0.1 s, release 0.5 s) → `am_demod` (defaults) → output `f32`.
 - `examples/flows/airband_receiver.json` + YAML: the same with `squelch` (M19, −40 dB) between `ddc` and `agc`; the comments explain the 8.33 kHz and 25 kHz channel spacing.
 

@@ -143,11 +143,13 @@ Additional rules:
 
 **In:** kernels `halfband_decimate`, `halfband_decimate_real` and `real_to_complex` in `sdrk-core` (states, `Fallback`, `Reference`, facade delegation); the design functions `halfband_len` and `halfband_taps` in `sdrk-blocks`; formats with `Layout::Real` in the `convert` block; the blocks `halfband` and `real_to_complex` with descriptions; their pipeline kinds and the regenerated schema; the example flow `real_input_fm_receiver` (JSON and YAML); golden cases; suite cases; the end-to-end case `e2e_real_fm_rx_*`; the SIMD paths and counts of §7; `docs/kernels.md`, `docs/timing.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`.
 
-**Out:** halfband interpolation, CIC, device drivers (Airspy and others live in their own repos), packed 12-bit real formats beyond what M01 defines, fs/4 shifts in the other direction (`+fs/4`; a mirrored spectrum is handled by the `ddc` frequency sign).
+**Out:** halfband interpolation, CIC, external C references for `real_to_complex` (for example libairspy's converter; backlog), device drivers (Airspy and others live in their own repos), packed 12-bit real formats beyond what M01 defines, fs/4 shifts in the other direction (`+fs/4`; a mirrored spectrum is handled by the `ddc` frequency sign).
 
 ## Specification
 
 General rules from M02/M05/M06 apply (see M19). Rate-changing kernels return `Progress` and consume input only as far as output space allows.
+
+**Thresholds and limits are not relaxed.** If a threshold, tolerance or count limit of this milestone is not met, do not change it in code, case files or `benches/limits.json`. Measure it, record the measured value and the reason in `docs/decisions-log.md` and an open item in `docs/open-items.md`, and report it in the pull request; a changed threshold needs the maintainer's approval. The only pre-approved changes are the ones stated in this file.
 
 ### 1. Design functions (`sdrk-blocks`, `design.rs`, in f64)
 
@@ -205,7 +207,8 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 
 ### 6. Pipeline kinds, flow and testkit
 
-- Kinds `halfband` (complex and real inputs; `kernels()` = `["halfband_decimate", "halfband_decimate_real"]`) and `real_to_complex` (`["real_to_complex"]`); the `convert` kind gets the real variant; `cargo xtask schema` regenerates the schema (version unchanged). Add the kinds to the WASM declarations if they list kinds.
+- Kinds `halfband` (complex and real inputs; `kernels()` = `["halfband_decimate", "halfband_decimate_real"]`) and `real_to_complex` (`["real_to_complex"]`). `plan` returns `Figures` exactly like `FmDemodKind::plan` (`crates/pipeline/sdrk-pipeline/src/kinds.rs`): `rate_out` and `memory_bytes` from the block's `rate_out` and `storage_bytes`, `delay` from its timing, `min_input` from `min_input()`, and `cost` per input sample by this formula, which is also added to the cost table of `docs/pipeline.md`: `halfband` and `real_to_complex` **`(N + 3) / 4`** (the `(N + 3)/2` non-zero taps once per two input samples).
+- the `convert` kind gets the real variant; `cargo xtask schema` regenerates the schema (version unchanged). Add the kinds to the WASM declarations if they list kinds.
 - `examples/flows/real_input_fm_receiver.json` + YAML: input `rs16` (real) at 4.8 MS/s → `convert` (real) → `real_to_complex` (→ 2.4 MS/s complex, centre = 1.2 MHz of the input) → `ddc` (frequency `f − 1.2 MHz`, decimation 10) → `fm_demod` (as `fm_receiver`) → output `f32`.
 - Suite cases (Fallback vs Reference, invariance with 20 chunk plans): `halfband_c32`, `halfband_cq15`, `halfband_real_f32`, `halfband_real_q15`, `real_to_complex_c32`, `real_to_complex_cq15`, `extremes_m23`; block cases `block_halfband_alias`, `block_real_to_complex_tone`.
 - **E2E-REAL (`e2e_real_fm_rx_{f32,q15}`):** the FM signal of E2E-RX (M08: deviation 75 kHz, audio 1 kHz) placed at a real IF of 1.8 MHz at 4.8 MS/s (`Re{fm_baseband(…) · e^{j2π·1.8e6·n/fs}}`, amplitude 0.45), plus real noise σ 0.005, encoded to `RS16` → the flow's chain with `ddc` at +600 kHz. SINAD at 1 kHz over the last 50 %: **f32 ≥ 40 dB, Q15 ≥ 35 dB** (as E2E-RX; initial thresholds, M07 rule). Quick variant 0.1 s, full variant 1.0 s.
@@ -222,9 +225,16 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 5. **Embedded backends:** M16–M18 accelerate the kernels listed in their own milestones. If one of them is implemented after this milestone, it decides there whether to include the new kernels.
 | Kernel | Accelerated | Reason | Count |
 | --- | --- | --- | --- |
-| `halfband_decimate` (C32, CQ15) | yes | an FIR: the dot products of the non-zero taps vectorize like `fir_decimate` (M13); C32 may use FMA on AVX2, AVX-512 and NEON like the other FIR kernels (D5, extended to the halfband family; record) and is then a tolerance kernel within 110 dB of the reference; CQ15 stays bit-exact | against our `fir_decimate` with factor 2 and the same (expanded) taps at the same level: `release` with the goal ≤ 0.60× (it does half the multiplications); add the comparison kind "own kernel" to `xtask count` if it does not exist and record it |
+| `halfband_decimate` (C32, CQ15) | yes | an FIR: the dot products of the non-zero taps vectorize like `fir_decimate` (M13); C32 may use FMA on AVX2, AVX-512 and NEON like the other FIR kernels (D5, extended to the halfband family; record) and is then a tolerance kernel within 110 dB of the reference; CQ15 stays bit-exact | against our `fir_decimate` with factor 2 and the same (expanded) taps at the same level (`Reference::OwnKernel`, see below): `release` with the per-entry limit 0.60 (it does half the multiplications) |
 | `halfband_decimate_real` (f32, Q15) | yes | as above for real lanes | against our `halfband_decimate` per value, `info` (no real `fir_decimate` path exists in the backend) |
-| `real_to_complex` (C32, CQ15) | yes | the shift is a sign pattern on lanes and the filter is the halfband | against our `halfband_decimate` on the shifted samples at the same level (`release`, ≤ 1.10×); libairspy `iqconverter_float` (BSD-3-Clause, built as a C reference in `benches/refs` like VOLK) as `info` |
+| `real_to_complex` (C32, CQ15) | yes | the shift is a sign pattern on lanes and the filter is the halfband | against our `halfband_decimate` on the shifted samples at the same level (`Reference::OwnKernel`, `release` with the default limit 1.10) |
+
+**Comparison with an own kernel (extension of `xtask count`, normative):**
+
+- `xtask/src/count.rs`: a new variant `Reference::OwnKernel { kernel: &'static str }`; `implementation()` returns `"ours"`. The measurement binary (`benches/kernels`) gets the comparison workloads `fir_decimate_x2_halfband_taps` (`fir_decimate` with factor 2 and the expanded halfband taps of the kernel's workload) and `halfband_decimate_shifted` (`halfband_decimate` on the input after the `(−j)^n` shift, the shift itself done outside the counted region), counted with the same differential method and level as the kernel.
+- `benches/limits.json`: an entry may carry an optional `"limit"` (number). It replaces `_limits.release` (status `release`) or `_limits.dev` (status `dev`) for that entry; `goal` stays `_limits.goal` unless the entry gives `"goal"` as well. The `halfband_decimate` entries use `"limit": 0.60`.
+- `benches/results/<platform>.json`: `compared_with` is `"ours:<kernel>"`; the verdict and the limit used are written as for the other entries.
+- Unit tests of `xtask` for the parser (an entry with and without `limit`, a wrong type) and for the verdict with a per-entry limit; `docs/performance.md` documents the new reference kind and the field.
 
 ### 8. Documentation
 
@@ -267,6 +277,6 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [ ] Design functions `halfband_len`, `halfband_taps`
 - [ ] Real formats in the `convert` block and the automatic conversion
 - [ ] Blocks `halfband`, `real_to_complex`, pipeline kinds, regenerated schema; flow `real_input_fm_receiver` with YAML twin
-- [ ] SIMD paths for the three kernels on every level, counts and limits (libairspy reference as info)
+- [ ] SIMD paths for the three kernels on every level, `Reference::OwnKernel` and the per-entry `limit` in `xtask count`, counts and limits
 - [ ] Golden cases (seeds 430–435 and the design cases), suite, invariance, extremes, E2E-REAL
 - [ ] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log

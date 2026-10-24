@@ -147,6 +147,10 @@ Additional rules:
 
 ## Specification
 
+General rules from M02/M05/M06/M09 apply (see M19).
+
+**Thresholds and limits are not relaxed.** If a threshold, tolerance or count limit of this milestone is not met, do not change it in code, case files or `benches/limits.json`. Measure it, record the measured value and the reason in `docs/decisions-log.md` and an open item in `docs/open-items.md`, and report it in the pull request; a changed threshold needs the maintainer's approval. The only pre-approved changes are the ones stated in this file.
+
 ### 1. Block `ssb_demod`
 
 The construction pattern, descriptions, storage and parameter rules of M09 §4–§5 apply unchanged.
@@ -168,7 +172,8 @@ The result contains the sideband `[low_hz, high_hz]` above (USB) or below (LSB) 
 
 ### 2. Pipeline kind and example flow
 
-- Kind `ssb_demod` (`kernels()` = `["rotate", "fir_decimate"]`); `cargo xtask schema` regenerates the schema (version unchanged). Add the kind to the WASM declarations if they list kinds.
+- Kind `ssb_demod` (`kernels()` = `["rotate", "fir_decimate"]`). `plan` returns `Figures` exactly like `FmDemodKind::plan` (`crates/pipeline/sdrk-pipeline/src/kinds.rs`): `rate_out` and `memory_bytes` from the block's `rate_out` and `storage_bytes`, `delay` from its timing, `min_input` from `min_input()`, and `cost` per input sample by this formula, which is also added to the cost table of `docs/pipeline.md`: `ssb_demod` **`8 + 4 * taps / audio_decimation`** (two NCOs and the complex filter, as `ddc`).
+- `cargo xtask schema` regenerates the schema (version unchanged). Add the kind to the WASM declarations if they list kinds.
 - `examples/flows/ssb_receiver.json` + YAML: input `cu8` at 2.4 MS/s → `ddc` (decimation 50 → 48 kHz, `cutoff_hz` 4000, `transition_hz` 2000) → `squelch` (−50 dB) → `agc` (defaults) → `ssb_demod` (USB, defaults) → output `f32`. The comments explain USB/LSB conventions (LSB below 10 MHz in amateur radio) and `audio_decimation`.
 
 ### 3. Testkit

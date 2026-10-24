@@ -149,6 +149,8 @@ Additional rules:
 
 General rules from M02/M05/M06 apply (see M19). All f32 arithmetic is written without FMA in exactly the order given; Q15 arithmetic is in `i64` with `round_shift` and `sat16` (R7).
 
+**Thresholds and limits are not relaxed.** If a threshold, tolerance or count limit of this milestone is not met, do not change it in code, case files or `benches/limits.json`. Measure it, record the measured value and the reason in `docs/decisions-log.md` and an open item in `docs/open-items.md`, and report it in the pull request; a changed threshold needs the maintainer's approval. The only pre-approved changes are the ones stated in this file.
+
 ### 1. `biquad` and `biquad_real` — cascaded second-order sections (f32 tolerance, Q15 bit-exact)
 
 Coefficients per section are `[b0, b1, b2, a1, a2]` with `a0 = 1`, i.e. one row of a `scipy.signal` SOS matrix `[b0, b1, b2, 1, a1, a2]` without the 1:
@@ -209,8 +211,10 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 
 ### 4. Pipeline kind and flows
 
-- Kind `biquad` (complex and real inputs; `kernels()` = `["biquad", "biquad_real"]`); `cargo xtask schema` regenerates the schema (version unchanged). Add the kind to the WASM declarations if they list kinds.
+- Kind `biquad` (complex and real inputs; `kernels()` = `["biquad", "biquad_real"]`). `plan` returns `Figures` exactly like `FmDemodKind::plan` (`crates/pipeline/sdrk-pipeline/src/kinds.rs`): `rate_out` and `memory_bytes` from the block's `rate_out` and `storage_bytes`, `delay` from its timing, `min_input` from `min_input()`, and `cost` per input sample by this formula, which is also added to the cost table of `docs/pipeline.md`: `biquad` **`5 * sections`** (real) and **`10 * sections`** (complex).
+- `cargo xtask schema` regenerates the schema (version unchanged). Add the kind to the WASM declarations if they list kinds.
 - `examples/flows/nfm_receiver.json` (+ YAML): a node `ctcss` = `biquad` (highpass, order 4, `cutoff_hz` 300) after `fm_demod`; the comments explain CTCSS (67–254 Hz).
+- **Silence after the squelch (amends M19 test 7):** M19 checks that the audio of `nfm_receiver` is exactly zero while the squelch is closed. With the `ctcss` node this holds for f32 (the DF2T state decays and is flushed to zero; assert exactly zero from 0.2 s after the transmission). For Q15 the DF1 recursion can keep a limit cycle (test 6): assert that the output of `fm_demod` is exactly zero and the output of `ctcss` stays within the limit-cycle amplitude recorded by test 6. The kernel chain of E2E-NFM (M19) has no biquad and keeps its exact-zero check unchanged. Update the M19 flow test accordingly.
 - `am_receiver` and `ssb_receiver`: a node `audio` = `biquad` (lowpass, order 4, `cutoff_hz` 4000 for AM, 2800 for SSB) after the demodulator, with a comment that `cutoff_hz` can be changed at runtime.
 
 ### 5. Testkit
@@ -266,7 +270,7 @@ All stateful Rust golden tests run whole and in random chunks (ChunkPlan seed = 
 7. Extremes (`extremes_m22`): no panic on silence, full scale, NaN and ±∞ (f32), and the Q15 corners.
 8. SIMD: where the two-lane path exists, `backend_vs_fallback_biquad` is bit-exact at every level; the counts pass their limits.
 9. Block rules: description, exact arena, no block struct larger than 512 bytes.
-10. Pipeline: the three updated flows validate, build and run; E2E checks of §6; schema check; the suite passes on the host and in the emulators (quick profile).
+10. Pipeline: the three updated flows validate, build and run; the silence check of §4 passes in f32 and Q15; E2E checks of §6; schema check; the suite passes on the host and in the emulators (quick profile).
 
 ## Acceptance
 

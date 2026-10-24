@@ -544,7 +544,7 @@ fn record(m: &Measurement, status: &str, verdict: &Verdict, goal: bool) -> Value
     r
 }
 
-fn round2(x: f64) -> f64 {
+pub(crate) fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 
@@ -1500,7 +1500,7 @@ fn qemu_tools(root: &Path) -> anyhow::Result<(PathBuf, PathBuf, PathBuf)> {
 /// `tests/tcg/plugins/insn.c`; the location has moved between QEMU releases) or downloaded
 /// from the QEMU repository at the tag `SDRK_QEMU_TAG` (default `v10.2.1`). Needs a C compiler
 /// and the glib development files (`libglib2.0-dev`, `pkg-config`).
-fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<()> {
+pub(crate) fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(tools)?;
     let src_dir = if let Some(dir) = std::env::var_os("SDRK_QEMU_SRC") {
         PathBuf::from(dir)
@@ -2149,7 +2149,7 @@ fn measure_levels(
 /// Runs `cargo xtask count ...`.
 ///
 /// ```text
-/// cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--strict]
+/// cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32|cortex-m4> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--strict]
 /// cargo xtask count --pipeline [--no-write]
 /// ```
 ///
@@ -2164,6 +2164,9 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     let options = Options::parse(args)?;
     if options.pipeline {
         return pipeline(root, options.write);
+    }
+    if options.platform.as_deref() == Some("cortex-m4") {
+        return crate::count_embedded::run(root, &options.kernels, options.write);
     }
     let Some(platform) = options.platform.as_deref() else {
         bail!("{USAGE}");

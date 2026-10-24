@@ -227,3 +227,7 @@ The count jobs run in a pinned container image (`ubuntu:26.04` by digest) with t
 - `count` counts `x86_64` on every pull request that touches `crates/core`, `crates/backends`, `crates/facade`, `benches` or `xtask`, with `--no-variants --no-write`: the misaligned and small-block variants are information and are not judged.
 - In the nightly run `count` measures `x86_64` with the variants and the pipeline benchmark, and `count-nightly` the platforms `x86_64-avx512`, `aarch64` and `wasm32`; both check that `benches/results` matches what is committed (`git diff --exit-code`). Instruction counts are deterministic, so the committed results change only when the code, the toolchain or a reference changes.
 - wasmtime is installed from its GitHub release tarball, pinned by version and SHA-256 (`WASMTIME_SHA256`).
+
+## Cortex-M4 (fallback, report only)
+
+`cargo xtask count --platform cortex-m4` counts eleven kernels of the portable fallback on a Cortex-M4F in `qemu-system-arm` (the `insn` plugin) and writes `benches/results/cortex-m4.json`; the nightly job `count-embedded` runs it. The method is the differential one above, with the workload binary `count` of `targets/qemu-cortex-m4`; there are no limits and no comparison library yet (CMSIS-DSP comes with the `arm-dsp` backend). Details in [embedded.md](embedded.md#instruction-counts-cortex-m4). Note that the M4F has a single-precision FPU only: `convert_out_cs16` rounds in `f64` (R7) and so counts about a thousand instructions per sample in software floating point.

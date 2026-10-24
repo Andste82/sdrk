@@ -1,0 +1,3 @@
+# The Xtensa Rust toolchain of Espressif, installed by `cargo xtask emu --install` (espup).
+[toolchain]
+channel = "esp"

@@ -1,0 +1,56 @@
+{
+  "kernels": {
+    "convert_cs16": {
+      "implementation": "fallback",
+      "instructions_per_sample": 159.23
+    },
+    "convert_cs8": {
+      "implementation": "fallback",
+      "instructions_per_sample": 135.23
+    },
+    "convert_out_cs16": {
+      "implementation": "fallback",
+      "instructions_per_sample": 149.46
+    },
+    "fft_1024": {
+      "implementation": "fallback",
+      "instructions_per_sample": 275.87
+    },
+    "fft_cq15_1024": {
+      "implementation": "fallback",
+      "instructions_per_sample": 1408.8
+    },
+    "fir": {
+      "implementation": "fallback",
+      "instructions_per_sample": 470.11
+    },
+    "fir_decimate": {
+      "implementation": "fallback",
+      "instructions_per_sample": 120.47
+    },
+    "fm_mod": {
+      "implementation": "fallback",
+      "instructions_per_sample": 423.09
+    },
+    "mag_sq": {
+      "implementation": "fallback",
+      "instructions_per_sample": 5.4
+    },
+    "quad_demod": {
+      "implementation": "fallback",
+      "instructions_per_sample": 97.91
+    },
+    "rotate": {
+      "implementation": "fallback",
+      "instructions_per_sample": 30.06
+    }
+  },
+  "machine": "qemu-system-arm -machine mps2-an386 -cpu cortex-m4",
+  "method": {
+    "counted": "(count(k = K) - count(k = 0)) / (K * samples_per_call)",
+    "counter": "QEMU insn plugin",
+    "k": 16,
+    "samples_per_call": 1024
+  },
+  "platform": "cortex-m4"
+}

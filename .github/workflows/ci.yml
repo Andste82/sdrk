@@ -273,6 +273,7 @@ jobs:
       - name: wasm-bindgen-test in headless Chrome
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+          WASM_BINDGEN_TEST_WEBDRIVER_JSON: ${{ github.workspace }}/webdriver.json
           WASM_BINDGEN_TEST_TIMEOUT: 120
         run: cargo xtask wasm-test --env chrome --variant all
       - name: Remove the Chrome-only webdriver.json

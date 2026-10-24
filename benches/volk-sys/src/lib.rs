@@ -1,9 +1,13 @@
-//! The VOLK functions used by the SDRk benchmarks (VOLK is LGPL-3.0; it is linked dynamically
-//! from the system and is not part of SDRk).
+//! The VOLK functions used by the SDRk benchmarks (VOLK is LGPL-3.0; `benches/refs/build.sh`
+//! builds it from the release tarball, and it is never part of SDRk).
 //!
 //! Only the signatures that the benchmarks need are declared. `lv_32fc_t` is a pair of `f32`.
 
 #![allow(non_camel_case_types, clippy::missing_safety_doc)]
+
+#[cfg(not(no_volk))]
+use core::ffi::CStr;
+use core::ffi::{c_char, c_uint};
 
 /// VOLK's `lv_32fc_t`: a complex float, real part first.
 #[repr(C)]
@@ -18,21 +22,43 @@ pub struct lv_32fc_t {
 /// Whether the library was found at build time.
 pub const AVAILABLE: bool = cfg!(not(no_volk));
 
+/// The signature of `volk_32fc_32f_dot_prod_32fc` and its aligned variant.
+pub type DotProd = unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const f32, c_uint);
+
+/// VOLK's `volk_func_desc_t`: the implementations of a kernel on the machine VOLK selected.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct volk_func_desc_t {
+    /// `n_impls` implementation names.
+    pub impl_names: *const *const c_char,
+    /// The architecture mask each implementation needs (the dispatcher ranks by it).
+    pub impl_deps: *const i32,
+    /// Whether each implementation needs aligned buffers.
+    pub impl_alignment: *const bool,
+    /// Number of implementations.
+    pub n_impls: usize,
+}
+
 #[cfg(not(no_volk))]
 mod ffi {
-    use super::lv_32fc_t;
-    use core::ffi::c_uint;
+    use super::{DotProd, lv_32fc_t, volk_func_desc_t};
+    use core::ffi::{c_char, c_uint};
 
-    // VOLK declares every kernel as a function-pointer variable that its dispatcher fills in
-    // when the library is loaded (`extern p_xxx volk_xxx;`), not as a function.
+    // VOLK declares every kernel as a function-pointer variable (`extern p_xxx volk_xxx;`)
+    // that starts at an initialisation stub: the first call ranks the implementations, stores
+    // the chosen one in the variable and calls it. The variables are therefore mutable.
     unsafe extern "C" {
-        pub static volk_8i_s32f_convert_32f:
+        pub static mut volk_8i_s32f_convert_32f:
             Option<unsafe extern "C" fn(*mut f32, *const i8, f32, c_uint)>;
-        pub static volk_16i_s32f_convert_32f:
+        pub static mut volk_16i_s32f_convert_32f:
             Option<unsafe extern "C" fn(*mut f32, *const i16, f32, c_uint)>;
-        pub static volk_32f_s32f_convert_16i:
+        pub static mut volk_32f_s32f_convert_16i:
             Option<unsafe extern "C" fn(*mut i16, *const f32, f32, c_uint)>;
-        pub static volk_32fc_s32fc_x2_rotator2_32fc: Option<
+        pub static mut volk_32f_s32f_convert_8i:
+            Option<unsafe extern "C" fn(*mut i8, *const f32, f32, c_uint)>;
+        pub static mut volk_32f_s32f_x2_convert_8u:
+            Option<unsafe extern "C" fn(*mut u8, *const f32, f32, f32, c_uint)>;
+        pub static mut volk_32fc_s32fc_x2_rotator2_32fc: Option<
             unsafe extern "C" fn(
                 *mut lv_32fc_t,
                 *const lv_32fc_t,
@@ -41,15 +67,30 @@ mod ffi {
                 c_uint,
             ),
         >;
-        pub static volk_32fc_32f_dot_prod_32fc:
-            Option<unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const f32, c_uint)>;
-        pub static volk_32fc_magnitude_squared_32f:
+        pub static mut volk_32fc_32f_dot_prod_32fc_a: Option<DotProd>;
+        pub static mut volk_32fc_magnitude_squared_32f:
             Option<unsafe extern "C" fn(*mut f32, *const lv_32fc_t, c_uint)>;
-        pub static volk_32fc_x2_multiply_conjugate_32fc: Option<
+        pub static mut volk_32fc_x2_multiply_conjugate_32fc: Option<
             unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const lv_32fc_t, c_uint),
         >;
-        pub static volk_32fc_s32f_atan2_32f:
+        pub static mut volk_32fc_s32f_atan2_32f:
             Option<unsafe extern "C" fn(*mut f32, *const lv_32fc_t, f32, c_uint)>;
+
+        pub fn volk_8i_s32f_convert_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_16i_s32f_convert_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32f_s32f_convert_16i_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32f_s32f_convert_8i_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32f_s32f_x2_convert_8u_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_s32fc_x2_rotator2_32fc_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_32f_dot_prod_32fc_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_magnitude_squared_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_x2_multiply_conjugate_32fc_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_s32f_atan2_32f_get_func_desc() -> volk_func_desc_t;
+
+        pub fn volk_get_alignment() -> usize;
+        pub fn volk_get_machine() -> *const c_char;
+        pub fn volk_version() -> *const c_char;
+        pub fn volk_compiler_flags() -> *const c_char;
     }
 }
 
@@ -59,10 +100,11 @@ macro_rules! wrappers {
             $(#[$m])*
             #[cfg(not(no_volk))]
             pub unsafe fn $name($($a: $t),*) {
-                // SAFETY: the dispatcher of the library fills the pointer when it is loaded;
-                // the caller upholds the contract of the VOLK function of this name.
+                // SAFETY: the variable is read once per call (the dispatcher may replace it on
+                // the first call, never concurrently here); the caller upholds the contract of
+                // the VOLK function of this name.
                 unsafe {
-                    if let Some(f) = ffi::$name {
+                    if let Some(f) = (&raw const ffi::$name).read() {
                         f($($a),*)
                     }
                 }
@@ -83,19 +125,16 @@ wrappers! {
     fn volk_16i_s32f_convert_32f(out: *mut f32, input: *const i16, scalar: f32, n: u32);
     /// `out[i] = saturate(round(in[i] * scalar))`.
     fn volk_32f_s32f_convert_16i(out: *mut i16, input: *const f32, scalar: f32, n: u32);
+    /// `out[i] = saturate(round(in[i] * scalar))` to `i8`.
+    fn volk_32f_s32f_convert_8i(out: *mut i8, input: *const f32, scalar: f32, n: u32);
+    /// `out[i] = saturate(round(in[i] * scale + bias))` to `u8`.
+    fn volk_32f_s32f_x2_convert_8u(out: *mut u8, input: *const f32, scale: f32, bias: f32, n: u32);
     /// Frequency shift by a complex phase increment; `phase` is updated.
     fn volk_32fc_s32fc_x2_rotator2_32fc(
         out: *mut lv_32fc_t,
         input: *const lv_32fc_t,
         phase_inc: *const lv_32fc_t,
         phase: *mut lv_32fc_t,
-        n: u32
-    );
-    /// One complex output: the dot product of complex input and real taps.
-    fn volk_32fc_32f_dot_prod_32fc(
-        result: *mut lv_32fc_t,
-        input: *const lv_32fc_t,
-        taps: *const f32,
         n: u32
     );
     /// `out[i] = |in[i]|^2`.
@@ -109,4 +148,153 @@ wrappers! {
     );
     /// `out[i] = atan2(im, re) / norm`.
     fn volk_32fc_s32f_atan2_32f(out: *mut f32, input: *const lv_32fc_t, norm: f32, n: u32);
+}
+
+/// The current value of `volk_32fc_32f_dot_prod_32fc_a`, the aligned dot product as GNU Radio's
+/// `fir_filter_ccf` calls it: no alignment check per call. Before the first call it is VOLK's
+/// initialisation stub, which resolves and calls the implementation.
+#[cfg(not(no_volk))]
+#[must_use]
+pub fn dot_prod_a() -> Option<DotProd> {
+    // SAFETY: a plain read of the variable; only VOLK's stub writes it, on the first call.
+    unsafe { (&raw const ffi::volk_32fc_32f_dot_prod_32fc_a).read() }
+}
+
+/// Without VOLK: `None`.
+#[cfg(no_volk)]
+#[must_use]
+pub fn dot_prod_a() -> Option<DotProd> {
+    None
+}
+
+/// VOLK's alignment in bytes (the largest alignment of the selected machine's architectures).
+#[cfg(not(no_volk))]
+#[must_use]
+pub fn alignment() -> usize {
+    // SAFETY: no arguments; selects the machine on the first call.
+    unsafe { ffi::volk_get_alignment() }
+}
+
+/// Without VOLK: 1.
+#[cfg(no_volk)]
+#[must_use]
+pub fn alignment() -> usize {
+    1
+}
+
+/// Version, selected machine and compiler flags of the linked VOLK.
+#[derive(Clone, Debug)]
+pub struct Info {
+    /// `volk_version()`.
+    pub version: String,
+    /// `volk_get_machine()`.
+    pub machine: String,
+    /// `volk_compiler_flags()`.
+    pub compiler_flags: String,
+}
+
+/// The [`Info`] of the linked VOLK, `None` without VOLK.
+#[must_use]
+pub fn info() -> Option<Info> {
+    #[cfg(not(no_volk))]
+    {
+        let text = |p: *const c_char| -> String {
+            if p.is_null() {
+                String::new()
+            } else {
+                // SAFETY: VOLK returns pointers to static NUL-terminated strings.
+                unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
+            }
+        };
+        // SAFETY: the three functions take no arguments and return static strings.
+        let (version, machine, flags) = unsafe {
+            (
+                ffi::volk_version(),
+                ffi::volk_get_machine(),
+                ffi::volk_compiler_flags(),
+            )
+        };
+        Some(Info {
+            version: text(version),
+            machine: text(machine),
+            compiler_flags: text(flags),
+        })
+    }
+    #[cfg(no_volk)]
+    {
+        None
+    }
+}
+
+/// One implementation of a VOLK kernel on the selected machine.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Implementation {
+    /// The name a `volk_config` line uses.
+    pub name: String,
+    /// The architecture mask it needs; the dispatcher prefers the largest.
+    pub deps: i32,
+    /// Whether it needs aligned buffers.
+    pub aligned: bool,
+}
+
+/// The implementations of the VOLK function `name` on the selected machine, `None` for a name
+/// that is not declared here or without VOLK.
+#[must_use]
+pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
+    #[cfg(not(no_volk))]
+    {
+        let get: unsafe extern "C" fn() -> volk_func_desc_t = match name {
+            "volk_8i_s32f_convert_32f" => ffi::volk_8i_s32f_convert_32f_get_func_desc,
+            "volk_16i_s32f_convert_32f" => ffi::volk_16i_s32f_convert_32f_get_func_desc,
+            "volk_32f_s32f_convert_16i" => ffi::volk_32f_s32f_convert_16i_get_func_desc,
+            "volk_32f_s32f_convert_8i" => ffi::volk_32f_s32f_convert_8i_get_func_desc,
+            "volk_32f_s32f_x2_convert_8u" => ffi::volk_32f_s32f_x2_convert_8u_get_func_desc,
+            "volk_32fc_s32fc_x2_rotator2_32fc" => {
+                ffi::volk_32fc_s32fc_x2_rotator2_32fc_get_func_desc
+            }
+            "volk_32fc_32f_dot_prod_32fc" => ffi::volk_32fc_32f_dot_prod_32fc_get_func_desc,
+            "volk_32fc_magnitude_squared_32f" => ffi::volk_32fc_magnitude_squared_32f_get_func_desc,
+            "volk_32fc_x2_multiply_conjugate_32fc" => {
+                ffi::volk_32fc_x2_multiply_conjugate_32fc_get_func_desc
+            }
+            "volk_32fc_s32f_atan2_32f" => ffi::volk_32fc_s32f_atan2_32f_get_func_desc,
+            _ => return None,
+        };
+        // SAFETY: the descriptor functions take no arguments; the descriptor points to static
+        // tables of `n_impls` entries each, with NUL-terminated names.
+        let list = unsafe {
+            let desc = get();
+            (0..desc.n_impls)
+                .map(|i| Implementation {
+                    name: CStr::from_ptr(*desc.impl_names.add(i))
+                        .to_string_lossy()
+                        .into_owned(),
+                    deps: *desc.impl_deps.add(i),
+                    aligned: *desc.impl_alignment.add(i),
+                })
+                .collect()
+        };
+        Some(list)
+    }
+    #[cfg(no_volk)]
+    {
+        let _ = name;
+        None
+    }
+}
+
+/// The implementation VOLK's dispatcher chooses for aligned buffers without a `volk_config`
+/// entry: the aligned one with the largest dependency mask, else the unaligned one with the
+/// largest (the first of equals wins, as in `volk_rank_archs`).
+#[must_use]
+pub fn default_implementation(list: &[Implementation]) -> Option<&Implementation> {
+    let best = |aligned: bool| {
+        list.iter()
+            .filter(|i| i.aligned == aligned)
+            .fold(None::<&Implementation>, |best, i| match best {
+                Some(b) if b.deps >= i.deps => Some(b),
+                _ => Some(i),
+            })
+    };
+    best(true).or_else(|| best(false))
 }

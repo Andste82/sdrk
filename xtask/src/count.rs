@@ -1,23 +1,29 @@
-//! `cargo xtask count`: instruction counts of the SDRk kernels against VOLK, rustfft and our own
+//! `cargo xtask count`: instruction counts of the SDRk kernels against established libraries
+//! (VOLK, rustfft, FFTW, `KissFFT`; Ne10 for information) and, where none exists, our own
 //! fallback.
 //!
 //! The method is differential. The measurement binary of `benches/kernels` (`count run <kernel>
 //! <impl> <k>`) performs one warm-up call and then `k` calls on the same buffers. It is started
 //! twice under an instruction counter, with `k = 0` and with `k = K`; the instructions per
 //! sample are `(count(K) - count(0)) / (K * samples)`. Everything outside the `K` calls (start
-//! of the process, allocation, set-up, the warm-up call) cancels.
+//! of the process, allocation, set-up, the warm-up call) cancels. The in-place FFTs restore
+//! their input before every call; the count of the restore alone is subtracted from both sides.
 //!
-//! Counters per platform:
+//! Counters per level:
 //!
-//! | Platform | Counter |
+//! | Level | Counter |
 //! | --- | --- |
-//! | `x86_64` (`sse2`, `avx2`) | Valgrind `callgrind` |
-//! | `x86_64-avx512` | Intel SDE (`sde64 -spr -mix`) |
-//! | `aarch64` | QEMU user mode with the `insn` plugin |
-//! | `wasm32` | wasmtime fuel (found by bisection) |
+//! | `sse2`, `sse4.2` | Intel SDE with a CPUID of a strict SSE2 or SSE4.2 CPU (`-cpuid_in`, `-chip_check_cpuid`), so that VOLK, rustfft and FFTW choose the code of that level themselves |
+//! | `avx2`, `avx2-runtime` | Valgrind `callgrind` |
+//! | `avx512` | Intel SDE (`-spr`) |
+//! | `neon` | QEMU user mode with the `insn` plugin |
+//! | `simd128` | wasmtime fuel (found by bisection) |
 //!
-//! The limits are in `benches/limits.json` and the results in `benches/results/<platform>.json`.
-//! See `docs/performance.md`.
+//! Under SDE only the region between two SSC markers of the binary is counted, which makes the
+//! counts exact; each is still the median of up to three runs. The C references are built by
+//! `benches/refs/build.sh` (pinned tarballs) into `benches/target/refs/<platform>`. The limits
+//! are in `benches/limits.json` and the results in `benches/results/<platform>.json`. See
+//! `docs/performance.md`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::collections::BTreeMap;
@@ -32,26 +38,79 @@ use serde_json::{Value, json};
 pub const K: u64 = 16;
 /// Samples per call unless a kernel fixes its own size.
 pub const N: u64 = 4096;
-/// Hard limit of a `release` kernel: instructions per sample against the comparison.
-pub const RELEASE_LIMIT: f64 = 1.15;
-/// Limit of a kernel that is still `dev`.
-pub const DEV_LIMIT: f64 = 1.50;
-/// From this ratio on, a passing kernel gets a warning.
-pub const WARN_FROM: f64 = 1.10;
 /// How much worse than the comparison the accuracy may be, in dB.
 pub const SNR_MARGIN_DB: f64 = 1.0;
+/// Runs per count under Intel SDE, of which the median is taken. The SSC markers make the
+/// counts exact, so the third run is made only when the first two differ.
+pub const SDE_RUNS: usize = 3;
+/// Guest address space reserved by QEMU (`-R`): it fixes the memory layout, and with it the
+/// instructions of the start-up code, so that identical runs give identical counts (without it
+/// they differ by up to 50 000 instructions).
+pub const QEMU_RESERVED_VA: &str = "0x200000000";
+/// The SSC markers around the counted calls (`benches/kernels`, `region_start`/`region_stop`).
+const SDE_REGION: [&str; 6] = [
+    "-controller_default_start",
+    "0",
+    "-start_ssc_mark",
+    "5d4b0001:repeat",
+    "-stop_ssc_mark",
+    "5d4b0002:repeat",
+];
+/// Sample counts of the informational small-block runs.
+pub const SMALL_N: [u64; 2] = [64, 100];
+
+/// The ratio limits. The defaults can be overridden by the object `_limits` in
+/// `benches/limits.json` (`{"release": 1.10, ...}`), so that the gate is tightened together with
+/// the entries it applies to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Caps {
+    /// Hard limit of a `release` entry.
+    pub release: f64,
+    /// Limit of a `dev` entry.
+    pub dev: f64,
+    /// Up to this ratio a passing `dev` entry is reported as ready to be promoted; above it a
+    /// passing entry gets a warning. With the defaults of D14 it equals the release limit, so it
+    /// only marks `dev` entries.
+    pub warn: f64,
+    /// The goal; results record whether an entry reaches it.
+    pub goal: f64,
+    /// Limit of a level with run-time detection against our own numbers of the level it
+    /// detects (the cost of the dispatch).
+    pub runtime: f64,
+}
+
+impl Default for Caps {
+    fn default() -> Self {
+        Caps {
+            release: 1.10,
+            dev: 1.50,
+            warn: 1.10,
+            goal: 1.00,
+            runtime: 1.02,
+        }
+    }
+}
 
 /// The release state of a kernel on one level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
-    /// Must stay within [`RELEASE_LIMIT`].
+    /// Must stay within [`Caps::release`].
     Release,
-    /// Under development: within [`DEV_LIMIT`].
+    /// Under development: within [`Caps::dev`].
     Dev,
     /// Reported, never judged: the comparison is not valid for this level (the `waiver` text
-    /// says why, for example that VOLK has no implementation for the level and its portable
-    /// `generic` code is built for a better instruction set).
+    /// says why).
     Info,
+}
+
+impl Status {
+    fn name(self) -> &'static str {
+        match self {
+            Status::Release => "release",
+            Status::Dev => "dev",
+            Status::Info => "info",
+        }
+    }
 }
 
 /// One entry of `benches/limits.json`.
@@ -59,27 +118,67 @@ pub enum Status {
 pub struct Limit {
     /// The state.
     pub status: Status,
-    /// If present, a failing verdict is reported as waived: the text names the open item in
-    /// `docs/open-items.md` that tracks the exceedance. A waiver never hides the numbers.
+    /// If present, an instruction ratio above the limit is reported as waived: the text names
+    /// the open item in `docs/open-items.md` that tracks it. A waiver never hides the numbers,
+    /// and it never covers the accuracy.
     pub waiver: Option<String>,
+    /// The same for an accuracy more than [`SNR_MARGIN_DB`] below the comparison.
+    pub accuracy_waiver: Option<String>,
 }
 
-/// The parsed `benches/limits.json`: kernel, then level.
+impl Limit {
+    /// A `release` entry without waivers.
+    #[must_use]
+    pub const fn release() -> Self {
+        Limit {
+            status: Status::Release,
+            waiver: None,
+            accuracy_waiver: None,
+        }
+    }
+}
+
+/// The parsed `benches/limits.json`: the caps, and the entries by kernel, then level.
 #[derive(Clone, Debug, Default)]
-pub struct Limits(BTreeMap<String, BTreeMap<String, Limit>>);
+pub struct Limits {
+    /// The ratio limits.
+    pub caps: Caps,
+    entries: BTreeMap<String, BTreeMap<String, Limit>>,
+}
 
 impl Limits {
-    /// Parses the file: `{ "<kernel>": { "<level>": { "status": "release" | "dev",
-    /// "waiver": "<text>" } } }`.
+    /// Parses the file: `{ "_limits": { "release": 1.10, ... }, "<kernel>": { "<level>": {
+    /// "status": "release" | "dev" | "info", "waiver": "<text>", "accuracy_waiver": "<text>" } } }`.
+    /// Other keys starting with `_` are comments.
     ///
     /// # Errors
-    /// Invalid JSON, or an unknown status.
+    /// Invalid JSON, an unknown status, or a cap that is not a positive number.
     pub fn parse(text: &str) -> anyhow::Result<Limits> {
         let value: Value = serde_json::from_str(text).context("limits.json is not valid JSON")?;
         let Some(kernels) = value.as_object() else {
             bail!("limits.json must be an object");
         };
-        let mut out = BTreeMap::new();
+        let mut caps = Caps::default();
+        if let Some(over) = kernels.get("_limits") {
+            let Some(over) = over.as_object() else {
+                bail!("limits.json: `_limits` must be an object");
+            };
+            for (name, v) in over {
+                let x = v
+                    .as_f64()
+                    .filter(|x| *x > 0.0)
+                    .ok_or_else(|| anyhow!("limits.json: `_limits.{name}` must be > 0"))?;
+                match name.as_str() {
+                    "release" => caps.release = x,
+                    "dev" => caps.dev = x,
+                    "warn" => caps.warn = x,
+                    "goal" => caps.goal = x,
+                    "runtime" => caps.runtime = x,
+                    _ => bail!("limits.json: unknown cap `_limits.{name}`"),
+                }
+            }
+        }
+        let mut entries = BTreeMap::new();
         for (kernel, levels) in kernels {
             if kernel.starts_with('_') {
                 continue;
@@ -95,28 +194,49 @@ impl Limits {
                     Some("info") => Status::Info,
                     other => bail!("limits.json: `{kernel}.{level}`: unknown status {other:?}"),
                 };
-                let waiver = entry
-                    .get("waiver")
-                    .and_then(Value::as_str)
-                    .map(str::to_string);
-                per_level.insert(level.clone(), Limit { status, waiver });
+                let text = |key: &str| entry.get(key).and_then(Value::as_str).map(str::to_string);
+                per_level.insert(
+                    level.clone(),
+                    Limit {
+                        status,
+                        waiver: text("waiver"),
+                        accuracy_waiver: text("accuracy_waiver"),
+                    },
+                );
             }
-            out.insert(kernel.clone(), per_level);
+            entries.insert(kernel.clone(), per_level);
         }
-        Ok(Limits(out))
+        Ok(Limits { caps, entries })
     }
 
-    /// The entry of a kernel on a level; a kernel that is not listed is `dev`.
+    /// The entry of a kernel on a level, `None` if it is not listed.
     #[must_use]
-    pub fn get(&self, kernel: &str, level: &str) -> Limit {
-        self.0
-            .get(kernel)
-            .and_then(|l| l.get(level))
-            .cloned()
-            .unwrap_or(Limit {
-                status: Status::Dev,
-                waiver: None,
-            })
+    pub fn get(&self, kernel: &str, level: &str) -> Option<&Limit> {
+        self.entries.get(kernel).and_then(|l| l.get(level))
+    }
+}
+
+/// An informational comparison next to the judged one: another library, the cheapest VOLK
+/// implementation, or a variant of the buffers (misaligned, small blocks).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Extra {
+    /// What differs from the judged comparison (`misaligned`, `n = 64`, the library).
+    pub label: String,
+    /// Instructions per sample of our kernel in this variant.
+    pub ours: f64,
+    /// Instructions per sample of the comparison in this variant.
+    pub other: f64,
+    /// Name of the comparison.
+    pub compared_with: String,
+    /// SNR in dB of the comparison, where measured.
+    pub other_snr_db: Option<f64>,
+}
+
+impl Extra {
+    /// `ours / other`.
+    #[must_use]
+    pub fn ratio(&self) -> f64 {
+        ratio(self.ours, self.other)
     }
 }
 
@@ -137,17 +257,23 @@ pub struct Measurement {
     pub ours_snr_db: f64,
     /// SNR in dB of the comparison against the f64 reference.
     pub other_snr_db: f64,
+    /// Informational comparisons, never judged.
+    pub extras: Vec<Extra>,
 }
 
 impl Measurement {
     /// Instructions of ours divided by instructions of the comparison.
     #[must_use]
     pub fn ratio(&self) -> f64 {
-        if self.other > 0.0 {
-            self.ours / self.other
-        } else {
-            f64::INFINITY
-        }
+        ratio(self.ours, self.other)
+    }
+}
+
+fn ratio(ours: f64, other: f64) -> f64 {
+    if other > 0.0 {
+        ours / other
+    } else {
+        f64::INFINITY
     }
 }
 
@@ -156,144 +282,266 @@ impl Measurement {
 pub enum Verdict {
     /// Within the limit.
     Pass,
-    /// Within the limit, but at or above [`WARN_FROM`].
+    /// Within the limit, with a remark: at or above [`Caps::warn`], a waiver that no longer
+    /// covers anything, or a `dev` entry ready to become `release`.
     Warn(String),
-    /// Above the limit, or less accurate than the comparison.
+    /// Above the limit or less accurate than the comparison, without a waiver for it, or not
+    /// listed in `limits.json`.
     Fail(String),
-    /// Above the limit, with a waiver in `limits.json`.
+    /// Above the limit or less accurate, with a waiver for each exceedance.
     Waived(String),
     /// Not judged (`info` entry); carries the reason from `limits.json`.
     Info(String),
 }
 
-/// Judges a measurement against its entry.
+impl Verdict {
+    /// The word of the console line and of the results file.
+    #[must_use]
+    pub fn word(&self) -> &'static str {
+        match self {
+            Verdict::Pass => "pass",
+            Verdict::Warn(_) => "warn",
+            Verdict::Fail(_) => "FAIL",
+            Verdict::Waived(_) => "waived",
+            Verdict::Info(_) => "info",
+        }
+    }
+
+    /// The explanation, empty for [`Verdict::Pass`].
+    #[must_use]
+    pub fn detail(&self) -> &str {
+        match self {
+            Verdict::Pass => "",
+            Verdict::Warn(d) | Verdict::Fail(d) | Verdict::Waived(d) | Verdict::Info(d) => d,
+        }
+    }
+}
+
+/// How a level is judged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rule {
+    /// Against an established library (or our fallback): the entry of `limits.json`, which
+    /// must exist.
+    Reference,
+    /// Against our own numbers of another level (run-time detection against the fixed level):
+    /// [`Caps::runtime`]; without an entry in `limits.json` the entry is `release`.
+    OwnLevel,
+}
+
+/// `ratio` (above `cap`) with as many decimals as it takes to print above the cap:
+/// `1.0215x` rather than a `1.02x` that "exceeds" a limit of `1.02x`.
+fn over(ratio: f64, cap: f64) -> String {
+    let digits = (2..6)
+        .find(|d| {
+            format!("{ratio:.d$}", d = *d)
+                .parse::<f64>()
+                .is_ok_and(|r| r > cap)
+        })
+        .unwrap_or(6);
+    format!("{ratio:.digits$}x")
+}
+
+/// Judges a measurement. The instruction ratio and the accuracy are checked independently, and
+/// each exceedance needs its own waiver (`waiver`, `accuracy_waiver`).
 #[must_use]
-pub fn judge(limit: &Limit, m: &Measurement) -> Verdict {
-    let ratio = m.ratio();
-    let cap = match limit.status {
-        Status::Release => RELEASE_LIMIT,
-        Status::Dev => DEV_LIMIT,
-        Status::Info => return Verdict::Info(limit.waiver.clone().unwrap_or_default()),
+pub fn judge(caps: &Caps, rule: Rule, limit: Option<&Limit>, m: &Measurement) -> Verdict {
+    let release = Limit::release();
+    let limit = match (limit, rule) {
+        (Some(l), _) => l,
+        (None, Rule::OwnLevel) => &release,
+        (None, Rule::Reference) => {
+            return Verdict::Fail(format!(
+                "no entry for `{}` at `{}` in benches/limits.json",
+                m.kernel, m.level
+            ));
+        }
     };
-    let mut problem = None;
-    if ratio > cap {
-        problem = Some(format!(
-            "{ratio:.2}x instructions per sample against {} exceeds the {} limit of {cap:.2}x",
-            m.compared_with,
-            match limit.status {
-                Status::Release => "release",
-                Status::Dev | Status::Info => "dev",
-            }
-        ));
-    } else if m.other_snr_db - m.ours_snr_db > SNR_MARGIN_DB {
-        problem = Some(format!(
+    let cap = match (limit.status, rule) {
+        (Status::Info, _) => return Verdict::Info(limit.waiver.clone().unwrap_or_default()),
+        (Status::Release, Rule::Reference) => caps.release,
+        (Status::Release, Rule::OwnLevel) => caps.runtime,
+        (Status::Dev, _) => caps.dev,
+    };
+    let status = limit.status.name();
+    let ratio = m.ratio();
+    let slow = ratio > cap;
+    let inaccurate = m.other_snr_db - m.ours_snr_db > SNR_MARGIN_DB;
+    let mut failing = Vec::new();
+    let mut waived = Vec::new();
+    if slow {
+        let text = format!(
+            "{} instructions per sample against {} exceeds the {status} limit of {cap:.2}x",
+            over(ratio, cap),
+            m.compared_with
+        );
+        match &limit.waiver {
+            Some(w) => waived.push(format!("{text} (waiver: {w})")),
+            None => failing.push(text),
+        }
+    }
+    if inaccurate {
+        let text = format!(
             "accuracy {:.1} dB is more than {SNR_MARGIN_DB:.0} dB below the {:.1} dB of {}",
             m.ours_snr_db, m.other_snr_db, m.compared_with
+        );
+        match &limit.accuracy_waiver {
+            Some(w) => waived.push(format!("{text} (accuracy waiver: {w})")),
+            None => failing.push(text),
+        }
+    }
+    if !failing.is_empty() {
+        failing.extend(waived);
+        return Verdict::Fail(failing.join("; "));
+    }
+    if !waived.is_empty() {
+        return Verdict::Waived(waived.join("; "));
+    }
+    let mut notes = Vec::new();
+    if let Some(w) = &limit.waiver {
+        notes.push(format!(
+            "{ratio:.2}x is within the {status} limit of {cap:.2}x: the waiver is no longer needed ({w})"
         ));
     }
-    match (problem, &limit.waiver) {
-        (Some(p), Some(w)) => Verdict::Waived(format!("{p} (waiver: {w})")),
-        (Some(p), None) => Verdict::Fail(p),
-        (None, _) if ratio > WARN_FROM => Verdict::Warn(format!(
-            "{ratio:.2}x is above {WARN_FROM:.2}x (hard limit {RELEASE_LIMIT:.2}x)"
-        )),
-        (None, _) => Verdict::Pass,
+    if let Some(w) = &limit.accuracy_waiver {
+        notes.push(format!(
+            "the accuracy is within {SNR_MARGIN_DB:.0} dB: the accuracy waiver is no longer needed ({w})"
+        ));
+    }
+    if limit.status == Status::Dev && rule == Rule::Reference && ratio <= caps.warn {
+        notes.push(format!(
+            "{ratio:.2}x: ready to be promoted from dev to release (release limit {:.2}x)",
+            caps.release
+        ));
+    } else if ratio > caps.warn && rule == Rule::Reference {
+        notes.push(format!(
+            "{ratio:.2}x is above {:.2}x ({status} limit {cap:.2}x)",
+            caps.warn
+        ));
+    }
+    if notes.is_empty() {
+        Verdict::Pass
+    } else {
+        Verdict::Warn(notes.join("; "))
+    }
+}
+
+/// `--strict` (the release gate of open item M13-4): why an entry blocks a release, if it
+/// does. Only a `release` entry without waivers that passes (with or without a warning)
+/// does not.
+#[must_use]
+pub fn blocks_release(limit: Option<&Limit>, verdict: &Verdict) -> Option<String> {
+    match verdict {
+        Verdict::Fail(d) => return Some(d.clone()),
+        Verdict::Waived(d) => return Some(format!("waived: {d}")),
+        Verdict::Info(d) => return Some(format!("not judged (info): {d}")),
+        Verdict::Pass | Verdict::Warn(_) => {}
+    }
+    let limit = limit?;
+    match (limit.status, &limit.waiver, &limit.accuracy_waiver) {
+        (Status::Dev, ..) => Some("status `dev`".into()),
+        (_, Some(w), _) | (_, None, Some(w)) => Some(format!("waiver: {w}")),
+        _ => None,
     }
 }
 
 /// The outcome of a whole level.
 #[derive(Clone, Debug, Default)]
 pub struct Report {
-    /// One line per kernel for the console.
+    /// One line per kernel for the console (extras indented below it).
     pub lines: Vec<String>,
     /// `false` if any measurement failed.
     pub ok: bool,
+    /// Entries that block a release under `--strict`: `kernel level: reason`.
+    pub blockers: Vec<String>,
     /// The per-kernel records for the results file.
     pub records: BTreeMap<String, Value>,
 }
 
-/// Judges all measurements of one level against the limits.
+/// Judges all measurements of one level.
 #[must_use]
-pub fn evaluate(limits: &Limits, level: &str, measurements: &[Measurement]) -> Report {
+pub fn evaluate(limits: &Limits, rule: Rule, level: &str, measurements: &[Measurement]) -> Report {
+    let caps = &limits.caps;
     let mut report = Report {
         ok: true,
         ..Report::default()
     };
     for m in measurements {
         let limit = limits.get(&m.kernel, level);
-        let verdict = judge(&limit, m);
-        let (word, detail) = match &verdict {
-            Verdict::Pass => ("pass", String::new()),
-            Verdict::Warn(d) => ("warn", d.clone()),
-            Verdict::Fail(d) => {
-                report.ok = false;
-                ("FAIL", d.clone())
-            }
-            Verdict::Waived(d) => ("waived", d.clone()),
-            Verdict::Info(d) => ("info", d.clone()),
+        let verdict = judge(caps, rule, limit, m);
+        if matches!(verdict, Verdict::Fail(_)) {
+            report.ok = false;
+        }
+        if let Some(why) = blocks_release(limit, &verdict) {
+            report.blockers.push(format!("{} {level}: {why}", m.kernel));
+        }
+        let status = match (limit, rule) {
+            (Some(l), _) => l.status.name(),
+            (None, Rule::OwnLevel) => "release",
+            (None, Rule::Reference) => "unlisted",
         };
-        let status = match limit.status {
-            Status::Release => "release",
-            Status::Dev => "dev",
-            Status::Info => "info",
-        };
+        let goal = m.ratio() <= caps.goal;
         let mut line = format!(
-            "{:<18} {:<8} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  [{status}]  {word}",
+            "{:<22} {:<12} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}{}  [{status}]  {}",
             m.kernel,
             m.level,
             m.ours,
             m.other,
-            m.ratio()
+            m.ratio(),
+            if goal { " goal" } else { "     " },
+            verdict.word()
         );
-        if !detail.is_empty() {
-            let _ = write!(line, "  {detail}");
+        if !verdict.detail().is_empty() {
+            let _ = write!(line, "  {}", verdict.detail());
         }
         report.lines.push(line);
-        report.records.insert(
-            m.kernel.clone(),
-            json!({
-                "ours_instr_per_sample": round2(m.ours),
-                "other_instr_per_sample": round2(m.other),
-                "ratio": round2(m.ratio()),
-                "compared_with": m.compared_with,
-                "status": status,
-                "verdict": word.to_lowercase(),
-                "snr_db": { "ours": round2(m.ours_snr_db), "other": round2(m.other_snr_db) },
-            }),
-        );
+        for e in &m.extras {
+            report.lines.push(format!(
+                "    {:<34} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  ({})",
+                e.label,
+                e.ours,
+                e.other,
+                e.ratio(),
+                e.compared_with
+            ));
+        }
+        report
+            .records
+            .insert(m.kernel.clone(), record(m, status, &verdict, goal));
     }
     report
 }
 
-/// A level that is only reported (no limit applies): the numbers and the comparison, no verdict.
-#[must_use]
-pub fn informational(measurements: &[Measurement]) -> Report {
-    let mut report = Report {
-        ok: true,
-        ..Report::default()
-    };
-    for m in measurements {
-        report.lines.push(format!(
-            "{:<18} {:<12} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  [informational]",
-            m.kernel,
-            m.level,
-            m.ours,
-            m.other,
-            m.ratio()
-        ));
-        report.records.insert(
-            m.kernel.clone(),
+fn record(m: &Measurement, status: &str, verdict: &Verdict, goal: bool) -> Value {
+    let extras: Vec<Value> = m
+        .extras
+        .iter()
+        .map(|e| {
             json!({
-                "ours_instr_per_sample": round2(m.ours),
-                "other_instr_per_sample": round2(m.other),
-                "ratio": round2(m.ratio()),
-                "compared_with": m.compared_with,
-                "verdict": "info",
-                "snr_db": { "ours": round2(m.ours_snr_db), "other": round2(m.other_snr_db) },
-            }),
-        );
+                "label": e.label,
+                "ours_instr_per_sample": round2(e.ours),
+                "other_instr_per_sample": round2(e.other),
+                "ratio": round2(e.ratio()),
+                "compared_with": e.compared_with,
+                "other_snr_db": e.other_snr_db.map(round2),
+            })
+        })
+        .collect();
+    let mut r = json!({
+        "ours_instr_per_sample": round2(m.ours),
+        "other_instr_per_sample": round2(m.other),
+        "ratio": round2(m.ratio()),
+        "compared_with": m.compared_with,
+        "status": status,
+        "verdict": verdict.word().to_lowercase(),
+        "goal": goal,
+        "snr_db": { "ours": round2(m.ours_snr_db), "other": round2(m.other_snr_db) },
+    });
+    if !extras.is_empty()
+        && let Some(obj) = r.as_object_mut()
+    {
+        obj.insert("informational".into(), Value::Array(extras));
     }
-    report
+    r
 }
 
 fn round2(x: f64) -> f64 {
@@ -303,84 +551,211 @@ fn round2(x: f64) -> f64 {
 // ---------------------------------------------------------------------------------------------
 // The measurement plan
 
-/// How a kernel is compared on a platform.
+/// What a kernel is compared with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Compare {
-    /// The system VOLK where the platform has it, else our fallback.
+pub enum Reference {
+    /// VOLK (pinned per level, GNU Radio's call pattern for the FIR family).
     Volk,
-    /// `rustfft`.
+    /// The cheapest VOLK implementation of the machine (informational).
+    VolkCheapest,
+    /// rustfft, `FftPlanner`.
     RustFft,
-    /// Our fallback.
+    /// FFTW, single precision, out of place (as GNU Radio's `fft_vcc` uses it).
+    Fftw,
+    /// FFTW in place, which needs more passes than out of place.
+    FftwInPlace,
+    /// `KissFFT`, 16-bit fixed point.
+    KissFft,
+    /// Ne10, int16 NEON.
+    Ne10,
+    /// Our own fallback, where no established library exists.
     Fallback,
+    /// Our own numbers of another level (run-time detection against that fixed level).
+    OwnLevel(&'static str),
 }
 
-/// The kernels of the benchmark table: name, comparison, samples per call.
-pub const KERNELS: [(&str, Compare, u64); 13] = [
-    ("convert_cs8", Compare::Volk, N),
-    ("convert_cs16", Compare::Volk, N),
-    ("convert_out_cs16", Compare::Volk, N),
-    ("rotate", Compare::Volk, N),
-    ("fir", Compare::Volk, N),
-    ("fir_decimate", Compare::Volk, N),
-    ("mag_sq", Compare::Volk, N),
-    ("quad_demod", Compare::Volk, N),
-    ("fm_mod", Compare::Fallback, N),
-    ("fft_64", Compare::RustFft, 64),
-    ("fft_1024", Compare::RustFft, 1024),
-    ("fft_4096", Compare::RustFft, 4096),
-    ("fft_cq15_1024", Compare::Fallback, 1024),
+impl Reference {
+    /// The implementation name of the measurement binary.
+    #[must_use]
+    pub fn implementation(self) -> &'static str {
+        match self {
+            Reference::Volk | Reference::VolkCheapest => "volk",
+            Reference::RustFft => "rustfft",
+            Reference::Fftw => "fftw",
+            Reference::FftwInPlace => "fftw-in-place",
+            Reference::KissFft => "kissfft",
+            Reference::Ne10 => "ne10",
+            Reference::Fallback => "fallback",
+            Reference::OwnLevel(_) => "ours",
+        }
+    }
+}
+
+/// The kind of comparison a kernel has.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Family {
+    /// A VOLK kernel exists.
+    Volk,
+    /// A VOLK kernel does the same work up to a constant offset (`convert_cu8`: VOLK converts
+    /// signed bytes only): it is the gate, and our fallback is reported as information.
+    VolkAndOwn,
+    /// The C32 FFT.
+    FftC32,
+    /// The CQ15 FFT.
+    FftCq15,
+    /// The real-input FFT: per level (`LevelPlan::rfft`) FFTW's real-input transform or rustfft's
+    /// real planner (`realfft`), our fallback as information.
+    RealFft,
+    /// No established library: our fallback.
+    Own,
+}
+
+impl Family {
+    /// The FFTs, whose measurements restore their input before every call (see `Impl::Restore`
+    /// of the measurement binary) and whose sizes are part of the name.
+    #[must_use]
+    pub fn is_fft(self) -> bool {
+        matches!(self, Family::FftC32 | Family::FftCq15 | Family::RealFft)
+    }
+}
+
+/// A kernel of the benchmark table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KernelSpec {
+    /// Name (as the measurement binary knows it).
+    pub name: &'static str,
+    /// Its comparisons.
+    pub family: Family,
+    /// Samples per call.
+    pub samples: u64,
+    /// Also measured with the [`SMALL_N`] block sizes (informational).
+    pub small_n: bool,
+    /// Also measured with misaligned buffers (informational).
+    pub misaligned: bool,
+}
+
+const fn spec(name: &'static str, family: Family, small_n: bool) -> KernelSpec {
+    KernelSpec {
+        name,
+        family,
+        samples: N,
+        small_n,
+        misaligned: true,
+    }
+}
+
+const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
+    KernelSpec {
+        name,
+        family,
+        samples,
+        small_n: false,
+        misaligned: false,
+    }
+}
+
+/// The kernels of the benchmark table, in report order.
+pub const KERNELS: [KernelSpec; 24] = [
+    spec("convert_cs8", Family::Volk, true),
+    spec("convert_cs16", Family::Volk, true),
+    spec("convert_cu8", Family::VolkAndOwn, true),
+    spec("convert_out_cs16", Family::Volk, true),
+    spec("convert_out_cs8", Family::Volk, true),
+    spec("convert_out_cu8", Family::Volk, true),
+    spec("rotate", Family::Volk, false),
+    spec("rotate_cq15", Family::Own, false),
+    spec("fir", Family::Volk, false),
+    spec("fir_decimate", Family::Volk, false),
+    spec("fir_interpolate", Family::Volk, false),
+    spec("resample", Family::Volk, false),
+    spec("mag_sq", Family::Volk, false),
+    spec("mag_sq_q15", Family::Own, false),
+    spec("quad_demod", Family::Volk, false),
+    spec("quad_demod_cq15", Family::Own, false),
+    spec("fm_mod", Family::Own, false),
+    fft("fft_64", Family::FftC32, 64),
+    fft("fft_1024", Family::FftC32, 1024),
+    fft("fft_4096", Family::FftC32, 4096),
+    fft("fft_cq15_1024", Family::FftCq15, 1024),
+    fft("fft_cq15_1024_default", Family::FftCq15, 1024),
+    fft("fft_cq15_1024_full_scale", Family::FftCq15, 1024),
+    fft("rfft_1024", Family::RealFft, 1024),
 ];
+
+/// The CPU Intel SDE emulates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SdeCpu {
+    /// x86-64 with SSE2 and nothing above it (own CPUID definition).
+    Sse2,
+    /// x86-64-v2: up to SSE4.2 and POPCNT (own CPUID definition).
+    Sse42,
+    /// Sapphire Rapids (`-spr`).
+    SapphireRapids,
+}
 
 /// How the measurement binary is run and counted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Counter {
     /// Valgrind callgrind.
     Callgrind,
-    /// Intel SDE mix histogram.
-    Sde,
+    /// Intel SDE `-icount` between the SSC markers.
+    Sde(SdeCpu),
     /// QEMU user mode with the `insn` plugin.
     Qemu,
     /// wasmtime with fuel.
     Wasmtime,
 }
 
-/// Which VOLK implementations the dispatcher may choose, so that the comparison is made at the
-/// same instruction set as our kernels and does not depend on the CPU of the machine.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VolkPin {
-    /// VOLK picks its best implementation itself.
-    Free,
-    /// Implementations that need no more than SSE3.
-    Sse,
-    /// Implementations that need no more than SSE4.2.
-    Sse42,
-    /// Implementations that need no more than AVX2 and FMA (no AVX-512).
-    Avx2,
-}
-
-impl VolkPin {
-    /// The `volk_config` that pins the dispatcher, and the directory name below `benches/target`.
-    #[must_use]
-    pub const fn config(self) -> Option<(&'static str, &'static str)> {
+impl Counter {
+    fn describe(self) -> &'static str {
         match self {
-            Self::Free => None,
-            Self::Sse => Some(("volk-sse", VOLK_SSE_CONFIG)),
-            Self::Sse42 => Some(("volk-sse42", VOLK_SSE42_CONFIG)),
-            Self::Avx2 => Some(("volk-avx2", VOLK_AVX2_CONFIG)),
+            Counter::Callgrind => "valgrind callgrind",
+            Counter::Sde(SdeCpu::Sse2) => "Intel SDE, CPUID of a strict SSE2 x86-64 CPU",
+            Counter::Sde(SdeCpu::Sse42) => "Intel SDE, CPUID of an x86-64-v2 (SSE4.2) CPU",
+            Counter::Sde(SdeCpu::SapphireRapids) => "Intel SDE -spr",
+            Counter::Qemu => "qemu-aarch64 insn plugin",
+            Counter::Wasmtime => "wasmtime fuel",
         }
     }
 }
 
-/// A level of a platform: how to build the binary and how to count it.
+/// The `volk_config` of a level: which implementations VOLK's dispatcher takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VolkPin {
+    /// An empty `volk_config`: VOLK's default dispatch on the machine it selects.
+    Default,
+    /// The defaults of VOLK's `sse2_64_mmx` machine.
+    Sse2,
+    /// The defaults of VOLK's `sse4_2_64_mmx` machine.
+    Sse42,
+    /// Implementations that need no more than AVX2 and FMA (no AVX-512).
+    Avx2,
+    /// The defaults of VOLK's `neonv8` machine (D11).
+    Neon,
+}
+
+impl VolkPin {
+    /// The `volk_config` text.
+    #[must_use]
+    pub const fn config(self) -> &'static str {
+        match self {
+            Self::Default => "",
+            Self::Sse2 => VOLK_SSE2_CONFIG,
+            Self::Sse42 => VOLK_SSE42_CONFIG,
+            Self::Avx2 => VOLK_AVX2_CONFIG,
+            Self::Neon => VOLK_NEON_CONFIG,
+        }
+    }
+}
+
+/// A level of a platform: how to build the binary, how to count it and what it is compared
+/// with.
 #[derive(Clone, Copy, Debug)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct LevelPlan {
     /// Platform name given to `--platform`.
     pub platform: &'static str,
     /// Level name (key of `limits.json`).
     pub level: &'static str,
-    /// Only reported, never judged.
-    pub info_only: bool,
     /// `cargo --target`, if cross-compiling.
     pub target: Option<&'static str>,
     /// `RUSTFLAGS`.
@@ -389,141 +764,195 @@ pub struct LevelPlan {
     pub runtime_detect: bool,
     /// The counter.
     pub counter: Counter,
-    /// VOLK exists on this platform (it is the system library of the host).
-    pub volk: bool,
+    /// The platform of the C references (`benches/refs/build.sh`).
+    pub refs: &'static str,
     /// The VOLK implementations the dispatcher may choose.
     pub volk_pin: VolkPin,
+    /// The judged comparison of the C32 FFT and the informational ones.
+    pub fft_c32: (Reference, &'static [Reference]),
+    /// The judged comparison of the real-input FFT and the informational ones.
+    pub rfft: (Reference, &'static [Reference]),
+    /// Informational comparisons of the CQ15 FFT next to `KissFFT`.
+    pub fft_cq15_extra: &'static [Reference],
+    /// Also report the cheapest VOLK implementation of every VOLK kernel (D11).
+    pub cheapest_volk: bool,
+    /// Judged against our own numbers of this level instead of the libraries.
+    pub baseline: Option<&'static str>,
 }
+
+const RUSTFFT: (Reference, &[Reference]) = (Reference::RustFft, &[]);
+/// rustfft's real-input planner (`realfft`), our fallback as information.
+const REALFFT: (Reference, &[Reference]) = (Reference::RustFft, &[Reference::Fallback]);
 
 /// All levels, in the order they run.
 pub const PLANS: [LevelPlan; 7] = [
     LevelPlan {
         platform: "x86_64",
         level: "sse2",
-        info_only: false,
         target: None,
         rustflags: "",
         runtime_detect: false,
-        counter: Counter::Callgrind,
-        volk: true,
-        volk_pin: VolkPin::Sse,
+        counter: Counter::Sde(SdeCpu::Sse2),
+        refs: "x86_64",
+        volk_pin: VolkPin::Sse2,
+        // rustfft has no planner below SSE4.1, so on this CPU it is scalar (D3). FFTW is
+        // judged out of place, its usual use; in place it needs more passes.
+        fft_c32: (
+            Reference::Fftw,
+            &[Reference::FftwInPlace, Reference::RustFft],
+        ),
+        // FFTW's real-input transform out of place, as the complex one (D3).
+        rfft: (Reference::Fftw, &[Reference::RustFft, Reference::Fallback]),
+        fft_cq15_extra: &[],
+        cheapest_volk: false,
+        baseline: None,
     },
     LevelPlan {
         platform: "x86_64",
         level: "sse4.2",
-        info_only: false,
         target: None,
         rustflags: "-C target-cpu=x86-64-v2",
         runtime_detect: false,
-        counter: Counter::Callgrind,
-        volk: true,
+        counter: Counter::Sde(SdeCpu::Sse42),
+        refs: "x86_64",
         volk_pin: VolkPin::Sse42,
+        fft_c32: RUSTFFT,
+        // FFTW has no codelets above SSE2, so it runs the code of `sse2` here, and its real-input
+        // transform is the stronger reference at this level.
+        rfft: (Reference::Fftw, &[Reference::RustFft, Reference::Fallback]),
+        fft_cq15_extra: &[],
+        cheapest_volk: false,
+        baseline: None,
     },
     LevelPlan {
         platform: "x86_64",
         level: "avx2",
-        info_only: false,
         target: None,
         rustflags: "-C target-cpu=x86-64-v3",
         runtime_detect: false,
         counter: Counter::Callgrind,
-        volk: true,
+        refs: "x86_64",
         volk_pin: VolkPin::Avx2,
+        fft_c32: RUSTFFT,
+        rfft: REALFFT,
+        fft_cq15_extra: &[],
+        cheapest_volk: false,
+        baseline: None,
     },
     LevelPlan {
         platform: "x86_64",
         level: "avx2-runtime",
-        info_only: true,
         target: None,
         rustflags: "",
         runtime_detect: true,
         counter: Counter::Callgrind,
-        volk: true,
+        refs: "x86_64",
         volk_pin: VolkPin::Avx2,
+        fft_c32: RUSTFFT,
+        rfft: REALFFT,
+        fft_cq15_extra: &[],
+        cheapest_volk: false,
+        baseline: Some("avx2"),
     },
     LevelPlan {
         platform: "x86_64-avx512",
         level: "avx512",
-        info_only: false,
         // An explicit target keeps `RUSTFLAGS` away from the build scripts, which run on the
         // host (without AVX-512) while the measurement binary runs under SDE.
         target: Some("x86_64-unknown-linux-gnu"),
         rustflags: "-C target-cpu=sapphirerapids",
         runtime_detect: false,
-        counter: Counter::Sde,
-        volk: true,
-        volk_pin: VolkPin::Free,
+        counter: Counter::Sde(SdeCpu::SapphireRapids),
+        refs: "x86_64",
+        volk_pin: VolkPin::Default,
+        fft_c32: RUSTFFT,
+        rfft: REALFFT,
+        fft_cq15_extra: &[],
+        cheapest_volk: false,
+        baseline: None,
     },
     LevelPlan {
         platform: "aarch64",
         level: "neon",
-        info_only: false,
         target: Some("aarch64-unknown-linux-gnu"),
         rustflags: "",
         runtime_detect: false,
         counter: Counter::Qemu,
-        volk: false,
-        volk_pin: VolkPin::Free,
+        refs: "aarch64",
+        volk_pin: VolkPin::Neon,
+        fft_c32: (Reference::RustFft, &[Reference::Fftw]),
+        rfft: (Reference::RustFft, &[Reference::Fftw, Reference::Fallback]),
+        fft_cq15_extra: &[Reference::Ne10],
+        cheapest_volk: true,
+        baseline: None,
     },
     LevelPlan {
         platform: "wasm32",
         level: "simd128",
-        info_only: false,
         target: Some("wasm32-wasip1"),
         rustflags: "-C target-feature=+simd128",
         runtime_detect: false,
         counter: Counter::Wasmtime,
-        volk: false,
-        volk_pin: VolkPin::Free,
+        refs: "wasm32",
+        volk_pin: VolkPin::Default,
+        fft_c32: RUSTFFT,
+        rfft: REALFFT,
+        fft_cq15_extra: &[],
+        cheapest_volk: false,
+        baseline: None,
     },
 ];
 
-/// The implementation name and the label of the comparison of a kernel on a level.
+/// The judged comparison of a kernel on a level and the informational ones.
 #[must_use]
-pub fn comparison(plan: &LevelPlan, kernel: &str, compare: Compare) -> (&'static str, String) {
-    match compare {
-        Compare::Volk if plan.volk => ("library", volk_name(kernel).to_string()),
-        Compare::RustFft => ("library", "rustfft".to_string()),
-        _ => ("fallback", "sdrk fallback".to_string()),
+pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
+    if let Some(level) = plan.baseline {
+        return (Reference::OwnLevel(level), Vec::new());
+    }
+    match spec.family {
+        Family::Volk | Family::VolkAndOwn => {
+            let mut extras = Vec::new();
+            if plan.cheapest_volk {
+                extras.push(Reference::VolkCheapest);
+            }
+            if spec.family == Family::VolkAndOwn {
+                extras.push(Reference::Fallback);
+            }
+            (Reference::Volk, extras)
+        }
+        Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
+        Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
+        Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
+        Family::Own => (Reference::Fallback, Vec::new()),
     }
 }
 
-/// The VOLK function(s) a kernel is compared with.
-#[must_use]
-pub fn volk_name(kernel: &str) -> &'static str {
-    match kernel {
-        "convert_cs8" => "volk_8i_s32f_convert_32f",
-        "convert_cs16" => "volk_16i_s32f_convert_32f",
-        "convert_out_cs16" => "volk_32f_s32f_convert_16i",
-        "rotate" => "volk_32fc_s32fc_x2_rotator2_32fc",
-        "fir" | "fir_decimate" => "volk_32fc_32f_dot_prod_32fc",
-        "mag_sq" => "volk_32fc_magnitude_squared_32f",
-        "quad_demod" => "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
-        _ => "volk",
-    }
-}
-
-/// The VOLK implementations that need no more than SSE3, for the `sse2` level. VOLK has no
-/// `sse2` variant of most kernels; a kernel without one runs the portable `generic` code.
-const VOLK_SSE_CONFIG: &str = "\
+/// The defaults of VOLK 3.3's `sse2_64_mmx` machine for the level `sse2` (the strict SSE2 CPU
+/// of SDE selects that machine). VOLK has no SSE2 implementation of `rotator2`, `atan2`,
+/// `multiply_conjugate` and `8i_s32f_convert_32f`: their portable `generic` code remains. The
+/// compiler vectorizes that of `8i_s32f_convert_32f` with SSE2, a fair reference; `rotator2` and
+/// `atan2` have no SSE implementation at all and their `generic` code is scalar, so those entries
+/// are `info`.
+const VOLK_SSE2_CONFIG: &str = "\
 volk_8i_s32f_convert_32f generic generic
 volk_16i_s32f_convert_32f a_sse u_sse
 volk_32f_s32f_convert_16i a_sse2 u_sse2
+volk_32f_s32f_convert_8i a_sse2 u_sse2
+volk_32f_s32f_x2_convert_8u a_sse2 u_sse2
 volk_32fc_s32fc_x2_rotator2_32fc generic generic
 volk_32fc_32f_dot_prod_32fc a_sse u_sse
-volk_32fc_magnitude_squared_32f a_sse3 u_sse3
-volk_32fc_x2_multiply_conjugate_32fc a_sse3 u_sse3
+volk_32fc_magnitude_squared_32f a_sse u_sse
+volk_32fc_x2_multiply_conjugate_32fc generic generic
 volk_32fc_s32f_atan2_32f generic generic
 ";
 
-/// The VOLK implementations that need no more than SSE4.2, for the level `sse4.2`. Where VOLK
-/// has no SSE implementation at all (`rotator2`, `atan2`) the portable `generic` code remains;
-/// `generic` is compiled once per instruction set and VOLK uses the best one of the machine, so
-/// the entries of these kernels are `info` in `limits.json`.
+/// The defaults of VOLK 3.3's `sse4_2_64_mmx` machine for the level `sse4.2`.
 const VOLK_SSE42_CONFIG: &str = "\
 volk_8i_s32f_convert_32f a_sse4_1 u_sse4_1
 volk_16i_s32f_convert_32f a_sse4_1 u_sse4_1
 volk_32f_s32f_convert_16i a_sse2 u_sse2
+volk_32f_s32f_convert_8i a_sse2 u_sse2
+volk_32f_s32f_x2_convert_8u a_sse2 u_sse2
 volk_32fc_s32fc_x2_rotator2_32fc generic generic
 volk_32fc_32f_dot_prod_32fc a_sse u_sse
 volk_32fc_magnitude_squared_32f a_sse3 u_sse3
@@ -533,18 +962,99 @@ volk_32fc_s32f_atan2_32f generic generic
 
 /// The VOLK implementations that need no more than AVX2 and FMA, for the levels `avx2` and
 /// `avx2-runtime`. Without this, a runner with AVX-512 makes VOLK dispatch to its AVX-512
-/// implementations (`rotator2`, `atan2`, `dot_prod` have them) and the AVX2 build of our kernels
-/// would be compared with a different instruction set than on a machine without AVX-512.
+/// implementations (`rotator2`, `atan2`, `dot_prod`, the conversions have them) and the AVX2
+/// build of our kernels would be compared with a different instruction set than on a machine
+/// without AVX-512.
 const VOLK_AVX2_CONFIG: &str = "\
 volk_8i_s32f_convert_32f a_avx2 u_avx2
 volk_16i_s32f_convert_32f a_avx2 u_avx2
 volk_32f_s32f_convert_16i a_avx2 u_avx2
+volk_32f_s32f_convert_8i a_avx2 u_avx2
+volk_32f_s32f_x2_convert_8u a_avx2_fma u_avx2_fma
 volk_32fc_s32fc_x2_rotator2_32fc a_avx u_avx
 volk_32fc_32f_dot_prod_32fc a_avx2_fma u_avx2_fma
 volk_32fc_magnitude_squared_32f a_avx u_avx
 volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx
 volk_32fc_s32f_atan2_32f a_avx2_fma u_avx2_fma
 ";
+
+/// The default dispatch of VOLK 3.3's `neonv8` machine (what QEMU's CPU selects), pinned so
+/// that a change of the machine or of VOLK's ranking shows up as a missing implementation
+/// instead of a silently different reference (D11). The aligned dot product of the FIR family
+/// is `a_neon`: `neonv8` needs no alignment, and the aligned entry point prefers aligned
+/// implementations.
+const VOLK_NEON_CONFIG: &str = "\
+volk_8i_s32f_convert_32f neonv8 neonv8
+volk_16i_s32f_convert_32f neonv8 neonv8
+volk_32f_s32f_convert_16i neonv8 neonv8
+volk_32f_s32f_convert_8i neonv8 neonv8
+volk_32f_s32f_x2_convert_8u neonv8 neonv8
+volk_32fc_s32fc_x2_rotator2_32fc neon neon
+volk_32fc_32f_dot_prod_32fc a_neon neonv8
+volk_32fc_magnitude_squared_32f neonv8 neonv8
+volk_32fc_x2_multiply_conjugate_32fc neonv8 neonv8
+volk_32fc_s32f_atan2_32f neonv8 neonv8
+";
+
+/// The VOLK functions whose names VOLK reads as environment variables to override its
+/// dispatch (`volk_rank_archs`); the measured processes run without them and without
+/// `VOLK_GENERIC`.
+const VOLK_FUNCTIONS: [&str; 10] = [
+    "volk_8i_s32f_convert_32f",
+    "volk_16i_s32f_convert_32f",
+    "volk_32f_s32f_convert_16i",
+    "volk_32f_s32f_convert_8i",
+    "volk_32f_s32f_x2_convert_8u",
+    "volk_32fc_s32fc_x2_rotator2_32fc",
+    "volk_32fc_32f_dot_prod_32fc",
+    "volk_32fc_magnitude_squared_32f",
+    "volk_32fc_x2_multiply_conjugate_32fc",
+    "volk_32fc_s32f_atan2_32f",
+];
+
+/// CPUID of SDE for the level `sse2`: `GenuineIntel`, family 15, SSE2 and nothing above it; XSAVE
+/// with x87 and SSE state only. The XSAVE bits matter: on a CPU without OSXSAVE, the
+/// `cpu_features` library inside VOLK falls back to the host's `/proc/cpuinfo` for the SSE
+/// flags, and VOLK would select a machine the emulated CPU does not have (SDE's own `-p4p`
+/// gives the `sse4_1` machine; `-p4` does not run 64-bit code).
+const CPUID_SSE2: &str = "\
+# CPUID_VERSION = 1.0
+# x86-64 with SSE2 and nothing above it, for cargo xtask count.
+00000000 ******** => 0000000d 756e6547 6c65746e 49656e69
+00000001 ******** => 00000f68 00010800 0c000000 078bfbff
+0000000d 00000000 => 00000003 00000240 00000240 00000000
+0000000d 00000001 => 00000000 00000000 00000000 00000000
+80000000 ******** => 80000001 00000000 00000000 00000000
+80000001 ******** => 00000000 00000000 00000001 20100800
+";
+
+/// CPUID of SDE for the level `sse4.2`: x86-64-v2 (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CX16,
+/// LAHF), with XSAVE for x87 and SSE state as in [`CPUID_SSE2`].
+const CPUID_SSE42: &str = "\
+# CPUID_VERSION = 1.0
+# x86-64-v2 (up to SSE4.2 and POPCNT), for cargo xtask count.
+00000000 ******** => 0000000d 756e6547 6c65746e 49656e69
+00000001 ******** => 000106a5 00010800 0c982201 078bfbff
+0000000d 00000000 => 00000003 00000240 00000240 00000000
+0000000d 00000001 => 00000000 00000000 00000000 00000000
+80000000 ******** => 80000001 00000000 00000000 00000000
+80000001 ******** => 00000000 00000000 00000001 20100800
+";
+
+/// Writes the CPUID definition of the level `sse2` or `sse4.2` for SDE's `-cpuid_in` to `path`
+/// (`cargo xtask sde-cpuid`), so that CI runs the tests on the CPU the counts use.
+///
+/// # Errors
+/// Fails on another level or if the file cannot be written.
+pub fn write_cpuid(level: &str, path: &Path) -> anyhow::Result<bool> {
+    let text = match level {
+        "sse2" => CPUID_SSE2,
+        "sse4.2" => CPUID_SSE42,
+        other => bail!("no CPUID definition for the level `{other}` (sse2 or sse4.2)"),
+    };
+    std::fs::write(path, text).with_context(|| format!("cannot write {}", path.display()))?;
+    Ok(true)
+}
 
 // ---------------------------------------------------------------------------------------------
 // Counters
@@ -570,22 +1080,27 @@ pub mod parse {
         bail!("no `Collected :` line in the callgrind output")
     }
 
-    /// The total of an Intel SDE mix report: the line `*total  N`.
+    /// The total of Intel SDE's `-icount`: the sum of the lines `$$ TID: T ICOUNT: N` (one per
+    /// thread) of its `-icount_file`.
     ///
     /// # Errors
     /// No such line.
-    pub fn sde_mix(report: &str) -> anyhow::Result<u64> {
+    pub fn sde_icount(report: &str) -> anyhow::Result<u64> {
+        let mut sum = 0u64;
+        let mut seen = false;
         for line in report.lines() {
-            let line = line.trim();
-            if let Some(rest) = line.strip_prefix("*total") {
-                let first = rest
-                    .split_whitespace()
-                    .next()
-                    .ok_or_else(|| anyhow!("empty total in the mix report"))?;
-                return Ok(first.parse()?);
+            if line.trim_start().starts_with("$$")
+                && let Some(n) = line.split("ICOUNT:").nth(1)
+            {
+                sum += n.trim().parse::<u64>()?;
+                seen = true;
             }
         }
-        bail!("no `*total` line in the SDE mix report")
+        if seen {
+            Ok(sum)
+        } else {
+            bail!("no `ICOUNT:` line in the SDE output")
+        }
     }
 
     /// The total of the QEMU `insn` plugin: `total insns: N`, or the sum of the lines
@@ -616,20 +1131,44 @@ pub mod parse {
     }
 }
 
+/// The median of the counts (the upper one of the two middle values for an even number), `None`
+/// for no counts.
+#[must_use]
+pub fn median(mut counts: Vec<u64>) -> Option<u64> {
+    counts.sort_unstable();
+    counts.get(counts.len() / 2).copied()
+}
+
+/// The median of up to [`SDE_RUNS`] results of `run`: when the first two agree, they are the
+/// median of any third, so it is not run.
+///
+/// # Errors
+/// An error of `run`.
+pub fn median_of_three(mut run: impl FnMut() -> anyhow::Result<u64>) -> anyhow::Result<u64> {
+    let mut counts = vec![run()?, run()?];
+    if counts.first() != counts.get(1) {
+        while counts.len() < SDE_RUNS {
+            counts.push(run()?);
+        }
+    }
+    median(counts).ok_or_else(|| anyhow!("no count"))
+}
+
 /// The smallest fuel with which `run(fuel)` succeeds, found by bisection. `run` returns `true`
 /// when the program completes.
 ///
 /// # Errors
 /// The program does not complete with the largest fuel that is tried.
 pub fn least_fuel(mut run: impl FnMut(u64) -> anyhow::Result<bool>) -> anyhow::Result<u64> {
-    let mut hi = 1u64 << 20;
+    // `lo` is known to fail (0 always does), `hi` to succeed.
+    let (mut lo, mut hi) = (0u64, 1u64 << 20);
     while !run(hi)? {
+        lo = hi;
         hi = hi
             .checked_mul(4)
             .filter(|h| *h < 1 << 50)
             .ok_or_else(|| anyhow!("the program needs more than 2^50 fuel"))?;
     }
-    let mut lo = 0u64; // known to fail
     while hi - lo > 1 {
         let mid = lo + (hi - lo) / 2;
         if run(mid)? {
@@ -643,107 +1182,191 @@ pub fn least_fuel(mut run: impl FnMut(u64) -> anyhow::Result<bool>) -> anyhow::R
 
 /// Environment and tools of a counting session.
 struct Session {
-    root: PathBuf,
     plan: LevelPlan,
     binary: PathBuf,
-    volk_config: Option<PathBuf>,
+    /// `VOLK_CONFIGPATH` with the pinned `volk_config` of the level.
+    volk_config: PathBuf,
+    /// The `lib` directory of the C references (VOLK is a shared library there).
+    refs_lib: PathBuf,
+    /// The CPUID definition of SDE, for the levels that need one.
+    cpuid: Option<PathBuf>,
+    /// Scratch directory of the level (SDE's count file, the configurations of the
+    /// cheapest-VOLK search).
+    scratch: PathBuf,
     qemu: Option<(PathBuf, PathBuf, PathBuf)>,
+    /// SDE: the count of the region with `k = 0`, which holds only the markers and is the
+    /// same for every kernel, so it is counted once.
+    markers: std::cell::OnceCell<u64>,
+}
+
+/// The arguments of `count run` with `k` calls, written with as many digits as `calls`: both
+/// runs of a measurement then have arguments of the same length. Their length moves the
+/// start-up code of the process by a few instructions, and only identical start-ups cancel
+/// exactly (otherwise the length of the environment decided the last digit of some counts).
+fn run_args(kernel: &str, which: &str, k: u64, calls: u64, variant: &Variant) -> Vec<String> {
+    let width = calls.to_string().len();
+    let mut args: Vec<String> = ["run", kernel, which, &format!("{k:0width$}")]
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    args.extend(variant.options());
+    args
+}
+
+/// One run of the measurement binary: the arguments and the `volk_config` directory.
+struct Run<'a> {
+    args: Vec<String>,
+    volk_config: &'a Path,
 }
 
 impl Session {
-    fn command(&self, program: impl AsRef<std::ffi::OsStr>) -> Command {
+    /// The command for `program` with the environment of the measured process: the pinned
+    /// `volk_config`, the library path of the references, and without the variables that
+    /// override VOLK's dispatch.
+    fn command(&self, program: impl AsRef<std::ffi::OsStr>, run: &Run<'_>) -> Command {
         let mut cmd = Command::new(program);
-        if let Some(dir) = &self.volk_config {
-            cmd.env("VOLK_CONFIGPATH", dir);
+        cmd.env("VOLK_CONFIGPATH", run.volk_config)
+            .env_remove("VOLK_GENERIC");
+        for f in VOLK_FUNCTIONS {
+            cmd.env_remove(f);
+        }
+        if matches!(self.plan.counter, Counter::Callgrind | Counter::Sde(_)) {
+            cmd.env("LD_LIBRARY_PATH", &self.refs_lib);
         }
         cmd
     }
 
-    /// Runs the measurement binary without a counter and returns its standard output.
-    fn plain(&self, args: &[String]) -> anyhow::Result<String> {
-        let mut cmd = match self.plan.counter {
-            Counter::Callgrind => self.command(&self.binary),
-            Counter::Sde => {
-                let mut c = self.command(sde());
-                c.args(["-spr", "--"]).arg(&self.binary);
-                c
+    /// The emulator in front of the binary: program and arguments.
+    fn launcher(&self, counting: bool) -> anyhow::Result<(PathBuf, Vec<std::ffi::OsString>)> {
+        let mut args: Vec<std::ffi::OsString> = Vec::new();
+        let program = match self.plan.counter {
+            Counter::Callgrind => {
+                if counting {
+                    args.extend(
+                        ["--tool=callgrind", "--callgrind-out-file=/dev/null"].map(Into::into),
+                    );
+                    PathBuf::from("valgrind")
+                } else {
+                    return Ok((self.binary.clone(), Vec::new()));
+                }
+            }
+            Counter::Sde(cpu) => {
+                match (cpu, &self.cpuid) {
+                    (SdeCpu::SapphireRapids, _) => args.push("-spr".into()),
+                    (_, Some(def)) => {
+                        args.push("-cpuid_in".into());
+                        args.push(def.into());
+                        // Any instruction above the CPUID stops the run: no library may use
+                        // code of a higher level than the one it is compared at.
+                        args.extend(["-chip_check_cpuid", "1"].map(Into::into));
+                    }
+                    (_, None) => bail!("no CPUID definition for {cpu:?}"),
+                }
+                if counting {
+                    args.extend(SDE_REGION.map(Into::into));
+                    args.extend(["-icount", "-icount_file"].map(Into::into));
+                    args.push(self.scratch.join("sde-icount.txt").into());
+                }
+                args.push("--".into());
+                sde()
             }
             Counter::Qemu => {
-                let (qemu, _, sysroot) = self.qemu.clone().ok_or_else(|| anyhow!("qemu"))?;
-                let mut c = self.command(qemu);
-                c.arg("-L").arg(sysroot).arg(&self.binary);
-                c
+                let (qemu, plugin, sysroot) = self.qemu.clone().ok_or_else(|| anyhow!("qemu"))?;
+                args.extend(["-R", QEMU_RESERVED_VA, "-L"].map(Into::into));
+                args.push(sysroot.into());
+                args.push("-E".into());
+                args.push(format!("LD_LIBRARY_PATH={}", self.refs_lib.display()).into());
+                if counting {
+                    args.push("-plugin".into());
+                    args.push(plugin.into());
+                    args.extend(["-d", "plugin"].map(Into::into));
+                }
+                qemu
             }
             Counter::Wasmtime => {
-                let mut c = self.command("wasmtime");
-                c.arg("run").arg(&self.binary);
-                c
+                args.push("run".into());
+                PathBuf::from("wasmtime")
             }
         };
-        let out = cmd
+        args.push(self.binary.clone().into());
+        Ok((program, args))
+    }
+
+    /// Runs the measurement binary without a counter and returns its standard output.
+    fn plain(&self, run: &Run<'_>) -> anyhow::Result<String> {
+        let (program, args) = self.launcher(false)?;
+        let out = self
+            .command(program, run)
             .args(args)
+            .args(&run.args)
             .stderr(Stdio::inherit())
             .output()
             .context("cannot run the measurement binary")?;
         if !out.status.success() {
-            bail!("the measurement binary failed: {args:?}");
+            bail!("the measurement binary failed: {:?}", run.args);
         }
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     }
 
-    /// Instructions of one run with the given arguments.
-    fn count(&self, args: &[String]) -> anyhow::Result<u64> {
+    /// Instructions of one run.
+    fn count(&self, run: &Run<'_>) -> anyhow::Result<u64> {
         match self.plan.counter {
-            Counter::Callgrind => {
-                let mut cmd = self.command("valgrind");
-                cmd.args(["--tool=callgrind", "--callgrind-out-file=/dev/null"])
-                    .arg(&self.binary)
-                    .args(args);
-                let out = cmd.output().context("cannot run valgrind")?;
-                if !out.status.success() {
-                    bail!("valgrind failed: {}", String::from_utf8_lossy(&out.stderr));
-                }
-                parse::callgrind(&String::from_utf8_lossy(&out.stderr))
-            }
-            Counter::Sde => {
-                let report = self.root.join("benches/target/sde-mix.txt");
-                let mut cmd = self.command(sde());
-                cmd.args(["-spr", "-mix", "-omix"])
-                    .arg(&report)
-                    .arg("--")
-                    .arg(&self.binary)
+            Counter::Callgrind | Counter::Qemu => {
+                let (program, args) = self.launcher(true)?;
+                let out = self
+                    .command(program, run)
                     .args(args)
-                    .stdout(Stdio::null());
-                let status = cmd.status().context("cannot run sde64")?;
-                if !status.success() {
-                    bail!("sde64 failed");
-                }
-                parse::sde_mix(&std::fs::read_to_string(&report)?)
-            }
-            Counter::Qemu => {
-                let (qemu, plugin, sysroot) = self.qemu.clone().ok_or_else(|| anyhow!("qemu"))?;
-                let mut cmd = self.command(qemu);
-                cmd.arg("-L")
-                    .arg(sysroot)
-                    .arg("-plugin")
-                    .arg(plugin)
-                    .args(["-d", "plugin"])
-                    .arg(&self.binary)
-                    .args(args);
-                let out = cmd.output().context("cannot run qemu")?;
+                    .args(&run.args)
+                    .output()
+                    .context("cannot run the counter")?;
+                let stderr = String::from_utf8_lossy(&out.stderr);
                 if !out.status.success() {
-                    bail!("qemu failed: {}", String::from_utf8_lossy(&out.stderr));
+                    bail!("the counter failed for {:?}: {stderr}", run.args);
                 }
-                parse::qemu_insn(&String::from_utf8_lossy(&out.stderr))
+                if self.plan.counter == Counter::Qemu {
+                    parse::qemu_insn(&stderr)
+                } else {
+                    parse::callgrind(&stderr)
+                }
+            }
+            Counter::Sde(_) => {
+                let (program, args) = self.launcher(true)?;
+                let file = self.scratch.join("sde-icount.txt");
+                median_of_three(|| {
+                    // A run that writes no count must not leave the previous one behind.
+                    match std::fs::remove_file(&file) {
+                        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                            return Err(e).context("cannot remove SDE's count file");
+                        }
+                        _ => {}
+                    }
+                    let out = self
+                        .command(&program, run)
+                        .args(&args)
+                        .args(&run.args)
+                        .stdout(Stdio::null())
+                        .output()
+                        .context("cannot run sde64")?;
+                    if !out.status.success() {
+                        bail!(
+                            "sde64 failed for {:?}: {}",
+                            run.args,
+                            String::from_utf8_lossy(&out.stderr)
+                        );
+                    }
+                    parse::sde_icount(
+                        &std::fs::read_to_string(&file).context("SDE wrote no count file")?,
+                    )
+                })
             }
             Counter::Wasmtime => least_fuel(|fuel| {
                 let status = self
-                    .command("wasmtime")
+                    .command("wasmtime", run)
                     .arg("run")
                     .arg("-W")
                     .arg(format!("fuel={fuel}"))
                     .arg(&self.binary)
-                    .args(args)
+                    .args(&run.args)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .status()
@@ -753,33 +1376,103 @@ impl Session {
         }
     }
 
-    /// `count(k) - count(0)` for `kernel` and `which`.
-    fn differential(&self, kernel: &str, which: &str, calls: u64) -> anyhow::Result<u64> {
-        let run = |k: u64| -> Vec<String> {
-            ["run", kernel, which, &k.to_string()]
-                .iter()
-                .map(ToString::to_string)
-                .collect()
+    /// Instructions per sample of `which` on `kernel`: `(count(calls) - count(0)) / (calls *
+    /// samples)`, with `calls` such that every measurement covers `K * N` samples. Under SDE
+    /// `count(0)` is the markers alone and is counted once per level.
+    fn per_sample(
+        &self,
+        kernel: &str,
+        which: &str,
+        variant: &Variant,
+        volk_config: &Path,
+    ) -> anyhow::Result<f64> {
+        let calls = K * (N / variant.samples).max(1);
+        let empty = || {
+            self.count(&Run {
+                args: run_args(kernel, which, 0, calls, variant),
+                volk_config,
+            })
         };
-        let base = self.count(&run(0))?;
-        let full = self.count(&run(calls))?;
-        full.checked_sub(base).ok_or_else(|| {
+        let base = match (self.plan.counter, self.markers.get()) {
+            (Counter::Sde(_), Some(b)) => *b,
+            (Counter::Sde(_), None) => {
+                let b = empty()?;
+                let _ = self.markers.set(b);
+                b
+            }
+            _ => empty()?,
+        };
+        let full = self.count(&Run {
+            args: run_args(kernel, which, calls, calls, variant),
+            volk_config,
+        })?;
+        let diff = full.checked_sub(base).ok_or_else(|| {
             anyhow!(
                 "{kernel} {which}: the run with k = {calls} counted fewer instructions than k = 0"
             )
-        })
+        })?;
+        Ok(diff as f64 / (calls * variant.samples) as f64)
     }
 
-    fn snr(&self, kernel: &str, which: &str) -> anyhow::Result<f64> {
-        let args: Vec<String> = ["accuracy", kernel, which]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
-        let out = self.plain(&args)?;
+    /// The SNR of one run of `which`, against the f64 reference.
+    fn snr(&self, kernel: &str, which: &str, volk_config: &Path) -> anyhow::Result<f64> {
+        let out = self.plain(&Run {
+            args: ["accuracy", kernel, which]
+                .map(ToString::to_string)
+                .to_vec(),
+            volk_config,
+        })?;
         let v: Value = serde_json::from_str(out.trim()).context("accuracy output")?;
         v.get("snr_db")
             .and_then(Value::as_f64)
             .ok_or_else(|| anyhow!("no snr_db in {out}"))
+    }
+
+    /// A JSON line of the measurement binary (`info`, `volk-info`, `volk-impls`).
+    fn query(&self, args: &[&str]) -> anyhow::Result<Value> {
+        let out = self.plain(&Run {
+            args: args.iter().map(ToString::to_string).collect(),
+            volk_config: &self.volk_config,
+        })?;
+        serde_json::from_str(out.trim()).with_context(|| format!("output of {args:?}: {out}"))
+    }
+}
+
+/// The buffers of one measurement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Variant {
+    samples: u64,
+    misaligned: bool,
+    /// Whether `--n` is passed (the FFT sizes are fixed by the kernel).
+    explicit_n: bool,
+}
+
+impl Variant {
+    fn standard(spec: &KernelSpec) -> Self {
+        Variant {
+            samples: spec.samples,
+            misaligned: false,
+            explicit_n: false,
+        }
+    }
+
+    fn options(&self) -> Vec<String> {
+        let mut o = Vec::new();
+        if self.explicit_n {
+            o.extend(["--n".to_string(), self.samples.to_string()]);
+        }
+        if self.misaligned {
+            o.push("--misaligned".to_string());
+        }
+        o
+    }
+
+    fn label(&self) -> String {
+        match (self.misaligned, self.explicit_n) {
+            (true, _) => "misaligned by one sample".to_string(),
+            (false, true) => format!("n = {}", self.samples),
+            (false, false) => String::new(),
+        }
     }
 }
 
@@ -857,7 +1550,55 @@ fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<()> {
 // ---------------------------------------------------------------------------------------------
 // Driver
 
-fn build(root: &Path, plan: &LevelPlan) -> anyhow::Result<PathBuf> {
+/// Builds the C references of `platform` (a no-op when they are up to date) and returns their
+/// prefix.
+fn references(root: &Path, platform: &str) -> anyhow::Result<PathBuf> {
+    let prefix = root
+        .join("benches")
+        .join("target")
+        .join("refs")
+        .join(platform);
+    let status = Command::new("bash")
+        .arg(root.join("benches").join("refs").join("build.sh"))
+        .arg(platform)
+        .arg(&prefix)
+        .status()
+        .context("cannot run bash for benches/refs/build.sh")?;
+    if !status.success() {
+        bail!("building the C references for {platform} failed (benches/refs/build.sh)");
+    }
+    Ok(prefix)
+}
+
+/// The flags of a measurement build for `CARGO_ENCODED_RUSTFLAGS`: `flags` plus a remapping of
+/// the paths of the work tree and of the Cargo home. Without it these paths end up in the
+/// panic locations of the binary, and their length shifts its data and with it the counts (by
+/// 0.01 instructions per sample, between two checkouts at different paths). The encoded form
+/// keeps paths with spaces in one argument.
+fn rustflags(flags: &str, root: &Path) -> std::ffi::OsString {
+    let cargo_home = std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".cargo")));
+    encoded_rustflags(flags, root, cargo_home.as_deref())
+}
+
+/// [`rustflags`] with the Cargo home given.
+fn encoded_rustflags(flags: &str, root: &Path, cargo_home: Option<&Path>) -> std::ffi::OsString {
+    let mut args: Vec<std::ffi::OsString> = flags.split_whitespace().map(Into::into).collect();
+    let remaps = [(Some(root), "/sdrk"), (cargo_home, "/cargo")];
+    for (from, to) in remaps {
+        if let Some(from) = from {
+            let mut arg = std::ffi::OsString::from("--remap-path-prefix=");
+            arg.push(from);
+            arg.push("=");
+            arg.push(to);
+            args.push(arg);
+        }
+    }
+    args.join(std::ffi::OsStr::new("\u{1f}"))
+}
+
+fn build(root: &Path, plan: &LevelPlan, refs: &Path) -> anyhow::Result<PathBuf> {
     let target_dir = root.join("benches").join("target").join(plan.level);
     let mut cmd = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     cmd.current_dir(root.join("benches"))
@@ -869,7 +1610,17 @@ fn build(root: &Path, plan: &LevelPlan) -> anyhow::Result<PathBuf> {
     if plan.runtime_detect {
         cmd.args(["--features", "std"]);
     }
-    cmd.env("RUSTFLAGS", plan.rustflags);
+    // Only the references of benches/refs/build.sh, never a VOLK of the system: the
+    // distribution's libvolk is built differently (-O2, LTO, ORC) and gives other counts.
+    cmd.env_remove("RUSTFLAGS")
+        .env("CARGO_ENCODED_RUSTFLAGS", rustflags(plan.rustflags, root))
+        .env("SDRK_REFS_DIR", refs)
+        .env("PKG_CONFIG_PATH", refs.join("lib").join("pkgconfig"))
+        .env_remove("PKG_CONFIG_LIBDIR")
+        .env_remove("PKG_CONFIG_SYSROOT_DIR");
+    if plan.target.is_some() {
+        cmd.env("PKG_CONFIG_ALLOW_CROSS", "1");
+    }
     if plan.target == Some("aarch64-unknown-linux-gnu") {
         cmd.env(
             "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER",
@@ -897,6 +1648,25 @@ fn build(root: &Path, plan: &LevelPlan) -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
+/// Writes `text` to `dir/volk/volk_config` and returns `dir` (the value of `VOLK_CONFIGPATH`).
+fn volk_config(dir: PathBuf, text: &str) -> anyhow::Result<PathBuf> {
+    let file = dir.join("volk").join("volk_config");
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&file, text)?;
+    Ok(dir)
+}
+
+/// What one level measured, with the facts about its references for the results file.
+struct LevelResult {
+    measurements: Vec<Measurement>,
+    volk: Value,
+}
+
+/// Our numbers of a level for the levels judged against it: kernel -> (instr/sample, SNR).
+type OwnNumbers = BTreeMap<String, (f64, f64)>;
+
 #[allow(
     clippy::large_stack_frames,
     reason = "std::process::Command and the Windows file system calls are large; xtask is a host tool"
@@ -904,57 +1674,251 @@ fn build(root: &Path, plan: &LevelPlan) -> anyhow::Result<PathBuf> {
 fn measure_level(
     root: &Path,
     plan: &LevelPlan,
+    refs: &Path,
     only: &[String],
-) -> anyhow::Result<Vec<Measurement>> {
-    let binary = build(root, plan)?;
-    let volk_config = if let Some((name, config)) = plan.volk_pin.config() {
-        let dir = root.join("benches").join("target").join(name);
-        let file = dir.join("volk").join("volk_config");
-        if let Some(parent) = file.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&file, config)?;
-        Some(dir)
-    } else {
-        None
-    };
-    let qemu = if plan.counter == Counter::Qemu {
-        Some(qemu_tools(root)?)
-    } else {
-        None
-    };
+    variants: bool,
+    own: &BTreeMap<&'static str, OwnNumbers>,
+) -> anyhow::Result<LevelResult> {
+    let binary = build(root, plan, refs)?;
+    let scratch = root.join("benches").join("target").join(plan.level);
+    std::fs::create_dir_all(&scratch)?;
+    let cpuid = match plan.counter {
+        Counter::Sde(SdeCpu::Sse2) => Some((CPUID_SSE2, "cpuid-sse2.def")),
+        Counter::Sde(SdeCpu::Sse42) => Some((CPUID_SSE42, "cpuid-sse4.2.def")),
+        _ => None,
+    }
+    .map(|(text, name)| -> anyhow::Result<PathBuf> {
+        let path = scratch.join(name);
+        std::fs::write(&path, text)?;
+        Ok(path)
+    })
+    .transpose()?;
     let session = Session {
-        root: root.to_path_buf(),
         plan: *plan,
         binary,
-        volk_config,
-        qemu,
+        volk_config: volk_config(scratch.join("volk-pinned"), plan.volk_pin.config())?,
+        refs_lib: refs.join("lib"),
+        cpuid,
+        scratch: scratch.clone(),
+        qemu: if plan.counter == Counter::Qemu {
+            Some(qemu_tools(root)?)
+        } else {
+            None
+        },
+        markers: std::cell::OnceCell::new(),
     };
+    let volk = session.query(&["volk-info"])?;
+    let mut listed: Vec<String> = session
+        .plain(&Run {
+            args: vec!["list".to_string()],
+            volk_config: &session.volk_config,
+        })?
+        .lines()
+        .map(str::to_string)
+        .collect();
+    listed.sort_unstable();
+    let mut known: Vec<&str> = KERNELS.iter().map(|k| k.name).collect();
+    known.sort_unstable();
+    if listed != known {
+        bail!("the measurement binary lists {listed:?}, xtask knows {known:?}");
+    }
     let mut out = Vec::new();
-    for (kernel, compare, samples) in KERNELS {
-        if !only.is_empty() && !only.iter().any(|k| k == kernel) {
+    for spec in &KERNELS {
+        if !only.is_empty() && !only.iter().any(|k| k == spec.name) {
             continue;
         }
-        let (which, label) = comparison(plan, kernel, compare);
-        println!("==> {} {} (ours vs {label})", plan.level, kernel);
-        // K calls of 4096 samples; a kernel with fewer samples per call gets proportionally more
-        // calls, so that every measurement covers the same number of samples and the
-        // difference of the two counts stays far above the run-to-run noise of the process.
-        let calls = K * (N / samples).max(1);
-        let scale = (calls * samples) as f64;
-        let ours = session.differential(kernel, "ours", calls)? as f64 / scale;
-        let other = session.differential(kernel, which, calls)? as f64 / scale;
-        out.push(Measurement {
-            kernel: kernel.to_string(),
-            level: plan.level.to_string(),
+        let m = measure_kernel(&session, spec, variants, own)?;
+        out.push(m);
+    }
+    Ok(LevelResult {
+        measurements: out,
+        volk,
+    })
+}
+
+#[allow(
+    clippy::large_stack_frames,
+    reason = "std::process::Command is large; xtask is a host tool"
+)]
+fn measure_kernel(
+    session: &Session,
+    spec: &KernelSpec,
+    variants: bool,
+    own: &BTreeMap<&'static str, OwnNumbers>,
+) -> anyhow::Result<Measurement> {
+    let plan = &session.plan;
+    let (gate, extras) = comparisons(plan, spec);
+    let info = session.query(&["info", spec.name])?;
+    let impls = info.get("impls").and_then(Value::as_object);
+    let describe = |r: Reference| -> Option<String> {
+        if let Reference::OwnLevel(level) = r {
+            return Some(format!("ours at {level}"));
+        }
+        impls
+            .and_then(|i| i.get(r.implementation()))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let label = describe(gate).ok_or_else(|| {
+        anyhow!(
+            "{} at {}: the comparison `{}` is not in the measurement binary (missing C reference?)",
+            spec.name,
+            plan.level,
+            gate.implementation()
+        )
+    })?;
+    println!("==> {} {} (ours vs {label})", plan.level, spec.name);
+    let pinned = session.volk_config.as_path();
+    let standard = Variant::standard(spec);
+    // The in-place FFTs restore their input before every call, on both sides.
+    let restore = if spec.family.is_fft() {
+        session.per_sample(spec.name, "restore", &standard, pinned)?
+    } else {
+        0.0
+    };
+    let count = |which: &str, variant: &Variant, config: &Path| -> anyhow::Result<f64> {
+        Ok(session.per_sample(spec.name, which, variant, config)? - restore)
+    };
+    let ours = count("ours", &standard, pinned)?;
+    let ours_snr_db = session.snr(spec.name, "ours", pinned)?;
+    let (other, other_snr_db) = match gate {
+        Reference::OwnLevel(level) => own
+            .get(level)
+            .and_then(|k| k.get(spec.name))
+            .copied()
+            .ok_or_else(|| anyhow!("{}: no numbers of the level {level}", spec.name))?,
+        r => (
+            count(r.implementation(), &standard, pinned)?,
+            session.snr(spec.name, r.implementation(), pinned)?,
+        ),
+    };
+    let mut m = Measurement {
+        kernel: spec.name.to_string(),
+        level: plan.level.to_string(),
+        ours,
+        other,
+        compared_with: label,
+        ours_snr_db,
+        other_snr_db,
+        extras: Vec::new(),
+    };
+    for r in extras {
+        if r == Reference::VolkCheapest {
+            m.extras.push(cheapest_volk(session, spec, ours, &count)?);
+            continue;
+        }
+        let Some(name) = describe(r) else {
+            println!("    ({} is not in this build)", r.implementation());
+            continue;
+        };
+        m.extras.push(Extra {
+            label: format!("information: {}", r.implementation()),
             ours,
-            other,
-            compared_with: label,
-            ours_snr_db: session.snr(kernel, "ours")?,
-            other_snr_db: session.snr(kernel, which)?,
+            other: count(r.implementation(), &standard, pinned)?,
+            compared_with: name,
+            other_snr_db: Some(session.snr(spec.name, r.implementation(), pinned)?),
         });
     }
-    Ok(out)
+    if variants && plan.baseline.is_none() {
+        let mut list = Vec::new();
+        if spec.small_n {
+            list.extend(SMALL_N.map(|n| Variant {
+                samples: n,
+                misaligned: false,
+                explicit_n: true,
+            }));
+        }
+        if spec.misaligned {
+            list.push(Variant {
+                misaligned: true,
+                ..standard.clone()
+            });
+        }
+        for v in list {
+            m.extras.push(Extra {
+                label: v.label(),
+                ours: count("ours", &v, pinned)?,
+                other: count(gate.implementation(), &v, pinned)?,
+                compared_with: m.compared_with.clone(),
+                other_snr_db: None,
+            });
+        }
+    }
+    Ok(m)
+}
+
+/// The cheapest combination of VOLK implementations for a kernel (D11: reported next to the
+/// pinned default dispatch, and the goal). Every implementation of the machine is tried for
+/// each VOLK function of the kernel, with a `volk_config` that pins it.
+fn cheapest_volk(
+    session: &Session,
+    spec: &KernelSpec,
+    ours: f64,
+    count: &dyn Fn(&str, &Variant, &Path) -> anyhow::Result<f64>,
+) -> anyhow::Result<Extra> {
+    let found = session.query(&["volk-impls", spec.name])?;
+    let functions: Vec<(String, Vec<String>)> = found
+        .get("functions")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|f| {
+                    let name = f.get("name")?.as_str()?.to_string();
+                    let impls = f
+                        .get("impls")?
+                        .as_array()?
+                        .iter()
+                        .filter_map(|i| i.as_str().map(str::to_string))
+                        .collect();
+                    Some((name, impls))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    // Every combination: the product of the implementation lists (at most a few dozen).
+    let mut combinations: Vec<Vec<(String, String)>> = vec![Vec::new()];
+    for (function, impls) in &functions {
+        combinations = combinations
+            .into_iter()
+            .flat_map(|c| {
+                impls.iter().map(move |i| {
+                    let mut next = c.clone();
+                    next.push((function.clone(), i.clone()));
+                    next
+                })
+            })
+            .collect();
+    }
+    let dir = session.scratch.join("volk-cheapest");
+    let standard = Variant::standard(spec);
+    let mut best: Option<(f64, String, PathBuf)> = None;
+    for combination in combinations {
+        let mut text = String::new();
+        for (function, implementation) in &combination {
+            let _ = writeln!(text, "{function} {implementation} {implementation}");
+        }
+        let config = volk_config(dir.clone(), &text)?;
+        let n = count("volk", &standard, &config)?;
+        if best.as_ref().is_none_or(|(b, _, _)| n < *b) {
+            let label = combination
+                .iter()
+                .map(|(f, i)| format!("{f}: {i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let keep = session.scratch.join("volk-cheapest-best");
+            let _ = std::fs::remove_dir_all(&keep);
+            best = Some((n, label, volk_config(keep, &text)?));
+        }
+    }
+    let (other, label, config) =
+        best.ok_or_else(|| anyhow!("{}: VOLK lists no implementation", spec.name))?;
+    Ok(Extra {
+        label: "goal: cheapest VOLK implementation".to_string(),
+        ours,
+        other,
+        compared_with: label,
+        other_snr_db: Some(session.snr(spec.name, "volk", &config)?),
+    })
 }
 
 /// `cargo xtask count --pipeline`: instructions per input sample of `fm_receiver.json` at
@@ -971,18 +1935,25 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
         .current_dir(root.join("benches"))
         .args(["build", "--release", "-p", "pipeline-bench", "--target-dir"])
         .arg(&target_dir)
-        .env("RUSTFLAGS", "-C target-cpu=x86-64-v3")
+        .env_remove("RUSTFLAGS")
+        .env(
+            "CARGO_ENCODED_RUSTFLAGS",
+            rustflags("-C target-cpu=x86-64-v3", root),
+        )
         .status()
         .context("cannot run cargo")?;
     if !status.success() {
         bail!("building benches/pipeline failed");
     }
     let binary = target_dir.join("release").join("pipeline");
+    let blocks = K;
     let count = |k: u64| -> anyhow::Result<u64> {
+        // As in `run_args`: both runs with arguments of the same length.
+        let width = blocks.to_string().len();
         let out = Command::new("valgrind")
             .args(["--tool=callgrind", "--callgrind-out-file=/dev/null"])
             .arg(&binary)
-            .args(["run", &k.to_string()])
+            .args(["run", &format!("{k:0width$}")])
             .output()
             .context("cannot run valgrind")?;
         if !out.status.success() {
@@ -990,7 +1961,6 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
         }
         parse::callgrind(&String::from_utf8_lossy(&out.stderr))
     };
-    let blocks = K;
     let diff = count(blocks)?
         .checked_sub(count(0)?)
         .ok_or_else(|| anyhow!("the pipeline run with more blocks counted fewer instructions"))?;
@@ -1023,52 +1993,186 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
     Ok(true)
 }
 
+/// The command line of `cargo xtask count`.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "one field per command-line flag"
+)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Options {
+    /// `--platform`.
+    pub platform: Option<String>,
+    /// `--level` (repeatable): only these levels of the platform.
+    pub levels: Vec<String>,
+    /// `--kernel` (repeatable): only these kernels.
+    pub kernels: Vec<String>,
+    /// Not `--no-write`.
+    pub write: bool,
+    /// `--pipeline`.
+    pub pipeline: bool,
+    /// `--strict`: every entry must be `release` without waivers and pass.
+    pub strict: bool,
+    /// Not `--no-variants`: also the informational misaligned and small-block runs.
+    pub variants: bool,
+}
+
+const USAGE: &str = "usage: cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--strict] | --pipeline [--no-write]";
+
+impl Options {
+    /// Parses the arguments after `count`.
+    ///
+    /// # Errors
+    /// An unknown option or a missing value.
+    pub fn parse(args: &[&str]) -> anyhow::Result<Options> {
+        let mut o = Options {
+            write: true,
+            variants: true,
+            ..Options::default()
+        };
+        let mut it = args.iter();
+        while let Some(arg) = it.next() {
+            let mut value = || {
+                it.next()
+                    .map(|s| (*s).to_string())
+                    .ok_or_else(|| anyhow!("`{arg}` needs a value; {USAGE}"))
+            };
+            match *arg {
+                "--platform" => o.platform = Some(value()?),
+                "--level" => o.levels.push(value()?),
+                "--kernel" => o.kernels.push(value()?),
+                "--no-write" => o.write = false,
+                "--no-variants" => o.variants = false,
+                "--pipeline" => o.pipeline = true,
+                "--strict" => o.strict = true,
+                other => bail!("unknown option `{other}`; {USAGE}"),
+            }
+        }
+        Ok(o)
+    }
+}
+
+/// The plans to run for the options: the selected levels of the platform, plus the levels they
+/// are judged against.
+///
+/// # Errors
+/// An unknown platform or level.
+pub fn select_plans(platform: &str, levels: &[String]) -> anyhow::Result<Vec<&'static LevelPlan>> {
+    let all: Vec<&'static LevelPlan> = PLANS.iter().filter(|p| p.platform == platform).collect();
+    if all.is_empty() {
+        bail!("unknown platform `{platform}`");
+    }
+    for l in levels {
+        if !all.iter().any(|p| p.level == l) {
+            bail!("the platform `{platform}` has no level `{l}`");
+        }
+    }
+    let selected = |level: &str| levels.is_empty() || levels.iter().any(|l| l == level);
+    let baselines: Vec<&str> = all
+        .iter()
+        .filter(|p| selected(p.level))
+        .filter_map(|p| p.baseline)
+        .collect();
+    Ok(all
+        .into_iter()
+        .filter(|p| selected(p.level) || baselines.contains(&p.level))
+        .collect())
+}
+
+/// Measures the levels of `plans` and returns their results in the same order.
+///
+/// The counts do not depend on each other, so the levels run in parallel: first those judged
+/// against the references, then those judged against our numbers of another level. The
+/// counters are deterministic, and every level has its own target and scratch directory.
+fn measure_levels(
+    root: &Path,
+    plans: &[&'static LevelPlan],
+    options: &Options,
+) -> anyhow::Result<Vec<LevelResult>> {
+    // The C references are shared by the levels of a platform: build them before the threads.
+    let mut refs: BTreeMap<&str, PathBuf> = BTreeMap::new();
+    for plan in plans {
+        if !refs.contains_key(plan.refs) {
+            refs.insert(plan.refs, references(root, plan.refs)?);
+        }
+    }
+    let mut own: BTreeMap<&'static str, OwnNumbers> = BTreeMap::new();
+    let mut results: BTreeMap<&str, LevelResult> = BTreeMap::new();
+    for judged_against_ours in [false, true] {
+        let phase: Vec<&LevelPlan> = plans
+            .iter()
+            .copied()
+            .filter(|p| p.baseline.is_some() == judged_against_ours)
+            .collect();
+        let measured = std::thread::scope(|scope| {
+            let threads: Vec<_> = phase
+                .iter()
+                .map(|plan| {
+                    let (refs, own) = (&refs, &own);
+                    scope.spawn(move || {
+                        let refs = refs
+                            .get(plan.refs)
+                            .ok_or_else(|| anyhow!("no references for {}", plan.refs))?;
+                        measure_level(root, plan, refs, &options.kernels, options.variants, own)
+                    })
+                })
+                .collect();
+            threads
+                .into_iter()
+                .map(|t| {
+                    t.join()
+                        .map_err(|_| anyhow!("a measurement thread panicked"))?
+                })
+                .collect::<anyhow::Result<Vec<_>>>()
+        })?;
+        for (plan, result) in phase.iter().zip(measured) {
+            own.insert(
+                plan.level,
+                result
+                    .measurements
+                    .iter()
+                    .map(|m| (m.kernel.clone(), (m.ours, m.ours_snr_db)))
+                    .collect(),
+            );
+            results.insert(plan.level, result);
+        }
+    }
+    plans
+        .iter()
+        .map(|plan| {
+            results
+                .remove(plan.level)
+                .ok_or_else(|| anyhow!("no result for the level {}", plan.level))
+        })
+        .collect()
+}
+
 /// Runs `cargo xtask count ...`.
 ///
 /// ```text
-/// cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--kernel NAME]... [--no-write]
+/// cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--strict]
 /// cargo xtask count --pipeline [--no-write]
 /// ```
 ///
 /// # Errors
 /// A tool is missing or fails; the return value is `Ok(false)` if a measurement exceeds its
-/// limit.
+/// limit (or, with `--strict`, if any entry blocks a release).
 #[allow(
     clippy::large_stack_frames,
     reason = "std::process::Command and the plan table are large; xtask is a host tool"
 )]
 pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
-    let mut platform = None;
-    let mut only = Vec::new();
-    let mut write = true;
-    let mut pipeline_mode = false;
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        match *arg {
-            "--platform" => platform = it.next().map(|s| (*s).to_string()),
-            "--kernel" => {
-                if let Some(k) = it.next() {
-                    only.push((*k).to_string());
-                }
-            }
-            "--no-write" => write = false,
-            "--pipeline" => pipeline_mode = true,
-            other => bail!(
-                "unknown option `{other}`; usage: cargo xtask count --platform <p> [--kernel NAME] [--no-write]"
-            ),
-        }
+    let options = Options::parse(args)?;
+    if options.pipeline {
+        return pipeline(root, options.write);
     }
-    if pipeline_mode {
-        return pipeline(root, write);
-    }
-    let Some(platform) = platform else {
-        bail!(
-            "usage: cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--kernel NAME] [--no-write]"
-        );
+    let Some(platform) = options.platform.as_deref() else {
+        bail!("{USAGE}");
     };
-    let plans: Vec<&LevelPlan> = PLANS.iter().filter(|p| p.platform == platform).collect();
-    if plans.is_empty() {
-        bail!("unknown platform `{platform}`");
+    let plans = select_plans(platform, &options.levels)?;
+    for k in &options.kernels {
+        if !KERNELS.iter().any(|s| s.name == k) {
+            bail!("unknown kernel `{k}`");
+        }
     }
     let limits_path = root.join("benches").join("limits.json");
     let limits = Limits::parse(
@@ -1076,34 +2180,51 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
             .with_context(|| format!("cannot read {}", limits_path.display()))?,
     )?;
     let mut all_ok = true;
+    let mut blockers = Vec::new();
     let mut levels = serde_json::Map::new();
-    for plan in plans {
-        let measurements = measure_level(root, plan, &only)?;
-        let judged = if plan.info_only {
-            informational(&measurements)
+    let mut volk_flags = Value::Null;
+    let results = measure_levels(root, &plans, &options)?;
+    for (plan, result) in plans.iter().zip(&results) {
+        let rule = if plan.baseline.is_some() {
+            Rule::OwnLevel
         } else {
-            evaluate(&limits, plan.level, &measurements)
+            Rule::Reference
         };
+        let judged = evaluate(&limits, rule, plan.level, &result.measurements);
         for line in &judged.lines {
             println!("{line}");
         }
         all_ok &= judged.ok;
+        blockers.extend(judged.blockers);
         levels.insert(
             plan.level.to_string(),
-            json!({ "informational": plan.info_only, "kernels": judged.records }),
+            json!({
+                "counter": plan.counter.describe(),
+                "judged_against": match plan.baseline {
+                    Some(level) => format!("ours at {level}"),
+                    None => "references".to_string(),
+                },
+                "volk": {
+                    "machine": result.volk.get("machine"),
+                    "alignment": result.volk.get("alignment"),
+                    "pinned": plan.volk_pin.config().lines().collect::<Vec<_>>(),
+                },
+                "kernels": judged.records,
+            }),
         );
+        if let Some(flags) = result.volk.get("compiler_flags") {
+            volk_flags = flags.clone();
+        }
     }
-    if write && only.is_empty() {
-        let dir = root.join("benches").join("results");
-        std::fs::create_dir_all(&dir)?;
-        let doc = json!({
-            "platform": platform,
-            "method": { "k": K, "samples": N, "counted": "(count(k = K) - count(k = 0)) / (K * samples)" },
-            "levels": levels,
-        });
-        let mut text = serde_json::to_string_pretty(&doc)?;
-        text.push('\n');
-        std::fs::write(dir.join(format!("{platform}.json")), text)?;
+    if options.write && options.kernels.is_empty() && options.levels.is_empty() {
+        write_results(root, platform, &limits.caps, &levels, &volk_flags)?;
+    }
+    if options.strict && !blockers.is_empty() {
+        eprintln!("--strict: {} entries block a release:", blockers.len());
+        for b in &blockers {
+            eprintln!("  {b}");
+        }
+        all_ok = false;
     }
     if all_ok {
         println!("count {platform}: ok");
@@ -1111,6 +2232,61 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         eprintln!("count {platform}: limits exceeded");
     }
     Ok(all_ok)
+}
+
+#[allow(
+    clippy::large_stack_frames,
+    reason = "serde_json values and the file system calls are large; xtask is a host tool"
+)]
+fn write_results(
+    root: &Path,
+    platform: &str,
+    caps: &Caps,
+    levels: &serde_json::Map<String, Value>,
+    volk_flags: &Value,
+) -> anyhow::Result<()> {
+    let refs_platform = PLANS
+        .iter()
+        .find(|p| p.platform == platform)
+        .map_or(platform, |p| p.refs);
+    let manifest = root
+        .join("benches")
+        .join("target")
+        .join("refs")
+        .join(refs_platform)
+        .join("refs.json");
+    let references: Value = std::fs::read_to_string(&manifest)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    let host_cpu = std::fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|t| {
+            t.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_default();
+    let doc = json!({
+        "platform": platform,
+        "method": {
+            "k": K,
+            "samples": N,
+            "counted": "(count(k = K) - count(k = 0)) / (K * samples), minus the restore of the input for the FFTs",
+            "limits": { "release": caps.release, "dev": caps.dev, "warn": caps.warn, "goal": caps.goal, "runtime": caps.runtime },
+        },
+        "host_cpu": host_cpu,
+        "references": references,
+        "volk_compiler_flags": volk_flags,
+        "levels": levels,
+    });
+    let dir = root.join("benches").join("results");
+    std::fs::create_dir_all(&dir)?;
+    let mut text = serde_json::to_string_pretty(&doc)?;
+    text.push('\n');
+    std::fs::write(dir.join(format!("{platform}.json")), text)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1127,6 +2303,7 @@ mod tests {
             compared_with: "volk".into(),
             ours_snr_db: 130.0,
             other_snr_db: 130.0,
+            extras: Vec::new(),
         }
     }
 
@@ -1134,59 +2311,123 @@ mod tests {
         Limits::parse(text).unwrap()
     }
 
+    /// Caps with a warning band below the release limit, to test it.
+    const CAPS: Caps = Caps {
+        release: 1.15,
+        dev: 1.50,
+        warn: 1.10,
+        goal: 1.00,
+        runtime: 1.02,
+    };
+
+    fn limit(status: Status, waiver: Option<&str>, accuracy: Option<&str>) -> Limit {
+        Limit {
+            status,
+            waiver: waiver.map(Into::into),
+            accuracy_waiver: accuracy.map(Into::into),
+        }
+    }
+
+    fn judged(l: &Limit, x: &Measurement) -> Verdict {
+        judge(&CAPS, Rule::Reference, Some(l), x)
+    }
+
     #[test]
     fn a_slow_release_kernel_fails_the_command() {
         let l = limits(r#"{ "dummy_slow": { "avx2": { "status": "release" } } }"#);
-        let report = evaluate(&l, "avx2", &[m("dummy_slow", 20.0, 10.0)]);
+        let report = evaluate(&l, Rule::Reference, "avx2", &[m("dummy_slow", 20.0, 10.0)]);
         assert!(!report.ok);
         assert!(report.lines[0].contains("FAIL"), "{}", report.lines[0]);
         assert!(report.lines[0].contains("2.00x"));
     }
 
     #[test]
-    fn the_limits_are_115_percent_for_release_and_150_for_dev() {
-        let rel = Limit {
-            status: Status::Release,
-            waiver: None,
-        };
-        let dev = Limit {
-            status: Status::Dev,
-            waiver: None,
-        };
-        assert_eq!(
-            judge(&rel, &m("k", 11.4, 10.0)),
-            Verdict::Warn("1.14x is above 1.10x (hard limit 1.15x)".into())
-        );
-        assert_eq!(judge(&rel, &m("k", 10.9, 10.0)), Verdict::Pass);
-        assert!(matches!(judge(&rel, &m("k", 11.6, 10.0)), Verdict::Fail(_)));
-        assert!(matches!(judge(&dev, &m("k", 11.6, 10.0)), Verdict::Warn(_)));
-        assert!(matches!(judge(&dev, &m("k", 14.9, 10.0)), Verdict::Warn(_)));
-        assert!(matches!(judge(&dev, &m("k", 15.1, 10.0)), Verdict::Fail(_)));
+    fn the_default_caps_are_those_of_d14() {
+        let caps = Caps::default();
+        assert_eq!((caps.release, caps.dev, caps.goal), (1.10, 1.50, 1.00));
+        assert_eq!(caps.warn, caps.release);
     }
 
     #[test]
-    fn a_kernel_that_is_not_listed_is_dev() {
+    fn the_caps_set_the_release_and_dev_limits_and_the_warning_band() {
+        let rel = Limit::release();
+        let dev = limit(Status::Dev, None, None);
+        assert_eq!(
+            judged(&rel, &m("k", 11.4, 10.0)),
+            Verdict::Warn("1.14x is above 1.10x (release limit 1.15x)".into())
+        );
+        assert_eq!(judged(&rel, &m("k", 10.9, 10.0)), Verdict::Pass);
+        assert!(matches!(
+            judged(&rel, &m("k", 11.6, 10.0)),
+            Verdict::Fail(_)
+        ));
+        assert_eq!(
+            judged(&dev, &m("k", 13.0, 10.0)),
+            Verdict::Warn("1.30x is above 1.10x (dev limit 1.50x)".into())
+        );
+        assert!(matches!(
+            judged(&dev, &m("k", 14.9, 10.0)),
+            Verdict::Warn(_)
+        ));
+        assert!(matches!(
+            judged(&dev, &m("k", 15.1, 10.0)),
+            Verdict::Fail(_)
+        ));
+    }
+
+    #[test]
+    fn the_caps_come_from_limits_json() {
+        let l = limits(
+            r#"{ "_limits": { "release": 1.10 }, "k": { "avx2": { "status": "release" } } }"#,
+        );
+        assert_eq!(l.caps.release, 1.10);
+        assert_eq!(l.caps.dev, 1.50);
+        let report = evaluate(&l, Rule::Reference, "avx2", &[m("k", 11.2, 10.0)]);
+        assert!(!report.ok, "{}", report.lines[0]);
+        assert!(Limits::parse(r#"{ "_limits": { "release": 0 } }"#).is_err());
+        assert!(Limits::parse(r#"{ "_limits": { "fast": 1.0 } }"#).is_err());
+    }
+
+    #[test]
+    fn a_dev_entry_within_the_warning_threshold_is_ready_for_release() {
+        let dev = limit(Status::Dev, None, None);
+        assert!(
+            matches!(judged(&dev, &m("k", 10.5, 10.0)), Verdict::Warn(w) if w.contains("promoted"))
+        );
+    }
+
+    #[test]
+    fn a_kernel_that_is_not_listed_fails() {
         let l = limits("{}");
-        assert_eq!(l.get("anything", "avx2").status, Status::Dev);
-        let report = evaluate(&l, "avx2", &[m("anything", 14.0, 10.0)]);
-        assert!(report.ok);
-        let report = evaluate(&l, "avx2", &[m("anything", 16.0, 10.0)]);
+        assert_eq!(l.get("anything", "avx2"), None);
+        let report = evaluate(&l, Rule::Reference, "avx2", &[m("anything", 5.0, 10.0)]);
         assert!(!report.ok);
+        assert!(report.lines[0].contains("no entry"), "{}", report.lines[0]);
+    }
+
+    #[test]
+    fn a_failing_ratio_is_printed_above_the_limit() {
+        let l = limit(Status::Release, None, None);
+        let v = judge(&CAPS, Rule::OwnLevel, Some(&l), &m("rotate", 6.66, 6.52));
+        assert!(
+            v.detail().starts_with("1.021x instructions per sample"),
+            "{}",
+            v.detail()
+        );
+        assert!(v.detail().contains("limit of 1.02x"), "{}", v.detail());
+        assert_eq!(over(1.3, 1.15), "1.30x");
     }
 
     #[test]
     fn lower_accuracy_than_the_comparison_fails() {
-        let rel = Limit {
-            status: Status::Release,
-            waiver: None,
-        };
+        let rel = Limit::release();
         let mut x = m("k", 10.0, 10.0);
         x.ours_snr_db = 128.5;
-        assert!(matches!(judge(&rel, &x), Verdict::Fail(_)));
+        assert!(matches!(judged(&rel, &x), Verdict::Fail(_)));
         x.ours_snr_db = 129.5;
-        assert_eq!(judge(&rel, &x), Verdict::Pass);
+        assert_eq!(judged(&rel, &x), Verdict::Pass);
         x.ours_snr_db = 140.0;
-        assert_eq!(judge(&rel, &x), Verdict::Pass);
+        assert_eq!(judged(&rel, &x), Verdict::Pass);
     }
 
     #[test]
@@ -1194,30 +2435,134 @@ mod tests {
         let l = limits(
             r#"{ "fft_4096": { "avx2": { "status": "dev", "waiver": "open item M13-1" } } }"#,
         );
-        let report = evaluate(&l, "avx2", &[m("fft_4096", 40.0, 10.0)]);
+        let report = evaluate(&l, Rule::Reference, "avx2", &[m("fft_4096", 40.0, 10.0)]);
         assert!(report.ok);
         assert!(report.lines[0].contains("waived") && report.lines[0].contains("M13-1"));
         assert_eq!(report.records["fft_4096"]["verdict"], "waived");
     }
 
     #[test]
+    fn a_ratio_waiver_does_not_hide_an_accuracy_regression() {
+        let l = limit(Status::Dev, Some("M13-2"), None);
+        let mut x = m("k", 40.0, 10.0);
+        x.ours_snr_db = 120.0;
+        match judged(&l, &x) {
+            Verdict::Fail(d) => assert!(d.contains("accuracy") && d.contains("M13-2"), "{d}"),
+            v => panic!("{v:?}"),
+        }
+        let both = limit(Status::Dev, Some("M13-2"), Some("M13-3"));
+        assert!(matches!(judged(&both, &x), Verdict::Waived(_)));
+        // An accuracy waiver alone does not cover the instruction count either.
+        let acc = limit(Status::Dev, None, Some("M13-3"));
+        assert!(matches!(judged(&acc, &x), Verdict::Fail(d) if d.contains("exceeds")));
+    }
+
+    #[test]
+    fn a_waiver_that_covers_nothing_is_reported() {
+        let l = limit(Status::Dev, Some("M13-2"), Some("M13-3"));
+        match judged(&l, &m("k", 9.0, 10.0)) {
+            Verdict::Warn(w) => {
+                assert!(w.contains("waiver is no longer needed (M13-2)"), "{w}");
+                assert!(
+                    w.contains("accuracy waiver is no longer needed (M13-3)"),
+                    "{w}"
+                );
+            }
+            v => panic!("{v:?}"),
+        }
+    }
+
+    #[test]
+    fn strict_mode_blocks_everything_but_clean_release_entries() {
+        let rel = Limit::release();
+        assert_eq!(
+            blocks_release(Some(&rel), &judged(&rel, &m("k", 9.0, 10.0))),
+            None
+        );
+        assert_eq!(
+            blocks_release(Some(&rel), &judged(&rel, &m("k", 11.2, 10.0))),
+            None
+        );
+        let dev = limit(Status::Dev, None, None);
+        assert!(blocks_release(Some(&dev), &judged(&dev, &m("k", 9.0, 10.0))).is_some());
+        let stale = limit(Status::Release, Some("M13-1"), None);
+        assert!(blocks_release(Some(&stale), &judged(&stale, &m("k", 9.0, 10.0))).is_some());
+        let info = limit(Status::Info, Some("no SSE code in VOLK"), None);
+        assert!(blocks_release(Some(&info), &judged(&info, &m("k", 9.0, 10.0))).is_some());
+        assert!(
+            blocks_release(
+                None,
+                &judge(&CAPS, Rule::Reference, None, &m("k", 1.0, 1.0))
+            )
+            .is_some()
+        );
+        let l = limits(
+            r#"{ "k": { "avx2": { "status": "dev" } }, "j": { "avx2": { "status": "release" } } }"#,
+        );
+        let report = evaluate(
+            &l,
+            Rule::Reference,
+            "avx2",
+            &[m("k", 9.0, 10.0), m("j", 9.0, 10.0)],
+        );
+        assert!(report.ok);
+        assert_eq!(report.blockers.len(), 1, "{:?}", report.blockers);
+        assert!(report.blockers[0].starts_with("k avx2"));
+    }
+
+    #[test]
+    fn run_time_detection_is_judged_against_our_fixed_level() {
+        let mut x = m("k", 10.3, 10.0);
+        x.level = "avx2-runtime".into();
+        assert!(
+            matches!(judge(&CAPS, Rule::OwnLevel, None, &x), Verdict::Fail(d) if d.contains("1.02x"))
+        );
+        x.ours = 10.1;
+        assert_eq!(judge(&CAPS, Rule::OwnLevel, None, &x), Verdict::Pass);
+        let waived = limit(Status::Release, Some("M14-9"), None);
+        x.ours = 10.5;
+        assert!(matches!(
+            judge(&CAPS, Rule::OwnLevel, Some(&waived), &x),
+            Verdict::Waived(_)
+        ));
+        let report = evaluate(
+            &limits("{}"),
+            Rule::OwnLevel,
+            "avx2-runtime",
+            &[m("k", 10.1, 10.0)],
+        );
+        assert!(report.ok);
+        assert_eq!(report.records["k"]["status"], "release");
+    }
+
+    #[test]
     fn an_info_entry_is_reported_but_never_judged() {
         let l = limits(
-            r#"{ "rotate": { "sse2": { "status": "info", "waiver": "VOLK generic is built for AVX2" } } }"#,
+            r#"{ "rotate": { "sse2": { "status": "info", "waiver": "VOLK has no SSE rotator" } } }"#,
         );
-        let report = evaluate(&l, "sse2", &[m("rotate", 400.0, 10.0)]);
+        let report = evaluate(&l, Rule::Reference, "sse2", &[m("rotate", 400.0, 10.0)]);
         assert!(report.ok);
-        assert!(report.lines[0].contains("info") && report.lines[0].contains("AVX2"));
+        assert!(report.lines[0].contains("info") && report.lines[0].contains("SSE rotator"));
         assert_eq!(report.records["rotate"]["verdict"], "info");
         assert_eq!(report.records["rotate"]["status"], "info");
     }
 
     #[test]
-    fn an_informational_level_never_fails() {
-        let report = informational(&[m("fft_4096", 400.0, 10.0)]);
-        assert!(report.ok);
-        assert!(report.lines[0].contains("informational"));
-        assert_eq!(report.records["fft_4096"]["verdict"], "info");
+    fn results_record_the_goal_and_the_informational_comparisons() {
+        let l = limits(r#"{ "k": { "neon": { "status": "release" } } }"#);
+        let mut x = m("k", 9.0, 10.0);
+        x.level = "neon".into();
+        x.extras.push(Extra {
+            label: "goal: cheapest VOLK implementation".into(),
+            ours: 9.0,
+            other: 6.0,
+            compared_with: "volk_x: neon".into(),
+            other_snr_db: Some(120.0),
+        });
+        let report = evaluate(&l, Rule::Reference, "neon", &[x]);
+        assert_eq!(report.records["k"]["goal"], true);
+        assert_eq!(report.records["k"]["informational"][0]["ratio"], 1.5);
+        assert!(report.lines[1].contains("cheapest"), "{:?}", report.lines);
     }
 
     #[test]
@@ -1236,15 +2581,38 @@ mod tests {
 
     #[test]
     fn sde_and_qemu_output_is_parsed() {
-        let mix = "# mix\n*total                                                  12345678\n*total_other 5\n";
-        assert_eq!(parse::sde_mix(mix).unwrap(), 12_345_678);
-        assert!(parse::sde_mix("no totals").is_err());
+        let icount = "$$ TID: 0 ICOUNT: 12345678\n$$ TID: 1 ICOUNT: 2\n";
+        assert_eq!(parse::sde_icount(icount).unwrap(), 12_345_680);
+        assert!(parse::sde_icount("no totals").is_err());
         assert_eq!(
             parse::qemu_insn("cpu 0 insns: 10\ncpu 1 insns: 5\n").unwrap(),
             15
         );
         assert_eq!(parse::qemu_insn("total insns: 99\n").unwrap(), 99);
         assert!(parse::qemu_insn("").is_err());
+    }
+
+    #[test]
+    fn the_median_ignores_one_outlier() {
+        assert_eq!(
+            median(vec![1_985_000, 2_085_000, 1_981_625]),
+            Some(1_985_000)
+        );
+        assert_eq!(median(vec![7]), Some(7));
+        assert_eq!(median(Vec::new()), None);
+    }
+
+    #[test]
+    fn the_third_sde_run_is_made_only_when_the_first_two_differ() {
+        let mut runs = 0;
+        let got = median_of_three(|| {
+            runs += 1;
+            Ok(5)
+        })
+        .unwrap();
+        assert_eq!((got, runs), (5, 2));
+        let mut values = vec![7u64, 100, 5].into_iter();
+        assert_eq!(median_of_three(|| Ok(values.next().unwrap())).unwrap(), 7);
     }
 
     #[test]
@@ -1257,19 +2625,191 @@ mod tests {
             })
             .unwrap();
             assert_eq!(got, need);
-            assert!(calls < 80);
+            // The bisection starts from the last amount that failed, not from 0.
+            assert!(calls <= 2 * 64_u32.saturating_sub(need.leading_zeros()) + 21);
         }
     }
 
     #[test]
-    fn the_plan_covers_the_four_platforms() {
+    fn the_plan_covers_the_four_platforms_with_established_references() {
         for p in ["x86_64", "x86_64-avx512", "aarch64", "wasm32"] {
             assert!(PLANS.iter().any(|plan| plan.platform == p), "{p}");
         }
-        let avx2 = PLANS.iter().find(|p| p.level == "avx2").unwrap();
-        assert_eq!(comparison(avx2, "rotate", Compare::Volk).0, "library");
-        let neon = PLANS.iter().find(|p| p.level == "neon").unwrap();
-        assert_eq!(comparison(neon, "rotate", Compare::Volk).0, "fallback");
-        assert_eq!(comparison(neon, "fft_1024", Compare::RustFft).0, "library");
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        assert_eq!(
+            comparisons(plan("sse2"), kernel("fft_1024")),
+            (
+                Reference::Fftw,
+                vec![Reference::FftwInPlace, Reference::RustFft]
+            )
+        );
+        assert_eq!(
+            comparisons(plan("sse4.2"), kernel("fft_1024")).0,
+            Reference::RustFft
+        );
+        assert_eq!(
+            comparisons(plan("sse2"), kernel("rfft_1024")),
+            (
+                Reference::Fftw,
+                vec![Reference::RustFft, Reference::Fallback]
+            )
+        );
+        assert_eq!(
+            comparisons(plan("avx2"), kernel("rfft_1024")),
+            (Reference::RustFft, vec![Reference::Fallback])
+        );
+        assert_eq!(
+            comparisons(plan("neon"), kernel("rotate")).0,
+            Reference::Volk
+        );
+        assert_eq!(
+            comparisons(plan("neon"), kernel("rotate")).1,
+            vec![Reference::VolkCheapest]
+        );
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("mag_sq")).0,
+            Reference::Volk
+        );
+        assert_eq!(
+            comparisons(plan("neon"), kernel("fft_cq15_1024")),
+            (Reference::KissFft, vec![Reference::Ne10])
+        );
+        assert_eq!(
+            comparisons(plan("avx2"), kernel("fm_mod")).0,
+            Reference::Fallback
+        );
+        assert_eq!(
+            comparisons(plan("avx2-runtime"), kernel("fir")).0,
+            Reference::OwnLevel("avx2")
+        );
+    }
+
+    #[test]
+    fn both_runs_of_a_measurement_have_arguments_of_the_same_length() {
+        let variant = Variant {
+            samples: 64,
+            misaligned: true,
+            explicit_n: true,
+        };
+        let empty = run_args("fir", "ours", 0, 1024, &variant);
+        let full = run_args("fir", "ours", 1024, 1024, &variant);
+        assert_eq!(
+            empty,
+            ["run", "fir", "ours", "0000", "--n", "64", "--misaligned"]
+        );
+        assert_eq!(
+            full,
+            ["run", "fir", "ours", "1024", "--n", "64", "--misaligned"]
+        );
+    }
+
+    #[test]
+    fn the_measurement_build_remaps_the_paths_of_the_checkout() {
+        let flags = encoded_rustflags(
+            "-C target-cpu=x86-64-v3",
+            Path::new("/work/my tree"),
+            Some(Path::new("/home/u/.cargo")),
+        );
+        let args: Vec<&str> = flags.to_str().unwrap_or_default().split('\u{1f}').collect();
+        assert_eq!(
+            args,
+            [
+                "-C",
+                "target-cpu=x86-64-v3",
+                "--remap-path-prefix=/work/my tree=/sdrk",
+                "--remap-path-prefix=/home/u/.cargo=/cargo",
+            ]
+        );
+        let without_flags = encoded_rustflags("", Path::new("/w"), None);
+        assert_eq!(without_flags, "--remap-path-prefix=/w=/sdrk");
+    }
+
+    #[test]
+    fn the_kernel_table_names_the_kernels_of_the_measurement_binary() {
+        let source = include_str!("../../benches/kernels/src/lib.rs");
+        let table = source
+            .split("pub const KERNELS")
+            .nth(1)
+            .and_then(|t| t.split("];").next())
+            .unwrap();
+        let mut binary: Vec<&str> = table.split('"').skip(1).step_by(2).collect();
+        binary.sort_unstable();
+        let mut ours: Vec<&str> = KERNELS.iter().map(|k| k.name).collect();
+        ours.sort_unstable();
+        assert_eq!(binary, ours);
+    }
+
+    #[test]
+    fn the_kernel_table_is_consistent() {
+        let names: Vec<&str> = KERNELS.iter().map(|k| k.name).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len());
+        for spec in &KERNELS {
+            let complex = matches!(spec.family, Family::FftC32 | Family::FftCq15);
+            let real = spec.family == Family::RealFft;
+            assert_eq!(complex, spec.name.starts_with("fft_"), "{}", spec.name);
+            assert_eq!(real, spec.name.starts_with("rfft_"), "{}", spec.name);
+            let fft = spec.family.is_fft();
+            assert_eq!(fft, complex || real);
+            // The FFT sizes are fixed by the name; their buffers are always aligned.
+            assert!(!(fft && (spec.misaligned || spec.small_n)), "{}", spec.name);
+        }
+    }
+
+    #[test]
+    fn selecting_a_level_adds_the_level_it_is_judged_against() {
+        let levels = |l: &[&str]| -> Vec<&str> {
+            let l: Vec<String> = l.iter().map(ToString::to_string).collect();
+            select_plans("x86_64", &l)
+                .unwrap()
+                .iter()
+                .map(|p| p.level)
+                .collect()
+        };
+        assert_eq!(levels(&["avx2-runtime"]), vec!["avx2", "avx2-runtime"]);
+        assert_eq!(levels(&["sse2"]), vec!["sse2"]);
+        assert_eq!(levels(&[]).len(), 4);
+        assert!(select_plans("x86_64", &["neon".to_string()]).is_err());
+        assert!(select_plans("riscv", &[]).is_err());
+    }
+
+    #[test]
+    fn options_are_parsed() {
+        let o = Options::parse(&[
+            "--platform",
+            "aarch64",
+            "--kernel",
+            "fir",
+            "--strict",
+            "--no-variants",
+        ])
+        .unwrap();
+        assert_eq!(o.platform.as_deref(), Some("aarch64"));
+        assert_eq!(o.kernels, vec!["fir".to_string()]);
+        assert!(o.strict && !o.variants && o.write);
+        assert!(Options::parse(&["--platform"]).is_err());
+        assert!(Options::parse(&["--fast"]).is_err());
+    }
+
+    #[test]
+    fn the_cpuid_definitions_hide_everything_above_their_level() {
+        let leaf1_ecx = |text: &str| -> u32 {
+            let line = text.lines().find(|l| l.starts_with("00000001")).unwrap();
+            u32::from_str_radix(line.split_whitespace().nth(5).unwrap(), 16).unwrap()
+        };
+        // SSE3 (bit 0), SSSE3 (9), SSE4.1 (19), SSE4.2 (20), AVX (28): none at sse2.
+        let sse2 = leaf1_ecx(CPUID_SSE2);
+        assert_eq!(sse2 & (1 | 1 << 9 | 1 << 19 | 1 << 20 | 1 << 28), 0);
+        // OSXSAVE (27) keeps cpu_features off the host's /proc/cpuinfo.
+        assert_ne!(sse2 & 1 << 27, 0);
+        let v2 = leaf1_ecx(CPUID_SSE42);
+        assert_eq!(
+            v2 & (1 | 1 << 9 | 1 << 19 | 1 << 20 | 1 << 23),
+            1 | 1 << 9 | 1 << 19 | 1 << 20 | 1 << 23
+        );
+        assert_eq!(v2 & (1 << 28 | 1 << 12), 0, "no AVX, no FMA");
     }
 }

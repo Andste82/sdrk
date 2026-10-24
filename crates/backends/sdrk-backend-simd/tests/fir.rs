@@ -13,7 +13,7 @@
 
 mod common;
 
-use common::{Rng, bits, c32_noise, chunks, cq15_noise};
+use common::{Rng, bits, c32_noise, chunks, cq15_noise, snr_db, taps_f32};
 use sdrk_backend_simd::Simd;
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
 use sdrk_core::kernels::filter::{Fir, FirState};
@@ -21,10 +21,6 @@ use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk_core::{C32, CQ15, Fallback, Q15};
 
 const TAP_COUNTS: [usize; 9] = [1, 2, 3, 8, 31, 64, 127, 256, 300];
-
-fn taps_f32(rng: &mut Rng, n: usize) -> Vec<f32> {
-    (0..n).map(|_| rng.unit() / (n as f32).sqrt()).collect()
-}
 
 fn taps_q15(rng: &mut Rng, n: usize, extreme: bool) -> Vec<Q15> {
     (0..n)
@@ -36,20 +32,6 @@ fn taps_q15(rng: &mut Rng, n: usize, extreme: bool) -> Vec<Q15> {
             }
         })
         .collect()
-}
-
-fn snr_db(want: &[C32], got: &[C32]) -> f64 {
-    let (mut sig, mut err) = (0f64, 0f64);
-    for (w, g) in want.iter().zip(got) {
-        let (wr, wi) = (f64::from(w.re), f64::from(w.im));
-        sig += wr * wr + wi * wi;
-        err += (wr - f64::from(g.re)).powi(2) + (wi - f64::from(g.im)).powi(2);
-    }
-    if err == 0.0 {
-        f64::INFINITY
-    } else {
-        10.0 * (sig / err).log10()
-    }
 }
 
 #[test]
@@ -259,7 +241,8 @@ fn resample_and_interpolate_match_the_fallback() {
         (5, 7),
         (160, 147),
     ] {
-        for &n in &[1usize, 4, 31, 64, 200] {
+        // 600 taps: several tap blocks per branch, so the strided outputs are also added to.
+        for &n in &[1usize, 4, 31, 64, 200, 600] {
             for room in [0usize, 5, 100_000] {
                 let len = 120;
                 let hist = n.div_ceil(up);

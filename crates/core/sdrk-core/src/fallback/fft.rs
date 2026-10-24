@@ -8,7 +8,7 @@ use crate::Fallback;
 use crate::error::{Error, Result};
 use crate::kernels::check_len;
 use crate::kernels::fft::{
-    Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling, check_real_lengths,
+    Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling, irfft_with, rfft_with,
 };
 use crate::num::{round_shift, sat16};
 use crate::types::{C32, CQ15, Q15};
@@ -184,15 +184,6 @@ impl Fft<CQ15> for Fallback {
     }
 }
 
-fn at(x: &[C32], i: usize) -> Result<C32> {
-    x.get(i).copied().ok_or_else(tw_error)
-}
-
-/// Complex product `a * b` in f32 without FMA (the order of the specification).
-fn cmul(a: C32, b: C32) -> C32 {
-    C32::new(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re)
-}
-
 impl RealFft for Fallback {
     fn rfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(
         &self,
@@ -201,39 +192,7 @@ impl RealFft for Fallback {
         output: &mut [C32],
         scratch: &mut [C32],
     ) -> Result<FftScale> {
-        let n = plan.len();
-        check_real_lengths(n, input.len(), output.len(), scratch.len())?;
-        let h = n / 2;
-        for (z, pair) in scratch.iter_mut().zip(input.chunks_exact(2)) {
-            if let [re, im] = *pair {
-                *z = C32::new(re, im);
-            }
-        }
-        Fft::<C32>::fft(
-            self,
-            &plan.inner,
-            scratch,
-            Direction::Forward,
-            Scaling::Default,
-        )?;
-        let post = plan.post.as_ref();
-        let z: &[C32] = scratch;
-        for (k, out) in output.iter_mut().enumerate() {
-            let zk = at(z, if k == h { 0 } else { k })?;
-            let zm = at(z, (h - k) % h)?;
-            // E = (Z[k] + conj(Z[N/2-k])) / 2, O = (Z[k] - conj(Z[N/2-k])) / 2.
-            let e = C32::new((zk.re + zm.re) * 0.5, (zk.im - zm.im) * 0.5);
-            let o = C32::new((zk.re - zm.re) * 0.5, (zk.im + zm.im) * 0.5);
-            let w = if k == h {
-                C32::new(-1.0, 0.0)
-            } else {
-                at(post, k)?
-            };
-            let p = cmul(w, o);
-            // X[k] = E - j * p.
-            *out = C32::new(e.re + p.im, e.im - p.re);
-        }
-        Ok(FftScale { exponent: 0 })
+        rfft_with(self, plan, input, output, scratch)
     }
 
     fn irfft<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(
@@ -243,41 +202,7 @@ impl RealFft for Fallback {
         output: &mut [f32],
         scratch: &mut [C32],
     ) -> Result<FftScale> {
-        let n = plan.len();
-        check_real_lengths(n, output.len(), input.len(), scratch.len())?;
-        let h = n / 2;
-        let post = plan.post.as_ref();
-        for (k, z) in scratch.iter_mut().enumerate() {
-            let mut xk = at(input, k)?;
-            let mut xm = at(input, h - k)?;
-            // Bin 0 and bin N/2 are real by definition.
-            if k == 0 {
-                xk.im = 0.0;
-                xm.im = 0.0;
-            }
-            let e = C32::new((xk.re + xm.re) * 0.5, (xk.im - xm.im) * 0.5);
-            let d = C32::new((xk.re - xm.re) * 0.5, (xk.im + xm.im) * 0.5);
-            let w = at(post, k)?;
-            let d = cmul(d, C32::new(w.re, -w.im));
-            // Z[k] = E + j * D.
-            *z = C32::new(e.re - d.im, e.im + d.re);
-        }
-        Fft::<C32>::fft(
-            self,
-            &plan.inner,
-            scratch,
-            Direction::Inverse,
-            Scaling::Default,
-        )?;
-        for (pair, z) in output.chunks_exact_mut(2).zip(scratch.iter()) {
-            if let [even, odd] = pair {
-                *even = z.re;
-                *odd = z.im;
-            }
-        }
-        Ok(FftScale {
-            exponent: n.trailing_zeros() as i32,
-        })
+        irfft_with(self, plan, input, output, scratch)
     }
 }
 

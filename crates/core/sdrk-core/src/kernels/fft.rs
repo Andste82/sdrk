@@ -373,6 +373,16 @@ impl<Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>> RealFftPlan<Tw, Tw2> {
     pub fn is_empty(&self) -> bool {
         false
     }
+
+    /// The plan of the inner complex FFT of `N / 2` points.
+    pub fn inner(&self) -> &FftPlan<C32, Tw> {
+        &self.inner
+    }
+
+    /// The twiddles of the post-processing: `e^(-j 2 pi k / N)` at index `k < N / 2`.
+    pub fn post_twiddles(&self) -> &[C32] {
+        self.post.as_ref()
+    }
 }
 
 /// The real-input FFT of `f32` data and its inverse.
@@ -424,4 +434,148 @@ pub(crate) fn check_real_lengths(
     crate::kernels::check_len(n, real_len)?;
     crate::kernels::check_len(n / 2 + 1, bins_len)?;
     crate::kernels::check_len(n / 2, scratch_len)
+}
+
+/// The error of a violated length invariant of [`rfft_with`] and [`irfft_with`] (the lengths are
+/// checked by `check_real_lengths` first).
+fn bins_error() -> Error {
+    Error::Internal("rfft bins")
+}
+
+/// `x[i]`, or the error of [`bins_error`].
+#[inline]
+fn at(x: &[C32], i: usize) -> Result<C32> {
+    x.get(i).copied().ok_or_else(bins_error)
+}
+
+/// Complex product `a * b` in f32 without FMA (the order of the specification).
+#[inline]
+fn cmul(a: C32, b: C32) -> C32 {
+    C32::new(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re)
+}
+
+/// [`RealFft::rfft`] with the inner `N / 2`-point transform of `fft`: the fallback passes itself,
+/// and a backend can pass its own `C32` FFT (and compile this code at its level; the SIMD backend
+/// has a post-processing of its own for `rfft` and uses [`irfft_with`]). The packing and the
+/// post-processing are those of the fallback, so the result equals the fallback's when `fft`
+/// does.
+///
+/// # Errors
+/// As [`RealFft::rfft`], and the errors of `fft`.
+#[allow(
+    clippy::inline_always,
+    reason = "a backend may call it at its dispatched level, whose target features it must inherit"
+)]
+#[allow(
+    clippy::manual_midpoint,
+    clippy::many_single_char_names,
+    reason = "`(a + b) * 0.5` is the specified, exact halving; the names are those of the formulas"
+)]
+#[inline(always)]
+pub fn rfft_with<F: Fft<C32>, Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(
+    fft: &F,
+    plan: &RealFftPlan<Tw, Tw2>,
+    input: &[f32],
+    output: &mut [C32],
+    scratch: &mut [C32],
+) -> Result<FftScale> {
+    let n = plan.len();
+    check_real_lengths(n, input.len(), output.len(), scratch.len())?;
+    let h = n / 2;
+    for (z, pair) in scratch.iter_mut().zip(input.chunks_exact(2)) {
+        if let [re, im] = *pair {
+            *z = C32::new(re, im);
+        }
+    }
+    Fft::<C32>::fft(
+        fft,
+        &plan.inner,
+        scratch,
+        Direction::Forward,
+        Scaling::Default,
+    )?;
+    let post = plan.post.as_ref();
+    let z: &[C32] = scratch;
+    let z0 = at(z, 0)?;
+    // X[k] from Z[k], Z[N/2 - k] and the twiddle `w` (bins 0 and N/2 use Z[0] twice).
+    let bin = |zk: C32, zm: C32, w: C32| {
+        // E = (Z[k] + conj(Z[N/2-k])) / 2, O = (Z[k] - conj(Z[N/2-k])) / 2.
+        let e = C32::new((zk.re + zm.re) * 0.5, (zk.im - zm.im) * 0.5);
+        let o = C32::new((zk.re - zm.re) * 0.5, (zk.im + zm.im) * 0.5);
+        let p = cmul(w, o);
+        // X[k] = E - j * p.
+        C32::new(e.re + p.im, e.im - p.re)
+    };
+    let (first, rest) = output.split_first_mut().ok_or_else(bins_error)?;
+    let (last, middle) = rest.split_last_mut().ok_or_else(bins_error)?;
+    *first = bin(z0, z0, at(post, 0)?);
+    *last = bin(z0, z0, C32::new(-1.0, 0.0));
+    // Bins 1 .. N/2 - 1 in one pass without index checks: Z[k] forwards, Z[N/2 - k] backwards.
+    let zs = z.get(1..h).ok_or_else(bins_error)?;
+    let w = post.get(1..h).ok_or_else(bins_error)?;
+    for (((out, &zk), &zm), &w) in middle.iter_mut().zip(zs).zip(zs.iter().rev()).zip(w) {
+        *out = bin(zk, zm, w);
+    }
+    Ok(FftScale { exponent: 0 })
+}
+
+/// [`RealFft::irfft`] with the inner `N / 2`-point transform of `fft` (see [`rfft_with`]).
+///
+/// # Errors
+/// As [`RealFft::irfft`], and the errors of `fft`.
+#[allow(
+    clippy::inline_always,
+    reason = "a backend may call it at its dispatched level, whose target features it must inherit"
+)]
+#[allow(
+    clippy::manual_midpoint,
+    clippy::many_single_char_names,
+    reason = "`(a + b) * 0.5` is the specified, exact halving; the names are those of the formulas"
+)]
+#[inline(always)]
+pub fn irfft_with<F: Fft<C32>, Tw: AsRef<[C32]>, Tw2: AsRef<[C32]>>(
+    fft: &F,
+    plan: &RealFftPlan<Tw, Tw2>,
+    input: &[C32],
+    output: &mut [f32],
+    scratch: &mut [C32],
+) -> Result<FftScale> {
+    let n = plan.len();
+    check_real_lengths(n, output.len(), input.len(), scratch.len())?;
+    let h = n / 2;
+    let post = plan.post.as_ref();
+    // Z[k] from X[k], X[N/2 - k] and the twiddle `w`.
+    let packed = |xk: C32, xm: C32, w: C32| {
+        let e = C32::new((xk.re + xm.re) * 0.5, (xk.im - xm.im) * 0.5);
+        let d = C32::new((xk.re - xm.re) * 0.5, (xk.im + xm.im) * 0.5);
+        let d = cmul(d, C32::new(w.re, -w.im));
+        // Z[k] = E + j * D.
+        C32::new(e.re - d.im, e.im + d.re)
+    };
+    // Bin 0 and bin N/2 are real by definition.
+    let (x0, xh) = (at(input, 0)?, at(input, h)?);
+    let (first, rest) = scratch.split_first_mut().ok_or_else(bins_error)?;
+    *first = packed(C32::new(x0.re, 0.0), C32::new(xh.re, 0.0), at(post, 0)?);
+    // Bins 1 .. N/2 - 1 in one pass without index checks: X[k] forwards, X[N/2 - k] backwards.
+    let xs = input.get(1..h).ok_or_else(bins_error)?;
+    let w = post.get(1..h).ok_or_else(bins_error)?;
+    for (((z, &xk), &xm), &w) in rest.iter_mut().zip(xs).zip(xs.iter().rev()).zip(w) {
+        *z = packed(xk, xm, w);
+    }
+    Fft::<C32>::fft(
+        fft,
+        &plan.inner,
+        scratch,
+        Direction::Inverse,
+        Scaling::Default,
+    )?;
+    for (pair, z) in output.chunks_exact_mut(2).zip(scratch.iter()) {
+        if let [even, odd] = pair {
+            *even = z.re;
+            *odd = z.im;
+        }
+    }
+    Ok(FftScale {
+        exponent: n.trailing_zeros() as i32,
+    })
 }

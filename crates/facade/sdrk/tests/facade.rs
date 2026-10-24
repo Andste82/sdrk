@@ -380,18 +380,8 @@ fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
     Sdrk.mag_sq(&c32, &mut a)?;
     Fallback.mag_sq(&c32, &mut b)?;
-    if cfg!(all(
-        feature = "relaxed-simd",
-        target_arch = "wasm32",
-        target_feature = "relaxed-simd"
-    )) {
-        // Relaxed multiply-add: not bit-exact; at most a few ulp apart.
-        for (x, y) in a.iter().zip(&b) {
-            assert!((x - y).abs() <= 4.0 * f32::EPSILON * y.abs(), "{x} {y}");
-        }
-    } else {
-        assert_eq!(a, b);
-    }
+    // No multiply-add, so bit-exact also in the relaxed WASM build.
+    assert_eq!(a, b);
     let (mut a, mut b) = (vec![Q15(0); 200], vec![Q15(0); 200]);
     Sdrk.mag_sq(&cq, &mut a)?;
     Fallback.mag_sq(&cq, &mut b)?;
@@ -471,10 +461,12 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
         ("scale", SampleType::C32),
         ("window", SampleType::C32),
         ("deemphasis", SampleType::F32),
-        ("rfft", SampleType::F32),
         ("dot", SampleType::C32),
     ] {
         assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
     }
     assert_eq!(backend_for("ddc", SampleType::C32), "chained");
+    // The real FFTs run on the backend of the complex FFT.
+    assert_eq!(backend_for("rfft", SampleType::F32), expected);
+    assert_eq!(backend_for("irfft", SampleType::F32), expected);
 }

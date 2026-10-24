@@ -37,20 +37,21 @@ The workspace member `sdrk-system-tests` (`tests/system`) closes phase 3:
 
 ## The SIMD backend in the suite and in CI
 
-The suite of `sdrk-testkit` runs through the facade, so every case exercises the SIMD backend where the platform has one. Ten cases `backend_vs_fallback_*` (`convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `mag_sq`, `quad_demod`, `fm_mod`, `fft`) cover every accelerated kernel and type with the lengths 0, 1, 3, 15, 16, 17, 255 and 4096 (the lengths that fit the arena of the tier: the quick tier takes the short ones), extreme inputs (full scale, -32768, NaN and infinity in `f32` where defined) and, for the stateful kernels, random chunk plans that must give the bits of one call. Bit-exact kernels are compared bit for bit with the fallback; tolerance kernels with the contract of `docs/kernels.md` against the reference (`rotate` 120 dB, `fir` family 110 dB, `quad_demod` 100 dB / 2 LSB, `fft` 110 dB, `fm_mod` 120 dB).
+The suite of `sdrk-testkit` runs through the facade, so every case exercises the SIMD backend where the platform has one. Ten cases `backend_vs_fallback_*` (`convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `mag_sq`, `quad_demod`, `fm_mod`, `fft`) cover every accelerated kernel and type with the lengths 0, 1, 3, 15, 16, 17, 255 and 4096 (the lengths that fit the arena of the tier: the quick tier takes the short ones), extreme inputs (full scale, -32768, NaN and infinity in `f32` where defined) and, for the stateful kernels, random chunk plans that must give the bits of one call. Bit-exact kernels are compared bit for bit with the fallback; tolerance kernels with the contract of `docs/kernels.md` against the reference (`rotate` 120 dB, `fir` family 110 dB, `quad_demod` 100 dB / 2 LSB, `fft` 110 dB for `C32`; for `CQ15` the exact transform is the measure, fixed scaling within 1 dB of the fallback with its exponent and block floating point checked by the reference cases of M07, `fm_mod` 120 dB).
 
-The tests of the crate `sdrk-backend-simd` (`crates/backends/sdrk-backend-simd/tests`) compare the kernels with the fallback for all lengths of the vector tails, with `LENGTHS = 0, 1, 2, 3, 7, 15, 16, 17, 31, 255, 257, 4096`, with random chunk plans, extreme inputs and invalid calls (same error values as the fallback). They run at the level the build selects: the default build at SSE2, `--features std` at the best level of the CPU, `-C target-cpu=...` at the level of the flag.
+The tests of the crate `sdrk-backend-simd` (`crates/backends/sdrk-backend-simd/tests`) compare the kernels with the fallback for all lengths of the vector tails, with `LENGTHS = 0, 1, 2, 3, 7, 15, 16, 17, 31, 255, 257, 4096`, with random chunk plans, extreme inputs and invalid calls (same error values as the fallback). They run at the level the build selects: the default build at SSE2, `--features std` at the best level of the CPU, `-C target-cpu=...` at the level of the flag. A workspace run enables `std` of the backend (the pipeline, `sdrk-testkit/std` and the system tests ask for it), so it always detects the level at run time; the static levels are tested with the backend and the facade alone (`cargo test -p sdrk-backend-simd -p sdrk`). The backend alone (without `-p sdrk`) also runs its own default build, without the static tables `nco-tables` and `fft-tables`, which the facade switches on. `SDRK_EXPECT_LEVEL=<name>` makes `tests/api.rs` check that `level_name()` is that level; every CI step that tests a level sets it, so a build or an emulator that selects another level fails instead of passing at the wrong one. The exhaustive test of `convert_out` (`convert_out_exhaustive_every_f32`, every `f32` bit pattern against the fallback, the proof of the per-byte CU8 bound) is `#[ignore]` and runs nightly in the job `exhaustive`; `SDRK_SWEEP_PART=k/n` runs the `k`-th of `n` interleaved parts, each of which covers every exponent.
 
 `sdrk::backend_for` is tested in `crates/facade/sdrk/tests/facade.rs`: every accelerated kernel reports `simd` when `sdrk::SIMD_BACKEND` is true and `fallback` otherwise (`--cfg sdrk_fallback_only`, no `simd` feature, or a target without SIMD).
 
 | CI job | What |
 | --- | --- |
-| `tier1` | the whole suite with the default `simd` backend on three hosts, a second run with `-C target-cpu=x86-64-v3` on x86-64 hosts, a third run with `RUSTFLAGS="--cfg sdrk_fallback_only"` so that the fallback stays covered |
-| `avx512-sde` | `cargo test --workspace --profile emulated` with `-C target-cpu=sapphirerapids` under Intel SDE (`sde64 -spr --` as the cargo runner) |
-| `aarch64-qemu` | `cargo test --workspace --profile emulated` cross-compiled for `aarch64-unknown-linux-gnu` under `qemu-aarch64` |
-| `wasm-wasmtime` | the crates that build for WASI (`sdrk-device`, `sdrk-core`, `sdrk-backend-simd`, `sdrk`, `sdrk-blocks`) for `wasm32-wasip1` under wasmtime, with `+simd128`, without it and with `+simd128,+relaxed-simd` (feature `sdrk/relaxed-simd`), with wasmtime's default stack |
+| `tier1` | the whole suite with the default `simd` backend on three hosts (run-time detection, see above), a second run with `-C target-cpu=x86-64-v3` on x86-64 hosts, the backend and the facade alone with the level fixed at compile time at `x86-64`, `x86-64-v2` and `x86-64-v3` on x86-64 hosts, the backend alone without its static tables at `x86-64` and `x86-64-v3`, on Linux x86-64 the backend and the facade for 32-bit x86 (`i686-unknown-linux-gnu`, `gcc-multilib`) at `x86-64` and `x86-64-v3`, with the facade's defaults (`nco-tables` only) and with `sdrk/fft-tables`, plus clippy for that target, and a run with `RUSTFLAGS="--cfg sdrk_fallback_only"` so that the fallback stays covered |
+| `avx512-sde` | `cargo test --workspace --profile emulated` with `-C target-cpu=sapphirerapids` under Intel SDE (`sde64 -spr --` as the cargo runner); the backend alone with AVX-512 fixed at compile time; the backend with `--features std` on the SSE2 and SSE4.2 CPUIDs of `cargo xtask count` (`cargo xtask sde-cpuid`, `-cpuid_in ... -chip_check_cpuid 1`), the only runs of the SSE2 and SSE4.2 arms of the run-time dispatch |
+| `aarch64-qemu` | `cargo test --workspace --profile emulated` cross-compiled for `aarch64-unknown-linux-gnu` under `qemu-aarch64`, and the backend alone without its static tables |
+| `wasm-wasmtime` | the crates that build for WASI (`sdrk-device`, `sdrk-core`, `sdrk-backend-simd`, `sdrk`, `sdrk-blocks`) for `wasm32-wasip1` under wasmtime, with `+simd128`, without it, with `+simd128,+relaxed-simd` (feature `sdrk/relaxed-simd`) and with `+simd128` and the opt-in static tables (features `sdrk/nco-tables,sdrk/fft-tables`), with wasmtime's default stack |
 | `wasm-bindings` | the WebAssembly package: `cargo xtask wasm-pkg --relaxed`, `wasm-bindgen-test` in Node, headless Chrome and headless Firefox for the variants, `node --test` on the packed tarball; Windows and arm64 build the package only ([wasm.md](wasm.md)) |
 | `count` | `cargo xtask count --platform x86_64` against VOLK and rustfft; nightly also AVX-512, AArch64, wasm32 and the pipeline ([performance.md](performance.md)) |
+| `exhaustive` | nightly: `convert_out_exhaustive_every_f32` (`cargo test --release -p sdrk-backend-simd --test convert_out_sweep -- --ignored`) natively at `x86-64`, `x86-64-v2` and `x86-64-v3`, under `qemu-aarch64`, under wasmtime with `+simd128`, and under SDE `-spr` in four jobs of one part each (`SDRK_SWEEP_PART`) |
 
 Run the same commands locally:
 
@@ -58,6 +59,17 @@ The two emulator jobs use the profile `emulated` (optimised like release but wit
 
 ```sh
 RUSTFLAGS="--cfg sdrk_fallback_only" cargo test --workspace --all-features --target-dir target/fallback-only
+SDRK_EXPECT_LEVEL=sse4.2 RUSTFLAGS="-C target-cpu=x86-64-v2" cargo test -p sdrk-backend-simd -p sdrk \
+    --features sdrk/fft-tables,sdrk/nco-tables --target-dir target/static-x86-64-v2
+SDRK_EXPECT_LEVEL=avx2 RUSTFLAGS="-C target-cpu=x86-64-v3" cargo test -p sdrk-backend-simd \
+    --target-dir target/backend-no-tables-x86-64-v3
+SDRK_EXPECT_LEVEL=sse2 RUSTFLAGS="-C target-cpu=x86-64" cargo test --target i686-unknown-linux-gnu \
+    -p sdrk-backend-simd -p sdrk --features sdrk/fft-tables --target-dir target/i686-x86-64
+cargo xtask sde-cpuid sse2 "$PWD/target/cpuid-sse2.def"
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sde64 -cpuid_in $PWD/target/cpuid-sse2.def -chip_check_cpuid 1 --" \
+    cargo test -p sdrk-backend-simd --features std,fft-tables,nco-tables --profile emulated \
+    --target x86_64-unknown-linux-gnu --target-dir target/sde-runtime
+cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables --test convert_out_sweep -- --ignored
 RUSTFLAGS="-C target-cpu=sapphirerapids" CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sde64 -spr --" \
     cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter \
     --target x86_64-unknown-linux-gnu --target-dir target/avx512
@@ -69,6 +81,8 @@ RUSTFLAGS="-C target-feature=+simd128" CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmti
     cargo test --target wasm32-wasip1 -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
 RUSTFLAGS="-C target-feature=+simd128,+relaxed-simd" CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --" \
     cargo test --target wasm32-wasip1 -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/relaxed-simd
+RUSTFLAGS="-C target-feature=+simd128" CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --" \
+    cargo test --target wasm32-wasip1 -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/nco-tables,sdrk/fft-tables
 cargo xtask wasm-pkg --relaxed && cargo xtask wasm-test --env node --variant all
 node --test "bindings/wasm/js-tests/*.test.mjs"
 ```

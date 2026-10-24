@@ -36,6 +36,8 @@ The FIR group delay is exact for symmetric (linear-phase) taps. A filter with as
 
 Output samples are a function of the absolute input position only, never of how the input was cut into calls: the same input produces bit-identical output whether it arrives in one block or in chunks of any size. `rotate` and `fir` keep their state (`Nco`, `FirState`) between calls and are tested with `check_block_invariance` over random chunk plans; the same holds for `fir_decimate`, `resample`, `quad_demod`, `deemphasis` and `dc_block` (20 plans each).
 
+The SIMD `rotate` for `C32` ([backends.md](backends.md)) cuts the stream into blocks of `B` samples (a power of two: 512 at SSE, NEON and SIMD128, 1024 at AVX2, 2048 at AVX-512, or the period of the phase sequence if that is shorter) at absolute positions. The position of a sample in its block is not stored: with `inc = 2^t o` (`o` odd) it is `((phase >> t) * o^-1) mod B`, a function of the phase and the increment alone. Every quantity a call computes once (lane offsets, table entries, step) is a function of the increment alone, and table entries are computed only for the positions a call covers but always by the same formula. So every output sample is a function of `(phase_n, inc)` and the input sample, and the output is bit-identical for any split into calls. Its bits can depend on the increment as well as on the phase: after a retune (`set_frequency`) the sample whose phase was still advanced with the old increment can differ from an unchanged run by rounding (about 1e-7). It is numerically still the old-frequency rotation, and the new frequency acts from the next sample on. The pipeline test `time_events.rs` (`a_timed_change_is_exact_at_decimation_1`) therefore checks the first output that changes by more than 1e-6 of the peak (the real change is 8.7e-6), not the first bit difference.
+
 ## Rate-changing kernels
 
 `fir_decimate`, `resample` and `resample_real` return `Progress { consumed, produced }`. They consume input only as far as the output space allows and the caller resubmits `input[consumed..]`; the output depends only on the absolute input position, so the sequence of outputs is the same for any block size and any output buffer size. After `n` input samples since a reset the decimator has produced `ceil(n / M)` outputs and the resampler `floor((n * L - 1) / M) + 1` (see `docs/kernels.md`). A resampler whose output buffer ran full keeps the remaining outputs pending; they are produced by the next call (also with an empty input).
@@ -64,7 +66,7 @@ output[n]   = input[n] * exp(j * 2 * pi * phase_n / 2^32)
 - A call to `rotate` advances the phase by exactly `input.len()` samples (also when called with an empty slice, which changes nothing).
 - Frequencies are given in hertz together with the sample `Rate`; NaN and infinity are rejected with `InvalidParameter`.
 
-Rotating by the cosine/sine of the phase uses a 4096-entry table with linear interpolation; the table is generated at build time (see `docs/kernels.md`).
+In the fallback, rotating by the cosine/sine of the phase uses a 4096-entry table with linear interpolation; the table is generated at build time (see `docs/kernels.md`). The reference evaluates `cos` and `sin` of the phase in f64. The SIMD backend evaluates the oscillator per block instead (the block oscillator of [backends.md](backends.md), see [Block-size invariance](#block-size-invariance)).
 
 ## Blocks
 

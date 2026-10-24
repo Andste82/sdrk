@@ -9,25 +9,11 @@
 
 mod common;
 
-use common::{LENGTHS, Rng, bits, c32_noise, chunks, cq15_noise};
+use common::{LENGTHS, Rng, bits, c32_noise, chunks, cq15_noise, snr_db};
 use sdrk_backend_simd::Simd;
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
 use sdrk_core::{C32, CQ15, Fallback, Q15, Rate, Reference};
-
-fn snr_db(want: &[C32], got: &[C32]) -> f64 {
-    let (mut sig, mut err) = (0f64, 0f64);
-    for (w, g) in want.iter().zip(got) {
-        let (wr, wi) = (f64::from(w.re), f64::from(w.im));
-        sig += wr * wr + wi * wi;
-        err += (wr - f64::from(g.re)).powi(2) + (wi - f64::from(g.im)).powi(2);
-    }
-    if err == 0.0 {
-        f64::INFINITY
-    } else {
-        10.0 * (sig / err).log10()
-    }
-}
 
 #[test]
 fn rotate_c32_meets_the_contract() {

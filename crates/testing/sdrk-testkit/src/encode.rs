@@ -8,8 +8,8 @@
 //!
 //! Value mapping (per component): `amplitude = (raw - offset) / full_scale`
 //! with `offset = 127.5` for `U8` and 0 otherwise. Encoding is the inverse:
-//! `raw = floor(amplitude * full_scale + offset + 0.5)` (round half up),
-//! saturated to the range of `bits`, shifted left for MSB alignment.
+//! `raw` is `amplitude * full_scale + offset` rounded to the nearest integer
+//! with ties to even, saturated to the range of `bits`, shifted left for MSB alignment.
 //! `swap_iq` puts Q first in every pair (for planar data: the first half holds
 //! Q). `Endian::Big` reverses the bytes of multi-byte containers. Packed
 //! containers pack their values LSB-first. `F32` is stored unscaled.
@@ -144,10 +144,17 @@ fn sign_extend(v: u64, bits: u32) -> i64 {
     ((v << s) as i64) >> s
 }
 
-/// Amplitude to raw integer, saturated to the range of `bits`.
+/// Amplitude to raw integer (nearest, ties to even), saturated to the range of `bits`.
 fn quantize(spec: &Spec, x: f64) -> i64 {
     let x = if x.is_nan() { 0.0 } else { x };
-    let v = libm::floor(x * spec.full_scale + spec.offset() + 0.5);
+    let v = x * spec.full_scale + spec.offset();
+    // Written out instead of a library rounding function; `v - f` is exact.
+    let f = libm::floor(v);
+    let v = if v - f > 0.5 || (v - f == 0.5 && libm::fmod(f, 2.0) != 0.0) {
+        f + 1.0
+    } else {
+        f
+    };
     let (lo, hi) = if spec.signed {
         let half = 1i64 << (spec.bits - 1);
         (-half, half - 1)

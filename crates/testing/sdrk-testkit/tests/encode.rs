@@ -136,7 +136,8 @@ fn round_trip_holds_for_swapped_big_endian_and_msb_variants() {
 
 #[test]
 fn spot_values_of_the_milestone() {
-    // CU8: 0.0 -> 127.5 -> 128 (half up), -1.0 -> -0.5 -> 0, +1.0 -> 255.5 -> 255 (saturated)
+    // CU8: 0.0 -> 127.5 -> 128 (ties to even), -1.0 -> -0.5 -> 0, +1.0 -> 255.5 -> 255
+    // (saturated)
     assert_eq!(
         enc(&formats::CU8, &[(0.0, -1.0), (1.0, 1.0)]),
         [128, 0, 255, 255]
@@ -303,6 +304,11 @@ proptest! {
     fn prop_encoding_is_monotonic_for_signed_16_bit(a in -0.99f64..0.99, b in -0.99f64..0.99) {
         let ra = i16::from_le_bytes(enc(&formats::CS16, &[(a, 0.0)])[..2].try_into().unwrap());
         let rb = i16::from_le_bytes(enc(&formats::CS16, &[(b, 0.0)])[..2].try_into().unwrap());
-        prop_assert_eq!(a <= b, ra <= rb || a == b);
+        // Monotonic, not strictly: two inputs less than one step apart may share a code.
+        if a <= b {
+            prop_assert!(ra <= rb);
+        } else {
+            prop_assert!(ra >= rb);
+        }
     }
 }

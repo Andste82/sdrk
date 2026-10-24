@@ -49,6 +49,51 @@ jobs:
         env:
           RUSTFLAGS: "-C target-cpu=x86-64-v3"
         run: cargo test --workspace --all-features --target-dir target/x86-64-v3
+      - name: Test the backend and the facade at the static x86-64 levels (x86-64 hosts)
+        # The workspace tests enable `std` of the backend (through the pipeline, the testkit and
+        # the system tests), which switches it to run-time detection at the host's level. Tested
+        # alone, the backend and the facade keep the level fixed at compile time and the dispatch
+        # without `std`: SSE2 (the default), x86-64-v2 (SSE4.2) and x86-64-v3 (AVX2).
+        # `SDRK_EXPECT_LEVEL` makes the tests of the backend check that they run at that level.
+        if: runner.arch == 'X64'
+        shell: bash
+        run: |
+          for pair in x86-64:sse2 x86-64-v2:sse4.2 x86-64-v3:avx2; do
+            cpu="${pair%%:*}"
+            SDRK_EXPECT_LEVEL="${pair#*:}" RUSTFLAGS="-C target-cpu=$cpu" \
+              cargo test -p sdrk-backend-simd -p sdrk \
+              --features sdrk/fft-tables,sdrk/nco-tables --target-dir "target/static-$cpu"
+          done
+      - name: Test the backend without its static tables (x86-64 hosts)
+        # The backend's own default build: without `nco-tables` and `fft-tables` the NCO lookups
+        # read the cosine tables of `sdrk-core` and the C32 FFT takes every twiddle from the
+        # plan. Without `-p sdrk` the facade does not switch the tables on.
+        if: runner.arch == 'X64'
+        shell: bash
+        run: |
+          for pair in x86-64:sse2 x86-64-v3:avx2; do
+            cpu="${pair%%:*}"
+            SDRK_EXPECT_LEVEL="${pair#*:}" RUSTFLAGS="-C target-cpu=$cpu" \
+              cargo test -p sdrk-backend-simd --target-dir "target/backend-no-tables-$cpu"
+          done
+      - name: Test the backend and the facade on 32-bit x86 (linux-x86_64)
+        # The level paths are compiled for `target_arch = "x86"` too (32-bit pointers, the facade's
+        # 32-bit table configuration: `nco-tables` on, `fft-tables` opt-in), at the SSE2 baseline
+        # and with AVX2.
+        if: matrix.name == 'linux-x86_64'
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-multilib
+          rustup target add i686-unknown-linux-gnu
+          cargo clippy --target i686-unknown-linux-gnu -p sdrk-backend-simd --all-targets -- -D warnings
+          for pair in x86-64:sse2 x86-64-v3:avx2; do
+            cpu="${pair%%:*}"
+            for features in "" "--features sdrk/fft-tables"; do
+              SDRK_EXPECT_LEVEL="${pair#*:}" RUSTFLAGS="-C target-cpu=$cpu" \
+                cargo test --target i686-unknown-linux-gnu -p sdrk-backend-simd -p sdrk $features \
+                --target-dir "target/i686-$cpu"
+            done
+          done
       - name: Test with the fallback only
         # `sdrk_fallback_only` is a cfg flag, not a feature: `--all-features` would switch a
         # feature on and silently disable the backend.
@@ -130,6 +175,89 @@ jobs:
       - name: Ten minutes of signal without drift
         run: cargo test --release -p sdrk-system-tests --test long_run_no_drift -- --ignored
 
+  exhaustive:
+    name: exhaustive (convert_out of every f32, ${{ matrix.name }}, nightly)
+    # Nightly only: the bit-exact test of `convert_out` against the fallback for all 2^32 `f32`
+    # bit patterns (the proof of the per-byte CU8 bound), at every level of the backend. Under
+    # SDE the work is split over several jobs (`SDRK_SWEEP_PART`).
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: sse2
+            setup: native
+            rustflags: ""
+          - name: x86-64-v2
+            setup: native
+            rustflags: "-C target-cpu=x86-64-v2"
+          - name: x86-64-v3
+            setup: native
+            rustflags: "-C target-cpu=x86-64-v3"
+          - name: aarch64-qemu
+            setup: qemu
+            rustflags: ""
+          - name: wasm simd128
+            setup: wasm
+            rustflags: "-C target-feature=+simd128"
+          - { name: avx512-sde part 0 of 4, setup: sde, part: 0/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: avx512-sde part 1 of 4, setup: sde, part: 1/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: avx512-sde part 2 of 4, setup: sde, part: 2/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: avx512-sde part 3 of 4, setup: sde, part: 3/4, rustflags: "-C target-cpu=sapphirerapids" }
+    env:
+      SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
+      SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
+      SDE_DIR: sde-external-9.58.0-2025-06-16-lin
+      WASMTIME_VERSION: v49.0.3
+      WASMTIME_SHA256: 4001225413f208345b980525f31c4080e1873808b38d0ddc7918497340667fbb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install QEMU and the cross toolchain
+        if: matrix.setup == 'qemu'
+        run: sudo apt-get update && sudo apt-get install -y qemu-user gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      - name: Download Intel SDE (pinned)
+        if: matrix.setup == 'sde'
+        run: |
+          mkdir -p ~/sde
+          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+          tar -xJf ~/sde.tar.xz -C ~/sde
+      - name: Install wasmtime
+        if: matrix.setup == 'wasm'
+        run: |
+          name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$name.tar.xz" -o ~/wasmtime.tar.xz
+          echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf ~/wasmtime.tar.xz -C "$HOME"
+          echo "$HOME/$name" >> "$GITHUB_PATH"
+      - name: Every f32 through convert_out
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          SDRK_SWEEP_PART: ${{ matrix.part || '0/1' }}
+        run: |
+          target=()
+          case "${{ matrix.setup }}" in
+            qemu)
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER="qemu-aarch64 -L /usr/aarch64-linux-gnu"
+              target=(--target aarch64-unknown-linux-gnu) ;;
+            wasm)
+              export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --"
+              target=(--target wasm32-wasip1) ;;
+            sde)
+              # An explicit `--target` keeps RUSTFLAGS away from the build scripts.
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$HOME/sde/$SDE_DIR/sde64 -spr --"
+              target=(--target x86_64-unknown-linux-gnu) ;;
+          esac
+          cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
+            --test convert_out_sweep -- --ignored
+
   avx512-sde:
     name: avx512-sde (Intel SDE, linux-x86_64)
     # The whole test suite with the AVX-512 level of the SIMD backend, emulated by Intel SDE.
@@ -164,6 +292,7 @@ jobs:
         # host without AVX-512.
         env:
           RUSTFLAGS: "-C target-cpu=sapphirerapids"
+          SDRK_EXPECT_LEVEL: avx512
         run: |
           export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$HOME/sde/$SDE_DIR/sde64 -spr --"
           # Profile `emulated` (optimised, no whole-program LTO): the emulator is slow and the debug
@@ -171,6 +300,28 @@ jobs:
           # process and are covered natively by tier1.
           cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter \
             --target x86_64-unknown-linux-gnu --target-dir target/avx512
+      - name: Test the backend with AVX-512 fixed at compile time (no std) under SDE
+        # The workspace run above enables `std` of the backend, so it dispatches at run time.
+        env:
+          RUSTFLAGS: "-C target-cpu=sapphirerapids"
+          SDRK_EXPECT_LEVEL: avx512
+        run: |
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$HOME/sde/$SDE_DIR/sde64 -spr --"
+          cargo test -p sdrk-backend-simd --features fft-tables,nco-tables --profile emulated \
+            --target x86_64-unknown-linux-gnu --target-dir target/avx512
+      - name: Test the backend at sse2 and sse4.2 under SDE (run-time detection)
+        # The CPUIDs of `cargo xtask count` for these levels; `-chip_check_cpuid 1` stops the run
+        # at any instruction above them. This runs the SSE2 and SSE4.2 arms of the run-time
+        # dispatch, which no x86-64 runner selects.
+        shell: bash
+        run: |
+          for level in sse2 sse4.2; do
+            cargo xtask sde-cpuid "$level" "$PWD/target/cpuid-$level.def"
+            SDRK_EXPECT_LEVEL="$level" \
+            CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$HOME/sde/$SDE_DIR/sde64 -cpuid_in $PWD/target/cpuid-$level.def -chip_check_cpuid 1 --" \
+              cargo test -p sdrk-backend-simd --features std,fft-tables,nco-tables --profile emulated \
+              --target x86_64-unknown-linux-gnu --target-dir target/sde-runtime
+          done
 
   aarch64-qemu:
     name: aarch64-qemu (cross-compiled, linux-x86_64 host)
@@ -189,12 +340,23 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER: "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+          SDRK_EXPECT_LEVEL: neon
         # Profile `emulated` (optimised, no whole-program LTO): the emulator is slow and the debug
         # builds of the end-to-end tests would run for hours. The command-line examples start the program under test as a child
         # process and are covered natively by tier1.
         run: >
           cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter
           --target aarch64-unknown-linux-gnu --target-dir target/aarch64
+      - name: Test the backend without its static tables under qemu-aarch64
+        # The backend's own default build (see tier1); without `-p sdrk` the facade does not
+        # switch the tables on.
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER: "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+          SDRK_EXPECT_LEVEL: neon
+        run: >
+          cargo test -p sdrk-backend-simd --profile emulated
+          --target aarch64-unknown-linux-gnu --target-dir target/aarch64-no-tables
 
   wasm-wasmtime:
     name: wasm-wasmtime (${{ matrix.name }})
@@ -207,15 +369,25 @@ jobs:
           - name: with simd128
             rustflags: "-C target-feature=+simd128"
             features: ""
+            level: simd128
           - name: without simd128
             rustflags: ""
             features: ""
+            level: scalar
           # Relaxed SIMD multiply-add in the C32 kernels (M14): the contracts must still hold.
           - name: with simd128 and relaxed simd
             rustflags: "-C target-feature=+simd128,+relaxed-simd"
             features: "--features sdrk/relaxed-simd"
+            level: simd128
+          # The opt-in static tables, which have SIMD128 code of their own (the NCO lookups, the
+          # CQ15 `fm_mod`, the table-driven C32 FFT).
+          - name: with simd128 and the static tables
+            rustflags: "-C target-feature=+simd128"
+            features: "--features sdrk/nco-tables,sdrk/fft-tables"
+            level: simd128
     env:
       WASMTIME_VERSION: v49.0.3
+      WASMTIME_SHA256: 4001225413f208345b980525f31c4080e1873808b38d0ddc7918497340667fbb
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain from rust-toolchain.toml
@@ -223,14 +395,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install wasmtime
         run: |
-          curl -fsSL https://wasmtime.dev/install.sh | bash -s -- --version "$WASMTIME_VERSION"
-          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+          name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$name.tar.xz" -o ~/wasmtime.tar.xz
+          echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf ~/wasmtime.tar.xz -C "$HOME"
+          echo "$HOME/$name" >> "$GITHUB_PATH"
       - name: Test under wasmtime with its default stack size
         # The default stack of wasmtime catches stack frames above the 4 KiB rule. The crates
         # that need `proptest` or the file system of a host do not build for WASI.
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-          CARGO_TARGET_WASM32_WASIP1_RUNNER: "wasmtime run --dir=${{ github.workspace }} --"
+          SDRK_EXPECT_LEVEL: ${{ matrix.level }}
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: "wasmtime run --env SDRK_EXPECT_LEVEL --dir=${{ github.workspace }} --"
         run: >
           cargo test --target wasm32-wasip1 --target-dir target/wasm
           -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks ${{ matrix.features }}
@@ -314,16 +490,33 @@ jobs:
       - name: Build the package
         run: cargo xtask wasm-pkg --relaxed
 
+  # The count jobs run in a pinned container with an apt snapshot, so that the compilers of
+  # the C references (benches/refs/build.sh), glibc (VOLK's generic atan2 and rotator call
+  # libm) and the counters are the same in every run and on a development machine with the
+  # same image; benches/results/*.json record the compiler versions and VOLK's flags.
   count:
-    name: count (instructions against VOLK and rustfft, linux-x86_64)
-    env:
-      VOLK_VERSION: "3.3.0"
-      VOLK_SHA256: 89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628
+    name: count (instructions against VOLK, FFTW, KissFFT and rustfft, linux-x86_64)
     # On every pull request that touches kernels or backends (the paths are checked in the first
     # step) and nightly. The other platforms (AVX-512, AArch64, wasm32) run nightly.
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    timeout-minutes: 240
+    env:
+      APT_SNAPSHOT: "20261019T000000Z"
+      SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
+      SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
     steps:
+      - name: Packages of the pinned snapshot (compilers, valgrind, VOLK build tools)
+        run: |
+          # The image has no CA certificates, which the https snapshot needs: take them from the
+          # image's own mirror first (they are installed again from the snapshot below).
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+          apt-get update --snapshot "$APT_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$APT_SNAPSHOT" \
+            git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
+            python3 python3-mako valgrind
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -331,6 +524,7 @@ jobs:
         id: changed
         shell: bash
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           if [ "${{ github.event_name }}" = "schedule" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
@@ -345,46 +539,62 @@ jobs:
           fi
       - name: Install toolchain from rust-toolchain.toml
         if: steps.changed.outputs.run == 'true'
-        run: rustup toolchain install
+        shell: bash
+        run: |
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
       - uses: Swatinem/rust-cache@v2
         if: steps.changed.outputs.run == 'true'
-      - name: VOLK 3.3.0 (the x86-64 comparison library, built from the release tarball)
+      - name: Cache the C references
+        # Keyed on the build script (versions, checksums, flags), the image and the snapshot
+        # (the compilers); the build script itself also rebuilds when a compiler version differs.
         if: steps.changed.outputs.run == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind pkg-config cmake ninja-build python3-mako
-      - name: Cache VOLK
-        if: steps.changed.outputs.run == 'true'
-        id: volk-cache
         uses: actions/cache@v4
         with:
-          path: ~/volk-prefix
-          key: volk-${{ env.VOLK_VERSION }}-${{ runner.os }}-${{ runner.arch }}
-      - name: Build VOLK
-        if: steps.changed.outputs.run == 'true' && steps.volk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl -fsSL "https://github.com/gnuradio/volk/releases/download/v$VOLK_VERSION/volk-$VOLK_VERSION.tar.gz" -o volk.tar.gz
-          echo "$VOLK_SHA256  volk.tar.gz" | sha256sum -c -
-          tar -xzf volk.tar.gz
-          cmake -S "volk-$VOLK_VERSION" -B volk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/volk-prefix" -DENABLE_TESTING=OFF -DENABLE_MODTOOL=OFF -DENABLE_ORC=OFF
-          cmake --build volk-build
-          cmake --install volk-build
-      - name: Use VOLK
+          path: benches/target/refs
+          key: refs-x86_64-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.APT_SNAPSHOT }}
+      - name: Cache Intel SDE
         if: steps.changed.outputs.run == 'true'
+        id: sde-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/sde
+          # Not the key of the avx512-sde job: that cache was saved on the host (another home
+          # directory), and restored here it leaves ~/sde empty.
+          key: sde-container-${{ env.SDE_SHA256 }}
+      - name: Download Intel SDE (pinned)
+        if: steps.changed.outputs.run == 'true' && steps.sde-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
-          echo "PKG_CONFIG_PATH=$HOME/volk-prefix/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$HOME/volk-prefix/lib" >> "$GITHUB_ENV"
-      - name: CPU of the runner
+          mkdir -p ~/sde
+          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+          tar -xJf ~/sde.tar.xz -C ~/sde
+      - name: Use Intel SDE
         if: steps.changed.outputs.run == 'true'
+        shell: bash
+        run: echo "SDRK_SDE=$(ls -d $HOME/sde/sde-external-*)/sde64" >> "$GITHUB_ENV"
+      - name: CPU of the runner and compilers
+        if: steps.changed.outputs.run == 'true'
+        shell: bash
         run: |
           grep -m1 'model name' /proc/cpuinfo
-          echo "flags:"
           grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' '
           echo
-          echo "VOLK: $(pkg-config --modversion volk)"
-      - name: Count the x86-64 levels (sse2, sse4.2, avx2)
+          gcc --version | head -n 1
+          valgrind --version
+      - name: Count the x86-64 levels (sse2 and sse4.2 under SDE, avx2, avx2-runtime)
+        # The misaligned and small-block variants are information and are not judged: pull
+        # requests skip them, the nightly run measures them for the committed results.
         if: steps.changed.outputs.run == 'true'
-        run: cargo xtask count --platform x86_64
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            cargo xtask count --platform x86_64
+          else
+            cargo xtask count --platform x86_64 --no-variants --no-write
+          fi
       - name: Count the FM receiver pipeline
         if: steps.changed.outputs.run == 'true' && github.event_name == 'schedule'
         run: cargo xtask count --pipeline
@@ -405,73 +615,109 @@ jobs:
     name: count (${{ matrix.platform }}, nightly)
     if: github.event_name == 'schedule'
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
-        platform: [x86_64-avx512, aarch64, wasm32]
+        include:
+          - platform: x86_64-avx512
+            refs: x86_64
+          - platform: aarch64
+            refs: aarch64
+          - platform: wasm32
+            refs: wasm32
     env:
+      APT_SNAPSHOT: "20261019T000000Z"
       SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
       SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
       QEMU_VERSION: 10.2.1
+      QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
       WASMTIME_VERSION: v49.0.3
-      VOLK_VERSION: "3.3.0"
-      VOLK_SHA256: 89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628
+      WASMTIME_SHA256: 4001225413f208345b980525f31c4080e1873808b38d0ddc7918497340667fbb
     steps:
+      - name: Packages of the pinned snapshot (compilers, cross compilers, VOLK and QEMU build tools)
+        run: |
+          # The image has no CA certificates, which the https snapshot needs: take them from the
+          # image's own mirror first (they are installed again from the snapshot below).
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+          apt-get update --snapshot "$APT_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$APT_SNAPSHOT" \
+            git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
+            python3 python3-mako python3-venv valgrind clang llvm wasi-libc \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross \
+            libglib2.0-dev libpixman-1-dev
       - uses: actions/checkout@v4
       - name: Install toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-      - name: VOLK 3.3.0 (the x86-64 comparison library, built from the release tarball)
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind pkg-config cmake ninja-build python3-mako
-      - name: Cache VOLK
-        id: volk-cache
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache the C references
         uses: actions/cache@v4
         with:
-          path: ~/volk-prefix
-          key: volk-${{ env.VOLK_VERSION }}-${{ runner.os }}-${{ runner.arch }}
-      - name: Build VOLK
-        if: steps.volk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl -fsSL "https://github.com/gnuradio/volk/releases/download/v$VOLK_VERSION/volk-$VOLK_VERSION.tar.gz" -o volk.tar.gz
-          echo "$VOLK_SHA256  volk.tar.gz" | sha256sum -c -
-          tar -xzf volk.tar.gz
-          cmake -S "volk-$VOLK_VERSION" -B volk-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/volk-prefix" -DENABLE_TESTING=OFF -DENABLE_MODTOOL=OFF -DENABLE_ORC=OFF
-          cmake --build volk-build
-          cmake --install volk-build
-      - name: Use VOLK
-        run: |
-          echo "PKG_CONFIG_PATH=$HOME/volk-prefix/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$HOME/volk-prefix/lib" >> "$GITHUB_ENV"
+          path: benches/target/refs
+          key: refs-${{ matrix.refs }}-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.APT_SNAPSHOT }}
       - name: CPU of the runner
+        shell: bash
         run: |
           grep -m1 'model name' /proc/cpuinfo || true
-          grep -m1 '^flags\|^Features' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx|asimd|neon|sve)' | sort | tr '\n' ' ' || true
+          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' ' || true
           echo
       - name: Intel SDE
         if: matrix.platform == 'x86_64-avx512'
+        shell: bash
         run: |
           mkdir -p ~/sde
           curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
           echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
           tar -xJf ~/sde.tar.xz -C ~/sde
           echo "SDRK_SDE=$(ls -d $HOME/sde/sde-external-*)/sde64" >> "$GITHUB_ENV"
+      - name: Cache QEMU
+        if: matrix.platform == 'aarch64'
+        id: qemu-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/qemu-build/qemu-aarch64
+            ~/qemu-build/plugin-src
+          key: qemu-plugin-src-${{ env.QEMU_VERSION }}-c098726dd9b9-${{ env.APT_SNAPSHOT }}
       - name: QEMU user mode with plugins
         # The distribution's qemu-user is built without plugin support: build QEMU from source.
-        if: matrix.platform == 'aarch64'
+        if: matrix.platform == 'aarch64' && steps.qemu-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
-          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev gcc-aarch64-linux-gnu libc6-dev-arm64-cross python3-venv
-          curl -fsSL "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz" | tar -xJ
-          mkdir qemu-build && cd qemu-build
-          ../qemu-$QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          curl -fsSL "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
+          echo "$QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
+          tar -xJf ~/qemu.tar.xz -C "$HOME"
+          mkdir -p ~/qemu-build && cd ~/qemu-build
+          ~/qemu-$QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
           ninja qemu-aarch64
-          echo "SDRK_QEMU_AARCH64=$PWD/qemu-aarch64" >> "$GITHUB_ENV"
+          # The source of the insn plugin, from the checksummed tarball (cached with QEMU).
+          for f in tests/tcg/plugins/insn.c include/qemu/qemu-plugin.h; do
+            install -D ~/qemu-$QEMU_VERSION/$f ~/qemu-build/plugin-src/$f
+          done
+      - name: Use QEMU
+        if: matrix.platform == 'aarch64'
+        shell: bash
+        run: |
+          echo "SDRK_QEMU_AARCH64=$HOME/qemu-build/qemu-aarch64" >> "$GITHUB_ENV"
+          echo "SDRK_QEMU_SRC=$HOME/qemu-build/plugin-src" >> "$GITHUB_ENV"
       - name: wasmtime
         if: matrix.platform == 'wasm32'
+        shell: bash
         run: |
-          curl -fsSL https://wasmtime.dev/install.sh | bash -s -- --version "$WASMTIME_VERSION"
-          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+          name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$name.tar.xz" -o ~/wasmtime.tar.xz
+          echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf ~/wasmtime.tar.xz -C "$HOME"
+          echo "$HOME/$name" >> "$GITHUB_PATH"
       - name: Count
         run: cargo xtask count --platform ${{ matrix.platform }}
+      - name: Results are committed
+        run: git diff --exit-code -- benches/results

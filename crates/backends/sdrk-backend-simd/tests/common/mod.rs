@@ -1,6 +1,7 @@
 //! Shared helpers of the backend tests: a small PRNG and data generators.
 #![allow(dead_code, clippy::indexing_slicing, clippy::unwrap_used)]
 
+use sdrk_core::kernels::fft::FftPlan;
 use sdrk_core::{C32, CQ15, Q15};
 
 /// PCG32, the same generator as the testkit (seeded, deterministic).
@@ -63,6 +64,66 @@ pub fn chunks(rng: &mut Rng, n: usize) -> Vec<usize> {
         left -= c;
     }
     out
+}
+
+/// The `CQ15` sample `(re, im)`.
+pub fn cq(re: i16, im: i16) -> CQ15 {
+    CQ15 {
+        re: Q15(re),
+        im: Q15(im),
+    }
+}
+
+/// Filter taps, uniform in `[-1, 1) / sqrt n`.
+pub fn taps_f32(rng: &mut Rng, n: usize) -> Vec<f32> {
+    (0..n).map(|_| rng.unit() / (n as f32).sqrt()).collect()
+}
+
+/// The `CQ15` FFT plan of `n` points.
+pub fn cq15_plan(n: usize) -> FftPlan<CQ15, Vec<CQ15>> {
+    FftPlan::new(n, vec![CQ15::default(); n / 2]).unwrap()
+}
+
+/// `10 log10(sig / err)` in dB; infinite without error.
+pub fn db(sig: f64, err: f64) -> f64 {
+    if err == 0.0 {
+        f64::INFINITY
+    } else {
+        10.0 * (sig / err).log10()
+    }
+}
+
+/// Signal and error power of `got` against `want`.
+pub fn powers(want: &[C32], got: &[C32]) -> (f64, f64) {
+    let (mut sig, mut err) = (0f64, 0f64);
+    for (w, g) in want.iter().zip(got) {
+        let (wr, wi) = (f64::from(w.re), f64::from(w.im));
+        sig += wr * wr + wi * wi;
+        err += (wr - f64::from(g.re)).powi(2) + (wi - f64::from(g.im)).powi(2);
+    }
+    (sig, err)
+}
+
+/// Signal and error power of `got` against the exact values `want`.
+pub fn powers_exact(want: &[(f64, f64)], got: &[C32]) -> (f64, f64) {
+    let (mut sig, mut err) = (0f64, 0f64);
+    for (w, g) in want.iter().zip(got) {
+        sig += w.0 * w.0 + w.1 * w.1;
+        err += (w.0 - f64::from(g.re)).powi(2) + (w.1 - f64::from(g.im)).powi(2);
+    }
+    (sig, err)
+}
+
+/// The SNR in dB of `got` against `want`.
+pub fn snr_db(want: &[C32], got: &[C32]) -> f64 {
+    let (sig, err) = powers(want, got);
+    db(sig, err)
+}
+
+/// The SNR in dB of `got` against the exact values `want`.
+pub fn snr_db_exact(want: &[(f64, f64)], got: &[C32]) -> f64 {
+    let (sig, err) = powers_exact(want, got);
+    db(sig, err)
 }
 
 /// Bit pattern of an f32 slice (so NaN payloads compare too).

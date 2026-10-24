@@ -213,11 +213,13 @@ enum Region {
     },
 }
 
+/// The exemption a `cfg` attribute at the start of `raw_line` opens, and the byte offset after
+/// it. `#[cfg(all(test, ...))]` is test code as well: it is compiled only into tests.
 fn attr_kind(raw_line: &str, policy: StdPolicy) -> Option<(Exempt, usize)> {
     let t = raw_line.trim_start();
     let offset = raw_line.len() - t.len();
     let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
-    let kind = if compact.starts_with("#[cfg(test)]") {
+    let kind = if compact.starts_with("#[cfg(test)]") || compact.starts_with("#[cfg(all(test,") {
         Exempt::Test
     } else if compact.starts_with("#[cfg(feature=\"std\")]") {
         match policy {
@@ -669,6 +671,15 @@ mod tests {
     fn cfg_test_module_is_ignored() {
         let src = "fn f() {}\n#[cfg(test)]\nmod tests {\n    fn t() { let v: Vec<u8> = Vec::new(); }\n}\nfn g() { let _: String; }\n";
         assert_eq!(heap(src), vec![6]);
+    }
+
+    #[test]
+    fn cfg_all_test_module_is_ignored() {
+        let src = "#[cfg(all(test, feature = \"x\"))]\nmod tests {\n    extern crate std;\n    fn t() { let v: Vec<u8> = Vec::new(); }\n}\nfn g() { let _: String; }\n";
+        assert_eq!(heap(src), vec![6]);
+        // `any(test, ...)` is also compiled outside the tests.
+        let src = "#[cfg(any(test, feature = \"x\"))]\nfn f() { let _: Vec<u8>; }\n";
+        assert_eq!(heap(src), vec![2]);
     }
 
     #[test]

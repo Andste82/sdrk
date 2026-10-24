@@ -1,0 +1,10 @@
+[package]
+name = "cref-sys"
+description = "Hand-written declarations of the C FFT libraries the SDRk benchmarks compare with: FFTW, KissFFT and Ne10."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+links = "cref"
+build = "build.rs"

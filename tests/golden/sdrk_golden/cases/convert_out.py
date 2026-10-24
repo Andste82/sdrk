@@ -1,12 +1,13 @@
 """Cases for the convert_out kernel (C32/CQ15 or f32/Q15 samples -> raw device bytes).
 
 The float path (``from_c32``) follows the specification: ``v = x * full_scale + offset`` in float64
-(NaN counts as amplitude 0), ``raw = floor(v + 0.5)`` saturated to the range of the format. The
-integer path (``from_cq15``) uses the Q15 rules: U8 ``round_shift(q + 255 * 2^(15 - bits), 16 - bits)``,
-signed power-of-two full scale with at most 16 bits ``round_shift(q, 16 - bits)``, more than 16 bits
-``q << (bits - 16)`` and an explicit full scale ``n``: ``floor((q * 2 n + 32768) / 65536)``
-(U8: ``floor((q n + 255 * 16384 + 16384) / 32768)``). Alignment, packing, swap, planar and byte order
-reuse the packing code of ``convert.py``, which is written from ``docs/device.md``.
+(NaN counts as amplitude 0), ``raw`` is ``v`` rounded to the nearest integer with ties to even
+(``numpy.rint``), saturated to the range of the format. The integer path (``from_cq15``) uses the
+Q15 rules, written here as exact integer divisions rounded to the nearest integer with ties to even:
+U8 ``(q + 255 * 2^(15 - bits)) / 2^(16 - bits)``, signed power-of-two full scale with at most
+16 bits ``q / 2^(16 - bits)``, more than 16 bits ``q << (bits - 16)`` and an explicit full scale
+``n``: ``q n / 32768`` (U8: ``(q n + 255 * 16384) / 32768``). Alignment, packing, swap, planar and
+byte order reuse the packing code of ``convert.py``, which is written from ``docs/device.md``.
 """
 
 import numpy as np
@@ -28,31 +29,38 @@ def raw_range(bits, signed):
     return 0, (1 << bits) - 1
 
 
+def div_even(a, d):
+    """Integer division a / d (d > 0) rounded to the nearest integer, ties to even."""
+    q = a // d
+    r2 = 2 * (a - q * d)
+    return q + ((r2 > d) | ((r2 == d) & (q % 2 == 1)))
+
+
 def float_raw(x, container, bits, signed, full_scale):
-    """Effective raw values of f32 amplitudes: floor(x * full_scale + offset + 0.5), saturated."""
+    """Effective raw values of f32 amplitudes: rint(x * full_scale + offset) (ties to even), saturated."""
     a = np.where(np.isnan(x), 0.0, x.astype(np.float64))
     off = 127.5 if container == "u8" else 0.0
-    v = np.floor(a * full_scale_of(bits, full_scale) + off + 0.5)
+    v = np.rint(a * full_scale_of(bits, full_scale) + off)
     lo, hi = raw_range(bits, signed)
     return np.clip(v, lo, hi).astype(np.int64)
 
 
 def q15_raw(q, container, bits, signed, full_scale):
-    """Effective raw values of Q15 samples by the integer rules."""
+    """Effective raw values of Q15 samples by the integer rules (ties to even)."""
     q = q.astype(np.int64)
     lo, hi = raw_range(bits, signed)
     if container == "u8":
         if full_scale is None:
             s = 15 - bits
-            raw = q15.round_shift(q + (255 << s), s + 1)
+            raw = div_even(q + (255 << s), 1 << (s + 1))
         else:
             n = int(full_scale)
-            raw = (q * n + 255 * 16384 + 16384) // 32768
+            raw = div_even(q * n + 255 * 16384, 32768)
     elif full_scale is not None:
         n = int(full_scale)
-        raw = (q * 2 * n + 32768) // 65536
+        raw = div_even(q * n, 32768)
     elif bits <= 16:
-        raw = q15.round_shift(q, 16 - bits)
+        raw = div_even(q, 1 << (16 - bits))
     else:
         raw = q << (bits - 16)
     return np.clip(raw, lo, hi)
@@ -94,7 +102,7 @@ def draw_c32(rng, spec):
     off = 127.5 if container == "u8" else 0.0
     lo, hi = raw_range(bits, signed)
     n = rng.integers(lo + 1, hi, size=6)
-    ties = ((n - 0.5 - off) / fs).astype(np.float32)  # v + 0.5 is an exact integer there
+    ties = ((n - 0.5 - off) / fs).astype(np.float32)  # v is exactly halfway between two integers there
     specials = np.concatenate(
         [np.array([np.nan, 1.0, -1.0, np.inf, -np.inf, 0.0], dtype=np.float32), ties, -ties]
     )
@@ -134,7 +142,7 @@ def build_c32(rng, spec):
         params=params_of(spec, N),
         arrays={"input": arr, "expected": Array("u8", np.frombuffer(encode(vals, spec), dtype=np.uint8))},
         tolerance={"class": "bit_exact"},
-        notes="float path: floor(x * full_scale + offset + 0.5) in float64, NaN as 0, saturated; bytes as in docs/device.md",
+        notes="float path: x * full_scale + offset in float64 rounded to nearest, ties to even, NaN as 0, saturated; bytes as in docs/device.md",
     )
 
 
@@ -153,7 +161,7 @@ def build_cq15(rng, spec):
         params=params_of(spec, N),
         arrays={"input": arr, "expected": Array("u8", np.frombuffer(encode(vals, spec), dtype=np.uint8))},
         tolerance={"class": "bit_exact"},
-        notes="integer path: Q15 rounding right shift or left shift by the bit depth, explicit full scale by floor division",
+        notes="integer path: Q15 division by a power of two or by the explicit full scale rounded to nearest, ties to even, or left shift by the bit depth",
     )
 
 

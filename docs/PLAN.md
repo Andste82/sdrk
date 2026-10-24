@@ -4,6 +4,8 @@
 > https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1
 > If the two differ, the living document wins; update this snapshot when you notice a difference.
 > Milestones derived from this plan: [`docs/milestones/README.md`](milestones/README.md).
+>
+> Status: phases 0 to 5 are delivered (milestones M00 to M14: kernels, blocks, pipeline, I/O, the SIMD backend and the WebAssembly bindings). Phases 6 and 7 (milestones M15 to M18: emulator targets, ESP32-P4 PIE, RVV and Arm DSP backends) are planned, as are phases 8 and 9. The release 0.1 (tag `v0.1.0`) is not made yet.
 
 ## Project
 
@@ -64,7 +66,7 @@ sdrk/
 ├── benches/        comparative benchmarks
 ├── tests/golden/   golden samples + generator script
 ├── examples/       fm-receiver, fm-transmitter (CLI)
-├── xtask/          layer, heap and global-state checks; bare-metal check; emulator matrix; schema generation
+├── xtask/          layer, heap, global-state and docs checks; bare-metal check; instruction counting (`count`); WASM package and tests; schema generation; emulator matrix (planned)
 └── docs/           architecture, kernels, backends, device, pipeline, timing, performance
 ```
 
@@ -144,7 +146,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - `sdrk-backend-simd`: `convert`, `rotate`, `fir`/`fir_decimate`/`fir_interpolate`, `mag_sq`, `quad_demod`, `fm_mod`
 - SIMD FFT (radix-4, vectorized butterflies, modelled on rustfft)
 - Comparative benchmarks against VOLK and rustfft (dev-dependencies only)
-- Instruction counting in CI (iai-callgrind)
+- Instruction counting in CI (`cargo xtask count`, Valgrind callgrind, Intel SDE, QEMU and wasmtime)
 - CI matrix: x86 native, AVX-512 via Intel SDE, AArch64 via QEMU, WASM under wasmtime (with/without SIMD128, with WASM's default stack limit to catch oversized stack buffers)
 
 **Done when:** the suite passes everywhere and the instruction-count target (at most 1.10× the reference, decision D14; [performance.md](performance.md)) is met. Then release 0.1.
@@ -253,7 +255,7 @@ Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filt
 
 | Platform | Counting tool | Compared against |
 | --- | --- | --- |
-| x86-64 | callgrind (iai-callgrind); Intel SDE instruction mix for AVX-512 | VOLK, rustfft |
+| x86-64 | callgrind (read by `cargo xtask count`); Intel SDE instruction mix for SSE2, SSE4.2 and AVX-512 | VOLK, rustfft |
 | AArch64 | QEMU user mode with the instruction-count plugin | VOLK |
 | Cortex-M4/M33/M55 | QEMU system mode with the instruction-count plugin | CMSIS-DSP |
 | ESP32-P4/S3 | S3: QEMU instruction-count plugin in the Espressif QEMU fork (plugin-enabled build; plugin support and PIE emulation unverified, otherwise static counting as for the P4); P4: static instruction count of the inner loops from the disassembly, as esp-emulator only samples | ESP-DSP |

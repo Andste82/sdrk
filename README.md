@@ -12,7 +12,7 @@ The repository contains only reusable SDR building blocks and what is needed to 
 
 ## Status
 
-Foundation stage: the workspace, the layer rules and their automatic checks exist; the libraries are filled in milestone by milestone.
+Milestones M00 to M14 are delivered: the kernels, the blocks, the JSON pipeline with time, events and the transmit path, file I/O and device capabilities, the SIMD backend (x86-64, AArch64, wasm32) and the WebAssembly bindings with the npm package layout. The workspace version is 0.0.1; the release 0.1 (tag `v0.1.0`) is not made, and nothing is published to crates.io or npm. The emulator targets (M15) are not part of `main` yet. See [docs/milestones/README.md](docs/milestones/README.md) and [docs/open-items.md](docs/open-items.md).
 
 ## Documentation
 

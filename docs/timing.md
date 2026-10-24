@@ -66,7 +66,7 @@ output[n]   = input[n] * exp(j * 2 * pi * phase_n / 2^32)
 - A call to `rotate` advances the phase by exactly `input.len()` samples (also when called with an empty slice, which changes nothing).
 - Frequencies are given in hertz together with the sample `Rate`; NaN and infinity are rejected with `InvalidParameter`.
 
-In the fallback, rotating by the cosine/sine of the phase uses a 4096-entry table with linear interpolation; the table is generated at build time (see `docs/kernels.md`). The reference evaluates `cos` and `sin` of the phase in f64. The SIMD backend evaluates the oscillator per block instead (the block oscillator of [backends.md](backends.md), see [Block-size invariance](#block-size-invariance)).
+In the fallback, rotating by the cosine/sine of the phase uses a 4096-entry table with linear interpolation; the table is generated at build time (see `docs/kernels.md`). The reference evaluates `cos` and `sin` of the phase in f64. The SIMD backend evaluates the `C32` oscillator per block instead (the block oscillator of [backends.md](backends.md), see [Block-size invariance](#block-size-invariance)); its `CQ15` `rotate` does the table lookup of the fallback, bit-exact.
 
 ## Blocks
 

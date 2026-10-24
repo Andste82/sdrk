@@ -1,6 +1,6 @@
 # File I/O (`sdrk-io`)
 
-The crate `sdrk-io` (layer `crates/io`, std, depends on `sdrk-device` only) reads and writes sample files as streams: readers implement `RxStream`, writers implement `TxStream`. They plug into the pipeline (`push_with_meta`, `pull`) and into the driver conformance checks like a device does ([device.md](device.md#conformance-checks)).
+The crate `sdrk-io` (layer `crates/io`, std, depends on `sdrk-device` and `serde_json`) reads and writes sample files as streams: readers implement `RxStream`, writers implement `TxStream`. They plug into the pipeline (`push_with_meta`, `pull`) and into the driver conformance checks like a device does ([device.md](device.md#conformance-checks)).
 
 Errors: `sdrk_io::Error` is `Io(String)` (kind `Io`), `Parse { file, reason }` (kind `Parse`), `Unsupported(&'static str)` (kind `Unsupported`), `InvalidArgument(String)` and `Device(sdrk_device::Error)` (kind forwarded).
 

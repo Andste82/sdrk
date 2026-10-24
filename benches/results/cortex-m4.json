@@ -10,7 +10,7 @@
     },
     "convert_out_cs16": {
       "implementation": "fallback",
-      "instructions_per_sample": 1013.18
+      "instructions_per_sample": 149.46
     },
     "fft_1024": {
       "implementation": "fallback",

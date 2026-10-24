@@ -14,7 +14,7 @@ use core::panic::PanicInfo;
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::debug::{self, EXIT_FAILURE, EXIT_SUCCESS};
-use cortex_m_semihosting::{hio, nr, syscall};
+use cortex_m_semihosting::{hio, nr, syscall1};
 use sdrk::kernels::convert::{Convert, ConvertOut};
 use sdrk::kernels::decim::{FirDecimState, FirDecimate};
 use sdrk::kernels::demod::{QuadDemod, QuadDemodState};
@@ -77,10 +77,12 @@ fn exit(ok: bool) -> ! {
 
 /// The last two words of the semihosting command line: the kernel name and `k`.
 fn arguments(buf: &mut [u8; 128]) -> Option<(&str, usize)> {
-    let block = [buf.as_mut_ptr() as usize, buf.len()];
+    let mut block = [buf.as_mut_ptr() as usize, buf.len()];
     // SAFETY: SYS_GET_CMDLINE takes a pointer to a buffer and its size and writes the length
-    // back into the second word.
-    let status = unsafe { syscall(nr::GET_CMDLINE, &block) };
+    // back into the second word. The block is passed by a mutable pointer: the host writes it,
+    // so passing a shared reference (`syscall(.., &block)`) would let the compiler keep the old
+    // length (seen at `opt-level = "s"`).
+    let status = unsafe { syscall1(nr::GET_CMDLINE, block.as_mut_ptr() as usize) };
     if status != 0 {
         return None;
     }

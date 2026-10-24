@@ -455,7 +455,7 @@ pub mod pins {
     /// Version of `espflash` (installed with `cargo install --locked`).
     pub const ESPFLASH_VERSION: &str = "4.6.0";
     /// Version of `espup` (installed with `cargo install --locked`).
-    pub const ESPUP_VERSION: &str = "0.18.0";
+    pub const ESPUP_VERSION: &str = "0.17.1";
     /// The Espressif Rust toolchain that `espup` installs.
     pub const ESP_RUST_TOOLCHAIN: &str = "1.95.0.0";
 }

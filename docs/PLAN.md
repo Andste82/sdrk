@@ -5,7 +5,7 @@
 > If the two differ, the living document wins; update this snapshot when you notice a difference.
 > Milestones derived from this plan: [`docs/milestones/README.md`](milestones/README.md).
 >
-> Status: phases 0 to 5 are delivered (milestones M00 to M14: kernels, blocks, pipeline, I/O, the SIMD backend and the WebAssembly bindings). Phases 6 and 7 (milestones M15 to M18: emulator targets, ESP32-P4 PIE, RVV and Arm DSP backends) are planned, as are phases 8 and 9. The release 0.1 (tag `v0.1.0`) is not made yet.
+> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9. The release 0.1 (tag `v0.1.0`) is not made yet.
 
 ## Project
 

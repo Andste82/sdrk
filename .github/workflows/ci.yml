@@ -780,6 +780,10 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - name: Install the Xtensa Rust toolchain (pinned)
+        # espup asks the GitHub API for the toolchain release; without a token the shared
+        # runner IP often hits the rate limit (403).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask emu --install
       - name: Build, emulator configuration (default)
         run: cargo xtask emu --target esp32s3 --build-only
@@ -835,6 +839,8 @@ jobs:
           command -v qemu-system-riscv32 || sudo apt-get install -y qemu-system-riscv
       - name: Install esp-emu, the Espressif QEMU fork, espflash and the Xtensa Rust toolchain (pinned)
         if: steps.plan.outputs.any == 'true' && startsWith(matrix.target, 'esp')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask emu --install
       - name: Quick profile
         if: steps.plan.outputs.quick == 'true'

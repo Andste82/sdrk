@@ -1,0 +1,33 @@
+# The testkit suite on a Cortex-M55 in QEMU (machine mps3-an547), nightly.
+[package]
+name = "sdrk-target-qemu-cortex-m55"
+description = "SDRk on-target suite for QEMU mps3-an547 (Cortex-M55)."
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# A project of its own, outside the main workspace.
+[workspace]
+
+[dependencies]
+sdrk-target-common = { path = "../common" }
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit" }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+cortex-m-semihosting = "0.5.0"
+
+[features]
+# Run every case (the default is the quick tier).
+full = ["sdrk-target-common/full"]
+
+[profile.emu]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"

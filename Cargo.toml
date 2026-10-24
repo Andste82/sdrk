@@ -16,7 +16,7 @@ members = [
     "xtask",
 ]
 
-exclude = ["crates/pipeline/sdrk-pipeline/fuzz", "benches"]
+exclude = ["crates/pipeline/sdrk-pipeline/fuzz", "benches", "targets/*"]
 
 [workspace.package]
 edition = "2024"

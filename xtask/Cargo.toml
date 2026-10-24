@@ -16,6 +16,7 @@ anyhow = "1.0.104"
 cargo_metadata = "0.20.0"
 sdrk-pipeline = { path = "../crates/pipeline/sdrk-pipeline" }
 serde_json = "1.0.154"
+sha2 = "0.10.9"
 walkdir = "2.5.0"
 
 [dev-dependencies]

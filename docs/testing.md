@@ -90,3 +90,7 @@ RUSTFLAGS="-C target-feature=+simd128" CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmti
 cargo xtask wasm-pkg --relaxed && cargo xtask wasm-test --env node --variant all
 node --test "bindings/wasm/js-tests/*.test.mjs"
 ```
+
+## The suite on microcontrollers
+
+The `no_std` suite of the testkit (`all_cases()`, `run_suite`, the line protocol) runs bare-metal in five emulators: a Cortex-M4F (every commit), a Cortex-M55, RISC-V `rv32imac`, the ESP32-P4 and the ESP32-S3 (nightly), with the quick and the full profile. `cargo xtask emu` builds, runs and judges them; the CI jobs are `emu-tier1` and `emu-tier2`. See [embedded.md](embedded.md).

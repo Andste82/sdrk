@@ -1,0 +1,19 @@
+# Code shared by the emulator targets: the arena size, the tier switch and the suite driver.
+# Targets are applications and live outside the main workspace (see the root `Cargo.toml`).
+[package]
+name = "sdrk-target-common"
+description = "Shared suite driver of the SDRk emulator targets."
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit" }
+
+[features]
+# Run every case (the default is the quick tier).
+full = []

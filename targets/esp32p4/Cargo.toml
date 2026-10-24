@@ -1,0 +1,34 @@
+# The testkit suite on an ESP32-P4 (RISC-V rv32imafc) in esp-emu, nightly.
+[package]
+name = "sdrk-target-esp32p4"
+description = "SDRk on-target suite for the ESP32-P4 in esp-emu."
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# A project of its own, outside the main workspace.
+[workspace]
+
+[dependencies]
+sdrk-target-common = { path = "../common" }
+sdrk-testkit = { path = "../../crates/testing/sdrk-testkit" }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
+
+esp-hal = { version = "=1.2.2", features = ["esp32p4"] }
+esp-println = { version = "=0.18.0", default-features = false, features = ["esp32p4", "uart"] }
+esp-bootloader-esp-idf = { version = "=0.6.0", features = ["esp32p4"] }
+
+[features]
+# Run every case (the default is the quick tier).
+full = ["sdrk-target-common/full"]
+
+[profile.emu]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

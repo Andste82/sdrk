@@ -326,7 +326,7 @@ With the feature `yaml` (default; the WASM binding disables it) `PipelineSpec::f
 
 [wire-format.md](wire-format.md) specifies the versioned messages (`wire` module) that carry samples, frames, events, stream descriptions and parameter changes between the parts of a split pipeline.
 
-### Errors
+## Errors
 
 `Error` is `#[non_exhaustive]`, implements `SdrkError` and maps to the shared `ErrorKind`:
 

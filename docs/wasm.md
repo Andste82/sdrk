@@ -2,7 +2,7 @@
 
 The crate `sdrk-wasm` (`bindings/wasm`, `cdylib` and `rlib`) exposes the pipeline API of [pipeline.md](pipeline.md) to JavaScript, in browsers and in Node 20 or later. The bindings only configure: they build a pipeline from JSON (or from the `FlowBuilder`), set parameters (immediately or at a sample index or time), push and pull data and read streams, frames and events. All processing stays in Rust. Data crosses the boundary once per block: `push` copies the typed array into a buffer that was allocated when the pipeline was built, `readStream` copies out of one; nothing allocates per call.
 
-The package `sdrk-wasm` (unscoped; whether the name is free on npm is not checked yet, see the decisions log and `docs/open-items.md`) is assembled by `cargo xtask wasm-pkg`. There is no `wasm-pack` (its upstream organisation was archived): xtask calls `cargo build --target wasm32-unknown-unknown --release` and `wasm-bindgen --target web` directly.
+The package `sdrk-wasm` (unscoped; it is not published, and the name is not reserved: `npm view sdrk-wasm` answered 404 on 2026-10-19, see M14-1 in [open-items.md](open-items.md)) is assembled by `cargo xtask wasm-pkg`. There is no `wasm-pack` (its upstream organisation was archived): xtask calls `cargo build --target wasm32-unknown-unknown --release` and `wasm-bindgen --target web` directly.
 
 ```js
 import { init, Pipeline, FlowBuilder } from "sdrk-wasm";

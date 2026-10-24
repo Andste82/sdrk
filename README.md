@@ -38,7 +38,7 @@ cargo xtask schema --check
 
 The WebAssembly package is built with `cargo xtask wasm-pkg` (needs `wasm-bindgen-cli`, see [docs/wasm.md](docs/wasm.md)).
 
-`cargo xtask test-all` runs the first five. `cargo xtask count --platform x86_64` measures the instructions per sample of the SIMD kernels against VOLK and rustfft (needs valgrind and `libvolk-dev`, see [docs/performance.md](docs/performance.md)); `RUSTFLAGS="--cfg sdrk_fallback_only"` makes the facade use the portable fallback everywhere. `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json` after a change of a block description; the pipeline model and its JSON format are described in [docs/pipeline.md](docs/pipeline.md).
+`cargo xtask test-all` runs the first five, the WebAssembly package tests when Node.js is installed and the Cortex-M4 emulator run. `cargo xtask emu --tier 1|2` runs the test suite bare-metal in emulators (Cortex-M4/M55, RISC-V, ESP32-P4, ESP32-S3; needs QEMU, see [docs/embedded.md](docs/embedded.md)). `cargo xtask count --platform x86_64` measures the instructions per sample of the SIMD kernels against VOLK and rustfft (needs valgrind and `libvolk-dev`, see [docs/performance.md](docs/performance.md)); `RUSTFLAGS="--cfg sdrk_fallback_only"` makes the facade use the portable fallback everywhere. `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json` after a change of a block description; the pipeline model and its JSON format are described in [docs/pipeline.md](docs/pipeline.md).
 
 ## License
 

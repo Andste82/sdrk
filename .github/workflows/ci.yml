@@ -269,7 +269,7 @@ jobs:
         run: cargo xtask wasm-test --env node --variant all
       - name: Point wasm-bindgen-test at the Chrome that matches the chromedriver
         run: |
-          printf '{"goog:chromeOptions":{"binary":"%s","args":["--headless=new","--no-sandbox"]}}\n' "${{ steps.chrome.outputs.chrome-path }}" > bindings/wasm/webdriver.json
+          printf '{"goog:chromeOptions":{"binary":"%s","args":["--headless=new","--no-sandbox"]}}\n' "${{ steps.chrome.outputs.chrome-path }}" > webdriver.json
       - name: wasm-bindgen-test in headless Chrome
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
@@ -277,7 +277,7 @@ jobs:
         run: cargo xtask wasm-test --env chrome --variant all
       - name: Remove the Chrome-only webdriver.json
         if: always()
-        run: rm -f bindings/wasm/webdriver.json
+        run: rm -f webdriver.json
       - name: wasm-bindgen-test in headless Firefox
         env:
           WASM_BINDGEN_TEST_TIMEOUT: 120

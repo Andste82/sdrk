@@ -133,15 +133,11 @@ fn the_squelch_gates_the_transmission() {
         (to - 100..to + 4800).contains(&last),
         "last non-zero audio sample {last}, transmission ends at {to}"
     );
-    // The same SINAD as the block-level E2E test (docs/open-items.md, M19-1: about 21.7 dB with
-    // the 6 kHz channel filter of the flow).
+    // The SINAD threshold of E2E-NFM for f32 (milestone section 5, check 1).
     let (lo, hi) = (from + (to - from) / 10, to - (to - from) / 10);
     let window: Vec<f64> = audio[lo..hi].iter().map(|v| f64::from(*v)).collect();
     let sinad = sinad_db(&window, AUDIO_RATE, 1000.0);
-    assert!(
-        (21.0..22.5).contains(&sinad),
-        "pipeline SINAD {sinad} dB (the block-level test measures about 21.7 dB)"
-    );
+    assert!(sinad >= 30.0, "pipeline SINAD {sinad} dB, need 30 dB");
 }
 
 #[test]

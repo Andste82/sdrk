@@ -4,10 +4,10 @@
 
 ## Status
 
-Implemented and tested; one acceptance check is not met and is an open item.
+Implemented and tested; every check of the milestone is met.
 
-- Fully completed: the kernel `squelch` (`C32`, `CQ15`) with state, fallback, reference and delegation; the float32 model with self-test; the block `squelch`; the pipeline kind and the regenerated schema; the flow `nfm_receiver` (JSON and YAML); the SIMD decision (not accelerated, `info` entries in `benches/limits.json` and the results of all four platforms, checked by `xtask/tests/m19_counts.rs`); golden cases, suite cases, invariance, extremes; the gate timing, exact-zero and arena checks of E2E-NFM (check 2 and 3 of section 5); the documentation and the CHANGELOG.
-- Not met, tracked in [`docs/open-items.md`](../open-items.md): M19-1, check 1 of E2E-NFM (SINAD): the flow's channel filter (cutoff 6 kHz) gives 21.685 dB (`C32`) and 21.711 dB (`CQ15`) against 30 dB and 25 dB. The thresholds are unchanged and checked by the ignored test `nfm_meets_the_specified_sinad`; the suite cases use a 20 dB regression floor until the maintainer decides.
+- Fully completed: the kernel `squelch` (`C32`, `CQ15`) with state, fallback, reference and delegation; the float32 model with self-test; the block `squelch`; the pipeline kind and the regenerated schema; the flow `nfm_receiver` (JSON and YAML); the SIMD decision (not accelerated, `info` entries in `benches/limits.json` and the results of all four platforms, checked by `xtask/tests/m19_counts.rs`); golden cases, suite cases, invariance, extremes; E2E-NFM with all three checks of section 5 (SINAD, gate timing, exact zeros) and the arena bound; the documentation and the CHANGELOG.
+- Changed during the implementation: the channel filter of the flow and of E2E-NFM was 6000/3000 Hz in the first version of this file and is 8000/4000 Hz now (section 4); the old values could not meet the SINAD thresholds (see the decisions log).
 - Decisions: [`docs/decisions-log.md`](../decisions-log.md), rows of M19.
 
 ## Goal
@@ -199,7 +199,7 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 
 - Kind `squelch` in `sdrk-pipeline` (`kinds.rs`: `Kind` with `kernels()` = `["squelch"]`). `plan` returns `Figures` exactly like `FmDemodKind::plan` (`crates/pipeline/sdrk-pipeline/src/kinds.rs`): `rate_out` and `memory_bytes` from the block's `rate_out` and `storage_bytes`, `delay` from its timing, `min_input` from `min_input()`, and `cost` per input sample by this formula, which is also added to the cost table of `docs/pipeline.md`: `squelch` **3**.
 - `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json`; adding a kind keeps the schema version (record in the decisions log).
-- `examples/flows/nfm_receiver.json` with a YAML twin (M11 test 8 covers it): input `cu8` at 2.4 MS/s → `ddc` (decimation 50 → 48 kHz, `cutoff_hz` 6000, `transition_hz` 3000) → `squelch` (defaults) → `fm_demod` (`deviation_hz` 5000, `deemphasis_us` 0, `audio_cutoff_hz` 4000) → output `f32`. The YAML comments explain the parameters for 12.5 kHz (`deviation_hz` 2500) and 25 kHz channels.
+- `examples/flows/nfm_receiver.json` with a YAML twin (M11 test 8 covers it): input `cu8` at 2.4 MS/s → `ddc` (decimation 50 → 48 kHz, `cutoff_hz` 8000, `transition_hz` 4000) → `squelch` (defaults) → `fm_demod` (`deviation_hz` 5000, `deemphasis_us` 0, `audio_cutoff_hz` 4000; the audio filter exists only with `audio_decimation` above 1, so this value has no effect at 48 kHz) → output `f32`. The channel filter passes the deviation plus the highest audio frequency (about 3 kHz), half the necessary bandwidth of a 25 kHz channel with 5 kHz deviation (16 kHz); a cutoff of 6000 Hz cuts the FM sidebands and limits the SINAD to about 22 dB, below the thresholds of §5 (measured with this chain and, independently, with GNU Radio 3.10). The YAML comments explain the parameters for 12.5 kHz (`deviation_hz` 2500, `cutoff_hz` 6000, `transition_hz` 3000) and 25 kHz channels.
 - If the WASM bindings list block kinds anywhere (`index.d.ts`, `FlowBuilder`), add the new kind there.
 
 ### 5. Testkit
@@ -266,5 +266,5 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Flow `nfm_receiver` with YAML twin
 - [x] SIMD decision documented, `info` entries in `benches/limits.json` and the results
 - [x] Golden cases (seeds 410–412), suite, invariance, extremes
-- [ ] E2E-NFM: gate timing, exact zeros and the quick/full cases are done; the SINAD thresholds are not met (open item M19-1)
+- [x] E2E-NFM (SINAD, gate timing, exact zeros; quick and full cases)
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, `tests/golden/README.md`, CHANGELOG, decisions log

@@ -4,7 +4,7 @@
 //! 1 kHz tone, amplitude 0.5) that is present only in the middle half of the run, plus complex
 //! Gaussian noise (sigma 0.003 per component) over the whole run, encoded to `CU8` with the
 //! independent testkit encoder. The receiver is the chain of the example flow `nfm_receiver`:
-//! `ConvertBlock`, `DdcBlock` (300 kHz, decimation 50, cutoff 6 kHz, transition 3 kHz, up to
+//! `ConvertBlock`, `DdcBlock` (300 kHz, decimation 50, cutoff 8 kHz, transition 4 kHz, up to
 //! 4096 taps), `SquelchBlock` (-40 dB, 3 dB, 0.01 s) and `FmDemodBlock` (5 kHz, no
 //! de-emphasis, audio cutoff 4 kHz).
 //!
@@ -67,17 +67,6 @@ pub const NFM_FULL_SAMPLES: usize = 4_800_000;
 pub const NFM_MIN_SINAD_F32_DB: f64 = 30.0;
 /// SINAD threshold for `CQ15` in dB.
 pub const NFM_MIN_SINAD_Q15_DB: f64 = 25.0;
-/// Interim regression floor of the SINAD in dB, used by the suite cases while the thresholds of
-/// the specification ([`NFM_MIN_SINAD_F32_DB`], [`NFM_MIN_SINAD_Q15_DB`]) are not met.
-///
-/// With the receiver of the example flow (channel filter cutoff 6 kHz) the chain measures about
-/// 21.7 dB in both sample types: the filter removes the FM sidebands beyond 6 kHz (deviation
-/// 5 kHz and a 1 kHz tone give a modulation index of 5, a Carson bandwidth of 12 kHz), and the
-/// resulting distortion limits the SINAD. A cutoff of 10 kHz gives 53 dB. The specified
-/// thresholds stay in the host test `nfm_meets_the_specified_sinad` (ignored until the
-/// maintainer decides, open item M19-1 in `docs/open-items.md`). This floor is a regression guard
-/// and not the specified threshold; it is a deviation logged in `docs/decisions-log.md`.
-pub const NFM_INTERIM_SINAD_DB: f64 = 20.0;
 /// The gate must open at most this long after the transmission starts, in seconds.
 pub const NFM_MAX_OPEN_DELAY_S: f64 = 0.001;
 /// The gate must close at most this long after the transmission ends, in seconds.
@@ -133,8 +122,8 @@ where
     let ddc_cfg = DdcConfig {
         frequency_hz: NFM_OFFSET_HZ,
         decimation: NFM_DECIMATION,
-        cutoff_hz: Some(6_000.0),
-        transition_hz: Some(3_000.0),
+        cutoff_hz: Some(8_000.0),
+        transition_hz: Some(4_000.0),
         max_taps: 4096,
         max_chunk: CHUNK,
         ..DdcConfig::default()

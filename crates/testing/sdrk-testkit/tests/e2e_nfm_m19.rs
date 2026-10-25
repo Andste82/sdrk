@@ -17,8 +17,8 @@ use sdrk_core::kernels::squelch::Squelch;
 use sdrk_core::{C32, CQ15, ComplexSample};
 use sdrk_testkit::e2e::E2eSample;
 use sdrk_testkit::e2e_nfm::{
-    NFM_FULL_SAMPLES, NFM_INTERIM_SINAD_DB, NFM_MAX_CLOSE_DELAY_S, NFM_MAX_OPEN_DELAY_S,
-    NFM_MIN_SINAD_F32_DB, NFM_MIN_SINAD_Q15_DB, NFM_QUICK_SAMPLES, NfmMeasurement, measure_nfm,
+    NFM_FULL_SAMPLES, NFM_MAX_CLOSE_DELAY_S, NFM_MAX_OPEN_DELAY_S, NFM_MIN_SINAD_F32_DB,
+    NFM_MIN_SINAD_Q15_DB, NFM_QUICK_SAMPLES, NfmMeasurement, measure_nfm,
 };
 use sdrk_testkit::{Arena, Failure};
 
@@ -68,7 +68,7 @@ fn nfm_quick_f32_fits_the_quick_arena_and_meets_the_checks() {
     check(
         &run::<C32>(NFM_QUICK_SAMPLES, QUICK_ARENA).unwrap(),
         NFM_QUICK_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_F32_DB,
     );
 }
 
@@ -77,7 +77,7 @@ fn nfm_quick_q15_fits_the_quick_arena_and_meets_the_checks() {
     check(
         &run::<CQ15>(NFM_QUICK_SAMPLES, QUICK_ARENA).unwrap(),
         NFM_QUICK_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_Q15_DB,
     );
 }
 
@@ -86,7 +86,7 @@ fn nfm_full_f32_meets_the_checks() {
     check(
         &run::<C32>(NFM_FULL_SAMPLES, QUICK_ARENA).unwrap(),
         NFM_FULL_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_F32_DB,
     );
 }
 
@@ -95,41 +95,8 @@ fn nfm_full_q15_meets_the_checks() {
     check(
         &run::<CQ15>(NFM_FULL_SAMPLES, QUICK_ARENA).unwrap(),
         NFM_FULL_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_Q15_DB,
     );
-}
-
-/// The thresholds of the specification (f32 30 dB, Q15 25 dB). They are not met by the receiver of
-/// the example flow (about 21.7 dB in both types, see `NFM_INTERIM_SINAD_DB` and open item
-/// M19-1 in `docs/open-items.md`); run with `--ignored`. Both values are measured before the
-/// assertions so that a failure reports both.
-#[test]
-#[ignore = "specified SINAD thresholds are not met, see open item M19-1 in docs/open-items.md"]
-fn nfm_meets_the_specified_sinad() {
-    let f = run::<C32>(NFM_QUICK_SAMPLES, QUICK_ARENA).unwrap();
-    let q = run::<CQ15>(NFM_QUICK_SAMPLES, QUICK_ARENA).unwrap();
-    let (fs, qs) = (f.sinad_db, q.sinad_db);
-    assert!(
-        fs >= NFM_MIN_SINAD_F32_DB && qs >= NFM_MIN_SINAD_Q15_DB,
-        "f32 {fs} dB (need {NFM_MIN_SINAD_F32_DB}), q15 {qs} dB (need {NFM_MIN_SINAD_Q15_DB})"
-    );
-}
-
-/// Pins the measured SINAD of the receiver of the example flow so that a change of the
-/// receiver, the filter design or the noise model is noticed. It documents the shortfall of
-/// open item M19-1; when the maintainer decides it, replace this test by the specified
-/// thresholds and drop `#[ignore]` from `nfm_meets_the_specified_sinad`.
-#[test]
-fn nfm_sinad_of_the_flow_filter_is_pinned() {
-    let f = run::<C32>(NFM_QUICK_SAMPLES, QUICK_ARENA).unwrap();
-    let q = run::<CQ15>(NFM_QUICK_SAMPLES, QUICK_ARENA).unwrap();
-    for (name, m) in [("f32", f), ("q15", q)] {
-        assert!(
-            (21.0..22.5).contains(&m.sinad_db),
-            "{name} SINAD {} dB left the pinned range 21.0 to 22.5 dB",
-            m.sinad_db
-        );
-    }
 }
 
 #[test]

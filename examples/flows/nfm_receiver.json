@@ -28,10 +28,10 @@
     "tune": {
       "kind": "ddc",
       "params": {
-        "cutoff_hz": 6000,
+        "cutoff_hz": 8000,
         "decimation": 50,
         "max_taps": 4096,
-        "transition_hz": 3000
+        "transition_hz": 4000
       }
     }
   },

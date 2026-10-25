@@ -267,8 +267,8 @@ fn c32_step_up_and_down_settle_within_one_db() {
     );
     // The first samples of the step are far too loud: the attack acts quickly.
     assert!(level_db_c32(&y[..4]) > REFERENCE_DB + 10.0);
-    // Back down by 15 dB to -25 dBFS: within 1 dB after 5 release time constants.
-    let y = settle(&mut st, 0.056_234_132, 5.0 * release + 0.005);
+    // Back down by 30 dB to -40 dBFS: within 1 dB after 5 release time constants.
+    let y = settle(&mut st, 0.01, 5.0 * release + 0.005);
     let n5 = (5.0 * release * FS as f64) as usize;
     let tail = &y[n5..n5 + 100];
     assert!(
@@ -276,13 +276,6 @@ fn c32_step_up_and_down_settle_within_one_db() {
         "{} dB",
         level_db_c32(tail)
     );
-    // The full 30 dB step down (-10 to -40 dBFS) needs about 5.5 release time constants for
-    // 1 dB (the loop is logistic: M20-1 in docs/open-items.md): check it at 6.
-    let mut st = AgcState::<C32>::new(0.5, attack, release, -20.0, 60.0, 0.0, rate()).unwrap();
-    settle(&mut st, 0.316_227_766, 10.0 * release);
-    let y = settle(&mut st, 0.01, 6.0 * release + 0.005);
-    let n6 = (6.0 * release * FS as f64) as usize;
-    assert!((level_db_c32(&y[n6..n6 + 100]) - REFERENCE_DB).abs() < 1.0);
 }
 
 #[test]
@@ -301,15 +294,10 @@ fn cq15_step_up_and_down_settle_within_one_db() {
     let y = settle(&mut st, 0.316_227_766, 5.0 * attack + 0.005);
     let n5 = (5.0 * attack * FS as f64) as usize;
     assert!((level_db_q(&y[n5..n5 + 100]) - REFERENCE_DB).abs() < 1.0);
-    let y = settle(&mut st, 0.056_234_132, 5.0 * release + 0.005);
+    // Back down by 30 dB to -40 dBFS: within 1 dB after 5 release time constants.
+    let y = settle(&mut st, 0.01, 5.0 * release + 0.005);
     let n5 = (5.0 * release * FS as f64) as usize;
     assert!((level_db_q(&y[n5..n5 + 100]) - REFERENCE_DB).abs() < 1.0);
-    // The full 30 dB step down needs about 5.5 release time constants (M20-1).
-    let mut st = AgcState::<CQ15>::new(0.5, attack, release, -20.0, 60.0, 0.0, rate()).unwrap();
-    settle(&mut st, 0.316_227_766, 10.0 * release);
-    let y = settle(&mut st, 0.01, 6.0 * release + 0.005);
-    let n6 = (6.0 * release * FS as f64) as usize;
-    assert!((level_db_q(&y[n6..n6 + 100]) - REFERENCE_DB).abs() < 1.0);
 }
 
 #[test]
@@ -350,20 +338,41 @@ fn the_gain_never_leaves_its_limits() {
             );
         }
     }
-    // Silence drives the gain to the maximum; a full-scale signal settles at the reference
+    // Silence (exact zeros) carries no information: the gain is held. A signal far below the
+    // reference drives the gain to the maximum; a full-scale signal settles at the reference
     // divided by its amplitude (|x| = sqrt 2), after a first sample that drives the gain to
     // the minimum (the step is far larger than the gain).
     let mut st = agc32();
     let mut y = vec![C32::ZERO; silence.len()];
     Sdrk.agc(&mut st, &silence, &mut y).unwrap();
+    assert_eq!(st.gain_db(), 0.0, "held in silence");
+    let faint = vec![C32::new(1e-6, 0.0); 60_000];
+    Sdrk.agc(&mut st, &faint, &mut y).unwrap();
     assert!((st.gain_db() - 60.0).abs() < 1e-3);
     let mut y = vec![C32::ZERO; loud.len()];
     Sdrk.agc(&mut st, &loud, &mut y).unwrap();
     assert!((st.gain_db() - 20.0 * (0.5f64 / 2f64.sqrt()).log10()).abs() < 0.05);
-    assert!(y[0].re >= 1000.0 && y[1].re < 0.2, "{:?} {:?}", y[0], y[1]);
+    // The overshoot of 2000 times the reference is cut by the divisive attack at once (the
+    // factor is 1 / (1 + r_a (u - 1) / 1.5), here about 1/23) and the loop never reaches zero.
+    assert!(
+        y[0].re >= 1000.0 && y[1].re < 0.2 * y[0].re && y[1].re > 1.0,
+        "{:?} {:?}",
+        y[0],
+        y[1]
+    );
+    assert!(y[1000].re < 1.0, "{:?}", y[1000]);
     let mut st = agcq();
     let mut y = vec![CQ15::ZERO; silence_q.len()];
     Sdrk.agc(&mut st, &silence_q, &mut y).unwrap();
+    assert_eq!(st.gain_db(), 0.0, "held in silence");
+    let faint = vec![
+        CQ15 {
+            re: Q15(1),
+            im: Q15(0)
+        };
+        silence_q.len()
+    ];
+    Sdrk.agc(&mut st, &faint, &mut y).unwrap();
     assert!((st.gain_db() - 60.0).abs() < 1e-6);
     let mut y = vec![CQ15::ZERO; loud_q.len()];
     Sdrk.agc(&mut st, &loud_q, &mut y).unwrap();
@@ -399,9 +408,10 @@ fn an_infinite_sample_drives_the_gain_to_the_minimum() {
         .unwrap();
     assert_eq!(out[0].re, f32::INFINITY);
     assert!((st.gain_db() + 20.0).abs() < 1e-4, "{}", st.gain_db());
-    // It recovers afterwards.
+    // It recovers afterwards, on a faint signal (silence would hold the gain).
     let mut y = vec![C32::ZERO; 60_000];
-    Sdrk.agc(&mut st, &vec![C32::ZERO; 60_000], &mut y).unwrap();
+    Sdrk.agc(&mut st, &vec![C32::new(1e-6, 0.0); 60_000], &mut y)
+        .unwrap();
     assert!(st.gain_db() > 59.0);
 }
 
@@ -716,9 +726,13 @@ fn agc_extremes_do_not_panic() {
     Sdrk.agc(&mut st, &loud, &mut y).unwrap();
     assert!(st.gain_db() < -30.0, "{}", st.gain_db());
     let mut y = vec![CQ15::ZERO; 200_000];
-    Sdrk.agc(&mut st, &vec![CQ15::ZERO; 200_000], &mut y)
-        .unwrap();
-    assert!(st.gain_db() > 80.0);
+    let faint = CQ15 {
+        re: Q15(1),
+        im: Q15(0),
+    };
+    Sdrk.agc(&mut st, &vec![faint; 200_000], &mut y).unwrap();
+    // One LSB is raised to the reference of 1024 LSB (60.2 dB).
+    assert!((st.gain_db() - 60.2).abs() < 0.5, "{}", st.gain_db());
 }
 
 #[test]
@@ -740,12 +754,12 @@ fn length_mismatch_is_an_error_and_changes_nothing() {
 /// instead of freezing the gain silently.
 #[test]
 fn a_time_constant_that_freezes_the_loop_is_rejected() {
-    assert!(AgcState::<CQ15>::new(0.03125, 1e9, 0.5, -20.0, 60.0, 0.0, rate()).is_err());
-    assert!(AgcState::<CQ15>::new(0.03125, 0.1, 1e9, -20.0, 60.0, 0.0, rate()).is_err());
+    assert!(AgcState::<CQ15>::new(0.03125, 1e11, 0.5, -20.0, 60.0, 0.0, rate()).is_err());
+    assert!(AgcState::<CQ15>::new(0.03125, 0.1, 1e11, -20.0, 60.0, 0.0, rate()).is_err());
     let mut st = AgcState::<CQ15>::new(0.03125, 0.1, 0.5, -20.0, 60.0, 0.0, rate()).unwrap();
     let before = st;
     assert!(
-        st.set_params(0.03125, 1e9, 0.5, -20.0, 60.0, rate())
+        st.set_params(0.03125, 1e11, 0.5, -20.0, 60.0, rate())
             .is_err()
     );
     assert_eq!(st, before);
@@ -763,4 +777,109 @@ fn dc_block_real_f32_stays_nan_after_a_nan_until_reset() {
     st.reset();
     Sdrk.dc_block_real(&mut st, &[0.5; 4], &mut y).unwrap();
     assert!(y.iter().all(|v| v.is_finite()));
+}
+
+/// The loop that settled on a faint signal survives a huge step with the fastest allowed
+/// attack: the factor of the update stays positive (the multiplicative form
+/// `g * (1 - r_a (u - 1))` collapsed to the minimum gain), the output returns to the
+/// reference without ever being silenced, and the next sample is already reduced.
+#[test]
+fn a_huge_step_with_the_fastest_attack_does_not_collapse_the_gain() {
+    let fastest = 1.45 / FS as f64; // a per-sample rate of about 0.498
+    let n = 30_000;
+    let faint = tone(0.01, 0, n);
+    let loud = tone(1.0, 0, 400);
+    let mut st = AgcState::<C32>::new(0.5, fastest, 0.05, -40.0, 90.0, 0.0, rate()).unwrap();
+    let mut y = vec![C32::ZERO; n];
+    Sdrk.agc(&mut st, &faint, &mut y).unwrap();
+    assert!((level_db_c32(&y[n - 100..]) - REFERENCE_DB).abs() < 0.5);
+    let mut y = vec![C32::ZERO; 400];
+    Sdrk.agc(&mut st, &loud, &mut y).unwrap();
+    let mags: Vec<f64> = y
+        .iter()
+        .map(|v| f64::from(v.re).hypot(f64::from(v.im)))
+        .collect();
+    assert!(mags[0] > 10.0, "the first sample passes at the old gain");
+    // Never silenced: after the first sample the output stays above a quarter of the reference.
+    assert!(mags[1..].iter().all(|m| *m > 0.125), "{:?}", &mags[..8]);
+    assert!((level_db_c32(&y[300..]) - REFERENCE_DB).abs() < 0.5);
+
+    let mut st = AgcState::<CQ15>::new(0.5, fastest, 0.05, -40.0, 90.0, 0.0, rate()).unwrap();
+    let mut y = vec![CQ15::ZERO; n];
+    Sdrk.agc(&mut st, &tone_q(0.01, 0, n), &mut y).unwrap();
+    let mut y = vec![CQ15::ZERO; 400];
+    Sdrk.agc(&mut st, &tone_q(0.7, 0, 400), &mut y).unwrap();
+    assert!(y[1..].iter().all(|v| v.re.0 != 0 || v.im.0 != 0));
+    assert!((level_db_q(&y[300..]) - REFERENCE_DB).abs() < 0.5);
+}
+
+/// The release is exponential at any level (the error is normalised by the output level, as
+/// in `agc3_cc` of GNU Radio): from 30 dB below the reference the output closes
+/// `1 - exp(-1/(fs tau))` of the distance per sample, as the closed form says.
+#[test]
+fn the_release_is_exponential_from_far_below_the_reference() {
+    let release = 0.05;
+    let x = vec![C32::new(0.01, 0.0); (1.0 * FS as f64) as usize];
+    // The gain holds 0 dB at the start, so u0 = 0.01 / 0.5; the release of the output
+    // follows u[n] = 1 - (1 - u0) exp(-n / (fs tau)) while u stays above 1/4.
+    let mut st = AgcState::<C32>::new(0.5, 0.005, release, -40.0, 90.0, 0.0, rate()).unwrap();
+    let mut y = vec![C32::ZERO; x.len()];
+    Sdrk.agc(&mut st, &x, &mut y).unwrap();
+    // Once u is above the lower limit of the divisor the closed form holds; compare after a
+    // time constant, relative to the state at that point.
+    let tc = (release * FS as f64) as usize;
+    let u = |i: usize| f64::from(y[i].re) / 0.5;
+    let step = |i: usize, k: usize| (1.0 - u(i + k)) / (1.0 - u(i));
+    let expect = (-(100.0) / (release * FS as f64)).exp();
+    for i in [2 * tc, 3 * tc] {
+        let got = step(i, 100);
+        assert!((got - expect).abs() < 2e-3, "{got} vs {expect}");
+    }
+}
+
+/// The `CQ15` fallback divides with 64-bit divisors and `Reference` with `i128` ones; both are
+/// the same function. Sweep the corners of the parameters (reference, rates, gain range) with
+/// signals that jump between silence, faint noise, the reference and full scale.
+#[test]
+fn cq15_fallback_equals_reference_over_parameter_corners() {
+    let mut rng = Pcg32::new(210, 1);
+    let levels = [0.0, 1e-5, 0.003, 0.05, 0.3, 0.7, 1.0];
+    let input: Vec<CQ15> = (0..40_000)
+        .map(|i| {
+            let a = levels[(rng.next_u32() as usize + i / 97) % levels.len()];
+            CQ15 {
+                re: q(rng.normal() * a),
+                im: q(rng.normal() * a),
+            }
+        })
+        .collect();
+    // (reference, attack, release, min dB, max dB, initial dB)
+    let corners = [
+        (
+            1.0 / 32.0,
+            1.45 / 48_000.0,
+            1.45 / 48_000.0,
+            -40.0,
+            90.0,
+            90.0,
+        ),
+        (1.0 / 32.0, 0.001, 0.2, -40.0, 90.0, -40.0),
+        (0.5, 1.45 / 48_000.0, 100.0, -20.0, 60.0, 0.0),
+        (0.5, 100.0, 1.45 / 48_000.0, -20.0, 60.0, 0.0),
+        (1.0, 0.002, 0.02, -40.0, 90.0, 0.0),
+        (1.0, 1.45 / 48_000.0, 0.02, -40.0, 90.0, 90.0),
+        (0.3, 0.1, 0.5, 0.0, 0.0, 0.0),
+        (0.7, 0.0005, 0.01, 10.0, 40.0, 25.0),
+    ];
+    for (reference, attack, release, min, max, initial) in corners {
+        let new = || {
+            AgcState::<CQ15>::new(reference, attack, release, min, max, initial, rate()).unwrap()
+        };
+        let (mut a, mut b) = (new(), new());
+        let (mut ya, mut yb) = (vec![CQ15::ZERO; input.len()], vec![CQ15::ZERO; input.len()]);
+        Fallback.agc(&mut a, &input, &mut ya).unwrap();
+        Reference.agc(&mut b, &input, &mut yb).unwrap();
+        assert_eq!(bit_exact(&ya, &yb), None, "{reference} {attack} {release}");
+        assert_eq!(a, b, "{reference} {attack} {release}");
+    }
 }

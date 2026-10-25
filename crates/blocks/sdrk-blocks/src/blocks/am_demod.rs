@@ -48,11 +48,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         a carrier produces noise; with CQ15 the magnitude saturates at full scale, so keep \
         the input below 0.7 per component; the output rate (input rate divided by \
         audio_decimation) must be above twice audio_cutoff_hz plus the transition; with \
-        CQ15 a dc_cutoff_hz far below fs / 20000 rounds to a pole of 1 and is rejected; when \
-        the input falls to zero (a closed squelch) the audio does not stop at once but decays \
-        with the time constant of the DC blocker (5 ms at 30 Hz) and is exactly zero again \
-        after about 70 time constants with f32, while CQ15 stays at a constant offset of up to \
-        127 LSB (-48 dBFS at 30 Hz, the rounding dead band of the Q15 pole).",
+        CQ15 a dc_cutoff_hz far below fs / 20000 rounds to a pole of 1 and is rejected; an \
+        input sample of exactly zero (a closed squelch) gives an envelope of exactly zero, which \
+        the block passes as zero audio and which clears the DC blocker, so a gated channel is \
+        silent at once (with audio_decimation above 1 the audio filter still rings out for its \
+        length).",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32, PortType::CQ15],
@@ -326,6 +326,43 @@ impl<T: BlockSample, S: Storage> AmDemodBlock<T, S> {
     }
 }
 
+/// The DC blocker with the silence rule of the block: an envelope sample of exactly zero (a
+/// closed squelch, digital silence) is written as zero and clears the blocker, so the audio
+/// of a gated channel is exactly zero instead of a decaying tail. The runs of non-zero
+/// samples between the zeros go through the `dc_block_real` kernel.
+fn dc_block_gated<R: RealSample>(
+    state: &mut DcBlockRealState<R>,
+    env: &[R],
+    out: &mut [R],
+) -> Result<()>
+where
+    Sdrk: DcBlockReal<R>,
+{
+    let mut pos = 0;
+    while pos < env.len() {
+        let rest = tail(env, pos)?;
+        let run = rest
+            .iter()
+            .position(|&v| v == R::ZERO)
+            .unwrap_or(rest.len());
+        if run > 0 {
+            <Sdrk as DcBlockReal<R>>::dc_block_real(
+                &Sdrk,
+                state,
+                head(rest, run)?,
+                head_mut(tail_mut(out, pos)?, run)?,
+            )?;
+            pos += run;
+            continue;
+        }
+        let zeros = rest.iter().take_while(|&&v| v == R::ZERO).count();
+        head_mut(tail_mut(out, pos)?, zeros)?.fill(R::ZERO);
+        state.reset();
+        pos += zeros;
+    }
+    Ok(())
+}
+
 impl<T: BlockSample, S: Storage> AmDemodBlock<T, S>
 where
     Sdrk: Mag<T> + DcBlockReal<T::Real> + ResampleReal<T::Real>,
@@ -338,12 +375,7 @@ where
             Some(d) => {
                 let env = head_mut(self.mag.as_mut(), m)?;
                 <Sdrk as Mag<T>>::mag(&Sdrk, piece, env)?;
-                <Sdrk as DcBlockReal<T::Real>>::dc_block_real(
-                    &Sdrk,
-                    d,
-                    head(self.mag.as_ref(), m)?,
-                    out,
-                )?;
+                dc_block_gated(d, head(self.mag.as_ref(), m)?, out)?;
             }
             None => <Sdrk as Mag<T>>::mag(&Sdrk, piece, out)?,
         }
@@ -356,8 +388,7 @@ where
         <Sdrk as Mag<T>>::mag(&Sdrk, piece, head_mut(self.mag.as_mut(), m)?)?;
         let src: &[T::Real] = match &mut self.dc {
             Some(d) => {
-                <Sdrk as DcBlockReal<T::Real>>::dc_block_real(
-                    &Sdrk,
+                dc_block_gated(
                     d,
                     head(self.mag.as_ref(), m)?,
                     head_mut(self.scratch.as_mut(), m)?,

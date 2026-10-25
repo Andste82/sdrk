@@ -13,6 +13,7 @@
 # | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, information on `neon` |
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
+# | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 #
 # The libraries are linked only into the measurement binary of `benches/kernels`, which is
 # built on the measuring machine and never distributed; none of them is a dependency of a
@@ -86,7 +87,7 @@ if [ -n "$cxx" ]; then
 fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c"; echo "$platform|$cc_version|$cxx_version") | sha256sum | cut -d ' ' -f 1)
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c"; echo "$platform|$cc_version|$cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -190,26 +191,40 @@ build_ne10() {
     cp "$(find "$work/ne10-build" -name libNE10.a | head -n 1)" "$prefix/lib/"
 }
 
+# The loop of GNU Radio's agc_cc, compiled with the generic flags of GNU Radio's own build.
+build_gr_agc() {
+    GR_AGC_FLAGS="-O3"
+    if [ "$platform" = wasm32 ]; then
+        GR_AGC_FLAGS="-O3 -msimd128"
+    fi
+    $cc $GR_AGC_FLAGS -c "$here/gr-agc.c" -o "$work/gr-agc.o"
+    $ar rcs "$prefix/lib/libgragc.a" "$work/gr-agc.o"
+}
+
 KISSFFT_FLAGS=""
+GR_AGC_FLAGS=""
 libraries=()
 case $platform in
     x86_64)
         build_volk
         build_fftw
         build_kissfft
-        libraries=(volk fftw kissfft)
+        build_gr_agc
+        libraries=(volk fftw kissfft gragc)
         ;;
     aarch64)
         build_volk
         build_fftw
         build_kissfft
         build_ne10
-        libraries=(volk fftw kissfft ne10)
+        build_gr_agc
+        libraries=(volk fftw kissfft ne10 gragc)
         ;;
     wasm32)
         build_volk_wasm
         build_kissfft
-        libraries=(volk kissfft)
+        build_gr_agc
+        libraries=(volk kissfft gragc)
         ;;
 esac
 
@@ -226,6 +241,7 @@ esac
             volk) entry="\"volk\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$VOLK_SHA256\", \"build\": \"$([ "$platform" = wasm32 ] && echo "generic protokernels, -O3 -msimd128" || echo "CMake Release, ENABLE_ORC=OFF")\" }" ;;
             fftw) entry="\"fftw\": { \"version\": \"$FFTW_VERSION\", \"sha256\": \"$FFTW_SHA256\", \"build\": \"--enable-float $([ "$platform" = aarch64 ] && echo --enable-neon || echo --enable-sse2), CFLAGS=$OPT_FLAGS\" }" ;;
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
+            gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
         printf '%s    %s' "$sep" "$entry"

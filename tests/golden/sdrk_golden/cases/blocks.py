@@ -357,3 +357,98 @@ def am_demod_cq15(rng):
             "sat16((x - x_prev) + round_shift(r y_prev, 15)) with r = round(exp(-2 pi 30 / fs) 32768)"
         ),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# am_demod with the audio filter (M20): mag -> dc_block_real -> upfirdn / resample_real
+
+AMD_DECIMATION = 4
+AMD_AUDIO_CUTOFF_HZ = 2500.0
+# Samples [GAP_START, GAP_END) are exactly zero (a closed squelch): the audio of the block is
+# exactly zero there and the DC blocker starts again from a cleared state.
+AMD_GAP = (6000, 8000)
+
+
+def am_gap_signal(rng):
+    x = am_signal(rng)
+    x[AMD_GAP[0] : AMD_GAP[1]] = 0.0
+    return x
+
+
+def am_gap_params(**extra):
+    return am_params(
+        **{
+            "audio_cutoff_hz": AMD_AUDIO_CUTOFF_HZ,
+            "audio_decimation": AMD_DECIMATION,
+            "gap_start": AMD_GAP[0],
+            "gap_end": AMD_GAP[1],
+            **extra,
+        }
+    )
+
+
+def audio_lowpass():
+    return design.lowpass(AMD_AUDIO_CUTOFF_HZ, AMD_AUDIO_CUTOFF_HZ / 4.0, 60.0, AM_RATE)
+
+
+def runs_of_nonzero(env):
+    """The maximal runs ``[a, b)`` where ``env != 0``."""
+    nz = np.concatenate([[False], np.asarray(env) != 0, [False]])
+    edges = np.flatnonzero(nz[1:] != nz[:-1])
+    return list(zip(edges[0::2].tolist(), edges[1::2].tolist()))
+
+
+@case(kernel="blocks", name="am_demod_c32_dec4_gap", seed=436)
+def am_demod_c32_dec4_gap(rng):
+    x = am_gap_signal(rng).astype(np.complex64)
+    r = float(np.float32(scalar_math.exp(-2.0 * np.pi * AM_DC_CUTOFF_HZ / AM_RATE)))
+    h = audio_lowpass().astype(np.float32).astype(np.float64)
+    env = np.abs(x.astype(np.complex128))
+    dc = np.zeros(AM_N)
+    for a, b in runs_of_nonzero(env):  # a zero envelope sample clears the DC blocker
+        dc[a:b] = scipy.signal.lfilter([1.0, -1.0], [1.0, -r], env[a:b])
+    expected = scipy.signal.upfirdn(h, dc, 1, AMD_DECIMATION)[: (AM_N - 1) // AMD_DECIMATION + 1]
+    return dict(
+        params=am_gap_params(r=r, taps=len(h)),
+        arrays={"input": Array("cf32", x), "expected": Array("f64", expected)},
+        tolerance={"class": "tolerance", "snr_db_min": 90.0, "skip": 0},
+        notes=(
+            "the signal of am_demod_c32 with samples 6000 to 7999 set to zero; np.abs of the f32 input, "
+            "the DC blocker via lfilter on every run of non-zero envelope (an envelope of exactly zero "
+            "outputs zero and clears the blocker), the audio filter (kaiserord + firwin, transition "
+            "cutoff / 4, 2500 Hz, taps rounded to f32) and upfirdn by 4"
+        ),
+    )
+
+
+@case(kernel="blocks", name="am_demod_cq15_dec4_gap", seed=437)
+def am_demod_cq15_dec4_gap(rng):
+    x = am_gap_signal(rng)
+    xr, xi = q15.from_float(x.real), q15.from_float(x.imag)
+    r = int(q15.from_float(scalar_math.exp(-2.0 * np.pi * AM_DC_CUTOFF_HZ / AM_RATE)))
+    h = np.asarray(q15.from_float(audio_lowpass()), dtype=np.int64)
+    assert int(np.abs(h).max()) < 32768
+    env = np.array(
+        [int(q15.sat16(mag_q15_scalar(a, b))) for a, b in zip(xr.tolist(), xi.tolist())],
+        dtype=np.int64,
+    )
+    dc = np.zeros(AM_N, dtype=np.int64)
+    for a, b in runs_of_nonzero(env):
+        dc[a:b] = block_q15(env[a:b], r)
+    # resample_real with L = 1: y[j] = sat16(round_shift(sum_i h[i] v[j M - i], 15))
+    count = (AM_N - 1) // AMD_DECIMATION + 1
+    padded = np.concatenate([np.zeros(len(h) - 1, dtype=np.int64), dc])
+    out = np.zeros(count, dtype=np.int64)
+    for j in range(count):
+        window = padded[j * AMD_DECIMATION : j * AMD_DECIMATION + len(h)][::-1]
+        out[j] = int(q15.sat16(q15.round_shift(int(np.sum(h * window)), 15)))
+    return dict(
+        params=am_gap_params(r_raw=r, taps=len(h)),
+        arrays={"input": Array("ci16", q15.pack(xr, xi)), "expected": Array("i16", out)},
+        tolerance={"class": "bit_exact"},
+        notes=(
+            "the signal of am_demod_cq15 with samples 6000 to 7999 set to zero; integer chain: envelope, "
+            "Q15 DC blocker restarted after every zero envelope sample, audio taps round(h 32768), "
+            "decimation by 4 with one rounding per output: sat16(round_shift(sum, 15))"
+        ),
+    )

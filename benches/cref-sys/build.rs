@@ -6,10 +6,11 @@
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 3] = [
+const LIBRARIES: [(&str, &str, &str); 4] = [
     ("has_fftw", "libfftw3f.a", "fftw3f"),
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
+    ("has_gragc", "libgragc.a", "gragc"),
 ];
 
 fn main() {

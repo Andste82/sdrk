@@ -312,7 +312,7 @@ fn mag_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32]) {
     });
     for (o, x) in out.iter_mut().zip(input.chunks_exact(2)) {
         if let [re, im] = *x {
-            *o = libm::sqrtf(re * re + im * im);
+            *o = sdrk_core::num::sqrt_f32(re * re + im * im);
         }
     }
 }
@@ -634,13 +634,12 @@ mod neon {
     #![allow(unsafe_code)]
 
     use core::arch::aarch64::{
-        float32x4x2_t, float32x4x4_t, int16x8_t, int16x8x2_t, int16x8x4_t, uint32x4_t, vaddq_u32,
-        vcgeq_u32, vcgtq_u32, vcvtaq_u32_f32, vcvtq_f32_u32, vdupq_n_f32, vdupq_n_s16, vdupq_n_u32,
-        vget_low_s16, vld2q_s16, vld4q_s16, vmaxq_s16, vminq_f32, vmlal_high_s16, vmlal_s16,
-        vmlaq_u32, vmull_high_s16, vmull_s16, vmulq_f32, vmulq_u32, vpaddq_f32, vqdmlal_high_s16,
-        vqdmlal_s16, vqdmull_high_s16, vqdmull_s16, vqmovn_high_s32, vqmovn_s32,
+        float32x4x2_t, float32x4x4_t, int16x8_t, int16x8x2_t, int16x8x4_t, uint32x4_t, vcgtq_u32,
+        vcvtaq_u32_f32, vcvtq_f32_u32, vdupq_n_f32, vget_low_s16, vld2q_s16, vld4q_s16,
+        vmlal_high_s16, vmlal_s16, vmlaq_u32, vmull_high_s16, vmull_s16, vmulq_f32, vpaddq_f32,
+        vqdmlal_high_s16, vqdmlal_s16, vqdmull_high_s16, vqdmull_s16, vqmovn_high_s32, vqmovn_s32,
         vqrshrn_high_n_s32, vqrshrn_n_s32, vreinterpretq_s32_u32, vreinterpretq_u32_s32,
-        vsqrtq_f32, vst1q_s16, vst2q_s16, vsubq_u32,
+        vsqrtq_f32, vst1q_s16, vst2q_s16, vsubq_f32, vsubq_u32,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x8, f32x16};
@@ -715,22 +714,21 @@ mod neon {
     fearless_simd::kernel!(
         pub(super) fn mag_q15(t: Neon, input: &[i16], out: &mut [i16]) -> usize {
             // The rounded roots of four sums of squares (`s`, at most `2^31`, as `u32`): the
-            // smallest `y` with `y (y + 1) >= s` (see `root_q15` for the idea). The root in
-            // single precision is limited to 32768 so that `y (y + 1)` fits `u32`, and
-            // converted to the nearest integer (`fcvtau`), which is within one of `y`. `y` is
-            // `u32::MAX` (-1) for `s = 0` (stepping down from 0), which the signed saturating
-            // narrowing keeps for the maximum with 0 after it, and at least 32768 for the sums
-            // that saturate.
+            // smallest `y` with `y (y + 1) >= s`, which is the root rounded to the nearest
+            // integer. The single-precision root is off by less than 0.0063 (the conversion of
+            // `s`, the root and the subtraction below, each half an ulp at most, at 46341), so
+            // after the subtraction of 1/64 it lies in `(sqrt(s) - 0.022, sqrt(s))`, and its
+            // nearest integer (`fcvtau`, which turns a negative value into 0) is `y` or `y - 1`
+            // and never above `y`. One test (`s > y_est (y_est + 1)`, which fits `u32`: the
+            // largest root is 46341) then adds the one that may be missing. Proven by the sweep
+            // over all 2^32 raw pairs (`mag_cq15_exhaustive_every_raw_pair`).
             // A closure, not a macro: the four expansions would exceed the stack frame the lint
             // allows. It inherits the target features of the function and is inlined.
             let roots = |s: uint32x4_t| -> uint32x4_t {
-                let r = vminq_f32(vsqrtq_f32(vcvtq_f32_u32(s)), vdupq_n_f32(32768.0));
+                let r = vsubq_f32(vsqrtq_f32(vcvtq_f32_u32(s)), vdupq_n_f32(1.0 / 64.0));
                 let y = vcvtaq_u32_f32(r);
-                let up = vcgtq_u32(s, vmlaq_u32(y, y, y));
-                let below = vaddq_u32(y, vdupq_n_u32(u32::MAX));
-                let down = vcgeq_u32(vmulq_u32(below, y), s);
-                // The masks are all ones (-1) where true.
-                vaddq_u32(vsubq_u32(y, up), down)
+                // The mask is all ones (-1) where true.
+                vsubq_u32(y, vcgtq_u32(s, vmlaq_u32(y, y, y)))
             };
             // One step per iteration: `ld2` has no offset form, only the post-index form of the
             // loop.
@@ -747,8 +745,7 @@ mod neon {
                 let hi = vmlal_high_s16(vmull_high_s16(re, re), im, im);
                 let lo = vreinterpretq_s32_u32(roots(vreinterpretq_u32_s32(lo)));
                 let hi = vreinterpretq_s32_u32(roots(vreinterpretq_u32_s32(hi)));
-                let packed = vqmovn_high_s32(vqmovn_s32(lo), hi);
-                store1(o, vmaxq_s16(packed, vdupq_n_s16(0)));
+                store1(o, vqmovn_high_s32(vqmovn_s32(lo), hi));
             })
         }
     );

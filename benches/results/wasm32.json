@@ -6,27 +6,35 @@
       "judged_against": "references",
       "kernels": {
         "agc": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
-              "other_instr_per_sample": 213.06,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 213.06,
+              "label": "information: fallback",
+              "other_instr_per_sample": 62.21,
+              "other_snr_db": 123.07,
+              "ours_instr_per_sample": 62.21,
               "ratio": 1.0
+            },
+            {
+              "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 64.05,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 62.21,
+              "ratio": 0.97
             }
           ],
-          "other_instr_per_sample": 213.06,
-          "ours_instr_per_sample": 213.06,
-          "ratio": 1.0,
+          "other_instr_per_sample": 64.05,
+          "ours_instr_per_sample": 62.21,
+          "ratio": 0.97,
           "snr_db": {
-            "other": 125.4,
-            "ours": 125.4
+            "other": 118.88,
+            "ours": 123.07
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "agc_cq15": {
           "compared_with": "sdrk fallback",
@@ -35,14 +43,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 806.07,
+              "other_instr_per_sample": 620.79,
               "other_snr_db": null,
-              "ours_instr_per_sample": 806.07,
+              "ours_instr_per_sample": 620.79,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 806.07,
-          "ours_instr_per_sample": 806.07,
+          "other_instr_per_sample": 620.79,
+          "ours_instr_per_sample": 620.79,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -552,8 +560,8 @@
             "other": 96.22,
             "ours": 96.22
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
@@ -810,6 +818,11 @@
     "cc": "Ubuntu clang version 21.1.8 (6ubuntu1)",
     "cxx": "",
     "libraries": {
+      "gnuradio_agc_cc": {
+        "build": "-O3 -msimd128",
+        "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
+        "version": "main at ec1bf15"
+      },
       "kissfft": {
         "build": "-O3 -msimd128 -DFIXED_POINT=16",
         "sha256": "76c1aac87ddb7258f34b08a13f0eebf9e53afa299857568346aa5c82bcafaf1a",

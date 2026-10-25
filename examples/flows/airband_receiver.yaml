@@ -17,8 +17,9 @@ inputs:
 nodes:
   # Automatic gain control with slow time constants (see am_receiver.yaml): the audio is the
   # envelope, so the loop must not follow the modulation. It sits after the squelch: while
-  # the gate is closed the input is exactly zero, the output stays zero and the gain does
-  # not run away (the release only raises it slowly, up to max_gain_db).
+  # the gate is closed the input is exactly zero, the output stays zero and the gain is held
+  # (a zero sample carries no information), so it does not run up to max_gain_db in the
+  # pauses and the next transmission starts at the gain of the last one.
   agc:
     kind: agc
     params:

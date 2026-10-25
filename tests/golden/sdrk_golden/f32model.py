@@ -38,6 +38,12 @@ def mul(a, b):
         return F32(a) * F32(b)
 
 
+def div(a, b):
+    """``a / b`` rounded once to float32 (IEEE: x / 0 is infinite, 0 / 0 is NaN)."""
+    with np.errstate(all="ignore"):
+        return F32(a) / F32(b)
+
+
 def is_finite(a):
     """True when ``a`` is neither NaN nor infinite."""
     return bool(np.isfinite(F32(a)))
@@ -52,9 +58,10 @@ def flush_denormal(x):
 def self_test():
     """Check the helpers against hand-computed values; raises AssertionError on any deviation."""
     # Every result is a float32 scalar.
-    for v in (f32(0.1), add(0.5, 0.25), sub(1, 2), mul(3, 4), flush_denormal(1.0)):
+    for v in (f32(0.1), add(0.5, 0.25), sub(1, 2), mul(3, 4), div(1, 4), flush_denormal(1.0)):
         assert isinstance(v, np.float32), type(v)
     # 0.1f + 0.2f is exactly 0.3f in float32 (bits 0x3E99999A); in float64 it is not 0.3.
+    assert div(1, 4) == f32(0.25) and not np.isfinite(div(1, 0))
     assert add(f32(0.1), f32(0.2)).tobytes() == f32(0.3).tobytes()
     assert float(f32(0.1)) + float(f32(0.2)) != float(f32(0.3))
     # f32(0.1) is 13421773 * 2^-27.

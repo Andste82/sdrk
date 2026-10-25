@@ -1,0 +1,42 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "am_demod_cq15_dec4_gap.expected.bin",
+      "len": 4000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "am_demod_cq15_dec4_gap.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "am_demod_cq15_dec4_gap",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the signal of am_demod_cq15 with samples 6000 to 7999 set to zero; integer chain: envelope, Q15 DC blocker restarted after every zero envelope sample, audio taps round(h 32768), decimation by 4 with one rounding per output: sat16(round_shift(sum, 15))",
+  "params": {
+    "audio_cutoff_hz": 2500.0,
+    "audio_decimation": 4,
+    "audio_hz": 1000.0,
+    "carrier": 0.5,
+    "dc_cutoff_hz": 30.0,
+    "gap_end": 8000,
+    "gap_start": 6000,
+    "index": 0.5,
+    "phase": 0.3,
+    "r_raw": 32640,
+    "rate_hz": 48000.0,
+    "taps": 281
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 437,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

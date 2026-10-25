@@ -279,7 +279,9 @@ fn blocks_cases_are_present() {
         golden::list("blocks").unwrap(),
         [
             "am_demod_c32",
+            "am_demod_c32_dec4_gap",
             "am_demod_cq15",
+            "am_demod_cq15_dec4_gap",
             "ddc_c32_fs2m4_f600k_d10",
             "fm_demod_c32",
             "resampler_rational_c32_48k_to_44k1",
@@ -362,6 +364,36 @@ fn am_demod_block_matches_python_chain_cq15() {
         panic!()
     };
     let (cfg, rate) = am_demod_config(&case);
+    check_stream(&case, input, || {
+        AmDemodBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+/// The decimated cases carry a stretch of exactly zero input (a closed squelch): the audio
+/// filter path and the silence rule of the block are part of the golden chain.
+#[test]
+fn am_demod_block_with_audio_filter_matches_python_chain_c32() {
+    let case = golden::load("blocks", "am_demod_c32_dec4_gap").unwrap();
+    let Array::CF32(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = am_demod_config(&case);
+    assert_eq!(cfg.audio_decimation, 4);
+    assert_eq!(cfg.audio_taps(rate).unwrap(), usize_param(&case, "taps"));
+    check_stream(&case, input, || {
+        AmDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+#[test]
+fn am_demod_block_with_audio_filter_matches_python_chain_cq15() {
+    let case = golden::load("blocks", "am_demod_cq15_dec4_gap").unwrap();
+    let Array::CI16(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = am_demod_config(&case);
+    assert_eq!(cfg.audio_decimation, 4);
+    assert_eq!(cfg.audio_taps(rate).unwrap(), usize_param(&case, "taps"));
     check_stream(&case, input, || {
         AmDemodBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });

@@ -20,10 +20,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "agc",
     summary: "Automatic gain control: scales a complex signal to a constant output amplitude.",
     details: "Multiplies every sample by a gain g and then corrects the gain from the amplitude \
-        m of the output sample: g = g (1 + (r / ref) (ref - m)), with ref the reference \
-        amplitude and r the attack rate when the output is too loud and the release rate when \
-        it is too quiet. Near the set point this is a first-order loop whose time constant is \
-        attack_s or release_s, independent of the input level. The gain stays between \
+        m of the output sample, with the error normalised by the output level (as the agc3 \
+        of GNU Radio): about g (1 + r (ref - m) / m), with ref the reference amplitude and r \
+        the attack rate when the output is too loud and the release rate when it is too \
+        quiet. The loop is first order with the time constant attack_s or release_s at any \
+        level (a step of 30 dB settles within 1 dB after 5 time constants), the divisor is \
+        limited to the range ref / 4 to 1.5 ref so that the update stays bounded. A sample of \
+        exactly zero (a closed squelch) holds the gain. The gain stays between \
         min_gain_db and max_gain_db. Place it after the channel filter (ddc) and, if there is \
         one, after the squelch. For AM use slow time constants (attack 0.1 s, release 0.5 s), \
         well above the audio period: a fast AGC follows the modulation and distorts it. The \

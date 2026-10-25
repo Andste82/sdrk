@@ -7,7 +7,7 @@
 use std::hint::black_box;
 use std::sync::Arc;
 
-use cref_sys::{Fftw, FftwR2c, KissFft16, Ne10Int16};
+use cref_sys::{Fftw, FftwR2c, GrAgcCc, KissFft16, Ne10Int16};
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
@@ -38,6 +38,9 @@ pub enum Impl {
     Fallback,
     /// VOLK, called as GNU Radio calls it.
     Volk,
+    /// The loop of a GNU Radio block that is not a VOLK kernel (`agc_cc`), compiled as GNU
+    /// Radio compiles it.
+    GnuRadio,
     /// rustfft, `FftPlanner` (it picks the best planner of the CPU).
     RustFft,
     /// FFTW, single precision, `FFTW_ESTIMATE`, out of place (as GNU Radio's `fft_vcc`).
@@ -55,10 +58,11 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 9] = [
+    pub const ALL: [Impl; 10] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
+        Impl::GnuRadio,
         Impl::RustFft,
         Impl::Fftw,
         Impl::FftwInPlace,
@@ -73,6 +77,7 @@ impl Impl {
             Impl::Ours => "ours",
             Impl::Fallback => "fallback",
             Impl::Volk => "volk",
+            Impl::GnuRadio => "gnuradio",
             Impl::RustFft => "rustfft",
             Impl::Fftw => "fftw",
             Impl::FftwInPlace => "fftw-in-place",
@@ -1861,6 +1866,12 @@ fn c32_pairs(x: &mut [C32]) -> &mut [[f32; 2]] {
     unsafe { std::slice::from_raw_parts_mut(x.as_mut_ptr().cast(), x.len()) }
 }
 
+/// Shared form of [`c32_pairs`].
+fn c32_pairs_ref(x: &[C32]) -> &[[f32; 2]] {
+    // SAFETY: as in `c32_pairs`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), x.len()) }
+}
+
 /// `x` viewed as interleaved pairs of `i16` (KissFFT's and Ne10's int16 complex type).
 fn cq15_pairs(x: &[CQ15]) -> &[[i16; 2]] {
     // SAFETY: `CQ15` is `repr(C)` of two `repr(transparent)` `i16`.
@@ -2436,13 +2447,42 @@ fn agc<T: ComplexSample, B: Agc<T>>(
     let _ = black_box(backend.agc(state, black_box(input), out));
 }
 
+/// The `agc_cc` of GNU Radio with the parameters of the measurement: rate, reference, initial
+/// gain and maximum gain (additive, so the rate is not the one of our `AgcState`; the
+/// instruction count of its loop does not depend on the values).
+fn gr_agc() -> Option<GrAgcCc> {
+    GrAgcCc::new(1e-3, 0.5, 1.0, 1000.0)
+}
+
+/// The f64 model of the `agc_cc` loop, the accuracy reference of [`Impl::GnuRadio`].
+fn gr_agc_model(input: &[C32]) -> Vec<C32> {
+    let (rate, reference, max_gain) = (1e-3f64, 0.5f64, 1000.0f64);
+    let mut gain = 1.0f64;
+    let mut out = Vec::with_capacity(input.len());
+    for x in input {
+        let (re, im) = (f64::from(x.re) * gain, f64::from(x.im) * gain);
+        gain += rate * (reference - (re * re + im * im).sqrt());
+        if gain > max_gain {
+            gain = max_gain;
+        }
+        #[allow(clippy::cast_possible_truncation, reason = "a model value rounded to f32")]
+        out.push(C32::new(re as f32, im as f32));
+    }
+    out
+}
+
 impl Kernel for AgcK<C32> {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let mut gr = gr_agc();
         for _ in 0..k {
             match which {
                 Impl::Ours => agc(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => agc(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::GnuRadio => gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .scale_n(c32_pairs_ref(&self.input), c32_pairs(&mut self.out)),
                 other => unreachable!("agc has no {other:?}"),
             }
             black_box(&self.out);
@@ -2451,18 +2491,28 @@ impl Kernel for AgcK<C32> {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        let mut want = vec![C32::default(); self.input.len()];
-        let _ = Reference.agc(&mut Self::state(), &self.input, &mut want);
+        let want = if which == Impl::GnuRadio {
+            gr_agc_model(&self.input)
+        } else {
+            let mut want = vec![C32::default(); self.input.len()];
+            let _ = Reference.agc(&mut Self::state(), &self.input, &mut want);
+            want
+        };
         snr_db(&c32s(&want), &c32s(&self.out))
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::GnuRadio => gr_agc().is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
             _ => "sdrk",
         }
     }

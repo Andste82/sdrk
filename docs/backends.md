@@ -102,7 +102,7 @@ Helpers called from a level path must be `#[inline(always)]` functions or local 
 
 The cargo feature `relaxed-simd` of `sdrk-backend-simd` (forwarded by the facade `sdrk` and by `sdrk-wasm`) is for builds with `RUSTFLAGS="-C target-feature=+simd128,+relaxed-simd"`. In such a build the `C32` variants of `fir`, `fir_decimate` and `fir_interpolate` (`resample`) accumulate with the relaxed multiply-add (`f32x4.relaxed_madd`), and `rotate` and the `C32` FFT, which use `mul_add` on every level, get it from `fearless_simd` (it uses the relaxed instruction for `mul_add` whenever the target feature is on). `mag_sq` uses no multiply-add, so it stays bit-exact in the relaxed build too. The engine may fuse the multiplication and the addition or not, whichever is faster on its hardware: the results are **not bit-exact** and differ between hosts, but stay within the contracts of the table (the tolerance kernels). On every other target, and on wasm32 without the target feature, the feature changes nothing. The block-size invariance of the `fir` family holds in the relaxed build as well, because every path through the window uses the same instruction.
 
-`cargo xtask wasm-pkg --relaxed` builds this variant as `sdrk_relaxed.wasm`; it is never selected automatically ([wasm.md](wasm.md)). The CI job `wasm-wasmtime` runs the tests of the backend, the facade and the blocks with it under wasmtime.
+`cargo xtask wasm-pkg --relaxed` builds this variant as `sdrk_relaxed.wasm`; it is never selected automatically ([wasm.md](wasm.md)). The CI job `test_wasm32` runs the tests of the backend, the facade and the blocks with it under wasmtime.
 
 ### Limits of the vector paths
 

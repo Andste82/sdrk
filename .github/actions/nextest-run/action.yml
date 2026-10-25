@@ -1,0 +1,27 @@
+name: nextest-run
+description: >
+  Runs the test programs of a nextest archive that a build job uploaded, without building.
+  The archive is extracted to the checkout, so the paths that the tests compiled in (for
+  example env!("CARGO_BIN_EXE_...") of the examples) are the same as in the build job.
+inputs:
+  artifact:
+    description: Name of the artifact that holds nextest.tar.zst.
+    required: true
+  args:
+    description: Further arguments of cargo nextest run (a filter, a partition).
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: nextest@${{ env.NEXTEST_VERSION }}
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact }}
+    - name: Run the archived tests
+      shell: bash
+      run: >
+        cargo nextest run --archive-file nextest.tar.zst --workspace-remap .
+        --extract-to "$GITHUB_WORKSPACE" --extract-overwrite --no-fail-fast ${{ inputs.args }}

@@ -1,0 +1,23 @@
+name: rust
+description: >
+  Installs the toolchain of rust-toolchain.toml and restores the cargo cache of one build.
+  Only runs on main save the cache, so pull requests read the caches of main and do not
+  evict them (the repository has 10 GB of cache).
+inputs:
+  cache-key:
+    description: Shared key of the cache, one per platform and build configuration.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install toolchain from rust-toolchain.toml
+      # Without arguments rustup installs the toolchain, components and targets listed in
+      # rust-toolchain.toml.
+      shell: bash
+      run: rustup toolchain install
+    - uses: Swatinem/rust-cache@v2
+      if: inputs.cache-key != ''
+      with:
+        shared-key: ${{ inputs.cache-key }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}

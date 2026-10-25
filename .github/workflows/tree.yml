@@ -1,0 +1,1117 @@
+# The CI tree: `check` is the gate; below it one build job per platform and build
+# configuration, and below each build the tests that use it. Called by ci.yml (scope `pr`)
+# and nightly.yml (scope `full`). The structure is described in docs/testing.md.
+#
+# Conditions, one kind each:
+#   build jobs            if: !inputs.docs_only
+#   tests of every run    if: !inputs.skip_pr_nodes   (the nightly run skips them when main is
+#                                                     unchanged since the last green run)
+#   nightly-only jobs     if: inputs.scope == 'full'
+# A job whose `needs` failed or was skipped is skipped too.
+name: tree
+
+on:
+  workflow_call:
+    inputs:
+      scope:
+        description: "`pr` (every pull request) or `full` (nightly and manual runs)."
+        type: string
+        required: true
+      weekly:
+        description: The weekly run also runs the full profile of the ESP32-P4.
+        type: boolean
+        default: false
+      docs_only:
+        description: Only documentation changed that no test reads; only `check` runs.
+        type: boolean
+        default: false
+      skip_pr_nodes:
+        description: Skip the tests that every pull request runs (main unchanged).
+        type: boolean
+        default: false
+      run_count:
+        description: Kernels, backends, benches, xtask or the toolchain changed.
+        type: boolean
+        default: true
+      run_golden:
+        description: The golden vectors or the generator changed.
+        type: boolean
+        default: true
+      run_selfcheck:
+        description: xtask or the emulator targets changed.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NEXTEST_VERSION: 0.9.148
+  SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
+  SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
+  SDE_DIR: sde-external-9.58.0-2025-06-16-lin
+  WASMTIME_VERSION: v49.0.3
+  WASMTIME_SHA256: 4001225413f208345b980525f31c4080e1873808b38d0ddc7918497340667fbb
+  # Not QEMU_VERSION: qemu-user reads QEMU_<OPTION> variables as options (QEMU_VERSION is
+  # -version), and the counters run qemu-aarch64 in this environment.
+  CI_QEMU_VERSION: 10.2.1
+  CI_QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
+  # The pinned container of the count jobs (the compilers of the C references, glibc and the
+  # counters are the same in every run) and its apt snapshot.
+  COUNT_IMAGE_SNAPSHOT: "20261019T000000Z"
+
+jobs:
+  # ---------------------------------------------------------------------------------------
+  # Gate: nothing is built that does not pass these checks.
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-check
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy (x86-64)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Clippy (wasm32-wasip1 with SIMD128, the crates that build for WASI)
+        env:
+          RUSTFLAGS: "-C target-feature=+simd128"
+        run: >
+          cargo clippy --target wasm32-wasip1 --target-dir target/wasm-clippy --all-targets
+          -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks -- -D warnings
+      - name: Clippy (sdrk-wasm on wasm32-unknown-unknown, tests included)
+        run: cargo clippy -p sdrk-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy (thumbv7em-none-eabihf, the heap-free crates)
+        run: >
+          cargo clippy --target thumbv7em-none-eabihf --no-default-features
+          -p sdrk-device -p sdrk-core -p sdrk -p sdrk-blocks -p sdrk-testkit -- -D warnings
+      - name: Architecture checks and cargo doc (-D warnings)
+        run: cargo xtask check
+      - name: Pipeline schema is up to date
+        run: cargo xtask schema --check
+      - uses: taiki-e/install-action@cargo-deny
+      - name: Dependency policy
+        run: cargo deny check
+      - uses: actions/setup-python@v5
+        if: inputs.run_golden
+        with:
+          python-version: "3.12"
+      - name: Golden vectors (pinned requirements)
+        if: inputs.run_golden
+        run: |
+          pip install -r tests/golden/requirements.txt
+          python tests/golden/generate.py --check
+
+  check_msrv:
+    name: check_msrv
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with the rust-version of Cargo.toml
+        shell: bash
+        run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          echo "MSRV $msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          cargo "+$msrv" check --workspace --all-targets --all-features
+
+  golden_hosts:
+    # R1.3: the golden generator runs on every host; Linux x86-64 runs it in `check`.
+    name: golden_${{ matrix.host }}
+    needs: check
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { host: x64_win, runner: windows-latest }
+          - { host: arm64_linux, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Golden vectors (pinned requirements)
+        run: |
+          pip install -r tests/golden/requirements.txt
+          python tests/golden/generate.py --check
+
+  # ---------------------------------------------------------------------------------------
+  # x86-64, Linux
+  build_x64_linux:
+    name: build_x64_linux
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Without debug info the archive of the test programs is 140 MB instead of 900 MB.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-test
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Bare-metal build
+        run: cargo xtask bare-metal
+      - name: Build the test programs into an archive
+        run: cargo nextest archive --workspace --all-features --archive-file nextest.tar.zst
+      - name: Quick test (unit tests of the libraries)
+        run: cargo nextest run --workspace --all-features --lib
+      - name: Doc tests (nextest does not run them)
+        run: cargo test --workspace --all-features --doc
+      - name: Pipeline tests without YAML
+        run: cargo test -p sdrk-pipeline --no-default-features
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextest-x64-linux
+          path: nextest.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  test_x64_linux:
+    name: test_x64_linux
+    needs: build_x64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+      - uses: ./.github/actions/nextest-run
+        with:
+          artifact: nextest-x64-linux
+
+  test_x64_linux_fallback:
+    name: test_x64_linux_fallback
+    needs: build_x64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # `sdrk_fallback_only` is a cfg flag, not a feature: `--all-features` would switch a
+      # feature on and silently disable the backend.
+      RUSTFLAGS: "--cfg sdrk_fallback_only"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-fallback
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Test with the fallback only
+        run: cargo nextest run --workspace --all-features --no-fail-fast
+
+  test_x64_linux_fixed_arch:
+    # The workspace tests enable `std` of the backend (through the pipeline, the testkit and
+    # the system tests), which switches it to run-time detection. Tested alone, the backend
+    # and the facade keep the level fixed at compile time. `SDRK_EXPECT_LEVEL` makes the tests
+    # of the backend check that they run at that level.
+    name: test_x64_linux_fixed_arch (${{ matrix.level }})
+    needs: build_x64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { level: sse2, cpu: x86-64, notables: true }
+          - { level: sse4.2, cpu: x86-64-v2, notables: false }
+          - { level: avx2, cpu: x86-64-v3, notables: true }
+    env:
+      RUSTFLAGS: "-C target-cpu=${{ matrix.cpu }}"
+      SDRK_EXPECT_LEVEL: ${{ matrix.level }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-fixed-${{ matrix.cpu }}
+      - name: Backend and facade with the static tables
+        run: cargo test -p sdrk-backend-simd -p sdrk --features sdrk/fft-tables,sdrk/nco-tables
+      - name: Backend without its static tables (its own default build)
+        # Without `-p sdrk` the facade does not switch the tables on.
+        if: matrix.notables
+        run: cargo test -p sdrk-backend-simd
+
+  # Intel SDE on the x86-64 runner: AVX-512 (the runner pool mixes CPUs with and without it)
+  # and CPUs below the runner's level for the run-time dispatch.
+  build_x64_linux_sde_avx512:
+    name: build_x64_linux_sde_avx512
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RUSTFLAGS: "-C target-cpu=sapphirerapids"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-sde-avx512
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Build the test programs into an archive
+        # Profile `emulated` (optimised, no whole-program LTO): the emulator is slow and debug
+        # builds of the end-to-end tests would run for hours. An explicit `--target` keeps
+        # RUSTFLAGS away from the build scripts, which run on the host without AVX-512. The
+        # command-line examples start the program under test as a child process and are covered
+        # natively by test_x64_linux.
+        run: >
+          cargo nextest archive --workspace --all-targets --cargo-profile emulated
+          --exclude fm-receiver --exclude fm-transmitter
+          --target x86_64-unknown-linux-gnu --archive-file nextest.tar.zst
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextest-x64-linux-sde-avx512
+          path: nextest.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  test_x64_linux_sde_avx512:
+    name: test_x64_linux_sde_avx512 (${{ matrix.part }}/2)
+    needs: build_x64_linux_sde_avx512
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    env:
+      SDRK_EXPECT_LEVEL: avx512
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+      - uses: ./.github/actions/sde
+      - name: Run the tests under SDE
+        shell: bash
+        run: echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER=$SDE64 -spr --" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/nextest-run
+        with:
+          artifact: nextest-x64-linux-sde-avx512
+          args: --partition count:${{ matrix.part }}/2
+
+  test_x64_linux_sde_avx512_fixed_arch:
+    # The workspace run enables `std` of the backend, so it dispatches at run time; this run
+    # keeps AVX-512 fixed at compile time (no std).
+    name: test_x64_linux_sde_avx512_fixed_arch
+    needs: build_x64_linux_sde_avx512
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RUSTFLAGS: "-C target-cpu=sapphirerapids"
+      SDRK_EXPECT_LEVEL: avx512
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-sde-avx512
+      - uses: ./.github/actions/sde
+      - name: Backend with AVX-512 fixed at compile time under SDE
+        shell: bash
+        run: |
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$SDE64 -spr --"
+          cargo test -p sdrk-backend-simd --features fft-tables,nco-tables --profile emulated \
+            --target x86_64-unknown-linux-gnu
+
+  test_x64_linux_sde_runtime:
+    # The CPUIDs of `cargo xtask count` for sse2 and sse4.2; `-chip_check_cpuid 1` stops the
+    # run at any instruction above them. This runs the SSE2 and SSE4.2 arms of the run-time
+    # dispatch, which no x86-64 runner selects.
+    name: test_x64_linux_sde_runtime
+    needs: build_x64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-sde-runtime
+      - uses: ./.github/actions/sde
+      - name: Backend at sse2 and sse4.2 under SDE (run-time detection)
+        shell: bash
+        run: |
+          for level in sse2 sse4.2; do
+            cargo xtask sde-cpuid "$level" "$PWD/target/cpuid-$level.def"
+            SDRK_EXPECT_LEVEL="$level" \
+            CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$SDE64 -cpuid_in $PWD/target/cpuid-$level.def -chip_check_cpuid 1 --" \
+              cargo test -p sdrk-backend-simd --features std,fft-tables,nco-tables --profile emulated \
+              --target x86_64-unknown-linux-gnu --target-dir target/sde-runtime
+          done
+
+  # ---------------------------------------------------------------------------------------
+  # x86-64, Windows: the operating system (paths, I/O, xtask); the SIMD variants depend only
+  # on the architecture and run on Linux.
+  build_x64_win:
+    name: build_x64_win
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-win-test
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Clippy (cfg(windows) code)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Architecture checks
+        run: cargo xtask check
+      - name: Bare-metal build
+        run: cargo xtask bare-metal
+      - name: Build the test programs into an archive
+        run: cargo nextest archive --workspace --all-features --archive-file nextest.tar.zst
+      - name: Quick test (unit tests of the libraries)
+        run: cargo nextest run --workspace --all-features --lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextest-x64-win
+          path: nextest.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  test_x64_win:
+    name: test_x64_win
+    needs: build_x64_win
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+      - uses: ./.github/actions/nextest-run
+        with:
+          artifact: nextest-x64-win
+
+  # ---------------------------------------------------------------------------------------
+  # AArch64, Linux (native runner). NEON is the only level, at run time and fixed.
+  build_arm64_linux:
+    name: build_arm64_linux
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: arm64-linux-test
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Clippy (cfg(target_arch = "aarch64") code)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Bare-metal build
+        run: cargo xtask bare-metal
+      - name: Build the test programs into an archive
+        run: cargo nextest archive --workspace --all-features --archive-file nextest.tar.zst
+      - name: Quick test (unit tests of the libraries)
+        run: cargo nextest run --workspace --all-features --lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextest-arm64-linux
+          path: nextest.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  test_arm64_linux:
+    name: test_arm64_linux
+    needs: build_arm64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      SDRK_EXPECT_LEVEL: neon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+      - uses: ./.github/actions/nextest-run
+        with:
+          artifact: nextest-arm64-linux
+
+  test_arm64_linux_fallback:
+    name: test_arm64_linux_fallback
+    needs: build_arm64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      RUSTFLAGS: "--cfg sdrk_fallback_only"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: arm64-linux-fallback
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Test with the fallback only
+        run: cargo nextest run --workspace --all-features --no-fail-fast
+
+  test_arm64_linux_fixed_arch:
+    name: test_arm64_linux_fixed_arch
+    needs: build_arm64_linux
+    if: ${{ !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      SDRK_EXPECT_LEVEL: neon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: arm64-linux-fixed
+      - name: Backend and facade with the static tables (no std, level fixed)
+        run: cargo test -p sdrk-backend-simd -p sdrk --features sdrk/fft-tables,sdrk/nco-tables
+      - name: Backend without its static tables (its own default build)
+        run: cargo test -p sdrk-backend-simd
+
+  # ---------------------------------------------------------------------------------------
+  # wasm32: WASI in wasmtime (build and test, four variants in one job) and the package.
+  test_wasm32:
+    name: test_wasm32
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: wasm32-wasi
+      - name: Install wasmtime
+        shell: bash
+        run: |
+          name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$name.tar.xz" -o ~/wasmtime.tar.xz
+          echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf ~/wasmtime.tar.xz -C "$HOME"
+          echo "$HOME/$name" >> "$GITHUB_PATH"
+      # The default stack of wasmtime catches stack frames above the 4 KiB rule. The crates that
+      # need `proptest` or the file system of a host do not build for WASI. One target directory
+      # for the four variants: the dependencies are shared where the flags allow it.
+      - name: wasmtime as the runner of wasm32-wasip1
+        shell: bash
+        run: |
+          echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime run --env SDRK_EXPECT_LEVEL --dir=$GITHUB_WORKSPACE --" >> "$GITHUB_ENV"
+      - name: Without simd128 (scalar)
+        env:
+          SDRK_EXPECT_LEVEL: scalar
+        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
+      - name: With simd128
+        env:
+          RUSTFLAGS: "-C target-feature=+simd128"
+          SDRK_EXPECT_LEVEL: simd128
+        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
+      - name: With simd128 and relaxed SIMD (M14; the contracts must still hold)
+        env:
+          RUSTFLAGS: "-C target-feature=+simd128,+relaxed-simd"
+          SDRK_EXPECT_LEVEL: simd128
+        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/relaxed-simd
+      - name: With simd128 and the static tables (their own SIMD128 code)
+        env:
+          RUSTFLAGS: "-C target-feature=+simd128"
+          SDRK_EXPECT_LEVEL: simd128
+        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/nco-tables,sdrk/fft-tables
+
+  test_wasm_web:
+    name: test_wasm_web
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: wasm32-web
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: wasm-bindgen version the crate pins
+        id: bindgen
+        shell: bash
+        run: echo "version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' bindings/wasm/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
+      - name: wasm-opt
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+      - uses: browser-actions/setup-geckodriver@latest
+      - uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Build the package (SIMD128, scalar and relaxed variants) and pack it
+        run: cargo xtask wasm-pkg --relaxed
+      - name: wasm-bindgen-test in Node
+        run: cargo xtask wasm-test --env node --variant all
+      - name: Point wasm-bindgen-test at the Chrome that matches the chromedriver
+        run: |
+          printf '{"goog:chromeOptions":{"binary":"%s","args":["--headless=new","--no-sandbox"]}}\n' "${{ steps.chrome.outputs.chrome-path }}" > webdriver.json
+      - name: wasm-bindgen-test in headless Chrome
+        env:
+          CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+          WASM_BINDGEN_TEST_WEBDRIVER_JSON: ${{ github.workspace }}/webdriver.json
+          WASM_BINDGEN_TEST_TIMEOUT: 120
+        run: cargo xtask wasm-test --env chrome --variant all
+      - name: Remove the Chrome-only webdriver.json
+        if: always()
+        run: rm -f webdriver.json
+      - name: wasm-bindgen-test in headless Firefox
+        env:
+          WASM_BINDGEN_TEST_TIMEOUT: 120
+        run: cargo xtask wasm-test --env firefox --variant all
+      - name: JavaScript tests on the packed tarball
+        run: node --test "bindings/wasm/js-tests/*.test.mjs"
+
+  build_wasm_pkg:
+    # R1.3: the package builds on every host; the browsers run on Linux x86-64 (test_wasm_web).
+    name: build_wasm_pkg (${{ matrix.host }})
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { host: arm64_linux, runner: ubuntu-24.04-arm }
+          - { host: x64_win, runner: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: wasm32-pkg-${{ matrix.host }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: wasm-bindgen version the crate pins
+        id: bindgen
+        shell: bash
+        run: echo "version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' bindings/wasm/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
+      - name: Build the package
+        run: cargo xtask wasm-pkg --relaxed
+
+  # ---------------------------------------------------------------------------------------
+  # Embedded targets in emulators. The Cortex-M4F runs its quick profile on every pull
+  # request; the other targets are built on every pull request and run nightly.
+  build_m4_qemu:
+    name: build_m4_qemu
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: emu-m4
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+      - name: Build and run the suite on the Cortex-M4F (quick)
+        run: cargo xtask emu --target qemu-cortex-m4
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-logs-m4-quick
+          path: target/emu/*.log
+          retention-days: 7
+
+  test_m4_qemu_selfcheck:
+    name: test_m4_qemu_selfcheck
+    needs: build_m4_qemu
+    if: ${{ inputs.run_selfcheck && !inputs.skip_pr_nodes }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: emu-m4
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+      - name: A failing case must make `xtask emu` exit with 1
+        shell: bash
+        run: |
+          set +e
+          cargo xtask emu --target qemu-cortex-m4 --features inject-failure
+          code=$?
+          echo "xtask emu exited with $code"
+          test "$code" -eq 1
+
+  build_emu:
+    name: build_${{ matrix.name }}
+    needs: check
+    if: ${{ !inputs.docs_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: m55_qemu, target: qemu-cortex-m55, esp: false }
+          - { name: rv32_qemu, target: qemu-riscv32, esp: false }
+          - { name: esp32p4_emu, target: esp32p4, esp: true }
+          - { name: esp32s3_emu, target: esp32s3, esp: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: emu-${{ matrix.target }}
+      - name: Cache the ESP tools (esp-emu, Espressif QEMU, espflash, Xtensa toolchain)
+        if: matrix.esp
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/tools
+            ~/.rustup/toolchains/esp
+          key: esp-tools-${{ runner.os }}-${{ hashFiles('xtask/src/emu.rs') }}
+      - name: Install the ESP tools (pinned)
+        if: matrix.esp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo xtask emu --install
+      - name: Build, emulator configuration
+        run: cargo xtask emu --target ${{ matrix.target }} --build-only
+      - name: Build, hardware configuration (ESP32-S3)
+        if: matrix.target == 'esp32s3'
+        run: cargo xtask emu --target esp32s3 --build-only --features hardware
+
+  test_emu:
+    # Nightly: every target runs the quick profile and every target except the ESP32-P4 also
+    # the full profile; the full profile of the ESP32-P4 (the slow esp-emu run) runs weekly.
+    name: test_${{ matrix.name }}
+    needs: [build_m4_qemu, build_emu]
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: m4_qemu_full, target: qemu-cortex-m4, quick: false, full: true, esp: false }
+          - { name: m55_qemu, target: qemu-cortex-m55, quick: true, full: true, esp: false }
+          - { name: rv32_qemu, target: qemu-riscv32, quick: true, full: true, esp: false }
+          - { name: esp32p4_emu, target: esp32p4, quick: true, full: weekly, esp: true }
+          - { name: esp32s3_emu, target: esp32s3, quick: true, full: true, esp: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: emu-${{ matrix.target }}
+      - name: Install QEMU
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm qemu-system-misc
+          command -v qemu-system-riscv32 || sudo apt-get install -y qemu-system-riscv
+      - name: Cache the ESP tools (esp-emu, Espressif QEMU, espflash, Xtensa toolchain)
+        if: matrix.esp
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/tools
+            ~/.rustup/toolchains/esp
+          key: esp-tools-${{ runner.os }}-${{ hashFiles('xtask/src/emu.rs') }}
+      - name: Install the ESP tools (pinned)
+        if: matrix.esp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo xtask emu --install
+      - name: Quick profile
+        if: matrix.quick
+        run: cargo xtask emu --target ${{ matrix.target }}
+      - name: Full profile
+        if: matrix.full == true || (matrix.full == 'weekly' && inputs.weekly)
+        run: cargo xtask emu --target ${{ matrix.target }} --full
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-logs-${{ matrix.name }}
+          path: target/emu/*.log
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------------------
+  # Instruction counts. The count jobs run in a pinned container with an apt snapshot, so that
+  # the compilers of the C references (benches/refs/build.sh), glibc (VOLK's generic atan2 and
+  # rotator call libm) and the counters are the same in every run and on a development machine
+  # with the same image; benches/results/*.json record the compiler versions and VOLK's flags.
+  count_x64:
+    name: count_x64
+    needs: build_x64_linux
+    if: ${{ inputs.run_count }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    timeout-minutes: 240
+    steps:
+      - name: Packages of the pinned snapshot (compilers, valgrind, VOLK build tools)
+        run: |
+          # The image has no CA certificates, which the https snapshot needs: take them from the
+          # image's own mirror first (they are installed again from the snapshot below).
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+          apt-get update --snapshot "$COUNT_IMAGE_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
+            git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
+            python3 python3-mako valgrind
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: count-x64
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Cache the C references
+        # Keyed on the build script (versions, checksums, flags), the image and the snapshot
+        # (the compilers); the build script itself also rebuilds when a compiler version differs.
+        uses: actions/cache@v4
+        with:
+          path: benches/target/refs
+          key: refs-x86_64-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
+      - name: Cache Intel SDE
+        id: sde-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/sde
+          # Not the key of the host jobs: that cache was saved on the host (another home
+          # directory), and restored here it leaves ~/sde empty.
+          key: sde-container-${{ env.SDE_SHA256 }}
+      - name: Download Intel SDE (pinned)
+        if: steps.sde-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p ~/sde
+          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+          tar -xJf ~/sde.tar.xz -C ~/sde
+      - name: Use Intel SDE
+        shell: bash
+        run: echo "SDRK_SDE=$HOME/sde/$SDE_DIR/sde64" >> "$GITHUB_ENV"
+      - name: CPU of the runner and compilers
+        shell: bash
+        run: |
+          grep -m1 'model name' /proc/cpuinfo
+          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' '
+          echo
+          gcc --version | head -n 1
+          valgrind --version
+      - name: Count the x86-64 levels (sse2 and sse4.2 under SDE, avx2, avx2-runtime)
+        # The misaligned and small-block variants are information and are not judged: pull
+        # requests skip them, the nightly run measures them for the committed results.
+        shell: bash
+        run: |
+          if [ "${{ inputs.scope }}" = "full" ]; then
+            cargo xtask count --platform x86_64
+          else
+            cargo xtask count --platform x86_64 --no-variants --no-write
+          fi
+      - name: Count the FM receiver pipeline
+        if: inputs.scope == 'full'
+        run: cargo xtask count --pipeline
+      # The counts depend on the CPU of the runner (the pool mixes EPYC 7763, 9V45 and 9V74) and
+      # on the toolchain of the day, so they cannot be compared byte for byte against the
+      # committed files. Show the drift and keep the fresh results instead of failing the run;
+      # the limits are judged by `cargo xtask count` itself.
+      - name: Results drift against the committed files (informational)
+        if: inputs.scope == 'full'
+        run: git diff -- benches/results
+      - name: Keep the fresh results
+        if: inputs.scope == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-results-x64
+          path: benches/results
+          retention-days: 30
+
+  count_nightly:
+    name: count_${{ matrix.name }}
+    needs: [build_x64_linux_sde_avx512, build_arm64_linux, test_wasm32]
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: x64_linux_sde_avx512, platform: x86_64-avx512, refs: x86_64 }
+          - { name: arm64_linux, platform: aarch64, refs: aarch64 }
+          - { name: wasm32, platform: wasm32, refs: wasm32 }
+    steps:
+      - name: Packages of the pinned snapshot (compilers, cross compilers, VOLK and QEMU build tools)
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+          apt-get update --snapshot "$COUNT_IMAGE_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
+            git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
+            python3 python3-mako python3-venv valgrind clang llvm wasi-libc \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross \
+            libglib2.0-dev libpixman-1-dev
+      - uses: actions/checkout@v4
+      - name: Install toolchain from rust-toolchain.toml
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: count-${{ matrix.platform }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Cache the C references
+        uses: actions/cache@v4
+        with:
+          path: benches/target/refs
+          key: refs-${{ matrix.refs }}-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
+      - name: CPU of the runner
+        shell: bash
+        run: |
+          grep -m1 'model name' /proc/cpuinfo || true
+          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' ' || true
+          echo
+      - name: Intel SDE
+        if: matrix.platform == 'x86_64-avx512'
+        shell: bash
+        run: |
+          mkdir -p ~/sde
+          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+          tar -xJf ~/sde.tar.xz -C ~/sde
+          echo "SDRK_SDE=$HOME/sde/$SDE_DIR/sde64" >> "$GITHUB_ENV"
+      - name: Cache QEMU
+        if: matrix.platform == 'aarch64'
+        id: qemu-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/qemu-build/qemu-aarch64
+            ~/qemu-build/plugin-src
+          key: qemu-plugin-src-${{ env.CI_QEMU_VERSION }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
+      - name: QEMU user mode with plugins
+        # The distribution's qemu-user is built without plugin support: build QEMU from source.
+        if: matrix.platform == 'aarch64' && steps.qemu-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
+          echo "$CI_QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
+          tar -xJf ~/qemu.tar.xz -C "$HOME"
+          mkdir -p ~/qemu-build && cd ~/qemu-build
+          ~/qemu-$CI_QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          ninja qemu-aarch64
+          # The source of the insn plugin, from the checksummed tarball (cached with QEMU).
+          for f in tests/tcg/plugins/insn.c include/qemu/qemu-plugin.h; do
+            install -D ~/qemu-$CI_QEMU_VERSION/$f ~/qemu-build/plugin-src/$f
+          done
+      - name: Use QEMU
+        if: matrix.platform == 'aarch64'
+        shell: bash
+        run: |
+          echo "SDRK_QEMU_AARCH64=$HOME/qemu-build/qemu-aarch64" >> "$GITHUB_ENV"
+          echo "SDRK_QEMU_SRC=$HOME/qemu-build/plugin-src" >> "$GITHUB_ENV"
+      - name: wasmtime
+        if: matrix.platform == 'wasm32'
+        shell: bash
+        run: |
+          name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$name.tar.xz" -o ~/wasmtime.tar.xz
+          echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf ~/wasmtime.tar.xz -C "$HOME"
+          echo "$HOME/$name" >> "$GITHUB_PATH"
+      - name: Count
+        run: cargo xtask count --platform ${{ matrix.platform }}
+      # As in count_x64: the drift against the committed files is information.
+      - name: Results drift against the committed files (informational)
+        run: git diff -- benches/results
+      - name: Keep the fresh results
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-results-${{ matrix.name }}
+          path: benches/results
+          retention-days: 30
+
+  count_m4_qemu:
+    # Instructions per sample of the fallback on a Cortex-M4F; report only, no limits yet.
+    name: count_m4_qemu
+    needs: build_m4_qemu
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: count-m4
+      - name: Cache QEMU with plugins
+        id: qemu-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/qemu-prefix
+          key: qemu-arm-softmmu-${{ env.CI_QEMU_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Build QEMU (system mode, Arm) with plugin support
+        # The plugin API must match the plugin that `xtask` builds from the same tag.
+        if: steps.qemu-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev python3-venv
+          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" | tar -xJ
+          mkdir qemu-build && cd qemu-build
+          ../qemu-$CI_QEMU_VERSION/configure --prefix="$HOME/qemu-prefix" --target-list=arm-softmmu --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          ninja
+          ninja install
+      - name: Use QEMU
+        run: |
+          sudo apt-get install -y libglib2.0-dev pkg-config
+          echo "SDRK_QEMU_ARM=$HOME/qemu-prefix/bin/qemu-system-arm" >> "$GITHUB_ENV"
+          echo "SDRK_QEMU_TAG=v$CI_QEMU_VERSION" >> "$GITHUB_ENV"
+      - name: Count
+        run: cargo xtask count --platform cortex-m4
+      - name: Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-results-m4-qemu
+          path: benches/results/cortex-m4.json
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------------------
+  # Nightly only: exhaustive sweeps, fuzzing, the long run.
+  sweep:
+    # The bit-exact test of `convert_out` against the fallback for all 2^32 `f32` bit patterns
+    # (the proof of the per-byte CU8 bound), at every level of the backend, and of the integer
+    # path of the fallback. Under SDE the work is split over several jobs (`SDRK_SWEEP_PART`);
+    # how long a part takes depends on whether the runner has AVX-512 itself.
+    name: sweep_${{ matrix.name }}
+    needs: [build_x64_linux, build_x64_linux_sde_avx512, build_arm64_linux, test_wasm32]
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: x64_linux (sse2), runner: ubuntu-24.04, setup: native, rustflags: "" }
+          - { name: x64_linux (sse4.2), runner: ubuntu-24.04, setup: native, rustflags: "-C target-cpu=x86-64-v2" }
+          - { name: x64_linux (avx2), runner: ubuntu-24.04, setup: native, rustflags: "-C target-cpu=x86-64-v3" }
+          - { name: x64_linux_sde_avx512 (1/4), runner: ubuntu-24.04, setup: sde, part: 0/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: x64_linux_sde_avx512 (2/4), runner: ubuntu-24.04, setup: sde, part: 1/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: x64_linux_sde_avx512 (3/4), runner: ubuntu-24.04, setup: sde, part: 2/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: x64_linux_sde_avx512 (4/4), runner: ubuntu-24.04, setup: sde, part: 3/4, rustflags: "-C target-cpu=sapphirerapids" }
+          - { name: arm64_linux, runner: ubuntu-24.04-arm, setup: native, rustflags: "" }
+          - { name: wasm32, runner: ubuntu-24.04, setup: wasm, rustflags: "-C target-feature=+simd128" }
+          - { name: fallback_int, runner: ubuntu-24.04, setup: int, rustflags: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: sweep-${{ matrix.setup }}-${{ runner.arch }}
+      - uses: ./.github/actions/sde
+        if: matrix.setup == 'sde'
+      - name: Install wasmtime
+        if: matrix.setup == 'wasm'
+        shell: bash
+        run: |
+          name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
+          curl -fsSL "https://github.com/bytecodealliance/wasmtime/releases/download/$WASMTIME_VERSION/$name.tar.xz" -o ~/wasmtime.tar.xz
+          echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf ~/wasmtime.tar.xz -C "$HOME"
+          echo "$HOME/$name" >> "$GITHUB_PATH"
+      - name: Every f32 through convert_out
+        if: matrix.setup != 'int'
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          SDRK_SWEEP_PART: ${{ matrix.part || '0/1' }}
+        run: |
+          target=()
+          case "${{ matrix.setup }}" in
+            wasm)
+              export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --"
+              target=(--target wasm32-wasip1) ;;
+            sde)
+              # An explicit `--target` keeps RUSTFLAGS away from the build scripts.
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$SDE64 -spr --"
+              target=(--target x86_64-unknown-linux-gnu) ;;
+          esac
+          cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
+            --test convert_out_sweep -- --ignored
+      - name: Every f32 through the integer path of the fallback's convert_out
+        # The path is only compiled in on bare-metal Arm and RISC-V; its equality with the f64
+        # formula does not depend on the target, so one native run covers it.
+        if: matrix.setup == 'int'
+        run: cargo test --release -p sdrk-core --lib integer_path_for_every_f32 -- --ignored
+
+  fuzz:
+    # Five minutes on Linux x86-64: fuzzing is not required on Windows and arm64.
+    name: fuzz
+    needs: build_x64_linux
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly toolchain
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz from_json, validate and build for five minutes
+        working-directory: crates/pipeline/sdrk-pipeline
+        run: cargo +nightly fuzz run pipeline_json -- -max_total_time=300
+
+  soak:
+    # The ten-minute variant of the long-run system test (ten minutes of signal, release build).
+    name: soak
+    needs: build_x64_linux
+    if: ${{ inputs.scope == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: soak
+      - name: Ten minutes of signal without drift
+        run: cargo test --release -p sdrk-system-tests --test long_run_no_drift -- --ignored

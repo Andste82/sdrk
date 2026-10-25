@@ -39,29 +39,71 @@ The workspace member `sdrk-system-tests` (`tests/system`) closes phase 3:
 
 The suite of `sdrk-testkit` runs through the facade, so every case exercises the SIMD backend where the platform has one. Ten cases `backend_vs_fallback_*` (`convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `mag_sq`, `quad_demod`, `fm_mod`, `fft`) cover every accelerated kernel and type with the lengths 0, 1, 3, 15, 16, 17, 255 and 4096 (the lengths that fit the arena of the tier: the quick tier takes the short ones), extreme inputs (full scale, -32768, NaN and infinity in `f32` where defined) and, for the stateful kernels, random chunk plans that must give the bits of one call. Bit-exact kernels are compared bit for bit with the fallback; tolerance kernels with the contract of `docs/kernels.md` against the reference (`rotate` 120 dB, `fir` family 110 dB, `quad_demod` 100 dB / 2 LSB, `fft` 110 dB for `C32`; for `CQ15` the exact transform is the measure, fixed scaling within 1 dB of the fallback with its exponent and block floating point checked by the reference cases of M07, `fm_mod` 120 dB).
 
-The tests of the crate `sdrk-backend-simd` (`crates/backends/sdrk-backend-simd/tests`) compare the kernels with the fallback for all lengths of the vector tails, with `LENGTHS = 0, 1, 2, 3, 7, 15, 16, 17, 31, 255, 257, 4096`, with random chunk plans, extreme inputs and invalid calls (same error values as the fallback). They run at the level the build selects: the default build at SSE2, `--features std` at the best level of the CPU, `-C target-cpu=...` at the level of the flag. A workspace run enables `std` of the backend (the pipeline, `sdrk-testkit/std` and the system tests ask for it), so it always detects the level at run time; the static levels are tested with the backend and the facade alone (`cargo test -p sdrk-backend-simd -p sdrk`). The backend alone (without `-p sdrk`) also runs its own default build, without the static tables `nco-tables` and `fft-tables`, which the facade switches on. `SDRK_EXPECT_LEVEL=<name>` makes `tests/api.rs` check that `level_name()` is that level; every CI step that tests a level sets it, so a build or an emulator that selects another level fails instead of passing at the wrong one. The exhaustive test of `convert_out` (`convert_out_exhaustive_every_f32`, every `f32` bit pattern against the fallback, the proof of the per-byte CU8 bound) is `#[ignore]` and runs nightly in the job `exhaustive`; `SDRK_SWEEP_PART=k/n` runs the `k`-th of `n` interleaved parts, each of which covers every exponent.
+The tests of the crate `sdrk-backend-simd` (`crates/backends/sdrk-backend-simd/tests`) compare the kernels with the fallback for all lengths of the vector tails, with `LENGTHS = 0, 1, 2, 3, 7, 15, 16, 17, 31, 255, 257, 4096`, with random chunk plans, extreme inputs and invalid calls (same error values as the fallback). They run at the level the build selects: the default build at SSE2, `--features std` at the best level of the CPU, `-C target-cpu=...` at the level of the flag. A workspace run enables `std` of the backend (the pipeline, `sdrk-testkit/std` and the system tests ask for it), so it always detects the level at run time; the static levels are tested with the backend and the facade alone (`cargo test -p sdrk-backend-simd -p sdrk`). The backend alone (without `-p sdrk`) also runs its own default build, without the static tables `nco-tables` and `fft-tables`, which the facade switches on. `SDRK_EXPECT_LEVEL=<name>` makes `tests/api.rs` check that `level_name()` is that level; every CI step that tests a level sets it, so a build or an emulator that selects another level fails instead of passing at the wrong one. The exhaustive test of `convert_out` (`convert_out_exhaustive_every_f32`, every `f32` bit pattern against the fallback, the proof of the per-byte CU8 bound) is `#[ignore]` and runs nightly in the jobs `sweep_*`; `SDRK_SWEEP_PART=k/n` runs the `k`-th of `n` interleaved parts, each of which covers every exponent.
 
 `sdrk::backend_for` is tested in `crates/facade/sdrk/tests/facade.rs`: every accelerated kernel reports `simd` when `sdrk::SIMD_BACKEND` is true and `fallback` otherwise (`--cfg sdrk_fallback_only`, no `simd` feature, or a target without SIMD).
 
-| CI job | What |
-| --- | --- |
-| `tier1` | the whole suite with the default `simd` backend on three hosts (run-time detection, see above), a second run with `-C target-cpu=x86-64-v3` on x86-64 hosts, the backend and the facade alone with the level fixed at compile time at `x86-64`, `x86-64-v2` and `x86-64-v3` on x86-64 hosts, the backend alone without its static tables at `x86-64` and `x86-64-v3`, and a run with `RUSTFLAGS="--cfg sdrk_fallback_only"` so that the fallback stays covered; also `cargo fmt --check`, clippy with `-D warnings`, `sdrk-pipeline` without default features, `cargo xtask check`, `cargo xtask bare-metal`, `cargo xtask schema --check` and `cargo deny check` |
-| `avx512-sde` | `cargo test --workspace --profile emulated` with `-C target-cpu=sapphirerapids` under Intel SDE (`sde64 -spr --` as the cargo runner); the backend alone with AVX-512 fixed at compile time; the backend with `--features std` on the SSE2 and SSE4.2 CPUIDs of `cargo xtask count` (`cargo xtask sde-cpuid`, `-cpuid_in ... -chip_check_cpuid 1`), the only runs of the SSE2 and SSE4.2 arms of the run-time dispatch |
-| `aarch64-qemu` | `cargo test --workspace --profile emulated` cross-compiled for `aarch64-unknown-linux-gnu` under `qemu-aarch64`, and the backend alone without its static tables |
-| `wasm-wasmtime` | the crates that build for WASI (`sdrk-device`, `sdrk-core`, `sdrk-backend-simd`, `sdrk`, `sdrk-blocks`) for `wasm32-wasip1` under wasmtime, with `+simd128`, without it, with `+simd128,+relaxed-simd` (feature `sdrk/relaxed-simd`) and with `+simd128` and the opt-in static tables (features `sdrk/nco-tables,sdrk/fft-tables`), with wasmtime's default stack |
-| `golden-check` | `python tests/golden/generate.py --check` (pinned requirements) when `tests/golden/**` changed, and nightly |
-| `fuzz` | nightly: `cargo +nightly fuzz run pipeline_json` for five minutes (`from_json`, `validate` and `build` of `sdrk-pipeline`) |
-| `system-long` | nightly: the ten-minute variant of `long_run_no_drift` |
-| `wasm-bindings` | the WebAssembly package: `cargo xtask wasm-pkg --relaxed`, `wasm-bindgen-test` in Node, headless Chrome and headless Firefox for the variants, `node --test` on the packed tarball; Windows and arm64 build the package only ([wasm.md](wasm.md)) |
-| `wasm-package` | the WebAssembly package builds (`cargo xtask wasm-pkg --relaxed`) on arm64 and Windows |
-| `count` | `cargo xtask count --platform x86_64` against VOLK, FFTW, KissFFT and rustfft in a pinned container, on pull requests that touch kernels, backends, `benches` or `xtask`; nightly with the variants and the pipeline benchmark, and the job `count-nightly` for AVX-512, AArch64 and wasm32; both judge the limits and show the drift against the committed `benches/results` for information ([performance.md](performance.md)) |
-| `exhaustive` | nightly: `convert_out_exhaustive_every_f32` (`cargo test --release -p sdrk-backend-simd --test convert_out_sweep -- --ignored`) natively at `x86-64`, `x86-64-v2` and `x86-64-v3`, under `qemu-aarch64`, under wasmtime with `+simd128`, and under SDE `-spr` in four jobs of one part each (`SDRK_SWEEP_PART`) |
+### CI
+
+CI is three workflow files. `ci.yml` runs on pull requests and on pushes to `main`, `nightly.yml` every night and on demand, and both call `tree.yml`, the tree of jobs. A job starts when the jobs it needs have passed; when one fails or is skipped, everything below it is skipped too.
+
+| Trigger | File | What runs |
+| --- | --- | --- |
+| pull request | `ci.yml` | `scope` (what changed), then the tree with scope `pr`: `check`, every build and the tests marked `pr` below. A pull request that only changes Markdown files no test reads runs `check` only |
+| pull request with the label `ci:full` | `ci.yml` | the tree with scope `full`, as at night |
+| push to `main` | `ci.yml` | `smoke` (build, `xtask check`, `bare-metal`, the unit tests). The pull request has tested the same tree, because a branch must be up to date with `main` before it is merged |
+| every night | `nightly.yml` | the tree with scope `full`: every `pr` job and the jobs marked `full`. When `main` is unchanged since the last green nightly run, the `pr` tests are skipped and only the `full` jobs run, except on Sunday |
+| Sunday night | `nightly.yml` | as every night, with the `pr` tests always, plus the full profile of the ESP32-P4 |
+| manual (`workflow_dispatch`) | `nightly.yml` | as at night; the inputs choose the weekly part and whether the `pr` tests are skipped |
+
+A failed nightly run opens an issue with the label `nightly-failure`, or comments on the open one. Every job has a timeout; the cargo caches are saved by runs on `main` only (pull requests read them), one cache per platform and build.
+
+The tree, with `[pr]` for every run and `[full]` for nightly and manual runs. The SIMD variants that depend only on the CPU architecture (fixed levels, without the static tables, fallback only) run on one host per architecture: x86-64 on Linux, AArch64 on Linux arm64. Build, the whole test suite, `xtask` and the golden generator run on all three hosts (R1.3).
+
+```text
+check                              gate: fmt · deny · clippy (x86-64, wasm32-wasip1 with SIMD128, sdrk-wasm on
+│                                  wasm32-unknown-unknown, thumbv7em) · xtask check (with cargo doc -D warnings) ·
+│                                  schema · golden (pr: when tests/golden/ changed)
+├── check_msrv                     cargo +<rust-version> check --workspace                                    [pr]
+├── golden_x64_win, golden_arm64_linux   the golden generator on the other hosts                             [full]
+├── build_x64_linux                bare-metal · nextest archive · unit tests · doc tests · pipeline without YAML
+│   ├── test_x64_linux             the whole suite from the archive                                           [pr]
+│   ├── test_x64_linux_fallback    --cfg sdrk_fallback_only                                                   [pr]
+│   ├── test_x64_linux_fixed_arch  sse2 | sse4.2 | avx2 fixed at compile time; without the tables at sse2, avx2 [pr]
+│   ├── test_x64_linux_sde_runtime sse2 | sse4.2 CPUIDs under SDE: the arms of the run-time dispatch          [pr]
+│   ├── count_x64                  instruction counts (pr: when kernels, benches, xtask or the toolchain changed;
+│   │                              full: with the variants and the pipeline)
+│   ├── fuzz                       pipeline_json, five minutes                                                [full]
+│   └── soak                       the ten-minute long_run_no_drift                                           [full]
+├── build_x64_linux_sde_avx512     target-cpu=sapphirerapids, profile emulated, nextest archive
+│   ├── test_x64_linux_sde_avx512  the suite under SDE, two partitions                                        [pr]
+│   └── test_x64_linux_sde_avx512_fixed_arch   the backend with AVX-512 fixed at compile time                 [pr]
+├── build_x64_win                  clippy · xtask check · bare-metal · nextest archive · unit tests
+│   └── test_x64_win               the whole suite from the archive                                           [pr]
+├── build_arm64_linux              clippy · bare-metal · nextest archive · unit tests
+│   ├── test_arm64_linux           the whole suite from the archive, SDRK_EXPECT_LEVEL=neon                   [pr]
+│   ├── test_arm64_linux_fallback  --cfg sdrk_fallback_only                                                   [pr]
+│   └── test_arm64_linux_fixed_arch  neon without std, with and without the tables                            [pr]
+├── test_wasm32                    WASI under wasmtime: scalar, simd128, relaxed SIMD, the static tables
+├── test_wasm_web                  the package in Node, Chrome and Firefox, JavaScript tests on the tarball
+├── build_wasm_pkg                 the package on arm64_linux and x64_win
+├── build_m4_qemu                  the suite on the Cortex-M4F, quick profile
+│   └── test_m4_qemu_selfcheck     a failing case must fail the run (pr: when xtask/ or targets/ changed)    [pr]
+├── build_m55_qemu, build_rv32_qemu, build_esp32p4_emu, build_esp32s3_emu (emulator and hardware image)
+├── test_emu                       m4 full; m55, rv32, esp32s3 quick and full; esp32p4 quick (full on Sunday) [full]
+├── count_x64_linux_sde_avx512, count_arm64_linux, count_wasm32, count_m4_qemu                                [full]
+└── sweep_x64_linux (sse2 | sse4.2 | avx2), sweep_x64_linux_sde_avx512 (4 parts), sweep_arm64_linux (native),
+    sweep_wasm32, sweep_fallback_int: convert_out for every f32                                               [full]
+```
+
+The test programs are built once per platform. The build job packs them with `cargo nextest archive`; the test job of the same platform downloads the archive, extracts it into its checkout (the same path, so the paths the tests compiled in stay valid) and runs it without building. nextest does not run doc tests, so `build_x64_linux` runs them with `cargo test --doc`. The jobs that need other flags (fixed levels, the fallback, the sweeps in release) build themselves; their cargo caches are separate.
 
 Run the same commands locally:
 
-The two emulator jobs use the profile `emulated` (optimised like release but without LTO and with overflow checks; debug builds of the end-to-end tests take hours in an emulator) and leave out the command-line examples, whose smoke tests start the program under test as a child process (natively covered by `tier1`).
+The jobs under SDE use the profile `emulated` (optimised like release but without LTO and with overflow checks; debug builds of the end-to-end tests take hours in an emulator) and leave out the command-line examples, whose smoke tests start the program under test as a child process (natively covered by `test_x64_linux`).
 
 ```sh
+cargo nextest run --workspace --all-features && cargo test --workspace --all-features --doc
 RUSTFLAGS="--cfg sdrk_fallback_only" cargo test --workspace --all-features --target-dir target/fallback-only
 SDRK_EXPECT_LEVEL=sse4.2 RUSTFLAGS="-C target-cpu=x86-64-v2" cargo test -p sdrk-backend-simd -p sdrk \
     --features sdrk/fft-tables,sdrk/nco-tables --target-dir target/static-x86-64-v2
@@ -75,10 +117,6 @@ cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables --tes
 RUSTFLAGS="-C target-cpu=sapphirerapids" CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sde64 -spr --" \
     cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter \
     --target x86_64-unknown-linux-gnu --target-dir target/avx512
-CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
-CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER="qemu-aarch64 -L /usr/aarch64-linux-gnu" \
-    cargo test --workspace --all-targets --profile emulated --exclude fm-receiver --exclude fm-transmitter \
-    --target aarch64-unknown-linux-gnu --target-dir target/aarch64
 RUSTFLAGS="-C target-feature=+simd128" CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --" \
     cargo test --target wasm32-wasip1 -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
 RUSTFLAGS="-C target-feature=+simd128,+relaxed-simd" CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --" \
@@ -91,4 +129,4 @@ node --test "bindings/wasm/js-tests/*.test.mjs"
 
 ## The suite on microcontrollers
 
-The `no_std` suite of the testkit (`all_cases()`, `run_suite`, the line protocol) runs bare-metal in five emulators: a Cortex-M4F (every commit), a Cortex-M55, RISC-V `rv32imac`, the ESP32-P4 and the ESP32-S3 (nightly), with the quick and the full profile. `cargo xtask emu` builds, runs and judges them; the CI jobs are `emu-tier1` and `emu-tier2`. See [embedded.md](embedded.md).
+The `no_std` suite of the testkit (`all_cases()`, `run_suite`, the line protocol) runs bare-metal in five emulators: a Cortex-M4F (every commit), a Cortex-M55, RISC-V `rv32imac`, the ESP32-P4 and the ESP32-S3 (nightly), with the quick and the full profile. `cargo xtask emu` builds, runs and judges them; the CI jobs are `build_m4_qemu` (every pull request), `build_*_qemu` and `build_esp32*_emu` (build only, every pull request) and `test_emu` (nightly). See [embedded.md](embedded.md).

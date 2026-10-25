@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 are delivered; M16 to M18 and M20 to M24 are planned (the receive series M19 to M23 and M24 use nothing from M16 to M18, see the *Order* section of M19).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 are delivered; M16 to M18 and M20 to M25 are planned (the receive series M19 to M23, M24 and M25 use nothing from M16 to M18, see the *Order* section of M19).
 
 | # | File | Plan phase | Delivers |
 | --- | --- | --- | --- |
@@ -35,6 +35,7 @@ Milestones are strictly sequential: each depends on all previous ones, and each 
 | M22 | [M22-audio-filters.md](M22-audio-filters.md) | 9 | Audio filters: kernels `biquad`/`biquad_real`, RBJ and Butterworth design, block `biquad`, CTCSS removal and audio low-pass in the flows |
 | M23 | [M23-real-sampling-input.md](M23-real-sampling-input.md) | 9 | Real-sampling devices: `halfband_decimate`, `real_to_complex` (SIMD), real formats in `convert`, blocks `halfband`, `real_to_complex`, E2E-REAL |
 | M24 | [M24-fm-stereo.md](M24-fm-stereo.md) | 9 | FM stereo: kernels `stereo_pll` (pilot PLL) and `stereo_matrix` (SIMD), block `fm_stereo`, stereo audio as complex samples, flow `fm_stereo_receiver`, stereo WAV, E2E-STEREO |
+| M25 | [M25-fm-transmit-audio.md](M25-fm-transmit-audio.md) | 9 | FM transmit audio: kernel `preemph_limit`, design `preemphasis_coefs`, block `fm_tx_audio`, pre-emphasis and limiter in `fm_transmitter`, flow `nfm_transmitter`, de-emphasis in `nfm_receiver`, loop tests TX → RX |
 | — | [BACKLOG.md](BACKLOG.md) | 7–9, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -44,7 +45,7 @@ M00 → M01 → M02 → M03 → M04 → M05 → M06 → M07 → M08     (phases 
                           ↓
                          M13 → M14 → M15 → M16 → M17 → M18 → BACKLOG                (phases 4–7: speed, WASM, embedded)
                                       ↓
-                                     M19 → M20 → M21 → M22 → M23 → M24 → BACKLOG    (phase 9: NFM, AM, SSB, audio filters, real-sampling input, FM stereo)
+                                     M19 → M20 → M21 → M22 → M23 → M24 → M25 → BACKLOG    (phase 9: NFM, AM, SSB, audio filters, real-sampling input, FM stereo, FM transmit audio)
 ```
 
 ## How to work on a milestone
@@ -81,7 +82,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 424–429 | M22 |
 | 430–435 | M23 |
 | 436–441 | M24 |
-| 442–499 | free, for backlog milestones |
+| 442–448 | M25 |
+| 449–499 | free, for backlog milestones |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
 | 530–999 | free, for backlog milestones |
@@ -89,5 +91,5 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 
 ## Files in this directory
 
-- `M00-…` to `M24-…`: the milestones (each contains the full ground rules).
-- `BACKLOG.md`: work after M18 and M24.
+- `M00-…` to `M25-…`: the milestones (each contains the full ground rules).
+- `BACKLOG.md`: work after M18 and M25.

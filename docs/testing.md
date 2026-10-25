@@ -65,7 +65,8 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 │                                  wasm32-unknown-unknown, thumbv7em) · xtask check (with cargo doc -D warnings) ·
 │                                  schema · golden (pr: when tests/golden/ changed)
 ├── check_msrv                     cargo +<rust-version> check --workspace                                    [pr]
-├── golden_x64_win, golden_arm64_linux   the golden generator on the other hosts                             [full]
+├── golden_x64_win, golden_arm64_linux   the golden generator runs on the other hosts; the byte comparison
+│                                  is information, the vectors are generated on Linux x86-64          [full]
 ├── build_x64_linux                bare-metal · nextest archive · unit tests · doc tests · pipeline without YAML
 │   ├── test_x64_linux             the whole suite from the archive                                           [pr]
 │   ├── test_x64_linux_fallback    --cfg sdrk_fallback_only                                                   [pr]

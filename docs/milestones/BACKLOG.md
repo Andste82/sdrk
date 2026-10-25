@@ -23,6 +23,8 @@ The RISC-V Vector backend is milestone [M17](M17-rvv-backend.md), the Arm DSP-ex
 
 ## Phase 9 — stabilization and extensions
 
+- **Platform-independent golden vectors:** the generator produces other bits on Windows and Linux arm64 in about 40 cases (Windows: `fft` 18, `design` 6, `rotate` 5, `fm_mod` 4, `window` 3, `blocks` 2, `quad_demod` 2, `power_db` 1; arm64: `fft` 18, `design` 3, `blocks` 2, `fir` 2, `fir_decimate` 2, `window` 1; CI run 40194336676), because NumPy and SciPy use the math library of the platform. Compute the transcendental functions, the FFT reference and the filter design of those cases with own scalar code (`sdrk_golden/scalar_math.py`, as M09 did for `dot`, `blocks` and `kaiserord`), then make `golden_x64_win` and `golden_arm64_linux` compare byte for byte and drop the Linux-only rule of `tests/golden/README.md`. Maintainer decision of 2026-10-25: do this next.
+
 - **Driver conformance suite complete** (all capabilities of M12, timed commands, async streams) and **`sdrk-device` 1.0** (API review, semver promise, MSRV policy).
 - **Kernels and blocks** (squelch, AGC, AM, SSB, `biquad`, halfband decimation and `real_to_complex` are the milestones [M19](M19-nfm-squelch.md) to [M23](M23-real-sampling-input.md)): `iq_balance` (IQ imbalance correction), `sigma_delta_decimate` (SX1255 mode A, 1-bit `Bits1` container from M01), CIC (decimate/interpolate), halfband interpolation by 2, pulse shaping (RRC), FM preemphasis (transmit), FM stereo and RDS, multi-input nodes (adder, mixer, multiplexer) in the pipeline.
 - **FFT extensions:** Q15 real FFT and its inverse, FFT-based fast convolution (overlap-save) as a block.

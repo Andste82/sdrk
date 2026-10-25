@@ -363,7 +363,7 @@ Six flows in `examples/flows`, each with a YAML twin (`.yaml`, with comments), a
 - `spectrum_only.json`: `cu8` IQ through a DC blocker into a Blackman-Harris spectrum with 8 averages.
 - `resample_audio.json`: real `f32` audio at 48 kHz converted to 44.1 kHz by the rational resampler (with `max_taps` raised, because the default of 1023 is too small for this ratio).
 - `fm_receiver_grouped.json`: the FM receiver with the tuner in the group `front` and the rest in `audio`.
-- `nfm_receiver.json`: narrow-band FM for two-way radio: `cu8` at 2.4 MS/s through `ddc` (decimation 50, 6 kHz cutoff, 3 kHz transition, `max_taps` raised to 4096 because the default of 1023 is too small for a 3 kHz transition at 2.4 MS/s) and the power `squelch` into `fm_demod` (5 kHz deviation) and 48 kHz audio; the YAML twin explains the values for 12.5 kHz and 25 kHz channels.
+- `nfm_receiver.json`: narrow-band FM for two-way radio: `cu8` at 2.4 MS/s through `ddc` (decimation 50, 8 kHz cutoff, 4 kHz transition, `max_taps` raised to 4096 because the default of 1023 is too small for a 4 kHz transition at 2.4 MS/s) and the power `squelch` into `fm_demod` (5 kHz deviation) and 48 kHz audio; the YAML twin explains the values for 12.5 kHz and 25 kHz channels.
 - `fm_transmitter.json`: 48 kHz audio to FM, 2.4 MS/s `cs8` output for pull mode: `resampler` 5/1, `fm_mod` with 75 kHz deviation, `duc` by 10 at +600 kHz.
 
 ## Tests

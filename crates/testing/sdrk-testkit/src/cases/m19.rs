@@ -18,8 +18,8 @@ use super::m06::same_rate;
 use crate::arena::Arena;
 use crate::e2e::E2eSample;
 use crate::e2e_nfm::{
-    NFM_FULL_SAMPLES, NFM_INTERIM_SINAD_DB, NFM_MAX_CLOSE_DELAY_S, NFM_MAX_OPEN_DELAY_S,
-    NFM_QUICK_SAMPLES, measure_nfm,
+    NFM_FULL_SAMPLES, NFM_MAX_CLOSE_DELAY_S, NFM_MAX_OPEN_DELAY_S, NFM_MIN_SINAD_F32_DB,
+    NFM_MIN_SINAD_Q15_DB, NFM_QUICK_SAMPLES, measure_nfm,
 };
 use crate::r#gen::extreme;
 use crate::invariance::{ChunkPlan, check_block_invariance};
@@ -504,7 +504,7 @@ pub(super) fn e2e_nfm_rx_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
         "e2e_nfm_rx_f32",
         arena,
         NFM_QUICK_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_F32_DB,
     )
 }
 
@@ -513,7 +513,7 @@ pub(super) fn e2e_nfm_rx_q15(arena: &mut Arena<'_>) -> Result<(), Failure> {
         "e2e_nfm_rx_q15",
         arena,
         NFM_QUICK_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_Q15_DB,
     )
 }
 
@@ -522,7 +522,7 @@ pub(super) fn e2e_nfm_rx_f32_2s(arena: &mut Arena<'_>) -> Result<(), Failure> {
         "e2e_nfm_rx_f32_2s",
         arena,
         NFM_FULL_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_F32_DB,
     )
 }
 
@@ -531,6 +531,6 @@ pub(super) fn e2e_nfm_rx_q15_2s(arena: &mut Arena<'_>) -> Result<(), Failure> {
         "e2e_nfm_rx_q15_2s",
         arena,
         NFM_FULL_SAMPLES,
-        NFM_INTERIM_SINAD_DB,
+        NFM_MIN_SINAD_Q15_DB,
     )
 }

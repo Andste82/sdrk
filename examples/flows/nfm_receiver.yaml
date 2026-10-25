@@ -30,17 +30,22 @@ nodes:
   # flow runs (set_param), tau_s only at build time.
   gate:
     kind: squelch
-  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz) with a 6 kHz channel filter.
-  # Set frequency_hz to the offset of the channel from the tuner centre. For 12.5 kHz channels
-  # use cutoff_hz 3000 and transition_hz 1500. The narrow transition at 2.4 MS/s needs about
-  # 2900 taps, more than the default max_taps of 1023, so max_taps is raised.
+  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz) with an 8 kHz channel filter.
+  # Set frequency_hz to the offset of the channel from the tuner centre. Rule of thumb: the
+  # cutoff is the deviation plus the highest audio frequency (about 3 kHz), half the
+  # necessary bandwidth of the channel (16 kHz for 25 kHz channels with 5 kHz deviation). A
+  # narrower filter cuts the FM sidebands and distorts the audio (6 kHz here gives about
+  # 22 dB SINAD instead of 35 dB). For 12.5 kHz channels (deviation_hz 2500) use cutoff_hz
+  # 6000 and transition_hz 3000. The narrow transition at 2.4 MS/s needs about 2200 taps
+  # (2900 for the 12.5 kHz values), more than the default max_taps of 1023, so max_taps is
+  # raised.
   tune:
     kind: ddc
     params:
-      cutoff_hz: 6000
+      cutoff_hz: 8000
       decimation: 50
       max_taps: 4096
-      transition_hz: 3000
+      transition_hz: 4000
 # Channel filter, squelch, demodulator.
 edges:
   - { from: rf, to: tune }

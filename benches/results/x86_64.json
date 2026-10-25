@@ -1,10 +1,56 @@
 {
-  "host_cpu": "AMD EPYC Processor (with IBPB)",
+  "host_cpu": "AMD Ryzen 7 5700U with Radeon Graphics",
   "levels": {
     "avx2": {
       "counter": "valgrind callgrind",
       "judged_against": "references",
       "kernels": {
+        "agc": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 24.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 24.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 24.03,
+          "ours_instr_per_sample": 24.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 125.4,
+            "ours": 125.4
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "agc_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 97.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 97.04,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 97.04,
+          "ours_instr_per_sample": 97.04,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
           "goal": true,
@@ -247,6 +293,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "dc_block_real": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 8.76,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 8.76,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 8.76,
+          "ours_instr_per_sample": 8.76,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 124.79,
+            "ours": 124.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "dc_block_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 14.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.01,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 14.01,
+          "ours_instr_per_sample": 14.01,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
           "goal": true,
@@ -416,6 +508,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "mag": {
+          "compared_with": "volk_32fc_magnitude_32f",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_magnitude_32f",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.04,
+              "ratio": 0.64
+            }
+          ],
+          "other_instr_per_sample": 1.64,
+          "ours_instr_per_sample": 1.04,
+          "ratio": 0.64,
+          "snr_db": {
+            "other": 150.54,
+            "ours": 150.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_q15": {
+          "compared_with": "volk_16ic_magnitude_16i",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_16ic_magnitude_16i",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.25,
+              "ratio": 0.85
+            }
+          ],
+          "other_instr_per_sample": 2.64,
+          "ours_instr_per_sample": 2.25,
+          "ratio": 0.85,
+          "snr_db": {
+            "other": 96.22,
+            "ours": 96.22
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
@@ -660,6 +798,8 @@
           "volk_32fc_s32fc_x2_rotator2_32fc a_avx u_avx",
           "volk_32fc_32f_dot_prod_32fc a_avx2_fma u_avx2_fma",
           "volk_32fc_magnitude_squared_32f a_avx u_avx",
+          "volk_32fc_magnitude_32f a_avx u_avx",
+          "volk_16ic_magnitude_16i a_avx2 u_avx2",
           "volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx",
           "volk_32fc_s32f_atan2_32f a_avx2_fma u_avx2_fma"
         ]
@@ -669,6 +809,32 @@
       "counter": "valgrind callgrind",
       "judged_against": "ours at avx2",
       "kernels": {
+        "agc": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 24.03,
+          "ours_instr_per_sample": 39.03,
+          "ratio": 1.62,
+          "snr_db": {
+            "other": 125.4,
+            "ours": 125.4
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "agc_cq15": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 97.04,
+          "ours_instr_per_sample": 98.04,
+          "ratio": 1.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_cs16": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -746,6 +912,32 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "dc_block_real": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 8.76,
+          "ours_instr_per_sample": 11.51,
+          "ratio": 1.31,
+          "snr_db": {
+            "other": 124.79,
+            "ours": 124.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "dc_block_real_q15": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 14.01,
+          "ours_instr_per_sample": 16.01,
+          "ratio": 1.14,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "fft_1024": {
           "compared_with": "ours at avx2",
@@ -877,6 +1069,32 @@
           "status": "release",
           "verdict": "pass"
         },
+        "mag": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 1.04,
+          "ours_instr_per_sample": 1.06,
+          "ratio": 1.01,
+          "snr_db": {
+            "other": 150.54,
+            "ours": 150.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_q15": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 2.25,
+          "ours_instr_per_sample": 2.26,
+          "ratio": 1.01,
+          "snr_db": {
+            "other": 96.22,
+            "ours": 96.22
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "mag_sq": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -996,7 +1214,7 @@
         },
         "squelch_cq15": {
           "compared_with": "ours at avx2",
-          "goal": true,
+          "goal": false,
           "other_instr_per_sample": 28.03,
           "ours_instr_per_sample": 28.03,
           "ratio": 1.0,
@@ -1020,6 +1238,8 @@
           "volk_32fc_s32fc_x2_rotator2_32fc a_avx u_avx",
           "volk_32fc_32f_dot_prod_32fc a_avx2_fma u_avx2_fma",
           "volk_32fc_magnitude_squared_32f a_avx u_avx",
+          "volk_32fc_magnitude_32f a_avx u_avx",
+          "volk_16ic_magnitude_16i a_avx2 u_avx2",
           "volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx",
           "volk_32fc_s32f_atan2_32f a_avx2_fma u_avx2_fma"
         ]
@@ -1029,6 +1249,52 @@
       "counter": "Intel SDE, CPUID of a strict SSE2 x86-64 CPU",
       "judged_against": "references",
       "kernels": {
+        "agc": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 39.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 39.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 39.03,
+          "ours_instr_per_sample": 39.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 125.4,
+            "ours": 125.4
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "agc_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 98.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 98.04,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 98.04,
+          "ours_instr_per_sample": 98.04,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
           "goal": true,
@@ -1271,6 +1537,52 @@
           "status": "dev",
           "verdict": "warn"
         },
+        "dc_block_real": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 11.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.51,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 11.51,
+          "ours_instr_per_sample": 11.51,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 124.79,
+            "ours": 124.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "dc_block_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 16.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 16.01,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 16.01,
+          "ours_instr_per_sample": 16.01,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "fft_1024": {
           "compared_with": "FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place)",
           "goal": true,
@@ -1368,7 +1680,7 @@
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
           "other_instr_per_sample": 233.83,
-          "ours_instr_per_sample": 28.51,
+          "ours_instr_per_sample": 28.6,
           "ratio": 0.12,
           "snr_db": {
             "other": 43.67,
@@ -1381,7 +1693,7 @@
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
           "other_instr_per_sample": 233.83,
-          "ours_instr_per_sample": 25.27,
+          "ours_instr_per_sample": 25.29,
           "ratio": 0.11,
           "snr_db": {
             "other": 43.51,
@@ -1394,7 +1706,7 @@
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
           "other_instr_per_sample": 233.83,
-          "ours_instr_per_sample": 27.07,
+          "ours_instr_per_sample": 26.99,
           "ratio": 0.12,
           "snr_db": {
             "other": 55.08,
@@ -1494,6 +1806,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "mag": {
+          "compared_with": "volk_32fc_magnitude_32f",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_magnitude_32f",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.57,
+              "ratio": 0.73
+            }
+          ],
+          "other_instr_per_sample": 3.52,
+          "ours_instr_per_sample": 2.57,
+          "ratio": 0.73,
+          "snr_db": {
+            "other": 150.54,
+            "ours": 150.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_q15": {
+          "compared_with": "volk_16ic_magnitude_16i",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_16ic_magnitude_16i",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 29.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.09,
+              "ratio": 0.18
+            }
+          ],
+          "other_instr_per_sample": 21.27,
+          "ours_instr_per_sample": 5.09,
+          "ratio": 0.24,
+          "snr_db": {
+            "other": 96.22,
+            "ours": 96.22
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
@@ -1746,6 +2104,8 @@
           "volk_32fc_s32fc_x2_rotator2_32fc generic generic",
           "volk_32fc_32f_dot_prod_32fc a_sse u_sse",
           "volk_32fc_magnitude_squared_32f a_sse u_sse",
+          "volk_32fc_magnitude_32f a_sse u_sse",
+          "volk_16ic_magnitude_16i a_sse generic",
           "volk_32fc_x2_multiply_conjugate_32fc generic generic",
           "volk_32fc_s32f_atan2_32f generic generic"
         ]
@@ -1755,6 +2115,52 @@
       "counter": "Intel SDE, CPUID of an x86-64-v2 (SSE4.2) CPU",
       "judged_against": "references",
       "kernels": {
+        "agc": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 33.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 33.03,
+          "ours_instr_per_sample": 33.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 125.4,
+            "ours": 125.4
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "agc_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 98.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 98.04,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 98.04,
+          "ours_instr_per_sample": 98.04,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
           "goal": true,
@@ -1997,6 +2403,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "dc_block_real": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 11.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.51,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 11.51,
+          "ours_instr_per_sample": 11.51,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 124.79,
+            "ours": 124.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "dc_block_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 16.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 16.01,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 16.01,
+          "ours_instr_per_sample": 16.01,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
           "goal": true,
@@ -2040,7 +2492,7 @@
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
           "other_instr_per_sample": 233.83,
-          "ours_instr_per_sample": 22.26,
+          "ours_instr_per_sample": 22.43,
           "ratio": 0.1,
           "snr_db": {
             "other": 43.67,
@@ -2053,8 +2505,8 @@
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
           "other_instr_per_sample": 233.83,
-          "ours_instr_per_sample": 19.87,
-          "ratio": 0.08,
+          "ours_instr_per_sample": 19.92,
+          "ratio": 0.09,
           "snr_db": {
             "other": 43.51,
             "ours": 46.71
@@ -2066,7 +2518,7 @@
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
           "other_instr_per_sample": 233.83,
-          "ours_instr_per_sample": 20.81,
+          "ours_instr_per_sample": 21.04,
           "ratio": 0.09,
           "snr_db": {
             "other": 55.08,
@@ -2166,6 +2618,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "mag": {
+          "compared_with": "volk_32fc_magnitude_32f",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_magnitude_32f",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.77,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.82,
+              "ratio": 0.66
+            }
+          ],
+          "other_instr_per_sample": 2.77,
+          "ours_instr_per_sample": 1.82,
+          "ratio": 0.66,
+          "snr_db": {
+            "other": 150.54,
+            "ours": 150.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_q15": {
+          "compared_with": "volk_16ic_magnitude_16i",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_16ic_magnitude_16i",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 6.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.09,
+              "ratio": 0.85
+            }
+          ],
+          "other_instr_per_sample": 11.02,
+          "ours_instr_per_sample": 5.09,
+          "ratio": 0.46,
+          "snr_db": {
+            "other": 96.22,
+            "ours": 96.22
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
@@ -2418,6 +2916,8 @@
           "volk_32fc_s32fc_x2_rotator2_32fc generic generic",
           "volk_32fc_32f_dot_prod_32fc a_sse u_sse",
           "volk_32fc_magnitude_squared_32f a_sse3 u_sse3",
+          "volk_32fc_magnitude_32f a_sse3 u_sse3",
+          "volk_16ic_magnitude_16i a_sse3 generic",
           "volk_32fc_x2_multiply_conjugate_32fc a_sse3 u_sse3",
           "volk_32fc_s32f_atan2_32f generic generic"
         ]

@@ -1,7 +1,7 @@
 //! The `am_receiver` and `airband_receiver` example flows: they validate, build and run on the
 //! E2E-AM signal; the airband flow also on a burst, where the squelch keeps the audio silent
-//! outside the transmission (the DC blocker of the demodulator lets the audio decay after the
-//! gate closes, then it is exactly zero again).
+//! outside the transmission (exactly zero before the burst and again once the gate has closed
+//! after it).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -33,8 +33,8 @@ use sdrk::{C32, Rate};
 use sdrk_device::formats;
 use sdrk_pipeline::{BuildOptions, InputData, Pipeline, Registry};
 use sdrk_testkit::e2e_am::{
-    AM_AUDIO_HZ, AM_CARRIER, AM_INDEX, AM_INTERIM_LEVEL_ERROR_DB, AM_MIN_SINAD_F32_DB,
-    AM_NOISE_SIGMA, AM_OFFSET_HZ,
+    AM_AUDIO_HZ, AM_CARRIER, AM_INDEX, AM_MAX_LEVEL_ERROR_DB, AM_MIN_SINAD_F32_DB, AM_NOISE_SIGMA,
+    AM_OFFSET_HZ,
 };
 use sdrk_testkit::{Pcg32, encode::encode, r#gen::am_tone, meters::ToneAccumulator};
 use serde_json::json;
@@ -202,7 +202,7 @@ fn the_am_receiver_demodulates_the_tone_at_the_agc_level() {
     let expected = 10f64.powf(-6.0 / 20.0) * AM_INDEX;
     let error_db = 20.0 * (meter.amplitude() / expected).log10();
     assert!(
-        error_db.abs() <= AM_INTERIM_LEVEL_ERROR_DB,
+        error_db.abs() <= AM_MAX_LEVEL_ERROR_DB,
         "audio level {error_db} dB from reference * index"
     );
     // The carrier is removed: the mean of the audio is close to zero.
@@ -235,23 +235,18 @@ fn the_squelch_gates_the_airband_burst() {
     let off = tone_power(mid, 3300.0, AUDIO_RATE);
     assert!(on > 1000.0 * off, "1 kHz tone: {on} vs {off}");
     assert!(mid.iter().any(|v| v.abs() > 0.1));
-    // After the gate closed (at most 0.1 s after the end) the audio decays with the time
-    // constant of the DC blocker: small after another 0.1 s, exactly zero once its state is
-    // flushed (about 0.36 s later), for the rest of the run.
+    // After the gate closed (at most 0.1 s after the end) the audio is exactly zero, as in
+    // E2E-NFM: the squelch writes exact zeros, the AGC holds its gain on them and the
+    // demodulator writes zero audio and clears its DC blocker (no decaying tail).
     let closed = a_to + 4800;
     assert!(
-        audio[closed + 4800..closed + 4900]
-            .iter()
-            .all(|v| v.abs() < 1e-3),
-        "the tail decays"
+        audio[closed..].iter().all(|v| *v == 0.0),
+        "silence after the gate closed"
     );
-    let flushed = audio.iter().rposition(|v| *v != 0.0).unwrap();
     assert!(
-        flushed > a_to && audio.len() - flushed > 4800,
-        "the last non-zero sample {flushed} of {} samples",
-        audio.len()
+        audio[a_to..closed].iter().any(|v| *v != 0.0),
+        "the gate is still open for a while after the end of the burst"
     );
-    assert!(audio[flushed + 1..].iter().all(|v| *v == 0.0));
 }
 
 #[test]

@@ -17,15 +17,19 @@ const Q48: f64 = 281_474_976_710_656.0;
 /// Mutable view of the numeric fields, used by the kernel implementations of this crate.
 pub(crate) struct AgcParts<'a> {
     pub(crate) ref_f: f32,
-    pub(crate) ka_f: f32,
-    pub(crate) kr_f: f32,
+    pub(crate) lo_f: f32,
+    pub(crate) hi_f: f32,
+    pub(crate) ra_f: f32,
+    pub(crate) rr_f: f32,
     pub(crate) gmin_f: f32,
     pub(crate) gmax_f: f32,
     pub(crate) g_f: &'a mut f32,
     pub(crate) g_d: &'a mut f64,
     pub(crate) ref_q: i64,
-    pub(crate) ka_q: i64,
-    pub(crate) kr_q: i64,
+    pub(crate) lo_q: i64,
+    pub(crate) hi_q: i64,
+    pub(crate) ra_q: i64,
+    pub(crate) rr_q: i64,
     pub(crate) gmin_q: i64,
     pub(crate) gmax_q: i64,
     pub(crate) g_q: &'a mut i64,
@@ -35,13 +39,17 @@ pub(crate) struct AgcParts<'a> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Consts {
     ref_f: f32,
-    ka_f: f32,
-    kr_f: f32,
+    lo_f: f32,
+    hi_f: f32,
+    ra_f: f32,
+    rr_f: f32,
     gmin_f: f32,
     gmax_f: f32,
     ref_q: i64,
-    ka_q: i64,
-    kr_q: i64,
+    lo_q: i64,
+    hi_q: i64,
+    ra_q: i64,
+    rr_q: i64,
     gmin_q: i64,
     gmax_q: i64,
 }
@@ -107,7 +115,7 @@ fn consts(
         "agc release time must be finite and positive",
     )?;
     let ref_q = libm::floor(reference * 32768.0 + 0.5) as i64;
-    let k_q = |r: f64| libm::floor(r * Q48 / ref_q as f64 + 0.5) as i64;
+    let k_q = |r: f64| libm::floor(r * Q48 + 0.5) as i64;
     // A loop coefficient that rounds to zero would freeze the `CQ15` gain silently.
     if k_q(r_a) == 0 || k_q(r_r) == 0 {
         return Err(Error::InvalidParameter(
@@ -116,13 +124,18 @@ fn consts(
     }
     Ok(Consts {
         ref_f: reference as f32,
-        ka_f: (r_a / reference) as f32,
-        kr_f: (r_r / reference) as f32,
+        // The products are rounded in f32, as every constant.
+        lo_f: reference as f32 * 0.25,
+        hi_f: reference as f32 * 1.5,
+        ra_f: r_a as f32,
+        rr_f: r_r as f32,
         gmin_f: lin(min_db) as f32,
         gmax_f: lin(max_db) as f32,
         ref_q,
-        ka_q: k_q(r_a),
-        kr_q: k_q(r_r),
+        lo_q: ref_q >> 2,
+        hi_q: ref_q + (ref_q >> 1),
+        ra_q: k_q(r_a),
+        rr_q: k_q(r_r),
         gmin_q: q32(lin(min_db)),
         gmax_q: q32(lin(max_db)),
     })
@@ -162,7 +175,7 @@ impl<T: ComplexSample> AgcState<T> {
     /// in dB with `-40 <= min_gain_db <= initial_gain_db <= max_gain_db <= 90`. The
     /// per-sample rates `1 - exp(-1 / (fs * tau))` (f64) must lie in `(0, 0.5]`, i.e. a
     /// time constant of at least `1 / (fs * ln 2)`, and the `CQ15` loop coefficient
-    /// `floor(r * 2^48 / reference_raw + 0.5)` must not be zero. Anything else, including
+    /// `floor(r * 2^48 + 0.5)` must not be zero. Anything else, including
     /// NaN, gives `InvalidParameter` (kind `InvalidArgument`; `sdrk_core::Error` has no
     /// `OutOfRange`).
     pub fn new(
@@ -260,15 +273,19 @@ impl<T: ComplexSample> AgcState<T> {
     pub(crate) fn parts_mut(&mut self) -> AgcParts<'_> {
         AgcParts {
             ref_f: self.c.ref_f,
-            ka_f: self.c.ka_f,
-            kr_f: self.c.kr_f,
+            lo_f: self.c.lo_f,
+            hi_f: self.c.hi_f,
+            ra_f: self.c.ra_f,
+            rr_f: self.c.rr_f,
             gmin_f: self.c.gmin_f,
             gmax_f: self.c.gmax_f,
             g_f: &mut self.g_f,
             g_d: &mut self.g_d,
             ref_q: self.c.ref_q,
-            ka_q: self.c.ka_q,
-            kr_q: self.c.kr_q,
+            lo_q: self.c.lo_q,
+            hi_q: self.c.hi_q,
+            ra_q: self.c.ra_q,
+            rr_q: self.c.rr_q,
             gmin_q: self.c.gmin_q,
             gmax_q: self.c.gmax_q,
             g_q: &mut self.g_q,
@@ -301,18 +318,30 @@ impl<T: ComplexSample> Timing for AgcState<T> {
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
 pub trait Agc<T: ComplexSample> {
-    /// Per sample: write `y = g * x`, measure `m = |y|`, then update the gain
-    /// multiplicatively, `g = g * (1 + (r / reference) * e)` with the error
-    /// `e = reference - m` and `r` the attack rate when `e < 0` and the release rate
-    /// otherwise, and clamp `g` to the gain limits. Near the set point this is a
-    /// first-order loop with the time constant `1 / r` samples, independent of the input
-    /// level. The lengths must be equal.
+    /// Per sample: write `y = g * x`, measure `m = |y|`, then update the gain with the
+    /// error `e = reference - m` (`u = m / reference`) and clamp it to the gain limits:
     ///
-    /// `C32`: `f32` arithmetic without FMA in this order; a NaN `m` leaves the gain
-    /// unchanged, an infinite one drives it to the minimum. `CQ15`: the gain is a Q.32
-    /// `i64`, `y = sat16(round_shift(x * g, 32))`, `m` is the rounded integer square root
-    /// of `re^2 + im^2` (not saturated) and the step `(g * e * k + 2^47) >> 48` is
-    /// computed in `i128` with `k` a Q.48 coefficient; bit-exact between `Fallback` and
-    /// `Reference`.
+    /// - too loud (`e < 0`, attack rate `r_a`): `g = g * d / (d + r_a * (m - reference))`
+    ///   with `d = min(m, 1.5 * reference)`;
+    /// - too quiet (`e >= 0`, release rate `r_r`): `g = g * (d + r_r * e) / d` with
+    ///   `d = max(m, reference / 4)`.
+    ///
+    /// For `0.25 <= u <= 1.5` this is `g * (1 + r * e / m)` to first order, i.e. the error is
+    /// normalised by the OUTPUT level (the update of GNU Radio's `agc3_cc`): a release is
+    /// exactly exponential towards the set point, `u` approaches 1 by `r_r` per sample at
+    /// any starting level, and a step of 30 dB settles within 1 dB after 5 time
+    /// constants in both directions. Beyond that range the divisor is limited, which
+    /// keeps the loop fast for big steps and bounded for silence. Near the set point the
+    /// loop is first order with the time constant `1 / r` samples, independent of the
+    /// input level. The attack form is divisive, so the factor stays in `(0, 1)` for any
+    /// overshoot and the loop cannot collapse for a large `r_a * u`. An input sample of
+    /// exactly zero (silence, a closed squelch) carries no information: the gain is
+    /// held. The lengths must be equal.
+    ///
+    /// `C32`: `f32` arithmetic without FMA in this order; a NaN or zero `m` leaves the
+    /// gain unchanged, an infinite one drives it to the minimum. `CQ15`: the gain is a
+    /// Q.32 `i64`, `y = sat16(round_shift(x * g, 32))`, `m` is the rounded integer square
+    /// root of `re^2 + im^2` (not saturated) and the new gain is computed in `i128` with
+    /// Q.48 rates and rounded half up; bit-exact between `Fallback` and `Reference`.
     fn agc(&self, s: &mut AgcState<T>, input: &[T], output: &mut [T]) -> Result<()>;
 }

@@ -1,5 +1,6 @@
-//! M20: `mag` is accelerated and counted against VOLK, `agc` and `dc_block_real` are not
-//! accelerated and counted as information on every platform. The committed result files and
+//! M20: `mag` is accelerated and counted against VOLK, the `C32` `agc` is counted against the
+//! `agc_cc` loop of GNU Radio, and `agc_cq15` and `dc_block_real` are not accelerated and
+//! counted as information on every platform. The committed result files and
 //! `benches/limits.json` must carry the entries at every level.
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
@@ -9,7 +10,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-const INFO_KERNELS: [&str; 4] = ["agc", "agc_cq15", "dc_block_real", "dc_block_real_q15"];
+const INFO_KERNELS: [&str; 3] = ["agc_cq15", "dc_block_real", "dc_block_real_q15"];
 
 const PLATFORMS: [(&str, &[&str]); 4] = [
     ("x86_64", &["sse2", "sse4.2", "avx2", "avx2-runtime"]),
@@ -70,8 +71,11 @@ fn every_platform_counts_mag_against_volk() {
                     assert_eq!(status, Some("release"), "{platform}/{level}/{kernel}");
                     continue;
                 }
-                let want = if kernel == "mag" { "release" } else { "dev" };
-                assert_eq!(status, Some(want), "{platform}/{level}/{kernel}: {entry}");
+                assert_eq!(
+                    status,
+                    Some("release"),
+                    "{platform}/{level}/{kernel}: {entry}"
+                );
                 assert!(
                     entry.to_string().contains(volk),
                     "{platform}/{level}/{kernel} is not compared with {volk}"
@@ -79,6 +83,45 @@ fn every_platform_counts_mag_against_volk() {
             }
         }
     }
+}
+
+#[test]
+fn every_platform_counts_agc_against_gnu_radio() {
+    for (platform, levels) in PLATFORMS {
+        let result = bench_file(&format!("results/{platform}.json"));
+        for level in levels {
+            let entry = &result["levels"][*level]["kernels"]["agc"];
+            if *level == "avx2-runtime" {
+                // Judged against nothing: the same code compiled for the baseline.
+                assert_eq!(entry["status"].as_str(), Some("info"), "{platform}/{level}");
+                continue;
+            }
+            // NEON is `dev` (open item M20-6): GCC fuses the multiply-adds of `agc_cc` there.
+            let want = if *level == "neon" { "dev" } else { "release" };
+            assert_eq!(
+                entry["status"].as_str(),
+                Some(want),
+                "{platform}/{level}: {entry}"
+            );
+            assert!(
+                entry.to_string().contains("GNU Radio agc_cc"),
+                "{platform}/{level}/agc is not compared with agc_cc"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
+    let limits = bench_file("limits.json");
+    for level in ["sse2", "sse4.2", "avx2", "avx512", "simd128"] {
+        assert_eq!(limits["agc"][level]["status"].as_str(), Some("release"));
+    }
+    assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("dev"));
+    assert_eq!(
+        limits["agc"]["avx2-runtime"]["status"].as_str(),
+        Some("info")
+    );
 }
 
 #[test]
@@ -106,10 +149,13 @@ fn the_limits_file_judges_mag_at_every_level() {
             continue;
         }
         assert_eq!(limits["mag"][*level]["status"].as_str(), Some("release"));
-        assert_eq!(limits["mag_q15"][*level]["status"].as_str(), Some("dev"));
+        assert_eq!(
+            limits["mag_q15"][*level]["status"].as_str(),
+            Some("release")
+        );
     }
     for level in ["avx512", "neon", "simd128"] {
         assert_eq!(limits["mag"][level]["status"].as_str(), Some("release"));
-        assert_eq!(limits["mag_q15"][level]["status"].as_str(), Some("dev"));
+        assert_eq!(limits["mag_q15"][level]["status"].as_str(), Some("release"));
     }
 }

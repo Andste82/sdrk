@@ -28,7 +28,7 @@ use super::m06::{flat, min_snr, same_rate};
 use crate::arena::Arena;
 use crate::e2e::E2eSample;
 use crate::e2e_am::{
-    AM_FULL_SAMPLES, AM_INTERIM_LEVEL_ERROR_DB, AM_MIN_SINAD_F32_DB, AM_MIN_SINAD_Q15_DB,
+    AM_FULL_SAMPLES, AM_MAX_LEVEL_ERROR_DB, AM_MIN_SINAD_F32_DB, AM_MIN_SINAD_Q15_DB,
     AM_QUICK_SAMPLES, measure_am,
 };
 use crate::r#gen::extreme;
@@ -691,8 +691,7 @@ where
         Failure::new(case, "SINAD below the threshold")
             .detail(format_args!("{} dB, need {min_sinad_db}", m.sinad_db))
     })?;
-    // The specified limit is 1 dB (open item M20-2); the cases enforce the interim limit.
-    ensure(m.level_error_db.abs() <= AM_INTERIM_LEVEL_ERROR_DB, || {
+    ensure(m.level_error_db.abs() <= AM_MAX_LEVEL_ERROR_DB, || {
         Failure::new(case, "audio level too far from reference * index")
             .detail(format_args!("{} dB", m.level_error_db))
     })

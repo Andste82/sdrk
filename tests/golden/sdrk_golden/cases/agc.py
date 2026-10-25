@@ -1,4 +1,5 @@
-"""Cases for the agc kernel (automatic gain control, a multiplicative feedback loop).
+"""Cases for the agc kernel (automatic gain control, a multiplicative feedback loop whose error
+is normalised by the output level, as the ``agc3_cc`` of GNU Radio).
 
 ``C32`` is compared with an f64 model of the specification that uses the f64 values of the f32
 constants; ``CQ15`` is bit-exact against an integer model with the gain in Q.32.
@@ -45,8 +46,8 @@ def agc_f64(x):
     """Model of the C32 algorithm in f64 with the f64 values of the f32 constants."""
     f = lambda v: float(np.float32(v))  # noqa: E731
     ref = f(REFERENCE)
-    ka = f(rate64(RATE_HZ, ATTACK_S) / REFERENCE)
-    kr = f(rate64(RATE_HZ, RELEASE_S) / REFERENCE)
+    lo, hi = f(REFERENCE) * 0.25, f(REFERENCE) * 1.5
+    ra, rr = f(rate64(RATE_HZ, ATTACK_S)), f(rate64(RATE_HZ, RELEASE_S))
     gmin, gmax = f(lin(MIN_DB)), f(lin(MAX_DB))
     g = f(lin(INITIAL_DB))
     out = np.zeros(len(x), dtype=np.complex128)
@@ -54,17 +55,23 @@ def agc_f64(x):
         y = complex(g * v.real, g * v.imag)
         out[i] = y
         m = math.sqrt(y.real * y.real + y.imag * y.imag)
-        e = ref - m
-        k = ka if e < 0 else kr
-        g = min(max(g * (1.0 + k * e), gmin), gmax)
+        if m > 0.0:
+            e = ref - m
+            if e < 0:
+                d = min(m, hi)
+                g = g * d / (d + ra * (m - ref))
+            else:
+                d = max(m, lo)
+                g = g * (d + rr * e) / d
+            g = min(max(g, gmin), gmax)
     return out
 
 
 def agc_f32(x):
     """Float32 model of the same algorithm (the arithmetic of the Rust fallback)."""
     ref = fm.f32(REFERENCE)
-    ka = fm.f32(rate64(RATE_HZ, ATTACK_S) / REFERENCE)
-    kr = fm.f32(rate64(RATE_HZ, RELEASE_S) / REFERENCE)
+    lo, hi = fm.mul(ref, fm.f32(0.25)), fm.mul(ref, fm.f32(1.5))
+    ra, rr = fm.f32(rate64(RATE_HZ, ATTACK_S)), fm.f32(rate64(RATE_HZ, RELEASE_S))
     gmin, gmax = fm.f32(lin(MIN_DB)), fm.f32(lin(MAX_DB))
     g = fm.f32(lin(INITIAL_DB))
     out = np.zeros(len(x), dtype=np.complex64)
@@ -72,10 +79,14 @@ def agc_f32(x):
         yr, yi = fm.mul(g, fm.f32(v.real)), fm.mul(g, fm.f32(v.imag))
         out[i] = complex(float(yr), float(yi))
         m = fm.f32(np.sqrt(fm.add(fm.mul(yr, yr), fm.mul(yi, yi))))
-        if not np.isnan(m):
+        if m > 0.0:
             e = fm.sub(ref, m)
-            k = ka if e < 0 else kr
-            g = fm.mul(g, fm.add(fm.f32(1.0), fm.mul(k, e)))
+            if e < 0:
+                d = min(m, hi)
+                g = fm.div(fm.mul(g, d), fm.add(d, fm.mul(ra, fm.sub(m, ref))))
+            else:
+                d = max(m, lo)
+                g = fm.div(fm.mul(g, fm.add(d, fm.mul(rr, e))), d)
             g = min(max(g, gmin), gmax)
     return out
 
@@ -87,27 +98,38 @@ def sqrt_round(s):
 
 
 def agc_q15(xr, xi):
-    """Integer model: gain ``g`` in Q.32, ``k`` in Q.48 per unit of reference-scaled error."""
+    """Integer model: gain ``g`` in Q.32, the rates in Q.48, divisions rounded half up."""
     ref_raw = int(math.floor(REFERENCE * 32768.0 + 0.5))
-    ka = int(math.floor(rate64(RATE_HZ, ATTACK_S) * 2.0**48 / ref_raw + 0.5))
-    kr = int(math.floor(rate64(RATE_HZ, RELEASE_S) * 2.0**48 / ref_raw + 0.5))
+    lo_raw, hi_raw = ref_raw >> 2, ref_raw + (ref_raw >> 1)
+    ra = int(math.floor(rate64(RATE_HZ, ATTACK_S) * 2.0**48 + 0.5))
+    rr = int(math.floor(rate64(RATE_HZ, RELEASE_S) * 2.0**48 + 0.5))
     q32 = lambda db: int(math.floor(lin(db) * 2.0**32 + 0.5))  # noqa: E731
     gmin, gmax, g = q32(MIN_DB), q32(MAX_DB), q32(INITIAL_DB)
-    assert ref_raw >= 1024 and ka <= 2**37 and kr <= 2**37 and gmax < 2**47
+    assert ref_raw >= 1024 and ra <= 2**47 and rr <= 2**47 and gmax < 2**47
     out = np.zeros((len(xr), 2), dtype=np.int64)
     for i, (re, im) in enumerate(zip(xr.tolist(), xi.tolist())):
         yr = int(q15.sat16(q15.round_shift(re * g, 32)))
         yi = int(q15.sat16(q15.round_shift(im * g, 32)))
         assert abs(re * g) < 2**63 and abs(im * g) < 2**63
         out[i] = (yr, yi)
+        if re == 0 and im == 0:
+            continue
         m = sqrt_round(yr * yr + yi * yi)
         assert m <= 46341
         e = ref_raw - m
-        k = ka if e < 0 else kr
-        prod = g * e * k
-        assert abs(prod) < 2**100
-        delta = (prod + 2**47) >> 48
-        g = min(max(g + delta, gmin), gmax)
+        if e < 0:
+            d = min(m, hi_raw)
+            den = (d << 48) - ra * e
+            num = (g * d) << 48
+            assert 2 * num < 2**126 and 2 * den < 2**126
+            nxt = (2 * num + den) // (2 * den)
+        else:
+            d = max(m, lo_raw)
+            den = d << 48
+            num = g * rr * e
+            assert 2 * num < 2**126
+            nxt = g + (2 * num + den) // (2 * den)
+        g = min(max(nxt, gmin), gmax)
     return out
 
 

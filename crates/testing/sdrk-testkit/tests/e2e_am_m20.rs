@@ -19,8 +19,8 @@ use sdrk_core::kernels::spectrum::Mag;
 use sdrk_core::{C32, CQ15, ComplexSample};
 use sdrk_testkit::e2e::E2eSample;
 use sdrk_testkit::e2e_am::{
-    AM_FULL_SAMPLES, AM_INTERIM_LEVEL_ERROR_DB, AM_MAX_LEVEL_ERROR_DB, AM_MIN_SINAD_F32_DB,
-    AM_MIN_SINAD_Q15_DB, AM_QUICK_SAMPLES, AmMeasurement, measure_am,
+    AM_FULL_SAMPLES, AM_MAX_LEVEL_ERROR_DB, AM_MIN_SINAD_F32_DB, AM_MIN_SINAD_Q15_DB,
+    AM_QUICK_SAMPLES, AmMeasurement, measure_am,
 };
 use sdrk_testkit::{Arena, Failure};
 
@@ -46,7 +46,7 @@ fn check(m: &AmMeasurement, samples: usize, min_db: f64) {
         m.sinad_db
     );
     assert!(
-        m.level_error_db.abs() <= AM_INTERIM_LEVEL_ERROR_DB,
+        m.level_error_db.abs() <= AM_MAX_LEVEL_ERROR_DB,
         "audio level {} dB from reference * index (amplitude {}, expected {})",
         m.level_error_db,
         m.tone_amplitude,
@@ -99,22 +99,10 @@ fn am_full_q15_meets_the_checks() {
     );
 }
 
-/// The specified limit of 1 dB for the audio level. The full variant does not meet it (open
-/// item M20-2); this guard shows the measurement and is run with `--ignored`.
-#[test]
-#[ignore = "open item M20-2: the specified 1 dB level limit is not met by the full variant"]
-fn the_full_variant_meets_the_specified_level_limit() {
-    for m in [
-        run::<C32>(AM_FULL_SAMPLES, QUICK_ARENA).unwrap(),
-        run::<CQ15>(AM_FULL_SAMPLES, QUICK_ARENA).unwrap(),
-    ] {
-        eprintln!("level error {} dB", m.level_error_db);
-        assert!(m.level_error_db.abs() <= AM_MAX_LEVEL_ERROR_DB);
-    }
-}
-
-/// The measured numbers behind open item M20-2: with equal time constants the gain settles at
-/// the mean envelope, so the level is within 1 dB of `reference * index`.
+/// The bias of the level comes from the attack and release ratio: the loop weighs an
+/// overshoot against an undershoot differently, so the gain settles below the level of the
+/// mean envelope with a slow release (0.1 s and 0.5 s: about -1 dB, the AM gain of the
+/// specified flow) and above it with equal time constants (about +1.2 dB).
 #[test]
 fn the_level_bias_comes_from_the_attack_release_ratio() {
     use sdrk_blocks::{AgcBlock, AgcConfig, ArenaStorage, Block};
@@ -142,6 +130,7 @@ fn the_level_bias_comes_from_the_attack_release_ratio() {
         block.process(&envelope, &mut out).unwrap();
         block.gain_db()
     };
-    assert!(run_agc(0.05, 0.05).abs() < 0.5);
-    assert!(run_agc(0.1, 0.5) < -1.0);
+    let (equal, slow) = (run_agc(0.05, 0.05), run_agc(0.1, 0.5));
+    assert!((0.5..2.0).contains(&equal), "{equal}");
+    assert!((-1.5..-0.5).contains(&slow), "{slow}");
 }

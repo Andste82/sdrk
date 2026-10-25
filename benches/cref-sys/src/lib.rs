@@ -8,9 +8,11 @@
 //!   stage divides by its radix, so the result is the DFT divided by N.
 //! - [`Ne10Int16`]: the int16 NEON transform of Ne10 (BSD-3-Clause), out of place, scaled by
 //!   1/N (AArch64 only).
+//! - [`GrAgcCc`]: the `agc_cc` loop of GNU Radio (GPL-3.0-or-later), the reference of the `C32`
+//!   `agc`.
 //!
 //! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
-//! constructor returns `None` when its library is not linked. All three use the interleaved
+//! constructor returns `None` when its library is not linked. All of them use the interleaved
 //! complex layout of `repr(C)` pairs.
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place
@@ -366,5 +368,55 @@ impl Drop for Ne10Int16 {
     fn drop(&mut self) {
         // SAFETY: the configuration came from `ne10_fft_alloc_c2c_int16` and is freed once.
         unsafe { ne10_ffi::ne10_fft_destroy_c2c_int16(self.cfg) }
+    }
+}
+
+/// The `agc_cc` loop of GNU Radio (`benches/refs/gr-agc.c`): four floats (rate, reference,
+/// gain, maximum gain) and the interleaved complex layout of `repr(C)` pairs.
+pub struct GrAgcCc {
+    state: [f32; 4],
+}
+
+#[cfg(has_gragc)]
+mod gragc_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_agc_cc_scale_n(
+            state: *mut [f32; 4],
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+impl GrAgcCc {
+    /// The object `agc_cc(rate, reference, gain, max_gain)`; `None` without the library.
+    #[must_use]
+    pub fn new(rate: f32, reference: f32, gain: f32, max_gain: f32) -> Option<Self> {
+        cfg!(has_gragc).then_some(GrAgcCc {
+            state: [rate, reference, gain, max_gain],
+        })
+    }
+
+    /// `scaleN`: scales `input` into `output`.
+    ///
+    /// # Panics
+    /// If the buffers differ in length or hold more than `u32::MAX` samples.
+    pub fn scale_n(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(input.len(), output.len(), "agc_cc: length mismatch");
+        let n = u32::try_from(input.len()).expect("agc_cc: too many samples");
+        #[cfg(has_gragc)]
+        // SAFETY: both buffers hold `n` pairs and do not overlap (an exclusive borrow of the
+        // output); the state is the four floats of the C object.
+        unsafe {
+            gragc_ffi::sdrk_gr_agc_cc_scale_n(
+                &raw mut self.state,
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                n,
+            );
+        }
+        #[cfg(not(has_gragc))]
+        let _ = n;
     }
 }

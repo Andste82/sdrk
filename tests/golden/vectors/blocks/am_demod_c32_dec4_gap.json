@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "am_demod_c32_dec4_gap.expected.bin",
+      "len": 4000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "am_demod_c32_dec4_gap.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "am_demod_c32_dec4_gap",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the signal of am_demod_c32 with samples 6000 to 7999 set to zero; np.abs of the f32 input, the DC blocker via lfilter on every run of non-zero envelope (an envelope of exactly zero outputs zero and clears the blocker), the audio filter (kaiserord + firwin, transition cutoff / 4, 2500 Hz, taps rounded to f32) and upfirdn by 4",
+  "params": {
+    "audio_cutoff_hz": 2500.0,
+    "audio_decimation": 4,
+    "audio_hz": 1000.0,
+    "carrier": 0.5,
+    "dc_cutoff_hz": 30.0,
+    "gap_end": 8000,
+    "gap_start": 6000,
+    "index": 0.5,
+    "phase": 0.3,
+    "r": 0.9960806965827942,
+    "rate_hz": 48000.0,
+    "taps": 281
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 436,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

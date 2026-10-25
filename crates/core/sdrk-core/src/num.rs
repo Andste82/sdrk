@@ -140,6 +140,49 @@ impl Acc64 {
     }
 }
 
+/// The correctly rounded square root of `x` in single precision (the same value as
+/// `libm::sqrtf`).
+///
+/// `libm` computes it in software on wasm32 (the hardware instruction of `core` is unstable
+/// there, 189 fuel per `agc` sample instead of 25); with `simd128` the vector instruction does
+/// it in hardware, and the scalar result is its first lane. Elsewhere `libm` already compiles to
+/// the hardware instruction.
+///
+/// ```
+/// assert_eq!(sdrk_core::num::sqrt_f32(2.25), 1.5);
+/// ```
+#[inline]
+pub fn sqrt_f32(x: f32) -> f32 {
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        use core::arch::wasm32::{f32x4_extract_lane, f32x4_splat, f32x4_sqrt};
+        f32x4_extract_lane::<0>(f32x4_sqrt(f32x4_splat(x)))
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    {
+        libm::sqrtf(x)
+    }
+}
+
+/// The correctly rounded square root of `x` in double precision (the same value as
+/// `libm::sqrt`, in hardware on wasm32 with `simd128`, see [`sqrt_f32`]).
+///
+/// ```
+/// assert_eq!(sdrk_core::num::sqrt_f64(2.25), 1.5);
+/// ```
+#[inline]
+pub fn sqrt_f64(x: f64) -> f64 {
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        use core::arch::wasm32::{f64x2_extract_lane, f64x2_splat, f64x2_sqrt};
+        f64x2_extract_lane::<0>(f64x2_sqrt(f64x2_splat(x)))
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    {
+        libm::sqrt(x)
+    }
+}
+
 /// The exact floor of the square root of `x`.
 ///
 /// An f64 estimate is corrected with exact integer products, so the result is right for
@@ -153,7 +196,7 @@ impl Acc64 {
 /// assert_eq!(isqrt_u64(u64::MAX), u32::MAX as u64);
 /// ```
 pub fn isqrt_u64(x: u64) -> u64 {
-    let mut r = libm::sqrt(x as f64) as u64;
+    let mut r = sqrt_f64(x as f64) as u64;
     // The estimate is within one of the root; `r * r` is computed in u128 so that the
     // correction cannot overflow near `u64::MAX`.
     while u128::from(r) * u128::from(r) > u128::from(x) {

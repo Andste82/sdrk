@@ -60,7 +60,7 @@ impl Mag<C32> for Fallback {
     fn mag(&self, input: &[C32], output: &mut [f32]) -> Result<()> {
         check_len(input.len(), output.len())?;
         for (o, x) in output.iter_mut().zip(input) {
-            *o = libm::sqrtf(x.re * x.re + x.im * x.im);
+            *o = crate::num::sqrt_f32(x.re * x.re + x.im * x.im);
         }
         Ok(())
     }

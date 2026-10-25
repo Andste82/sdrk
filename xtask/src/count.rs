@@ -558,6 +558,9 @@ pub enum Reference {
     Volk,
     /// The cheapest VOLK implementation of the machine (informational).
     VolkCheapest,
+    /// The loop of a GNU Radio block that is no VOLK kernel (`agc_cc`), compiled with the
+    /// generic flags of GNU Radio's own build.
+    GnuRadio,
     /// rustfft, `FftPlanner`.
     RustFft,
     /// FFTW, single precision, out of place (as GNU Radio's `fft_vcc` uses it).
@@ -580,6 +583,7 @@ impl Reference {
     pub fn implementation(self) -> &'static str {
         match self {
             Reference::Volk | Reference::VolkCheapest => "volk",
+            Reference::GnuRadio => "gnuradio",
             Reference::RustFft => "rustfft",
             Reference::Fftw => "fftw",
             Reference::FftwInPlace => "fftw-in-place",
@@ -599,6 +603,9 @@ pub enum Family {
     /// A VOLK kernel does the same work up to a constant offset (`convert_cu8`: VOLK converts
     /// signed bytes only): it is the gate, and our fallback is reported as information.
     VolkAndOwn,
+    /// A loop of GNU Radio that is no VOLK kernel (`agc_cc`): it is the gate, and our fallback is
+    /// reported as information.
+    GnuRadio,
     /// The C32 FFT.
     FftC32,
     /// The CQ15 FFT.
@@ -677,7 +684,7 @@ pub const KERNELS: [KernelSpec; 32] = [
     spec("squelch_cq15", Family::Own, false),
     spec("mag", Family::Volk, false),
     spec("mag_q15", Family::Volk, false),
-    spec("agc", Family::Own, false),
+    spec("agc", Family::GnuRadio, false),
     spec("agc_cq15", Family::Own, false),
     spec("dc_block_real", Family::Own, false),
     spec("dc_block_real_q15", Family::Own, false),
@@ -928,6 +935,7 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
             }
             (Reference::Volk, extras)
         }
+        Family::GnuRadio => (Reference::GnuRadio, vec![Reference::Fallback]),
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
@@ -2727,6 +2735,18 @@ mod tests {
         assert_eq!(
             comparisons(plan("simd128"), kernel("mag_sq")).0,
             Reference::Volk
+        );
+        assert_eq!(
+            comparisons(plan("sse2"), kernel("agc")),
+            (Reference::GnuRadio, vec![Reference::Fallback])
+        );
+        assert_eq!(
+            comparisons(plan("avx2-runtime"), kernel("agc")).0,
+            Reference::OwnLevel("avx2")
+        );
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("agc_cq15")).0,
+            Reference::Fallback
         );
         assert_eq!(
             comparisons(plan("neon"), kernel("fft_cq15_1024")),

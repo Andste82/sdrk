@@ -16,17 +16,24 @@ impl Agc<C32> for Reference {
         check_len(input.len(), output.len())?;
         let par = state.parts_mut();
         let reference = f64::from(par.ref_f);
-        let (rate_a, rate_r) = (f64::from(par.ka_f), f64::from(par.kr_f));
+        let (lo_ref, hi_ref) = (f64::from(par.lo_f), f64::from(par.hi_f));
+        let (rate_a, rate_r) = (f64::from(par.ra_f), f64::from(par.rr_f));
         let (lo, hi) = (f64::from(par.gmin_f), f64::from(par.gmax_f));
         let mut g_now = *par.g_d;
         for (o, x) in output.iter_mut().zip(input) {
             let (yr, yi) = (g_now * f64::from(x.re), g_now * f64::from(x.im));
             *o = C32::new(yr as f32, yi as f32);
             let level = libm::sqrt(yr * yr + yi * yi);
-            if !level.is_nan() {
+            if level > 0.0 {
                 let err = reference - level;
-                let coef = if err < 0.0 { rate_a } else { rate_r };
-                g_now = (g_now * (1.0 + coef * err)).max(lo).min(hi);
+                g_now = if err < 0.0 {
+                    let div = level.min(hi_ref);
+                    g_now * div / (div + rate_a * (level - reference))
+                } else {
+                    let div = level.max(lo_ref);
+                    g_now * (div + rate_r * err) / div
+                };
+                g_now = g_now.max(lo).min(hi);
             }
         }
         *par.g_d = g_now;
@@ -47,12 +54,23 @@ impl Agc<CQ15> for Reference {
                 im: scale(x.im),
             };
             *o = y;
+            if x.re.0 == 0 && x.im.0 == 0 {
+                continue;
+            }
             let sum = i64::from(y.re.0).pow(2) + i64::from(y.im.0).pow(2);
-            let err = par.ref_q - nearest_sqrt(sum);
-            let coef = if err < 0 { par.ka_q } else { par.kr_q };
-            let product = i128::from(gain) * i128::from(err) * i128::from(coef);
-            let delta = (product + (1i128 << 47)) >> 48;
-            let next = i128::from(gain) + delta;
+            let level = nearest_sqrt(sum);
+            let err = i128::from(par.ref_q - level);
+            let g = i128::from(gain);
+            let next = if err < 0 {
+                let div = i128::from(level.min(par.hi_q));
+                let den = (div << 48) - i128::from(par.ra_q) * err;
+                // floor(g d 2^48 / den + 1/2)
+                (2 * ((g * div) << 48) + den).div_euclid(2 * den)
+            } else {
+                let den = i128::from(level.max(par.lo_q)) << 48;
+                // g + floor(g r e / den + 1/2)
+                g + (2 * g * i128::from(par.rr_q) * err + den).div_euclid(2 * den)
+            };
             *par.g_q = next.clamp(i128::from(par.gmin_q), i128::from(par.gmax_q)) as i64;
         }
         Ok(())

@@ -81,16 +81,12 @@ pub const AM_MIN_SINAD_F32_DB: f64 = 35.0;
 /// SINAD threshold for `CQ15` in dB.
 pub const AM_MIN_SINAD_Q15_DB: f64 = 30.0;
 /// The audio tone level after the AGC must be within this many dB of `reference * index`
-/// (the specified limit). The chain does not meet it: the AGC update uses the attack rate
-/// above and the release rate below the reference, and with the specified time constants
-/// (0.1 s and 0.5 s, a ratio of 5) the gain settles where the average of the weighted errors
-/// is zero, which for a modulation index of 0.5 is 1.8 dB below the level at which the mean
-/// envelope equals the reference (measured: -1.78 dB for `C32` and -1.74 dB for `CQ15` over
-/// 1.0 s; open item M20-2). The suite cases check [`AM_INTERIM_LEVEL_ERROR_DB`] until the
-/// maintainer decides.
+/// (the specified limit). With the specified time constants (attack 0.1 s, release 0.5 s, a
+/// ratio of 5) any AGC that weighs the overshoot more than the undershoot settles slightly
+/// below the level at which the mean envelope equals the reference; the error normalised by
+/// the output level keeps this bias below the limit (about -0.9 dB for a modulation index of
+/// 0.5, against -1.8 dB for an error normalised by the reference; open item M20-2).
 pub const AM_MAX_LEVEL_ERROR_DB: f64 = 1.0;
-/// The limit of the level error the suite cases enforce until open item M20-2 is decided.
-pub const AM_INTERIM_LEVEL_ERROR_DB: f64 = 2.0;
 
 /// What [`measure_am`] found.
 #[derive(Debug, Clone, Copy, PartialEq)]

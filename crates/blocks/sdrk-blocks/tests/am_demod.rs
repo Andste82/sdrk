@@ -300,27 +300,54 @@ fn rate_storage_and_timing() {
 }
 
 #[test]
-fn the_audio_decays_after_the_input_stops() {
-    // The carrier is gone (a closed squelch): the DC blocker lets the audio decay, then f32
-    // is exactly zero again and Q15 stays at a constant offset of at most 127 LSB (the dead
-    // band of the rounded pole).
+fn a_closed_squelch_gives_exact_silence() {
+    // The carrier is gone (a closed squelch gives exact zeros): the envelope is exactly zero,
+    // the block writes zero audio at once and clears the DC blocker, so there is no decaying
+    // tail, in f32 as in Q15.
     let mut input = am_signal::<C32>(4000);
-    input.extend(vec![C32::new(0.0, 0.0); 40_000]);
+    input.extend(vec![C32::new(0.0, 0.0); 3000]);
     let out = run_block(&mut new_block::<C32>(&config(30.0, 1)), &input, None);
     assert!(
-        out[4000..4100].iter().any(|v| v.abs() > 0.05),
-        "starts large"
+        out[3900..4000].iter().any(|v| v.abs() > 0.05),
+        "the carrier is audible"
     );
-    assert!(out[4000 + 5000..4000 + 5100].iter().all(|v| v.abs() < 1e-3));
-    assert!(
-        out[input.len() - 100..].iter().all(|v| *v == 0.0),
-        "flushed"
-    );
+    assert!(out[4000..].iter().all(|v| *v == 0.0), "silent at once");
 
     let mut input = am_signal::<CQ15>(4000);
-    input.extend(vec![CQ15::default(); 60_000]);
+    input.extend(vec![CQ15::default(); 3000]);
     let out = run_block(&mut new_block::<CQ15>(&config(30.0, 1)), &input, None);
-    let tail = &out[input.len() - 100..];
-    assert!(tail.iter().all(|v| *v == tail[0]), "constant");
-    assert!(tail[0].0 != 0 && tail[0].0.abs() <= 127, "{:?}", tail[0]);
+    assert!(out[3900..4000].iter().any(|v| v.0.abs() > 1000));
+    assert!(out[4000..].iter().all(|v| v.0 == 0));
+}
+
+#[test]
+fn a_gap_clears_the_dc_blocker_and_the_carrier_starts_afresh() {
+    // After the gap the block behaves as if freshly built: the output equals that of a new
+    // block fed with the signal after the gap, whatever the chunking.
+    let signal = am_signal::<C32>(2000);
+    let mut input = signal.clone();
+    input.extend(vec![C32::new(0.0, 0.0); 77]);
+    input.extend(signal.clone());
+    let fresh = run_block(&mut new_block::<C32>(&config(30.0, 1)), &signal, None);
+    let whole = run_block(&mut new_block::<C32>(&config(30.0, 1)), &input, None);
+    assert_eq!(&whole[2077..], &fresh[..]);
+    for plan in twenty_plans() {
+        let chunked = run_block(&mut new_block::<C32>(&config(30.0, 1)), &input, Some(plan));
+        assert_eq!(chunked, whole);
+    }
+}
+
+#[test]
+fn with_the_audio_filter_the_silence_rings_out_for_the_filter_length_only() {
+    let cfg = AmDemodConfig {
+        audio_cutoff_hz: 2_000.0,
+        ..config(30.0, 4)
+    };
+    let taps = cfg.audio_taps(rate(FS)).unwrap();
+    let mut input = am_signal::<C32>(4000);
+    input.extend(vec![C32::new(0.0, 0.0); 2000]);
+    let out = run_block(&mut new_block::<C32>(&cfg), &input, None);
+    assert_eq!(out.len(), input.len() / 4);
+    let flushed = 4000 / 4 + taps / 4 + 1;
+    assert!(out[flushed..].iter().all(|v| *v == 0.0));
 }

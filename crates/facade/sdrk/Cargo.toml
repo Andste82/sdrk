@@ -11,20 +11,16 @@ repository.workspace = true
 sdrk-core = { path = "../../core/sdrk-core" }
 sdrk-device = { path = "../../core/sdrk-device" }
 
-# The backend has nothing to offer on targets without SIMD instructions (a Cortex-M); there the
-# facade uses the fallback and does not build it.
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32"))'.dependencies]
+# The backend has nothing to offer on targets without SIMD instructions (a Cortex-M) and is not
+# built for 32-bit x86; there the facade uses the fallback and does not build it.
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32"))'.dependencies]
 sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true }
 
-# The static twiddle tables of the C32 FFT (41 KiB) on x86-64 and AArch64; elsewhere (wasm32,
-# 32-bit x86) they are opt-in (feature `fft-tables`).
+# The static twiddle tables of the C32 FFT (41 KiB) and the static NCO interpolation tables
+# (96 KiB) on x86-64 and AArch64, where memory is not scarce; on wasm32 both are opt-in (features
+# `fft-tables` and `nco-tables`).
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true, features = ["fft-tables"] }
-
-# The static NCO interpolation tables (96 KiB) where flash is not scarce; on wasm32 they are
-# opt-in (feature `nco-tables`).
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true, features = ["nco-tables"] }
+sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true, features = ["fft-tables", "nco-tables"] }
 
 [features]
 default = ["simd"]
@@ -38,7 +34,7 @@ relaxed-simd = ["sdrk-backend-simd?/relaxed-simd"]
 # The static twiddle tables of the C32 FFT on every target (they are on by default on x86-64 and
 # AArch64).
 fft-tables = ["sdrk-backend-simd?/fft-tables"]
-# The static NCO interpolation tables on every target (they are on by default on x86, x86-64 and
+# The static NCO interpolation tables on every target (they are on by default on x86-64 and
 # AArch64).
 nco-tables = ["sdrk-backend-simd?/nco-tables"]
 

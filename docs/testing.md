@@ -45,7 +45,7 @@ The tests of the crate `sdrk-backend-simd` (`crates/backends/sdrk-backend-simd/t
 
 | CI job | What |
 | --- | --- |
-| `tier1` | the whole suite with the default `simd` backend on three hosts (run-time detection, see above), a second run with `-C target-cpu=x86-64-v3` on x86-64 hosts, the backend and the facade alone with the level fixed at compile time at `x86-64`, `x86-64-v2` and `x86-64-v3` on x86-64 hosts, the backend alone without its static tables at `x86-64` and `x86-64-v3`, on Linux x86-64 the backend and the facade for 32-bit x86 (`i686-unknown-linux-gnu`, `gcc-multilib`) at `x86-64` and `x86-64-v3`, with the facade's defaults (`nco-tables` only) and with `sdrk/fft-tables`, plus clippy for that target, and a run with `RUSTFLAGS="--cfg sdrk_fallback_only"` so that the fallback stays covered; also `cargo fmt --check`, clippy with `-D warnings`, `sdrk-pipeline` without default features, `cargo xtask check`, `cargo xtask bare-metal`, `cargo xtask schema --check` and `cargo deny check` |
+| `tier1` | the whole suite with the default `simd` backend on three hosts (run-time detection, see above), a second run with `-C target-cpu=x86-64-v3` on x86-64 hosts, the backend and the facade alone with the level fixed at compile time at `x86-64`, `x86-64-v2` and `x86-64-v3` on x86-64 hosts, the backend alone without its static tables at `x86-64` and `x86-64-v3`, and a run with `RUSTFLAGS="--cfg sdrk_fallback_only"` so that the fallback stays covered; also `cargo fmt --check`, clippy with `-D warnings`, `sdrk-pipeline` without default features, `cargo xtask check`, `cargo xtask bare-metal`, `cargo xtask schema --check` and `cargo deny check` |
 | `avx512-sde` | `cargo test --workspace --profile emulated` with `-C target-cpu=sapphirerapids` under Intel SDE (`sde64 -spr --` as the cargo runner); the backend alone with AVX-512 fixed at compile time; the backend with `--features std` on the SSE2 and SSE4.2 CPUIDs of `cargo xtask count` (`cargo xtask sde-cpuid`, `-cpuid_in ... -chip_check_cpuid 1`), the only runs of the SSE2 and SSE4.2 arms of the run-time dispatch |
 | `aarch64-qemu` | `cargo test --workspace --profile emulated` cross-compiled for `aarch64-unknown-linux-gnu` under `qemu-aarch64`, and the backend alone without its static tables |
 | `wasm-wasmtime` | the crates that build for WASI (`sdrk-device`, `sdrk-core`, `sdrk-backend-simd`, `sdrk`, `sdrk-blocks`) for `wasm32-wasip1` under wasmtime, with `+simd128`, without it, with `+simd128,+relaxed-simd` (feature `sdrk/relaxed-simd`) and with `+simd128` and the opt-in static tables (features `sdrk/nco-tables,sdrk/fft-tables`), with wasmtime's default stack |
@@ -67,8 +67,6 @@ SDRK_EXPECT_LEVEL=sse4.2 RUSTFLAGS="-C target-cpu=x86-64-v2" cargo test -p sdrk-
     --features sdrk/fft-tables,sdrk/nco-tables --target-dir target/static-x86-64-v2
 SDRK_EXPECT_LEVEL=avx2 RUSTFLAGS="-C target-cpu=x86-64-v3" cargo test -p sdrk-backend-simd \
     --target-dir target/backend-no-tables-x86-64-v3
-SDRK_EXPECT_LEVEL=sse2 RUSTFLAGS="-C target-cpu=x86-64" cargo test --target i686-unknown-linux-gnu \
-    -p sdrk-backend-simd -p sdrk --features sdrk/fft-tables --target-dir target/i686-x86-64
 cargo xtask sde-cpuid sse2 "$PWD/target/cpuid-sse2.def"
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sde64 -cpuid_in $PWD/target/cpuid-sse2.def -chip_check_cpuid 1 --" \
     cargo test -p sdrk-backend-simd --features std,fft-tables,nco-tables --profile emulated \

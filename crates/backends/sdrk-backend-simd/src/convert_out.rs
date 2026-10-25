@@ -57,7 +57,7 @@ const S8: f32 = 128.0;
 const TINY: f32 = 1.0 / (1u64 << 47) as f32;
 /// `0.5 - 2^-25`, subtracted from `x * 128 + 2^-47` for `CU8` on the level paths (see the module
 /// documentation).
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const C: f32 = 0.5 - 1.0 / (1u32 << 25) as f32;
 
 /// Runs `body` on every whole block of `step` floats and `bytes` output bytes (see
@@ -77,7 +77,6 @@ fn blocks(
 /// `unroll` blocks per iteration of the main loop; returns the number of floats done. Only the
 /// level paths use it.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -102,7 +101,7 @@ fn run(
 }
 
 /// The four vectors of 4 floats of a block of 16. Only the 128-bit level paths use it.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[inline(always)]
 fn quarters(i: &[f32]) -> [&[f32]; 4] {
     let (ab, cd) = i.split_at(8);
@@ -214,7 +213,7 @@ fn generic<S: SimdToken>(simd: S, kind: Kind, input: &[f32], out: &mut [u8]) -> 
 #[inline(always)]
 fn level_path<S: SimdToken>(simd: S, kind: Kind, input: &[f32], out: &mut [u8]) -> Option<usize> {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
             return Some(x86::avx512(t, kind, input, out));
@@ -253,11 +252,9 @@ fn f32_out<S: SimdToken>(simd: S, kind: Kind, input: &[f32], out: &mut [u8]) {
     tail(kind, input, out);
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[allow(unsafe_code)]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86 as arch;
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64 as arch;
 

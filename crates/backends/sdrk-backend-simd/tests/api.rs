@@ -22,28 +22,24 @@ fn the_level_name_is_one_of_the_documented_names() {
     );
     // The level fixed at compile time (the target features of `-C target-cpu=...`).
     #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
+        target_arch = "x86_64",
         target_feature = "sse2",
         not(target_feature = "sse4.2"),
         not(feature = "std")
     ))]
     assert_eq!(name, "sse2");
     #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
+        target_arch = "x86_64",
         target_feature = "sse4.2",
         target_feature = "popcnt",
         not(target_feature = "avx2"),
         not(feature = "std")
     ))]
     assert_eq!(name, "sse4.2");
-    #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
-        target_feature = "avx2",
-        not(feature = "std")
-    ))]
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", not(feature = "std")))]
     assert!(["avx2", "avx512"].contains(&name), "{name}");
     #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
+        target_arch = "x86_64",
         target_feature = "avx512vbmi",
         not(feature = "std")
     ))]

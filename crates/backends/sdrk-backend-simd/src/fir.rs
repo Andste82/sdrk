@@ -544,12 +544,12 @@ impl<
             // The windows of the pass. On x86 every window is checked against the pass slice of
             // known length, which lets the window pointers derive from one base; elsewhere
             // stepping through the windows of the slice measured fewer instructions.
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            #[cfg(target_arch = "x86_64")]
             let wins: [&[[f32; L]]; B] = core::array::from_fn(|b| {
                 pass.get(b * step..b * step + len)
                     .map_or(&[][..], |w| w.as_chunks::<L>().0)
             });
-            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            #[cfg(not(target_arch = "x86_64"))]
             let wins = {
                 let mut it = pass.windows(len).step_by(step);
                 let mut wins: [&[[f32; L]]; B] = [&[]; B];
@@ -893,7 +893,7 @@ struct Quad([f32; 4]);
 #[inline(always)]
 fn has_fma<S: SimdToken>(simd: S) -> bool {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         level.as_avx2().is_some()
     }
@@ -901,7 +901,7 @@ fn has_fma<S: SimdToken>(simd: S) -> bool {
     {
         level.as_neon().is_some()
     }
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         let _ = level;
         false
@@ -1133,7 +1133,7 @@ fn contiguous_c32<S: SimdToken, const STRIDED: bool>(
     ostride: usize,
 ) {
     let fma = has_fma(simd);
-    let x86 = cfg!(any(target_arch = "x86", target_arch = "x86_64"));
+    let x86 = cfg!(target_arch = "x86_64");
     match S::f32s::LEN {
         16 => contiguous::<S, f32x16<S>, f32, [f32; 16], 16, true, 14, 8, 1, 7, 8, 1, STRIDED>(
             simd, taps, tstride, hist, input, out, first, step, ostride,

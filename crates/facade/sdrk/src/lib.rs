@@ -5,7 +5,7 @@
 //!
 //! The accelerated kernels (`convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`,
 //! `fir_interpolate`, `resample`, `mag_sq`, `quad_demod`, `fm_mod`, `fft`) run on the SIMD
-//! backend (`sdrk-backend-simd`, feature `simd`, default) on x86, x86-64, AArch64 and wasm32 with
+//! backend (`sdrk-backend-simd`, feature `simd`, default) on x86-64, AArch64 and wasm32 with
 //! `simd128`, everything else on `Fallback`. The feature `std` selects the SIMD level at run
 //! time; without it the level is fixed by the target features of the build. Building with
 //! `RUSTFLAGS="--cfg sdrk_fallback_only"` forces the fallback everywhere (see
@@ -56,7 +56,6 @@ impl BackendName for Fallback {
     feature = "simd",
     not(sdrk_fallback_only),
     any(
-        target_arch = "x86",
         target_arch = "x86_64",
         target_arch = "aarch64",
         all(target_arch = "wasm32", target_feature = "simd128")
@@ -79,7 +78,7 @@ pub use delegations::backend_for;
 
 /// Whether the accelerated kernels run on the SIMD backend in this build: the feature `simd`
 /// is on, the build does not set `--cfg sdrk_fallback_only`, and the target has SIMD
-/// instructions (x86, x86-64, AArch64, wasm32 with `simd128`).
+/// instructions (x86-64, AArch64, wasm32 with `simd128`).
 ///
 /// ```
 /// // `backend_for` reports the backend the constant announces.
@@ -90,7 +89,6 @@ pub const SIMD_BACKEND: bool = cfg!(all(
     feature = "simd",
     not(sdrk_fallback_only),
     any(
-        target_arch = "x86",
         target_arch = "x86_64",
         target_arch = "aarch64",
         all(target_arch = "wasm32", target_feature = "simd128")

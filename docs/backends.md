@@ -12,10 +12,10 @@ The vector code is written once against the `Simd` trait of [`fearless_simd`](ht
 
 | Target | Levels |
 | --- | --- |
-| x86-64 (and 32-bit x86) | `sse2` (baseline), `sse4.2` (`x86-64-v2`), `avx2` with FMA (`x86-64-v3`), `avx512` (Ice Lake class: `avx512f`, `bw`, `dq`, `vl`, ...) |
+| x86-64 | `sse2` (baseline), `sse4.2` (`x86-64-v2`), `avx2` with FMA (`x86-64-v3`), `avx512` (Ice Lake class: `avx512f`, `bw`, `dq`, `vl`, ...) |
 | AArch64 | `neon` |
 | wasm32 | `simd128` (compile-time only; without the target feature the level is `scalar`, the generic code); with the cargo feature `relaxed-simd` and the target feature `+relaxed-simd` also relaxed SIMD, see below |
-| anything else (Cortex-M, RISC-V, ...) | none; the facade uses `Fallback` and does not build the backend |
+| anything else (32-bit x86, Cortex-M, RISC-V, ...) | none; the facade uses `Fallback` and does not build the backend |
 
 ### Dispatch
 
@@ -90,8 +90,8 @@ Helpers called from a level path must be `#[inline(always)]` functions or local 
 
 ### Cargo features of the backend
 
-- `fft-tables`: the static per-span twiddle tables of the `C32` FFT, 41 KiB of read-only data (41 904 bytes). The facade enables it through a target-specific dependency on x86-64 and AArch64 only, and offers the facade feature `fft-tables` for wasm32 and 32-bit x86 (decision D13). wasm32 measured both ways: 35.5 / 58.6 / 67.6 fuel per sample at N = 64 / 1024 / 4096 without the tables, 31.0 / 53.1 / 61.8 with them (and a slightly higher SNR).
-- `nco-tables`: the static NCO interpolation tables of `fm_mod` and `rotate` `CQ15`, 96 KiB of read-only data. The facade enables it by default on x86, x86-64 and AArch64 through a target-specific dependency and offers the facade feature `nco-tables` elsewhere. `fm_mod` on wasm32: 34.78 fuel per sample without, 27.77 with the tables.
+- `fft-tables`: the static per-span twiddle tables of the `C32` FFT, 41 KiB of read-only data (41 904 bytes). The facade enables it through a target-specific dependency on x86-64 and AArch64 only, and offers the facade feature `fft-tables` for wasm32 (decision D13). wasm32 measured both ways: 35.5 / 58.6 / 67.6 fuel per sample at N = 64 / 1024 / 4096 without the tables, 31.0 / 53.1 / 61.8 with them (and a slightly higher SNR).
+- `nco-tables`: the static NCO interpolation tables of `fm_mod` and `rotate` `CQ15`, 96 KiB of read-only data. The facade enables it by default on x86-64 and AArch64 through a target-specific dependency and offers the facade feature `nco-tables` elsewhere. `fm_mod` on wasm32: 34.78 fuel per sample without, 27.77 with the tables.
 - `relaxed-simd`: see below.
 
 **Builds with debug assertions.** The helpers of the `C32` FFT are `#[inline(always)]` only without debug assertions. A downstream crate in the dev profile (opt-level 0) gets frames of at most about 10 KiB instead of megabytes, and builds in seconds. Each such helper is compiled without its level's target features there (correct, but slower).

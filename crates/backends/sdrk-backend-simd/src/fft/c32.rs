@@ -230,12 +230,8 @@ where
 
 /// The AVX2 data movement of the tile pass: in-lane shuffles only (`vshufps`, `vunpck*ps`,
 /// `vperm2f128`), with a lane order that the transposition undoes for free.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        __m256, _mm256_permute2f128_ps, _mm256_shuffle_ps, _mm256_unpackhi_ps, _mm256_unpacklo_ps,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m256, _mm256_permute2f128_ps, _mm256_shuffle_ps, _mm256_unpackhi_ps, _mm256_unpacklo_ps,
@@ -606,7 +602,6 @@ fn span_table(_log2: u32) -> Option<[(&'static [f32], &'static [f32]); 2]> {
 }
 
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -1804,7 +1799,7 @@ const RADIX8_4_LANES: bool = cfg!(target_arch = "wasm32");
 fn transform<S: SimdToken, const INV: bool>(simd: S, data: &mut [f32], tw: Twiddles<'_>) {
     let n = tw.n;
     let l = S::f32s::LEN;
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     if let Some(avx2) = x86::avx2_only(simd.level())
         && n >= 64
     {
@@ -1981,7 +1976,7 @@ mod tests {
     /// The data movement of AVX2 against the portable operations, bit for bit: the rows of a tile
     /// (load and transposition), the transposition of the codelet (lanes in the order `IN_LANE`)
     /// and its interleaved store.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn the_avx2_lanes_match_the_portable_lanes() {
         use fearless_simd::{Avx2, f32x8, f64x4, prelude::*};

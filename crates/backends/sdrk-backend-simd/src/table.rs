@@ -23,7 +23,7 @@
 //! lies between `a` and `b`, so the wrapping 16-bit addition is exact and the fallback's final
 //! saturation never acts.
 //!
-//! Without the feature (the default of the backend; the facade enables it on x86, x86-64 and
+//! Without the feature (the default of the backend; the facade enables it on x86-64 and
 //! AArch64) the lookups read `COS_F32` and `COS_Q15` directly.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
@@ -108,7 +108,6 @@ pub(crate) fn entry_f32(i: u32) -> [f32; 4] {
 #[cfg(all(
     feature = "nco-tables",
     any(
-        target_arch = "x86",
         target_arch = "x86_64",
         all(target_arch = "wasm32", target_feature = "simd128")
     )
@@ -129,7 +128,6 @@ pub(crate) fn entry_q15(i: u32) -> [i16; 4] {
 #[cfg(all(
     feature = "nco-tables",
     any(
-        target_arch = "x86",
         target_arch = "x86_64",
         all(target_arch = "wasm32", target_feature = "simd128")
     )
@@ -241,7 +239,7 @@ pub(crate) fn cos_sin_q15<S: SimdToken>(simd: S, p: S::u32s) -> (S::i32s, S::i32
 #[inline(always)]
 pub(crate) fn cos_sin_q15_packed<S: SimdToken>(simd: S, p: S::u32s) -> S::u32s {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         use fearless_simd::{u32x4, u32x8, u32x16};
         let ps = p.as_slice();
@@ -289,33 +287,9 @@ pub(crate) fn cos_sin_q15_packed<S: SimdToken>(simd: S, p: S::u32s) -> S::u32s {
 /// The level-specific lookups of x86: whole vectors of phases in, interleaved `(cos, sin)`
 /// out. Every helper is compiled with the features of its level and inlined into the kernels
 /// of that level.
-#[cfg(all(
-    feature = "nco-tables",
-    any(target_arch = "x86", target_arch = "x86_64")
-))]
+#[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
 #[allow(unsafe_code)]
 pub(crate) mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        __m128, __m128i, __m256, __m256d, __m256i, __m512, __m512i, _mm_add_epi16, _mm_add_ps,
-        _mm_and_si128, _mm_castpd_ps, _mm_castps_pd, _mm_castps_si128, _mm_castsi128_ps,
-        _mm_cvtepi32_ps, _mm_cvtsi128_si32, _mm_extract_epi32, _mm_madd_epi16, _mm_mul_ps,
-        _mm_mulhrs_epi16, _mm_or_si128, _mm_packs_epi32, _mm_set_epi64x, _mm_set1_epi16,
-        _mm_set1_epi32, _mm_setr_epi8, _mm_shuffle_epi8, _mm_shuffle_epi32, _mm_shuffle_ps,
-        _mm_slli_epi32, _mm_srai_epi32, _mm_srli_epi32, _mm_unpackhi_epi16, _mm_unpackhi_epi32,
-        _mm_unpackhi_pd, _mm_unpackhi_ps, _mm_unpacklo_epi16, _mm_unpacklo_epi32, _mm_unpacklo_pd,
-        _mm_unpacklo_ps, _mm256_add_epi16, _mm256_add_ps, _mm256_and_si256, _mm256_castpd_ps,
-        _mm256_castps_pd, _mm256_castps_si256, _mm256_castps128_ps256, _mm256_castsi128_si256,
-        _mm256_castsi256_ps, _mm256_cvtepi32_ps, _mm256_extract_epi32, _mm256_insertf128_ps,
-        _mm256_inserti128_si256, _mm256_mul_ps, _mm256_mulhrs_epi16, _mm256_permutevar8x32_ps,
-        _mm256_set1_epi16, _mm256_set1_epi32, _mm256_setr_epi8, _mm256_setr_epi32,
-        _mm256_shuffle_epi8, _mm256_shuffle_ps, _mm256_slli_epi32, _mm256_srli_epi32,
-        _mm256_unpackhi_pd, _mm256_unpacklo_pd, _mm512_add_epi16, _mm512_add_ps, _mm512_and_si512,
-        _mm512_castpd_ps, _mm512_castsi512_si256, _mm512_cvtepi32_ps, _mm512_extracti64x4_epi64,
-        _mm512_i32gather_epi64, _mm512_i32gather_pd, _mm512_mul_ps, _mm512_mulhrs_epi16,
-        _mm512_or_si512, _mm512_permutex2var_epi32, _mm512_permutexvar_ps, _mm512_set1_epi32,
-        _mm512_setr_epi32, _mm512_slli_epi32, _mm512_srli_epi32,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m128, __m128i, __m256, __m256d, __m256i, __m512, __m512i, _mm_add_epi16, _mm_add_ps,

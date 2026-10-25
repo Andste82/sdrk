@@ -151,7 +151,7 @@ Per sample, in this order: update the average power, update the gate (open when 
 
 **Twiddles in the SIMD backend.** A plan's table is the only twiddle source of the fallback. The SIMD backend can use other sources (decision D4), so for a plan from `FftPlan::from_twiddles` with values other than those of `new` its result is not the transform of those twiddles:
 
-- `C32` with the backend feature `fft-tables` (on by default on x86-64 and AArch64 through the facade, opt-in on wasm32 and 32-bit x86 with the facade feature `fft-tables`): the passes of spans up to 4096 read static per-span tables equal to the twiddles of `new`; the plan's table serves only the spans above 4096. Without the feature, `W^3k` is the product `W^k W^2k` of two plan entries.
+- `C32` with the backend feature `fft-tables` (on by default on x86-64 and AArch64 through the facade, opt-in on wasm32 with the facade feature `fft-tables`): the passes of spans up to 4096 read static per-span tables equal to the twiddles of `new`; the plan's table serves only the spans above 4096. Without the feature, `W^3k` is the product `W^k W^2k` of two plan entries.
 - `rfft`: the bins `N/2 - k` use `-conj(post[k])` in place of `post[N/2 - k]` (the identity of the twiddles of `RealFftPlan::new`), and with `fft-tables` the post-processing of up to 4096 points reads the static table of the span `N` instead of `post`.
 - `CQ15`: the generic bit-exact path relies on `|wr| + |wi| <= 46341`, which holds for plans from `new` and `from_static_4096`; the radix-4 level paths clamp twiddles to `>= -32767`. Stride plans with a twiddle step above 4 per stage square `w^k` instead of loading `w^2k`, which costs up to about 1 dB at N = 16.
 

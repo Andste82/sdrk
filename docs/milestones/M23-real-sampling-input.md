@@ -1,6 +1,6 @@
 # M23 — Real-sampling devices (halfband, real to complex)
 
-> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M22](M22-audio-filters.md) · Next: see [BACKLOG.md](BACKLOG.md)
+> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M22](M22-audio-filters.md) · Next: [M24](M24-fm-stereo.md)
 
 ## Goal
 

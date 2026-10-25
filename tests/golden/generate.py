@@ -12,7 +12,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from sdrk_golden import cases, fileio, q15, registry  # noqa: E402,F401
+from sdrk_golden import cases, f32model, fileio, q15, registry  # noqa: E402,F401
 
 
 def render(selected):
@@ -63,6 +63,7 @@ def main():
         return 0
 
     q15.self_test()
+    f32model.self_test()
     rendered = render(selected)
     kernels = sorted({c.kernel for c in selected})
     if args.kernel is None:

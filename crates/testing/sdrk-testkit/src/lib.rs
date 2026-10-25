@@ -9,6 +9,7 @@
 //! - `storage` (feature `std`): `VecStorage`, the `Vec`-backed block storage for host tests,
 //! - `golden` (feature `std`): loader and comparison for the golden vectors,
 //! - [`e2e`]: the streaming FM receive and transmit chains of the end-to-end tests,
+//! - [`e2e_nfm`]: the end-to-end narrowband FM receive with squelch (M19),
 //! - [`fm`]: the analytic FM baseband generator,
 //! - [`meters`]: tone fit, SINAD, frequency estimate and spectral mask,
 //! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
@@ -52,6 +53,7 @@ pub mod channel;
 pub mod conformance;
 pub mod design_helpers;
 pub mod e2e;
+pub mod e2e_nfm;
 pub mod encode;
 pub mod fm;
 pub mod r#gen;

@@ -655,7 +655,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 24] = [
+pub const KERNELS: [KernelSpec; 26] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -673,6 +673,8 @@ pub const KERNELS: [KernelSpec; 24] = [
     spec("quad_demod", Family::Volk, false),
     spec("quad_demod_cq15", Family::Own, false),
     spec("fm_mod", Family::Own, false),
+    spec("squelch", Family::Own, false),
+    spec("squelch_cq15", Family::Own, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),

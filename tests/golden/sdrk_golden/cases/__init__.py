@@ -21,5 +21,6 @@ from . import (  # noqa: F401
     resample,
     rotate,
     scale,
+    squelch,
     window,
 )

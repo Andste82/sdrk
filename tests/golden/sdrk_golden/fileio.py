@@ -86,6 +86,8 @@ def render_case(kernel, name, seed, result):
         "notes": result.get("notes", ""),
         "provenance": provenance(),
     }
+    if "model" in result:
+        doc["model"] = result["model"]
     files[f"{name}.json"] = (json.dumps(doc, sort_keys=True, indent=2) + "\n").encode("utf-8")
     return files
 

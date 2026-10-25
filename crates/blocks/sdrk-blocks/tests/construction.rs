@@ -31,7 +31,7 @@ use sdrk_blocks::{
     ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error,
     FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock,
     ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SpectrumSample, SpectrumWindow,
+    SpectrumConfig, SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -86,6 +86,10 @@ fn simple_exact<T: BlockSample>() {
         DcBlockBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap(),
         |a| DcBlockBlock::<T, _>::new(&cfg, r, a).map(|_| ()),
     );
+    let cfg = SquelchConfig::default();
+    let bytes = SquelchBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+    assert_eq!(bytes, 0);
+    check_exact_storage(bytes, |a| SquelchBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
     let cfg = FmModConfig::default();
     let r = rate(240_000);
     check_exact_storage(
@@ -269,7 +273,8 @@ fn no_block_is_larger_than_512_bytes() {
         FmDemodBlock,
         FmModBlock,
         ResamplerBlock,
-        SpectrumBlock
+        SpectrumBlock,
+        SquelchBlock
     );
     check::<ResamplerRealBlock<f32, A<'static>>>("ResamplerRealBlock<f32>");
     check::<ResamplerRealBlock<Q15, A<'static>>>("ResamplerRealBlock<Q15>");
@@ -300,7 +305,8 @@ fn public_types_are_send() {
         FmDemodBlock,
         FmModBlock,
         ResamplerBlock,
-        SpectrumBlock
+        SpectrumBlock,
+        SquelchBlock
     );
     assert_send::<ResamplerRealBlock<f32, A<'static>>>();
     assert_send::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>();
@@ -315,6 +321,7 @@ fn public_types_are_send() {
     assert_send::<FmModConfig>();
     assert_send::<ResamplerConfig>();
     assert_send::<SpectrumConfig>();
+    assert_send::<SquelchConfig>();
     assert_send::<Error>();
     assert_send::<A<'static>>();
     assert_send::<sdrk_blocks::BlockDescription>();

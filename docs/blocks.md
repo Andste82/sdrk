@@ -50,7 +50,7 @@ impl<T, S: Storage> Foo<T, S> {
 
 `validate` applies the limits that depend on the input rate (`frequency_hz` within plus or minus half the rate, a stop band below half the rate). Parameters with a rate-dependent default (`cutoff_hz` and `transition_hz` of `ddc`, `duc` and `resampler`) are `Option<f64>` in the config: `None` selects the default. `FooConfig::get` of an unset one is an error; the block reports the resolved value. `set` and `get` work on build and runtime parameters and check kind and range with the same table (`ParamDesc::check`) that the description publishes.
 
-Blocks exist for the complex sample types `C32` and `CQ15` (`ConvertBlock<T, S>`, `ConvertOutBlock`, `ScaleBlock`, `DcBlockBlock`, `FirBlock`, `DdcBlock`, `DucBlock`, `FmDemodBlock` (`C32`/`CQ15` in, `f32`/`Q15` out), `FmModBlock` (`f32`/`Q15` in, `C32`/`CQ15` out), `ResamplerBlock`, `SpectrumBlock`) and for the real types in `ResamplerRealBlock<R, S>` (`f32`, `Q15`), which is the resampler for audio.
+Blocks exist for the complex sample types `C32` and `CQ15` (`ConvertBlock<T, S>`, `ConvertOutBlock`, `ScaleBlock`, `DcBlockBlock`, `FirBlock`, `DdcBlock`, `DucBlock`, `FmDemodBlock` (`C32`/`CQ15` in, `f32`/`Q15` out), `FmModBlock` (`f32`/`Q15` in, `C32`/`CQ15` out), `ResamplerBlock`, `SpectrumBlock`, `SquelchBlock`) and for the real types in `ResamplerRealBlock<R, S>` (`f32`, `Q15`), which is the resampler for audio.
 
 ## Storage
 
@@ -96,7 +96,7 @@ The golden tests compare the taps with SciPy to 1e-12 and the tap counts exactly
 
 ## Descriptions
 
-Every block has a `BlockDescription` (kind, summary, details, ports, parameters, required parameters) as `static` data; `all_descriptions()` lists all eleven. A `ParamDesc` has a name that ends in its unit (`_hz`, `_db`, `_us`), a `Unit`, a `ParamKind` with absolute limits and a default, a `typical` text, `Mutability::Build` or `Runtime`, and a description. Rules, all enforced by `crates/blocks/sdrk-blocks/tests/describe.rs`:
+Every block has a `BlockDescription` (kind, summary, details, ports, parameters, required parameters) as `static` data; `all_descriptions()` lists all twelve. A `ParamDesc` has a name that ends in its unit (`_hz`, `_db`, `_us`), a `Unit`, a `ParamKind` with absolute limits and a default, a `typical` text, `Mutability::Build` or `Runtime`, and a description. Rules, all enforced by `crates/blocks/sdrk-blocks/tests/describe.rs`:
 
 - every text is non-empty and has no leading or trailing whitespace; a summary is one sentence of at most 120 characters that ends with a period;
 - block kinds and parameter names are `snake_case` and unique; a unit suffix in the name matches the `Unit`;
@@ -121,6 +121,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `fm_mod` | Frequency-modulates a real signal onto a complex baseband carrier. | `in`: f32, q15 | `out`: c32, cq15 | - |
 | `resampler` | Changes the sample rate by a rational factor, optionally tunable in ppm. | `in`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | `rate_out_hz` |
 | `spectrum` | Computes averaged power spectra in dB relative to full scale as frames. | `in`: c32, cq15 | `frame`: frame(fft_size) | - |
+| `squelch` | Passes a complex signal only while its average power is above a threshold. | `in`: c32, cq15 | `out`: c32, cq15 | - |
 
 | Block | Parameter | Unit | When | Type, range, default | Typical |
 | --- | --- | --- | --- | --- | --- |
@@ -163,6 +164,9 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `spectrum` | `kaiser_beta` | - | build | f64, 0 to 50, default 8.6 | 8.6 |
 | `spectrum` | `averaging` | - | runtime | integer, 1 to 1024, default 1 | 1; 10 for a smoother display |
 | `spectrum` | `interval_samples` | samples | runtime | integer, 1 to 1073741824, no default | default fft_size; fft_size / 2 for 50 % overlap |
+| `squelch` | `threshold_db` | dB | runtime | f64, -150 to 0, default -40 | -40 for a strong local signal, -55 for weak signals |
+| `squelch` | `hysteresis_db` | dB | runtime | f64, 0 to 40, default 3 | 3 |
+| `squelch` | `tau_s` | s | build | f64, 0.000001 to 100, default 0.01 | 0.01 at 48 kHz |
 
 <!-- blocks-table:end -->
 
@@ -176,6 +180,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 - **`duc`:** the fused `duc` kernel with taps designed at the *output* rate and multiplied by `L`, the NCO at `+frequency_hz` at the output rate; defaults relative to the input rate (cutoff `0.4`, transition `0.1`). `max_chunk` is counted in output samples and must be at least `interpolation`.
 - **`fm_demod`:** `quad_demod` + `deemphasis` (the fused `fm_demod` kernel; `deemphasis_us = 0` switches it off) + the audio low-pass with decimation (`resample_real`, L = 1). The discriminator gain is `fs / (2 pi deviation_hz)` for `C32` (the full deviation reads 1.0) and the largest Q15 value for `CQ15` (output unit phase per sample divided by pi; 75 kHz at 240 kHz reads about 0.625). The audio filter has the cutoff `audio_cutoff_hz`, a transition width of a quarter of it and 60 dB; its stop band must lie below the output Nyquist frequency. The block works through its input in pieces of `FM_CHUNK` (256) samples.
 - **`fm_mod`:** `fm_mod` with a runtime `deviation_hz`; the phase stays continuous when it changes.
+- **`squelch`:** a power gate (`squelch` kernel, bit-exact in both types). The average power `p` follows `p += alpha (|x|^2 - p)` with `alpha = 1 - exp(-1 / (fs tau_s))`; the gate opens when `p >= 10^(threshold_db / 10)` and closes when `p < 10^((threshold_db - hysteresis_db) / 10)`, otherwise it keeps its state. Closed output is exactly zero, so a following `fm_demod` outputs exact silence. `threshold_db` and `hysteresis_db` are runtime parameters (`set_param` calls `set_thresholds`; the average power and the gate state are kept and the new levels apply from the next sample), `tau_s` is a build parameter. **Chain position:** the squelch works on the channel signal, so it belongs **after** the channel filter (`ddc`) and **before** the demodulator and any gain control; after an AGC every signal, noise included, has the same level and the gate would always open. Example: `ddc` -> `squelch` -> `fm_demod` in `examples/flows/nfm_receiver.json`.
 - **`resampler`:** see below.
 - **`spectrum`:** see below.
 
@@ -193,5 +198,5 @@ For every frame the block takes `fft_size` consecutive samples starting at the f
 ## Tests
 
 - Golden cases (`design/`, `dot/`, `blocks/`): blocks are driven in one piece and in random chunks; results must be identical and match SciPy/NumPy (`ddc` 130 dB, FM demodulator 133 dB, rational resampler 139 dB, tuned resampler 140 dB (`C32`) and bit-exact (`CQ15`), spectrum within 0.0002 dB (`C32`) and 0.0013 dB (`CQ15`)).
-- `tests/describe.rs`, `construction.rs`, `params.rs`, `behaviour.rs`, `timing.rs`, `map_index.rs`, `ppm.rs`, `functional.rs`, `design.rs`, `storage.rs` in `crates/blocks/sdrk-blocks`: the rules above, exact storage, parameters, chunk invariance and `reset` of every block and sample type, extreme inputs (silence, full scale, NaN, infinity), impulse delays, output counts, pass bands and stop bands, DUC-DDC and FM modulator-demodulator loops, spectrum levels.
+- `tests/describe.rs`, `construction.rs`, `params.rs`, `behaviour.rs`, `squelch.rs` (gate samples, hysteresis band, runtime parameters, invariance), `timing.rs`, `map_index.rs`, `ppm.rs`, `functional.rs`, `design.rs`, `storage.rs` in `crates/blocks/sdrk-blocks`: the rules above, exact storage, parameters, chunk invariance and `reset` of every block and sample type, extreme inputs (silence, full scale, NaN, infinity), impulse delays, output counts, pass bands and stop bands, DUC-DDC and FM modulator-demodulator loops, spectrum levels.
 - Suite cases (no heap, `ArenaStorage` on the suite arena): `block_ddc_vs_chain`, `block_fm_demod_sinad` (the receive chain of M08 rebuilt from blocks, thresholds 40/35 dB; it reaches about 98/86 dB because the designed filters are better than the Hann filters of the kernel chain), `block_spectrum_tone_level` (0 dBFS plus or minus 0.05 dB for `C32`, plus or minus 0.3 dB for `CQ15`), `block_resampler_ppm_count`.

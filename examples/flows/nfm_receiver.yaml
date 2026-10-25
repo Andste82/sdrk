@@ -1,0 +1,55 @@
+# SDRk pipeline: receive one narrow-band FM channel with a squelch (YAML twin of
+# nfm_receiver.json). YAML is accepted as input; JSON stays the canonical format.
+sdrk: 1
+name: nfm-receiver
+description: "Receive one narrow-band FM channel with a power squelch and output 48 kHz audio."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # Quadrature FM demodulation without de-emphasis (two-way radio audio is not
+  # pre-emphasised in the same way as broadcast FM). deviation_hz is the deviation that reads
+  # full scale: 5000 for 25 kHz channels, 2500 for 12.5 kHz channels. audio_cutoff_hz only
+  # matters when audio_decimation is above 1; the channel is already at 48 kHz here.
+  demod:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 0
+      deviation_hz: 5000
+  # Power squelch with the defaults: it opens at -40 dBFS, closes 3 dB lower and averages the
+  # power over 10 ms. While it is closed the audio is exact silence. It sits after the channel
+  # filter and before the demodulator; threshold_db and hysteresis_db can be changed while the
+  # flow runs (set_param), tau_s only at build time.
+  gate:
+    kind: squelch
+  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz) with a 6 kHz channel filter.
+  # Set frequency_hz to the offset of the channel from the tuner centre. For 12.5 kHz channels
+  # use cutoff_hz 3000 and transition_hz 1500. The narrow transition at 2.4 MS/s needs about
+  # 2900 taps, more than the default max_taps of 1023, so max_taps is raised.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      max_taps: 4096
+      transition_hz: 3000
+# Channel filter, squelch, demodulator.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: gate }
+  - { from: gate, to: demod }
+  - { from: demod, to: audio }
+# Audio samples (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

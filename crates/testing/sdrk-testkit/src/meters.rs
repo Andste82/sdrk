@@ -106,6 +106,112 @@ impl ToneMeter {
     }
 }
 
+/// Streaming form of the [`ToneMeter`] fit and of [`sinad_db`]: samples are pushed one at a time
+/// and nothing but a few sums is stored, so a measurement over a long window needs no buffer.
+///
+/// The residual comes from the normal equations (`sum x^2` minus what the fit explains), which
+/// agrees with the two-pass [`ToneMeter`] as long as the residual is not many orders of magnitude
+/// below the signal (a SINAD up to about 100 dB in f64).
+///
+/// ```
+/// use sdrk_testkit::meters::{ToneAccumulator, sinad_db};
+/// let x: Vec<f64> = (0..4000)
+///     .map(|n| (2.0 * std::f64::consts::PI * 1000.0 * n as f64 / 48000.0).sin() + 0.01 * ((n * 7) % 11) as f64)
+///     .collect();
+/// let mut acc = ToneAccumulator::new(48000.0, 1000.0);
+/// for &v in &x {
+///     acc.push(v);
+/// }
+/// assert!((acc.sinad_db() - sinad_db(&x, 48000.0, 1000.0)).abs() < 1e-6);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ToneAccumulator {
+    rate: f64,
+    freq: f64,
+    n: usize,
+    scc: f64,
+    sss: f64,
+    scs: f64,
+    sc: f64,
+    ss: f64,
+    xc: f64,
+    xs: f64,
+    x1: f64,
+    xx: f64,
+}
+
+impl ToneAccumulator {
+    /// An empty accumulator for a tone at `freq` Hz and sample rate `rate`; the first pushed
+    /// sample has index 0.
+    pub fn new(rate: f64, freq: f64) -> Self {
+        Self {
+            rate,
+            freq,
+            n: 0,
+            scc: 0.0,
+            sss: 0.0,
+            scs: 0.0,
+            sc: 0.0,
+            ss: 0.0,
+            xc: 0.0,
+            xs: 0.0,
+            x1: 0.0,
+            xx: 0.0,
+        }
+    }
+
+    /// Adds the next sample.
+    pub fn push(&mut self, x: f64) {
+        let (c, s) = cos_sin(self.n, self.rate, self.freq);
+        self.n += 1;
+        self.scc += c * c;
+        self.sss += s * s;
+        self.scs += c * s;
+        self.sc += c;
+        self.ss += s;
+        self.xc += x * c;
+        self.xs += x * s;
+        self.x1 += x;
+        self.xx += x * x;
+    }
+
+    /// Number of samples pushed so far.
+    pub fn len(&self) -> usize {
+        self.n
+    }
+
+    /// True before the first sample.
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
+
+    /// SINAD of the pushed samples in dB, like [`sinad_db`]: `+inf` for a perfect tone and for
+    /// an empty accumulator.
+    pub fn sinad_db(&self) -> f64 {
+        if self.n == 0 {
+            return f64::INFINITY;
+        }
+        let nf = self.n as f64;
+        let m = [
+            [self.scc, self.scs, self.sc],
+            [self.scs, self.sss, self.ss],
+            [self.sc, self.ss, nf],
+        ];
+        let (a, b, dc) = match solve3(m, [self.xc, self.xs, self.x1], nf) {
+            Some(sol) => sol,
+            None => (0.0, 0.0, self.x1 / nf),
+        };
+        let explained = a * self.xc + b * self.xs + dc * self.x1;
+        let residual = (self.xx - explained) / nf;
+        let total = (self.xx - 2.0 * dc * self.x1) / nf + dc * dc;
+        if residual <= 0.0 {
+            f64::INFINITY
+        } else {
+            10.0 * libm::log10(total / residual)
+        }
+    }
+}
+
 /// Solves `m * v = rhs` by Cramer's rule; `None` when the matrix is (nearly) singular.
 /// `scale` is the sample count, which scales the determinant of a well-conditioned system.
 fn solve3(m: [[f64; 3]; 3], rhs: [f64; 3], scale: f64) -> Option<(f64, f64, f64)> {

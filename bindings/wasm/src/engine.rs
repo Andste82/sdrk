@@ -662,6 +662,7 @@ impl Engine {
             ("rfft", F32),
             ("rotate", C32),
             ("scale", C32),
+            ("squelch", C32),
             ("window", C32),
         ];
         KERNELS

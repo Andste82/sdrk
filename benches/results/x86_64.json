@@ -600,6 +600,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "squelch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 21.84,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 21.84,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 21.84,
+          "ours_instr_per_sample": 21.84,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "squelch_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 29.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 29.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 29.03,
+          "ours_instr_per_sample": 29.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         }
       },
       "volk": {
@@ -934,6 +980,32 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "squelch": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 21.84,
+          "ours_instr_per_sample": 27.35,
+          "ratio": 1.25,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "squelch_cq15": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 29.03,
+          "ours_instr_per_sample": 27.03,
+          "ratio": 0.93,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         }
       },
       "volk": {
@@ -1614,6 +1686,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "squelch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 27.35,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.35,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 27.35,
+          "ours_instr_per_sample": 27.35,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "squelch_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 27.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 27.03,
+          "ours_instr_per_sample": 27.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         }
       },
       "volk": {
@@ -2240,6 +2358,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "squelch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 26.35,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 26.35,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 26.35,
+          "ours_instr_per_sample": 26.35,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "squelch_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 27.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 27.03,
+          "ours_instr_per_sample": 27.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         }
       },
       "volk": {

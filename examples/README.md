@@ -23,4 +23,4 @@ Reads a mono WAV file (16-bit PCM or 32-bit float) and pulls the baseband from t
 
 ## Flows
 
-`examples/flows/` has the example flows in JSON with a YAML twin of each; they are described in [docs/pipeline.md](../docs/pipeline.md).
+`examples/flows/` has the example flows in JSON with a YAML twin of each; they are described in [docs/pipeline.md](../docs/pipeline.md). `nfm_receiver` is the narrow-band FM receiver (two-way radio, PMR446, amateur 2 m / 70 cm): channel filter, power `squelch`, FM demodulator; use `--set tune.frequency_hz=...` to select the channel and `--set gate.threshold_db=...` to move the squelch level.

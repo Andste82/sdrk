@@ -37,3 +37,4 @@ mod interp;
 mod mix;
 mod modulate;
 mod spectrum;
+mod squelch;

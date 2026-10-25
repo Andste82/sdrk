@@ -209,6 +209,8 @@ fn backend_table_lists_the_m06_kernels() {
         ("deemphasis", SampleType::Q15),
         ("dc_block", SampleType::C32),
         ("dc_block", SampleType::CQ15),
+        ("squelch", SampleType::C32),
+        ("squelch", SampleType::CQ15),
         ("window", SampleType::C32),
         ("window", SampleType::CQ15),
         ("power_db", SampleType::F32),
@@ -218,6 +220,7 @@ fn backend_table_lists_the_m06_kernels() {
     }
     assert_eq!(backend_for("fir_decimate", SampleType::F32), "none");
     assert_eq!(backend_for("deemphasis", SampleType::C32), "none");
+    assert_eq!(backend_for("squelch", SampleType::F32), "none");
     assert_eq!(backend_for("resample_real", SampleType::C32), "none");
     assert_eq!(backend_for("power_db", SampleType::CQ15), "none");
 }

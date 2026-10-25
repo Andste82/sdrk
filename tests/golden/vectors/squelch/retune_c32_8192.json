@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "retune_c32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "retune_c32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "retune_c32_8192",
+  "format_version": 1,
+  "kernel": "squelch",
+  "model": "float32",
+  "notes": "noise sigma 0.01 per component (power 2e-4, -37 dBFS; the milestone text calls this -40 dBFS); threshold -30 dB until sample 4095, -45 dB from sample 4096 (set_thresholds before that sample); exact float32 model",
+  "params": {
+    "hysteresis_db": 3.0,
+    "rate_hz": 48000,
+    "retune_at": 4096,
+    "retune_hysteresis_db": 3.0,
+    "retune_threshold_db": -45.0,
+    "tau_s": 0.002,
+    "threshold_db": -30.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 412,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

@@ -7,19 +7,15 @@ name: ci
 on:
   push:
     branches: [main]
+  # The whole tree (scope `full`) on a branch: `gh workflow run nightly.yml --ref <branch>`.
+  # A label trigger would be unsafe: a run started by a label reports its skipped jobs for the
+  # same commit, and GitHub counts a skipped required check as passed.
   pull_request:
-    # `labeled`: the label `ci:full` runs the whole tree (scope `full`) on the pull request.
-    types: [opened, synchronize, reopened, labeled]
 
 # A newer push to a pull request makes the older run obsolete. main is never cancelled, so
 # every commit on main keeps a result.
 concurrency:
-  # A label other than `ci:full` starts a run that does nothing; its own group keeps it from
-  # cancelling the run in progress.
-  group: >-
-    ci-${{ github.event_name }}-${{ github.ref }}${{
-    github.event.action == 'labeled' && github.event.label.name != 'ci:full'
-    && format('-label-{0}', github.run_id) || '' }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -51,9 +47,7 @@ jobs:
   scope:
     # What the pull request changed: decides which parts of the tree run.
     name: scope
-    if: >-
-      github.event_name == 'pull_request' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ci:full')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -70,7 +64,6 @@ jobs:
         id: scope
         shell: bash
         env:
-          FULL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           git diff --name-only "$BASE" "$GITHUB_SHA" > changed.txt
@@ -84,12 +77,8 @@ jobs:
           run_count=false; has "^(crates/(core|backends|facade)/|benches/|xtask/)" && run_count=true; has "$code_or_ci" && run_count=true
           run_golden=false; has '^tests/golden/' && run_golden=true; has '^\.github/' && run_golden=true
           run_selfcheck=false; has '^(xtask/|targets/|\.github/)' && run_selfcheck=true
-          scope="pr"
-          if [ "$FULL" = "true" ]; then
-            scope="full"; docs_only=false; run_count=true; run_golden=true; run_selfcheck=true
-          fi
           {
-            echo "scope=$scope"
+            echo "scope=pr"
             echo "docs_only=$docs_only"
             echo "run_count=$run_count"
             echo "run_golden=$run_golden"

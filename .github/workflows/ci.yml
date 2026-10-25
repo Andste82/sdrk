@@ -647,8 +647,10 @@ jobs:
       APT_SNAPSHOT: "20261019T000000Z"
       SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
       SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
-      QEMU_VERSION: 10.2.1
-      QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
+      # Not QEMU_VERSION: qemu-user reads QEMU_<OPTION> variables as options (QEMU_VERSION is
+      # -version), and the counter runs qemu-aarch64 in this environment.
+      CI_QEMU_VERSION: 10.2.1
+      CI_QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
       WASMTIME_VERSION: v49.0.3
       WASMTIME_SHA256: 4001225413f208345b980525f31c4080e1873808b38d0ddc7918497340667fbb
     steps:
@@ -701,21 +703,21 @@ jobs:
           path: |
             ~/qemu-build/qemu-aarch64
             ~/qemu-build/plugin-src
-          key: qemu-plugin-src-${{ env.QEMU_VERSION }}-c098726dd9b9-${{ env.APT_SNAPSHOT }}
+          key: qemu-plugin-src-${{ env.CI_QEMU_VERSION }}-c098726dd9b9-${{ env.APT_SNAPSHOT }}
       - name: QEMU user mode with plugins
         # The distribution's qemu-user is built without plugin support: build QEMU from source.
         if: matrix.platform == 'aarch64' && steps.qemu-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          curl -fsSL "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
-          echo "$QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
+          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
+          echo "$CI_QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
           tar -xJf ~/qemu.tar.xz -C "$HOME"
           mkdir -p ~/qemu-build && cd ~/qemu-build
-          ~/qemu-$QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          ~/qemu-$CI_QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
           ninja qemu-aarch64
           # The source of the insn plugin, from the checksummed tarball (cached with QEMU).
           for f in tests/tcg/plugins/insn.c include/qemu/qemu-plugin.h; do
-            install -D ~/qemu-$QEMU_VERSION/$f ~/qemu-build/plugin-src/$f
+            install -D ~/qemu-$CI_QEMU_VERSION/$f ~/qemu-build/plugin-src/$f
           done
       - name: Use QEMU
         if: matrix.platform == 'aarch64'
@@ -734,8 +736,17 @@ jobs:
           echo "$HOME/$name" >> "$GITHUB_PATH"
       - name: Count
         run: cargo xtask count --platform ${{ matrix.platform }}
-      - name: Results are committed
-        run: git diff --exit-code -- benches/results
+      # As in the job `count`: the counts drift with the runner (the CPU name in `host_cpu`) and
+      # with the toolchain of the day (`stable`), so the fresh results are compared against the
+      # committed files for information and kept as an artifact; the limits are judged by
+      # `cargo xtask count` itself.
+      - name: Results drift against the committed files (informational)
+        run: git diff -- benches/results
+      - name: Keep the fresh results
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-results-${{ matrix.platform }}
+          path: benches/results
 
   emu-tier1:
     name: emu-tier1 (qemu-cortex-m4, quick)
@@ -862,7 +873,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      QEMU_VERSION: 10.2.1
+      CI_QEMU_VERSION: 10.2.1
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain from rust-toolchain.toml
@@ -873,23 +884,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/qemu-prefix
-          key: qemu-arm-softmmu-${{ env.QEMU_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+          key: qemu-arm-softmmu-${{ env.CI_QEMU_VERSION }}-${{ runner.os }}-${{ runner.arch }}
       - name: Build QEMU (system mode, Arm) with plugin support
         # The plugin API must match the plugin that `xtask` builds from the same tag.
         if: steps.qemu-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev python3-venv
-          curl -fsSL "https://download.qemu.org/qemu-$QEMU_VERSION.tar.xz" | tar -xJ
+          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" | tar -xJ
           mkdir qemu-build && cd qemu-build
-          ../qemu-$QEMU_VERSION/configure --prefix="$HOME/qemu-prefix" --target-list=arm-softmmu --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          ../qemu-$CI_QEMU_VERSION/configure --prefix="$HOME/qemu-prefix" --target-list=arm-softmmu --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
           ninja
           ninja install
       - name: Use QEMU
         run: |
           sudo apt-get install -y libglib2.0-dev pkg-config
           echo "SDRK_QEMU_ARM=$HOME/qemu-prefix/bin/qemu-system-arm" >> "$GITHUB_ENV"
-          echo "SDRK_QEMU_TAG=v$QEMU_VERSION" >> "$GITHUB_ENV"
+          echo "SDRK_QEMU_TAG=v$CI_QEMU_VERSION" >> "$GITHUB_ENV"
       - name: Count
         run: cargo xtask count --platform cortex-m4
       - name: Report

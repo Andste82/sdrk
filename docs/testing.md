@@ -56,7 +56,7 @@ CI is three workflow files. `ci.yml` runs on pull requests and on pushes to `mai
 | Sunday night | `nightly.yml` | as every night, with the `pr` tests always, plus the full profile of the ESP32-P4 |
 | manual (`workflow_dispatch`) | `nightly.yml` | as at night; the inputs choose the weekly part and whether the `pr` tests are skipped |
 
-A failed nightly run opens an issue with the label `nightly-failure`, or comments on the open one. Every job has a timeout; the cargo caches are saved by runs on `main` only (pull requests read them), one cache per platform and build.
+The branch protection of `main` requires one check, `result` of `ci.yml`: it is green only when `scope` and every job of the tree that ran passed, and the branch is up to date with `main`. A failed nightly run opens an issue with the label `nightly-failure`, or comments on the open one. Every job has a timeout; the cargo caches are saved by runs on `main` only (pull requests read them), one cache per platform and build.
 
 The tree, with `[pr]` for every run and `[full]` for nightly and manual runs. The SIMD variants that depend only on the CPU architecture (fixed levels, without the static tables, fallback only) run on one host per architecture: x86-64 on Linux, AArch64 on Linux arm64. Build, the whole test suite, `xtask` and the golden generator run on all three hosts (R1.3).
 

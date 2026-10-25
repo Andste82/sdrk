@@ -199,6 +199,8 @@ fn backend_table_lists_the_m06_kernels() {
         ("quad_demod", SampleType::CQ15),
         ("mag_sq", SampleType::C32),
         ("mag_sq", SampleType::CQ15),
+        ("mag", SampleType::C32),
+        ("mag", SampleType::CQ15),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
@@ -211,6 +213,10 @@ fn backend_table_lists_the_m06_kernels() {
         ("dc_block", SampleType::CQ15),
         ("squelch", SampleType::C32),
         ("squelch", SampleType::CQ15),
+        ("dc_block_real", SampleType::F32),
+        ("dc_block_real", SampleType::Q15),
+        ("agc", SampleType::C32),
+        ("agc", SampleType::CQ15),
         ("window", SampleType::C32),
         ("window", SampleType::CQ15),
         ("power_db", SampleType::F32),
@@ -221,6 +227,8 @@ fn backend_table_lists_the_m06_kernels() {
     assert_eq!(backend_for("fir_decimate", SampleType::F32), "none");
     assert_eq!(backend_for("deemphasis", SampleType::C32), "none");
     assert_eq!(backend_for("squelch", SampleType::F32), "none");
+    assert_eq!(backend_for("agc", SampleType::F32), "none");
+    assert_eq!(backend_for("dc_block_real", SampleType::C32), "none");
     assert_eq!(backend_for("resample_real", SampleType::C32), "none");
     assert_eq!(backend_for("power_db", SampleType::CQ15), "none");
 }
@@ -472,4 +480,71 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
     // The real FFTs run on the backend of the complex FFT.
     assert_eq!(backend_for("rfft", SampleType::F32), expected);
     assert_eq!(backend_for("irfft", SampleType::F32), expected);
+}
+
+#[test]
+fn m20_kernels_agree_with_the_fallback() -> Result<()> {
+    use sdrk::Rate;
+    use sdrk::kernels::agc::{Agc, AgcState};
+    use sdrk::kernels::demod::{DcBlockReal, DcBlockRealState};
+    use sdrk::kernels::spectrum::Mag;
+
+    let mut s = 20u64;
+    let c32: Vec<C32> = (0..300)
+        .map(|_| {
+            C32::new(
+                lcg(&mut s) as f32 / 4e9 - 0.5,
+                lcg(&mut s) as f32 / 4e9 - 0.5,
+            )
+        })
+        .collect();
+    let cq: Vec<CQ15> = (0..300)
+        .map(|_| CQ15 {
+            re: Q15(lcg(&mut s) as i16),
+            im: Q15(lcg(&mut s) as i16),
+        })
+        .collect();
+
+    let (mut a, mut b) = (vec![0.0f32; 300], vec![0.0f32; 300]);
+    Sdrk.mag(&c32, &mut a)?;
+    Fallback.mag(&c32, &mut b)?;
+    assert_eq!(a, b);
+    let (mut a, mut b) = (vec![Q15(0); 300], vec![Q15(0); 300]);
+    Sdrk.mag(&cq, &mut a)?;
+    Fallback.mag(&cq, &mut b)?;
+    assert_eq!(a, b);
+
+    let r = Rate::hz(48_000)?;
+    let new32 = || AgcState::<C32>::new(0.5, 0.005, 0.05, -20.0, 60.0, 0.0, r);
+    let newq = || AgcState::<CQ15>::new(0.5, 0.005, 0.05, -20.0, 60.0, 0.0, r);
+    let (mut sa, mut sb) = (new32()?, new32()?);
+    let (mut a, mut b) = (vec![C32::default(); 300], vec![C32::default(); 300]);
+    Sdrk.agc(&mut sa, &c32, &mut a)?;
+    Fallback.agc(&mut sb, &c32, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+    let (mut sa, mut sb) = (newq()?, newq()?);
+    let (mut a, mut b) = (vec![CQ15::default(); 300], vec![CQ15::default(); 300]);
+    Sdrk.agc(&mut sa, &cq, &mut a)?;
+    Fallback.agc(&mut sb, &cq, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+
+    let re: Vec<f32> = c32.iter().map(|v| v.re).collect();
+    let rq: Vec<Q15> = cq.iter().map(|v| v.re).collect();
+    let (mut sa, mut sb) = (
+        DcBlockRealState::<f32>::new(0.99)?,
+        DcBlockRealState::<f32>::new(0.99)?,
+    );
+    let (mut a, mut b) = (vec![0.0f32; 300], vec![0.0f32; 300]);
+    Sdrk.dc_block_real(&mut sa, &re, &mut a)?;
+    Fallback.dc_block_real(&mut sb, &re, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+    let (mut sa, mut sb) = (
+        DcBlockRealState::<Q15>::new(Q15(32000))?,
+        DcBlockRealState::<Q15>::new(Q15(32000))?,
+    );
+    let (mut a, mut b) = (vec![Q15(0); 300], vec![Q15(0); 300]);
+    Sdrk.dc_block_real(&mut sa, &rq, &mut a)?;
+    Fallback.dc_block_real(&mut sb, &rq, &mut b)?;
+    assert_eq!((a, sa), (b, sb));
+    Ok(())
 }

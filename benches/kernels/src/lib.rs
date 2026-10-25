@@ -10,20 +10,21 @@ use std::sync::Arc;
 use cref_sys::{Fftw, FftwR2c, KissFft16, Ne10Int16};
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
+use sdrk::kernels::agc::{Agc, AgcState};
 use sdrk::kernels::convert::{Convert, ConvertOut};
 use sdrk::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
-use sdrk::kernels::demod::{QuadDemod, QuadDemodState};
+use sdrk::kernels::demod::{DcBlockReal, DcBlockRealState, QuadDemod, QuadDemodState};
 use sdrk::kernels::fft::{Direction, Fft, FftPlan, RealFft, RealFftPlan, Scaling};
 use sdrk::kernels::filter::{Fir, FirState};
 use sdrk::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk::kernels::mix::{Nco, Rotate};
 use sdrk::kernels::modulate::{FmMod, FmModState};
-use sdrk::kernels::spectrum::MagSq;
+use sdrk::kernels::spectrum::{Mag, MagSq};
 use sdrk::kernels::squelch::{Squelch, SquelchState};
 use sdrk::{C32, CQ15, ComplexSample, Fallback, Q15, Rate, Sdrk};
 use sdrk_core::Reference;
 use sdrk_device::{SampleFormat, formats};
-use volk_sys::lv_32fc_t;
+use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 /// Samples per call unless overridden.
 pub const N: usize = 4096;
@@ -277,7 +278,7 @@ pub trait Kernel {
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended.
-pub const KERNELS: [&str; 26] = [
+pub const KERNELS: [&str; 32] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -304,6 +305,12 @@ pub const KERNELS: [&str; 26] = [
     "quad_demod_cq15",
     "squelch",
     "squelch_cq15",
+    "mag",
+    "mag_q15",
+    "agc",
+    "agc_cq15",
+    "dc_block_real",
+    "dc_block_real_q15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -337,6 +344,12 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "fm_mod" => Box::new(FmModK::new(rng, layout)),
         "squelch" => Box::new(SquelchK::<C32>::new(rng, layout)),
         "squelch_cq15" => Box::new(SquelchK::<CQ15>::new(rng, layout)),
+        "mag" => Box::new(MagK::new(rng, layout)),
+        "mag_q15" => Box::new(MagQ15K::new(rng, layout)),
+        "agc" => Box::new(AgcK::<C32>::new(rng, layout)),
+        "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
+        "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout)),
+        "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout)),
         "fft_64" => Box::new(FftK::new(rng, 64)),
         "fft_1024" => Box::new(FftK::new(rng, 1024)),
         "fft_4096" => Box::new(FftK::new(rng, 4096)),
@@ -2224,6 +2237,374 @@ impl Kernel for FftQ15K {
             Impl::KissFft => "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
             Impl::Ne10 => "Ne10 ne10_fft_c2c_1d_int16_neon (1/N scaling, out of place)",
             Impl::Restore => "restore of the input",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// mag (M20)
+
+#[inline(never)]
+fn mag<T: ComplexSample, B: Mag<T>>(backend: &B, input: &[T], out: &mut [T::Real]) {
+    let _ = black_box(backend.mag(black_box(input), out));
+}
+
+/// `mag` of C32 samples against `volk_32fc_magnitude_32f`.
+struct MagK {
+    input: Aligned<C32>,
+    out: Aligned<f32>,
+}
+
+impl MagK {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        MagK {
+            input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+        }
+    }
+}
+
+impl Kernel for MagK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => mag(&Sdrk, &self.input, &mut self.out),
+                Impl::Fallback => mag(&Fallback, &self.input, &mut self.out),
+                // SAFETY: input and output hold `n` elements.
+                Impl::Volk => unsafe {
+                    volk_sys::volk_32fc_magnitude_32f(
+                        self.out.as_mut_ptr(),
+                        self.input.as_ptr().cast(),
+                        self.input.len() as u32,
+                    );
+                },
+                other => unreachable!("mag has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let want: Vec<f64> = self
+            .input
+            .iter()
+            .map(|v| f64::from(v.re).hypot(f64::from(v.im)))
+            .collect();
+        snr_db(&want, &f32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::AVAILABLE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => "volk_32fc_magnitude_32f",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        &["volk_32fc_magnitude_32f"]
+    }
+}
+
+/// `mag` of CQ15 samples against `volk_16ic_magnitude_16i`. VOLK rounds differently (it scales
+/// to float and back), so the accuracy rule compares the SNR of both against the unrounded
+/// magnitude.
+struct MagQ15K {
+    input: Aligned<CQ15>,
+    out: Aligned<Q15>,
+}
+
+impl MagQ15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        MagQ15K {
+            input: noise_cq15(rng, layout.n, 23_000.0, layout.skew(4)),
+            out: Aligned::skewed(layout.n, layout.skew(2)),
+        }
+    }
+}
+
+impl Kernel for MagQ15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => mag(&Sdrk, &self.input, &mut self.out),
+                Impl::Fallback => mag(&Fallback, &self.input, &mut self.out),
+                // SAFETY: input and output hold `n` elements; `CQ15` and `lv_16sc_t` are two
+                // `i16` each, real part first.
+                Impl::Volk => unsafe {
+                    volk_sys::volk_16ic_magnitude_16i(
+                        self.out.as_mut_ptr().cast(),
+                        self.input.as_ptr().cast::<lv_16sc_t>(),
+                        self.input.len() as u32,
+                    );
+                },
+                other => unreachable!("mag_q15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let want: Vec<f64> = self
+            .input
+            .iter()
+            .map(|v| f64::from(v.re.0).hypot(f64::from(v.im.0)))
+            .collect();
+        let got: Vec<f64> = self.out.iter().map(|q| f64::from(q.0)).collect();
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::AVAILABLE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => "volk_16ic_magnitude_16i",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        &["volk_16ic_magnitude_16i"]
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// agc and dc_block_real (M20)
+
+/// `agc` (no established library: compared with our fallback; not accelerated, so the entries
+/// are `info`). The input is noise whose amplitude steps from 0.01 to 0.3 to 0.003 in thirds,
+/// so the gain moves in both directions within a call.
+struct AgcK<T: ComplexSample> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: SquelchSample> AgcK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let n = layout.n;
+        let mut input = Aligned::<T>::skewed(n, layout.skew(core::mem::size_of::<T>()));
+        for (i, s) in input.iter_mut().enumerate() {
+            let amplitude = [0.01, 0.3, 0.003][(3 * i / n).min(2)];
+            *s = T::noise(rng, amplitude);
+        }
+        AgcK {
+            input,
+            out: Aligned::skewed(n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> AgcState<T> {
+        AgcState::new(
+            0.5,
+            0.005,
+            0.05,
+            -20.0,
+            60.0,
+            0.0,
+            Rate::hz(48_000).expect("rate"),
+        )
+        .expect("agc")
+    }
+}
+
+#[inline(never)]
+fn agc<T: ComplexSample, B: Agc<T>>(
+    backend: &B,
+    state: &mut AgcState<T>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.agc(state, black_box(input), out));
+}
+
+impl Kernel for AgcK<C32> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => agc(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => agc(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("agc has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![C32::default(); self.input.len()];
+        let _ = Reference.agc(&mut Self::state(), &self.input, &mut want);
+        snr_db(&c32s(&want), &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+impl Kernel for AgcK<CQ15> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => agc(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => agc(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("agc_cq15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![CQ15::default(); self.input.len()];
+        let _ = Reference.agc(&mut Self::state(), &self.input, &mut want);
+        snr_db(&cq15s(&want, 1.0), &cq15s(&self.out, 1.0))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// A real sample for the `dc_block_real` measurements.
+trait RealNoise: sdrk_core::RealSample {
+    /// Noise of the given amplitude as a fraction of full scale, plus the offset `dc`.
+    fn noise(rng: &mut Pcg32, amplitude: f32, dc: f32) -> Self;
+    /// The pole `0.999`.
+    fn pole() -> Self;
+    /// The value as f64.
+    fn as_f64(self) -> f64;
+}
+
+impl RealNoise for f32 {
+    fn noise(rng: &mut Pcg32, amplitude: f32, dc: f32) -> Self {
+        rng.unit() * amplitude + dc
+    }
+
+    fn pole() -> Self {
+        0.999
+    }
+
+    fn as_f64(self) -> f64 {
+        f64::from(self)
+    }
+}
+
+impl RealNoise for Q15 {
+    fn noise(rng: &mut Pcg32, amplitude: f32, dc: f32) -> Self {
+        Q15(((rng.unit() * amplitude + dc) * 32768.0) as i16)
+    }
+
+    fn pole() -> Self {
+        Q15(32_735)
+    }
+
+    fn as_f64(self) -> f64 {
+        f64::from(self.0)
+    }
+}
+
+/// `dc_block_real` (a first-order recursion, as `dc_block`: not accelerated, so the entries are
+/// `info` against our fallback).
+struct DcBlockRealK<T: RealNoise> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: RealNoise> DcBlockRealK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
+        for s in input.iter_mut() {
+            *s = T::noise(rng, 0.2, 0.3);
+        }
+        DcBlockRealK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> DcBlockRealState<T> {
+        DcBlockRealState::new(T::pole()).expect("dc_block_real")
+    }
+}
+
+#[inline(never)]
+fn dc_block_real<T: sdrk_core::RealSample, B: DcBlockReal<T>>(
+    backend: &B,
+    state: &mut DcBlockRealState<T>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.dc_block_real(state, black_box(input), out));
+}
+
+impl<T: RealNoise> Kernel for DcBlockRealK<T>
+where
+    Sdrk: DcBlockReal<T>,
+    Fallback: DcBlockReal<T>,
+    Reference: DcBlockReal<T>,
+{
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => dc_block_real(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => dc_block_real(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("dc_block_real has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![self.out[0]; self.out.len()];
+        let _ = Reference.dc_block_real(&mut Self::state(), &self.input, &mut want);
+        let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }

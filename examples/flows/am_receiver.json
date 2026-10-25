@@ -1,0 +1,62 @@
+{
+  "sdrk": 1,
+  "name": "am-receiver",
+  "description": "Receive one AM broadcast channel with an automatic gain control and output 48 kHz audio.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2400000,
+      "description": "RTL-SDR IQ"
+    }
+  },
+  "nodes": {
+    "agc": {
+      "kind": "agc",
+      "params": {
+        "attack_s": 0.1,
+        "release_s": 0.5
+      }
+    },
+    "demod": {
+      "kind": "am_demod"
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 5000,
+        "decimation": 50,
+        "max_taps": 8192,
+        "transition_hz": 2000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "agc"
+    },
+    {
+      "from": "agc",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    }
+  }
+}

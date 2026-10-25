@@ -636,11 +636,13 @@ impl Engine {
     pub fn backends() -> Vec<(&'static str, &'static str)> {
         use sdrk::SampleType::{C32, F32};
         const KERNELS: &[(&str, sdrk::SampleType)] = &[
+            ("agc", C32),
             ("convert", C32),
             ("convert_out", C32),
             ("convert_out_real", F32),
             ("convert_real", F32),
             ("dc_block", C32),
+            ("dc_block_real", F32),
             ("ddc", C32),
             ("deemphasis", F32),
             ("dot", C32),
@@ -654,6 +656,7 @@ impl Engine {
             ("fm_demod", C32),
             ("fm_mod", C32),
             ("irfft", F32),
+            ("mag", C32),
             ("mag_sq", C32),
             ("power_db", F32),
             ("quad_demod", C32),

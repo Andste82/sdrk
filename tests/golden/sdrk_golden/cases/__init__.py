@@ -1,6 +1,7 @@
 """Importing this package registers every case module."""
 
 from . import (  # noqa: F401
+    agc,
     blocks,
     convert,
     convert_out,
@@ -14,6 +15,7 @@ from . import (  # noqa: F401
     fir_interpolate,
     fm_mod,
     io,
+    mag,
     mag_sq,
     power_db,
     q15_ops,

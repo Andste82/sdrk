@@ -2,13 +2,15 @@
 
 use crate::{C32, CQ15, Chained, Fallback, Progress, Q15, Result};
 use sdrk_core::fused::{ddc_chained, duc_chained, fm_demod_chained};
+use sdrk_core::kernels::agc::{Agc, AgcState};
 use sdrk_core::kernels::basic::Scale;
 use sdrk_core::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
 use sdrk_core::kernels::decim::{
     FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
 };
 use sdrk_core::kernels::demod::{
-    DcBlock, DcBlockState, Deemphasis, DeemphasisState, QuadDemod, QuadDemodState,
+    DcBlock, DcBlockReal, DcBlockRealState, DcBlockState, Deemphasis, DeemphasisState, QuadDemod,
+    QuadDemodState,
 };
 use sdrk_core::kernels::dot::{Dot, DotReal};
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling};
@@ -19,7 +21,7 @@ use sdrk_core::kernels::interp::{
 };
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
-use sdrk_core::kernels::spectrum::{MagSq, PowerDb, Window};
+use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::kernels::squelch::{Squelch, SquelchState};
 use sdrk_device::SampleFormat;
 
@@ -70,12 +72,18 @@ crate::delegate! {
     Deemphasis<Q15>::deemphasis(&self, state: &mut DeemphasisState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
     DcBlock<C32>::dc_block(&self, state: &mut DcBlockState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     DcBlock<CQ15>::dc_block(&self, state: &mut DcBlockState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    DcBlockReal<f32>::dc_block_real(&self, state: &mut DcBlockRealState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
+    DcBlockReal<Q15>::dc_block_real(&self, state: &mut DcBlockRealState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
+    Agc<C32>::agc(&self, s: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
+    Agc<CQ15>::agc(&self, s: &mut AgcState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     Squelch<C32>::squelch(&self, state: &mut SquelchState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     Squelch<CQ15>::squelch(&self, state: &mut SquelchState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     Window<C32>::window(&self, input: &[C32], output: &mut [C32], w: &[f32]) -> Result<()> => Fallback;
     Window<CQ15>::window(&self, input: &[CQ15], output: &mut [CQ15], w: &[Q15]) -> Result<()> => Fallback;
     MagSq<C32>::mag_sq(&self, input: &[C32], output: &mut [f32]) -> Result<()> => Fast;
     MagSq<CQ15>::mag_sq(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> => Fast;
+    Mag<C32>::mag(&self, input: &[C32], output: &mut [f32]) -> Result<()> => Fast;
+    Mag<CQ15>::mag(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> => Fast;
     PowerDb<f32>::power_db(&self, input: &[f32], output: &mut [f32], offset_db: f32) -> Result<()> => Fallback;
     PowerDb<Q15>::power_db(&self, input: &[Q15], output: &mut [f32], offset_db: f32) -> Result<()> => Fallback;
     Fft<C32>::fft[Tw: AsRef<[C32]>](&self, plan: &FftPlan<C32, Tw>, data: &mut [C32], dir: Direction, scaling: Scaling) -> Result<FftScale> => Fast;

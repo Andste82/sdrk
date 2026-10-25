@@ -12,6 +12,8 @@ import scipy.signal
 
 from .. import design, q15, scalar_math
 from ..registry import Array, case
+from .dc_block import block_q15
+from .mag import mag_q15_scalar
 
 # ---------------------------------------------------------------------------------------------
 # ddc
@@ -282,4 +284,76 @@ def spectrum_cq15(rng):
         arrays={"input": Array("ci16", q15.pack(xr, xi)), "expected": Array("f64", spectrum_db(xq))},
         tolerance={"class": "max_abs_err", "max_abs_err": 0.2, "skip": 0, "min_ref_db": -60.0, "ref_unit": "db"},
         notes="the same signal quantized to Q15; the numpy result of the quantized values, compared above -60 dB",
+    )
+
+
+# ---------------------------------------------------------------------------------------------
+# am_demod (M20): mag -> dc_block_real -> (no audio filter at audio_decimation 1)
+
+AM_RATE = 48000.0
+AM_N = 16000
+AM_AUDIO_HZ, AM_INDEX, AM_CARRIER, AM_PHASE = 1000.0, 0.5, 0.5, 0.3
+AM_DC_CUTOFF_HZ = 30.0
+AM_NOISE_SIGMA = 1e-3
+
+
+def am_signal(rng):
+    """am_tone: carrier (1 + index cos(2 pi f n / fs)) exp(j phase) plus complex noise."""
+    k = np.arange(AM_N)
+    cycles = (AM_AUDIO_HZ * k / AM_RATE) % 1.0
+    env = AM_CARRIER * (1.0 + AM_INDEX * scalar_math.cos(2.0 * np.pi * cycles))
+    return env * scalar_math.expj(np.full(AM_N, AM_PHASE)) + noise(rng, AM_N, AM_NOISE_SIGMA)
+
+
+def am_params(**extra):
+    return {
+        "rate_hz": AM_RATE,
+        "audio_hz": AM_AUDIO_HZ,
+        "index": AM_INDEX,
+        "carrier": AM_CARRIER,
+        "phase": AM_PHASE,
+        "dc_cutoff_hz": AM_DC_CUTOFF_HZ,
+        "audio_cutoff_hz": 5000.0,
+        "audio_decimation": 1,
+        **extra,
+    }
+
+
+@case(kernel="blocks", name="am_demod_c32", seed=419)
+def am_demod_c32(rng):
+    x = am_signal(rng).astype(np.complex64)
+    r = float(np.float32(scalar_math.exp(-2.0 * np.pi * AM_DC_CUTOFF_HZ / AM_RATE)))
+    env = np.abs(x.astype(np.complex128))
+    expected = scipy.signal.lfilter([1.0, -1.0], [1.0, -r], env)
+    return dict(
+        params=am_params(r=r),
+        arrays={"input": Array("cf32", x), "expected": Array("f64", expected)},
+        tolerance={"class": "tolerance", "snr_db_min": 90.0, "skip": 0},
+        notes=(
+            "am_tone (carrier 0.5, 1 kHz, index 0.5, phase 0.3) plus complex noise sigma 1e-3 per "
+            "component at 48 kHz; np.abs of the f32 input, then the DC blocker "
+            "y[n] = x[n] - x[n-1] + r y[n-1] via lfilter with r = exp(-2 pi 30 / fs) cast to f32; "
+            "audio_decimation 1 has no audio filter (as fm_demod), so there is no upfirdn stage"
+        ),
+    )
+
+
+@case(kernel="blocks", name="am_demod_cq15", seed=420)
+def am_demod_cq15(rng):
+    x = am_signal(rng)
+    xr, xi = q15.from_float(x.real), q15.from_float(x.imag)
+    r = int(q15.from_float(scalar_math.exp(-2.0 * np.pi * AM_DC_CUTOFF_HZ / AM_RATE)))
+    env = np.array(
+        [int(q15.sat16(mag_q15_scalar(a, b))) for a, b in zip(xr.tolist(), xi.tolist())],
+        dtype=np.int64,
+    )
+    return dict(
+        params=am_params(r_raw=r),
+        arrays={"input": Array("ci16", q15.pack(xr, xi)), "expected": Array("i16", block_q15(env, r))},
+        tolerance={"class": "bit_exact"},
+        notes=(
+            "the signal of am_demod_c32 quantized to Q15; integer chain: envelope "
+            "sat16(round(sqrt(re^2 + im^2))) with math.isqrt, then the Q15 DC blocker "
+            "sat16((x - x_prev) + round_shift(r y_prev, 15)) with r = round(exp(-2 pi 30 / fs) 32768)"
+        ),
     )

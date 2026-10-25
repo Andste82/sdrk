@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "c32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "c32_4096",
+  "format_version": 1,
+  "kernel": "mag",
+  "notes": "noise sigma 0.5 per component; the first nine samples are 0, +-1, +-1j and +-1 +-1j; expected np.abs of the f32 input in float64",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 413,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 130.0
+  }
+}

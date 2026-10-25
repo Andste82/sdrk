@@ -22,7 +22,7 @@ use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
-use sdrk_core::kernels::spectrum::MagSq;
+use sdrk_core::kernels::spectrum::{Mag, MagSq};
 use sdrk_core::{C32, CQ15, Fallback, Q15, Rate, Reference};
 use sdrk_device::{SampleFormat, formats};
 
@@ -541,6 +541,55 @@ pub(super) fn backend_vs_fallback_mag_sq(arena: &mut Arena<'_>) -> Result<(), Fa
         )?;
         MagSq::<CQ15>::mag_sq(&Fallback, qin, qb)?;
         MagSq::<CQ15>::mag_sq(&Sdrk, qin, qac)?;
+        ensure(bit_exact(qb, qac).is_none(), || {
+            fail(CASE, "cq15 differs from the fallback", n)
+        })?;
+    }
+    Ok(())
+}
+
+// ------------------------------------------------------------------------------------- mag
+
+pub(super) fn backend_vs_fallback_mag(arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "backend_vs_fallback_mag";
+    let mut rng = Pcg32::new(2010, 1);
+    for n in lengths(arena.remaining(), 8 + 4 + 4 * 2 + 2 * 2) {
+        let mut c = arena.carver();
+        let (input, qin) = (c.take::<C32>(n)?, c.take::<CQ15>(n)?);
+        let (fb, fac) = (c.take::<f32>(n)?, c.take::<f32>(n)?);
+        let (qb, qac) = (c.take::<Q15>(n)?, c.take::<Q15>(n)?);
+        for (k, s) in input.iter_mut().enumerate() {
+            *s = match k % 11 {
+                3 => C32::new(f32::NAN, 1.0),
+                5 => C32::new(f32::INFINITY, 0.0),
+                7 => C32::new(0.0, 0.0),
+                _ => random_c32(&mut rng, 2.0),
+            };
+        }
+        for (k, s) in qin.iter_mut().enumerate() {
+            *s = match k % 5 {
+                0 => CQ15 {
+                    re: Q15(-32768),
+                    im: Q15(-32768),
+                },
+                1 => CQ15 {
+                    re: Q15(0),
+                    im: Q15(0),
+                },
+                _ => random_cq15(&mut rng, 1.0),
+            };
+        }
+        Mag::<C32>::mag(&Fallback, input, fb)?;
+        Mag::<C32>::mag(&Sdrk, input, fac)?;
+        // The square root is correctly rounded in both: the same bits, NaN payloads aside.
+        ensure(
+            fb.iter()
+                .zip(fac.iter())
+                .all(|(a, b)| a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan())),
+            || fail(CASE, "c32 differs from the fallback", n),
+        )?;
+        Mag::<CQ15>::mag(&Fallback, qin, qb)?;
+        Mag::<CQ15>::mag(&Sdrk, qin, qac)?;
         ensure(bit_exact(qb, qac).is_none(), || {
             fail(CASE, "cq15 differs from the fallback", n)
         })?;

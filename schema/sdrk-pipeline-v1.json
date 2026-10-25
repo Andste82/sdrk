@@ -616,6 +616,131 @@
         "oneOf": [
           {
             "additionalProperties": false,
+            "description": "Automatic gain control: scales a complex signal to a constant output amplitude.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "agc"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attack_s": {
+                    "default": 0.005,
+                    "description": "Time constant in seconds when the output is too loud (gain falls). Unit: s. Typical: 0.005 for SSB, 0.1 for AM. Runtime.",
+                    "maximum": 100.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "initial_gain_db": {
+                    "default": 0.0,
+                    "description": "Gain in dB at the start and after a reset; between min_gain_db and max_gain_db. Unit: dB. Typical: 0. Build-time.",
+                    "maximum": 90.0,
+                    "minimum": -40.0,
+                    "type": "number"
+                  },
+                  "max_gain_db": {
+                    "default": 60.0,
+                    "description": "Highest gain in dB. Unit: dB. Typical: 60. Runtime.",
+                    "maximum": 90.0,
+                    "minimum": -40.0,
+                    "type": "number"
+                  },
+                  "min_gain_db": {
+                    "default": -20.0,
+                    "description": "Lowest gain in dB. Unit: dB. Typical: -20. Runtime.",
+                    "maximum": 90.0,
+                    "minimum": -40.0,
+                    "type": "number"
+                  },
+                  "reference_db": {
+                    "default": -6.0,
+                    "description": "Output amplitude in dBFS the loop settles at (a full-scale sample is 0 dB); the linear value must be at least 2^-5. Unit: dB. Typical: -6 (output amplitude 0.5). Runtime.",
+                    "maximum": 0.0,
+                    "minimum": -30.0,
+                    "type": "number"
+                  },
+                  "release_s": {
+                    "default": 0.2,
+                    "description": "Time constant in seconds when the output is too quiet (gain rises). Unit: s. Typical: 0.2 for SSB, 0.5 for AM. Runtime.",
+                    "maximum": 100.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates an AM signal to audio: envelope, DC removal and decimation.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "am_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "audio_cutoff_hz": {
+                    "default": 5000.0,
+                    "description": "Cutoff of the audio low-pass in Hz (ignored when audio_decimation is 1). Unit: Hz. Typical: 5e3 for broadcast, 2.5e3 for airband voice. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "audio_decimation": {
+                    "default": 1,
+                    "description": "Decimation factor of the audio, 1 to 64. Typical: 1 at 48 kHz, 6 with audio_cutoff_hz 2500 to go to 8 kHz. Build-time.",
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "dc_cutoff_hz": {
+                    "default": 30.0,
+                    "description": "-3 dB corner of the DC-blocking high-pass in Hz; 0 switches it off; must be below half the input rate. Unit: Hz. Typical: 30 for broadcast, 0 to switch off. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Converts raw device bytes in a sample format to complex samples.",
             "properties": {
               "backend": {

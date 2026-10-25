@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "r0p999_q15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "r0p999_q15_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "r0p999_q15_8192",
+  "format_version": 1,
+  "kernel": "dc_block_real",
+  "notes": "exact Q15 recursion: sat16((x - x_prev) + round_shift(r y_prev, 15)), real noise sigma 0.2 plus DC 0.3 quantized",
+  "params": {
+    "r_raw": 32735
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 416,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

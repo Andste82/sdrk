@@ -53,6 +53,7 @@ pub mod channel;
 pub mod conformance;
 pub mod design_helpers;
 pub mod e2e;
+pub mod e2e_am;
 pub mod e2e_nfm;
 pub mod encode;
 pub mod fm;

@@ -140,6 +140,41 @@ impl Acc64 {
     }
 }
 
+/// The exact floor of the square root of `x`.
+///
+/// An f64 estimate is corrected with exact integer products, so the result is right for
+/// every `u64`.
+///
+/// ```
+/// use sdrk_core::num::isqrt_u64;
+/// assert_eq!(isqrt_u64(0), 0);
+/// assert_eq!(isqrt_u64(15), 3);
+/// assert_eq!(isqrt_u64(16), 4);
+/// assert_eq!(isqrt_u64(u64::MAX), u32::MAX as u64);
+/// ```
+pub fn isqrt_u64(x: u64) -> u64 {
+    let mut r = libm::sqrt(x as f64) as u64;
+    // The estimate is within one of the root; `r * r` is computed in u128 so that the
+    // correction cannot overflow near `u64::MAX`.
+    while u128::from(r) * u128::from(r) > u128::from(x) {
+        r -= 1;
+    }
+    while u128::from(r + 1) * u128::from(r + 1) <= u128::from(x) {
+        r += 1;
+    }
+    r
+}
+
+/// The square root of `s >= 0` rounded to the nearest integer (a tie is impossible for
+/// integers): `r = isqrt(s)`, then `r + 1` when `s - r^2 > r`. Not saturated.
+#[inline]
+pub(crate) fn round_sqrt(s: i64) -> i64 {
+    let s = s.max(0) as u64;
+    let r = isqrt_u64(s);
+    let rem = s - r * r;
+    (r + u64::from(rem > r)) as i64
+}
+
 /// Returns 0.0 when `|x| < 1e-30` (NaN is unchanged), otherwise `x`.
 ///
 /// ```

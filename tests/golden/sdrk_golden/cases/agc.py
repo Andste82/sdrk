@@ -1,0 +1,154 @@
+"""Cases for the agc kernel (automatic gain control, a multiplicative feedback loop).
+
+``C32`` is compared with an f64 model of the specification that uses the f64 values of the f32
+constants; ``CQ15`` is bit-exact against an integer model with the gain in Q.32.
+"""
+
+import math
+
+import numpy as np
+
+from .. import f32model as fm
+from .. import q15, scalar_math
+from ..registry import Array, case
+from .fir import noise
+
+RATE_HZ = 48000
+REFERENCE = 0.5
+ATTACK_S = 0.005
+RELEASE_S = 0.05
+MIN_DB, MAX_DB, INITIAL_DB = -20.0, 60.0, 0.0
+
+# Complex tone of 1 kHz, 8000 samples per step, amplitudes of the three steps.
+AMPLITUDES = [0.01, 0.3, 0.003]
+STEP = 8000
+NOISE_SIGMA = 1e-4
+
+
+def rate64(rate_hz, tau_s):
+    return 1.0 - math.exp(-1.0 / (rate_hz * tau_s))
+
+
+def lin(db):
+    return 10.0 ** (db / 20.0)
+
+
+def signal(rng):
+    n = STEP * len(AMPLITUDES)
+    k = np.arange(n)
+    tone = scalar_math.expj(2.0 * np.pi * ((k * 1000.0 / RATE_HZ) % 1.0))
+    amp = np.repeat(np.array(AMPLITUDES), STEP)
+    return amp * tone + noise(rng, n, NOISE_SIGMA)
+
+
+def agc_f64(x):
+    """Model of the C32 algorithm in f64 with the f64 values of the f32 constants."""
+    f = lambda v: float(np.float32(v))  # noqa: E731
+    ref = f(REFERENCE)
+    ka = f(rate64(RATE_HZ, ATTACK_S) / REFERENCE)
+    kr = f(rate64(RATE_HZ, RELEASE_S) / REFERENCE)
+    gmin, gmax = f(lin(MIN_DB)), f(lin(MAX_DB))
+    g = f(lin(INITIAL_DB))
+    out = np.zeros(len(x), dtype=np.complex128)
+    for i, v in enumerate(x.tolist()):
+        y = complex(g * v.real, g * v.imag)
+        out[i] = y
+        m = math.sqrt(y.real * y.real + y.imag * y.imag)
+        e = ref - m
+        k = ka if e < 0 else kr
+        g = min(max(g * (1.0 + k * e), gmin), gmax)
+    return out
+
+
+def agc_f32(x):
+    """Float32 model of the same algorithm (the arithmetic of the Rust fallback)."""
+    ref = fm.f32(REFERENCE)
+    ka = fm.f32(rate64(RATE_HZ, ATTACK_S) / REFERENCE)
+    kr = fm.f32(rate64(RATE_HZ, RELEASE_S) / REFERENCE)
+    gmin, gmax = fm.f32(lin(MIN_DB)), fm.f32(lin(MAX_DB))
+    g = fm.f32(lin(INITIAL_DB))
+    out = np.zeros(len(x), dtype=np.complex64)
+    for i, v in enumerate(x.tolist()):
+        yr, yi = fm.mul(g, fm.f32(v.real)), fm.mul(g, fm.f32(v.imag))
+        out[i] = complex(float(yr), float(yi))
+        m = fm.f32(np.sqrt(fm.add(fm.mul(yr, yr), fm.mul(yi, yi))))
+        if not np.isnan(m):
+            e = fm.sub(ref, m)
+            k = ka if e < 0 else kr
+            g = fm.mul(g, fm.add(fm.f32(1.0), fm.mul(k, e)))
+            g = min(max(g, gmin), gmax)
+    return out
+
+
+def sqrt_round(s):
+    """Rounded integer square root (no saturation): ``r + (s - r^2 > r)``."""
+    r = math.isqrt(s)
+    return r + (1 if s - r * r > r else 0)
+
+
+def agc_q15(xr, xi):
+    """Integer model: gain ``g`` in Q.32, ``k`` in Q.48 per unit of reference-scaled error."""
+    ref_raw = int(math.floor(REFERENCE * 32768.0 + 0.5))
+    ka = int(math.floor(rate64(RATE_HZ, ATTACK_S) * 2.0**48 / ref_raw + 0.5))
+    kr = int(math.floor(rate64(RATE_HZ, RELEASE_S) * 2.0**48 / ref_raw + 0.5))
+    q32 = lambda db: int(math.floor(lin(db) * 2.0**32 + 0.5))  # noqa: E731
+    gmin, gmax, g = q32(MIN_DB), q32(MAX_DB), q32(INITIAL_DB)
+    assert ref_raw >= 1024 and ka <= 2**37 and kr <= 2**37 and gmax < 2**47
+    out = np.zeros((len(xr), 2), dtype=np.int64)
+    for i, (re, im) in enumerate(zip(xr.tolist(), xi.tolist())):
+        yr = int(q15.sat16(q15.round_shift(re * g, 32)))
+        yi = int(q15.sat16(q15.round_shift(im * g, 32)))
+        assert abs(re * g) < 2**63 and abs(im * g) < 2**63
+        out[i] = (yr, yi)
+        m = sqrt_round(yr * yr + yi * yi)
+        assert m <= 46341
+        e = ref_raw - m
+        k = ka if e < 0 else kr
+        prod = g * e * k
+        assert abs(prod) < 2**100
+        delta = (prod + 2**47) >> 48
+        g = min(max(g + delta, gmin), gmax)
+    return out
+
+
+def params():
+    return {
+        "rate_hz": RATE_HZ,
+        "reference": REFERENCE,
+        "attack_s": ATTACK_S,
+        "release_s": RELEASE_S,
+        "min_gain_db": MIN_DB,
+        "max_gain_db": MAX_DB,
+        "initial_gain_db": INITIAL_DB,
+    }
+
+
+@case(kernel="agc", name="steps_c32_24000", seed=417)
+def steps_c32(rng):
+    x = signal(rng).astype(np.complex64)
+    expected = agc_f64(x.astype(np.complex128))
+    # The float32 loop of the kernel must stay close to the f64 model; if it did not, the
+    # pre-approved bit-exact fallback of the milestone would apply (measured: 117 dB).
+    f32_out = agc_f32(x).astype(np.complex128)
+    drift = 10.0 * np.log10(np.sum(np.abs(expected) ** 2) / np.sum(np.abs(expected - f32_out) ** 2))
+    assert drift > 100.0, f"float32 and f64 AGC models drift apart: {drift:.1f} dB"
+    return dict(
+        params=params(),
+        arrays={"input": Array("cf32", x), "expected": Array("cf32", expected.astype(np.complex64))},
+        tolerance={"class": "tolerance", "snr_db_min": 80.0, "skip": 0},
+        notes="1 kHz complex tone, amplitude 0.01, 0.3 and 0.003 (8000 samples each) plus noise "
+        "sigma 1e-4; the f64 model of the C32 algorithm with the f64 values of the f32 constants, rounded once to f32 (a cf64 file would exceed the 512 KiB limit of a case)",
+    )
+
+
+@case(kernel="agc", name="steps_cq15_24000", seed=418)
+def steps_cq15(rng):
+    x = signal(rng)
+    xr, xi = q15.from_float(x.real), q15.from_float(x.imag)
+    return dict(
+        params=params(),
+        arrays={"input": Array("ci16", q15.pack(xr, xi)), "expected": Array("ci16", agc_q15(xr, xi))},
+        tolerance={"class": "bit_exact"},
+        notes="same signal as steps_c32_24000 quantized to Q15; integer model with the gain in "
+        "Q.32 and the step computed in 128-bit integers",
+    )

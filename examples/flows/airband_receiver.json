@@ -1,0 +1,72 @@
+{
+  "sdrk": 1,
+  "name": "airband-receiver",
+  "description": "Receive one AM airband channel with a power squelch and an automatic gain control and output 48 kHz audio.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2400000,
+      "description": "RTL-SDR IQ"
+    }
+  },
+  "nodes": {
+    "agc": {
+      "kind": "agc",
+      "params": {
+        "attack_s": 0.1,
+        "release_s": 0.5
+      }
+    },
+    "demod": {
+      "kind": "am_demod"
+    },
+    "gate": {
+      "kind": "squelch",
+      "params": {
+        "threshold_db": -40
+      }
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 5000,
+        "decimation": 50,
+        "max_taps": 8192,
+        "transition_hz": 2000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "gate"
+    },
+    {
+      "from": "gate",
+      "to": "agc"
+    },
+    {
+      "from": "agc",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    }
+  }
+}

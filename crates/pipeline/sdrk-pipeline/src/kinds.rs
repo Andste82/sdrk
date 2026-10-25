@@ -11,11 +11,12 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ParamValue, PortType,
-    ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, TUNED_PHASES,
+    AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BlockDescription, BlockSample, ConvertBlock,
+    ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
+    DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
+    FmModBlock, FmModConfig, ParamValue, PortType, ResamplerBlock, ResamplerConfig,
+    ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, TUNED_PHASES,
 };
 use serde_json::{Map, Value};
 
@@ -558,6 +559,113 @@ impl Kind for SquelchKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(SquelchBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// --------------------------------------------------------------------- agc
+
+pub(crate) struct AgcKind;
+
+impl Kind for AgcKind {
+    type Cfg = AgcConfig;
+
+    const KIND: &'static str = "agc";
+    fn kernels() -> &'static [&'static str] {
+        &["agc"]
+    }
+    fn default_cfg() -> AgcConfig {
+        AgcConfig::default()
+    }
+    fn set(cfg: &mut AgcConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &AgcConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("agc needs complex samples"));
+        }
+        Ok(Figures {
+            rate_out: AgcBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: AgcBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+            cost: 6.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(complex_port(p)),
+        })
+    }
+    fn build(
+        cfg: &AgcConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(AgcBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ---------------------------------------------------------------- am_demod
+
+pub(crate) struct AmDemodKind;
+
+impl Kind for AmDemodKind {
+    type Cfg = AmDemodConfig;
+
+    const KIND: &'static str = "am_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["mag", "dc_block_real", "resample_real"]
+    }
+    fn default_cfg() -> AmDemodConfig {
+        AmDemodConfig::default()
+    }
+    fn set(cfg: &mut AmDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &AmDemodConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("am_demod needs complex samples"));
+        }
+        let taps = cfg.audio_taps(rate)?;
+        let d = cfg.audio_decimation;
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: AmDemodBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: AmDemodBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 4.0 + taps as f64 / d as f64,
+                taps,
+                delay: Delay::new(taps.saturating_sub(1) as u64, 2).unwrap_or(Delay::ZERO),
+                min_input: d,
+                output: stream(real_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &AmDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(AmDemodBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )

@@ -86,6 +86,17 @@
 //! | `e2e_nfm_rx_f32` | quick | about 49 KiB (0.4 s of signal) |
 //! | `e2e_nfm_rx_q15` | quick | about 27 KiB (0.4 s of signal) |
 //! | `e2e_nfm_rx_f32_2s`, `e2e_nfm_rx_q15_2s` | full | as the 0.4 s variants (2.0 s of signal) |
+//! | `mag_c32` | quick | about 16 KiB |
+//! | `mag_cq15` | quick | about 8 KiB |
+//! | `dc_block_real_f32` | quick | about 20 KiB |
+//! | `dc_block_real_q15` | quick | about 10 KiB |
+//! | `agc_c32` | quick | about 80 KiB |
+//! | `agc_cq15` | quick | about 40 KiB |
+//! | `extremes_m20` | full | about 5 KiB |
+//! | `block_agc_level` | quick | about 80 KiB |
+//! | `e2e_am_rx_f32` | quick | about 60 KiB (0.2 s of signal) |
+//! | `e2e_am_rx_q15` | quick | about 32 KiB (0.2 s of signal) |
+//! | `e2e_am_rx_f32_1s`, `e2e_am_rx_q15_1s` | full | as the 0.2 s variants (1.0 s of signal) |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |
@@ -93,6 +104,7 @@
 //! | `backend_vs_fallback_fir_decimate` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_fir_interpolate` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_mag_sq` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_mag` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_quad_demod` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_fm_mod` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_fft` | quick | up to 62 KiB |
@@ -129,8 +141,9 @@ mod m08;
 mod m09;
 mod m13;
 mod m19;
+mod m20;
 
-pub(crate) static CASES: [TestCase; 94] = [
+pub(crate) static CASES: [TestCase; 107] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -547,6 +560,11 @@ pub(crate) static CASES: [TestCase; 94] = [
         run: m13::backend_vs_fallback_mag_sq,
     },
     TestCase {
+        name: "backend_vs_fallback_mag",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_mag,
+    },
+    TestCase {
         name: "backend_vs_fallback_quad_demod",
         tier: Tier::Quick,
         run: m13::backend_vs_fallback_quad_demod,
@@ -600,6 +618,66 @@ pub(crate) static CASES: [TestCase; 94] = [
         name: "e2e_nfm_rx_q15_2s",
         tier: Tier::Full,
         run: m19::e2e_nfm_rx_q15_2s,
+    },
+    TestCase {
+        name: "mag_c32",
+        tier: Tier::Quick,
+        run: m20::mag_c32,
+    },
+    TestCase {
+        name: "mag_cq15",
+        tier: Tier::Quick,
+        run: m20::mag_cq15,
+    },
+    TestCase {
+        name: "dc_block_real_f32",
+        tier: Tier::Quick,
+        run: m20::dc_block_real_f32,
+    },
+    TestCase {
+        name: "dc_block_real_q15",
+        tier: Tier::Quick,
+        run: m20::dc_block_real_q15,
+    },
+    TestCase {
+        name: "agc_c32",
+        tier: Tier::Quick,
+        run: m20::agc_c32,
+    },
+    TestCase {
+        name: "agc_cq15",
+        tier: Tier::Quick,
+        run: m20::agc_cq15,
+    },
+    TestCase {
+        name: "extremes_m20",
+        tier: Tier::Full,
+        run: m20::extremes_m20,
+    },
+    TestCase {
+        name: "block_agc_level",
+        tier: Tier::Quick,
+        run: m20::block_agc_level,
+    },
+    TestCase {
+        name: "e2e_am_rx_f32",
+        tier: Tier::Quick,
+        run: m20::e2e_am_rx_f32,
+    },
+    TestCase {
+        name: "e2e_am_rx_q15",
+        tier: Tier::Quick,
+        run: m20::e2e_am_rx_q15,
+    },
+    TestCase {
+        name: "e2e_am_rx_f32_1s",
+        tier: Tier::Full,
+        run: m20::e2e_am_rx_f32_1s,
+    },
+    TestCase {
+        name: "e2e_am_rx_q15_1s",
+        tier: Tier::Full,
+        run: m20::e2e_am_rx_q15_1s,
     },
 ];
 

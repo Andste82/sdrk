@@ -1035,8 +1035,9 @@ jobs:
   # Nightly only: exhaustive sweeps, fuzzing, the long run.
   sweep:
     # The bit-exact test of `convert_out` against the fallback for all 2^32 `f32` bit patterns
-    # (the proof of the per-byte CU8 bound), at every level of the backend, and of the integer
-    # path of the fallback. Under SDE the work is split over several jobs (`SDRK_SWEEP_PART`);
+    # (the proof of the per-byte CU8 bound), the bit-exact test of `mag` `CQ15` against the
+    # fallback for all 2^32 raw pairs (the vector integer square root), at every level of the
+    # backend, and of the integer path of the fallback. Under SDE the work is split over several jobs (`SDRK_SWEEP_PART`);
     # how long a part takes depends on whether the runner has AVX-512 itself.
     name: sweep_${{ matrix.name }}
     needs: [build_x64_linux, build_x64_linux_sde_avx512, build_arm64_linux, test_wasm32]
@@ -1092,6 +1093,27 @@ jobs:
           esac
           cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
             --test convert_out_sweep -- --ignored
+      - name: Every CQ15 pair through mag
+        # The rounded integer square root of `mag` on vectors against the fallback (and, on a
+        # stride, against the integer rule itself) for all 2^32 raw pairs of `re` and `im`.
+        if: matrix.setup != 'int'
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          SDRK_SWEEP_PART: ${{ matrix.part || '0/1' }}
+        run: |
+          target=()
+          case "${{ matrix.setup }}" in
+            wasm)
+              export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --"
+              target=(--target wasm32-wasip1) ;;
+            sde)
+              # An explicit `--target` keeps RUSTFLAGS away from the build scripts.
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$SDE64 -spr --"
+              target=(--target x86_64-unknown-linux-gnu) ;;
+          esac
+          cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
+            --test spectrum_mag -- --ignored
       - name: Every f32 through the integer path of the fallback's convert_out
         # The path is only compiled in on bare-metal Arm and RISC-V; its equality with the f64
         # formula does not depend on the target, so one native run covers it.

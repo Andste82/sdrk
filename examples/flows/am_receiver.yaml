@@ -1,0 +1,59 @@
+# SDRk pipeline: receive one AM broadcast channel (medium wave, short wave) with an automatic
+# gain control (YAML twin of am_receiver.json). YAML is accepted as input; JSON stays the
+# canonical format.
+sdrk: 1
+name: am-receiver
+description: "Receive one AM broadcast channel with an automatic gain control and output 48 kHz audio."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # Automatic gain control with slow time constants. The audio is the envelope of the signal,
+  # so a gain that reacts within the audio period would follow the modulation and distort it:
+  # the attack of 0.1 s and the release of 0.5 s keep the gain constant over many audio
+  # cycles. The defaults (0.005 s, 0.2 s) suit SSB, not AM. The loop sets the carrier level to
+  # the reference (reference_db, default -6 dBFS, amplitude 0.5), so the audio at the output
+  # of am_demod is the modulation depth times that level. reference_db, attack_s, release_s,
+  # min_gain_db and max_gain_db can be changed while the flow runs (set_param); the
+  # AGC keeps its current gain.
+  agc:
+    kind: agc
+    params:
+      attack_s: 0.1
+      release_s: 0.5
+  # Envelope detector with DC removal: the magnitude of every sample, a 30 Hz high-pass that
+  # removes the carrier, and no decimation (the channel is already at 48 kHz). The defaults
+  # are for broadcast audio; audio_cutoff_hz only matters when audio_decimation is above 1.
+  demod:
+    kind: am_demod
+  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz) with a 5 kHz channel filter
+  # for a broadcast channel of 10 kHz (medium wave in Europe: 9 kHz spacing; short wave
+  # 5 kHz audio). Set frequency_hz to the offset of the channel from the tuner centre. The
+  # narrow transition at 2.4 MS/s needs about 4400 taps, more than the default max_taps of
+  # 1023, so max_taps is raised.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 5000
+      decimation: 50
+      max_taps: 8192
+      transition_hz: 2000
+# Channel filter, automatic gain control, envelope detector.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: agc }
+  - { from: agc, to: demod }
+  - { from: demod, to: audio }
+# Audio samples (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

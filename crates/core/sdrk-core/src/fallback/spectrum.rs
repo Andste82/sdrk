@@ -1,10 +1,10 @@
-//! Fallback implementations of `window`, `mag_sq` and `power_db`.
+//! Fallback implementations of `window`, `mag_sq`, `mag` and `power_db`.
 
 use crate::Fallback;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::spectrum::{MagSq, PowerDb, Window};
-use crate::num::{q15_mul, round_shift, sat16};
+use crate::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
+use crate::num::{q15_mul, round_shift, round_sqrt, sat16};
 use crate::types::{C32, CQ15, Q15};
 
 /// Smallest linear power that `power_db` evaluates; smaller, negative and NaN input use it.
@@ -51,6 +51,27 @@ impl MagSq<CQ15> for Fallback {
         for (o, x) in output.iter_mut().zip(input) {
             let (re, im) = (i64::from(x.re.0), i64::from(x.im.0));
             *o = Q15(sat16(round_shift(re * re + im * im, 15)));
+        }
+        Ok(())
+    }
+}
+
+impl Mag<C32> for Fallback {
+    fn mag(&self, input: &[C32], output: &mut [f32]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (o, x) in output.iter_mut().zip(input) {
+            *o = libm::sqrtf(x.re * x.re + x.im * x.im);
+        }
+        Ok(())
+    }
+}
+
+impl Mag<CQ15> for Fallback {
+    fn mag(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (o, x) in output.iter_mut().zip(input) {
+            let (re, im) = (i64::from(x.re.0), i64::from(x.im.0));
+            *o = Q15(sat16(round_sqrt(re * re + im * im)));
         }
         Ok(())
     }

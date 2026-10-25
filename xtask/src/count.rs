@@ -655,7 +655,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 26] = [
+pub const KERNELS: [KernelSpec; 32] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -675,6 +675,12 @@ pub const KERNELS: [KernelSpec; 26] = [
     spec("fm_mod", Family::Own, false),
     spec("squelch", Family::Own, false),
     spec("squelch_cq15", Family::Own, false),
+    spec("mag", Family::Volk, false),
+    spec("mag_q15", Family::Volk, false),
+    spec("agc", Family::Own, false),
+    spec("agc_cq15", Family::Own, false),
+    spec("dc_block_real", Family::Own, false),
+    spec("dc_block_real_q15", Family::Own, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -944,6 +950,8 @@ volk_32f_s32f_x2_convert_8u a_sse2 u_sse2
 volk_32fc_s32fc_x2_rotator2_32fc generic generic
 volk_32fc_32f_dot_prod_32fc a_sse u_sse
 volk_32fc_magnitude_squared_32f a_sse u_sse
+volk_32fc_magnitude_32f a_sse u_sse
+volk_16ic_magnitude_16i a_sse generic
 volk_32fc_x2_multiply_conjugate_32fc generic generic
 volk_32fc_s32f_atan2_32f generic generic
 ";
@@ -958,6 +966,8 @@ volk_32f_s32f_x2_convert_8u a_sse2 u_sse2
 volk_32fc_s32fc_x2_rotator2_32fc generic generic
 volk_32fc_32f_dot_prod_32fc a_sse u_sse
 volk_32fc_magnitude_squared_32f a_sse3 u_sse3
+volk_32fc_magnitude_32f a_sse3 u_sse3
+volk_16ic_magnitude_16i a_sse3 generic
 volk_32fc_x2_multiply_conjugate_32fc a_sse3 u_sse3
 volk_32fc_s32f_atan2_32f generic generic
 ";
@@ -976,6 +986,8 @@ volk_32f_s32f_x2_convert_8u a_avx2_fma u_avx2_fma
 volk_32fc_s32fc_x2_rotator2_32fc a_avx u_avx
 volk_32fc_32f_dot_prod_32fc a_avx2_fma u_avx2_fma
 volk_32fc_magnitude_squared_32f a_avx u_avx
+volk_32fc_magnitude_32f a_avx u_avx
+volk_16ic_magnitude_16i a_avx2 u_avx2
 volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx
 volk_32fc_s32f_atan2_32f a_avx2_fma u_avx2_fma
 ";
@@ -994,6 +1006,8 @@ volk_32f_s32f_x2_convert_8u neonv8 neonv8
 volk_32fc_s32fc_x2_rotator2_32fc neon neon
 volk_32fc_32f_dot_prod_32fc a_neon neonv8
 volk_32fc_magnitude_squared_32f neonv8 neonv8
+volk_32fc_magnitude_32f neonv8 neonv8
+volk_16ic_magnitude_16i neonv8 neonv8
 volk_32fc_x2_multiply_conjugate_32fc neonv8 neonv8
 volk_32fc_s32f_atan2_32f neonv8 neonv8
 ";
@@ -1001,7 +1015,7 @@ volk_32fc_s32f_atan2_32f neonv8 neonv8
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 10] = [
+const VOLK_FUNCTIONS: [&str; 12] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
     "volk_32f_s32f_convert_16i",
@@ -1010,6 +1024,8 @@ const VOLK_FUNCTIONS: [&str; 10] = [
     "volk_32fc_s32fc_x2_rotator2_32fc",
     "volk_32fc_32f_dot_prod_32fc",
     "volk_32fc_magnitude_squared_32f",
+    "volk_32fc_magnitude_32f",
+    "volk_16ic_magnitude_16i",
     "volk_32fc_x2_multiply_conjugate_32fc",
     "volk_32fc_s32f_atan2_32f",
 ];

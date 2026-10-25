@@ -1,0 +1,29 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "cq15_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "cq15_4096",
+  "format_version": 1,
+  "kernel": "mag",
+  "notes": "sat16(r + (s - r^2 > r)) with s = re^2 + im^2 and r = math.isqrt(s); the first eighteen samples are corner values, the four full-scale corners saturate",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 414,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

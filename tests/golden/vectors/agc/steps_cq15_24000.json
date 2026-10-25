@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "steps_cq15_24000.expected.bin",
+      "len": 24000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "steps_cq15_24000.input.bin",
+      "len": 24000
+    }
+  },
+  "case": "steps_cq15_24000",
+  "format_version": 1,
+  "kernel": "agc",
+  "notes": "same signal as steps_c32_24000 quantized to Q15; integer model with the gain in Q.32 and the step computed in 128-bit integers",
+  "params": {
+    "attack_s": 0.005,
+    "initial_gain_db": 0.0,
+    "max_gain_db": 60.0,
+    "min_gain_db": -20.0,
+    "rate_hz": 48000,
+    "reference": 0.5,
+    "release_s": 0.05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 418,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

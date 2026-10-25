@@ -1,6 +1,6 @@
-//! `mag_sq`.
+//! `mag_sq` and `mag`.
 //!
-//! Both variants are bit-exact with the fallback. The loops split the buffers once into whole
+//! All variants are bit-exact with the fallback. The loops split the buffers once into whole
 //! blocks of [`UNROLL`] vectors, whole vectors and the scalar tail, and iterate over the chunks
 //! of each part by value: a `Zip` of two owned chunk iterators runs on one counter, while a zip
 //! of `&mut` iterators tests both ends in every iteration.
@@ -12,9 +12,16 @@
 //! - `CQ15` uses the multiply-add of adjacent 16-bit pairs (`pmaddwd`, `i32x4.dot_i16x8_s`) on
 //!   x86 and wasm32, and `ld4`/`st2` with the saturating doubling multiply-accumulate
 //!   (`sqdmull`/`sqdmlal`, `sqrshrn`) on NEON.
+//!
+//! `mag` is the same loop with a vector square root. `C32` runs the generic code on every level
+//! (`sqrt` is correctly rounded, like `libm::sqrtf` of the fallback). `CQ15` rounds the integer
+//! square root of the sum of squares: a single-precision estimate within one of the result and a
+//! correction step in each direction (`root_q15` for the idea and the bound); every level but
+//! the generic one has a path of its own that takes the products from `pmaddwd`, `smlal` or
+//! `i32x4.dot_i16x8_s` (module `x86`, `neon`, `wasm`).
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
-use sdrk_core::kernels::spectrum::MagSq;
+use sdrk_core::kernels::spectrum::{Mag, MagSq};
 use sdrk_core::{C32, CQ15, Q15, Result};
 
 use crate::Simd;
@@ -283,6 +290,142 @@ impl MagSq<CQ15> for Simd {
     }
 }
 
+/// `sqrt(re*re + im*im)` of one vector of `2 l` interleaved floats into `l` outputs. The square
+/// root of IEEE 754 is correctly rounded on every level, like `libm::sqrtf` of the fallback, so
+/// the result is bit-exact; the sum is the one of [`mag_sq_vector`] (no fused multiply-add).
+#[inline(always)]
+fn mag_vector<S: SimdToken>(simd: S, i: &[f32], o: &mut [f32]) {
+    let l = S::f32s::LEN;
+    let (a, b) = i.split_at(l);
+    let a = S::f32s::from_slice(simd, a);
+    let b = S::f32s::from_slice(simd, b);
+    let (sa, sb) = (a * a, b * b);
+    (sa.unzip_low(sb) + sa.unzip_high(sb)).sqrt().store_slice(o);
+}
+
+/// `sqrt(re*re + im*im)` of `input` (interleaved floats) into `out`, bit-exact with the
+/// fallback.
+#[inline(always)]
+fn mag_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32]) {
+    let (input, out) = vectors!(input, out, S::f32s::LEN, |i, o| {
+        mag_vector(simd, i, o);
+    });
+    for (o, x) in out.iter_mut().zip(input.chunks_exact(2)) {
+        if let [re, im] = *x {
+            *o = libm::sqrtf(re * re + im * im);
+        }
+    }
+}
+
+impl Mag<C32> for Simd {
+    fn mag(&self, input: &[C32], output: &mut [f32]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let input: &[f32] = bytemuck::cast_slice(input);
+        dispatch!(simd => mag_f32(simd, input, output));
+        Ok(())
+    }
+}
+
+/// The rounded integer square root of the sum of squares of one vector of Q15 samples, at most
+/// 32767: the smallest `y` with `y (y + 1) >= re*re + im*im`, which is `r + 1` exactly where
+/// `s - r*r > r` for the floor root `r` (the rule of the fallback), because `y (y + 1) >= s`
+/// holds from `r + 1` on exactly when `s > r (r + 1)`.
+///
+/// The sum is limited to `2^30` first (the root of anything above it saturates anyway), which
+/// makes it a non-negative `i32` and `y (y + 1)` fit `i32`. The single-precision root of the
+/// (rounded) sum plus one half, truncated, is within one of `y`: the error of the two roundings
+/// and of the addition is below 0.01 where the root is below 32768, and the estimate differs
+/// from the exact root plus one half by less than that, so it can only miss when that value is
+/// within 0.01 of an integer. The two comparisons step the estimate to `y`. The exhaustive test
+/// over all 2^32 raw pairs (`tests/spectrum_mag.rs`) confirms the bound.
+#[inline(always)]
+fn root_q15<S: SimdToken>(simd: S, s: &[i16]) -> S::i32s {
+    let x: S::i32s = S::i16s::from_slice(simd, s).bitcast();
+    let re = (x << 16u32) >> 16u32;
+    let im = x >> 16u32;
+    // `2^31` (both parts `-32768`) is `i32::MIN` as a signed lane: the unsigned minimum fixes it.
+    let sum: S::u32s = (re * re + im * im).bitcast();
+    let sum: S::i32s = sum.min(S::u32s::splat(simd, 1 << 30)).bitcast();
+    let y = (sum.to_float::<S::f32s>().sqrt() + 0.5).to_int::<S::i32s>();
+    // Too small where `y (y + 1) < s`, too large where `(y - 1) y >= s`.
+    let up = (y * (y + 1)).simd_lt(sum).to_vector();
+    let down = ((y - 1) * y).simd_ge(sum).to_vector();
+    // The masks are -1 where true. `y - 1` for `s = 0` is -1 and `down` fires: the maximum
+    // restores 0.
+    (y - up + down)
+        .max(S::i32s::splat(simd, 0))
+        .min(S::i32s::splat(simd, 32767))
+}
+
+/// `mag` of one vector of `n` Q15 samples (`2 n` values) into `n` outputs.
+#[inline(always)]
+fn mag_q15_vector<S: SimdToken>(simd: S, i: &[i16], o: &mut [i16]) {
+    let (a, b) = i.split_at(S::i16s::LEN);
+    let packed: S::i16s = root_q15::<S>(simd, a).narrow(root_q15::<S>(simd, b));
+    packed.store_slice(o);
+}
+
+/// The rounded root of the sum of squares for Q15 samples, bit-exact with the fallback.
+#[inline(always)]
+fn mag_q15<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16]) {
+    let done = mag_q15_level(simd, input, out);
+    let (Some(input), Some(out)) = (input.get(2 * done..), out.get_mut(done..)) else {
+        return;
+    };
+    let (input, out) = vectors!(input, out, S::i16s::LEN, |i, o| {
+        mag_q15_vector(simd, i, o);
+    });
+    for (o, x) in out.iter_mut().zip(input.chunks_exact(2)) {
+        if let [re, im] = *x {
+            let s = (i64::from(re) * i64::from(re) + i64::from(im) * i64::from(im)) as u64;
+            let r = sdrk_core::num::isqrt_u64(s);
+            *o = (r + u64::from(s - r * r > r)).min(32767) as i16;
+        }
+    }
+}
+
+/// The level-specific path of `mag` `CQ15` for the current level, if there is one: returns the
+/// number of leading samples done.
+#[inline(always)]
+fn mag_q15_level<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16]) -> usize {
+    let level = simd.level();
+    #[cfg(target_arch = "x86_64")]
+    {
+        if let Some(t) = level.as_avx512() {
+            return x86::mag_q15_avx512(t, input, out);
+        }
+        if let Some(t) = level.as_avx2() {
+            return x86::mag_q15_avx2(t, input, out);
+        }
+        if let Some(t) = level.as_sse4_2() {
+            return x86::mag_q15_sse4_2(t, input, out);
+        }
+        if let Some(t) = crate::level::sse2_only(level) {
+            return x86::mag_q15_sse2(t, input, out);
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = level.as_neon() {
+        return neon::mag_q15(t, input, out);
+    }
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    if let Some(t) = level.as_wasm_simd128() {
+        return wasm::mag_q15(t, input, out);
+    }
+    let _ = (level, input, out);
+    0
+}
+
+impl Mag<CQ15> for Simd {
+    fn mag(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let x: &[i16] = bytemuck::cast_slice(input);
+        let y: &mut [i16] = bytemuck::cast_slice_mut(output);
+        dispatch!(simd => mag_q15(simd, x, y));
+        Ok(())
+    }
+}
+
 #[cfg(target_arch = "x86_64")]
 mod x86 {
     //! `CQ15` with `pmaddwd`: `re*re + im*im` of a sample is one lane of the multiply-add of
@@ -293,10 +436,17 @@ mod x86 {
 
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
-        __m128i, __m256i, __m512i, _mm_add_epi32, _mm_madd_epi16, _mm_packs_epi32, _mm_set1_epi32,
-        _mm_srli_epi32, _mm256_add_epi32, _mm256_madd_epi16, _mm256_packs_epi32,
-        _mm256_permute4x64_epi64, _mm256_set1_epi32, _mm256_srli_epi32, _mm512_add_epi32,
-        _mm512_cvtsepi32_epi16, _mm512_madd_epi16, _mm512_set1_epi32, _mm512_srli_epi32,
+        __m128i, __m256i, __m512i, _mm_add_epi32, _mm_cmpgt_epi32, _mm_cvtepi32_ps,
+        _mm_cvtps_epi32, _mm_madd_epi16, _mm_max_epi16, _mm_min_ps, _mm_packs_epi32,
+        _mm_set1_epi16, _mm_set1_epi32, _mm_set1_ps, _mm_sqrt_ps, _mm_srli_epi32, _mm_sub_epi32,
+        _mm256_add_epi32, _mm256_cmpgt_epi32, _mm256_cvtepi32_ps, _mm256_cvtps_epi32,
+        _mm256_madd_epi16, _mm256_max_epi16, _mm256_min_ps, _mm256_packs_epi32,
+        _mm256_permute4x64_epi64, _mm256_set1_epi16, _mm256_set1_epi32, _mm256_set1_ps,
+        _mm256_sqrt_ps, _mm256_srli_epi32, _mm256_sub_epi32, _mm512_add_epi32,
+        _mm512_cmpge_epi32_mask, _mm512_cmpgt_epi32_mask, _mm512_cvtepi32_ps, _mm512_cvtps_epi32,
+        _mm512_cvtsepi32_epi16, _mm512_madd_epi16, _mm512_mask_add_epi32, _mm512_mask_sub_epi32,
+        _mm512_max_epi16, _mm512_max_epi32, _mm512_min_ps, _mm512_set1_epi16, _mm512_set1_epi32,
+        _mm512_set1_ps, _mm512_sqrt_ps, _mm512_srli_epi32, _mm512_sub_epi32,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{i16x8, i16x16, i16x32};
@@ -359,6 +509,114 @@ mod x86 {
             })
         }
     );
+
+    // `mag` of `CQ15`: the rounded root `y` of `s = re*re + im*im`, the smallest `y` with
+    // `y (y + 1) >= s`, from a single-precision root and a correction of at most one step in
+    // each direction (see `root_q15` for the bound of the error of the estimate). The products
+    // come from `pmaddwd` as well: `s` from the samples, and `y * y` from the lanes of `y`,
+    // whose high 16 bits are zero (`y <= 32768`, and `(-32768)^2` is exact).
+    //
+    // The input is limited to `-32767` first: a sample with a part of `-32768` has a magnitude
+    // of at least 32768 and so saturates, as it does with `-32767`, and the largest sum
+    // `2 * 32767^2` then fits a signed lane (SSE2 has no unsigned minimum). The root is limited
+    // to 32768 (`minps`) so that `y * y` fits too; above it the output saturates anyway: `y`
+    // ends at 32768 at the least, and the saturating narrowing gives 32767. The one result
+    // below zero is `-1` for `s = 0` (the correction steps down from 0); a maximum with 0 after
+    // the narrowing restores it.
+
+    /// The path for the 128-bit vectors, for a token of SSE2 or of SSE4.2 (which adds nothing it
+    /// uses).
+    macro_rules! sse_mag {
+        ($name:ident, $token:ident) => {
+            fearless_simd::kernel!(
+                pub(super) fn $name(t: $token, input: &[i16], out: &mut [i16]) -> usize {
+                    // A closure, not a macro: the four expansions of the arithmetic (two vectors
+                    // per step, two loops) would exceed the stack frame the lint allows. It
+                    // inherits the target features of the function and is inlined.
+                    let roots = |x: &[i16]| -> __m128i {
+                        {
+                            let x: __m128i = i16x8::from_slice(t, x).into();
+                            let x = _mm_max_epi16(x, _mm_set1_epi16(-32767));
+                            let s = _mm_madd_epi16(x, x);
+                            let r = _mm_sqrt_ps(_mm_cvtepi32_ps(s));
+                            let y = _mm_cvtps_epi32(_mm_min_ps(r, _mm_set1_ps(32768.0)));
+                            let yy = _mm_madd_epi16(y, y);
+                            // Too small where `y (y + 1) < s`, too large where
+                            // `(y - 1) y >= s`, that is `y (y - 1) + 1 > s`; -1 where true.
+                            let up = _mm_cmpgt_epi32(s, _mm_add_epi32(yy, y));
+                            let one = _mm_set1_epi32(1);
+                            let down = _mm_cmpgt_epi32(_mm_add_epi32(yy, _mm_sub_epi32(one, y)), s);
+                            _mm_add_epi32(_mm_sub_epi32(y, up), down)
+                        }
+                    };
+                    steps!(input, out, 8, UNROLL, |i, o| {
+                        let (a, b) = i.split_at(8);
+                        let packed = _mm_packs_epi32(roots(a), roots(b));
+                        i16x8::simd_from(t, _mm_max_epi16(packed, _mm_set1_epi16(0)))
+                            .store_array(o);
+                    })
+                }
+            );
+        };
+    }
+    sse_mag!(mag_q15_sse2, Sse2);
+    sse_mag!(mag_q15_sse4_2, Sse4_2);
+
+    fearless_simd::kernel!(
+        pub(super) fn mag_q15_avx2(t: Avx2, input: &[i16], out: &mut [i16]) -> usize {
+            // A closure, not a macro (see the 128-bit path).
+            let roots = |x: &[i16]| -> __m256i {
+                {
+                    let x: __m256i = i16x16::from_slice(t, x).into();
+                    let x = _mm256_max_epi16(x, _mm256_set1_epi16(-32767));
+                    let s = _mm256_madd_epi16(x, x);
+                    let r = _mm256_sqrt_ps(_mm256_cvtepi32_ps(s));
+                    let y = _mm256_cvtps_epi32(_mm256_min_ps(r, _mm256_set1_ps(32768.0)));
+                    let yy = _mm256_madd_epi16(y, y);
+                    let up = _mm256_cmpgt_epi32(s, _mm256_add_epi32(yy, y));
+                    let one = _mm256_set1_epi32(1);
+                    let down =
+                        _mm256_cmpgt_epi32(_mm256_add_epi32(yy, _mm256_sub_epi32(one, y)), s);
+                    _mm256_add_epi32(_mm256_sub_epi32(y, up), down)
+                }
+            };
+            steps!(input, out, 16, UNROLL, |i, o| {
+                let (a, b) = i.split_at(16);
+                // `vpackssdw` packs within the 128-bit halves; `vpermq` restores the order.
+                let packed = _mm256_packs_epi32(roots(a), roots(b));
+                let packed = _mm256_permute4x64_epi64::<0b11_01_10_00>(packed);
+                i16x16::simd_from(t, _mm256_max_epi16(packed, _mm256_set1_epi16(0))).store_array(o);
+            })
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn mag_q15_avx512(t: Avx512, input: &[i16], out: &mut [i16]) -> usize {
+            // A closure, not inline code (see the 128-bit path).
+            let roots = |i: &[i16; 32]| -> __m512i {
+                let x: __m512i = i16x32::load_array_ref(t, i).into();
+                let x = _mm512_max_epi16(x, _mm512_set1_epi16(-32767));
+                let s = _mm512_madd_epi16(x, x);
+                let r = _mm512_sqrt_ps(_mm512_cvtepi32_ps(s));
+                let y = _mm512_cvtps_epi32(_mm512_min_ps(r, _mm512_set1_ps(32768.0)));
+                let yy = _mm512_madd_epi16(y, y);
+                // The masks of the corrections: one up where `y (y + 1) < s`, one down where
+                // `(y - 1) y >= s`.
+                let one = _mm512_set1_epi32(1);
+                let up = _mm512_cmpgt_epi32_mask(s, _mm512_add_epi32(yy, y));
+                let down = _mm512_cmpge_epi32_mask(_mm512_sub_epi32(yy, y), s);
+                let y = _mm512_mask_add_epi32(y, up, y, one);
+                let y = _mm512_mask_sub_epi32(y, down, y, one);
+                // `-1` for `s = 0`; the signed saturating narrowing gives 32767 above.
+                _mm512_max_epi32(y, _mm512_set1_epi32(0))
+            };
+            // One vector per step: `vpmovsdw` narrows a single vector, so no pairs are needed.
+            steps!(input, out, 16, UNROLL, |i, o| {
+                let y = roots(i);
+                i16x16::simd_from(t, _mm512_cvtsepi32_epi16(y)).store_array(o);
+            })
+        }
+    );
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -376,9 +634,13 @@ mod neon {
     #![allow(unsafe_code)]
 
     use core::arch::aarch64::{
-        float32x4x2_t, float32x4x4_t, int16x8_t, int16x8x2_t, int16x8x4_t, vget_low_s16, vld4q_s16,
-        vmulq_f32, vpaddq_f32, vqdmlal_high_s16, vqdmlal_s16, vqdmull_high_s16, vqdmull_s16,
-        vqrshrn_high_n_s32, vqrshrn_n_s32, vst2q_s16,
+        float32x4x2_t, float32x4x4_t, int16x8_t, int16x8x2_t, int16x8x4_t, uint32x4_t, vaddq_u32,
+        vcgeq_u32, vcgtq_u32, vcvtaq_u32_f32, vcvtq_f32_u32, vdupq_n_f32, vdupq_n_s16, vdupq_n_u32,
+        vget_low_s16, vld2q_s16, vld4q_s16, vmaxq_s16, vminq_f32, vmlal_high_s16, vmlal_s16,
+        vmlaq_u32, vmull_high_s16, vmull_s16, vmulq_f32, vmulq_u32, vpaddq_f32, vqdmlal_high_s16,
+        vqdmlal_s16, vqdmull_high_s16, vqdmull_s16, vqmovn_high_s32, vqmovn_s32,
+        vqrshrn_high_n_s32, vqrshrn_n_s32, vreinterpretq_s32_u32, vreinterpretq_u32_s32,
+        vsqrtq_f32, vst1q_s16, vst2q_s16, vsubq_u32,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x8, f32x16};
@@ -433,6 +695,63 @@ mod neon {
             })
         }
     );
+
+    /// The 16 values of `x` (8 samples) split into the real and the imaginary parts.
+    #[inline(always)]
+    fn load2(x: &[i16; 16]) -> int16x8x2_t {
+        // SAFETY: `vld2q_s16` reads 16 consecutive `i16` with no alignment requirement beyond
+        // that of `i16`, and `x` holds exactly 16. NEON is part of the AArch64 baseline.
+        unsafe { vld2q_s16(x.as_ptr()) }
+    }
+
+    /// Stores the 8 results.
+    #[inline(always)]
+    fn store1(o: &mut [i16; 8], v: int16x8_t) {
+        // SAFETY: `vst1q_s16` writes 8 consecutive `i16` with no alignment requirement beyond
+        // that of `i16`, and `o` holds exactly 8 and is borrowed exclusively.
+        unsafe { vst1q_s16(o.as_mut_ptr(), v) }
+    }
+
+    fearless_simd::kernel!(
+        pub(super) fn mag_q15(t: Neon, input: &[i16], out: &mut [i16]) -> usize {
+            // The rounded roots of four sums of squares (`s`, at most `2^31`, as `u32`): the
+            // smallest `y` with `y (y + 1) >= s` (see `root_q15` for the idea). The root in
+            // single precision is limited to 32768 so that `y (y + 1)` fits `u32`, and
+            // converted to the nearest integer (`fcvtau`), which is within one of `y`. `y` is
+            // `u32::MAX` (-1) for `s = 0` (stepping down from 0), which the signed saturating
+            // narrowing keeps for the maximum with 0 after it, and at least 32768 for the sums
+            // that saturate.
+            // A closure, not a macro: the four expansions would exceed the stack frame the lint
+            // allows. It inherits the target features of the function and is inlined.
+            let roots = |s: uint32x4_t| -> uint32x4_t {
+                let r = vminq_f32(vsqrtq_f32(vcvtq_f32_u32(s)), vdupq_n_f32(32768.0));
+                let y = vcvtaq_u32_f32(r);
+                let up = vcgtq_u32(s, vmlaq_u32(y, y, y));
+                let below = vaddq_u32(y, vdupq_n_u32(u32::MAX));
+                let down = vcgeq_u32(vmulq_u32(below, y), s);
+                // The masks are all ones (-1) where true.
+                vaddq_u32(vsubq_u32(y, up), down)
+            };
+            // One step per iteration: `ld2` has no offset form, only the post-index form of the
+            // loop.
+            steps!(input, out, 8, 1, |i, o| {
+                let x = load2(i);
+                let (re, im) = (x.0, x.1);
+                // Products of at most `2^30`; the sum of two is at most `2^31`, which the
+                // unsigned lanes hold (the signed `smlal` wraps to the same bits).
+                let lo = vmlal_s16(
+                    vmull_s16(vget_low_s16(re), vget_low_s16(re)),
+                    vget_low_s16(im),
+                    vget_low_s16(im),
+                );
+                let hi = vmlal_high_s16(vmull_high_s16(re, re), im, im);
+                let lo = vreinterpretq_s32_u32(roots(vreinterpretq_u32_s32(lo)));
+                let hi = vreinterpretq_s32_u32(roots(vreinterpretq_u32_s32(hi)));
+                let packed = vqmovn_high_s32(vqmovn_s32(lo), hi);
+                store1(o, vmaxq_s16(packed, vdupq_n_s16(0)));
+            })
+        }
+    );
 }
 
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
@@ -447,8 +766,9 @@ mod wasm {
     //! an unsigned narrowing for each input vector, two more instructions per vector.)
 
     use core::arch::wasm32::{
-        i16x8_narrow_i32x4, i32x4_add, i32x4_dot_i16x8, i32x4_shr, i32x4_splat, u16x8_min,
-        u16x8_splat, v128,
+        f32x4_add, f32x4_convert_i32x4, f32x4_min, f32x4_splat, f32x4_sqrt, i16x8_max,
+        i16x8_narrow_i32x4, i16x8_splat, i32x4_add, i32x4_dot_i16x8, i32x4_gt, i32x4_shr,
+        i32x4_splat, i32x4_sub, i32x4_trunc_sat_f32x4, u16x8_min, u16x8_splat, v128,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, i16x8};
@@ -487,12 +807,61 @@ mod wasm {
             })
         }
     );
+
+    fearless_simd::kernel!(
+        pub(super) fn mag_q15(t: WasmSimd128, input: &[i16], out: &mut [i16]) -> usize {
+            // The rounded roots as on x86 (see `x86`): the input limited to -32767 so that the
+            // sums fit a signed lane, the root limited to 32768 so that `y * y` does too.
+            // A closure, not a macro (see `neon`).
+            let roots = |x: &[i16]| -> v128 {
+                let x: v128 = i16x8::from_slice(t, x).into();
+                let x = i16x8_max(x, i16x8_splat(-32767));
+                let s = i32x4_dot_i16x8(x, x);
+                let r = f32x4_sqrt(f32x4_convert_i32x4(s));
+                let r = f32x4_add(f32x4_min(r, f32x4_splat(32768.0)), f32x4_splat(0.5));
+                let y = i32x4_trunc_sat_f32x4(r);
+                let yy = i32x4_dot_i16x8(y, y);
+                let up = i32x4_gt(s, i32x4_add(yy, y));
+                let down = i32x4_gt(i32x4_add(yy, i32x4_sub(i32x4_splat(1), y)), s);
+                i32x4_add(i32x4_sub(y, up), down)
+            };
+            steps!(input, out, 8, UNROLL, |i, o| {
+                let (a, b) = i.split_at(8);
+                let packed = i16x8_narrow_i32x4(roots(a), roots(b));
+                i16x8::simd_from(t, i16x8_max(packed, i16x8_splat(0))).store_array(o);
+            })
+        }
+    );
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{mag_sq_f32_level, mag_sq_q15_level};
+    use super::{mag_q15_level, mag_sq_f32_level, mag_sq_q15_level};
     use crate::level::{dispatch, name};
+
+    /// The samples per step of the level-specific path of `mag` `CQ15` at `level`, `0` where the
+    /// level has none (`mag` `C32` has none on any level).
+    fn mag_steps(level: &str) -> usize {
+        match level {
+            "avx512" | "avx2" => 16,
+            "sse4.2" | "sse2" | "neon" | "simd128" => 8,
+            _ => 0,
+        }
+    }
+
+    #[test]
+    fn the_mag_path_of_the_current_level_runs_on_all_whole_steps() {
+        let step = mag_steps(name());
+        // `(1000, 1000)` has the magnitude 1414.2, rounded 1414.
+        let input = [1000i16; 2 * 300];
+        for n in 0..=300 {
+            let mut out = [0i16; 300];
+            let ((x, _), (y, _)) = (input.split_at(2 * n), out.split_at_mut(n));
+            let done = dispatch!(simd => mag_q15_level(simd, x, y));
+            assert_eq!(done, n.checked_rem(step).map_or(0, |r| n - r), "n {n}");
+            assert!(y.iter().take(done).all(|&v| v == 1414), "n {n}");
+        }
+    }
 
     /// The samples per step of the level-specific paths of `C32` and `CQ15` at `level`, `0` where
     /// the level has none.

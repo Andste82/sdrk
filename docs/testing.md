@@ -54,7 +54,7 @@ The tests of the crate `sdrk-backend-simd` (`crates/backends/sdrk-backend-simd/t
 | `system-long` | nightly: the ten-minute variant of `long_run_no_drift` |
 | `wasm-bindings` | the WebAssembly package: `cargo xtask wasm-pkg --relaxed`, `wasm-bindgen-test` in Node, headless Chrome and headless Firefox for the variants, `node --test` on the packed tarball; Windows and arm64 build the package only ([wasm.md](wasm.md)) |
 | `wasm-package` | the WebAssembly package builds (`cargo xtask wasm-pkg --relaxed`) on arm64 and Windows |
-| `count` | `cargo xtask count --platform x86_64` against VOLK, FFTW, KissFFT and rustfft in a pinned container, on pull requests that touch kernels, backends, `benches` or `xtask`; nightly with the variants and the pipeline benchmark, and the job `count-nightly` for AVX-512, AArch64 and wasm32, which checks that `benches/results` is committed ([performance.md](performance.md)) |
+| `count` | `cargo xtask count --platform x86_64` against VOLK, FFTW, KissFFT and rustfft in a pinned container, on pull requests that touch kernels, backends, `benches` or `xtask`; nightly with the variants and the pipeline benchmark, and the job `count-nightly` for AVX-512, AArch64 and wasm32; both judge the limits and show the drift against the committed `benches/results` for information ([performance.md](performance.md)) |
 | `exhaustive` | nightly: `convert_out_exhaustive_every_f32` (`cargo test --release -p sdrk-backend-simd --test convert_out_sweep -- --ignored`) natively at `x86-64`, `x86-64-v2` and `x86-64-v3`, under `qemu-aarch64`, under wasmtime with `+simd128`, and under SDE `-spr` in four jobs of one part each (`SDRK_SWEEP_PART`) |
 
 Run the same commands locally:

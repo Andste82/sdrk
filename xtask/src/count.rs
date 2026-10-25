@@ -1235,6 +1235,16 @@ impl Session {
         if matches!(self.plan.counter, Counter::Callgrind | Counter::Sde(_)) {
             cmd.env("LD_LIBRARY_PATH", &self.refs_lib);
         }
+        if matches!(self.plan.counter, Counter::Qemu) {
+            // qemu-user reads every `QEMU_<OPTION>` variable as a command-line option
+            // (`QEMU_VERSION` is `-version`, which prints the version and runs nothing), so
+            // none may reach it from the caller's environment.
+            for (name, _) in std::env::vars_os() {
+                if is_qemu_option_variable(&name) {
+                    cmd.env_remove(name);
+                }
+            }
+        }
         cmd
     }
 
@@ -1476,6 +1486,11 @@ impl Variant {
             (false, false) => String::new(),
         }
     }
+}
+
+/// Whether `name` is a variable that qemu-user would read as one of its options.
+fn is_qemu_option_variable(name: &std::ffi::OsStr) -> bool {
+    name.to_str().is_some_and(|n| n.starts_with("QEMU_"))
 }
 
 fn sde() -> PathBuf {
@@ -2298,6 +2313,27 @@ fn write_results(
 #[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn qemu_option_variables_are_recognised() {
+        for name in ["QEMU_VERSION", "QEMU_LD_PREFIX", "QEMU_"] {
+            assert!(
+                is_qemu_option_variable(std::ffi::OsStr::new(name)),
+                "{name}"
+            );
+        }
+        for name in [
+            "SDRK_QEMU_AARCH64",
+            "QEMU",
+            "qemu_version",
+            "LD_LIBRARY_PATH",
+        ] {
+            assert!(
+                !is_qemu_option_variable(std::ffi::OsStr::new(name)),
+                "{name}"
+            );
+        }
+    }
 
     fn m(kernel: &str, ours: f64, other: f64) -> Measurement {
         Measurement {

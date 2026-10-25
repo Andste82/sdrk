@@ -5,12 +5,18 @@ use core::marker::PhantomData;
 use sdrk_device::Ratio;
 
 use crate::error::{Error, Result};
-use crate::num::q15_from_f64;
 use crate::timing::{Delay, Rate, Timing};
 use crate::types::{ComplexSample, SampleType};
 
-/// Scale of the Q30 power values of the `CQ15` variant (`2^30`, full scale is 1.0).
-const Q30: f64 = 1_073_741_824.0;
+/// Scale of the Q61 average power and levels of the `CQ15` variant (`2^61`, full scale is
+/// 1.0).
+const Q61: f64 = 2_305_843_009_213_693_952.0;
+/// Scale of the Q31 smoothing coefficient of the `CQ15` variant (`2^31`).
+const Q31: f64 = 2_147_483_648.0;
+/// Lowest close level of the `CQ15` variant in dBFS. A decaying average stops one step
+/// before zero, below `2^-31` (about -93.3 dBFS), and a single input LSB already has a
+/// power of `2^-30` (-90.3 dBFS), so lower levels cannot work.
+pub const CQ15_MIN_CLOSE_DB: f64 = -90.0;
 
 /// Mutable view of the numeric fields, used by the kernel implementations of this crate.
 pub(crate) struct SquelchParts<'a> {
@@ -29,7 +35,7 @@ pub(crate) struct SquelchParts<'a> {
 /// close levels and the gate.
 ///
 /// The state starts closed with `p = 0`. Both numeric representations (`f32` for
-/// `C32`, Q30 `i64` for `CQ15`) are derived from the same parameters, and only the one
+/// `C32`, Q61 `i64` for `CQ15`) are derived from the same parameters, and only the one
 /// of the sample type `T` is used.
 ///
 /// ```
@@ -55,16 +61,16 @@ pub struct SquelchState<T: ComplexSample> {
     marker: PhantomData<T>,
 }
 
-/// `(P_open, P_close)` as `f32` (computed in f64 and cast) and as Q30 `i64`
-/// (`floor(10^(db/10) * 2^30 + 0.5)`).
+/// `(P_open, P_close)` as `f32` (computed in f64 and cast) and as Q61 `i64`
+/// (`floor(10^(db/10) * 2^61 + 0.5)`).
 fn levels(threshold_db: f64, hysteresis_db: f64) -> (f32, f32, i64, i64) {
     let lin = |db: f64| libm::pow(10.0, db / 10.0);
-    let q30 = |p: f64| libm::floor(p * Q30 + 0.5) as i64;
+    let q61 = |p: f64| libm::floor(p * Q61 + 0.5) as i64;
     let (open, close) = (lin(threshold_db), lin(threshold_db - hysteresis_db));
-    (open as f32, close as f32, q30(open), q30(close))
+    (open as f32, close as f32, q61(open), q61(close))
 }
 
-fn check_levels(threshold_db: f64, hysteresis_db: f64) -> Result<()> {
+fn check_levels<T: ComplexSample>(threshold_db: f64, hysteresis_db: f64) -> Result<()> {
     if !(threshold_db.is_finite() && (-150.0..=0.0).contains(&threshold_db)) {
         return Err(Error::InvalidParameter(
             "squelch threshold must be between -150 and 0 dB",
@@ -73,6 +79,11 @@ fn check_levels(threshold_db: f64, hysteresis_db: f64) -> Result<()> {
     if !(hysteresis_db.is_finite() && hysteresis_db >= 0.0) {
         return Err(Error::InvalidParameter(
             "squelch hysteresis must be finite and not negative",
+        ));
+    }
+    if T::TYPE == SampleType::CQ15 && threshold_db - hysteresis_db < CQ15_MIN_CLOSE_DB {
+        return Err(Error::InvalidParameter(
+            "squelch close level must be at least -90 dB for CQ15",
         ));
     }
     Ok(())
@@ -86,13 +97,11 @@ impl<T: ComplexSample> SquelchState<T> {
     /// (`threshold_db - hysteresis_db`), `tau_s > 0` is the time constant of the power
     /// average at `rate`. The smoothing coefficient is
     /// `alpha = 1 - exp(-1 / (fs * tau))` in f64 and must satisfy `0 < alpha <= 0.5`.
-    /// Anything else, including NaN, gives `InvalidParameter`.
-    ///
-    /// For `CQ15` the coefficient is `q15_from_f64(alpha)`; a coefficient below
-    /// `2^-16` rounds to zero and then the average never moves, so use
-    /// `fs * tau_s` below about 20 000 samples there.
+    /// For `CQ15` the close level must be at least [`CQ15_MIN_CLOSE_DB`] and the Q31
+    /// coefficient `floor(alpha * 2^31 + 0.5)` must not be zero (`fs * tau_s` below about
+    /// `3 * 10^9` samples). Anything else, including NaN, gives `InvalidParameter`.
     pub fn new(threshold_db: f64, hysteresis_db: f64, tau_s: f64, rate: Rate) -> Result<Self> {
-        check_levels(threshold_db, hysteresis_db)?;
+        check_levels::<T>(threshold_db, hysteresis_db)?;
         if !(tau_s.is_finite() && tau_s > 0.0) {
             return Err(Error::InvalidParameter(
                 "squelch time constant must be finite and positive",
@@ -104,12 +113,18 @@ impl<T: ComplexSample> SquelchState<T> {
                 "squelch smoothing coefficient must be in (0, 0.5]",
             ));
         }
+        let alpha_q = libm::floor(alpha * Q31 + 0.5) as i64;
+        if T::TYPE == SampleType::CQ15 && alpha_q == 0 {
+            return Err(Error::InvalidParameter(
+                "squelch time constant is too long for CQ15",
+            ));
+        }
         let (open_f, close_f, open_q, close_q) = levels(threshold_db, hysteresis_db);
         Ok(Self {
             threshold_db,
             hysteresis_db,
             alpha_f: alpha as f32,
-            alpha_q: i64::from(q15_from_f64(alpha).0),
+            alpha_q,
             open_f,
             close_f,
             open_q,
@@ -135,7 +150,7 @@ impl<T: ComplexSample> SquelchState<T> {
     /// # Ok::<(), sdrk_core::Error>(())
     /// ```
     pub fn set_thresholds(&mut self, threshold_db: f64, hysteresis_db: f64) -> Result<()> {
-        check_levels(threshold_db, hysteresis_db)?;
+        check_levels::<T>(threshold_db, hysteresis_db)?;
         let (open_f, close_f, open_q, close_q) = levels(threshold_db, hysteresis_db);
         self.threshold_db = threshold_db;
         self.hysteresis_db = hysteresis_db;
@@ -169,11 +184,11 @@ impl<T: ComplexSample> SquelchState<T> {
         self.hysteresis_db
     }
 
-    /// The average power as a linear value (full scale `|x|^2 = 1`), exact for both
-    /// sample types (`f32` widened, or the Q30 integer divided by `2^30`).
+    /// The average power as a linear value (full scale `|x|^2 = 1`): the `f32` value
+    /// widened, or the Q61 integer converted to f64 and divided by `2^61`.
     pub fn average_power(&self) -> f64 {
         if T::TYPE == SampleType::CQ15 {
-            self.p_q as f64 / Q30
+            self.p_q as f64 / Q61
         } else {
             f64::from(self.p_f)
         }
@@ -226,7 +241,9 @@ pub trait Squelch<T: ComplexSample> {
     ///
     /// `C32`: `q = re*re + im*im`, `p = flush_denormal(p + alpha * (q - p))` in f32
     /// without FMA; a non-finite `q` leaves `p` and the gate unchanged. `CQ15`: `q` is
-    /// the Q30 value `re^2 + im^2`, `p = p + round_shift(alpha_raw * (q - p), 15)` in
-    /// `i64`. Both are bit-exact between `Fallback` and `Reference`.
+    /// the Q30 value `re^2 + im^2`, `p` is Q61 and
+    /// `p = p + alpha_q31 * (q - round_shift(p, 31))` in `i64` (no rounding of the step,
+    /// so the average follows small powers and long time constants). Both are bit-exact
+    /// between `Fallback` and `Reference`.
     fn squelch(&self, state: &mut SquelchState<T>, input: &[T], output: &mut [T]) -> Result<()>;
 }

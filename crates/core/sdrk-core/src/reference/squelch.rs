@@ -2,7 +2,7 @@
 //!
 //! The gate decision is discrete, so an f64 model could switch one sample earlier or
 //! later than the fallback. The specification therefore fixes the arithmetic (f32 for
-//! `C32`, exact `i64` for `CQ15`) and this reference follows it step by step, written
+//! `C32`, exact `i64` with a Q61 average for `CQ15`) and this reference follows it step by step, written
 //! as separate small functions.
 
 use crate::Reference;
@@ -35,6 +35,13 @@ fn next_power_f32(p: f32, alpha: f32, re: f32, im: f32) -> Option<f32> {
     Some(flush_denormal(p + delta))
 }
 
+/// One `CQ15` step: `q` in Q30, the average `p` in Q61, the coefficient in Q31.
+fn next_power_q61(p: i64, alpha_q31: i64, re: i16, im: i16) -> i64 {
+    let q = i64::from(re).pow(2) + i64::from(im).pow(2);
+    let p_q30 = round_shift(p, 31);
+    p + alpha_q31 * (q - p_q30)
+}
+
 impl Squelch<C32> for Reference {
     fn squelch(
         &self,
@@ -65,9 +72,7 @@ impl Squelch<CQ15> for Reference {
         check_len(input.len(), output.len())?;
         let g = state.parts_mut();
         for (o, x) in output.iter_mut().zip(input) {
-            let q = i64::from(x.re.0).pow(2) + i64::from(x.im.0).pow(2);
-            let step = round_shift(g.alpha_q * (q - *g.p_q), 15);
-            *g.p_q += step;
+            *g.p_q = next_power_q61(*g.p_q, g.alpha_q, x.re.0, x.im.0);
             *g.open = decide(*g.open, *g.p_q, g.open_q, g.close_q);
             *o = if *g.open { *x } else { CQ15::ZERO };
         }

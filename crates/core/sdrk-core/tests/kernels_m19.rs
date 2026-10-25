@@ -41,6 +41,15 @@ fn construction_validates_every_parameter() {
     }
     // The largest accepted coefficient: alpha <= 0.5 needs tau >= 1 / (fs ln 2).
     assert!(SquelchState::<C32>::new(-40.0, 3.0, 1.45 / 48_000.0, rate()).is_ok());
+    // CQ15 only: the close level must be at least -90 dB, and the Q31 coefficient must not
+    // round to zero (fs * tau above about 4.3e9 samples; C32 still accepts it).
+    for (t, h, tau) in [(-91.0, 0.0, 0.01), (-80.0, 10.5, 0.01), (-40.0, 3.0, 1e5)] {
+        let e = SquelchState::<CQ15>::new(t, h, tau, rate()).unwrap_err();
+        assert!(matches!(e, Error::InvalidParameter(_)), "{t} {h} {tau}");
+        assert!(SquelchState::<C32>::new(t, h, tau, rate()).is_ok());
+    }
+    assert!(SquelchState::<CQ15>::new(-80.0, 10.0, 0.01, rate()).is_ok());
+    assert!(SquelchState::<CQ15>::new(-40.0, 3.0, 4e4, rate()).is_ok());
 }
 
 #[test]

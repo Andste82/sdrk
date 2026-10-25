@@ -14,7 +14,7 @@
   "case": "bursts_cq15_24000",
   "format_version": 1,
   "kernel": "squelch",
-  "notes": "same signal as bursts_c32_24000 quantized to Q15; exact integer model (Q30 power, alpha as a Q15 raw value)",
+  "notes": "same signal as bursts_c32_24000 quantized to Q15; exact integer model (Q30 power, Q61 average, alpha as a Q31 raw value)",
   "params": {
     "hysteresis_db": 3.0,
     "rate_hz": 48000,

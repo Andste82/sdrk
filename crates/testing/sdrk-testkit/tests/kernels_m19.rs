@@ -200,8 +200,7 @@ fn c32_gate_opens_holds_in_the_band_and_closes_with_exact_zeros() {
 
 #[test]
 fn cq15_gate_opens_holds_in_the_band_and_closes_with_exact_zeros() {
-    let to_q30 = |db: f64| (10f64.powf(db / 10.0) * 2f64.powi(30) + 0.5).floor();
-    let (open_p, close_p) = (to_q30(-40.0) / 2f64.powi(30), to_q30(-43.0) / 2f64.powi(30));
+    let (open_p, close_p) = (level_q61(-40.0) as f64 / Q61, level_q61(-43.0) as f64 / Q61);
     let mut st = SquelchState::<CQ15>::new(-40.0, 3.0, TAU, rate()).unwrap();
     let cq = |re: i16, im: i16| CQ15 {
         re: Q15(re),
@@ -426,11 +425,12 @@ fn silence_and_full_scale_for_both_types() {
     Sdrk.squelch(&mut st, &vec![CQ15::ZERO; 2000], &mut out)
         .unwrap();
     assert!(!st.is_open() && out[1999] == CQ15::ZERO);
-    // The lowest threshold opens at once (P_open rounds to zero in Q30).
-    let mut st = SquelchState::<CQ15>::new(-150.0, 0.0, TAU, rate()).unwrap();
-    let mut out = [corner(1, 1)];
-    Sdrk.squelch(&mut st, &[CQ15::ZERO], &mut out).unwrap();
-    assert!(st.is_open());
+    // The lowest CQ15 close level (-90 dB) keeps the gate closed on silence.
+    let mut st = SquelchState::<CQ15>::new(-87.0, 3.0, TAU, rate()).unwrap();
+    let mut out = vec![corner(1, 1); 2000];
+    Sdrk.squelch(&mut st, &vec![CQ15::ZERO; 2000], &mut out)
+        .unwrap();
+    assert!(!st.is_open() && out.iter().all(|s| *s == CQ15::ZERO));
 }
 
 #[test]
@@ -471,21 +471,52 @@ fn c32_average_decays_to_exactly_zero_and_the_gate_closes() {
     assert_eq!(sa, sb);
 }
 
-/// The `CQ15` recurrence in `i128`, written independently of the kernel.
-fn cq15_model(alpha_raw: i128, input: &[(i16, i16)], mut p: i128) -> Vec<i128> {
+/// Scale of the Q61 average of `CQ15`.
+const Q61: f64 = 2_305_843_009_213_693_952.0;
+
+/// The `CQ15` recurrence in `i128`, written independently of the kernel: `q` in Q30, the
+/// average in Q61, the coefficient in Q31.
+fn cq15_model(alpha_q31: i128, input: &[(i16, i16)], mut p: i128) -> Vec<i128> {
     input
         .iter()
         .map(|&(re, im)| {
             let q = i128::from(re) * i128::from(re) + i128::from(im) * i128::from(im);
-            p += (alpha_raw * (q - p) + 16384) >> 15;
+            p += alpha_q31 * (q - ((p + (1 << 30)) >> 31));
             p
         })
         .collect()
 }
 
-fn alpha_raw() -> i128 {
-    let alpha = 1.0 - (-1.0 / (FS as f64 * TAU)).exp();
-    (alpha * 32768.0 + 0.5).floor() as i128
+fn alpha_f64(tau: f64) -> f64 {
+    1.0 - (-1.0 / (FS as f64 * tau)).exp()
+}
+
+fn alpha_q31() -> i128 {
+    (alpha_f64(TAU) * 2f64.powi(31) + 0.5).floor() as i128
+}
+
+/// The Q61 level of `db`, computed exactly as the kernel does.
+fn level_q61(db: f64) -> i128 {
+    libm::floor(libm::pow(10.0, db / 10.0) * Q61 + 0.5) as i128
+}
+
+/// A level in dB whose Q61 value is exactly `target` and for which `(db + 4) - 4 == db`, so
+/// that it can also be reached as `threshold - hysteresis` with a hysteresis of 4 dB. Below
+/// about -36 dBFS one step of `db` moves the level by less than one, so every target is hit.
+fn db_for_level(target: i128) -> f64 {
+    let mut db = 10.0 * (target as f64 / Q61).log10();
+    while level_q61(db) >= target {
+        db = db.next_down();
+    }
+    for _ in 0..100_000 {
+        db = db.next_up();
+        let l = level_q61(db);
+        assert!(l <= target, "level {target} is skipped at {db} dB");
+        if l == target && (db + 4.0) - 4.0 == db {
+            return db;
+        }
+    }
+    panic!("no level in dB for {target}");
 }
 
 fn cq(re: i16, im: i16) -> CQ15 {
@@ -512,37 +543,35 @@ where
 
 #[test]
 fn cq15_comparisons_switch_exactly_at_the_levels() {
-    let ar = alpha_raw();
-    let db = |p: i128| 10.0 * (p as f64 / 2f64.powi(30)).log10();
+    let a = alpha_q31();
 
-    // Opening: after one sample p1 = round(alpha * q) equals P_open exactly: `>=` opens.
-    let p1 = cq15_model(ar, &[(2000, 0)], 0)[0];
-    assert!(p1 > 100);
+    // Opening: after one sample p1 = alpha * q equals P_open exactly: `>=` opens.
+    let p1 = cq15_model(a, &[(2000, 0)], 0)[0];
     for (level, opens) in [(p1, true), (p1 + 1, false), (p1 - 1, true)] {
-        let mut st = SquelchState::<CQ15>::new(db(level), 20.0, TAU, rate()).unwrap();
+        let mut st = SquelchState::<CQ15>::new(db_for_level(level), 20.0, TAU, rate()).unwrap();
         let trace = gate_trace(&mut st, &[cq(2000, 0)]);
         assert_eq!(trace, [opens], "P_open = {level}, p = {p1}");
-        assert_eq!(st.average_power() * 2f64.powi(30), p1 as f64);
+        assert_eq!(st.average_power(), p1 as f64 / Q61);
     }
 
     // Closing: open the gate with permissive levels, then one zero sample gives p_b. With
     // P_close == p_b the gate must stay open (`p < P_close` is false); with P_close = p_b + 1
     // it closes on that sample.
-    let warm = vec![cq(1600, 0); 400];
-    let warm_model: Vec<(i16, i16)> = vec![(1600, 0); 400];
-    let p_a = *cq15_model(ar, &warm_model, 0).last().unwrap();
-    let p_b = cq15_model(ar, &[(0, 0)], p_a)[0];
-    assert!(p_b < p_a && p_b > 1000);
+    let warm = vec![cq(180, 0); 400];
+    let warm_model: Vec<(i16, i16)> = vec![(180, 0); 400];
+    let p_a = *cq15_model(a, &warm_model, 0).last().unwrap();
+    let p_b = cq15_model(a, &[(0, 0)], p_a)[0];
+    assert!(p_b < p_a);
     for (close, stays_open) in [(p_b, true), (p_b + 1, false), (p_b - 1, true)] {
         let mut st = SquelchState::<CQ15>::new(-60.0, 0.0, TAU, rate()).unwrap();
         let mut out = vec![CQ15::ZERO; warm.len()];
         Sdrk.squelch(&mut st, &warm, &mut out).unwrap();
         assert!(st.is_open());
-        assert_eq!(st.average_power() * 2f64.powi(30), p_a as f64);
-        st.set_thresholds(db(close) + 3.0, 3.0).unwrap();
+        assert_eq!(st.average_power(), p_a as f64 / Q61);
+        st.set_thresholds(db_for_level(close) + 4.0, 4.0).unwrap();
         let trace = gate_trace(&mut st, &[CQ15::ZERO]);
         assert_eq!(trace, [stays_open], "P_close = {close}, p = {p_b}");
-        assert_eq!(st.average_power() * 2f64.powi(30), p_b as f64);
+        assert_eq!(st.average_power(), p_b as f64 / Q61);
     }
 }
 
@@ -590,7 +619,7 @@ fn c32_comparisons_switch_exactly_at_the_levels() {
 
 #[test]
 fn cq15_average_follows_an_independent_integer_model_at_the_corners() {
-    let ar = alpha_raw();
+    let ar = alpha_q31();
     let corners = [
         (-32768i16, -32768i16),
         (32767, 32767),
@@ -616,11 +645,7 @@ fn cq15_average_follows_an_independent_integer_model_at_the_corners() {
         let mut o = [CQ15::ZERO];
         Sdrk.squelch(&mut st, std::slice::from_ref(s), &mut o)
             .unwrap();
-        assert_eq!(
-            st.average_power() * 2f64.powi(30),
-            model[k] as f64,
-            "sample {k}"
-        );
+        assert_eq!(st.average_power(), model[k] as f64 / Q61, "sample {k}");
     }
     // The same through one call of Fallback and Reference.
     let (mut sa, mut sb) = (
@@ -630,43 +655,117 @@ fn cq15_average_follows_an_independent_integer_model_at_the_corners() {
     let (mut a, mut b) = (vec![CQ15::ZERO; input.len()], vec![CQ15::ZERO; input.len()]);
     Fallback.squelch(&mut sa, &input, &mut a).unwrap();
     Reference.squelch(&mut sb, &input, &mut b).unwrap();
-    assert_eq!(
-        sa.average_power() * 2f64.powi(30),
-        *model.last().unwrap() as f64
-    );
+    assert_eq!(sa.average_power(), *model.last().unwrap() as f64 / Q61);
     assert_eq!(bit_exact(&a, &b), None);
     assert_eq!(sa, sb);
 }
 
-/// The Q30 limits of `CQ15` (documented in `docs/kernels.md`): the rounding of the update
-/// stalls the decaying average near -66 dBFS, and an open level that rounds to zero opens the
-/// gate even for silence.
+/// Q15 noise of `level_db` dBFS (complex Gaussian, rounded and saturated).
+fn q15_noise(rng: &mut Pcg32, n: usize, level_db: f64) -> Vec<CQ15> {
+    let sigma = (10f64.powf(level_db / 10.0) / 2.0).sqrt() * 32768.0;
+    let q = |v: f64| Q15(v.round().clamp(-32768.0, 32767.0) as i16);
+    (0..n)
+        .map(|_| CQ15 {
+            re: q(rng.normal() * sigma),
+            im: q(rng.normal() * sigma),
+        })
+        .collect()
+}
+
+/// The `CQ15` average follows small powers: noise at -70 and -80 dBFS with the default time
+/// constant (10 ms at 48 kHz) is measured within 0.2 dB of its actual power, and a gate 3 dB
+/// below it opens. A rounded Q15 step (`round_shift(alpha_q15 * (q - p), 15)`) stalled near
+/// -66 dBFS here and never left zero at -80 dBFS; GNU Radio's `pwr_squelch_cc` (double)
+/// measures the same values as this kernel on these signals.
 #[test]
-fn cq15_stalls_near_minus_66_db_and_a_very_low_threshold_always_opens() {
-    let fs = Rate::hz(48_000).unwrap();
-    let mut st = SquelchState::<CQ15>::new(-90.0, 3.0, 0.01, fs).unwrap();
-    let mut out = vec![CQ15::ZERO; 2000];
-    Sdrk.squelch(&mut st, &vec![cq(1600, 0); 2000], &mut out)
+fn cq15_follows_low_noise_powers() {
+    for (level, seed) in [(-70.0, 70u64), (-80.0, 80)] {
+        let input = q15_noise(&mut Pcg32::new(seed, 1), 96_000, level);
+        let mut st = SquelchState::<CQ15>::new(level - 3.0, 0.0, 0.01, rate()).unwrap();
+        let (mut sum_p, mut sum_q, mut open) = (0.0, 0.0, 0usize);
+        for (k, s) in input.iter().enumerate() {
+            let mut o = [*s];
+            Sdrk.squelch(&mut st, std::slice::from_ref(s), &mut o)
+                .unwrap();
+            if k >= 48_000 {
+                sum_p += st.average_power();
+                let (re, im) = (f64::from(s.re.0), f64::from(s.im.0));
+                sum_q += (re * re + im * im) / 2f64.powi(30);
+                open += usize::from(st.is_open());
+            }
+        }
+        let diff_db = 10.0 * (sum_p / sum_q).log10();
+        assert!(
+            diff_db.abs() < 0.2,
+            "{level} dBFS: average off by {diff_db} dB"
+        );
+        assert!(
+            open >= 47_500,
+            "{level} dBFS: gate open for {open} of 48000 samples"
+        );
+    }
+}
+
+/// After a signal, digital silence lets the `CQ15` average decay below `2^-31` (-93.3 dBFS),
+/// and a gate with the close level -70 dB closes within one sample of the ideal time
+/// `ln(P / P_close) / -ln(1 - alpha)` (115 ms here, as GNU Radio's `pwr_squelch_cc`).
+#[test]
+fn cq15_closes_in_digital_silence_at_the_ideal_time() {
+    let mut st = SquelchState::<CQ15>::new(-70.0, 0.0, 0.01, rate()).unwrap();
+    let mut out = vec![CQ15::ZERO; 24_000];
+    Sdrk.squelch(&mut st, &vec![cq(3277, 0); 24_000], &mut out)
         .unwrap();
     assert!(st.is_open());
-    let mut out = vec![CQ15::ZERO; 100_000];
-    Sdrk.squelch(&mut st, &vec![CQ15::ZERO; 100_000], &mut out)
-        .unwrap();
-    let p_db = 10.0 * st.average_power().log10();
+    let p = st.average_power();
+    let silence = vec![CQ15::ZERO; 200_000];
+    let trace = gate_trace(&mut st, &silence);
+    let closed_at = trace.iter().position(|o| !o).unwrap();
+    let ideal = (p / 1e-7).ln() / -(1.0 - alpha_f64(0.01)).ln();
     assert!(
-        (-68.0..-64.0).contains(&p_db),
-        "the average stalls at {p_db} dBFS"
+        (closed_at as f64 - ideal).abs() <= 1.0,
+        "closed after {closed_at} samples, ideal {ideal}"
     );
-    assert!(st.is_open(), "a close level below the stall never closes");
+    assert!(st.average_power() < 2f64.powi(-31));
+}
 
-    for db in [-95.0, -100.0, -150.0] {
-        let mut st = SquelchState::<CQ15>::new(db, 0.0, 0.01, fs).unwrap();
-        let mut out = [cq(1, 1)];
-        Sdrk.squelch(&mut st, &[CQ15::ZERO], &mut out).unwrap();
-        assert!(st.is_open(), "{db} dB opens on silence");
+/// Long time constants keep their value in `CQ15`: after `N = fs * tau` samples of a
+/// constant input the average is within 0.1 % of `q * (1 - (1 - alpha)^N)` (the rounding of
+/// the Q31 coefficient is the only error, 2.7e-6 at `N = 20000`). The Q15
+/// coefficient of the first version gave an 18 % shorter time constant at `N = 20000` and
+/// rounded to zero (no movement at all) above about 65 500.
+#[test]
+fn cq15_keeps_long_time_constants() {
+    for n in [20_000usize, 70_000, 1_000_000] {
+        let tau = n as f64 / FS as f64;
+        let mut st = SquelchState::<CQ15>::new(-30.0, 0.0, tau, rate()).unwrap();
+        let mut out = vec![CQ15::ZERO; n];
+        Sdrk.squelch(&mut st, &vec![cq(3277, 0); n], &mut out)
+            .unwrap();
+        let q = 3277f64 * 3277.0 / 2f64.powi(30);
+        let ideal = q * (1.0 - (1.0 - alpha_f64(tau)).powi(n as i32));
+        let rel = (st.average_power() - ideal).abs() / ideal;
+        assert!(rel < 1e-3, "N = {n}: relative error {rel}");
     }
-    let mut st = SquelchState::<CQ15>::new(-90.0, 0.0, 0.01, fs).unwrap();
-    let mut out = [cq(1, 1)];
-    Sdrk.squelch(&mut st, &[CQ15::ZERO], &mut out).unwrap();
-    assert!(!st.is_open(), "-90 dB does not open on silence");
+}
+
+/// The `CQ15` close level must be at least -90 dB (the power of one input LSB); `C32` keeps
+/// the range down to -150 dB. A refused `set_thresholds` changes nothing.
+#[test]
+fn cq15_close_level_is_limited_to_minus_90_db() {
+    for (t, h) in [(-95.0, 0.0), (-150.0, 0.0), (-88.0, 3.0), (-60.0, 31.0)] {
+        assert!(
+            SquelchState::<CQ15>::new(t, h, 0.01, rate()).is_err(),
+            "{t} {h}"
+        );
+        assert!(
+            SquelchState::<C32>::new(t, h, 0.01, rate()).is_ok(),
+            "{t} {h}"
+        );
+    }
+    assert!(SquelchState::<CQ15>::new(-90.0, 0.0, 0.01, rate()).is_ok());
+    assert!(SquelchState::<CQ15>::new(-60.0, 30.0, 0.01, rate()).is_ok());
+    let mut st = SquelchState::<CQ15>::new(-40.0, 3.0, 0.01, rate()).unwrap();
+    let before = st;
+    assert!(st.set_thresholds(-89.0, 3.0).is_err());
+    assert_eq!(st, before);
 }

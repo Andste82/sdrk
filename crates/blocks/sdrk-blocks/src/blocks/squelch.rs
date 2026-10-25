@@ -28,13 +28,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         it after the channel filter (ddc) and before the demodulator and any gain control: \
         after an AGC every signal, noise included, has the same level and the gate would \
         always open. Pitfalls: the gate reacts after about tau_s to a level change, a \
-        smaller tau_s opens faster but is noisier; with CQ15 a tau_s above about 20000 \
-        samples (tau_s times the sample rate) rounds the smoothing coefficient to zero and \
-        the average no longer moves; with CQ15 the rounding of the \
-        update stalls the average near -66 dBFS after the signal ends, so a close level \
-        (threshold_db - hysteresis_db) below that never closes an open gate, and a threshold \
-        below about -93 dB rounds to zero and opens the gate on the first sample, even for \
-        silence.",
+        smaller tau_s opens faster but is noisier; with CQ15 the close level \
+        (threshold_db - hysteresis_db) must be at least -90 dB, the power of a single \
+        input LSB, otherwise construction and set_param fail.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32, PortType::CQ15],

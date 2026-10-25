@@ -52,7 +52,7 @@ impl Squelch<CQ15> for Fallback {
         for (o, &x) in output.iter_mut().zip(input) {
             let (re, im) = (i64::from(x.re.0), i64::from(x.im.0));
             let power = re * re + im * im;
-            p += round_shift(g.alpha_q * (power - p), 15);
+            p += g.alpha_q * (power - round_shift(p, 31));
             if p >= g.open_q {
                 open = true;
             } else if p < g.close_q {

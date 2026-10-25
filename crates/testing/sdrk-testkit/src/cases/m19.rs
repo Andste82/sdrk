@@ -189,8 +189,8 @@ pub(super) fn extremes_m19(arena: &mut Arena<'_>) -> Result<(), Failure> {
                     .all(|s| s.re.to_bits() == 0 && s.im.to_bits() == 0),
             || fail("silence did not give a closed gate"),
         )?;
-        // A Q15 threshold below about -90 dB rounds to a zero open level (always open).
-        let mut stq = SquelchState::<CQ15>::new(threshold.max(-80.0), 3.0, TAU_S, rate()?)?;
+        // CQ15 accepts close levels down to -90 dB (the power of one input LSB).
+        let mut stq = SquelchState::<CQ15>::new(threshold.max(-87.0), 3.0, TAU_S, rate()?)?;
         extreme::silence(q);
         Squelch::<CQ15>::squelch(&Sdrk, &mut stq, q, qout)?;
         ensure(
@@ -327,24 +327,24 @@ fn burst_sample<T: ComplexSample>(on: bool) -> T {
 
 /// `(open_at, close_at)` of the burst input: the first sample with the gate open and the first
 /// sample after the burst with the gate closed, from the recurrence of the kernel written out
-/// here (`f32` for `C32`, the Q30 integer for `CQ15`).
+/// here (`f32` for `C32`, the Q61 integer for `CQ15`).
 fn switching_samples<T: ComplexSample>(input: &[T]) -> (usize, usize) {
     let alpha = 1.0 - libm::exp(-1.0 / (FS as f64 * BLOCK_TAU_S));
     let (open_db, close_db) = (THRESHOLD_DB, THRESHOLD_DB - HYSTERESIS_DB);
     let lin = |db: f64| libm::pow(10.0, db / 10.0);
-    let q30 = |p: f64| libm::floor(p * 1_073_741_824.0 + 0.5) as i64;
+    let q61 = |p: f64| libm::floor(p * 2_305_843_009_213_693_952.0 + 0.5) as i64;
     let (mut gate, mut open_at, mut close_at) = (false, usize::MAX, usize::MAX);
     let (mut pf, mut pq) = (0.0f32, 0i64);
     for (k, s) in input.iter().enumerate() {
         let c = s.to_c64();
         if T::TYPE == SampleType::CQ15 {
-            let alpha_raw = libm::floor(alpha * 32768.0 + 0.5) as i64;
+            let alpha_q31 = libm::floor(alpha * 2_147_483_648.0 + 0.5) as i64;
             let re = libm::round(c.re * 32768.0) as i64;
             let im = libm::round(c.im * 32768.0) as i64;
-            pq += (alpha_raw * (re * re + im * im - pq) + 16384) >> 15;
-            if pq >= q30(lin(open_db)) {
+            pq += alpha_q31 * (re * re + im * im - ((pq + (1 << 30)) >> 31));
+            if pq >= q61(lin(open_db)) {
                 gate = true;
-            } else if pq < q30(lin(close_db)) {
+            } else if pq < q61(lin(close_db)) {
                 gate = false;
             }
         } else {
@@ -391,7 +391,7 @@ where
         || fail("block did not process the whole input"),
     )?;
     // Documented switching samples, exactly: a model of the recurrence written for this case
-    // (f32 for C32, the Q30 integer for CQ15) gives the first sample with the gate open and
+    // (f32 for C32, the Q61 integer for CQ15) gives the first sample with the gate open and
     // the first one after the burst with the gate closed.
     let (open_at, close_at) = switching_samples::<T>(input);
     let first = out

@@ -1,0 +1,24 @@
+name: sde
+description: >
+  Restores Intel SDE (pinned, checksum verified) from the cache or downloads it, and exports
+  SDE64 with the path of the sde64 binary.
+runs:
+  using: composite
+  steps:
+    - name: Cache Intel SDE
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/sde
+        key: sde-${{ env.SDE_SHA256 }}
+    - name: Download Intel SDE (pinned)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/sde
+        curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+        echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+        tar -xJf ~/sde.tar.xz -C ~/sde
+    - name: Use Intel SDE
+      shell: bash
+      run: echo "SDE64=$HOME/sde/$SDE_DIR/sde64" >> "$GITHUB_ENV"

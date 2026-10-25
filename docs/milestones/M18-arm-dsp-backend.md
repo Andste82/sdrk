@@ -24,7 +24,7 @@ These rules apply to every line of code in this repository. They are repeated in
    - `cargo xtask check` (exists from M00 on; runs the architecture checks in R2–R6)
    - `cargo xtask bare-metal` (exists from M00 on; builds every heap-free crate for `thumbv7em-none-eabihf`)
    - plus every additional command listed in the milestone's *Acceptance* section.
-3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI runs every tier-1 job on all three hosts.
+3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI builds the workspace and runs the whole test suite, `xtask` and the golden generator on all three hosts; the variants that depend only on the CPU architecture (SIMD levels fixed at compile time, builds without the static tables, the fallback-only build) run on one host per architecture (x86-64 on Linux, AArch64 on Linux arm64).
 4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
 5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
 6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
@@ -199,8 +199,8 @@ Machine and CPU names are the expected ones for QEMU 8.2; check them with `qemu-
 
 | Job | Trigger | What |
 | --- | --- | --- |
-| `emu-tier1` (M15) | every push/PR | additionally `xtask emu --target qemu-cortex-m4 --features arm-dsp` (quick) |
-| `emu-tier2` (M15) | nightly | additionally M7 and M33 targets with `arm-dsp` (quick) and the M4 target with `--full` |
+| `build_m4_qemu` (`tree.yml`) | every pull request | additionally `xtask emu --target qemu-cortex-m4 --features arm-dsp` (quick) |
+| `test_emu` (`tree.yml`) | nightly | additionally M7 and M33 targets with `arm-dsp` (quick) and the M4 target with `--full` |
 | `count-arm-dsp` | PRs touching `crates/backends/sdrk-backend-arm-dsp` or `sdrk-core`; nightly always | `cargo xtask count --platform cortex-m4` with the CMSIS comparison |
 
 Install in CI and devcontainer: `gcc-arm-none-eabi`, `libnewlib-arm-none-eabi` (the devcontainer already has the compiler), the QEMU packages of M15. `xtask bare-metal` now also builds this crate for `thumbv7em-none-eabihf` (it is a heap-free crate; with the cfg of §1 the assembly is assembled).

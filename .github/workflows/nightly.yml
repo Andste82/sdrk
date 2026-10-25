@@ -1,0 +1,101 @@
+# The nightly run: the whole CI tree (tree.yml) with scope `full`, that is every pull-request
+# job plus the long jobs (sweeps, emulators with the full profile, every instruction count,
+# fuzzing, the long run). On Sunday it also runs the full profile of the ESP32-P4. When main
+# has not changed since the last green nightly run, the pull-request tests are skipped and
+# only the long jobs run (except on Sunday, so that a change of the environment, a new
+# toolchain or runner image, still shows within a week). A failure opens or updates an issue.
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * 1-6"
+    # Sunday: also the full profile of the ESP32-P4.
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      weekly:
+        description: Also run the full profile of the ESP32-P4.
+        type: boolean
+        default: false
+      skip_pr_nodes:
+        description: Skip the tests that every pull request runs.
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  delta:
+    # Whether main changed since the last green nightly run.
+    name: delta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    outputs:
+      weekly: ${{ steps.delta.outputs.weekly }}
+      skip_pr_nodes: ${{ steps.delta.outputs.skip_pr_nodes }}
+    steps:
+      - name: Last green nightly run
+        id: delta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCHEDULE: ${{ github.event.schedule }}
+          WEEKLY_INPUT: ${{ inputs.weekly }}
+          SKIP_INPUT: ${{ inputs.skip_pr_nodes }}
+        run: |
+          weekly=false
+          if [ "$SCHEDULE" = "17 3 * * 0" ] || [ "$WEEKLY_INPUT" = "true" ]; then weekly=true; fi
+          skip=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            [ "$SKIP_INPUT" = "true" ] && skip=true
+          elif [ "$weekly" = "false" ]; then
+            last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --branch main \
+              --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+            echo "last green nightly: ${last:-none}, now: $GITHUB_SHA"
+            [ "$last" = "$GITHUB_SHA" ] && skip=true
+          fi
+          { echo "weekly=$weekly"; echo "skip_pr_nodes=$skip"; } | tee -a "$GITHUB_OUTPUT"
+
+  tree:
+    needs: delta
+    uses: ./.github/workflows/tree.yml
+    secrets: inherit
+    with:
+      scope: full
+      weekly: ${{ needs.delta.outputs.weekly == 'true' }}
+      skip_pr_nodes: ${{ needs.delta.outputs.skip_pr_nodes == 'true' }}
+
+  report:
+    # A failed nightly run opens an issue, or adds a comment to the open one.
+    name: report
+    needs: tree
+    if: failure() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create nightly-failure --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "The nightly CI run failed" --force
+          body="The nightly run failed on $GITHUB_SHA: $RUN_URL"
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label nightly-failure --state open \
+            --json number --jq '.[0].number // ""')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Nightly CI run failed" \
+              --label nightly-failure --body "$body"
+          fi

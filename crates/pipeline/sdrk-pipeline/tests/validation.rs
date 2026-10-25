@@ -614,6 +614,11 @@ fn the_estimate_of_validate_matches_the_built_report() {
 fn delays_of_validate_match_the_blocks_for_every_kind() {
     let kinds = [
         ("scale", json!({})),
+        ("agc", json!({})),
+        (
+            "am_demod",
+            json!({ "audio_decimation": 2, "audio_cutoff_hz": 5000 }),
+        ),
         ("dc_block", json!({ "cutoff_hz": 50 })),
         ("fir", json!({ "cutoff_hz": 4000, "transition_hz": 1000 })),
         ("ddc", json!({ "decimation": 4, "frequency_hz": 1000 })),

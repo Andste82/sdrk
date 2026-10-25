@@ -1,9 +1,9 @@
-//! Reference implementations of `window`, `mag_sq` and `power_db`.
+//! Reference implementations of `window`, `mag_sq`, `mag` and `power_db`.
 
 use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::spectrum::{MagSq, PowerDb, Window};
+use crate::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use crate::num::{round_shift, sat16};
 use crate::types::{C32, CQ15, Q15};
 
@@ -51,6 +51,43 @@ impl MagSq<CQ15> for Reference {
         for (o, x) in output.iter_mut().zip(input) {
             let (re, im) = (i64::from(x.re.0), i64::from(x.im.0));
             *o = Q15(sat16(round_shift(re * re + im * im, 15)));
+        }
+        Ok(())
+    }
+}
+
+/// The square root of `s` rounded to the nearest integer, found as the smallest `y` with
+/// `y * (y + 1) >= s` (`(y + 1/2)^2 > s`), by bisection. Not saturated.
+pub(super) fn nearest_sqrt(s: i64) -> i64 {
+    let (mut lo, mut hi) = (0i64, 3_037_000_499i64);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if mid * (mid + 1) >= s {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    lo
+}
+
+impl Mag<C32> for Reference {
+    fn mag(&self, input: &[C32], output: &mut [f32]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (o, x) in output.iter_mut().zip(input) {
+            let (re, im) = (f64::from(x.re), f64::from(x.im));
+            *o = libm::sqrt(re * re + im * im) as f32;
+        }
+        Ok(())
+    }
+}
+
+impl Mag<CQ15> for Reference {
+    fn mag(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (o, x) in output.iter_mut().zip(input) {
+            let (re, im) = (i64::from(x.re.0), i64::from(x.im.0));
+            *o = Q15(sat16(nearest_sqrt(re * re + im * im)));
         }
         Ok(())
     }

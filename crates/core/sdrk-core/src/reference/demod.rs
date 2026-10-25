@@ -7,7 +7,8 @@ use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
 use crate::kernels::demod::{
-    DcBlock, DcBlockState, Deemphasis, DeemphasisState, QuadDemod, QuadDemodState,
+    DcBlock, DcBlockReal, DcBlockRealState, DcBlockState, Deemphasis, DeemphasisState, QuadDemod,
+    QuadDemodState,
 };
 use crate::num::{flush_denormal, flush_denormal_f64, q15_from_f64, round_shift, sat16};
 use crate::types::{C32, CQ15, Q15};
@@ -153,6 +154,44 @@ impl DcBlock<CQ15> for Reference {
                 re: dc_q15(r, x.re, x_prev.re, y_prev.re),
                 im: dc_q15(r, x.im, x_prev.im, y_prev.im),
             };
+            *o = y;
+            *x_prev = x;
+            *y_prev = y;
+        }
+        Ok(())
+    }
+}
+
+impl DcBlockReal<f32> for Reference {
+    fn dc_block_real(
+        &self,
+        state: &mut DcBlockRealState<f32>,
+        input: &[f32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let (r, x_prev, y_prev) = state.parts_mut();
+        for (o, &x) in output.iter_mut().zip(input) {
+            let y = dc_f64(r, x, *x_prev, *y_prev);
+            *o = y;
+            *x_prev = x;
+            *y_prev = flush_denormal(y);
+        }
+        Ok(())
+    }
+}
+
+impl DcBlockReal<Q15> for Reference {
+    fn dc_block_real(
+        &self,
+        state: &mut DcBlockRealState<Q15>,
+        input: &[Q15],
+        output: &mut [Q15],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let (r, x_prev, y_prev) = state.parts_mut();
+        for (o, &x) in output.iter_mut().zip(input) {
+            let y = dc_q15(r, x, *x_prev, *y_prev);
             *o = y;
             *x_prev = x;
             *y_prev = y;

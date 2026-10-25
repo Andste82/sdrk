@@ -47,3 +47,32 @@ def r0p999_cq15(rng):
         tolerance={"class": "bit_exact"},
         notes="exact Q15 recursion per component: sat16((x - x_prev) + round_shift(r y_prev, 15))",
     )
+
+
+# dc_block_real: the same recursion on a real signal (M20)
+
+
+@case(kernel="dc_block_real", name="r0p999_f32_8192", seed=415)
+def real_r0p999_f32(rng):
+    x = (rng.standard_normal(8192) * 0.2 + 0.3).astype(np.float32)
+    r = float(np.float32(0.999))
+    expected = scipy.signal.lfilter([1.0, -1.0], [1.0, -r], x.astype(np.float64))
+    return dict(
+        params={"r": r},
+        arrays={"input": Array("f32", x), "expected": Array("f64", expected)},
+        tolerance={"class": "tolerance", "snr_db_min": 100.0, "skip": 0},
+        notes="y[n] = x[n] - x[n-1] + r y[n-1], r cast to f32, real noise sigma 0.2 plus DC 0.3",
+    )
+
+
+@case(kernel="dc_block_real", name="r0p999_q15_8192", seed=416)
+def real_r0p999_q15(rng):
+    x = q15.from_float(rng.standard_normal(8192) * 0.2 + 0.3)
+    r = int(q15.from_float(0.999))
+    return dict(
+        params={"r_raw": r},
+        arrays={"input": Array("i16", x), "expected": Array("i16", block_q15(x, r))},
+        tolerance={"class": "bit_exact"},
+        notes="exact Q15 recursion: sat16((x - x_prev) + round_shift(r y_prev, 15)), real noise "
+        "sigma 0.2 plus DC 0.3 quantized",
+    )

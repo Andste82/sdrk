@@ -16,10 +16,12 @@
 #include <volk/volk_complex.h>
 
 #include <volk/volk_16i_s32f_convert_32f.h>
+#include <volk/volk_16ic_magnitude_16i.h>
 #include <volk/volk_32f_s32f_convert_16i.h>
 #include <volk/volk_32f_s32f_convert_8i.h>
 #include <volk/volk_32f_s32f_x2_convert_8u.h>
 #include <volk/volk_32fc_32f_dot_prod_32fc.h>
+#include <volk/volk_32fc_magnitude_32f.h>
 #include <volk/volk_32fc_magnitude_squared_32f.h>
 #include <volk/volk_32fc_s32f_atan2_32f.h>
 #include <volk/volk_32fc_s32fc_x2_rotator2_32fc.h>
@@ -56,7 +58,9 @@ GENERIC_KERNEL(volk_32f_s32f_convert_8i)
 GENERIC_KERNEL(volk_32f_s32f_x2_convert_8u)
 GENERIC_KERNEL(volk_32fc_s32fc_x2_rotator2_32fc)
 GENERIC_KERNEL(volk_32fc_32f_dot_prod_32fc)
+GENERIC_KERNEL(volk_32fc_magnitude_32f)
 GENERIC_KERNEL(volk_32fc_magnitude_squared_32f)
+GENERIC_KERNEL(volk_16ic_magnitude_16i)
 GENERIC_KERNEL(volk_32fc_x2_multiply_conjugate_32fc)
 GENERIC_KERNEL(volk_32fc_s32f_atan2_32f)
 

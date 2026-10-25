@@ -185,6 +185,32 @@ impl ToneAccumulator {
         self.n == 0
     }
 
+    /// Amplitude of the fitted tone (the same fit as [`ToneMeter`]); 0 for an empty accumulator.
+    ///
+    /// ```
+    /// use sdrk_testkit::meters::ToneAccumulator;
+    /// let mut acc = ToneAccumulator::new(8000.0, 1000.0);
+    /// for n in 0..800 {
+    ///     acc.push(0.25 * (2.0 * std::f64::consts::PI * n as f64 / 8.0).cos());
+    /// }
+    /// assert!((acc.amplitude() - 0.25).abs() < 1e-12);
+    /// ```
+    pub fn amplitude(&self) -> f64 {
+        if self.n == 0 {
+            return 0.0;
+        }
+        let nf = self.n as f64;
+        let m = [
+            [self.scc, self.scs, self.sc],
+            [self.scs, self.sss, self.ss],
+            [self.sc, self.ss, nf],
+        ];
+        match solve3(m, [self.xc, self.xs, self.x1], nf) {
+            Some((a, b, _)) => libm::sqrt(a * a + b * b),
+            None => 0.0,
+        }
+    }
+
     /// SINAD of the pushed samples in dB, like [`sinad_db`]: `+inf` for a perfect tone and for
     /// an empty accumulator.
     pub fn sinad_db(&self) -> f64 {

@@ -43,6 +43,8 @@ mod sample;
 mod storage;
 
 pub use block::{Block, BlockTiming, FrameBlock, FrameMeta, ParamValue};
+pub use blocks::agc::{AgcBlock, AgcConfig};
+pub use blocks::am_demod::{AM_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::convert::{ConvertBlock, ConvertConfig};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
 pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig};

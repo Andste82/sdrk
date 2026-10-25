@@ -27,11 +27,12 @@ mod common;
 use common::{check_exact_storage, rate};
 use sdrk::{C32, CQ15, Q15, Rate};
 use sdrk_blocks::{
-    AlignedBytes, ArenaStorage, Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock,
-    ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock,
-    ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig,
+    AgcBlock, AgcConfig, AlignedBytes, AmDemodBlock, AmDemodConfig, ArenaStorage, Block,
+    BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock,
+    DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, ResamplerBlock,
+    ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -90,6 +91,10 @@ fn simple_exact<T: BlockSample>() {
     let bytes = SquelchBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
     assert_eq!(bytes, 0);
     check_exact_storage(bytes, |a| SquelchBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
+    let cfg = AgcConfig::default();
+    let bytes = AgcBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+    assert_eq!(bytes, 0);
+    check_exact_storage(bytes, |a| AgcBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
     let cfg = FmModConfig::default();
     let r = rate(240_000);
     check_exact_storage(
@@ -116,6 +121,16 @@ fn filters_exact<T: BlockSample>() {
     };
     let bytes = DdcBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
     check_exact_storage(bytes, |a| DdcBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
+
+    for (dc_cutoff_hz, audio_decimation) in [(30.0, 1), (0.0, 1), (30.0, 6), (0.0, 4)] {
+        let cfg = AmDemodConfig {
+            dc_cutoff_hz,
+            audio_decimation,
+            audio_cutoff_hz: 2_000.0,
+        };
+        let bytes = AmDemodBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        check_exact_storage(bytes, |a| AmDemodBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
+    }
 
     let cfg = DucConfig {
         interpolation: 3,
@@ -274,7 +289,9 @@ fn no_block_is_larger_than_512_bytes() {
         FmModBlock,
         ResamplerBlock,
         SpectrumBlock,
-        SquelchBlock
+        SquelchBlock,
+        AgcBlock,
+        AmDemodBlock
     );
     check::<ResamplerRealBlock<f32, A<'static>>>("ResamplerRealBlock<f32>");
     check::<ResamplerRealBlock<Q15, A<'static>>>("ResamplerRealBlock<Q15>");
@@ -306,7 +323,9 @@ fn public_types_are_send() {
         FmModBlock,
         ResamplerBlock,
         SpectrumBlock,
-        SquelchBlock
+        SquelchBlock,
+        AgcBlock,
+        AmDemodBlock
     );
     assert_send::<ResamplerRealBlock<f32, A<'static>>>();
     assert_send::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>();
@@ -322,6 +341,8 @@ fn public_types_are_send() {
     assert_send::<ResamplerConfig>();
     assert_send::<SpectrumConfig>();
     assert_send::<SquelchConfig>();
+    assert_send::<AgcConfig>();
+    assert_send::<AmDemodConfig>();
     assert_send::<Error>();
     assert_send::<A<'static>>();
     assert_send::<sdrk_blocks::BlockDescription>();

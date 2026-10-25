@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "r0p999_f32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "r0p999_f32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "r0p999_f32_8192",
+  "format_version": 1,
+  "kernel": "dc_block_real",
+  "notes": "y[n] = x[n] - x[n-1] + r y[n-1], r cast to f32, real noise sigma 0.2 plus DC 0.3",
+  "params": {
+    "r": 0.9990000128746033
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 415,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

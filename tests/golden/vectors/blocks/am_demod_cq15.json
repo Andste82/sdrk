@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "am_demod_cq15.expected.bin",
+      "len": 16000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "am_demod_cq15.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "am_demod_cq15",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the signal of am_demod_c32 quantized to Q15; integer chain: envelope sat16(round(sqrt(re^2 + im^2))) with math.isqrt, then the Q15 DC blocker sat16((x - x_prev) + round_shift(r y_prev, 15)) with r = round(exp(-2 pi 30 / fs) 32768)",
+  "params": {
+    "audio_cutoff_hz": 5000.0,
+    "audio_decimation": 1,
+    "audio_hz": 1000.0,
+    "carrier": 0.5,
+    "dc_cutoff_hz": 30.0,
+    "index": 0.5,
+    "phase": 0.3,
+    "r_raw": 32640,
+    "rate_hz": 48000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 420,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

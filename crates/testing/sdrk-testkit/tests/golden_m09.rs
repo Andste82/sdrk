@@ -17,8 +17,8 @@
 use sdrk::Sdrk;
 use sdrk_blocks::design::{DesignWindow, firwin_lowpass, kaiserord};
 use sdrk_blocks::{
-    Block, DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig, FrameBlock, ResamplerBlock,
-    ResamplerConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
+    AmDemodBlock, AmDemodConfig, Block, DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig,
+    FrameBlock, ResamplerBlock, ResamplerConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
 };
 use sdrk_core::kernels::dot::{Dot, DotReal};
 use sdrk_core::{C32, CQ15, Q15, Rate, Reference, Sample};
@@ -278,6 +278,8 @@ fn blocks_cases_are_present() {
     assert_eq!(
         golden::list("blocks").unwrap(),
         [
+            "am_demod_c32",
+            "am_demod_cq15",
             "ddc_c32_fs2m4_f600k_d10",
             "fm_demod_c32",
             "resampler_rational_c32_48k_to_44k1",
@@ -328,6 +330,40 @@ fn fm_demod_block_matches_python_chain() {
     let rate = Rate::hz(case.param_f64("rate_hz").unwrap() as u64).unwrap();
     check_stream(&case, input, || {
         FmDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+fn am_demod_config(case: &GoldenCase) -> (AmDemodConfig, Rate) {
+    let cfg = AmDemodConfig {
+        dc_cutoff_hz: case.param_f64("dc_cutoff_hz").unwrap(),
+        audio_cutoff_hz: case.param_f64("audio_cutoff_hz").unwrap(),
+        audio_decimation: usize_param(case, "audio_decimation"),
+    };
+    let rate = Rate::hz(case.param_f64("rate_hz").unwrap() as u64).unwrap();
+    (cfg, rate)
+}
+
+#[test]
+fn am_demod_block_matches_python_chain_c32() {
+    let case = golden::load("blocks", "am_demod_c32").unwrap();
+    let Array::CF32(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = am_demod_config(&case);
+    check_stream(&case, input, || {
+        AmDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+#[test]
+fn am_demod_block_matches_python_chain_cq15() {
+    let case = golden::load("blocks", "am_demod_cq15").unwrap();
+    let Array::CI16(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = am_demod_config(&case);
+    check_stream(&case, input, || {
+        AmDemodBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
 

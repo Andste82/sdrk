@@ -1,5 +1,7 @@
 //! The blocks.
 
+pub mod agc;
+pub mod am_demod;
 pub mod convert;
 pub mod convert_out;
 pub mod dc_block;

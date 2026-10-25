@@ -214,10 +214,12 @@ The cost is an estimate, in multiply-accumulates (a complex tap counts like the 
 | `convert`, `convert_out` | 2 |
 | `scale` | 1 |
 | `dc_block`, `squelch` | 3 |
+| `agc` | 6 |
 | `fir` | `taps` |
 | `ddc` | `4 + 4 * taps / decimation` |
 | `duc` | `4 * interpolation + 4 * taps` |
 | `fm_demod` | `10 + taps / audio_decimation` (`taps` of the audio filter, 0 without it) |
+| `am_demod` | `4 + taps / audio_decimation` (`taps` of the audio filter, 0 without it) |
 | `fm_mod` | 6 |
 | `resampler`, rational | `taps / M`, `M` the denominator of `rate_out / rate_in` |
 | `resampler`, tunable | `K * rate_out / rate_in + 4`, `K` taps per phase |
@@ -357,15 +359,17 @@ Errors are only created on the error path; the hot path never builds a string.
 
 ## Examples
 
-Six flows in `examples/flows`, each with a YAML twin (`.yaml`, with comments), all valid against the schema and covered by the tests:
+Eight flows in `examples/flows`, each with a YAML twin (`.yaml`, with comments), all valid against the schema and covered by the tests:
 
 - `fm_receiver.json`: RTL-SDR IQ (`cu8`, 2.4 MHz) to a DDC, an FM demodulator and 48 kHz audio, plus an averaged spectrum frame output fed from the same input buffer.
 - `spectrum_only.json`: `cu8` IQ through a DC blocker into a Blackman-Harris spectrum with 8 averages.
 - `resample_audio.json`: real `f32` audio at 48 kHz converted to 44.1 kHz by the rational resampler (with `max_taps` raised, because the default of 1023 is too small for this ratio).
 - `fm_receiver_grouped.json`: the FM receiver with the tuner in the group `front` and the rest in `audio`.
 - `nfm_receiver.json`: narrow-band FM for two-way radio: `cu8` at 2.4 MS/s through `ddc` (decimation 50, 8 kHz cutoff, 4 kHz transition, `max_taps` raised to 4096 because the default of 1023 is too small for a 4 kHz transition at 2.4 MS/s) and the power `squelch` into `fm_demod` (5 kHz deviation) and 48 kHz audio; the YAML twin explains the values for 12.5 kHz and 25 kHz channels.
+- `am_receiver.json`: AM broadcast (medium wave, short wave): `cu8` at 2.4 MS/s through `ddc` (decimation 50, 5 kHz cutoff, 2 kHz transition, `max_taps` raised to 8192 because the design needs about 4400 taps), the `agc` with the slow time constants for AM (attack 0.1 s, release 0.5 s) and `am_demod` (envelope, 30 Hz DC blocker) into 48 kHz audio.
+- `airband_receiver.json`: the same with the power `squelch` (-40 dBFS) between `ddc` and `agc`; the YAML twin explains the 25 kHz and 8.33 kHz channel spacings. After the gate closes the audio decays with the time constant of the DC blocker (5 ms at 30 Hz) and is exactly zero again once its state is flushed (about 0.36 s with `f32`); with `q15` it stays at a constant offset of up to 127 LSB (-48 dBFS), the rounding dead band of the Q15 pole.
 - `fm_transmitter.json`: 48 kHz audio to FM, 2.4 MS/s `cs8` output for pull mode: `resampler` 5/1, `fm_mod` with 75 kHz deviation, `duc` by 10 at +600 kHz.
 
 ## Tests
 
-`crates/pipeline/sdrk-pipeline/tests`: `model` (JSON round trip, canonical form, rates, formats), `schema` (the committed schema, examples against it with `jsonschema`), `validation` (the invalid-flow corpus, all errors at once, limits, cost and memory), `e2e` (the pipeline equals the hand-wired blocks bit for bit, block-size invariance with 10 chunk plans, fan-out, a run-time parameter change), `runner` (drop policies, errors, outputs, `set_param`, `config`, `stats`, `reset`), `no_alloc` (counting allocator, also for metadata, events, timed parameters and `pull`), `property` (random graphs, random bytes and JSON values), `time_events` (gaps, anchors, joining, events, timed parameters), `pull` (transmit, underrun, bursts), `groups` (groups, backend preferences, `split_by_groups`), `yaml`, `wire` (round trips, the committed bytes in `tests/wire`, properties) and `probe_two_threads` (a split pipeline on two threads equals the single pipeline) and `nfm` (the `nfm_receiver` flow gates a narrow-band FM burst: exact silence outside the transmission, chunk invariance, run-time threshold). The fuzz target `fuzz_targets/pipeline_json.rs` (`cargo +nightly fuzz run pipeline_json` in `crates/pipeline/sdrk-pipeline`) runs in the nightly CI job for five minutes on Linux x86_64 only; fuzzing is not required on Windows and arm64.
+`crates/pipeline/sdrk-pipeline/tests`: `model` (JSON round trip, canonical form, rates, formats), `schema` (the committed schema, examples against it with `jsonschema`), `validation` (the invalid-flow corpus, all errors at once, limits, cost and memory), `e2e` (the pipeline equals the hand-wired blocks bit for bit, block-size invariance with 10 chunk plans, fan-out, a run-time parameter change), `runner` (drop policies, errors, outputs, `set_param`, `config`, `stats`, `reset`), `no_alloc` (counting allocator, also for metadata, events, timed parameters and `pull`), `property` (random graphs, random bytes and JSON values), `time_events` (gaps, anchors, joining, events, timed parameters), `pull` (transmit, underrun, bursts), `groups` (groups, backend preferences, `split_by_groups`), `yaml`, `wire` (round trips, the committed bytes in `tests/wire`, properties) and `probe_two_threads` (a split pipeline on two threads equals the single pipeline) and `nfm` (the `nfm_receiver` flow gates a narrow-band FM burst: exact silence outside the transmission, chunk invariance, run-time threshold) and `am` (the `am_receiver` and `airband_receiver` flows on the E2E-AM signal: SINAD and audio level, the airband burst, chunk invariance, run-time parameters of `agc` and `squelch`, the cost of the new kinds). The fuzz target `fuzz_targets/pipeline_json.rs` (`cargo +nightly fuzz run pipeline_json` in `crates/pipeline/sdrk-pipeline`) runs in the nightly CI job for five minutes on Linux x86_64 only; fuzzing is not required on Windows and arm64.

@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "steps_c32_24000.expected.bin",
+      "len": 24000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "steps_c32_24000.input.bin",
+      "len": 24000
+    }
+  },
+  "case": "steps_c32_24000",
+  "format_version": 1,
+  "kernel": "agc",
+  "notes": "1 kHz complex tone, amplitude 0.01, 0.3 and 0.003 (8000 samples each) plus noise sigma 1e-4; the f64 model of the C32 algorithm with the f64 values of the f32 constants, rounded once to f32 (a cf64 file would exceed the 512 KiB limit of a case)",
+  "params": {
+    "attack_s": 0.005,
+    "initial_gain_db": 0.0,
+    "max_gain_db": 60.0,
+    "min_gain_db": -20.0,
+    "rate_hz": 48000,
+    "reference": 0.5,
+    "release_s": 0.05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 417,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 80.0
+  }
+}

@@ -267,3 +267,101 @@ pub trait DcBlock<T: ComplexSample> {
     /// `y[n] = x[n] - x[n-1] + r * y[n-1]` per component. The lengths must be equal.
     fn dc_block(&self, state: &mut DcBlockState<T>, input: &[T], output: &mut [T]) -> Result<()>;
 }
+
+/// State of the DC blocker for real signals: the pole `r` and the previous input and
+/// output samples. The real variant of [`DcBlockState`] with the same rules.
+///
+/// ```
+/// use sdrk_core::kernels::demod::DcBlockRealState;
+/// let state = DcBlockRealState::<f32>::new(0.999)?;
+/// assert_eq!(state.r(), 0.999);
+/// assert!(DcBlockRealState::<f32>::new(1.0).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DcBlockRealState<T: RealSample> {
+    r: T,
+    x_prev: T,
+    y_prev: T,
+}
+
+impl<T: RealSample> DcBlockRealState<T> {
+    /// Creates a state with pole `r`, `0 < r < 1` (for Q15 `1 <= raw <= 32767`);
+    /// anything else, including NaN, gives `InvalidParameter`.
+    pub fn new(r: T) -> Result<Self> {
+        let v = r.to_f64();
+        if !(v > 0.0 && v < 1.0) {
+            return Err(Error::InvalidParameter(
+                "the pole must be greater than 0 and less than 1",
+            ));
+        }
+        Ok(Self {
+            r,
+            x_prev: T::ZERO,
+            y_prev: T::ZERO,
+        })
+    }
+
+    /// Clears the previous input and output (the pole is kept).
+    pub fn reset(&mut self) {
+        self.x_prev = T::ZERO;
+        self.y_prev = T::ZERO;
+    }
+
+    /// The pole `r`.
+    pub fn r(&self) -> T {
+        self.r
+    }
+
+    /// The previous input sample.
+    pub fn x_prev(&self) -> T {
+        self.x_prev
+    }
+
+    /// The previous output sample (flushed for `f32`).
+    pub fn y_prev(&self) -> T {
+        self.y_prev
+    }
+
+    pub(crate) fn parts_mut(&mut self) -> (T, &mut T, &mut T) {
+        (self.r, &mut self.x_prev, &mut self.y_prev)
+    }
+}
+
+impl<T: RealSample> Timing for DcBlockRealState<T> {
+    fn ratio(&self) -> Ratio {
+        Ratio::ONE
+    }
+
+    /// Zero (a one-pole high-pass; its delay depends on the frequency).
+    fn group_delay(&self) -> Delay {
+        Delay::ZERO
+    }
+}
+
+/// DC blocker for real signals.
+///
+/// For `f32`, a NaN input makes the stored `x_prev` and `y_prev` NaN (the denormal flush
+/// leaves NaN unchanged), so every following output is NaN until `reset()`; this is the
+/// behaviour of `dc_block`.
+///
+/// ```
+/// use sdrk_core::{kernels::demod::{DcBlockReal, DcBlockRealState}, Fallback};
+/// let mut state = DcBlockRealState::<f32>::new(0.5)?;
+/// let mut output = [0.0f32; 3];
+/// Fallback.dc_block_real(&mut state, &[1.0; 3], &mut output)?;
+/// assert_eq!(output, [1.0, 0.5, 0.25]);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait DcBlockReal<T: RealSample> {
+    /// `y[n] = x[n] - x[n-1] + r * y[n-1]`. `f32` keeps `flush_denormal(y)` as the
+    /// feedback; `Q15` computes `sat16((x - x_prev) + round_shift(r * y_prev, 15))` in
+    /// `i64`, so a signal that stays within a dead band of a few LSB around a constant
+    /// does not decay to zero (see `dc_block`). The lengths must be equal.
+    fn dc_block_real(
+        &self,
+        state: &mut DcBlockRealState<T>,
+        input: &[T],
+        output: &mut [T],
+    ) -> Result<()>;
+}

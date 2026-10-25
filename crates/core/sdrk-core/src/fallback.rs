@@ -25,6 +25,7 @@ impl Scale<CQ15> for Fallback {
     }
 }
 
+mod agc;
 mod convert;
 mod convert_out;
 mod decim;

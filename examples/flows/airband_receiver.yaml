@@ -1,0 +1,69 @@
+# SDRk pipeline: receive one AM airband channel (118 to 137 MHz) with a squelch and an
+# automatic gain control (YAML twin of airband_receiver.json). YAML is accepted as input;
+# JSON stays the canonical format.
+sdrk: 1
+name: airband-receiver
+description: "Receive one AM airband channel with a power squelch and an automatic gain control and output 48 kHz audio."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # Automatic gain control with slow time constants (see am_receiver.yaml): the audio is the
+  # envelope, so the loop must not follow the modulation. It sits after the squelch: while
+  # the gate is closed the input is exactly zero, the output stays zero and the gain does
+  # not run away (the release only raises it slowly, up to max_gain_db).
+  agc:
+    kind: agc
+    params:
+      attack_s: 0.1
+      release_s: 0.5
+  # Envelope detector with DC removal, as in am_receiver.yaml.
+  demod:
+    kind: am_demod
+  # Power squelch: it opens at -40 dBFS, closes 3 dB lower (the default hysteresis) and
+  # averages the power over 10 ms. While it is closed the audio is exact silence, which is
+  # what airband needs: the channel is silent between transmissions and the AGC would raise
+  # the noise to full level. It sits after the channel filter and before the AGC (after the
+  # AGC every signal, noise included, has the same level and the gate would always open).
+  # threshold_db and hysteresis_db can be changed while the flow runs (set_param).
+  gate:
+    kind: squelch
+    params:
+      threshold_db: -40
+  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz). The channel spacing in
+  # airband is 25 kHz, or 8.33 kHz in the European upper airspace above flight level 195. An
+  # AM voice channel needs about 2.5 kHz of audio bandwidth on each side of the carrier. For
+  # 25 kHz channels a cutoff of 5 kHz with a 2 kHz transition (used here) keeps the audio and
+  # rejects the neighbours 25 kHz away. For 8.33 kHz channels the neighbours are only 8.33
+  # kHz away: use cutoff_hz 3000 and transition_hz 1500 (the stop band starts at 3.75 kHz)
+  # and set audio_cutoff_hz of the demodulator to 2500 if you decimate the audio. The
+  # narrow transition at 2.4 MS/s needs about 4400 taps (about 5900 for the 8.33 kHz values),
+  # more than the default max_taps of 1023, so max_taps is raised. Set frequency_hz to the
+  # offset of the channel from the tuner centre.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 5000
+      decimation: 50
+      max_taps: 8192
+      transition_hz: 2000
+# Channel filter, squelch, automatic gain control, envelope detector.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: gate }
+  - { from: gate, to: agc }
+  - { from: agc, to: demod }
+  - { from: demod, to: audio }
+# Audio samples (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

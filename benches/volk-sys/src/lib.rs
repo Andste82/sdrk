@@ -19,6 +19,16 @@ pub struct lv_32fc_t {
     pub im: f32,
 }
 
+/// VOLK's `lv_16sc_t`: a complex 16-bit integer, real part first.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct lv_16sc_t {
+    /// Real part.
+    pub re: i16,
+    /// Imaginary part.
+    pub im: i16,
+}
+
 /// Whether the library was found at build time.
 pub const AVAILABLE: bool = cfg!(not(no_volk));
 
@@ -41,7 +51,7 @@ pub struct volk_func_desc_t {
 
 #[cfg(not(no_volk))]
 mod ffi {
-    use super::{DotProd, lv_32fc_t, volk_func_desc_t};
+    use super::{DotProd, lv_16sc_t, lv_32fc_t, volk_func_desc_t};
     use core::ffi::{c_char, c_uint};
 
     // VOLK declares every kernel as a function-pointer variable (`extern p_xxx volk_xxx;`)
@@ -70,6 +80,10 @@ mod ffi {
         pub static mut volk_32fc_32f_dot_prod_32fc_a: Option<DotProd>;
         pub static mut volk_32fc_magnitude_squared_32f:
             Option<unsafe extern "C" fn(*mut f32, *const lv_32fc_t, c_uint)>;
+        pub static mut volk_32fc_magnitude_32f:
+            Option<unsafe extern "C" fn(*mut f32, *const lv_32fc_t, c_uint)>;
+        pub static mut volk_16ic_magnitude_16i:
+            Option<unsafe extern "C" fn(*mut i16, *const lv_16sc_t, c_uint)>;
         pub static mut volk_32fc_x2_multiply_conjugate_32fc: Option<
             unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const lv_32fc_t, c_uint),
         >;
@@ -84,6 +98,8 @@ mod ffi {
         pub fn volk_32fc_s32fc_x2_rotator2_32fc_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32fc_32f_dot_prod_32fc_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32fc_magnitude_squared_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_magnitude_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_16ic_magnitude_16i_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32fc_x2_multiply_conjugate_32fc_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32fc_s32f_atan2_32f_get_func_desc() -> volk_func_desc_t;
 
@@ -139,6 +155,11 @@ wrappers! {
     );
     /// `out[i] = |in[i]|^2`.
     fn volk_32fc_magnitude_squared_32f(out: *mut f32, input: *const lv_32fc_t, n: u32);
+    /// `out[i] = |in[i]|`.
+    fn volk_32fc_magnitude_32f(out: *mut f32, input: *const lv_32fc_t, n: u32);
+    /// `out[i] = |in[i]|` for 16-bit integer samples (VOLK scales by 1/32768 and back, and
+    /// rounds in single precision).
+    fn volk_16ic_magnitude_16i(out: *mut i16, input: *const lv_16sc_t, n: u32);
     /// `out[i] = a[i] * conj(b[i])`.
     fn volk_32fc_x2_multiply_conjugate_32fc(
         out: *mut lv_32fc_t,
@@ -254,6 +275,8 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
             }
             "volk_32fc_32f_dot_prod_32fc" => ffi::volk_32fc_32f_dot_prod_32fc_get_func_desc,
             "volk_32fc_magnitude_squared_32f" => ffi::volk_32fc_magnitude_squared_32f_get_func_desc,
+            "volk_32fc_magnitude_32f" => ffi::volk_32fc_magnitude_32f_get_func_desc,
+            "volk_16ic_magnitude_16i" => ffi::volk_16ic_magnitude_16i_get_func_desc,
             "volk_32fc_x2_multiply_conjugate_32fc" => {
                 ffi::volk_32fc_x2_multiply_conjugate_32fc_get_func_desc
             }

@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "am_demod_c32.expected.bin",
+      "len": 16000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "am_demod_c32.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "am_demod_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "am_tone (carrier 0.5, 1 kHz, index 0.5, phase 0.3) plus complex noise sigma 1e-3 per component at 48 kHz; np.abs of the f32 input, then the DC blocker y[n] = x[n] - x[n-1] + r y[n-1] via lfilter with r = exp(-2 pi 30 / fs) cast to f32; audio_decimation 1 has no audio filter (as fm_demod), so there is no upfirdn stage",
+  "params": {
+    "audio_cutoff_hz": 5000.0,
+    "audio_decimation": 1,
+    "audio_hz": 1000.0,
+    "carrier": 0.5,
+    "dc_cutoff_hz": 30.0,
+    "index": 0.5,
+    "phase": 0.3,
+    "r": 0.9960806965827942,
+    "rate_hz": 48000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 419,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

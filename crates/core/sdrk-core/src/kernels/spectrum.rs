@@ -34,6 +34,24 @@ pub trait MagSq<T: ComplexSample> {
     fn mag_sq(&self, input: &[T], output: &mut [T::Real]) -> Result<()>;
 }
 
+/// Magnitude (envelope) of complex samples.
+///
+/// ```
+/// use sdrk_core::{kernels::spectrum::Mag, Fallback, C32};
+/// let mut output = [0.0f32; 1];
+/// Fallback.mag(&[C32::new(3.0, 4.0)], &mut output)?;
+/// assert_eq!(output, [5.0]);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait Mag<T: ComplexSample> {
+    /// `C32`: `sqrtf(re * re + im * im)` without FMA; inputs above about 1.8e19 overflow
+    /// to `+inf` and NaN gives NaN. `CQ15`: `s = re^2 + im^2` of the raw values in `i64`,
+    /// `r = isqrt(s)`, output `sat16(r + (s - r^2 > r))` (the square root rounded to
+    /// nearest, a tie is impossible for integers); full-scale corners saturate, as in
+    /// `mag_sq`. The lengths must be equal.
+    fn mag(&self, input: &[T], output: &mut [T::Real]) -> Result<()>;
+}
+
 /// Linear power to decibels.
 ///
 /// ```

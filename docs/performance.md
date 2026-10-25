@@ -59,8 +59,10 @@ What each kernel is compared with:
 | `fir` C32, 64 taps; `fir_decimate` C32, 127 taps, M = 10 | `volk_32fc_32f_dot_prod_32fc` per output, called as GNU Radio's FIR filters call it (aligned entry point, taps pre-shifted, D6) |
 | `fir_interpolate` C32, L = 2, 128 taps; `resample` C32, 3 / 2, 192 taps (64 per branch; per output sample) | the same dot product per output with the taps of the output's branch, as GNU Radio's `interp_fir_filter_ccf` and `rational_resampler_ccf` call it |
 | `mag_sq` C32 | `volk_32fc_magnitude_squared_32f` |
+| `mag` C32 | `volk_32fc_magnitude_32f` |
+| `mag` CQ15 | `volk_16ic_magnitude_16i` (VOLK scales to float and back and rounds differently from the integer rule; the entries start as `dev`, and the accuracy rule compares the SNR of both against the unrounded magnitude) |
 | `quad_demod` C32 | `volk_32fc_x2_multiply_conjugate_32fc` + `volk_32fc_s32f_atan2_32f` |
-| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32, `squelch` C32 and CQ15 | our fallback (no established library) |
+| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32, `squelch` C32 and CQ15, `agc` C32 and CQ15, `dc_block_real` f32 and Q15 | our fallback (no established library); `squelch`, `agc` and `dc_block_real` are not accelerated, so their entries are `info` |
 | `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
 | `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
 | `rfft` f32, N = 1024 | FFTW's real-input transform (`fftwf_plan_dft_r2c_1d`, out of place) at `sse2` and `sse4.2` (FFTW has no codelets above SSE2, so it is the stronger reference there too), rustfft's real-input planner (`realfft` 3.5, forward, out of place) elsewhere; the other of the two and our fallback as information (FFTW also on `neon`) |
@@ -71,7 +73,7 @@ VOLK's dispatcher is pinned per level by a `volk_config` that xtask writes (`ben
 - `avx2`, `avx2-runtime`: the implementations that need no more than AVX2 and FMA, so that a runner with AVX-512 does not dispatch `rotator2`, `atan2` and `dot_prod` to AVX-512 code.
 - `avx512`: VOLK's own choice, as our kernels use AVX-512 there too.
 - `neon`: the default dispatch of VOLK's `neonv8` machine (D11), pinned so that a change of VOLK's ranking shows up as a missing implementation instead of a silently different reference. Every VOLK kernel also gets the cheapest combination of VOLK implementations of the machine as information (`goal: cheapest VOLK implementation`).
-- `simd128`: VOLK has no wasm32 machine; its `generic` protokernels compiled for wasm32 with `simd128` are what its dispatcher would take. They gate `mag_sq` and the conversions only (D12); for `rotate`, the FIR family and `quad_demod` they are scalar code and the entries are `info`.
+- `simd128`: VOLK has no wasm32 machine; its `generic` protokernels compiled for wasm32 with `simd128` are what its dispatcher would take. They gate `mag_sq`, `mag` (D12 extended in M20: the `generic` protokernel of `volk_32fc_magnitude_32f` is the code its dispatcher would take, as for `mag_sq`) and the conversions only (D12); for `rotate`, the FIR family and `quad_demod` they are scalar code and the entries are `info`.
 
 ### Where no fair reference exists
 
@@ -110,6 +112,12 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `fm_mod` C32 | 0.27 | 0.22 | 0.13 | 0.06 | 0.27 | 0.32 |
 | `squelch` C32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `squelch` CQ15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `mag` C32 | 0.73 | 0.66 | 0.64 | 0.52 | 0.72 | 0.80 |
+| `mag` CQ15 | 0.24 dev | 0.46 dev | 0.85 dev | 0.46 dev | 0.97 dev | 0.49 dev |
+| `agc` C32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `agc` CQ15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `dc_block_real` f32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `dc_block_real` Q15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `fft` C32, N = 64 | 0.80 | 0.60 | 0.99 | 0.95 | 0.58 | 0.56 |
 | `fft` C32, N = 1024 | 0.98 | 0.74 | 0.91 | 0.50 | 0.59 | 0.64 |
 | `fft` C32, N = 4096 | 0.93 | 0.73 | 0.86 | 0.50 | 0.56 | 0.64 |
@@ -141,6 +149,12 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `fm_mod` C32 | 16.51 / 61.91 | 13.74 / 61.91 | 7.51 / 58.92 | 7.65 | 3.40 / 55.92 | 11.22 / 41.95 | 34.78 / 109.89 |
 | `squelch` C32 | 27.35 / 27.35 | 26.35 / 26.35 | 21.84 / 21.84 | 27.35 | 21.80 / 21.80 | 23.73 / 23.73 | 67.06 / 67.06 |
 | `squelch` CQ15 | 28.03 / 28.03 | 28.03 / 28.03 | 28.03 / 28.03 | 28.03 | 28.53 / 28.53 | 21.02 / 21.02 | 71.05 / 71.05 |
+| `mag` C32 | 2.57 / 3.52 | 1.82 / 2.77 | 1.04 / 1.64 | 1.06 | 0.66 / 1.27 | 1.45 / 2.02 | 6.86 / 8.53 |
+| `mag` CQ15 | 5.09 / 21.27 | 5.09 / 11.02 | 2.25 / 2.64 | 2.26 | 1.22 / 2.64 | 4.39 / 4.52 | 9.03 / 18.28 |
+| `agc` C32 | 39.03 / 39.03 | 33.03 / 33.03 | 24.03 / 24.03 | 39.03 | 24.03 / 24.03 | 22.03 / 22.03 | 213.06 / 213.06 |
+| `agc` CQ15 | 98.04 / 98.04 | 98.04 / 98.04 | 97.04 / 97.04 | 98.04 | 84.04 / 84.04 | 74.04 / 74.04 | 806.07 / 806.07 |
+| `dc_block_real` f32 | 11.51 / 11.51 | 11.51 / 11.51 | 8.76 / 8.76 | 11.51 | 8.76 / 8.76 | 16.01 / 16.01 | 28.53 / 28.53 |
+| `dc_block_real` Q15 | 16.01 / 16.01 | 16.01 / 16.01 | 14.01 / 14.01 | 16.01 | 13.01 / 13.01 | 12.01 / 12.01 | 49.03 / 49.03 |
 | `fft` C32, N = 64 | 15.06 / 18.88 | 15.06 / 25.30 | 5.84 / 5.88 | 6.28 | 5.28 / 5.53 | 10.52 / 18.28 | 35.50 / 63.23 |
 | `fft` C32, N = 1024 | 25.16 / 25.56 | 25.16 / 33.81 | 10.33 / 11.33 | 10.37 | 5.57 / 11.07 | 15.14 / 25.85 | 58.57 / 91.17 |
 | `fft` C32, N = 4096 | 28.93 / 31.17 | 28.93 / 39.44 | 11.45 / 13.27 | 11.49 | 5.92 / 11.81 | 17.37 / 30.85 | 67.64 / 105.58 |
@@ -172,6 +186,12 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `fm_mod` C32 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 |
 | `squelch` C32 | exact | exact | exact | exact | exact | exact |
 | `squelch` CQ15 | exact | exact | exact | exact | exact | exact |
+| `mag` C32 | 150.5 / 150.5 | 150.5 / 150.5 | 150.5 / 150.5 | 150.5 / 150.9 | 150.5 / 150.9 | 150.5 / 150.5 |
+| `mag` CQ15 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 |
+| `agc` C32 | 125.4 / 125.4 | 125.4 / 125.4 | 125.4 / 125.4 | 125.4 / 125.4 | 125.4 / 125.4 | 125.4 / 125.4 |
+| `agc` CQ15 | exact | exact | exact | exact | exact | exact |
+| `dc_block_real` f32 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 |
+| `dc_block_real` Q15 | exact | exact | exact | exact | exact | exact |
 | `fft` C32, N = 64 | 142.1 / 140.2 | 142.1 / 142.1 | 140.7 / 141.4 | 140.7 / 141.4 | 141.7 / 142.3 | 142.5 / 141.6 |
 | `fft` C32, N = 1024 | 138.7 / 137.9 | 138.7 / 138.7 | 139.1 / 139.1 | 139.1 / 139.1 | 138.8 / 139.1 | 138.2 / 138.9 |
 | `fft` C32, N = 4096 | 137.8 / 137.2 | 137.8 / 137.8 | 138.2 / 137.9 | 138.2 / 137.9 | 138.0 / 138.3 | 137.4 / 137.7 |
@@ -193,6 +213,8 @@ Notes.
 - **FFT.** `C32` reads its twiddles from static per-span tables on x86-64 and AArch64 (feature `fft-tables`, [backends.md](backends.md)); wasm32 is measured without them (with them: 31.0 / 53.1 / 61.8 fuel per sample). The accuracy of the single-vector transform at N = 64 scatters by about 1.9 dB between levels (140.7 to 142.5 dB), with the comparisons between 140.2 and 142.3 dB. `CQ15`: the radix-4 transform is not bit-identical with the fallback (decision D10); on the bench input it is far more accurate than KissFFT (which rounds every stage of its fixed-point code).
 - **`fm_mod`.** On wasm32 it is measured without the NCO tables (feature `nco-tables`, off there by default): 34.78 fuel per sample, 27.77 with the tables. At `avx512` it uses gathers (see the caveat at the top).
 - **`squelch`.** Not accelerated (M19; [backends.md](backends.md)): the average power is a first-order recursion and the gate decision depends on it. Ours is the fallback, so every level is `info` with a ratio of 1.00 against the fallback, and the output is bit-identical (accuracy `exact`). The counts differ between levels only by code generation of the fallback (for example 21.84 at `avx2` against 27.35 at `sse2` and in the run-time-detection build, which runs the fallback compiled for the baseline target; that is why `avx2-runtime` is `info` for `squelch` too). Input of the measurement: noise with a burst in the middle third, so the gate opens and closes once per call; 4096 samples at 48 kHz, 2 ms time constant.
+- **`mag`.** `C32` is the loop of `mag_sq` with a vector `sqrt` on the sums and needs 1.04 instructions per sample at `avx2` against 1.64 for `volk_32fc_magnitude_32f`; the generic code is the path on every level, and it is bit-exact (IEEE `sqrt` is correctly rounded). `CQ15` computes the rounded integer root from a single-precision estimate and one correction step in each direction, with the products from `pmaddwd` (`dot_i16x8` on SIMD128, `smlal` on NEON), and needs 5.09 / 5.09 / 2.25 / 1.22 / 4.39 / 9.03 instructions per sample at `sse2` / `sse4.2` / `avx2` / `avx512` / `neon` / `simd128`; `volk_16ic_magnitude_16i` needs 21.27 / 11.02 / 2.64 / 2.64 / 4.52 / 18.28 (on `neon` the cheapest combination of VOLK needs 3.64, which is information). The entries start as `dev` (VOLK scales to float and back and rounds differently from the integer rule: both are 96.2 dB against the unrounded magnitude); every ratio is below 1.00, so they could be `release` (open item M20-3). The result is bit-exact with the fallback on every level (the sweep over all 2^32 raw pairs, [testing.md](testing.md)).
+- **`agc`, `dc_block_real`.** Not accelerated (M20; [backends.md](backends.md)): the gain of `agc` follows the output of the previous sample, and `dc_block_real` is a first-order recursion on the previous output. The input of `agc` is noise whose amplitude steps from 0.01 to 0.3 to 0.003 in thirds (the gain moves in both directions within a call), that of `dc_block_real` noise of 0.2 with an offset of 0.3. They are `info` against the fallback at every level; at `avx2-runtime` the same code compiled for the baseline target needs more instructions than the `avx2` build (`agc` 39.03 against 24.03), which only shows the difference of code generation.
 - **AVX-512** counts come from SDE between the SSC markers and are exact; an earlier version of the method without markers varied by up to 0.07 instructions per sample.
 - **Variants.** The misaligned and small-block lines of the results files are information; they show the per-call cost of the conversions (for example `convert` CS16 at `avx512`, n = 64: 2.63 against 2.08 for VOLK).
 

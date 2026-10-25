@@ -95,3 +95,23 @@ jobs:
       run_count: ${{ needs.scope.outputs.run_count == 'true' }}
       run_golden: ${{ needs.scope.outputs.run_golden == 'true' }}
       run_selfcheck: ${{ needs.scope.outputs.run_selfcheck == 'true' }}
+
+  result:
+    # The one required check of the branch protection: green only when `scope` and every job
+    # of the tree that ran passed. A single check keeps the protection independent of the
+    # jobs in the tree (a skipped matrix job reports an unexpanded name such as
+    # `build_wasm_pkg (${{ matrix.host }})`, which a list of required names would wait for).
+    name: result
+    needs: [scope, tree]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: scope and tree passed
+        shell: bash
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          TREE: ${{ needs.tree.result }}
+        run: |
+          echo "scope: $SCOPE, tree: $TREE"
+          test "$SCOPE" = success && test "$TREE" = success

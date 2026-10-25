@@ -123,7 +123,10 @@ jobs:
           cargo "+$msrv" check --workspace --all-targets --all-features
 
   golden_hosts:
-    # R1.3: the golden generator runs on every host; Linux x86-64 runs it in `check`.
+    # R1.3: the golden generator runs on every host; Linux x86-64 runs it in `check`. The
+    # vectors are generated on Linux x86-64 only: NumPy and SciPy evaluate cos, exp and the FFT
+    # with the math library of the platform, so Windows and arm64 differ in the last bit of
+    # about 30 to 40 cases. Here the generator must run; the byte comparison is information.
     name: golden_${{ matrix.host }}
     needs: check
     if: ${{ inputs.scope == 'full' }}
@@ -140,10 +143,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Golden vectors (pinned requirements)
+      - name: Install the pinned requirements
+        run: pip install -r tests/golden/requirements.txt
+      - name: Generate every case (must succeed)
+        shell: bash
+        run: python tests/golden/generate.py --out "$RUNNER_TEMP/golden"
+      - name: Byte comparison with the committed vectors (information)
+        shell: bash
         run: |
-          pip install -r tests/golden/requirements.txt
-          python tests/golden/generate.py --check
+          if python tests/golden/generate.py --check > check.txt 2>&1; then
+            echo "Byte-identical with the committed vectors." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            n=$(grep -cE '^(differs|missing|stale)' check.txt || true)
+            echo "::notice::$n files differ from the vectors generated on Linux x86-64 (expected, see tests/golden/README.md)"
+            { echo "### Golden vectors on ${{ matrix.host }}"; echo; echo "$n files differ from the committed vectors (generated on Linux x86-64):"; echo '```'; grep -E '^(differs|missing|stale)' check.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # ---------------------------------------------------------------------------------------
   # x86-64, Linux

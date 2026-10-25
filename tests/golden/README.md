@@ -12,7 +12,15 @@ python3.12 -m venv .venv && . .venv/bin/activate && pip install -r tests/golden/
 ```
 
 On Windows activate with `.venv\Scripts\activate`. The versions in `requirements.txt` are pinned exactly;
-byte-identical output is only guaranteed with those versions and Python 3.12.
+byte-identical output is only guaranteed with those versions and Python 3.12, **on Linux x86-64**.
+
+**Generate the vectors on Linux x86-64 only.** The generator runs on every host (R1.3, checked by CI),
+but NumPy and SciPy evaluate `cos`, `exp`, the FFT and the filter design with the math library and the
+build of the platform, so on Windows and Linux arm64 about 30 to 40 cases differ in the last bit (an ulp,
+or an LSB after quantization). The Rust tests compare with the committed files on every platform and are
+not affected; only a regeneration on another host would change unrelated cases. Making those cases
+independent of the platform (own scalar math, as `sdrk_golden/scalar_math.py` already does for some cases)
+is planned (see `docs/milestones/BACKLOG.md`).
 
 ## Commands
 

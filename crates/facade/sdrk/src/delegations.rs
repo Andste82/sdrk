@@ -20,6 +20,7 @@ use sdrk_core::kernels::interp::{
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
 use sdrk_core::kernels::spectrum::{MagSq, PowerDb, Window};
+use sdrk_core::kernels::squelch::{Squelch, SquelchState};
 use sdrk_device::SampleFormat;
 
 // The implementation of the accelerated kernels: the SIMD backend, or the fallback when the
@@ -71,6 +72,8 @@ crate::delegate! {
     Deemphasis<Q15>::deemphasis(&self, state: &mut DeemphasisState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
     DcBlock<C32>::dc_block(&self, state: &mut DcBlockState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     DcBlock<CQ15>::dc_block(&self, state: &mut DcBlockState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    Squelch<C32>::squelch(&self, state: &mut SquelchState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
+    Squelch<CQ15>::squelch(&self, state: &mut SquelchState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     Window<C32>::window(&self, input: &[C32], output: &mut [C32], w: &[f32]) -> Result<()> => Fallback;
     Window<CQ15>::window(&self, input: &[CQ15], output: &mut [CQ15], w: &[Q15]) -> Result<()> => Fallback;
     MagSq<C32>::mag_sq(&self, input: &[C32], output: &mut [f32]) -> Result<()> => Fast;

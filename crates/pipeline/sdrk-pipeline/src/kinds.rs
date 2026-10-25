@@ -15,7 +15,7 @@ use sdrk_blocks::{
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock,
     FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ParamValue, PortType,
     ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, TUNED_PHASES,
+    SpectrumConfig, SquelchBlock, SquelchConfig, TUNED_PHASES,
 };
 use serde_json::{Map, Value};
 
@@ -505,6 +505,59 @@ impl Kind for DcBlockKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(DcBlockBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ----------------------------------------------------------------- squelch
+
+pub(crate) struct SquelchKind;
+
+impl Kind for SquelchKind {
+    type Cfg = SquelchConfig;
+
+    const KIND: &'static str = "squelch";
+    fn kernels() -> &'static [&'static str] {
+        &["squelch"]
+    }
+    fn default_cfg() -> SquelchConfig {
+        SquelchConfig::default()
+    }
+    fn set(cfg: &mut SquelchConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SquelchConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("squelch needs complex samples"));
+        }
+        Ok(Figures {
+            rate_out: SquelchBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: SquelchBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+            cost: 3.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(complex_port(p)),
+        })
+    }
+    fn build(
+        cfg: &SquelchConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(SquelchBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )

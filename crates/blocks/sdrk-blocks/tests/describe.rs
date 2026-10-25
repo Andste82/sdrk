@@ -35,7 +35,8 @@ use sdrk_blocks::{
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
     FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, Mutability,
     ParamKind, ParamValue, PortType, ResamplerBlock, ResamplerConfig, ResamplerRealBlock,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, all_descriptions,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -55,10 +56,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_eleven_unique_kinds() {
+fn there_are_twelve_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 11);
-    assert_eq!(all_descriptions().len(), 11);
+    assert_eq!(kinds.len(), 12);
+    assert_eq!(all_descriptions().len(), 12);
     for kind in [
         "convert",
         "convert_out",
@@ -71,6 +72,7 @@ fn there_are_eleven_unique_kinds() {
         "fm_mod",
         "resampler",
         "spectrum",
+        "squelch",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -243,6 +245,7 @@ fn config_defaults_match_the_descriptions() {
         &["interval_samples"],
     );
     defaults_match("convert", |n| ConvertConfig::default().get(n), &[]);
+    defaults_match("squelch", |n| SquelchConfig::default().get(n), &[]);
     defaults_match("convert_out", |n| ConvertOutConfig::default().get(n), &[]);
 }
 
@@ -323,6 +326,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("spectrum", SpectrumConfig);
     round_trip!("convert", ConvertConfig);
     round_trip!("convert_out", ConvertOutConfig);
+    round_trip!("squelch", SquelchConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -372,6 +376,10 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "scale",
         &mut ScaleBlock::<C32, _>::new(&ScaleConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "squelch",
+        &mut SquelchBlock::<CQ15, _>::new(&SquelchConfig::default(), r, &mut s).unwrap(),
     );
     check_block_params(
         "dc_block",

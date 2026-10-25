@@ -26,7 +26,7 @@ python tests/golden/generate.py --out DIR      # use another output directory
 
 `--check` prints every missing, differing or stale file (a committed file without a registered case) and
 exits with 1 on any difference. The script runs from any working directory. Before generating, the Q15 model
-runs a self-test of the R7 spot values.
+runs a self-test of the R7 spot values, and so does the float32 model (below).
 
 ## Format (version 1)
 
@@ -59,3 +59,14 @@ vectors together at or below 16 MiB; the generator fails otherwise.
 In Rust: `let case = sdrk_testkit::golden::load("scale", "c32_random_4096")?;`, run the kernel, then
 `golden::assert_matches(&case, case.array("expected")?, &actual)?`. The environment variable
 `SDRK_GOLDEN_DIR` overrides the vector directory.
+
+## The exact float32 model
+
+Kernels whose output depends on a discrete decision (the gate of `squelch`) cannot be compared with an f64
+reference, because the decision may flip one sample earlier or later. Their arithmetic is fixed by the
+specification and `sdrk_golden/f32model.py` evaluates it with NumPy `float32` scalars, one operation at a time
+(`add`, `sub`, `mul`, `flush_denormal`, `is_finite`); NumPy rounds every scalar operation to float32 and never
+fuses a multiply with an add, so the model equals Rust `f32` code compiled without FMA. Such a case is
+`bit_exact` and its JSON carries `"model": "float32"` at the top level. `f32model.self_test()` checks the
+helpers against hand-computed values (for example that `0.1f + 0.2f == 0.3f` and that a product and a subtraction
+are not fused) and runs in front of every generate and check run.

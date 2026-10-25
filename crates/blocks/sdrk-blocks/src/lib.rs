@@ -54,6 +54,7 @@ pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::resampler::{ResamplerBlock, ResamplerConfig, ResamplerRealBlock, TUNED_PHASES};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
+pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
 };

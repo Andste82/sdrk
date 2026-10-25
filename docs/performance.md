@@ -60,7 +60,7 @@ What each kernel is compared with:
 | `fir_interpolate` C32, L = 2, 128 taps; `resample` C32, 3 / 2, 192 taps (64 per branch; per output sample) | the same dot product per output with the taps of the output's branch, as GNU Radio's `interp_fir_filter_ccf` and `rational_resampler_ccf` call it |
 | `mag_sq` C32 | `volk_32fc_magnitude_squared_32f` |
 | `quad_demod` C32 | `volk_32fc_x2_multiply_conjugate_32fc` + `volk_32fc_s32f_atan2_32f` |
-| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32 | our fallback (no established library) |
+| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32, `squelch` C32 and CQ15 | our fallback (no established library) |
 | `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
 | `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
 | `rfft` f32, N = 1024 | FFTW's real-input transform (`fftwf_plan_dft_r2c_1d`, out of place) at `sse2` and `sse4.2` (FFTW has no codelets above SSE2, so it is the stronger reference there too), rustfft's real-input planner (`realfft` 3.5, forward, out of place) elsewhere; the other of the two and our fallback as information (FFTW also on `neon`) |
@@ -108,6 +108,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `quad_demod` C32 | 0.13 info | 0.14 info | 0.68 | 0.50 | 0.62 | 0.18 info |
 | `quad_demod` CQ15 | 0.22 | 0.16 | 0.07 | 0.02 | 0.10 | 0.13 |
 | `fm_mod` C32 | 0.27 | 0.22 | 0.13 | 0.06 | 0.27 | 0.32 |
+| `squelch` C32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `squelch` CQ15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `fft` C32, N = 64 | 0.80 | 0.60 | 0.99 | 0.95 | 0.58 | 0.56 |
 | `fft` C32, N = 1024 | 0.98 | 0.74 | 0.91 | 0.50 | 0.59 | 0.64 |
 | `fft` C32, N = 4096 | 0.93 | 0.73 | 0.86 | 0.50 | 0.56 | 0.64 |
@@ -137,6 +139,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.43 / 10.92 | 7.44 | 3.36 / 6.73 | 12.30 / 19.79 | 36.15 / 201.21 |
 | `quad_demod` CQ15 | 38.15 / 170.85 | 26.77 / 171.16 | 11.27 / 162.72 | 11.29 | 4.03 / 163.66 | 17.78 / 173.61 | 42.91 / 332.25 |
 | `fm_mod` C32 | 16.51 / 61.91 | 13.74 / 61.91 | 7.51 / 58.92 | 7.65 | 3.40 / 55.92 | 11.22 / 41.95 | 34.78 / 109.89 |
+| `squelch` C32 | 27.35 / 27.35 | 26.35 / 26.35 | 21.84 / 21.84 | 27.35 | 21.80 / 21.80 | 23.73 / 23.73 | 67.06 / 67.06 |
+| `squelch` CQ15 | 27.03 / 27.03 | 27.03 / 27.03 | 29.03 / 29.03 | 27.03 | 27.53 / 27.53 | 23.02 / 23.02 | 72.05 / 72.05 |
 | `fft` C32, N = 64 | 15.06 / 18.88 | 15.06 / 25.30 | 5.84 / 5.88 | 6.28 | 5.28 / 5.53 | 10.52 / 18.28 | 35.50 / 63.23 |
 | `fft` C32, N = 1024 | 25.16 / 25.56 | 25.16 / 33.81 | 10.33 / 11.33 | 10.37 | 5.57 / 11.07 | 15.14 / 25.85 | 58.57 / 91.17 |
 | `fft` C32, N = 4096 | 28.93 / 31.17 | 28.93 / 39.44 | 11.45 / 13.27 | 11.49 | 5.92 / 11.81 | 17.37 / 30.85 | 67.64 / 105.58 |
@@ -166,6 +170,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `quad_demod` C32 | 143.5 / 144.2 | 143.5 / 144.2 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 143.6 |
 | `quad_demod` CQ15 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 |
 | `fm_mod` C32 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 |
+| `squelch` C32 | exact | exact | exact | exact | exact | exact |
+| `squelch` CQ15 | exact | exact | exact | exact | exact | exact |
 | `fft` C32, N = 64 | 142.1 / 140.2 | 142.1 / 142.1 | 140.7 / 141.4 | 140.7 / 141.4 | 141.7 / 142.3 | 142.5 / 141.6 |
 | `fft` C32, N = 1024 | 138.7 / 137.9 | 138.7 / 138.7 | 139.1 / 139.1 | 139.1 / 139.1 | 138.8 / 139.1 | 138.2 / 138.9 |
 | `fft` C32, N = 4096 | 137.8 / 137.2 | 137.8 / 137.8 | 138.2 / 137.9 | 138.2 / 137.9 | 138.0 / 138.3 | 137.4 / 137.7 |
@@ -186,6 +192,7 @@ Notes.
 - **`quad_demod`.** At `sse2` and `sse4.2` VOLK has no SSE `atan2`; the comparison is the correctly rounded `generic` code (144.2 dB), 0.7 dB above ours, which is within the rule (decision D9).
 - **FFT.** `C32` reads its twiddles from static per-span tables on x86-64 and AArch64 (feature `fft-tables`, [backends.md](backends.md)); wasm32 is measured without them (with them: 31.0 / 53.1 / 61.8 fuel per sample). The accuracy of the single-vector transform at N = 64 scatters by about 1.9 dB between levels (140.7 to 142.5 dB), with the comparisons between 140.2 and 142.3 dB. `CQ15`: the radix-4 transform is not bit-identical with the fallback (decision D10); on the bench input it is far more accurate than KissFFT (which rounds every stage of its fixed-point code).
 - **`fm_mod`.** On wasm32 it is measured without the NCO tables (feature `nco-tables`, off there by default): 34.78 fuel per sample, 27.77 with the tables. At `avx512` it uses gathers (see the caveat at the top).
+- **`squelch`.** Not accelerated (M19; [backends.md](backends.md)): the average power is a first-order recursion and the gate decision depends on it. Ours is the fallback, so every level is `info` with a ratio of 1.00 against the fallback, and the output is bit-identical (accuracy `exact`). The counts differ between levels only by code generation of the fallback (for example 21.84 at `avx2` against 27.35 at `sse2` and in the run-time-detection build, which runs the fallback compiled for the baseline target; that is why `avx2-runtime` is `info` for `squelch` too). Input of the measurement: noise with a burst in the middle third, so the gate opens and closes once per call; 4096 samples at 48 kHz, 2 ms time constant.
 - **AVX-512** counts come from SDE between the SSC markers and are exact; an earlier version of the method without markers varied by up to 0.07 instructions per sample.
 - **Variants.** The misaligned and small-block lines of the results files are information; they show the per-call cost of the conversions (for example `convert` CS16 at `avx512`, n = 64: 2.63 against 2.08 for VOLK).
 

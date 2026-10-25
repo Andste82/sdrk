@@ -1279,6 +1279,58 @@
               "kind"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Passes a complex signal only while its average power is above a threshold.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "squelch"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "hysteresis_db": {
+                    "default": 3.0,
+                    "description": "The gate closes this many dB below threshold_db. Unit: dB. Typical: 3. Runtime.",
+                    "maximum": 40.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "tau_s": {
+                    "default": 0.01,
+                    "description": "Time constant of the power average in seconds. Unit: s. Typical: 0.01 at 48 kHz. Build-time.",
+                    "maximum": 100.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "threshold_db": {
+                    "default": -40.0,
+                    "description": "Level in dBFS at which the gate opens. Unit: dB. Typical: -40 for a strong local signal, -55 for weak signals. Runtime.",
+                    "maximum": 0.0,
+                    "minimum": -150.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
           }
         ]
       },

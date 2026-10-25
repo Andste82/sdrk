@@ -19,6 +19,7 @@ use sdrk::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk::kernels::mix::{Nco, Rotate};
 use sdrk::kernels::modulate::{FmMod, FmModState};
 use sdrk::kernels::spectrum::MagSq;
+use sdrk::kernels::squelch::{Squelch, SquelchState};
 use sdrk::{C32, CQ15, ComplexSample, Fallback, Q15, Rate, Sdrk};
 use sdrk_core::Reference;
 use sdrk_device::{SampleFormat, formats};
@@ -276,7 +277,7 @@ pub trait Kernel {
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended.
-pub const KERNELS: [&str; 24] = [
+pub const KERNELS: [&str; 26] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -301,6 +302,8 @@ pub const KERNELS: [&str; 24] = [
     "fft_cq15_1024_full_scale",
     "rfft_1024",
     "quad_demod_cq15",
+    "squelch",
+    "squelch_cq15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -332,6 +335,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "quad_demod" => Box::new(QuadK::new(rng, layout)),
         "quad_demod_cq15" => Box::new(QuadQ15K::new(rng, layout)),
         "fm_mod" => Box::new(FmModK::new(rng, layout)),
+        "squelch" => Box::new(SquelchK::<C32>::new(rng, layout)),
+        "squelch_cq15" => Box::new(SquelchK::<CQ15>::new(rng, layout)),
         "fft_64" => Box::new(FftK::new(rng, 64)),
         "fft_1024" => Box::new(FftK::new(rng, 1024)),
         "fft_4096" => Box::new(FftK::new(rng, 4096)),
@@ -1696,6 +1701,130 @@ impl Kernel for FmModK {
         let mut want = vec![C32::default(); self.input.len()];
         let _ = Reference.fm_mod(&mut Self::state(), &self.input, &mut want);
         snr_db(&c32s(&want), &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// squelch
+
+/// `squelch` (no established library: compared with our fallback; not accelerated, so the
+/// entries are `info`). The input is noise with a loud burst in the middle third, so the gate
+/// opens and closes once per call.
+struct SquelchK<T: ComplexSample> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+trait SquelchSample: ComplexSample {
+    /// Noise sample of the given amplitude as a fraction of full scale.
+    fn noise(rng: &mut Pcg32, amplitude: f32) -> Self;
+}
+
+impl SquelchSample for C32 {
+    fn noise(rng: &mut Pcg32, amplitude: f32) -> Self {
+        C32::new(rng.unit() * amplitude, rng.unit() * amplitude)
+    }
+}
+
+impl SquelchSample for CQ15 {
+    fn noise(rng: &mut Pcg32, amplitude: f32) -> Self {
+        CQ15 {
+            re: Q15((rng.unit() * amplitude * 32768.0) as i16),
+            im: Q15((rng.unit() * amplitude * 32768.0) as i16),
+        }
+    }
+}
+
+impl<T: SquelchSample> SquelchK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
+        let n = layout.n;
+        for (i, s) in input.iter_mut().enumerate() {
+            let loud = i >= n / 3 && i < 2 * n / 3;
+            *s = T::noise(rng, if loud { 0.1 } else { 0.0005 });
+        }
+        SquelchK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> SquelchState<T> {
+        SquelchState::new(-40.0, 3.0, 0.002, Rate::hz(48_000).expect("rate")).expect("squelch")
+    }
+}
+
+#[inline(never)]
+fn squelch<T: ComplexSample, B: Squelch<T>>(
+    backend: &B,
+    state: &mut SquelchState<T>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.squelch(state, black_box(input), out));
+}
+
+impl Kernel for SquelchK<C32> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => squelch(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => squelch(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("squelch has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![C32::default(); self.input.len()];
+        let _ = Reference.squelch(&mut Self::state(), &self.input, &mut want);
+        snr_db(&c32s(&want), &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+impl Kernel for SquelchK<CQ15> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => squelch(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => squelch(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("squelch_cq15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![CQ15::default(); self.input.len()];
+        let _ = Reference.squelch(&mut Self::state(), &self.input, &mut want);
+        snr_db(&cq15s(&want, 1.0), &cq15s(&self.out, 1.0))
     }
 
     fn supports(&self, which: Impl) -> bool {

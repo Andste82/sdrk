@@ -1,0 +1,35 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "bursts_c32_24000.expected.bin",
+      "len": 24000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "bursts_c32_24000.input.bin",
+      "len": 24000
+    }
+  },
+  "case": "bursts_c32_24000",
+  "format_version": 1,
+  "kernel": "squelch",
+  "model": "float32",
+  "notes": "noise sigma 0.001, tone bursts -20 dBFS (4000-9999, 15000-17999) and -41 dBFS (20000-21999, between the close and the open level); exact float32 model",
+  "params": {
+    "hysteresis_db": 3.0,
+    "rate_hz": 48000,
+    "tau_s": 0.002,
+    "threshold_db": -40.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 410,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

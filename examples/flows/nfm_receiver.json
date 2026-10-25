@@ -1,0 +1,63 @@
+{
+  "sdrk": 1,
+  "name": "nfm-receiver",
+  "description": "Receive one narrow-band FM channel with a power squelch and output 48 kHz audio.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2400000,
+      "description": "RTL-SDR IQ"
+    }
+  },
+  "nodes": {
+    "demod": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 4000,
+        "deemphasis_us": 0,
+        "deviation_hz": 5000
+      }
+    },
+    "gate": {
+      "kind": "squelch"
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 6000,
+        "decimation": 50,
+        "max_taps": 4096,
+        "transition_hz": 3000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "gate"
+    },
+    {
+      "from": "gate",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    }
+  }
+}

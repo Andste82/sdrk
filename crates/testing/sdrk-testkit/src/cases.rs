@@ -79,6 +79,13 @@
 //! | `block_fm_demod_sinad` | quick | about 45 KiB |
 //! | `block_spectrum_tone_level` | quick | about 34 KiB |
 //! | `block_resampler_ppm_count` | quick | about 24 KiB |
+//! | `squelch_c32` | quick | about 48 KiB |
+//! | `squelch_cq15` | quick | about 24 KiB |
+//! | `extremes_m19` | full | about 7 KiB |
+//! | `block_squelch_gate` | quick | about 48 KiB |
+//! | `e2e_nfm_rx_f32` | quick | about 49 KiB (0.4 s of signal) |
+//! | `e2e_nfm_rx_q15` | quick | about 27 KiB (0.4 s of signal) |
+//! | `e2e_nfm_rx_f32_2s`, `e2e_nfm_rx_q15_2s` | full | as the 0.4 s variants (2.0 s of signal) |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |
@@ -121,8 +128,9 @@ mod m07;
 mod m08;
 mod m09;
 mod m13;
+mod m19;
 
-pub(crate) static CASES: [TestCase; 86] = [
+pub(crate) static CASES: [TestCase; 94] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -552,6 +560,46 @@ pub(crate) static CASES: [TestCase; 86] = [
         name: "backend_vs_fallback_fft",
         tier: Tier::Quick,
         run: m13::backend_vs_fallback_fft,
+    },
+    TestCase {
+        name: "squelch_c32",
+        tier: Tier::Quick,
+        run: m19::squelch_c32,
+    },
+    TestCase {
+        name: "squelch_cq15",
+        tier: Tier::Quick,
+        run: m19::squelch_cq15,
+    },
+    TestCase {
+        name: "extremes_m19",
+        tier: Tier::Full,
+        run: m19::extremes_m19,
+    },
+    TestCase {
+        name: "block_squelch_gate",
+        tier: Tier::Quick,
+        run: m19::block_squelch_gate,
+    },
+    TestCase {
+        name: "e2e_nfm_rx_f32",
+        tier: Tier::Quick,
+        run: m19::e2e_nfm_rx_f32,
+    },
+    TestCase {
+        name: "e2e_nfm_rx_q15",
+        tier: Tier::Quick,
+        run: m19::e2e_nfm_rx_q15,
+    },
+    TestCase {
+        name: "e2e_nfm_rx_f32_2s",
+        tier: Tier::Full,
+        run: m19::e2e_nfm_rx_f32_2s,
+    },
+    TestCase {
+        name: "e2e_nfm_rx_q15_2s",
+        tier: Tier::Full,
+        run: m19::e2e_nfm_rx_q15_2s,
     },
 ];
 

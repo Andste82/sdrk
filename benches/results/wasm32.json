@@ -631,14 +631,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 72.05,
+              "other_instr_per_sample": 71.05,
               "other_snr_db": null,
-              "ours_instr_per_sample": 72.05,
+              "ours_instr_per_sample": 71.05,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 72.05,
-          "ours_instr_per_sample": 72.05,
+          "other_instr_per_sample": 71.05,
+          "ours_instr_per_sample": 71.05,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

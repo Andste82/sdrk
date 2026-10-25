@@ -32,8 +32,12 @@ def level64(db):
     return 10.0 ** (db / 10.0)
 
 
-def q30(db):
-    return int(math.floor(level64(db) * 2.0**30 + 0.5))
+def q61(db):
+    return int(math.floor(level64(db) * 2.0**61 + 0.5))
+
+
+def alpha_q31(rate_hz, tau_s):
+    return int(math.floor(alpha64(rate_hz, tau_s) * 2.0**31 + 0.5))
 
 
 def bursts_signal(rng):
@@ -73,8 +77,9 @@ def squelch_f32(x, schedule):
 
 
 def squelch_q15(xr, xi, schedule):
-    """Integer model: ``xr`` and ``xi`` are Q15 raw values."""
-    alpha = int(q15.from_float(alpha64(RATE_HZ, TAU_S)))
+    """Integer model: ``xr`` and ``xi`` are Q15 raw values, the average is Q61, the
+    coefficient Q31; the step is not rounded."""
+    alpha = alpha_q31(RATE_HZ, TAU_S)
     p = 0
     is_open = False
     p_open = p_close = None
@@ -82,9 +87,9 @@ def squelch_q15(xr, xi, schedule):
     for i, (re, im) in enumerate(zip(xr.tolist(), xi.tolist())):
         if i in schedule:
             thr, hyst = schedule[i]
-            p_open, p_close = q30(thr), q30(thr - hyst)
+            p_open, p_close = q61(thr), q61(thr - hyst)
         q = re * re + im * im
-        p = p + int(q15.round_shift(alpha * (q - p), 15))
+        p = p + alpha * (q - int(q15.round_shift(p, 31)))
         if p >= p_open:
             is_open = True
         elif p < p_close:
@@ -129,7 +134,7 @@ def bursts_cq15(rng):
         arrays={"input": Array("ci16", q15.pack(xr, xi)), "expected": Array("ci16", expected)},
         tolerance={"class": "bit_exact"},
         notes="same signal as bursts_c32_24000 quantized to Q15; exact integer model "
-        "(Q30 power, alpha as a Q15 raw value)",
+        "(Q30 power, Q61 average, alpha as a Q31 raw value)",
     )
 
 

@@ -72,15 +72,15 @@ fn first_pass<T: ComplexSample + PartialEq>(input: &[T], output: &[T]) -> Option
 }
 
 /// The gate after every sample, from a model of the kernel written for this test: the `f32`
-/// recurrence for `C32` and the `i64` recurrence of the Q30 power for `CQ15`.
+/// recurrence for `C32` and the `i64` recurrence of the Q61 average for `CQ15`.
 fn gate_trace<T: ComplexSample>(cfg: &SquelchConfig, input: &[T]) -> Vec<bool> {
     let a = alpha(cfg);
     let (open_db, close_db) = (cfg.threshold_db, cfg.threshold_db - cfg.hysteresis_db);
     let mut gate = false;
     let mut trace = Vec::with_capacity(input.len());
     if T::TYPE == SampleType::CQ15 {
-        let alpha_raw = (a * 32768.0 + 0.5).floor() as i64;
-        let level = |db: f64| (10f64.powf(db / 10.0) * 2f64.powi(30) + 0.5).floor() as i64;
+        let alpha_q31 = (a * 2f64.powi(31) + 0.5).floor() as i64;
+        let level = |db: f64| (10f64.powf(db / 10.0) * 2f64.powi(61) + 0.5).floor() as i64;
         let (open, close) = (level(open_db), level(close_db));
         let mut p = 0i64;
         for s in input {
@@ -89,7 +89,7 @@ fn gate_trace<T: ComplexSample>(cfg: &SquelchConfig, input: &[T]) -> Vec<bool> {
                 (c.re * 32768.0).round() as i64,
                 (c.im * 32768.0).round() as i64,
             );
-            p += (alpha_raw * (re * re + im * im - p) + 16384) >> 15;
+            p += alpha_q31 * (re * re + im * im - ((p + (1 << 30)) >> 31));
             if p >= open {
                 gate = true;
             } else if p < close {

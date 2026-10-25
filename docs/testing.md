@@ -50,7 +50,7 @@ CI is three workflow files. `ci.yml` runs on pull requests and on pushes to `mai
 | Trigger | File | What runs |
 | --- | --- | --- |
 | pull request | `ci.yml` | `scope` (what changed), then the tree with scope `pr`: `check`, every build and the tests marked `pr` below. A pull request that only changes Markdown files no test reads runs `check` only |
-| pull request with the label `ci:full` | `ci.yml` | the tree with scope `full`, as at night |
+| `gh workflow run nightly.yml --ref <branch>` | `nightly.yml` | the tree with scope `full` on any branch, for example before merging a change of the CI or of a long-running job |
 | push to `main` | `ci.yml` | `smoke` (build, `xtask check`, `bare-metal`, the unit tests). The pull request has tested the same tree, because a branch must be up to date with `main` before it is merged |
 | every night | `nightly.yml` | the tree with scope `full`: every `pr` job and the jobs marked `full`. When `main` is unchanged since the last green nightly run, the `pr` tests are skipped and only the `full` jobs run, except on Sunday |
 | Sunday night | `nightly.yml` | as every night, with the `pr` tests always, plus the full profile of the ESP32-P4 |

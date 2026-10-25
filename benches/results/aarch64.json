@@ -1,10 +1,56 @@
 {
-  "host_cpu": "AMD EPYC Processor (with IBPB)",
+  "host_cpu": "AMD Ryzen 7 5700U with Radeon Graphics",
   "levels": {
     "neon": {
       "counter": "qemu-aarch64 insn plugin",
       "judged_against": "references",
       "kernels": {
+        "agc": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 22.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 22.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 22.03,
+          "ours_instr_per_sample": 22.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 125.4,
+            "ours": 125.4
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "agc_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 74.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 74.04,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 74.04,
+          "ours_instr_per_sample": 74.04,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
           "goal": true,
@@ -295,6 +341,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "dc_block_real": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 16.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 16.01,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 16.01,
+          "ours_instr_per_sample": 16.01,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 124.79,
+            "ours": 124.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "dc_block_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 12.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 12.01,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 12.01,
+          "ours_instr_per_sample": 12.01,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
           "goal": true,
@@ -548,6 +640,68 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "mag": {
+          "compared_with": "volk_32fc_magnitude_32f",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_magnitude_32f: generic",
+              "label": "goal: cheapest VOLK implementation",
+              "other_instr_per_sample": 1.77,
+              "other_snr_db": 150.92,
+              "ours_instr_per_sample": 1.45,
+              "ratio": 0.82
+            },
+            {
+              "compared_with": "volk_32fc_magnitude_32f",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.45,
+              "ratio": 0.72
+            }
+          ],
+          "other_instr_per_sample": 2.02,
+          "ours_instr_per_sample": 1.45,
+          "ratio": 0.72,
+          "snr_db": {
+            "other": 150.95,
+            "ours": 150.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_q15": {
+          "compared_with": "volk_16ic_magnitude_16i",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_16ic_magnitude_16i: generic",
+              "label": "goal: cheapest VOLK implementation",
+              "other_instr_per_sample": 3.64,
+              "other_snr_db": 96.22,
+              "ours_instr_per_sample": 4.39,
+              "ratio": 1.2
+            },
+            {
+              "compared_with": "volk_16ic_magnitude_16i",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 4.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 4.39,
+              "ratio": 0.97
+            }
+          ],
+          "other_instr_per_sample": 4.52,
+          "ours_instr_per_sample": 4.39,
+          "ratio": 0.97,
+          "snr_db": {
+            "other": 96.22,
+            "ours": 96.22
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
@@ -832,6 +986,8 @@
           "volk_32fc_s32fc_x2_rotator2_32fc neon neon",
           "volk_32fc_32f_dot_prod_32fc a_neon neonv8",
           "volk_32fc_magnitude_squared_32f neonv8 neonv8",
+          "volk_32fc_magnitude_32f neonv8 neonv8",
+          "volk_16ic_magnitude_16i neonv8 neonv8",
           "volk_32fc_x2_multiply_conjugate_32fc neonv8 neonv8",
           "volk_32fc_s32f_atan2_32f neonv8 neonv8"
         ]

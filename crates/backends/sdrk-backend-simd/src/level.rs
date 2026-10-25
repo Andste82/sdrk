@@ -37,7 +37,7 @@
 //! The test at the end of this file is the smallest example of the pattern.
 
 use fearless_simd::Level;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 use fearless_simd::Sse2;
 
 /// The level the kernels run at: detected at run time with the feature `std`, fixed at compile
@@ -88,7 +88,7 @@ macro_rules! dispatch_fn {
     ) => {
         $(#[$meta])*
         $vis fn $name($($arg: $ty),*) {
-            #[cfg(all(feature = "std", any(target_arch = "x86", target_arch = "x86_64")))]
+            #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
                 fearless_simd::kernel!(
                     #[inline(always)]
@@ -138,7 +138,7 @@ macro_rules! dispatch_fn {
                     }
                 }
             }
-            #[cfg(not(all(feature = "std", any(target_arch = "x86", target_arch = "x86_64"))))]
+            #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
             $crate::level::dispatch!(simd => $kernel(simd, $($arg),*))
         }
     };
@@ -147,7 +147,7 @@ pub(crate) use dispatch_fn;
 
 /// The SSE2 token if the level is the plain SSE2 baseline of x86 and nothing better (unlike
 /// `Level::as_sse2`, which also answers at SSE4.2 and above).
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub(crate) fn sse2_only(level: Level) -> Option<Sse2> {
     if level.as_sse4_2().is_some() {
@@ -161,11 +161,11 @@ pub(crate) fn sse2_only(level: Level) -> Option<Sse2> {
 /// (`pmovsx`, SSE4.1): the kernels that widen signed integers use shifts and interleaves instead.
 #[inline(always)]
 pub(crate) fn is_sse2_baseline<S: fearless_simd::Simd>(simd: S) -> bool {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         sse2_only(simd.level()).is_some()
     }
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     {
         let _ = simd;
         false
@@ -175,7 +175,7 @@ pub(crate) fn is_sse2_baseline<S: fearless_simd::Simd>(simd: S) -> bool {
 /// Name of the current level.
 pub(crate) fn name() -> &'static str {
     let level = current();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if level.as_avx512().is_some() {
             return "avx512";
@@ -213,10 +213,8 @@ mod tests {
     use super::name;
 
     /// The level-specific paths of the example kernel `x + y` on `f32` slices.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     mod x86 {
-        #[cfg(target_arch = "x86")]
-        use core::arch::x86::{_mm_add_ps, _mm256_add_ps, _mm512_add_ps};
         #[cfg(target_arch = "x86_64")]
         use core::arch::x86_64::{_mm_add_ps, _mm256_add_ps, _mm512_add_ps};
         use fearless_simd::prelude::*;
@@ -302,7 +300,7 @@ mod tests {
     #[inline(always)]
     fn add_level<S: SimdToken>(simd: S, x: &mut [f32], y: &[f32]) -> (&'static str, usize) {
         let level = simd.level();
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(target_arch = "x86_64")]
         {
             if let Some(t) = level.as_avx512() {
                 return ("avx512", x86::add_avx512(t, x, y));

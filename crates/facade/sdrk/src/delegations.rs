@@ -30,7 +30,6 @@ use sdrk_device::SampleFormat;
     feature = "simd",
     not(sdrk_fallback_only),
     any(
-        target_arch = "x86",
         target_arch = "x86_64",
         target_arch = "aarch64",
         all(target_arch = "wasm32", target_feature = "simd128")
@@ -41,7 +40,6 @@ use crate::Fallback as Fast;
     feature = "simd",
     not(sdrk_fallback_only),
     any(
-        target_arch = "x86",
         target_arch = "x86_64",
         target_arch = "aarch64",
         all(target_arch = "wasm32", target_feature = "simd128")

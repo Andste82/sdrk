@@ -538,7 +538,7 @@ fn level_transform<S: SimdToken>(
     block_float: bool,
 ) -> Option<i32> {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
             return radix4::transform(
@@ -643,7 +643,6 @@ impl Fft<CQ15> for Simd {
 /// tone keeps its precision (its magnitude rounds up to 32768); a twiddle product of such an
 /// input saturates by at most 3.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -667,7 +666,6 @@ const STAGE_LIMIT: u64 = 32_770;
 /// single instructions, so that it also takes the sizes below 64), every stage halves. Below 64
 /// samples x86 and wasm take the generic code.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -675,7 +673,6 @@ const STAGE_LIMIT: u64 = 32_770;
 const HALVING: u8 = 0;
 /// See [`HALVING`].
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -683,7 +680,6 @@ const HALVING: u8 = 0;
 const SCALED: u8 = 1;
 /// See [`HALVING`].
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -693,7 +689,6 @@ const PLAIN: u8 = 2;
 /// The largest size at which fixed scaling on x86 and wasm uses the scaled twiddles in the
 /// stages before the last one (from 64 samples on; see [`HALVING`]).
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
@@ -703,7 +698,6 @@ const SCALED_FIXED_MAX: usize = 8192;
 /// squared magnitude `norm` (block floating point), or of fixed scaling (`None`: 1 per factor of
 /// 2, with the scaling `fixed`).
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -731,7 +725,6 @@ fn plan(norm: Option<u64>, radix: u64, fixed: u8) -> (u8, u32) {
 /// it back (see [`owed_stage`]), so the overall scale stays `1 / N`; the last stage saturates
 /// where the fallback's output saturates.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -748,7 +741,6 @@ fn fixed_fits(norm: u64) -> bool {
 /// data at full scale for the stages after it), else it scales by `2^-2` and tracks its output
 /// for the next one.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -766,7 +758,6 @@ fn owed_stage(bound: u64, last: bool) -> (u32, bool) {
 /// and 4 load the `step` vectors from `k0 * step` and keep every `step`-th sample by unzips;
 /// larger steps (the stages with few butterflies per block, so few `k0`) gather.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
@@ -799,7 +790,6 @@ fn twiddle_vector<T: SimdToken>(t: T, tw: &[i16], k0: usize, step: usize) -> T::
 /// The twiddles of one vector from `chunk`, the `STEP` vectors of table entries from its first
 /// position: every `STEP`-th sample, by unzips.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
@@ -819,7 +809,6 @@ fn twiddle_chunk<T: SimdToken, const STEP: usize>(t: T, chunk: &[i16]) -> T::i16
 
 /// The vector of `chunk` from `at`, as `i32` lanes (zero past the end).
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
@@ -842,7 +831,6 @@ fn vector_at<T: SimdToken>(t: T, chunk: &[i16], at: usize) -> T::i32s {
 /// and, for the differences, the average with the complement, `(a - b) >> 1`. The block-float
 /// shift comes from the largest `re^2 + im^2` (`pmaddwd` of the outputs with themselves).
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
@@ -1560,7 +1548,6 @@ mod radix4 {
 /// A method of a level trait whose body runs as a `kernel!` of the level `$level` (`$t` is the
 /// token).
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
@@ -1578,23 +1565,8 @@ macro_rules! method {
 }
 
 /// [`radix4::Radix4`] on x86.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        __m128i, __m256i, __m512i, _mm_add_epi32, _mm_adds_epi16, _mm_avg_epu16, _mm_cvtsi32_si128,
-        _mm_madd_epi16, _mm_max_epi16, _mm_max_epu32, _mm_mulhrs_epi16, _mm_packs_epi32,
-        _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_shuffle_epi8, _mm_shufflehi_epi16,
-        _mm_shufflelo_epi16, _mm_sra_epi16, _mm_srai_epi32, _mm_srli_epi32, _mm_unpackhi_epi16,
-        _mm_unpackhi_epi32, _mm_unpackhi_epi64, _mm_unpacklo_epi16, _mm_unpacklo_epi32,
-        _mm_unpacklo_epi64, _mm256_avg_epu16, _mm256_madd_epi16, _mm256_max_epu32,
-        _mm256_mulhrs_epi16, _mm256_permute2x128_si256, _mm256_set1_epi16, _mm256_setr_epi8,
-        _mm256_shuffle_epi8, _mm256_unpackhi_epi32, _mm256_unpackhi_epi64, _mm256_unpacklo_epi32,
-        _mm256_unpacklo_epi64, _mm512_avg_epu16, _mm512_broadcast_i32x4, _mm512_madd_epi16,
-        _mm512_max_epu32, _mm512_mulhrs_epi16, _mm512_rol_epi32, _mm512_set1_epi16,
-        _mm512_shuffle_epi8, _mm512_shuffle_i64x2, _mm512_unpackhi_epi32, _mm512_unpackhi_epi64,
-        _mm512_unpacklo_epi32, _mm512_unpacklo_epi64,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m128i, __m256i, __m512i, _mm_add_epi32, _mm_adds_epi16, _mm_avg_epu16, _mm_cvtsi32_si128,

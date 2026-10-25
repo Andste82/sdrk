@@ -170,10 +170,7 @@ fn fm_mod_f32<S: SimdToken>(
     y: &mut [f32],
 ) -> (usize, u32) {
     let level = simd.level();
-    #[cfg(all(
-        feature = "nco-tables",
-        any(target_arch = "x86", target_arch = "x86_64")
-    ))]
+    #[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
     {
         if let Some(t) = level.as_avx512() {
             return x86::f32_avx512(t, k, limit, phase, x, y);
@@ -227,10 +224,7 @@ fn fm_mod_f32<S: SimdToken>(
 #[inline(always)]
 fn fm_mod_q15<S: SimdToken>(simd: S, k: f64, phase: u32, x: &[i16], y: &mut [i16]) -> (usize, u32) {
     let level = simd.level();
-    #[cfg(all(
-        feature = "nco-tables",
-        any(target_arch = "x86", target_arch = "x86_64")
-    ))]
+    #[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
     {
         let k15 = k * (1.0 / 32768.0);
         if let Some(t) = level.as_avx512() {
@@ -329,35 +323,8 @@ impl FmMod<CQ15> for Simd {
 
 /// The level-specific paths of x86. The helpers carry the target features of the lowest level
 /// that uses them and are inlined into the kernels.
-#[cfg(all(
-    feature = "nco-tables",
-    any(target_arch = "x86", target_arch = "x86_64")
-))]
+#[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        __m128, __m128d, __m128i, __m256, __m256d, __m256i, __m512, __m512d, __m512i,
-        _MM_FROUND_NO_EXC, _MM_FROUND_TO_NEG_INF, _mm_add_epi32, _mm_add_pd, _mm_and_si128,
-        _mm_castpd_ps, _mm_castps_si128, _mm_cmpgt_epi32, _mm_cmplt_epi16, _mm_cmplt_pd,
-        _mm_cvtepi16_epi32, _mm_cvtepi32_pd, _mm_cvtps_pd, _mm_cvtsi128_si32, _mm_floor_pd,
-        _mm_max_epi16, _mm_max_epi32, _mm_movehl_ps, _mm_movemask_epi8, _mm_mul_pd, _mm_set1_epi16,
-        _mm_set1_epi32, _mm_set1_pd, _mm_setzero_si128, _mm_shuffle_epi32, _mm_shuffle_ps,
-        _mm_slli_si128, _mm_srai_epi32, _mm_sub_pd, _mm_unpackhi_epi16, _mm_unpackhi_epi64,
-        _mm_unpacklo_epi16, _mm256_add_epi32, _mm256_add_pd, _mm256_and_si256, _mm256_castpd_ps,
-        _mm256_castpd_si256, _mm256_castps_pd, _mm256_castps_si256, _mm256_castps256_ps128,
-        _mm256_cmpgt_epi32, _mm256_cvtepi32_pd, _mm256_cvtps_pd, _mm256_cvtsi256_si32,
-        _mm256_extractf128_ps, _mm256_floor_pd, _mm256_max_epi32, _mm256_movemask_epi8,
-        _mm256_mul_pd, _mm256_permute2x128_si256, _mm256_permute4x64_pd,
-        _mm256_permutevar8x32_epi32, _mm256_set1_epi32, _mm256_set1_pd, _mm256_setzero_si256,
-        _mm256_shuffle_epi32, _mm256_shuffle_ps, _mm256_slli_si256, _mm512_add_epi32,
-        _mm512_add_pd, _mm512_add_round_pd, _mm512_and_si512, _mm512_bslli_epi128,
-        _mm512_castpd_si512, _mm512_castps_pd, _mm512_castps_si512, _mm512_castps512_ps256,
-        _mm512_castsi512_si256, _mm512_cmpgt_epi32_mask, _mm512_cvtepi16_epi32, _mm512_cvtepi32_pd,
-        _mm512_cvtps_pd, _mm512_cvtsi512_si32, _mm512_extractf64x4_pd, _mm512_extracti64x4_epi64,
-        _mm512_maskz_permutexvar_epi32, _mm512_max_epi32, _mm512_mul_pd, _mm512_permutex2var_epi32,
-        _mm512_permutexvar_epi32, _mm512_set1_epi32, _mm512_set1_pd, _mm512_setr_epi32,
-        _mm512_setzero_si512,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m128, __m128d, __m128i, __m256, __m256d, __m256i, __m512, __m512d, __m512i,

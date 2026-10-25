@@ -77,7 +77,6 @@ macro_rules! vectors {
 /// the block of 32 steps is written out, as 32 calls of the body as a closure (which keeps the
 /// stack frame of the unoptimized function small). Only the level paths use it.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -247,7 +246,7 @@ fn mag_sq_q15<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16]) {
 #[inline(always)]
 fn mag_sq_q15_level<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16]) -> usize {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
             return x86::mag_sq_q15_avx512(t, input, out);
@@ -284,7 +283,7 @@ impl MagSq<CQ15> for Simd {
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 mod x86 {
     //! `CQ15` with `pmaddwd`: `re*re + im*im` of a sample is one lane of the multiply-add of
     //! adjacent pairs of `x * x`. The only sum that does not fit `i32` is `2^31` (both parts
@@ -292,13 +291,6 @@ mod x86 {
     //! rounding and the shift run on unsigned lanes, and the signed saturating narrowing
     //! (`packssdw`, `vpmovsdw`) applies the limit 32767.
 
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        __m128i, __m256i, __m512i, _mm_add_epi32, _mm_madd_epi16, _mm_packs_epi32, _mm_set1_epi32,
-        _mm_srli_epi32, _mm256_add_epi32, _mm256_madd_epi16, _mm256_packs_epi32,
-        _mm256_permute4x64_epi64, _mm256_set1_epi32, _mm256_srli_epi32, _mm512_add_epi32,
-        _mm512_cvtsepi32_epi16, _mm512_madd_epi16, _mm512_set1_epi32, _mm512_srli_epi32,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m128i, __m256i, __m512i, _mm_add_epi32, _mm_madd_epi16, _mm_packs_epi32, _mm_set1_epi32,

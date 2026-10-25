@@ -34,7 +34,7 @@ relaxed-simd = []
 # AArch64; without it the passes take every twiddle from the plan.
 fft-tables = []
 # Static interpolation tables of the NCO lookups (64 KiB f32, 32 KiB Q15 of read-only data): one
-# load per sample in `fm_mod` and in the CQ15 `rotate`. The facade enables it on x86, x86-64 and
+# load per sample in `fm_mod` and in the CQ15 `rotate`. The facade enables it on x86-64 and
 # AArch64; without it the lookups read the cosine tables of `sdrk-core`.
 nco-tables = []
 

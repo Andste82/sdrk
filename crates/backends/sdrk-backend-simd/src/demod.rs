@@ -144,7 +144,7 @@ fn discriminator<S: SimdToken>(simd: S, re: S::f32s, im: S::f32s, gain: f32) -> 
 /// predecessors `p`, over the whole vectors of `out` (`x` and `p` hold two floats per output).
 #[inline(always)]
 fn discriminate_vectors<S: SimdToken>(simd: S, x: &[f32], p: &[f32], out: &mut [f32], gain: f32) {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         let level = simd.level();
         if level.as_avx512().is_none() {
@@ -187,14 +187,8 @@ fn discriminate_generic<S: SimdToken>(simd: S, x: &[f32], p: &[f32], out: &mut [
 /// The paths of SSE4.2 and AVX2: the products stay interleaved, `x * p` gives
 /// `(xr pr, xi pi)` and `swap(x) * p` gives `(xi pr, xr pi)` per sample, and the horizontal sum
 /// and difference of the pairs are `re` and `im`, in the order of operations of the fallback.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        __m128, __m256, _mm_hadd_ps, _mm_hsub_ps, _mm_mul_ps, _mm_shuffle_ps, _mm256_castpd_ps,
-        _mm256_castps_pd, _mm256_hadd_ps, _mm256_hsub_ps, _mm256_mul_ps, _mm256_permute_ps,
-        _mm256_permute4x64_pd,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m128, __m256, _mm_hadd_ps, _mm_hsub_ps, _mm_mul_ps, _mm_shuffle_ps, _mm256_castpd_ps,

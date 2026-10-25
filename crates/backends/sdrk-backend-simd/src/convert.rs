@@ -109,7 +109,6 @@ const U8_OFFSET: f32 = 255.0 / 256.0;
 /// The bits `0x4380_0000 | u << 8` (`u` an unsigned byte) are the float `256 + u * 2^-7`;
 /// subtracting this constant gives the `CU8` value `(u - 127.5) * 2^-7`.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -117,7 +116,6 @@ const U8_OFFSET: f32 = 255.0 / 256.0;
 const U8_MAGIC: f32 = 256.0 + U8_OFFSET;
 /// The upper half-word of the `CU8` and `CS16` magic floats.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -126,21 +124,19 @@ const HIGH_U8_I16: u16 = 0x4380;
 /// The bits `0x4780_0000 | u` (`u = x + 128` for a signed byte `x`) are the float
 /// `65536 + u * 2^-7 = 65537 + x * 2^-7`; subtracting this constant gives the `CS8` value.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 const I8_MAGIC: f32 = 65537.0;
 /// The upper half-word of the `CS8` magic float.
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 const HIGH_I8: u16 = 0x4780;
 /// The bits `0x4380_0000 | u` (`u = x + 2^15` for a signed 16-bit `x`) are the float
 /// `256 + u * 2^-15 = 257 + x * 2^-15`; subtracting this constant gives the `CS16` value.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 const I16_MAGIC: f32 = 257.0;
 
 /// Runs `unit` (`IN` input bytes to `OUT` values) over all whole units that fit both slices,
@@ -150,7 +146,7 @@ const I16_MAGIC: f32 = 257.0;
 /// The zipped slice iterators of whole blocks give one counted loop (zipping `&mut ChunksExact`
 /// would test both ends in every iteration), and the inner loops over the units of a block are
 /// unrolled completely, also in a kernel that is not inlined into its caller.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[inline(always)]
 fn run<const IN: usize, const OUT: usize, const U: usize>(
     bytes: &[u8],
@@ -269,7 +265,7 @@ fn level_path<S: SimdToken>(simd: S, kind: Kind, bytes: &[u8], out: &mut [f32]) 
     let level = simd.level();
     // SSE2 has no `pmovsx`, and for `U8` the float bits are as short as the conversion.
     let float_bits = kind == Kind::U8 || is_sse2_baseline(simd);
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
             return Some(x86::avx512(t, kind, bytes, out));
@@ -312,11 +308,9 @@ fn f32_in<S: SimdToken>(simd: S, kind: Kind, bytes: &[u8], out: &mut [f32]) {
     tail(kind, bytes, out);
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 #[allow(unsafe_code)]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86 as arch;
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64 as arch;
 

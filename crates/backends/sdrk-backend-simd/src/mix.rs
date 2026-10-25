@@ -594,7 +594,7 @@ fn rotate_split<S: SimdToken, L: Split<S>>(
 #[inline(always)]
 fn rotate_f32<S: SimdToken>(simd: S, phase: u32, inc: u32, x: &[f32], y: &mut [f32]) {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
             return rotate_split(t, x86::InLane, phase, inc, x, y);
@@ -615,13 +615,8 @@ fn rotate_f32<S: SimdToken>(simd: S, phase: u32, inc: u32, x: &[f32], y: &mut [f
 /// it crosses the 128-bit blocks (two shuffles more each way), so those levels use `shufps`
 /// and `unpcklps`/`unpckhps`, which stay within the blocks, and the lane order of
 /// [`lane_sample`].
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{
-        _mm256_shuffle_ps, _mm256_unpackhi_ps, _mm256_unpacklo_ps, _mm512_shuffle_ps,
-        _mm512_unpackhi_ps, _mm512_unpacklo_ps,
-    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         _mm256_shuffle_ps, _mm256_unpackhi_ps, _mm256_unpacklo_ps, _mm512_shuffle_ps,

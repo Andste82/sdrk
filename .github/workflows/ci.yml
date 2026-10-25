@@ -79,24 +79,6 @@ jobs:
             SDRK_EXPECT_LEVEL="${pair#*:}" RUSTFLAGS="-C target-cpu=$cpu" \
               cargo test -p sdrk-backend-simd --target-dir "target/backend-no-tables-$cpu"
           done
-      - name: Test the backend and the facade on 32-bit x86 (linux-x86_64)
-        # The level paths are compiled for `target_arch = "x86"` too (32-bit pointers, the facade's
-        # 32-bit table configuration: `nco-tables` on, `fft-tables` opt-in), at the SSE2 baseline
-        # and with AVX2.
-        if: matrix.name == 'linux-x86_64'
-        shell: bash
-        run: |
-          sudo apt-get update && sudo apt-get install -y gcc-multilib
-          rustup target add i686-unknown-linux-gnu
-          cargo clippy --target i686-unknown-linux-gnu -p sdrk-backend-simd --all-targets -- -D warnings
-          for pair in x86-64:sse2 x86-64-v3:avx2; do
-            cpu="${pair%%:*}"
-            for features in "" "--features sdrk/fft-tables"; do
-              SDRK_EXPECT_LEVEL="${pair#*:}" RUSTFLAGS="-C target-cpu=$cpu" \
-                cargo test --target i686-unknown-linux-gnu -p sdrk-backend-simd -p sdrk $features \
-                --target-dir "target/i686-$cpu"
-            done
-          done
       - name: Test with the fallback only
         # `sdrk_fallback_only` is a cfg flag, not a feature: `--all-features` would switch a
         # feature on and silently disable the backend.

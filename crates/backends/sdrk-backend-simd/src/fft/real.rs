@@ -23,7 +23,6 @@
 
 use fearless_simd::Simd as SimdToken;
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -56,7 +55,6 @@ impl Fft<C32> for Inner {
 }
 
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -104,10 +102,8 @@ impl Post for fearless_simd::wasm32::WasmSimd128 {}
 
 /// The reversals of [`Post`] with `shufps` and `unpck*ps`, for every x86 level (the SSE2 token
 /// also serves the levels above it, which then encode the same instructions with VEX).
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 mod x86 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{__m128, _mm_shuffle_ps, _mm_unpackhi_ps, _mm_unpacklo_ps};
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{__m128, _mm_shuffle_ps, _mm_unpackhi_ps, _mm_unpacklo_ps};
     use fearless_simd::prelude::*;
@@ -184,7 +180,6 @@ fn bin(zk: C32, zm: C32, w: C32) -> C32 {
 }
 
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -198,7 +193,6 @@ fn vectors(bins: usize) -> usize {
 }
 
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -260,7 +254,6 @@ fn vector_bins<P: Post>(
 }
 
 #[cfg(any(
-    target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
@@ -300,7 +293,7 @@ fn level_bins<S: SimdToken>(
     middle: &mut [C32],
 ) -> usize {
     let level = simd.level();
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     if let Some(p) = level.as_sse2()
         && level.as_avx2().is_none()
     {
@@ -324,7 +317,7 @@ fn level_bins<S: SimdToken>(
 /// sample). Elsewhere `memcpy` is a vector copy.
 #[inline(always)]
 fn pack(input: &[f32], dst: &mut [f32]) {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     for (o, pair) in dst
         .as_chunks_mut::<2>()
         .0
@@ -335,7 +328,7 @@ fn pack(input: &[f32], dst: &mut [f32]) {
             *o = [re, im];
         }
     }
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     if let Some(dst) = dst.get_mut(..input.len()) {
         dst.copy_from_slice(input);
     }

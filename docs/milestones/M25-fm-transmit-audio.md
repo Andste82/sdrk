@@ -8,7 +8,7 @@ Transmit audio that a standard FM receiver reproduces correctly and that never e
 
 ## Why
 
-The transmit chain of M08 (`fm_mod`, `duc`, `convert_out`, flow `fm_transmitter`) modulates the audio as it is. Every FM receiver applies a de-emphasis (50 µs in Europe, 75 µs in North America for broadcast; about 6 dB per octave from 300 Hz for two-way radio), so audio sent without the matching pre-emphasis arrives dull: at 10 kHz it is about 10 dB too low with 50 µs. And nothing limits the deviation: loud audio, or the pre-emphasis boosting the treble, pushes the deviation past 75 kHz (5 kHz for NFM), which widens the signal beyond its channel. A transmitter needs both before it goes on the air. The first user is a HackRF One (driver in the separate hardware repository).
+The transmit chain of M08 (`fm_mod`, `duc`, `convert_out`, flow `fm_transmitter`) modulates the audio as it is. Every FM receiver applies a de-emphasis (50 µs in Europe, 75 µs in North America for broadcast; about 6 dB per octave from 300 Hz for two-way radio), so audio sent without the matching pre-emphasis arrives dull: at 10 kHz it is about 10 dB too low with 50 µs. And nothing limits the deviation: loud audio, or the pre-emphasis boosting the treble, pushes the deviation past 75 kHz (5 kHz for NFM), which widens the signal beyond its channel. A transmitter needs both before it goes on the air. The first user is a HackRF One (driver in the separate repository [`sdrk-hardware`](https://github.com/Andste82/sdrk-hardware)).
 
 ## Order
 
@@ -142,7 +142,7 @@ Additional rules:
 
 **In:** kernel `preemph_limit` in `sdrk-core` (state, `Fallback`, `Reference`, facade delegation); the design function `preemphasis_coefs` in `sdrk-blocks`; the block `fm_tx_audio` with description; its pipeline kind and the regenerated schema; the node `shape` in `fm_transmitter`; the flow `nfm_transmitter`; de-emphasis in `nfm_receiver`; golden cases; suite cases; the loop tests of §6; `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`.
 
-**Out:** loudness processing (compressor, multiband processing, AGC on the transmit side), look-ahead limiting, the FM stereo encoder (pilot and 38 kHz subcarrier; backlog), RDS, CTCSS tone generation, drivers for transmitters (separate hardware repository), the live audio input (separate hardware repository).
+**Out:** loudness processing (compressor, multiband processing, AGC on the transmit side), look-ahead limiting, the FM stereo encoder (pilot and 38 kHz subcarrier; backlog), RDS, CTCSS tone generation, drivers for transmitters and the live audio input (both in `sdrk-hardware`).
 
 ## Specification
 

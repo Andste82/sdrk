@@ -274,11 +274,11 @@ pub enum ParamKind {
 ///
 /// ```
 /// let kinds: Vec<_> = sdrk_blocks::all_descriptions().iter().map(|d| d.kind).collect();
-/// assert_eq!(kinds.len(), 14);
+/// assert_eq!(kinds.len(), 15);
 /// assert!(kinds.contains(&"resampler"));
 /// ```
 pub fn all_descriptions() -> &'static [&'static BlockDescription] {
-    static ALL: [&BlockDescription; 14] = [
+    static ALL: [&BlockDescription; 15] = [
         &crate::blocks::convert::DESCRIPTION,
         &crate::blocks::convert_out::DESCRIPTION,
         &crate::blocks::scale::DESCRIPTION,
@@ -293,6 +293,7 @@ pub fn all_descriptions() -> &'static [&'static BlockDescription] {
         &crate::blocks::squelch::DESCRIPTION,
         &crate::blocks::agc::DESCRIPTION,
         &crate::blocks::am_demod::DESCRIPTION,
+        &crate::blocks::ssb_demod::DESCRIPTION,
     ];
     &ALL
 }

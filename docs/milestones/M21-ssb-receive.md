@@ -2,6 +2,10 @@
 
 > Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M20](M20-am-receive.md) · Next: [M22](M22-audio-filters.md)
 
+## Status
+
+Implemented and tested; every check of the milestone is met (details in *Status details* at the end). Not yet merged.
+
 ## Goal
 
 A complete SSB receiver (amateur radio, HF utility and maritime): the block `ssb_demod` (USB and LSB, switchable at runtime), its pipeline kind, the example flow `ssb_receiver`, the testkit generator `ssb_tone` and an end-to-end SSB test in f32 and Q15 that checks audio quality and the rejection of the opposite sideband.
@@ -217,8 +221,25 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Block `ssb_demod`, pipeline kind, regenerated schema
-- [ ] Flow `ssb_receiver` with YAML twin
-- [ ] Generator `ssb_tone`; golden cases (seeds 421–423), suite, E2E-SSB
-- [ ] Pipeline benchmark line
-- [ ] `docs/blocks.md`, `docs/timing.md`, `docs/pipeline.md`, `docs/performance.md`, `examples/README.md`, CHANGELOG, decisions log
+- [x] Block `ssb_demod`, pipeline kind, regenerated schema (done)
+- [x] Flow `ssb_receiver` with YAML twin (done)
+- [x] Generator `ssb_tone`; golden cases (seeds 421–423), suite, E2E-SSB (done: SINAD about 64 dB and rejection 71 dB or more in every variant; `e2e_ssb_rx_f32` runs in the full tier because the `f32` chain needs about 75 KiB, see the decisions log)
+- [x] Pipeline benchmark line (done: 631.4 instructions per input sample, `chains.ssb` of `benches/results/pipeline.json`, row in `docs/performance.md`)
+- [x] `docs/blocks.md`, `docs/timing.md`, `docs/pipeline.md`, `docs/performance.md`, `examples/README.md`, CHANGELOG, decisions log (done)
+
+## Status details
+
+Complete:
+
+- Block `ssb_demod` (`SsbDemodBlock`, f32 and Q15, runtime `sideband`, one `rotate`, one `fir_decimate` and one second `rotate` per piece of 256 samples, so the existing vector paths are used), pipeline kind with cost `8 + 4 * taps / audio_decimation`, schema (`cargo xtask schema --check`: ok), flow `ssb_receiver` (JSON and YAML).
+- Generator `ssb_tone` and `Sideband`; golden cases 421 to 423 (whole and in random chunks, 20 plans for the block).
+- Suite cases `block_ssb_demod_usb`, `block_ssb_demod_lsb`, `block_ssb_sideband_switch`, `e2e_ssb_rx_f32` (full tier), `e2e_ssb_rx_q15`, `e2e_ssb_rx_f32_1s`, `e2e_ssb_rx_q15_1s`; E2E-SSB in both roles with SINAD of 63.7 to 64.9 dB (limits 35 / 30 dB) and rejection of 71.6 to 94.9 dB (limits 50 / 40 dB).
+- Pipeline benchmark line, documentation, CHANGELOG, decisions log.
+
+Deviations from the text of this file (in the decisions log of 2026-10-26, none is a threshold): `e2e_ssb_rx_f32` registers in the full tier (arena), both roles run in each E2E case except the quick Q15 one (upper sideband only, emulator time), the benchmark chain has no squelch.
+
+Review follow-up (all in the decisions log of 2026-10-26): the golden case `ssb_demod_usb_cq15_dec4_loud` (seed 451: decimation 4 with saturation, bit-exact), the pipeline test of the shipped flow on the two-sided E2E-SSB signal (`f32` and `q15`, both sidebands, default AGC, the thresholds above) and a stronger extreme-input test of the block. `python tests/golden/generate.py --check` was verified with the pinned NumPy and SciPy (only the provenance label of the Python minor version differs).
+
+Open (in `docs/open-items.md`): M21-1, the `f32` E2E-SSB case and the lower-sideband role of the `q15` case are not in the quick emulator profile (arena and time budget); M21-2, the flow needs `max_taps: 8192`, which the milestone text omits. The CI-only jobs were not run in this session.
+
+Final run (host, Linux x86-64): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features` (1345 tests, 0 failed), `cargo xtask check` and `cargo xtask bare-metal` all pass. Not run in this session: `cargo xtask emu --target qemu-cortex-m4` of the final tree and the CI-only jobs (counted as open, see M21-1).

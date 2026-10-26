@@ -1,10 +1,28 @@
 {
+  "chains": {
+    "ssb": {
+      "flow": "ddc (300 kHz, decimation 50, cutoff 4 kHz, transition 2 kHz) -> agc -> ssb_demod (usb), as examples/flows/ssb_receiver.json without the squelch",
+      "input": {
+        "format": "cu8",
+        "rate_hz": 2400000
+      },
+      "instructions_per_input_sample": 631.44,
+      "latency": {
+        "group_delay_samples": 479.52,
+        "latency_samples": 481.52,
+        "latency_us": 10031.7,
+        "max_buffered_samples": 2,
+        "output": "audio",
+        "rate_hz": 48000
+      }
+    }
+  },
   "flow": "examples/flows/fm_receiver.json",
   "input": {
     "format": "cu8",
     "rate_hz": 2400000
   },
-  "instructions_per_input_sample": 461.15,
+  "instructions_per_input_sample": 461.03,
   "latency": {
     "group_delay_samples": 27.14,
     "latency_samples": 30.14,

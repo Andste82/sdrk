@@ -1,6 +1,6 @@
 [package]
 name = "pipeline-bench"
-description = "Instruction count and latency of the FM receiver flow at 2.4 MHz."
+description = "Instruction count and latency of the FM receiver flow and the SSB chain at 2.4 MHz."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

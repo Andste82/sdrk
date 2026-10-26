@@ -36,7 +36,7 @@ use sdrk_blocks::{
     DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
     FmModBlock, FmModConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType,
     ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, all_descriptions,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -56,10 +56,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_fourteen_unique_kinds() {
+fn there_are_fifteen_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 14);
-    assert_eq!(all_descriptions().len(), 14);
+    assert_eq!(kinds.len(), 15);
+    assert_eq!(all_descriptions().len(), 15);
     for kind in [
         "convert",
         "convert_out",
@@ -75,6 +75,7 @@ fn there_are_fourteen_unique_kinds() {
         "squelch",
         "agc",
         "am_demod",
+        "ssb_demod",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -250,6 +251,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("squelch", |n| SquelchConfig::default().get(n), &[]);
     defaults_match("agc", |n| AgcConfig::default().get(n), &[]);
     defaults_match("am_demod", |n| AmDemodConfig::default().get(n), &[]);
+    defaults_match("ssb_demod", |n| SsbDemodConfig::default().get(n), &[]);
     defaults_match("convert_out", |n| ConvertOutConfig::default().get(n), &[]);
 }
 
@@ -333,6 +335,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("squelch", SquelchConfig);
     round_trip!("agc", AgcConfig);
     round_trip!("am_demod", AmDemodConfig);
+    round_trip!("ssb_demod", SsbDemodConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -398,6 +401,15 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "am_demod",
         &mut AmDemodBlock::<CQ15, _>::new(&am, r, &mut s).unwrap(),
+    );
+    let ssb = SsbDemodConfig {
+        audio_decimation: 5,
+        transition_hz: 2_000.0,
+        ..SsbDemodConfig::default()
+    };
+    check_block_params(
+        "ssb_demod",
+        &mut SsbDemodBlock::<CQ15, _>::new(&ssb, r, &mut s).unwrap(),
     );
     check_block_params(
         "dc_block",

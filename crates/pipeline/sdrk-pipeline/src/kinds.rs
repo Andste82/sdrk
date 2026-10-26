@@ -16,7 +16,7 @@ use sdrk_blocks::{
     DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
     FmModBlock, FmModConfig, ParamValue, PortType, ResamplerBlock, ResamplerConfig,
     ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, TUNED_PHASES,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
 };
 use serde_json::{Map, Value};
 
@@ -666,6 +666,66 @@ impl Kind for AmDemodKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(AmDemodBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// --------------------------------------------------------------- ssb_demod
+
+pub(crate) struct SsbDemodKind;
+
+impl Kind for SsbDemodKind {
+    type Cfg = SsbDemodConfig;
+
+    const KIND: &'static str = "ssb_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["rotate", "fir_decimate"]
+    }
+    fn default_cfg() -> SsbDemodConfig {
+        SsbDemodConfig::default()
+    }
+    fn set(cfg: &mut SsbDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SsbDemodConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("ssb_demod needs complex samples"));
+        }
+        let taps = cfg.num_taps(rate)?;
+        let d = cfg.audio_decimation;
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: SsbDemodBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: SsbDemodBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                // Two oscillators and the complex filter, as ddc.
+                cost: 8.0 + 4.0 * taps as f64 / d as f64,
+                taps,
+                delay: delay_half(taps),
+                min_input: d,
+                output: stream(real_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &SsbDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(SsbDemodBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )

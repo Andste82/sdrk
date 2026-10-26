@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "ssb_demod_lsb_cq15.expected.bin",
+      "len": 16000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "ssb_demod_lsb_cq15.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "ssb_demod_lsb_cq15",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "mirrored tones (LSB 1 kHz, USB 1.5 kHz, amplitude 0.3, noise sigma 1e-3) quantized to Q15, sideband lsb, audio_decimation 1; integer chain: rotate (Q15 cosine table of 4097 entries, linear interpolation with a 15-bit fraction, complex Q15 multiply), fir_decimate (taps round(h 32768), int64 sum, one rounding and saturation per output), rotate back, real part",
+  "params": {
+    "amplitude": 0.3,
+    "attenuation_db": 60.0,
+    "audio_decimation": 1,
+    "high_hz": 3000.0,
+    "inc_in": 147639501,
+    "inc_out": 4147327795,
+    "low_hz": 300.0,
+    "other_hz": 1500.0,
+    "rate_hz": 48000.0,
+    "sideband": "lsb",
+    "taps": 873,
+    "transition_hz": 200.0,
+    "wanted_hz": 1000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 423,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

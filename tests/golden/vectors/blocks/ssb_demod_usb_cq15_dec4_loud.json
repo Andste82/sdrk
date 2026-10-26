@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "ssb_demod_usb_cq15_dec4_loud.expected.bin",
+      "len": 4000
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "ssb_demod_usb_cq15_dec4_loud.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "ssb_demod_usb_cq15_dec4_loud",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "loud signal: USB tone 1 kHz of amplitude 1.2 (clipped to full scale by the Q15 quantizer) and LSB tone 1.5 kHz of amplitude 0.3, noise sigma 1e-3, sideband usb, audio_decimation 4; the integer chain of ssb_demod_lsb_cq15 with fir_decimate keeping every 4th output, so that the decimation phase and the saturation of the filter and of the rotation back are covered",
+  "params": {
+    "amplitude": 0.3,
+    "attenuation_db": 60.0,
+    "audio_decimation": 4,
+    "high_hz": 3000.0,
+    "inc_in": 4147327795,
+    "inc_out": 590558003,
+    "low_hz": 300.0,
+    "other_hz": 1500.0,
+    "rate_hz": 48000.0,
+    "sideband": "usb",
+    "taps": 873,
+    "transition_hz": 200.0,
+    "wanted_hz": 1000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 451,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

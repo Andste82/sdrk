@@ -85,6 +85,7 @@ Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, d
 | `duc` with `N` taps, interpolation `L` | `L/1` | `Constant` | `(N - 1) / (2 L)` |
 | `fm_demod`, audio decimation `M`, audio filter of `N` taps | `1/M` | `Constant` | `1/2 + (N - 1) / 2` (`1/2` for `M = 1`, which has no audio filter) |
 | `am_demod`, audio decimation `M`, audio filter of `N` taps | `1/M` | `Constant` | `(N - 1) / 2` (0 for `M = 1`, which has no audio filter; the delay of the DC blocker depends on the frequency and is not declared) |
+| `ssb_demod`, audio decimation `M`, filter of `N` taps | `1/M` | `Constant` | `(N - 1) / 2` (the delay of `fir_decimate`, as `Delay::new(N - 1, 2)`; the two oscillators add none) |
 | `resampler`, rational `L/M`, `N` taps at `L` times the input rate | `L/M` | `Constant` | `(N - 1) / (2 L)` |
 | `resampler`, tunable, `K` taps per phase | nominal `rate_out / rate_in` | `Variable` | `(128 K - 1) / 256` (the delay of the prototype filter at 128 times the input rate; a `ppm` correction does not change the declaration) |
 

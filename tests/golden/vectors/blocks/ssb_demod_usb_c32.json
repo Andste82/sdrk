@@ -1,0 +1,45 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "ssb_demod_usb_c32.expected.bin",
+      "len": 16000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "ssb_demod_usb_c32.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "ssb_demod_usb_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "USB tone 1 kHz and LSB tone 1.5 kHz (each amplitude 0.3) plus complex noise sigma 1e-3 per component at 48 kHz; band 300 to 3000 Hz: rotation by -c = -1650 Hz in float64 (exact modular 32-bit phase), low-pass (kaiserord + firwin, cutoff 1350 Hz, transition 200 Hz, taps rounded to f32) via upfirdn(h, y, 1, 1), rotation back by +c, real part",
+  "params": {
+    "amplitude": 0.3,
+    "attenuation_db": 60.0,
+    "audio_decimation": 1,
+    "high_hz": 3000.0,
+    "inc_in": 4147327795,
+    "inc_out": 147639501,
+    "low_hz": 300.0,
+    "other_hz": 1500.0,
+    "rate_hz": 48000.0,
+    "sideband": "usb",
+    "taps": 873,
+    "transition_hz": 200.0,
+    "wanted_hz": 1000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 421,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

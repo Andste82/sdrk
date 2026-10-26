@@ -1,0 +1,45 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "ssb_demod_lsb_c32_dec2.expected.bin",
+      "len": 8000
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "ssb_demod_lsb_c32_dec2.input.bin",
+      "len": 16000
+    }
+  },
+  "case": "ssb_demod_lsb_c32_dec2",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the tones of ssb_demod_usb_c32 mirrored (LSB 1 kHz, USB 1.5 kHz), sideband lsb, audio_decimation 2: rotation by +c, the same low-pass at 48 kHz, upfirdn(h, y, 1, 2) restricted to ceil(n / 2) outputs, rotation back by -c at 24 kHz, real part",
+  "params": {
+    "amplitude": 0.3,
+    "attenuation_db": 60.0,
+    "audio_decimation": 2,
+    "high_hz": 3000.0,
+    "inc_in": 147639501,
+    "inc_out": 3999688294,
+    "low_hz": 300.0,
+    "other_hz": 1500.0,
+    "rate_hz": 48000.0,
+    "sideband": "lsb",
+    "taps": 873,
+    "transition_hz": 200.0,
+    "wanted_hz": 1000.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 422,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

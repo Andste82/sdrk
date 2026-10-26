@@ -668,7 +668,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[test]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 107);
+    assert_eq!(cases.len(), 114);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));
@@ -738,6 +738,13 @@ fn registered_cases_have_unique_names_without_spaces() {
         "e2e_am_rx_q15",
         "e2e_am_rx_f32_1s",
         "e2e_am_rx_q15_1s",
+        "block_ssb_demod_usb",
+        "block_ssb_demod_lsb",
+        "block_ssb_sideband_switch",
+        "e2e_ssb_rx_f32",
+        "e2e_ssb_rx_q15",
+        "e2e_ssb_rx_f32_1s",
+        "e2e_ssb_rx_q15_1s",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

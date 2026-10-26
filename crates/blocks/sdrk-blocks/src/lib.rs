@@ -57,6 +57,7 @@ pub use blocks::resampler::{ResamplerBlock, ResamplerConfig, ResamplerRealBlock,
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
+pub use blocks::ssb_demod::{SSB_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
 pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
 };

@@ -1962,8 +1962,9 @@ fn cheapest_volk(
     })
 }
 
-/// `cargo xtask count --pipeline`: instructions per input sample of `fm_receiver.json` at
-/// 2.4 MHz (callgrind, x86-64 with AVX2) and the latency of the audio output, written to
+/// `cargo xtask count --pipeline`: instructions per input sample of `fm_receiver.json` and of
+/// the SSB chain (`ddc`, `agc`, `ssb_demod`) at 2.4 MHz (callgrind, x86-64 with AVX2) and the
+/// latency of the audio output, written to
 /// `benches/results/pipeline.json`.
 #[allow(
     clippy::large_stack_frames,
@@ -1988,33 +1989,46 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
     }
     let binary = target_dir.join("release").join("pipeline");
     let blocks = K;
-    let count = |k: u64| -> anyhow::Result<u64> {
-        // As in `run_args`: both runs with arguments of the same length.
-        let width = blocks.to_string().len();
-        let out = Command::new("valgrind")
-            .args(["--tool=callgrind", "--callgrind-out-file=/dev/null"])
-            .arg(&binary)
-            .args(["run", &format!("{k:0width$}")])
+    // One chain: the differential count and the latency line of the benchmark binary.
+    let measure = |chain: Option<&str>| -> anyhow::Result<(f64, Value)> {
+        let count = |k: u64| -> anyhow::Result<u64> {
+            // As in `run_args`: both runs with arguments of the same length.
+            let width = blocks.to_string().len();
+            let out = Command::new("valgrind")
+                .args(["--tool=callgrind", "--callgrind-out-file=/dev/null"])
+                .arg(&binary)
+                .args(["run", &format!("{k:0width$}")])
+                .args(chain)
+                .output()
+                .context("cannot run valgrind")?;
+            if !out.status.success() {
+                bail!("valgrind failed: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            parse::callgrind(&String::from_utf8_lossy(&out.stderr))
+        };
+        let diff = count(blocks)?.checked_sub(count(0)?).ok_or_else(|| {
+            anyhow!("the pipeline run with more blocks counted fewer instructions")
+        })?;
+        let per_sample = diff as f64 / (blocks * N) as f64;
+        let info = Command::new(&binary)
+            .arg("info")
+            .args(chain)
             .output()
-            .context("cannot run valgrind")?;
-        if !out.status.success() {
-            bail!("valgrind failed: {}", String::from_utf8_lossy(&out.stderr));
-        }
-        parse::callgrind(&String::from_utf8_lossy(&out.stderr))
+            .context("cannot run the pipeline benchmark")?;
+        let latency: Value = serde_json::from_slice(&info.stdout).context("latency output")?;
+        Ok((per_sample, latency))
     };
-    let diff = count(blocks)?
-        .checked_sub(count(0)?)
-        .ok_or_else(|| anyhow!("the pipeline run with more blocks counted fewer instructions"))?;
-    let per_sample = diff as f64 / (blocks * N) as f64;
-    let info = Command::new(&binary)
-        .arg("info")
-        .output()
-        .context("cannot run the pipeline benchmark")?;
-    let latency: Value = serde_json::from_slice(&info.stdout).context("latency output")?;
+    let (per_sample, latency) = measure(None)?;
     println!(
         "pipeline fm_receiver.json at 2.4 MHz: {per_sample:.1} instructions per input sample, latency {} samples = {} us",
         latency.get("latency_samples").unwrap_or(&Value::Null),
         latency.get("latency_us").unwrap_or(&Value::Null)
+    );
+    let (ssb_per_sample, ssb_latency) = measure(Some("ssb"))?;
+    println!(
+        "pipeline ssb chain (ddc, agc, ssb_demod) at 2.4 MHz: {ssb_per_sample:.1} instructions per input sample, latency {} samples = {} us",
+        ssb_latency.get("latency_samples").unwrap_or(&Value::Null),
+        ssb_latency.get("latency_us").unwrap_or(&Value::Null)
     );
     if write {
         let dir = root.join("benches").join("results");
@@ -2026,6 +2040,14 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
             "method": { "blocks": blocks, "block_samples": N, "counted": "(count(k blocks) - count(0 blocks)) / (k * block_samples)" },
             "instructions_per_input_sample": round2(per_sample),
             "latency": latency,
+            "chains": {
+                "ssb": {
+                    "flow": "ddc (300 kHz, decimation 50, cutoff 4 kHz, transition 2 kHz) -> agc -> ssb_demod (usb), as examples/flows/ssb_receiver.json without the squelch",
+                    "input": { "format": "cu8", "rate_hz": 2_400_000 },
+                    "instructions_per_input_sample": round2(ssb_per_sample),
+                    "latency": ssb_latency,
+                },
+            },
         });
         let mut text = serde_json::to_string_pretty(&doc)?;
         text.push('\n');

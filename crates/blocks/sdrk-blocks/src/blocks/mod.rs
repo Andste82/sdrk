@@ -14,6 +14,7 @@ pub mod resampler;
 pub mod scale;
 pub mod spectrum;
 pub mod squelch;
+pub mod ssb_demod;
 
 use sdrk::{Delay, Rate, Ratio, RatioKind};
 

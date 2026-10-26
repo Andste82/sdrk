@@ -32,7 +32,7 @@ use sdrk_blocks::{
     DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
     FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, ResamplerBlock,
     ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
-    SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig,
+    SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -130,6 +130,17 @@ fn filters_exact<T: BlockSample>() {
         };
         let bytes = AmDemodBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
         check_exact_storage(bytes, |a| AmDemodBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
+    }
+
+    for audio_decimation in [1, 4] {
+        let cfg = SsbDemodConfig {
+            audio_decimation,
+            ..SsbDemodConfig::default()
+        };
+        let bytes = SsbDemodBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        check_exact_storage(bytes, |a| {
+            SsbDemodBlock::<T, _>::new(&cfg, r, a).map(|_| ())
+        });
     }
 
     let cfg = DucConfig {
@@ -291,7 +302,8 @@ fn no_block_is_larger_than_512_bytes() {
         SpectrumBlock,
         SquelchBlock,
         AgcBlock,
-        AmDemodBlock
+        AmDemodBlock,
+        SsbDemodBlock
     );
     check::<ResamplerRealBlock<f32, A<'static>>>("ResamplerRealBlock<f32>");
     check::<ResamplerRealBlock<Q15, A<'static>>>("ResamplerRealBlock<Q15>");
@@ -325,7 +337,8 @@ fn public_types_are_send() {
         SpectrumBlock,
         SquelchBlock,
         AgcBlock,
-        AmDemodBlock
+        AmDemodBlock,
+        SsbDemodBlock
     );
     assert_send::<ResamplerRealBlock<f32, A<'static>>>();
     assert_send::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>();
@@ -343,6 +356,7 @@ fn public_types_are_send() {
     assert_send::<SquelchConfig>();
     assert_send::<AgcConfig>();
     assert_send::<AmDemodConfig>();
+    assert_send::<SsbDemodConfig>();
     assert_send::<Error>();
     assert_send::<A<'static>>();
     assert_send::<sdrk_blocks::BlockDescription>();

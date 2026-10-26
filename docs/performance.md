@@ -232,6 +232,14 @@ Notes.
 
 At 2.4 Msps this is about 1.1 G instructions per second of signal.
 
+The same command also counts the SSB chain of M21 (`ddc` at +300 kHz with decimation 50, 4 kHz cutoff and 2 kHz transition, then `agc` with its defaults, then `ssb_demod` USB with its defaults: the receiver of `examples/flows/ssb_receiver.json` without the squelch, at the rates of the end-to-end SSB test), in the same blocks of 4096 input samples; the line is in `chains.ssb` of `benches/results/pipeline.json` (information, no limit):
+
+| Chain | Instructions per input sample | Latency of `audio` |
+| --- | --- | --- |
+| `ddc` + `agc` + `ssb_demod` | 631.4 | 481.52 samples of 48 kHz, 10031.7 µs (group delay 479.52 samples: 436 from the 873-tap audio filter, the rest from the channel filter; up to 2 samples buffered) |
+
+`ssb_demod` adds no kernel. It calls `rotate`, `fir_decimate` and a second `rotate` once per piece of 256 samples, never per sample, so every call goes through the facade to the vector paths of the backend (the check is `the_block_equals_the_kernel_chain` in `crates/blocks/sdrk-blocks/tests/ssb_demod.rs`, which compares the block with the three kernel calls bit for bit; the differential count above includes the block, and the drift of the FM line from 461.2 to 461.0 is the toolchain of the day). The channel filter of the chain is the same `ddc` as in the FM line, so the difference of the two lines (170 instructions per input sample) is the cost of `agc` and `ssb_demod` at 48 kHz amortised over the 50 input samples per audio sample.
+
 ## Running the measurements
 
 ```sh

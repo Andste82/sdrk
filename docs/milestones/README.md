@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15, M19 and M20 are delivered; M16 to M18 and M21 to M25 are planned (the receive series M19 to M23, M24 and M25 use nothing from M16 to M18, see the *Order* section of M19).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M21 are delivered; M16 to M18 and M22 to M25 are planned (the receive series M19 to M23, M24 and M25 use nothing from M16 to M18, see the *Order* section of M19).
 
 | # | File | Plan phase | Delivers |
 | --- | --- | --- | --- |
@@ -84,7 +84,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 436–437 | M20 (the audio-filter cases of `am_demod`, open item M20-5) |
 | 438–443 | M24 |
 | 444–450 | M25 |
-| 451–499 | free, for backlog milestones |
+| 451 | M21 (the loud decimated `CQ15` case `ssb_demod_usb_cq15_dec4_loud`, review finding) |
+| 452–499 | free, for backlog milestones |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
 | 530–999 | free, for backlog milestones |

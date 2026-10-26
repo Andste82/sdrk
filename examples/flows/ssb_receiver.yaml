@@ -1,0 +1,70 @@
+# SDRk pipeline: receive one single-sideband voice channel (amateur radio, HF utility and
+# maritime) with a squelch and an automatic gain control (YAML twin of ssb_receiver.json).
+# YAML is accepted as input; JSON stays the canonical format.
+sdrk: 1
+name: ssb-receiver
+description: "Receive one single-sideband voice channel (USB or LSB) with a power squelch and an automatic gain control and output 48 kHz audio."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # Automatic gain control with the defaults (attack 0.005 s, release 0.2 s), which suit SSB:
+  # the audio is the signal itself, not its envelope, so a fast loop that follows the syllables
+  # of speech is wanted (AM needs a slow loop, see am_receiver.yaml). It sits after the
+  # squelch: while the gate is closed the input is exactly zero and the gain is held.
+  agc:
+    kind: agc
+  # Single-sideband demodulator. The suppressed carrier must be at 0 Hz of its input, which
+  # is why the tuning is done by the frequency_hz of the ddc (set it to the carrier
+  # frequency, not to the middle of the voice band); a mistuning of df Hz shifts the audio
+  # by df Hz. The sideband is a convention: amateur radio uses lower sideband (lsb) below
+  # 10 MHz (80 m, 40 m) and upper sideband (usb) above (20 m to 10 m); marine and aviation HF
+  # voice is always usb. The sideband can be changed while the flow runs (set_param
+  # sideband, "usb" or "lsb"), the audio stays continuous. The defaults pass 300 to 3000 Hz
+  # from the carrier. audio_decimation stays 1 here because the channel is already at 48
+  # kHz; with a larger value the block also decimates the audio (for example 6 gives 8 kHz,
+  # enough for speech), and the band must still fit below half the output rate.
+  demod:
+    kind: ssb_demod
+    params:
+      sideband: usb
+  # Power squelch: it opens at -50 dBFS, closes 3 dB lower (the default hysteresis) and
+  # averages the power over 10 ms. It sits before the AGC, which would otherwise raise
+  # the noise of an empty channel to full level. threshold_db can be changed while the flow
+  # runs (set_param).
+  gate:
+    kind: squelch
+    params:
+      threshold_db: -50
+  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz) with a 4 kHz channel filter.
+  # An SSB voice channel is 3 kHz wide, so a cutoff of 4 kHz with a 2 kHz transition keeps it
+  # and rejects the neighbours at 4 to 5 kHz spacing. The narrow transition at 2.4 MS/s
+  # needs about 4400 taps, more than the default max_taps of 1023, so max_taps is raised.
+  # Set frequency_hz to the offset of the suppressed carrier from the tuner centre.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 4000
+      decimation: 50
+      max_taps: 8192
+      transition_hz: 2000
+# Channel filter, squelch, automatic gain control, SSB demodulator.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: gate }
+  - { from: gate, to: agc }
+  - { from: agc, to: demod }
+  - { from: demod, to: audio }
+# Audio samples (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

@@ -26,6 +26,7 @@ const FM_RECEIVER_GROUPED: &str = include_str!("../../../examples/flows/fm_recei
 const NFM_RECEIVER: &str = include_str!("../../../examples/flows/nfm_receiver.json");
 const AM_RECEIVER: &str = include_str!("../../../examples/flows/am_receiver.json");
 const AIRBAND_RECEIVER: &str = include_str!("../../../examples/flows/airband_receiver.json");
+const SSB_RECEIVER: &str = include_str!("../../../examples/flows/ssb_receiver.json");
 const FM_TRANSMITTER: &str = include_str!("../../../examples/flows/fm_transmitter.json");
 const RESAMPLE_AUDIO: &str = include_str!("../../../examples/flows/resample_audio.json");
 const SPECTRUM_ONLY: &str = include_str!("../../../examples/flows/spectrum_only.json");
@@ -124,6 +125,7 @@ fn every_example_flow_validates_clean() {
         ("nfm_receiver", NFM_RECEIVER),
         ("am_receiver", AM_RECEIVER),
         ("airband_receiver", AIRBAND_RECEIVER),
+        ("ssb_receiver", SSB_RECEIVER),
         ("resample_audio", RESAMPLE_AUDIO),
         ("spectrum_only", SPECTRUM_ONLY),
     ] {

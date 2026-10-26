@@ -10,6 +10,7 @@
 //! - `golden` (feature `std`): loader and comparison for the golden vectors,
 //! - [`e2e`]: the streaming FM receive and transmit chains of the end-to-end tests,
 //! - [`e2e_nfm`]: the end-to-end narrowband FM receive with squelch (M19),
+//! - [`e2e_ssb`]: the end-to-end SSB receive with squelch and AGC (M21),
 //! - [`fm`]: the analytic FM baseband generator,
 //! - [`meters`]: tone fit, SINAD, frequency estimate and spectral mask,
 //! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
@@ -55,6 +56,7 @@ pub mod design_helpers;
 pub mod e2e;
 pub mod e2e_am;
 pub mod e2e_nfm;
+pub mod e2e_ssb;
 pub mod encode;
 pub mod fm;
 pub mod r#gen;

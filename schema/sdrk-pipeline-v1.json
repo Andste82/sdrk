@@ -1456,6 +1456,88 @@
               "kind"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates a single-sideband signal (USB or LSB) to audio.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "ssb_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "audio_decimation": {
+                    "default": 1,
+                    "description": "Decimation factor of the audio, 1 to 64. Typical: 1 at 48 kHz, 6 to go to 8 kHz. Build-time.",
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "high_hz": {
+                    "default": 3000.0,
+                    "description": "Upper edge of the audio band in Hz, from the carrier; above low_hz. Unit: Hz. Typical: 3000 for voice. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "low_hz": {
+                    "default": 300.0,
+                    "description": "Lower edge of the audio band in Hz, from the carrier. Unit: Hz. Typical: 300 for voice. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "sideband": {
+                    "default": "usb",
+                    "description": "Sideband to receive: usb (above the carrier) or lsb (below). Typical: usb; lsb for amateur radio below 10 MHz. Runtime.",
+                    "enum": [
+                      "usb",
+                      "lsb"
+                    ],
+                    "type": "string"
+                  },
+                  "transition_hz": {
+                    "default": 200.0,
+                    "description": "Width of the transition band of the filter in Hz. Unit: Hz. Typical: 200. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
           }
         ]
       },

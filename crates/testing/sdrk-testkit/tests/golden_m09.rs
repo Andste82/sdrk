@@ -19,6 +19,7 @@ use sdrk_blocks::design::{DesignWindow, firwin_lowpass, kaiserord};
 use sdrk_blocks::{
     AmDemodBlock, AmDemodConfig, Block, DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig,
     FrameBlock, ResamplerBlock, ResamplerConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
+    SsbDemodBlock, SsbDemodConfig, SsbSideband,
 };
 use sdrk_core::kernels::dot::{Dot, DotReal};
 use sdrk_core::{C32, CQ15, Q15, Rate, Reference, Sample};
@@ -288,7 +289,11 @@ fn blocks_cases_are_present() {
             "resampler_tuned_c32_ppm",
             "resampler_tuned_cq15_ppm",
             "spectrum_c32_1024_hann_avg4",
-            "spectrum_cq15_1024_bfp"
+            "spectrum_cq15_1024_bfp",
+            "ssb_demod_lsb_c32_dec2",
+            "ssb_demod_lsb_cq15",
+            "ssb_demod_usb_c32",
+            "ssb_demod_usb_cq15_dec4_loud"
         ]
     );
 }
@@ -396,6 +401,83 @@ fn am_demod_block_with_audio_filter_matches_python_chain_cq15() {
     assert_eq!(cfg.audio_taps(rate).unwrap(), usize_param(&case, "taps"));
     check_stream(&case, input, || {
         AmDemodBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+fn ssb_demod_config(case: &GoldenCase) -> (SsbDemodConfig, Rate) {
+    let sideband = match case.param_str("sideband").unwrap() {
+        "usb" => SsbSideband::Usb,
+        "lsb" => SsbSideband::Lsb,
+        other => panic!("unknown sideband {other}"),
+    };
+    let cfg = SsbDemodConfig {
+        sideband,
+        low_hz: case.param_f64("low_hz").unwrap(),
+        high_hz: case.param_f64("high_hz").unwrap(),
+        transition_hz: case.param_f64("transition_hz").unwrap(),
+        attenuation_db: case.param_f64("attenuation_db").unwrap(),
+        audio_decimation: usize_param(case, "audio_decimation"),
+        ..SsbDemodConfig::default()
+    };
+    let rate = Rate::hz(case.param_f64("rate_hz").unwrap() as u64).unwrap();
+    assert_eq!(cfg.num_taps(rate).unwrap(), usize_param(case, "taps"));
+    (cfg, rate)
+}
+
+#[test]
+fn ssb_demod_block_matches_python_chain_usb_c32() {
+    let case = golden::load("blocks", "ssb_demod_usb_c32").unwrap();
+    let Array::CF32(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = ssb_demod_config(&case);
+    assert_eq!(cfg.sideband, SsbSideband::Usb);
+    check_stream(&case, input, || {
+        SsbDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+#[test]
+fn ssb_demod_block_matches_python_chain_lsb_c32_decimated() {
+    let case = golden::load("blocks", "ssb_demod_lsb_c32_dec2").unwrap();
+    let Array::CF32(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = ssb_demod_config(&case);
+    assert_eq!((cfg.sideband, cfg.audio_decimation), (SsbSideband::Lsb, 2));
+    check_stream(&case, input, || {
+        SsbDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+#[test]
+fn ssb_demod_block_matches_python_chain_lsb_cq15() {
+    let case = golden::load("blocks", "ssb_demod_lsb_cq15").unwrap();
+    let Array::CI16(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = ssb_demod_config(&case);
+    assert_eq!(cfg.sideband, SsbSideband::Lsb);
+    check_stream(&case, input, || {
+        SsbDemodBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+    });
+}
+
+#[test]
+fn ssb_demod_block_matches_python_chain_usb_cq15_decimated_loud() {
+    let case = golden::load("blocks", "ssb_demod_usb_cq15_dec4_loud").unwrap();
+    let Array::CI16(input) = case.array("input").unwrap() else {
+        panic!()
+    };
+    let (cfg, rate) = ssb_demod_config(&case);
+    assert_eq!((cfg.sideband, cfg.audio_decimation), (SsbSideband::Usb, 4));
+    // The case is built to saturate: the expected audio reaches both rails.
+    let Array::I16(expected) = case.array("expected").unwrap() else {
+        panic!()
+    };
+    assert!(expected.contains(&i16::MAX) && expected.contains(&i16::MIN));
+    check_stream(&case, input, || {
+        SsbDemodBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
 

@@ -165,6 +165,59 @@ pub fn am_tone(
     }
 }
 
+/// The sideband of an SSB test signal.
+///
+/// ```
+/// use sdrk_testkit::r#gen::Sideband;
+/// assert_ne!(Sideband::Usb, Sideband::Lsb);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sideband {
+    /// Upper sideband: the tone lies above the carrier.
+    Usb,
+    /// Lower sideband: the tone lies below the carrier.
+    Lsb,
+}
+
+/// SSB tone with the suppressed carrier at 0 Hz: `amplitude * exp(+-j 2 pi audio_hz n / fs)` for
+/// `n = start + i` (`+` for USB, `-` for LSB), computed in f64 and rounded once to f32. The
+/// phase is reduced to a fraction of a cycle first, so the samples depend only on the absolute
+/// index and a signal generated in chunks equals the one generated at once.
+///
+/// ```
+/// use sdrk_core::{Rate, C32};
+/// use sdrk_testkit::r#gen::{Sideband, ssb_tone};
+/// let mut usb = [C32::default(); 3];
+/// let mut lsb = [C32::default(); 3];
+/// // A quarter of the sample rate: 1, j, -1 for USB and the conjugate for LSB.
+/// ssb_tone(&mut usb, Rate::hz(8_000).unwrap(), 2_000.0, Sideband::Usb, 0.5, 0);
+/// ssb_tone(&mut lsb, Rate::hz(8_000).unwrap(), 2_000.0, Sideband::Lsb, 0.5, 0);
+/// assert_eq!((usb[0].re, usb[1].im), (0.5, 0.5));
+/// assert_eq!((lsb[1].im, lsb[2].re), (-0.5, -0.5));
+/// ```
+pub fn ssb_tone(
+    out: &mut [C32],
+    rate: Rate,
+    audio_hz: f64,
+    sideband: Sideband,
+    amplitude: f64,
+    start: u64,
+) {
+    let fs = rate.as_f64();
+    let sign = match sideband {
+        Sideband::Usb => 1.0,
+        Sideband::Lsb => -1.0,
+    };
+    for (i, o) in out.iter_mut().enumerate() {
+        let cycles = frac(audio_hz * index_of(start, i) / fs);
+        let theta = sign * TAU * cycles;
+        *o = C32::new(
+            (amplitude * libm::cos(theta)) as f32,
+            (amplitude * libm::sin(theta)) as f32,
+        );
+    }
+}
+
 /// Extreme inputs for robustness tests.
 pub mod extreme {
     use num_complex::Complex64;

@@ -452,3 +452,193 @@ def am_demod_cq15_dec4_gap(rng):
             "decimation by 4 with one rounding per output: sat16(round_shift(sum, 15))"
         ),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# ssb_demod (M21): rotate -> low-pass with decimation -> rotate back -> real part
+
+SSB_RATE = 48000.0
+SSB_N = 16000
+SSB_LOW_HZ, SSB_HIGH_HZ = 300.0, 3000.0
+SSB_TRANSITION_HZ, SSB_ATTENUATION_DB = 200.0, 60.0
+SSB_AMPLITUDE = 0.3
+SSB_NOISE_SIGMA = 1e-3
+SSB_WANTED_HZ, SSB_OTHER_HZ = 1000.0, 1500.0
+TWO32 = 2**32
+
+
+def ssb_signal(rng, wanted_sign, wanted_amplitude=SSB_AMPLITUDE):
+    """ssb_tone: a tone of 1 kHz on the wanted side (+1 USB, -1 LSB) and one of 1.5 kHz on the other."""
+    k = np.arange(SSB_N)
+
+    def tone(sign, audio_hz, amplitude):
+        cycles = (audio_hz * k / SSB_RATE) % 1.0
+        return amplitude * scalar_math.expj(sign * 2.0 * np.pi * cycles)
+
+    return (
+        tone(wanted_sign, SSB_WANTED_HZ, wanted_amplitude)
+        + tone(-wanted_sign, SSB_OTHER_HZ, SSB_AMPLITUDE)
+        + noise(rng, SSB_N, SSB_NOISE_SIGMA)
+    )
+
+
+def nco_increment(freq_hz, rate_hz):
+    """``round(frac(f / fs) * 2**32) mod 2**32``, round half to even (the Nco of sdrk-core)."""
+    cycles = freq_hz / rate_hz
+    return int(round((cycles - math.floor(cycles)) * TWO32)) % TWO32
+
+
+def nco_phase(n, inc):
+    """The 32-bit phase of the first ``n`` samples of an oscillator that starts at phase 0 (exact)."""
+    return (np.arange(n, dtype=np.uint64) * np.uint64(inc)) % np.uint64(TWO32)
+
+
+def nco_rotation(n, inc):
+    """``exp(j 2 pi phase / 2**32)`` in float64 for the exact modular phase."""
+    return scalar_math.expj(2.0 * np.pi * nco_phase(n, inc).astype(np.float64) / float(TWO32))
+
+
+def ssb_setup(sideband_sign, decimation):
+    """Taps (f64) and the two phase increments of the block."""
+    centre = (SSB_LOW_HZ + SSB_HIGH_HZ) / 2.0
+    half = (SSB_HIGH_HZ - SSB_LOW_HZ) / 2.0
+    h = design.lowpass(half, SSB_TRANSITION_HZ, SSB_ATTENUATION_DB, SSB_RATE)
+    inc_in = nco_increment(-sideband_sign * centre, SSB_RATE)
+    inc_out = nco_increment(sideband_sign * centre, SSB_RATE / decimation)
+    return h, inc_in, inc_out
+
+
+def ssb_params(sideband, decimation, h, inc_in, inc_out):
+    return {
+        "rate_hz": SSB_RATE,
+        "sideband": sideband,
+        "low_hz": SSB_LOW_HZ,
+        "high_hz": SSB_HIGH_HZ,
+        "transition_hz": SSB_TRANSITION_HZ,
+        "attenuation_db": SSB_ATTENUATION_DB,
+        "audio_decimation": decimation,
+        "amplitude": SSB_AMPLITUDE,
+        "wanted_hz": SSB_WANTED_HZ,
+        "other_hz": SSB_OTHER_HZ,
+        "taps": len(h),
+        "inc_in": inc_in,
+        "inc_out": inc_out,
+    }
+
+
+def ssb_chain_c32(x, h, inc_in, inc_out, decimation):
+    """rotation in f64, ``upfirdn(h, ., 1, M)`` restricted to ceil(n / M) outputs, rotation back, real part."""
+    n = len(x)
+    h32 = h.astype(np.float32).astype(np.float64)
+    rotated = x.astype(np.complex128) * nco_rotation(n, inc_in)
+    y = scipy.signal.upfirdn(h32, rotated, 1, decimation)[: -(-n // decimation)]
+    return (y * nco_rotation(len(y), inc_out)).real
+
+
+@case(kernel="blocks", name="ssb_demod_usb_c32", seed=421)
+def ssb_demod_usb_c32(rng):
+    x = ssb_signal(rng, +1).astype(np.complex64)
+    h, inc_in, inc_out = ssb_setup(+1, 1)
+    return dict(
+        params=ssb_params("usb", 1, h, inc_in, inc_out),
+        arrays={"input": Array("cf32", x), "expected": Array("f64", ssb_chain_c32(x, h, inc_in, inc_out, 1))},
+        tolerance={"class": "tolerance", "snr_db_min": 90.0, "skip": 0},
+        notes=(
+            "USB tone 1 kHz and LSB tone 1.5 kHz (each amplitude 0.3) plus complex noise sigma 1e-3 per "
+            "component at 48 kHz; band 300 to 3000 Hz: rotation by -c = -1650 Hz in float64 (exact modular "
+            "32-bit phase), low-pass (kaiserord + firwin, cutoff 1350 Hz, transition 200 Hz, taps rounded to "
+            "f32) via upfirdn(h, y, 1, 1), rotation back by +c, real part"
+        ),
+    )
+
+
+@case(kernel="blocks", name="ssb_demod_lsb_c32_dec2", seed=422)
+def ssb_demod_lsb_c32_dec2(rng):
+    x = ssb_signal(rng, -1).astype(np.complex64)
+    h, inc_in, inc_out = ssb_setup(-1, 2)
+    return dict(
+        params=ssb_params("lsb", 2, h, inc_in, inc_out),
+        arrays={"input": Array("cf32", x), "expected": Array("f64", ssb_chain_c32(x, h, inc_in, inc_out, 2))},
+        tolerance={"class": "tolerance", "snr_db_min": 90.0, "skip": 0},
+        notes=(
+            "the tones of ssb_demod_usb_c32 mirrored (LSB 1 kHz, USB 1.5 kHz), sideband lsb, audio_decimation 2: "
+            "rotation by +c, the same low-pass at 48 kHz, upfirdn(h, y, 1, 2) restricted to ceil(n / 2) outputs, "
+            "rotation back by -c at 24 kHz, real part"
+        ),
+    )
+
+
+def cos_sin_q15(phase):
+    """Q15 ``(cos, sin)`` of 32-bit phases: the table of 4097 rounded cosines and linear interpolation."""
+    table = np.asarray(
+        q15.from_float(scalar_math.cos(2.0 * np.pi * np.arange(4097) / 4096)), dtype=np.int64
+    )
+
+    def interp(p):
+        p = p.astype(np.int64)
+        idx = p >> 20
+        f15 = (p >> 5) & 0x7FFF
+        a, b = table[idx], table[idx + 1]
+        return q15.sat16(a + q15.round_shift((b - a) * f15, 15))
+
+    quarter = np.uint64(1 << 30)
+    return interp(phase), interp((phase - quarter) % np.uint64(TWO32))
+
+
+def rotate_q15(xr, xi, inc):
+    c, s = cos_sin_q15(nco_phase(len(xr), inc))
+    return q15.cmul(xr, xi, c, s)
+
+
+def decimate_q15(v, h, m):
+    """fir_decimate: integer convolution, every m-th output, one rounding and saturation each."""
+    full = np.convolve(v, h)[: len(v)][::m]
+    return q15.sat16(q15.round_shift(full, 15))
+
+
+def ssb_demod_cq15_case(x, sideband_sign, decimation, notes):
+    xr, xi = q15.from_float(x.real), q15.from_float(x.imag)
+    h, inc_in, inc_out = ssb_setup(sideband_sign, decimation)
+    hq = np.asarray(q15.from_float(h), dtype=np.int64)
+    assert int(np.abs(hq).max()) < 32768
+    rr, ri = rotate_q15(xr, xi, inc_in)
+    yr, yi = decimate_q15(rr, hq, decimation), decimate_q15(ri, hq, decimation)
+    zr, _ = rotate_q15(yr, yi, inc_out)
+    return dict(
+        params=ssb_params("usb" if sideband_sign > 0 else "lsb", decimation, h, inc_in, inc_out),
+        arrays={"input": Array("ci16", q15.pack(xr, xi)), "expected": Array("i16", zr)},
+        tolerance={"class": "bit_exact"},
+        notes=notes,
+    )
+
+
+@case(kernel="blocks", name="ssb_demod_lsb_cq15", seed=423)
+def ssb_demod_lsb_cq15(rng):
+    return ssb_demod_cq15_case(
+        ssb_signal(rng, -1),
+        -1,
+        1,
+        (
+            "mirrored tones (LSB 1 kHz, USB 1.5 kHz, amplitude 0.3, noise sigma 1e-3) quantized to Q15, "
+            "sideband lsb, audio_decimation 1; integer chain: rotate (Q15 cosine table of 4097 entries, "
+            "linear interpolation with a 15-bit fraction, complex Q15 multiply), fir_decimate (taps "
+            "round(h 32768), int64 sum, one rounding and saturation per output), rotate back, real part"
+        ),
+    )
+
+
+@case(kernel="blocks", name="ssb_demod_usb_cq15_dec4_loud", seed=451)
+def ssb_demod_usb_cq15_dec4_loud(rng):
+    # The wanted tone has amplitude 1.2: the quantizer clips the input, the filter overshoots and both the
+    # decimating filter and the second rotation saturate (rule R7).
+    return ssb_demod_cq15_case(
+        ssb_signal(rng, +1, wanted_amplitude=1.2),
+        +1,
+        4,
+        (
+            "loud signal: USB tone 1 kHz of amplitude 1.2 (clipped to full scale by the Q15 quantizer) and LSB "
+            "tone 1.5 kHz of amplitude 0.3, noise sigma 1e-3, sideband usb, audio_decimation 4; the integer "
+            "chain of ssb_demod_lsb_cq15 with fir_decimate keeping every 4th output, so that the decimation "
+            "phase and the saturation of the filter and of the rotation back are covered"
+        ),
+    )

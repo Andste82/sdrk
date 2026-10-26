@@ -97,6 +97,11 @@
 //! | `e2e_am_rx_f32` | quick | about 60 KiB (0.2 s of signal) |
 //! | `e2e_am_rx_q15` | quick | about 32 KiB (0.2 s of signal) |
 //! | `e2e_am_rx_f32_1s`, `e2e_am_rx_q15_1s` | full | as the 0.2 s variants (1.0 s of signal) |
+//! | `block_ssb_demod_usb`, `block_ssb_demod_lsb` | quick | about 44 KiB |
+//! | `block_ssb_sideband_switch` | quick | about 54 KiB |
+//! | `e2e_ssb_rx_q15` | quick | about 63 KiB (0.2 s of signal, upper sideband) |
+//! | `e2e_ssb_rx_f32` | full | about 75 KiB (0.2 s of signal, both sidebands; the f32 chain does not fit the 64 KiB of the quick tier) |
+//! | `e2e_ssb_rx_f32_1s`, `e2e_ssb_rx_q15_1s` | full | as the 0.2 s variants (1.0 s of signal) |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |
@@ -142,8 +147,9 @@ mod m09;
 mod m13;
 mod m19;
 mod m20;
+mod m21;
 
-pub(crate) static CASES: [TestCase; 107] = [
+pub(crate) static CASES: [TestCase; 114] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -678,6 +684,41 @@ pub(crate) static CASES: [TestCase; 107] = [
         name: "e2e_am_rx_q15_1s",
         tier: Tier::Full,
         run: m20::e2e_am_rx_q15_1s,
+    },
+    TestCase {
+        name: "block_ssb_demod_usb",
+        tier: Tier::Quick,
+        run: m21::block_ssb_demod_usb,
+    },
+    TestCase {
+        name: "block_ssb_demod_lsb",
+        tier: Tier::Quick,
+        run: m21::block_ssb_demod_lsb,
+    },
+    TestCase {
+        name: "block_ssb_sideband_switch",
+        tier: Tier::Quick,
+        run: m21::block_ssb_sideband_switch,
+    },
+    TestCase {
+        name: "e2e_ssb_rx_f32",
+        tier: Tier::Full,
+        run: m21::e2e_ssb_rx_f32,
+    },
+    TestCase {
+        name: "e2e_ssb_rx_q15",
+        tier: Tier::Quick,
+        run: m21::e2e_ssb_rx_q15,
+    },
+    TestCase {
+        name: "e2e_ssb_rx_f32_1s",
+        tier: Tier::Full,
+        run: m21::e2e_ssb_rx_f32_1s,
+    },
+    TestCase {
+        name: "e2e_ssb_rx_q15_1s",
+        tier: Tier::Full,
+        run: m21::e2e_ssb_rx_q15_1s,
     },
 ];
 

@@ -40,7 +40,7 @@ The host decides pass or fail from these lines only (`xtask::emu::judge`; the ex
 
 Every case works in a 256 KiB arena (quick cases in 64 KiB); a case that needs more fails with `CapacityExceeded`, reported as `FAIL`. Two host tests catch oversizing before the emulator: `full_suite_passes_with_a_256_kib_arena` and `quick_suite_passes_with_a_64_kib_arena` (`crates/testing/sdrk-testkit/tests/suite.rs`).
 
-The suite on the MCUs is the whole testkit suite: kernels in both directions, fused kernels, blocks with `ArenaStorage` and the end-to-end FM chains (`e2e_fm_rx_*`, `e2e_fm_txrx_*`; 0.1 s in the quick profile, 1 s in the full profile). The `C32` cases run with the hardware FPU on the Cortex-M4F, Cortex-M55, ESP32-P4 and ESP32-S3 and in soft float on RISC-V `imac`. The `f64` of the references is software floating point on every target but the Cortex-M55 (the P4 and the M4F have single-precision FPUs only), which dominates the run times.
+The suite on the MCUs is the whole testkit suite: kernels in both directions, fused kernels, blocks with `ArenaStorage` and the end-to-end FM chains (`e2e_fm_rx_*`, `e2e_fm_txrx_*`; 0.1 s in the quick profile, 1 s in the full profile), NFM (`e2e_nfm_rx_*`; 2 s variants in the full profile) and AM (`e2e_am_rx_*`; 0.2 s quick, 1 s full). The `C32` cases run with the hardware FPU on the Cortex-M4F, Cortex-M55, ESP32-P4 and ESP32-S3 and in soft float on RISC-V `imac`. The `f64` of the references is software floating point on every target but the Cortex-M55 (the P4 and the M4F have single-precision FPUs only), which dominates the run times.
 
 ## Memory maps and linker scripts
 

@@ -2,6 +2,10 @@
 
 > Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M19](M19-nfm-squelch.md) · Next: [M21](M21-ssb-receive.md)
 
+## Status
+
+Implemented and tested; every check of the milestone is met (details in *Status details* at the end). Merged with pull request 35 on 2026-10-26.
+
 ## Goal
 
 A complete AM receiver (medium and short wave broadcast, airband): the kernels `mag` (envelope), `dc_block_real` and `agc`, the blocks `agc` and `am_demod`, their pipeline kinds, the example flows `am_receiver` (broadcast) and `airband_receiver` (with the squelch of M19), the testkit generator `am_tone` and an end-to-end AM test in f32 and Q15.
@@ -279,13 +283,13 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] `mag` paths in `sdrk-backend-simd` for every level, sweep, counts and limits; the `C32` `agc` against the `agc_cc` loop of GNU Radio (a C copy in `benches/refs/gr-agc.c`; `release` at `sse2`, `sse4.2`, `avx2`, `avx512` and `simd128`, first `dev` at `neon`, `release` since M20-6 was closed in the review) and `info` entries for `agc` `CQ15` and `dc_block_real` (done: the paths of SSE2, SSE4.2, AVX2, AVX-512, NEON and SIMD128; `tests/spectrum_mag.rs` and the sweep over all 2^32 raw pairs in the nightly `sweep_*` jobs; all four `cargo xtask count` platforms pass; `mag_q15` is `release` at all six levels (first `dev` as specified, promoted because every ratio is below 1.00 and the accuracy rule is met, open item M20-3 closed); the testkit case `backend_vs_fallback_mag` is in `cases/m13.rs`)
 - [x] Blocks `agc`, `am_demod`, pipeline kinds, regenerated schema (done)
 - [x] Flows `am_receiver`, `airband_receiver` with YAML twins (done: the airband flow is exactly zero before the transmission and again once the gate has closed, open item M20-4 closed)
-- [x] Generator `am_tone`; golden cases (seeds 413–420, 436 and 437), suite, invariance, extremes, E2E-AM (done: E2E-AM meets SINAD and the audio level of 1 dB, quick and full, open item M20-2 closed; the `am_demod` golden vectors cover the audio filter path with the cases 421 and 422, open item M20-5 closed)
+- [x] Generator `am_tone`; golden cases (seeds 413–420, 436 and 437), suite, invariance, extremes, E2E-AM (done: E2E-AM meets SINAD and the audio level of 1 dB, quick and full, open item M20-2 closed; the `am_demod` golden vectors cover the audio filter path with the cases 436 and 437, open item M20-5 closed)
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log (done)
 - Closed in the review: M20-6 (the `C32` `agc` at `neon` was 1.28x of the `agc_cc` loop of GNU Radio compiled by GCC, `dev`; with the magnitudes and products in the SIMD backend it is 1.03x and `release` (1.00x before the review finding that the gain must be clamped on both sides), see the decisions log of 2026-10-26)
 
 **Deviations from the text of this file (in the decisions log of 2026-10-25 and 2026-10-26, none is a threshold):** the gain update of section 3 (open item M20-1), the hold of the gain on an input of exactly zero (section 3), the silence rule of `am_demod` (section 4, open item M20-4), the two extra golden cases (open item M20-5), `mag_q15` as `release` (section 7, open item M20-3); from the review (2026-10-26): the `C32` `agc` takes the output level as `g |x|` instead of `|y|` and evaluates the release in two rearranged forms per range of the level (the same function with other roundings, not the order of operations of section 3; the f64 model, `Reference` and the golden vectors follow section 3 unchanged), and the `C32` `agc` is accelerated in the SIMD backend around the scalar recursion (section 7 had it with the fallback). The clamp of the gain to `[min, max]` is two-sided as specified (acceptance test 4 holds without tolerance).
 
-## Status
+## Status details
 
 Complete:
 

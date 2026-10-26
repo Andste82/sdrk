@@ -81,11 +81,10 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 421–423 | M21 |
 | 424–429 | M22 |
 | 430–435 | M23 |
-| 436–441 | M24 |
-| 442–448 | M25 |
-| 449–499 | free, for backlog milestones |
 | 436–437 | M20 (the audio-filter cases of `am_demod`, open item M20-5) |
-| 438–499 | free, for backlog milestones |
+| 438–443 | M24 |
+| 444–450 | M25 |
+| 451–499 | free, for backlog milestones |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
 | 530–999 | free, for backlog milestones |

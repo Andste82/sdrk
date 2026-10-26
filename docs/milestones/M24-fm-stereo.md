@@ -304,12 +304,12 @@ The generator builds the cosine tables of `rotate` itself (`COS_F32[k] = float32
 
 | Kernel | Case | Seed | Construction | Expected | Tolerance |
 | --- | --- | --- | --- | --- | --- |
-| stereo_pll | `lock_f32_16384` | 436 | 192 kHz, `natural_hz` 50, `pilot_level` 0.1; `mpx` = the MPX of §2 (L 1 kHz, R 3 kHz, amplitude 1, pilot 0.1 at 19 000.5 Hz with start phase 1.0 rad) plus real noise σ 0.01; `pilot` = the pilot term alone plus independent noise σ 0.005 (no band-pass in the case) | float32 model of §3 | bit-exact |
-| stereo_pll | `lock_q15_16384` | 437 | same signals scaled by 0.625 and quantized; `pilot_level` 0.0625 | integer model of §3 | bit-exact |
-| stereo_pll | `fade_f32_16384` | 438 | as `lock_f32`, the pilot amplitude falls linearly from 0.1 to 0 over samples 8192–12287 and stays 0 | float32 model; the case also stores the stereo flag per sample (`u8`) | bit-exact |
-| stereo_pll | `disable_f32_8192` | 439 | as `lock_f32`; `set_enabled(false)` at sample 4096 (the case lists the change) | float32 model | bit-exact |
-| stereo_matrix | `c32_4096` | 440 | uniform noise in ±0.6 per component | `s + (d + d)`, `s − (d + d)` in float32 | bit-exact |
-| stereo_matrix | `cq15_4096` | 441 | uniform raw values over the whole range (saturates often) | integer model of §4 | bit-exact |
+| stereo_pll | `lock_f32_16384` | 438 | 192 kHz, `natural_hz` 50, `pilot_level` 0.1; `mpx` = the MPX of §2 (L 1 kHz, R 3 kHz, amplitude 1, pilot 0.1 at 19 000.5 Hz with start phase 1.0 rad) plus real noise σ 0.01; `pilot` = the pilot term alone plus independent noise σ 0.005 (no band-pass in the case) | float32 model of §3 | bit-exact |
+| stereo_pll | `lock_q15_16384` | 439 | same signals scaled by 0.625 and quantized; `pilot_level` 0.0625 | integer model of §3 | bit-exact |
+| stereo_pll | `fade_f32_16384` | 440 | as `lock_f32`, the pilot amplitude falls linearly from 0.1 to 0 over samples 8192–12287 and stays 0 | float32 model; the case also stores the stereo flag per sample (`u8`) | bit-exact |
+| stereo_pll | `disable_f32_8192` | 441 | as `lock_f32`; `set_enabled(false)` at sample 4096 (the case lists the change) | float32 model | bit-exact |
+| stereo_matrix | `c32_4096` | 442 | uniform noise in ±0.6 per component | `s + (d + d)`, `s − (d + d)` in float32 | bit-exact |
+| stereo_matrix | `cq15_4096` | 443 | uniform raw values over the whole range (saturates often) | integer model of §4 | bit-exact |
 
 The cases of 16384 samples are about 256 KiB (two real inputs and one complex output); keep each at or below 512 KiB (R8.6). All stateful Rust golden tests run whole and in random chunks (ChunkPlan seed = case seed); `fade_f32` also compares `is_stereo()` after every chunk with the stored flag.
 
@@ -336,7 +336,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [ ] Stereo convention documented; flow `fm_stereo_receiver` with YAML twin; stereo WAV in the `fm-receiver` example
 - [ ] Testkit `fm_multitone_baseband`, `stereo_mpx_tones`
 - [ ] SIMD path for `stereo_matrix`, `info` for `stereo_pll`, counts and limits, block row in `docs/performance.md`
-- [ ] Golden cases (seeds 436–441) with table hashes, suite, invariance, extremes, E2E-STEREO (separation, SINAD, level, pilot residue, lock, switching, mono)
+- [ ] Golden cases (seeds 438–443) with table hashes, suite, invariance, extremes, E2E-STEREO (separation, SINAD, level, pilot residue, lock, switching, mono)
 - [ ] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
 
 ## Notes

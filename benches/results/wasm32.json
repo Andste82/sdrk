@@ -7,31 +7,31 @@
       "kernels": {
         "agc": {
           "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
-          "goal": true,
+          "goal": false,
           "informational": [
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 62.21,
-              "other_snr_db": 123.07,
-              "ours_instr_per_sample": 62.21,
-              "ratio": 1.0
+              "other_instr_per_sample": 66.89,
+              "other_snr_db": 119.85,
+              "ours_instr_per_sample": 64.61,
+              "ratio": 0.97
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 64.05,
               "other_snr_db": null,
-              "ours_instr_per_sample": 62.21,
-              "ratio": 0.97
+              "ours_instr_per_sample": 64.61,
+              "ratio": 1.01
             }
           ],
           "other_instr_per_sample": 64.05,
-          "ours_instr_per_sample": 62.21,
-          "ratio": 0.97,
+          "ours_instr_per_sample": 64.61,
+          "ratio": 1.01,
           "snr_db": {
             "other": 118.88,
-            "ours": 123.07
+            "ours": 119.85
           },
           "status": "release",
           "verdict": "pass"
@@ -43,14 +43,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 620.79,
+              "other_instr_per_sample": 141.14,
               "other_snr_db": null,
-              "ours_instr_per_sample": 620.79,
+              "ours_instr_per_sample": 141.14,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 620.79,
-          "ours_instr_per_sample": 620.79,
+          "other_instr_per_sample": 141.14,
+          "ours_instr_per_sample": 141.14,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

@@ -218,6 +218,57 @@ pub(crate) fn round_sqrt(s: i64) -> i64 {
     (r + u64::from(rem > r)) as i64
 }
 
+/// An integer within `1/2` of `x`, for `0 <= x < 2^50` (which of the two at a tie is not
+/// specified), without the range checks of a saturating `as` conversion where they cost.
+///
+/// x86-64: `x + 2^52` rounds `x` to the nearest integer (the ulp in `[2^52, 2^53)` is 1), and
+/// its bits minus those of `2^52` are that integer; a saturating `as` costs about five
+/// instructions more there. Elsewhere `trunc(x + 1/2)` (`x + 1/2` is exact below `2^50`), one
+/// instruction on AArch64 (`fcvtzs`) and one operator on wasm32 (`i64.trunc_sat_f64_s`).
+#[inline]
+pub(crate) fn near_int_f64(x: f64) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        const MAGIC: f64 = 4_503_599_627_370_496.0; // 2^52
+        (x + MAGIC).to_bits() - MAGIC.to_bits()
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        (x + 0.5) as i64 as u64
+    }
+}
+
+/// An integer within `1/2` of `x + 1/2`, for `0 <= x < 2^50`: [`near_int_f64`] of `x + 1/2`
+/// on x86-64, `trunc(x) + 1` elsewhere (`x + 1/2 - (trunc(x) + 1)` is `frac(x) - 1/2`).
+#[inline]
+pub(crate) fn near_int_plus_half_f64(x: f64) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        near_int_f64(x + 0.5)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        x as u64 + 1
+    }
+}
+
+/// [`round_sqrt`] for `0 <= s <= 2^32` with one f64 square root: [`near_int_f64`] of
+/// `sqrt(s)`.
+///
+/// Why it is exact: `s` is exact in f64 and the square root (at most `2^16`) is correctly
+/// rounded, with an ulp of at most `2^-36`. The rounded root steps from `n` to `n + 1`
+/// between `s = n^2 + n` and `n^2 + n + 1`, where `sqrt(s)` is `n + 1/2 - 0.25 / (n + 1/2 +
+/// sqrt(s))` and `n + 1/2 + 0.75 / (n + 1/2 + sqrt(s))`: at least `0.25 / (2^17 + 1) > 2^-20`
+/// away from `n + 1/2`, far more than the half ulp (`2^-37`) by which the rounded square root
+/// can move. So `fl(sqrt(s))` is never within `2^-21` of a half integer, and the only integer
+/// within `1/2` of it is the rounded root. The unit test checks both sides of every step for
+/// every `n` up to `2^16` (both functions are monotone in `s`, so that is every `s`).
+#[inline]
+pub(crate) fn round_sqrt_u32(s: u64) -> i64 {
+    // `s` is below 2^63, so the signed conversion (one instruction on x86-64) is exact.
+    near_int_f64(sqrt_f64(s as i64 as f64)) as i64
+}
+
 /// Returns 0.0 when `|x| < 1e-30` (NaN is unchanged), otherwise `x`.
 ///
 /// ```

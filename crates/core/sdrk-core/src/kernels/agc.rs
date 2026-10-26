@@ -23,6 +23,8 @@ pub(crate) struct AgcParts<'a> {
     pub(crate) rr_f: f32,
     pub(crate) gmin_f: f32,
     pub(crate) gmax_f: f32,
+    /// The constants of the update forms of the fallback (see [`Derived`]).
+    pub(crate) d: Derived,
     pub(crate) g_f: &'a mut f32,
     pub(crate) g_d: &'a mut f64,
     pub(crate) ref_q: i64,
@@ -35,6 +37,27 @@ pub(crate) struct AgcParts<'a> {
     pub(crate) g_q: &'a mut i64,
 }
 
+/// The constants of the `C32` update in the forms that the fallback evaluates (the same
+/// function as the specification, see `fallback/agc.rs`), each the f64 value computed from the
+/// f64 values of the f32 constants, rounded once to f32.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Derived {
+    /// `r_r ref`: release from `lo`, `g + (r_r ref / |x| - r_r g)`.
+    pub(crate) cr: f32,
+    /// `r_r / lo`: release below `lo`, `g + g ((r_r / lo) (ref - m))`.
+    pub(crate) br: f32,
+}
+
+impl Derived {
+    fn new(reference: f32, lo: f32, r_r: f32) -> Self {
+        let (reference, lo, r_r) = (f64::from(reference), f64::from(lo), f64::from(r_r));
+        Self {
+            cr: (r_r * reference) as f32,
+            br: (r_r / lo) as f32,
+        }
+    }
+}
+
 /// The constants derived from the parameters, in both numeric representations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Consts {
@@ -45,6 +68,7 @@ struct Consts {
     rr_f: f32,
     gmin_f: f32,
     gmax_f: f32,
+    d: Derived,
     ref_q: i64,
     lo_q: i64,
     hi_q: i64,
@@ -122,15 +146,19 @@ fn consts(
             "agc time constant is too long for the Q.48 loop coefficient",
         ));
     }
+    let ref_f = reference as f32;
+    // The products are rounded in f32, as every constant.
+    let lo_f = ref_f * 0.25;
+    let rate_r = r_r as f32;
     Ok(Consts {
-        ref_f: reference as f32,
-        // The products are rounded in f32, as every constant.
-        lo_f: reference as f32 * 0.25,
-        hi_f: reference as f32 * 1.5,
+        ref_f,
+        lo_f,
+        hi_f: ref_f * 1.5,
         ra_f: r_a as f32,
-        rr_f: r_r as f32,
+        rr_f: rate_r,
         gmin_f: lin(min_db) as f32,
         gmax_f: lin(max_db) as f32,
+        d: Derived::new(ref_f, lo_f, rate_r),
         ref_q,
         lo_q: ref_q >> 2,
         hi_q: ref_q + (ref_q >> 1),
@@ -279,6 +307,7 @@ impl<T: ComplexSample> AgcState<T> {
             rr_f: self.c.rr_f,
             gmin_f: self.c.gmin_f,
             gmax_f: self.c.gmax_f,
+            d: self.c.d,
             g_f: &mut self.g_f,
             g_d: &mut self.g_d,
             ref_q: self.c.ref_q,
@@ -338,8 +367,10 @@ pub trait Agc<T: ComplexSample> {
     /// exactly zero (silence, a closed squelch) carries no information: the gain is
     /// held. The lengths must be equal.
     ///
-    /// `C32`: `f32` arithmetic without FMA in this order; a NaN or zero `m` leaves the
-    /// gain unchanged, an infinite one drives it to the minimum. `CQ15`: the gain is a
+    /// `C32`: `f32` arithmetic without FMA, with `m` computed as `g * |x|` and the release
+    /// in two rearranged forms of the same function (one per side of the divisor limit, see
+    /// `docs/kernels.md`); a NaN or zero `m` leaves the gain unchanged, an infinite one
+    /// drives it to the minimum. `CQ15`: the gain is a
     /// Q.32 `i64`, `y = sat16(round_shift(x * g, 32))`, `m` is the rounded integer square
     /// root of `re^2 + im^2` (not saturated) and the new gain is computed in `i128` with
     /// Q.48 rates and rounded half up; bit-exact between `Fallback` and `Reference`.

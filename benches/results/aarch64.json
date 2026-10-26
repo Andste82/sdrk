@@ -12,29 +12,29 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 21.84,
-              "other_snr_db": 123.07,
-              "ours_instr_per_sample": 21.84,
-              "ratio": 1.0
+              "other_instr_per_sample": 22.92,
+              "other_snr_db": 119.85,
+              "ours_instr_per_sample": 17.61,
+              "ratio": 0.77
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 17.03,
               "other_snr_db": null,
-              "ours_instr_per_sample": 21.84,
-              "ratio": 1.28
+              "ours_instr_per_sample": 17.61,
+              "ratio": 1.03
             }
           ],
           "other_instr_per_sample": 17.03,
-          "ours_instr_per_sample": 21.84,
-          "ratio": 1.28,
+          "ours_instr_per_sample": 17.61,
+          "ratio": 1.03,
           "snr_db": {
             "other": 118.88,
-            "ours": 123.07
+            "ours": 119.85
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "agc_cq15": {
           "compared_with": "sdrk fallback",
@@ -43,14 +43,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 111.35,
+              "other_instr_per_sample": 54.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 111.35,
+              "ours_instr_per_sample": 54.77,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 111.35,
-          "ours_instr_per_sample": 111.35,
+          "other_instr_per_sample": 54.77,
+          "ours_instr_per_sample": 54.77,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

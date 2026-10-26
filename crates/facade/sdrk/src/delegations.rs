@@ -74,7 +74,7 @@ crate::delegate! {
     DcBlock<CQ15>::dc_block(&self, state: &mut DcBlockState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     DcBlockReal<f32>::dc_block_real(&self, state: &mut DcBlockRealState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
     DcBlockReal<Q15>::dc_block_real(&self, state: &mut DcBlockRealState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
-    Agc<C32>::agc(&self, s: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
+    Agc<C32>::agc(&self, s: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fast;
     Agc<CQ15>::agc(&self, s: &mut AgcState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     Squelch<C32>::squelch(&self, state: &mut SquelchState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     Squelch<CQ15>::squelch(&self, state: &mut SquelchState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;

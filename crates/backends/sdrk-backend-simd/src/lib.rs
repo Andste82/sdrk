@@ -50,6 +50,7 @@
     clippy::undocumented_unsafe_blocks
 )]
 
+mod agc;
 mod convert;
 mod convert_out;
 mod demod;

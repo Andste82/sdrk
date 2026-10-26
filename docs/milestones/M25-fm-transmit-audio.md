@@ -229,7 +229,7 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 All run the transmitter flow in pull mode, feed its `cs8` output (as bytes, without a channel) to the receiver flow whose input format is set to `cs8`, and measure the audio with `ToneMeter`. Run them in f32 and Q15 precision.
 
 - **TX-FLAT (`loop_fm_flat_{f32,q15}`):** tones at 100 Hz, 1, 5, 10 and 12 kHz, one after the other (0.3 s each, amplitude 0.1 so the limiter stays idle) through `fm_transmitter` → `fm_receiver` (`tune.frequency_hz` 600000): every level within **±0.5 dB** of the 1 kHz level (f32; Q15 ±1.0 dB). Before this milestone 10 kHz arrived about 10 dB low; the test fails without the `shape` node.
-- **TX-PEAK (`loop_fm_peak_{f32,q15}`):** band-limited noise (fourth-order Butterworth to 15 kHz at 48 kHz, σ 3, seed 448) for 1 s through `fm_transmitter`; the instantaneous frequency of the transmitted signal, measured by a `ddc` to 240 kHz and `quad_demod` with gain `fs / (2π · 75 kHz)` and without de-emphasis, never exceeds **1.02** (75 kHz plus 2 % for the filters and the `cs8` quantization; initial threshold, see the M07 rule on thresholds). The same input without `shape` exceeds 1.5 (record the value).
+- **TX-PEAK (`loop_fm_peak_{f32,q15}`):** band-limited noise (fourth-order Butterworth to 15 kHz at 48 kHz, σ 3, seed 450) for 1 s through `fm_transmitter`; the instantaneous frequency of the transmitted signal, measured by a `ddc` to 240 kHz and `quad_demod` with gain `fs / (2π · 75 kHz)` and without de-emphasis, never exceeds **1.02** (75 kHz plus 2 % for the filters and the `cs8` quantization; initial threshold, see the M07 rule on thresholds). The same input without `shape` exceeds 1.5 (record the value).
 - **NFM (`loop_nfm_{f32,q15}`):** a 1 kHz tone at amplitude 0.3 through `nfm_transmitter` → `nfm_receiver` (`tune.frequency_hz` 200000): SINAD **f32 ≥ 30 dB, Q15 ≥ 25 dB**; with the noise of TX-PEAK as input the peak deviation stays below **1.0 × 5 kHz**.
 
 ### 7. SIMD backend and instruction counts
@@ -255,14 +255,14 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | Kernel | Case | Seed | Construction | Expected | Tolerance |
 | --- | --- | --- | --- | --- | --- |
 | design | `preemphasis_{50us_48k,75us_48k,530us_48k,50us_240k}` | 0 | formulas of §1; the generator also asserts that the result equals `scipy.signal.bilinear([τ, 1], [τ_p, 1], fs)` within 1e-12 | formulas in f64 | max_abs_err ≤ 1e-14 |
-| preemph_limit | `preemph_f32_8192` | 442 | 48 kHz, τ 50 µs, `limit` 1.0, hold 0.02 s, release 0.2 s; noise σ 0.05 (limiter idle) | float32 model of §2 | bit-exact |
-| preemph_limit | `limit_f32_8192` | 443 | as above with `limit` 0.5; tone bursts at 1 and 8 kHz with amplitude 1.5 over noise σ 0.05 (the limiter attacks, holds and releases) | float32 model | bit-exact |
-| preemph_limit | `limit_q15_8192` | 444 | the input of `limit_f32` quantized | integer model of §2 | bit-exact |
-| preemph_limit | `preemph_q15_8192` | 445 | 48 kHz, τ 530 µs (gain up to 36 dB inside the kernel), `limit` 1.0; noise σ 0.2 | integer model | bit-exact |
-| preemph_limit | `nonfinite_f32_4096` | 446 | the input of `preemph_f32` with NaN, +∞ and −∞ at 20 positions | float32 model (non-finite counts as 0) | bit-exact |
-| preemph_limit | `retune_f32_8192` | 447 | as `limit_f32`; `limit` 1.0 for samples 0–4095 and 0.5 from 4096 (the case lists the change) | float32 model | bit-exact |
+| preemph_limit | `preemph_f32_8192` | 444 | 48 kHz, τ 50 µs, `limit` 1.0, hold 0.02 s, release 0.2 s; noise σ 0.05 (limiter idle) | float32 model of §2 | bit-exact |
+| preemph_limit | `limit_f32_8192` | 445 | as above with `limit` 0.5; tone bursts at 1 and 8 kHz with amplitude 1.5 over noise σ 0.05 (the limiter attacks, holds and releases) | float32 model | bit-exact |
+| preemph_limit | `limit_q15_8192` | 446 | the input of `limit_f32` quantized | integer model of §2 | bit-exact |
+| preemph_limit | `preemph_q15_8192` | 447 | 48 kHz, τ 530 µs (gain up to 36 dB inside the kernel), `limit` 1.0; noise σ 0.2 | integer model | bit-exact |
+| preemph_limit | `nonfinite_f32_4096` | 448 | the input of `preemph_f32` with NaN, +∞ and −∞ at 20 positions | float32 model (non-finite counts as 0) | bit-exact |
+| preemph_limit | `retune_f32_8192` | 449 | as `limit_f32`; `limit` 1.0 for samples 0–4095 and 0.5 from 4096 (the case lists the change) | float32 model | bit-exact |
 
-Seed 448 is the noise of the loop tests (§6). All stateful Rust golden tests run whole and in random chunks (ChunkPlan seed = case seed).
+Seed 450 is the noise of the loop tests (§6). All stateful Rust golden tests run whole and in random chunks (ChunkPlan seed = case seed).
 
 ## Tests
 
@@ -284,5 +284,5 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [ ] Block `fm_tx_audio`, pipeline kind, regenerated schema
 - [ ] `fm_transmitter` with the `shape` node, new `nfm_transmitter`, `nfm_receiver` with de-emphasis (all with YAML twins)
 - [ ] SIMD decision (not accelerated), `info` entries and results
-- [ ] Golden cases (seeds 442–447 and the design cases), suite, invariance, extremes, loop tests TX-FLAT, TX-PEAK and NFM
+- [ ] Golden cases (seeds 444–449 and the design cases), suite, invariance, extremes, loop tests TX-FLAT, TX-PEAK and NFM
 - [ ] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log

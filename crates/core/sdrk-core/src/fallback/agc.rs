@@ -7,14 +7,107 @@ use crate::kernels::check_len;
 use crate::num::{near_int_plus_half_f64, round_sqrt_u32, sat16, sqrt_f32};
 use crate::types::{C32, CQ15, Q15};
 
-/// Samples per iteration of the `C32` loops. The loops are a recursion on the gain, so nothing
-/// is vectorized; four samples per iteration share the counter, the end test and the branch of
-/// the loop, and more than four make the compiler spill registers at the baseline level of
-/// x86-64.
+/// Samples per iteration of the `C32` loop of the fallback. The loop is a recursion on the
+/// gain, so nothing is vectorized; four samples per iteration share the counter, the end test
+/// and the branch of the loop. Measured on every counted platform (x86-64, AArch64, wasm32,
+/// Cortex-M4), one sample per iteration costs more everywhere (2.4 to 3.5 instructions per
+/// sample), and eight per iteration more as well (the compiler then keeps the inner loop).
 const UNROLL: usize = 4;
 
-/// Samples per iteration of [`AgcState::<C32>::gains_with`], whose loop holds less per sample:
-/// eight on AArch64 (32 FP registers), four elsewhere (the 16 of x86-64).
+/// One sample of the `C32` fallback: writes `y = g x` and returns the gain of the next sample.
+///
+/// The output level is `level = g m` with `m = |x| = sqrtf(x.re^2 + x.im^2)`. The update of
+/// the specification is evaluated per range of the level in the form with the fewest
+/// operations (the same function; only the roundings differ, the constants `c_r = r_r ref` and
+/// `b_r = r_r / lo` are those of [`Derived`](crate::kernels::agc::Derived)):
+///
+/// - attack, `level > ref`: `g d / (d + r_a (level - ref))` with `d = min(level, hi)`, as
+///   specified, clamped to `[g_min, g_max]`;
+/// - release, `lo <= level <= ref`: `g (level + r_r (ref - level)) / level` is
+///   `g + (c_r / m - r_r g)`, because `g / level = 1 / m`; clamped to `[g_min, g_max]`;
+/// - release, `0 < level < lo`: `g (lo + r_r (ref - level)) / lo` is
+///   `g + g (b_r (ref - level))`; clamped to `g_max`;
+/// - a zero or NaN level holds the gain (it fails all three tests).
+///
+/// The release forms add the small update to `g` in their last step, so the rate enters with
+/// its full precision. The attack and the first release form can miss the old gain by one
+/// rounding near the set point (the attack `g d / den` rounds up where `den` rounds to `d`, the
+/// release rounds down where its update is a rounding below zero), so both clamp on both
+/// sides. The second release form adds `g` times a product of non-negative factors to `g`,
+/// which never lowers it, so its clamp to `g_min` would change no value and is left out.
+///
+/// Plain scalar code for every target: no target-specific path in the loop and no hint to the
+/// compiler. One exception lies in a shared helper: [`sqrt_f32`] is one correctly rounded IEEE
+/// operation everywhere, but on wasm32 with `simd128` it reaches the hardware instruction
+/// through lane 0 of `f32x4_sqrt` (`libm` has only software code there: about 189 instead of
+/// 62 fuel per sample; the count of commit c45da86 already included it); it gives the same
+/// bits as on every other target.
+///
+/// The minimum and maximum are a compare and a select (the operands are never NaN and never two
+/// zeros: the level is above the reference where it is limited, and the gain is positive and
+/// not NaN in every branch; an infinite level gives zero in the attack); `f32::min` and
+/// `f32::max` would add their NaN rule. Each two-sided clamp first takes the minimum with
+/// `g_max`: the same values as the other order (`g_min <= g_max`), but the three branches then
+/// do not end in the same operation, which the compiler would otherwise move behind the
+/// branches and turn into a branch of its own on x86-64, and the branches stay branches on
+/// AArch64 (`cargo xtask count`, docs/performance.md).
+#[allow(
+    clippy::inline_always,
+    reason = "the recursion on the gain must stay in the registers of the unrolled loop"
+)]
+#[inline(always)]
+fn sample_c32(par: &AgcParts<'_>, gain: f32, x: C32, o: &mut C32) -> f32 {
+    *o = C32::new(gain * x.re, gain * x.im);
+    let m = sqrt_f32(x.re * x.re + x.im * x.im);
+    let level = gain * m;
+    if level > par.ref_f {
+        let div = if level > par.hi_f { par.hi_f } else { level };
+        let n = gain * div / (div + par.ra_f * (level - par.ref_f));
+        let n = if n < par.gmax_f { n } else { par.gmax_f };
+        if n > par.gmin_f { n } else { par.gmin_f }
+    } else if level >= par.lo_f {
+        let n = gain + (par.d.cr / m - par.rr_f * gain);
+        let n = if n < par.gmax_f { n } else { par.gmax_f };
+        if n > par.gmin_f { n } else { par.gmin_f }
+    } else if level > 0.0 {
+        let n = gain + gain * (par.d.br * (par.ref_f - level));
+        if n < par.gmax_f { n } else { par.gmax_f }
+    } else {
+        gain
+    }
+}
+
+impl Agc<C32> for Fallback {
+    fn agc(&self, state: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let par = state.parts_mut();
+        let mut gain = *par.g_f;
+        // Whole chunks zipped by value: one counter (a zip of `&mut ChunksExact` tests both
+        // ends in every iteration).
+        let (xc, xr) = input.as_chunks::<UNROLL>();
+        let (oc, or) = output.as_chunks_mut::<UNROLL>();
+        for (x, o) in xc.iter().zip(oc) {
+            // The chunks have exactly `UNROLL` samples, so the compiler unrolls this loop.
+            for (&x, o) in x.iter().zip(o.iter_mut()) {
+                gain = sample_c32(&par, gain, x, o);
+            }
+        }
+        for (&x, o) in xr.iter().zip(or) {
+            gain = sample_c32(&par, gain, x, o);
+        }
+        *par.g_f = gain;
+        *par.g_d = f64::from(gain);
+        Ok(())
+    }
+}
+
+// The recursion of the `C32` gain alone, for the SIMD backend (`sdrk-backend-simd`, `agc.rs`),
+// which computes the magnitudes and the products in vectors around it. The fallback does not
+// use it; it computes the same values (tests `c32_fallback_matches_the_model_*` below and
+// `tests/agc.rs` of the backend).
+
+/// Samples per iteration of [`AgcState::<C32>::gains_with`] (tuned for the backend): eight on
+/// AArch64 (32 FP registers), four elsewhere (the 16 of x86-64).
 #[cfg(target_arch = "aarch64")]
 const GAINS_UNROLL: usize = 8;
 #[cfg(not(target_arch = "aarch64"))]
@@ -46,7 +139,9 @@ fn max_f32(a: f32, b: f32) -> f32 {
 }
 
 /// One step of the recursion: the gain after a sample of magnitude `m = |x|` (output level
-/// `level = gain * m`), with `min` and `max` for operands that are never NaN or two zeros.
+/// `level = gain * m`), with `min` and `max` for operands that are never NaN or two zeros. The
+/// same function as the step of [`sample_c32`], written for the backend: the minimum and the
+/// maximum of the caller and the optional test of the hold.
 ///
 /// The update of the specification in the form with the fewest operations per range of the
 /// level (the same function; only the roundings differ, the constants are those of
@@ -108,8 +203,9 @@ fn step_c32<const HOLD: bool>(
     } else {
         // `black_box` (no instruction of its own on this rare path) keeps the compiler from
         // evaluating every branch and selecting: it cannot move this path into the others, so
-        // it keeps the branches. Without it the fallback ran about 37 instructions per sample
-        // on AArch64 instead of about 22.
+        // it keeps the branches. It was measured when the fallback still ran this step (about
+        // 37 instructions per sample on AArch64 without it instead of about 22); the backend
+        // keeps it so that its counts do not depend on that choice of the compiler.
         core::hint::black_box(gain)
     }
 }
@@ -230,42 +326,6 @@ fn run_gains<const HOLD: bool>(
         gain = step_c32::<HOLD>(par, gain, m, min, max);
     }
     gain
-}
-
-/// One sample of the fallback: writes `gain * x` and returns the next gain.
-#[allow(
-    clippy::inline_always,
-    reason = "the recursion on the gain must stay in the registers of the unrolled loop; the instruction counts of the benchmark depend on it"
-)]
-#[inline(always)]
-fn sample_c32(par: &AgcParts<'_>, gain: f32, x: C32, o: &mut C32) -> f32 {
-    *o = C32::new(gain * x.re, gain * x.im);
-    let m = sqrt_f32(x.re * x.re + x.im * x.im);
-    step_c32::<true>(par, gain, m, min_f32, max_f32)
-}
-
-impl Agc<C32> for Fallback {
-    fn agc(&self, state: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> {
-        check_len(input.len(), output.len())?;
-        let par = state.parts_mut();
-        let mut gain = *par.g_f;
-        // Whole chunks zipped by value: one counter (a zip of `&mut ChunksExact` tests both
-        // ends in every iteration).
-        let (xc, xr) = input.as_chunks::<UNROLL>();
-        let (oc, or) = output.as_chunks_mut::<UNROLL>();
-        for (x, o) in xc.iter().zip(oc) {
-            // The chunks have exactly `UNROLL` samples, so the compiler unrolls this loop.
-            for (&x, o) in x.iter().zip(o.iter_mut()) {
-                gain = sample_c32(&par, gain, x, o);
-            }
-        }
-        for (&x, o) in xr.iter().zip(or) {
-            gain = sample_c32(&par, gain, x, o);
-        }
-        *par.g_f = gain;
-        *par.g_d = f64::from(gain);
-        Ok(())
-    }
 }
 
 /// `2^47` and `2^48` as f64 (exact).
@@ -546,5 +606,332 @@ mod tests {
             }
         }
         assert!(checked > 5_000_000, "{checked}");
+    }
+}
+
+#[cfg(all(test, feature = "reference"))]
+mod c32_tests {
+    //! The `C32` fallback against a model of its contract written out once more (one sample at
+    //! a time, the limits as `f32::clamp` and `f32::min`), bit for bit, and against the f64
+    //! `Reference`, within the accuracy of f32: at the bounds of every branch (output levels at
+    //! and next to `ref`, `lo` and `hi`), at zero, NaN, infinity and tiny and huge magnitudes,
+    //! for corner parameters (both ends of the reference, the fastest and slow rates, gains at
+    //! both limits, equal limits), and on random signals through the unrolled loop and its
+    //! remainder. A longer random run is `#[ignore]`d: `cargo test -p sdrk-core --release --lib
+    //! --features reference -- --ignored c32_` (the tests need `Reference`).
+    #![allow(
+        clippy::float_cmp,
+        clippy::cast_precision_loss,
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::many_single_char_names
+    )]
+
+    use super::{AgcParts, sqrt_f32};
+    use crate::kernels::agc::{Agc, AgcState};
+    use crate::{C32, Fallback, Rate, Reference};
+    use std::{format, vec, vec::Vec};
+
+    const FS: u64 = 48_000;
+
+    /// The update of the contract for one sample: the output and the next gain.
+    fn model(par: &AgcParts<'_>, g: f32, x: C32) -> (C32, f32) {
+        let y = C32::new(g * x.re, g * x.im);
+        let m = sqrt_f32(x.re * x.re + x.im * x.im);
+        let level = g * m;
+        let next = if level > par.ref_f {
+            let div = level.min(par.hi_f);
+            (g * div / (div + par.ra_f * (level - par.ref_f))).clamp(par.gmin_f, par.gmax_f)
+        } else if level >= par.lo_f {
+            (g + (par.d.cr / m - par.rr_f * g)).clamp(par.gmin_f, par.gmax_f)
+        } else if level > 0.0 {
+            (g + g * (par.d.br * (par.ref_f - level))).min(par.gmax_f)
+        } else {
+            g
+        };
+        (y, next)
+    }
+
+    /// The model over `x`, with the state updated as the kernels do.
+    fn run_model(state: &mut AgcState<C32>, x: &[C32]) -> Vec<C32> {
+        let par = state.parts_mut();
+        let mut g = *par.g_f;
+        let mut y = Vec::with_capacity(x.len());
+        for &s in x {
+            let (o, n) = model(&par, g, s);
+            y.push(o);
+            g = n;
+        }
+        *par.g_f = g;
+        *par.g_d = f64::from(g);
+        y
+    }
+
+    fn gain_f(state: &mut AgcState<C32>) -> f32 {
+        *state.parts_mut().g_f
+    }
+
+    fn gain_d(state: &mut AgcState<C32>) -> f64 {
+        *state.parts_mut().g_d
+    }
+
+    /// The index of the first sample whose bits differ (two NaN count as equal: the payload of
+    /// a NaN result is not specified).
+    fn differs(a: &[C32], b: &[C32]) -> Option<usize> {
+        let bits = |p: f32, q: f32| p.to_bits() == q.to_bits() || (p.is_nan() && q.is_nan());
+        a.iter()
+            .zip(b)
+            .position(|(p, q)| !(bits(p.re, q.re) && bits(p.im, q.im)))
+    }
+
+    /// Fallback and model from equal states over `x`, in calls of `chunk` samples (the unrolled
+    /// loop and its remainder).
+    fn check_model(state: AgcState<C32>, x: &[C32], chunk: usize, what: &str) {
+        let (mut sf, mut sm) = (state, state);
+        let want = run_model(&mut sm, x);
+        let mut got = vec![C32::default(); x.len()];
+        for (i, o) in x.chunks(chunk).zip(got.chunks_mut(chunk)) {
+            Fallback.agc(&mut sf, i, o).unwrap();
+        }
+        if let Some(i) = differs(&want, &got) {
+            panic!(
+                "{what}: sample {i} of {}: {:?} against {:?}",
+                x.len(),
+                got[i],
+                want[i]
+            );
+        }
+        assert_eq!(sf, sm, "{what}: state");
+    }
+
+    fn state(reference: f64, attack: f64, release: f64, gains: (f64, f64, f64)) -> AgcState<C32> {
+        let (min, max, init) = gains;
+        AgcState::new(
+            reference,
+            attack,
+            release,
+            min,
+            max,
+            init,
+            Rate::hz(FS).unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// Corner parameter sets.
+    fn params() -> Vec<AgcState<C32>> {
+        // The fastest allowed loop (a rate of 0.5) and slow ones.
+        let fastest = 1.0 / (FS as f64 * core::f64::consts::LN_2) * 1.000_000_1;
+        let mut out = Vec::new();
+        for reference in [0.03125, 0.0809, 0.5, 1.0] {
+            for (attack, release) in [(fastest, fastest), (0.005, 0.05), (0.2, 2.0)] {
+                for gains in [
+                    (-40.0, 90.0, -40.0),
+                    (-40.0, 90.0, 90.0),
+                    (-40.0, 90.0, 0.0),
+                    (-6.0, 12.0, 6.0),
+                    (-25.3, 90.0, -25.3),
+                    (-40.0, 83.7, 83.7),
+                    (3.0, 3.0, 3.0),
+                ] {
+                    out.push(state(reference, attack, release, gains));
+                }
+            }
+        }
+        out
+    }
+
+    /// `v` moved by `k` floats (positive and finite `v`).
+    fn ulps(v: f32, k: i32) -> f32 {
+        f32::from_bits(v.to_bits().wrapping_add_signed(k))
+    }
+
+    /// Samples whose output level at gain `g` is at or next to `ref`, `lo` and `hi`, on both
+    /// axes and off them, and the special magnitudes.
+    fn edges(par: &AgcParts<'_>, g: f32) -> Vec<C32> {
+        let mut out = Vec::new();
+        for t in [par.ref_f, par.lo_f, par.hi_f] {
+            let m = t / g;
+            for k in -3..=3 {
+                let m = ulps(m, k);
+                out.extend([
+                    C32::new(m, 0.0),
+                    C32::new(0.0, -m),
+                    C32::new(-m * 0.6, m * 0.8),
+                ]);
+            }
+        }
+        for v in [
+            1e-45, 1e-40, 1e-23, 5.0e-23, 1e-22, 1e-19, 1e-15, 1.0e-6, 1e6, 1e15, 1e19,
+        ] {
+            out.extend([C32::new(v, 0.0), C32::new(v, v)]);
+        }
+        out.extend([
+            C32::new(0.0, 0.0),
+            C32::new(-0.0, 0.0),
+            C32::new(0.0, -0.0),
+            C32::new(f32::NAN, 0.0),
+            C32::new(0.3, f32::NAN),
+            C32::new(f32::INFINITY, 0.0),
+            C32::new(-1.0, f32::NEG_INFINITY),
+            C32::new(f32::INFINITY, f32::NAN),
+            C32::new(2e19, 0.0),
+            C32::new(3e19, 3e19),
+            C32::new(f32::MAX, f32::MAX),
+            C32::new(f32::MIN_POSITIVE, 0.0),
+        ]);
+        out
+    }
+
+    /// Whether the f32 kernels and the f64 model see the same kind of level: the squares of a
+    /// finite `x` neither underflow nor overflow in f32 (where they do, `m` is zero or
+    /// infinite and the f64 level is not, which the specification allows).
+    fn ordinary(x: C32) -> bool {
+        let m = f64::from(x.re).hypot(f64::from(x.im));
+        m == 0.0 || (1e-18..=1e18).contains(&m) || !m.is_finite()
+    }
+
+    #[test]
+    fn c32_fallback_matches_the_model_and_the_reference_at_the_branch_bounds() {
+        let mut probes = 0;
+        for st in params() {
+            let mut st0 = st;
+            let g = gain_f(&mut st0);
+            let gmin = st0.parts_mut().gmin_f;
+            let edge = edges(&st0.parts_mut(), g);
+            for &x in &edge {
+                // One sample from the state (the remainder of the loop) and the same sample in
+                // every slot of the unrolled loop.
+                check_model(st, &[x], 1, &format!("{x:?} alone"));
+                for slot in 0..4 {
+                    let mut block = [C32::new(0.01, 0.02); 9];
+                    block[slot] = x;
+                    check_model(st, &block, 9, &format!("{x:?} in slot {slot}"));
+                }
+                // Against the f64 model: one step from the same gain.
+                let (mut sf, mut sr) = (st, st);
+                let (mut yf, mut yr) = ([C32::default()], [C32::default()]);
+                Fallback.agc(&mut sf, &[x], &mut yf).unwrap();
+                Reference.agc(&mut sr, &[x], &mut yr).unwrap();
+                let (gf, gr) = (f64::from(gain_f(&mut sf)), gain_d(&mut sr));
+                if ordinary(x) {
+                    let rel = (gf - gr).abs() / gr;
+                    assert!(rel < 1e-5, "{x:?}: {gf:e} against {gr:e} of the reference");
+                    let held = (x.re == 0.0 && x.im == 0.0) || x.re.is_nan() || x.im.is_nan();
+                    let infinite = (x.re.is_infinite() || x.im.is_infinite()) && !held;
+                    if held {
+                        assert_eq!(gain_f(&mut sf), g, "{x:?} holds the gain");
+                        assert_eq!(gr, gain_d(&mut st0), "{x:?} holds the reference gain");
+                    }
+                    if infinite {
+                        assert_eq!(
+                            gain_f(&mut sf),
+                            gmin,
+                            "{x:?} drives the gain to the minimum"
+                        );
+                    }
+                } else {
+                    // The f32 squares underflow (to zero, which holds the gain, or to a
+                    // subnormal, an inexact low level) or overflow (an infinite level: the
+                    // attack goes to the minimum); the gain stays within its limits.
+                    let g1 = gain_f(&mut sf);
+                    let par = st0.parts_mut();
+                    assert!(g1 >= par.gmin_f && g1 <= par.gmax_f, "{x:?}: {g1:e}");
+                }
+                probes += 1;
+            }
+            // All bounds after one another, so that the gain moves between them.
+            check_model(st, &edge, 4, "all bounds, chunks of 4");
+            check_model(st, &edge, 7, "all bounds, chunks of 7");
+        }
+        assert!(probes > 8_000, "{probes}");
+    }
+
+    /// xorshift64.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        /// Uniform in `[0, 1)`.
+        fn unit(&mut self) -> f64 {
+            (self.next() >> 11) as f64 / (1u64 << 53) as f64
+        }
+    }
+
+    /// Noise whose amplitude changes every 1 to 300 samples, log-uniform over `10^-7` to
+    /// `10^4`, with a special sample (zero, NaN, infinity, a tiny or a huge value) in `specials`
+    /// of every 1000.
+    fn signal(rng: &mut Rng, n: usize, specials: u64) -> Vec<C32> {
+        let special = [
+            C32::new(0.0, 0.0),
+            C32::new(f32::NAN, 1.0),
+            C32::new(f32::INFINITY, 0.0),
+            C32::new(1e-30, -1e-30),
+            C32::new(1e25, 0.0),
+            C32::new(1e-41, 0.0),
+        ];
+        let mut out = Vec::with_capacity(n);
+        let mut amp = 1.0;
+        let mut left = 0;
+        while out.len() < n {
+            if left == 0 {
+                amp = libm::pow(10.0, -7.0 + 11.0 * rng.unit());
+                left = 1 + rng.next() % 300;
+            }
+            left -= 1;
+            if rng.next() % 1000 < specials {
+                out.push(special[(rng.next() % special.len() as u64) as usize]);
+            } else {
+                let (a, b) = (rng.unit() * 2.0 - 1.0, rng.unit() * 2.0 - 1.0);
+                out.push(C32::new((a * amp) as f32, (b * amp) as f32));
+            }
+        }
+        out
+    }
+
+    fn snr_db(want: &[C32], got: &[C32]) -> f64 {
+        let (mut s, mut e) = (0.0, 0.0);
+        for (w, g) in want.iter().zip(got) {
+            let (wr, wi) = (f64::from(w.re), f64::from(w.im));
+            let (dr, di) = (wr - f64::from(g.re), wi - f64::from(g.im));
+            s += wr * wr + wi * wi;
+            e += dr * dr + di * di;
+        }
+        10.0 * libm::log10(s / e)
+    }
+
+    fn random_run(seed: u64, n: usize) {
+        let mut rng = Rng(seed);
+        for (k, st) in params().into_iter().enumerate() {
+            let x = signal(&mut rng, n, 5);
+            let chunk = [1, 3, 4, 5, 17, 256, 4096][k % 7];
+            check_model(st, &x, chunk, &format!("params {k} chunk {chunk}"));
+            // Against the f64 model, without the special samples.
+            let x = signal(&mut rng, n, 0);
+            let (mut sf, mut sr) = (st, st);
+            let (mut yf, mut yr) = (vec![C32::default(); n], vec![C32::default(); n]);
+            Fallback.agc(&mut sf, &x, &mut yf).unwrap();
+            Reference.agc(&mut sr, &x, &mut yr).unwrap();
+            let snr = snr_db(&yr, &yf);
+            assert!(snr > 80.0, "params {k}: {snr} dB against the reference");
+        }
+    }
+
+    #[test]
+    fn c32_fallback_matches_the_model_on_random_signals() {
+        random_run(0x5eed_a6c3_2000_0001, 3_000);
+    }
+
+    /// About 170 million samples (84 parameter sets of two signals of 10^6); slow without
+    /// optimisation.
+    #[test]
+    #[ignore = "long; run in release"]
+    fn c32_fallback_matches_the_model_on_long_random_signals() {
+        random_run(0x5eed_a6c3_2000_0002, 1_000_000);
     }
 }

@@ -27,7 +27,7 @@ use crate::emu::{Tool, find_tool};
 pub const SAMPLES_PER_CALL: u64 = 1024;
 
 /// The kernels the workload binary knows, in report order.
-pub const KERNELS: [&str; 11] = [
+pub const KERNELS: [&str; 15] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -39,6 +39,10 @@ pub const KERNELS: [&str; 11] = [
     "fm_mod",
     "fft_1024",
     "fft_cq15_1024",
+    "agc",
+    "agc_cq15",
+    "dc_block_real",
+    "dc_block_real_q15",
 ];
 
 /// Instructions per sample from the counts of the runs with `k = 0` and `k = calls`.

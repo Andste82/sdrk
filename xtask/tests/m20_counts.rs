@@ -1,7 +1,8 @@
 //! M20: `mag` is accelerated and counted against VOLK, the `C32` `agc` is counted against the
 //! `agc_cc` loop of GNU Radio, and `agc_cq15` and `dc_block_real` are not accelerated and
 //! counted as information on every platform. The committed result files and
-//! `benches/limits.json` must carry the entries at every level.
+//! `benches/limits.json` must carry the entries at every level, and the Cortex-M4 report (no
+//! limits) counts all four kernels of the fallback.
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -156,5 +157,24 @@ fn the_limits_file_judges_mag_at_every_level() {
     for level in ["avx512", "neon", "simd128"] {
         assert_eq!(limits["mag"][level]["status"].as_str(), Some("release"));
         assert_eq!(limits["mag_q15"][level]["status"].as_str(), Some("release"));
+    }
+}
+
+#[test]
+fn the_cortex_m4_report_counts_the_m20_kernels_of_the_fallback() {
+    let result = bench_file("results/cortex-m4.json");
+    for kernel in ["agc", "agc_cq15", "dc_block_real", "dc_block_real_q15"] {
+        let entry = &result["kernels"][kernel];
+        assert_eq!(
+            entry["implementation"].as_str(),
+            Some("fallback"),
+            "cortex-m4/{kernel}: {entry}"
+        );
+        assert!(
+            entry["instructions_per_sample"]
+                .as_f64()
+                .is_some_and(|v| v > 0.0),
+            "cortex-m4/{kernel} has no count"
+        );
     }
 }

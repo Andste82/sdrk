@@ -12,10 +12,10 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 66.89,
+              "other_instr_per_sample": 64.11,
               "other_snr_db": 119.85,
               "ours_instr_per_sample": 64.61,
-              "ratio": 0.97
+              "ratio": 1.01
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",

@@ -53,7 +53,7 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 | `dc_block` | `kernels::demod::DcBlock` | `CQ15` | bit-exact | `y = sat16((x - x_prev) + round_shift(r * y_prev, 15))` per component |
 | `dc_block_real` | `kernels::demod::DcBlockReal` | `f32` | tolerance | SNR >= 100 dB; the real variant of `dc_block`, `y = (x - x_prev) + r * y_prev`, state flushed |
 | `dc_block_real` | `kernels::demod::DcBlockReal` | `Q15` | bit-exact | `y = sat16((x - x_prev) + round_shift(r * y_prev, 15))` |
-| `agc` | `kernels::agc::Agc` | `C32` | tolerance | SNR >= 80 dB vs. the f64 model of the algorithm (measured 125.5 dB on `steps_c32_24000`); f32 loop without FMA, the output level as `g |x|`; the backend is bit-exact with the fallback |
+| `agc` | `kernels::agc::Agc` | `C32` | tolerance | SNR >= 80 dB vs. the f64 model of the algorithm (measured 125.5 dB on `steps_c32_24000`); f32 loop without FMA, the output level as `g |x|`; the fallback is one plain scalar loop for every target (no target-specific code in the loop; the square root `num::sqrt_f32` uses lane 0 of `f32x4_sqrt` on wasm32 with `simd128`, the same correctly rounded value); the backend is bit-exact with the fallback |
 | `agc` | `kernels::agc::Agc` | `CQ15` | bit-exact | gain in Q.32 `i64`, rounded integer square root, step in `i128` (fallback: f64 estimate and exact 64-bit correction) |
 | `squelch` | `kernels::squelch::Squelch` | `C32` | bit-exact | float32 model: `q = re*re + im*im`, `p = flush_denormal(p + alpha * (q - p))` without FMA; reference and fallback run the same arithmetic |
 | `squelch` | `kernels::squelch::Squelch` | `CQ15` | bit-exact | `q = re^2 + im^2` (Q30), Q61 average `p = p + alpha_q31 * (q - round_shift(p, 31))` in `i64` |

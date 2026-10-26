@@ -12,10 +12,10 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 22.73,
+              "other_instr_per_sample": 23.36,
               "other_snr_db": 119.85,
               "ours_instr_per_sample": 17.39,
-              "ratio": 0.76
+              "ratio": 0.74
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
@@ -1264,10 +1264,10 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 27.87,
+              "other_instr_per_sample": 28.24,
               "other_snr_db": 119.85,
               "ours_instr_per_sample": 23.79,
-              "ratio": 0.85
+              "ratio": 0.84
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
@@ -2138,10 +2138,10 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 27.87,
+              "other_instr_per_sample": 28.24,
               "other_snr_db": 119.85,
               "ours_instr_per_sample": 23.04,
-              "ratio": 0.83
+              "ratio": 0.82
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",

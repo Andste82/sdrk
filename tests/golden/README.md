@@ -58,8 +58,9 @@ vectors together at or below 16 MiB; the generator fails otherwise.
    `sdrk_golden/cases/__init__.py`).
 2. Choose a new seed. The `rng` argument is the only source of randomness; the draw order is part of the case.
 3. Quantize the inputs yourself (`astype(np.complex64)` or `q15.from_float`) and compute `expected` from the
-   quantized input, so that only kernel error is measured. Tolerance cases store `f64`/`cf64`; bit-exact cases
-   store the exact output dtype.
+   quantized input, so that only kernel error is measured. Tolerance cases store `f64`/`cf64` (exception:
+   `agc/steps_c32_24000` stores the f64 model rounded once to `cf32`, because a `cf64` file would exceed
+   512 KiB); bit-exact cases store the exact output dtype.
 4. Pick the tolerance class from the contract table in `docs/kernels.md`.
 5. Run `python tests/golden/generate.py --kernel <name>`, then `--check`.
 6. Commit the vectors together with the code and the Rust test that loads them.

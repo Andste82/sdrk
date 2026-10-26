@@ -300,6 +300,44 @@ fn cq15_step_up_and_down_settle_within_one_db() {
     assert!((level_db_q(&y[n5..n5 + 100]) - REFERENCE_DB).abs() < 1.0);
 }
 
+/// The gain after one sample of `C32` magnitude `m` (on the real axis, so `|x| = m` exactly),
+/// from a state at the initial gain, with `Fallback` and the facade (which must agree); the
+/// initial gain (as f32, read back from a held zero magnitude) and the new gain.
+fn one_step_c32(st: AgcState<C32>, m: f32) -> (f32, f32, AgcState<C32>) {
+    let mut g0 = [0.0_f32];
+    let mut probe = st;
+    probe.gains(&[0.0], &mut g0).unwrap();
+    let x = [C32::new(m, 0.0), C32::new(1.0, 0.0)];
+    let (mut a, mut b) = (st, st);
+    let (mut ya, mut yb) = ([C32::ZERO; 2], [C32::ZERO; 2]);
+    Fallback.agc(&mut a, &x, &mut ya).unwrap();
+    Sdrk.agc(&mut b, &x, &mut yb).unwrap();
+    assert_eq!(bit_exact(&ya, &yb), None);
+    assert_eq!(a, b);
+    (g0[0], ya[1].re, a)
+}
+
+/// Regression: near the set point the release form `g + (c / m - r_r g)` can round one step
+/// below the old gain and the attack `g d / den` one step above it, so a gain at a limit left
+/// it by one rounding while the update clamped on one side only. Found by a search over the
+/// parameters; the gain must stay within the limits exactly, without tolerance.
+#[test]
+fn c32_gain_at_a_limit_stays_there_exactly() {
+    let fs = FS as f64;
+    // A rate of 0.5 (the largest allowed), just inside the limit.
+    let fastest = 1.0 / (fs * core::f64::consts::LN_2) * 1.000_000_1;
+    let reference = 0.03125 + 0.96875 * 2.0 / 39.0;
+    // Release at the minimum.
+    let st = AgcState::<C32>::new(reference, 0.001, fastest, -25.3, 90.0, -25.3, rate()).unwrap();
+    let (g0, g1, st) = one_step_c32(st, 1.489_727_4);
+    assert!(g1 >= g0, "{g1:e} below the minimum {g0:e}");
+    assert!(st.gain_db() >= -25.3, "{} below -25.3 dB", st.gain_db());
+    // Attack at the maximum.
+    let st = AgcState::<C32>::new(reference, fastest, 0.01, -40.0, 83.7, 83.7, rate()).unwrap();
+    let (g0, g1, _) = one_step_c32(st, 5.285_752_6e-6);
+    assert!(g1 <= g0, "{g1:e} above the maximum {g0:e}");
+}
+
 #[test]
 fn the_gain_never_leaves_its_limits() {
     let mut rng = Pcg32::new(204, 1);
@@ -881,5 +919,62 @@ fn cq15_fallback_equals_reference_over_parameter_corners() {
         Reference.agc(&mut b, &input, &mut yb).unwrap();
         assert_eq!(bit_exact(&ya, &yb), None, "{reference} {attack} {release}");
         assert_eq!(a, b, "{reference} {attack} {release}");
+    }
+}
+
+/// The `CQ15` fallback (f64 estimates with an exact integer correction) against the `i128`
+/// divisions of `Reference`, at the extremes of every parameter and with inputs that drive
+/// the gain to both limits: full-scale corners, single LSBs, zeros and random amplitudes.
+#[test]
+fn agc_cq15_fallback_matches_the_reference_at_the_parameter_extremes() {
+    let mut s = 0x2545_f491_4f6c_dd1du64;
+    let mut next = move || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        s
+    };
+    let fast = 1.45 / 48_000.0;
+    let mut input = Vec::with_capacity(24_000);
+    for block in 0..24 {
+        // Amplitude classes per block of 1000: the full scale, one LSB, silence, random.
+        let amp: i64 = [32768, 1, 0, 300, 4096, 20_000][block % 6];
+        for _ in 0..1000 {
+            let r = next();
+            let q = |v: u64| {
+                if amp == 32768 {
+                    if v & 1 == 0 { Q15(32767) } else { Q15(-32768) }
+                } else if amp == 0 {
+                    Q15(0)
+                } else {
+                    Q15(((v % (2 * amp as u64 + 1)) as i64 - amp) as i16)
+                }
+            };
+            input.push(CQ15 {
+                re: q(r),
+                im: q(r >> 32),
+            });
+        }
+    }
+    for reference in [1.0 / 32.0, 0.1, 0.5, 1.0] {
+        for (attack, release) in [(fast, fast), (fast, 2.0), (2.0, fast), (0.005, 0.05)] {
+            for (min, max, init) in [(-40.0, 90.0, -40.0), (-40.0, 90.0, 90.0), (-3.0, 3.0, 0.0)] {
+                let st = AgcState::<CQ15>::new(reference, attack, release, min, max, init, rate())
+                    .unwrap();
+                let (mut a, mut b) = (st, st);
+                let (mut ya, mut yb) =
+                    (vec![CQ15::ZERO; input.len()], vec![CQ15::ZERO; input.len()]);
+                Fallback.agc(&mut a, &input, &mut ya).unwrap();
+                Reference.agc(&mut b, &input, &mut yb).unwrap();
+                assert_eq!(
+                    a, b,
+                    "ref {reference} attack {attack} release {release} {min}..{max}"
+                );
+                assert!(
+                    ya == yb,
+                    "ref {reference} attack {attack} release {release} {min}..{max}"
+                );
+            }
+        }
     }
 }

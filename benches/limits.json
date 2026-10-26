@@ -614,44 +614,40 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
-    },
-    "avx2-runtime": {
-      "status": "info",
-      "waiver": "`agc` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, no register copies), so their counts differ by code generation only (23.84 against 20.84 instructions per sample, and both are below the 24.03 of GNU Radio's `agc_cc` compiled for the baseline); reported as information"
     }
   },
   "agc_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "`agc` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "`agc` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     },
     "avx2": {
       "status": "info",
-      "waiver": "`agc` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     },
     "avx512": {
       "status": "info",
-      "waiver": "`agc` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     },
     "neon": {
       "status": "info",
-      "waiver": "`agc` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     },
     "simd128": {
       "status": "info",
-      "waiver": "`agc` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`agc` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "`agc` `CQ15` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
   },
   "dc_block_real": {

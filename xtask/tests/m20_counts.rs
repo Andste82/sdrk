@@ -92,15 +92,17 @@ fn every_platform_counts_agc_against_gnu_radio() {
         for level in levels {
             let entry = &result["levels"][*level]["kernels"]["agc"];
             if *level == "avx2-runtime" {
-                // Judged against nothing: the same code compiled for the baseline.
-                assert_eq!(entry["status"].as_str(), Some("info"), "{platform}/{level}");
+                // Judged against our own numbers at `avx2` (the backend detects the level).
+                assert_eq!(
+                    entry["status"].as_str(),
+                    Some("release"),
+                    "{platform}/{level}"
+                );
                 continue;
             }
-            // NEON is `dev` (open item M20-6): GCC fuses the multiply-adds of `agc_cc` there.
-            let want = if *level == "neon" { "dev" } else { "release" };
             assert_eq!(
                 entry["status"].as_str(),
-                Some(want),
+                Some("release"),
                 "{platform}/{level}: {entry}"
             );
             assert!(
@@ -114,14 +116,11 @@ fn every_platform_counts_agc_against_gnu_radio() {
 #[test]
 fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
     let limits = bench_file("limits.json");
-    for level in ["sse2", "sse4.2", "avx2", "avx512", "simd128"] {
+    for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
         assert_eq!(limits["agc"][level]["status"].as_str(), Some("release"));
     }
-    assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("dev"));
-    assert_eq!(
-        limits["agc"]["avx2-runtime"]["status"].as_str(),
-        Some("info")
-    );
+    // The run-time detection is judged with the default limit against `avx2`.
+    assert!(limits["agc"]["avx2-runtime"].is_null());
 }
 
 #[test]

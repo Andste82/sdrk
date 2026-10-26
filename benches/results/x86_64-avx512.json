@@ -12,26 +12,26 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 20.84,
-              "other_snr_db": 123.07,
-              "ours_instr_per_sample": 20.84,
-              "ratio": 1.0
+              "other_instr_per_sample": 22.73,
+              "other_snr_db": 119.85,
+              "ours_instr_per_sample": 16.12,
+              "ratio": 0.71
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 24.03,
               "other_snr_db": null,
-              "ours_instr_per_sample": 20.84,
-              "ratio": 0.87
+              "ours_instr_per_sample": 16.12,
+              "ratio": 0.67
             }
           ],
           "other_instr_per_sample": 24.03,
-          "ours_instr_per_sample": 20.84,
-          "ratio": 0.87,
+          "ours_instr_per_sample": 16.12,
+          "ratio": 0.67,
           "snr_db": {
             "other": 118.88,
-            "ours": 123.07
+            "ours": 119.85
           },
           "status": "release",
           "verdict": "pass"
@@ -43,14 +43,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 111.27,
+              "other_instr_per_sample": 70.31,
               "other_snr_db": null,
-              "ours_instr_per_sample": 111.27,
+              "ours_instr_per_sample": 70.31,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 111.27,
-          "ours_instr_per_sample": 111.27,
+          "other_instr_per_sample": 70.31,
+          "ours_instr_per_sample": 70.31,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

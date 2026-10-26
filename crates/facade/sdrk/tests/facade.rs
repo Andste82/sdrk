@@ -201,6 +201,7 @@ fn backend_table_lists_the_m06_kernels() {
         ("mag_sq", SampleType::CQ15),
         ("mag", SampleType::C32),
         ("mag", SampleType::CQ15),
+        ("agc", SampleType::C32),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
@@ -215,7 +216,6 @@ fn backend_table_lists_the_m06_kernels() {
         ("squelch", SampleType::CQ15),
         ("dc_block_real", SampleType::F32),
         ("dc_block_real", SampleType::Q15),
-        ("agc", SampleType::C32),
         ("agc", SampleType::CQ15),
         ("window", SampleType::C32),
         ("window", SampleType::CQ15),

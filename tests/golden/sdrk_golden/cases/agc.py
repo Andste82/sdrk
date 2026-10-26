@@ -68,26 +68,34 @@ def agc_f64(x):
 
 
 def agc_f32(x):
-    """Float32 model of the same algorithm (the arithmetic of the Rust fallback)."""
+    """Float32 model of the arithmetic of the Rust fallback (``fallback/agc.rs``).
+
+    The output level is ``g * |x|`` and the release is evaluated in the two rearranged forms of
+    the fallback, with the constants ``c = r_r ref`` and ``b = r_r / lo`` computed in f64 from
+    the f64 values of the f32 constants and rounded once to f32; the attack and the first
+    release form clamp on both sides, the second release form only to the maximum (it never
+    lowers the gain).
+    """
     ref = fm.f32(REFERENCE)
     lo, hi = fm.mul(ref, fm.f32(0.25)), fm.mul(ref, fm.f32(1.5))
     ra, rr = fm.f32(rate64(RATE_HZ, ATTACK_S)), fm.f32(rate64(RATE_HZ, RELEASE_S))
+    c, b = fm.f32(float(rr) * float(ref)), fm.f32(float(rr) / float(lo))
     gmin, gmax = fm.f32(lin(MIN_DB)), fm.f32(lin(MAX_DB))
     g = fm.f32(lin(INITIAL_DB))
     out = np.zeros(len(x), dtype=np.complex64)
     for i, v in enumerate(x.tolist()):
-        yr, yi = fm.mul(g, fm.f32(v.real)), fm.mul(g, fm.f32(v.imag))
-        out[i] = complex(float(yr), float(yi))
-        m = fm.f32(np.sqrt(fm.add(fm.mul(yr, yr), fm.mul(yi, yi))))
-        if m > 0.0:
-            e = fm.sub(ref, m)
-            if e < 0:
-                d = min(m, hi)
-                g = fm.div(fm.mul(g, d), fm.add(d, fm.mul(ra, fm.sub(m, ref))))
-            else:
-                d = max(m, lo)
-                g = fm.div(fm.mul(g, fm.add(d, fm.mul(rr, e))), d)
+        xr, xi = fm.f32(v.real), fm.f32(v.imag)
+        out[i] = complex(float(fm.mul(g, xr)), float(fm.mul(g, xi)))
+        a = fm.f32(np.sqrt(fm.add(fm.mul(xr, xr), fm.mul(xi, xi))))
+        m = fm.mul(g, a)
+        if m > ref:
+            d = min(m, hi)
+            g = fm.div(fm.mul(g, d), fm.add(d, fm.mul(ra, fm.sub(m, ref))))
             g = min(max(g, gmin), gmax)
+        elif m >= lo:
+            g = min(max(fm.add(g, fm.sub(fm.div(c, a), fm.mul(rr, g))), gmin), gmax)
+        elif m > 0.0:
+            g = min(fm.add(g, fm.mul(g, fm.mul(b, fm.sub(ref, m)))), gmax)
     return out
 
 
@@ -150,7 +158,7 @@ def steps_c32(rng):
     x = signal(rng).astype(np.complex64)
     expected = agc_f64(x.astype(np.complex128))
     # The float32 loop of the kernel must stay close to the f64 model; if it did not, the
-    # pre-approved bit-exact fallback of the milestone would apply (measured: 117 dB).
+    # pre-approved bit-exact fallback of the milestone would apply (measured: 125.5 dB, and the model gives the values of the fallback bit for bit).
     f32_out = agc_f32(x).astype(np.complex128)
     drift = 10.0 * np.log10(np.sum(np.abs(expected) ** 2) / np.sum(np.abs(expected - f32_out) ** 2))
     assert drift > 100.0, f"float32 and f64 AGC models drift apart: {drift:.1f} dB"

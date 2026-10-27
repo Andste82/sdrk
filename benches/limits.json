@@ -732,22 +732,28 @@
   },
   "biquad_cq15": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     }
   },
   "biquad_real": {
@@ -772,22 +778,28 @@
   },
   "biquad_real_q15": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     }
   },
   "biquad_fallback": {

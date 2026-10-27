@@ -1,9 +1,11 @@
 //! M22 with the references of D15 and D16: `biquad` C32 and `biquad_real` f32 are counted
 //! against KFR (CMSIS-DSP at `simd128`, where KFR is not built), `biquad` CQ15 and
 //! `biquad_real` Q15 against our fallback (no SIMD Q15 biquad exists on our levels), and four
-//! fallback entries count our fallback against CMSIS-DSP's generic C. Every entry is `release`.
-//! The committed result files and `benches/limits.json` must carry the entries on the platforms
-//! that were measured, and every committed record must pass.
+//! fallback entries count our fallback against CMSIS-DSP's generic C. The entries against a
+//! reference library are `release`; the two Q15 SIMD entries are `info`, because our own fallback
+//! is no fair gate for a SIMD branch (D21). The committed result files and `benches/limits.json`
+//! must carry the entries on the platforms that were measured, and every committed record must
+//! pass or be information.
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -30,13 +32,26 @@ fn bench_file(name: &str) -> Value {
     serde_json::from_str(&text).expect("parse the bench file")
 }
 
+/// The status of an entry and the verdict its committed record carries.
+fn expected_status(kernel: &str) -> (&'static str, &'static str) {
+    match kernel {
+        "biquad_cq15" | "biquad_real_q15" => ("info", "info"),
+        _ => ("release", "pass"),
+    }
+}
+
 #[test]
-fn every_biquad_entry_is_release_at_every_level() {
+fn every_biquad_entry_has_its_status_at_every_level() {
     let limits = bench_file("limits.json");
     for kernel in SIMD.into_iter().chain(FALLBACK) {
+        let (status, _) = expected_status(kernel);
         for level in LEVELS {
-            let status = limits[kernel][level]["status"].as_str();
-            assert_eq!(status, Some("release"), "{kernel}/{level}");
+            let entry = &limits[kernel][level];
+            assert_eq!(entry["status"].as_str(), Some(status), "{kernel}/{level}");
+            // An `info` entry states why it is not judged.
+            if status == "info" {
+                assert!(entry["waiver"].is_string(), "{kernel}/{level}");
+            }
         }
         // avx2-runtime follows the run-time rule (no entry); the fallback entries are not
         // measured there.
@@ -83,17 +98,19 @@ fn the_measured_platforms_report_every_biquad_entry() {
                         .is_some_and(|c| c.contains(want)),
                     "{platform}/{level}/{kernel} is not compared with {want}"
                 );
-                // The committed record passes as a release entry: the verdict of
-                // `cargo xtask count` and, independently of it, the ratio of the two counts
-                // within the release limit.
+                // The committed record has its status and verdict (`pass` for a release
+                // entry, `info` for the Q15 SIMD entries), and independently of it the ratio of
+                // the two counts is within the release limit, which also guards the `info`
+                // entries against a regression of the SIMD branch.
+                let (status, verdict) = expected_status(kernel);
                 assert_eq!(
                     entry["status"].as_str(),
-                    Some("release"),
+                    Some(status),
                     "{platform}/{level}/{kernel}"
                 );
                 assert_eq!(
                     entry["verdict"].as_str(),
-                    Some("pass"),
+                    Some(verdict),
                     "{platform}/{level}/{kernel}: {entry}"
                 );
                 let ours = entry["ours_instr_per_sample"].as_f64().unwrap_or(f64::NAN);

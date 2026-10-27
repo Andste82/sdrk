@@ -150,8 +150,8 @@
             "other": 71.59,
             "ours": 71.59
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "biquad_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
@@ -313,8 +313,8 @@
             "other": 71.45,
             "ours": 71.45
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "biquad_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
@@ -1734,8 +1734,8 @@
             "other": 71.59,
             "ours": 71.59
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "biquad_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
@@ -1897,8 +1897,8 @@
             "other": 71.45,
             "ours": 71.45
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "biquad_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
@@ -2888,8 +2888,8 @@
             "other": 71.59,
             "ours": 71.59
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "biquad_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
@@ -3051,8 +3051,8 @@
             "other": 71.45,
             "ours": 71.45
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "biquad_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",

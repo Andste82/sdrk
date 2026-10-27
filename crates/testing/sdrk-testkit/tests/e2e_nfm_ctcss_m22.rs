@@ -18,8 +18,8 @@ use sdrk_core::kernels::squelch::Squelch;
 use sdrk_core::{C32, CQ15, ComplexSample};
 use sdrk_testkit::e2e::E2eSample;
 use sdrk_testkit::e2e_nfm::{
-    NFM_MAX_SINAD_LOSS_DB, NFM_MIN_SUBTONE_DB_F32, NFM_MIN_SUBTONE_DB_Q15, NFM_QUICK_SAMPLES,
-    NfmMeasurement, measure_nfm, measure_nfm_ctcss,
+    NFM_MAX_SINAD_LOSS_DB_F32, NFM_MAX_SINAD_LOSS_DB_Q15, NFM_MIN_SUBTONE_DB_F32,
+    NFM_MIN_SUBTONE_DB_Q15, NFM_QUICK_SAMPLES, NfmMeasurement, measure_nfm, measure_nfm_ctcss,
 };
 use sdrk_testkit::{Arena, Failure};
 
@@ -65,28 +65,22 @@ fn check(base: &NfmMeasurement, m: &NfmMeasurement, min_subtone_db: f64, max_los
 fn ctcss_f32_removes_the_sub_tone() {
     let (base, with) = run::<C32>(NFM_QUICK_SAMPLES).unwrap();
     // f32: 50 dB and the specified 1 dB.
-    check(&base, &with, NFM_MIN_SUBTONE_DB_F32, NFM_MAX_SINAD_LOSS_DB);
+    check(
+        &base,
+        &with,
+        NFM_MIN_SUBTONE_DB_F32,
+        NFM_MAX_SINAD_LOSS_DB_F32,
+    );
 }
 
 #[test]
 fn ctcss_q15_removes_the_sub_tone() {
     let (base, with) = run::<CQ15>(NFM_QUICK_SAMPLES).unwrap();
-    // Q15: 40 dB; the SINAD loss is 1.07 dB, checked below as a recorded value (M22-3).
+    // Q15: 40 dB and the separate Q15 SINAD threshold of 1.1 dB (decision D23; measured 1.07 dB).
     check(
         &base,
         &with,
         NFM_MIN_SUBTONE_DB_Q15,
-        RECORDED_Q15_SINAD_LOSS_DB,
+        NFM_MAX_SINAD_LOSS_DB_Q15,
     );
-}
-
-/// The SINAD loss the Q15 chain shows (measured 1.07 dB), a regression guard and not a
-/// threshold of the specification.
-const RECORDED_Q15_SINAD_LOSS_DB: f64 = 1.1;
-
-#[test]
-#[ignore = "open item M22-3: the Q15 chain loses 1.07 dB of SINAD against the specified 1 dB"]
-fn ctcss_q15_sinad_within_1_db() {
-    let (base, with) = run::<CQ15>(NFM_QUICK_SAMPLES).unwrap();
-    check(&base, &with, NFM_MIN_SUBTONE_DB_Q15, NFM_MAX_SINAD_LOSS_DB);
 }

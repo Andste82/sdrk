@@ -87,8 +87,11 @@ pub const NFM_CTCSS_CUTOFF_HZ: f64 = 300.0;
 pub const NFM_MIN_SUBTONE_DB_F32: f64 = 50.0;
 /// Minimum attenuation of the sub-tone against the 1 kHz tone with the `ctcss` node, Q15, in dB.
 pub const NFM_MIN_SUBTONE_DB_Q15: f64 = 40.0;
-/// The SINAD with the `ctcss` node may be this much lower than without it, in dB.
-pub const NFM_MAX_SINAD_LOSS_DB: f64 = 1.0;
+/// The SINAD with the `ctcss` node may be this much lower than without it, `f32`, in dB.
+pub const NFM_MAX_SINAD_LOSS_DB_F32: f64 = 1.0;
+/// The SINAD with the `ctcss` node may be this much lower than without it, Q15, in dB (the
+/// separate Q15 threshold approved by the maintainer, decision D23; measured 1.07 dB).
+pub const NFM_MAX_SINAD_LOSS_DB_Q15: f64 = 1.1;
 /// Audio samples after the gate closed that are exempt from the zero check: the tail of the
 /// audio filter of the demodulator.
 const FILTER_TAIL: usize = 256;

@@ -620,6 +620,7 @@ fn delays_of_validate_match_the_blocks_for_every_kind() {
             json!({ "audio_decimation": 2, "audio_cutoff_hz": 5000 }),
         ),
         ("ssb_demod", json!({ "audio_decimation": 2 })),
+        ("biquad", json!({ "cutoff_hz": 1000, "order": 4 })),
         ("dc_block", json!({ "cutoff_hz": 50 })),
         ("fir", json!({ "cutoff_hz": 4000, "transition_hz": 1000 })),
         ("ddc", json!({ "decimation": 4, "frequency_hz": 1000 })),

@@ -31,12 +31,13 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, Block, BlockDescription, ConvertBlock,
-    ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
-    DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType,
-    ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
+    AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
+    Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
+    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, Mutability,
+    ParamKind, ParamValue, PortType, ResamplerBlock, ResamplerConfig, ResamplerRealBlock,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -56,10 +57,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_fifteen_unique_kinds() {
+fn there_are_sixteen_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 15);
-    assert_eq!(all_descriptions().len(), 15);
+    assert_eq!(kinds.len(), 16);
+    assert_eq!(all_descriptions().len(), 16);
     for kind in [
         "convert",
         "convert_out",
@@ -76,6 +77,7 @@ fn there_are_fifteen_unique_kinds() {
         "agc",
         "am_demod",
         "ssb_demod",
+        "biquad",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -252,6 +254,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("agc", |n| AgcConfig::default().get(n), &[]);
     defaults_match("am_demod", |n| AmDemodConfig::default().get(n), &[]);
     defaults_match("ssb_demod", |n| SsbDemodConfig::default().get(n), &[]);
+    defaults_match("biquad", |n| BiquadConfig::default().get(n), &[]);
     defaults_match("convert_out", |n| ConvertOutConfig::default().get(n), &[]);
 }
 
@@ -336,6 +339,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("agc", AgcConfig);
     round_trip!("am_demod", AmDemodConfig);
     round_trip!("ssb_demod", SsbDemodConfig);
+    round_trip!("biquad", BiquadConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -410,6 +414,19 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "ssb_demod",
         &mut SsbDemodBlock::<CQ15, _>::new(&ssb, r, &mut s).unwrap(),
+    );
+    let biquad = BiquadConfig {
+        cutoff_hz: 2_000.0,
+        order: 4,
+        ..BiquadConfig::default()
+    };
+    check_block_params(
+        "biquad",
+        &mut BiquadBlock::<CQ15, _>::new(&biquad, r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "biquad",
+        &mut BiquadRealBlock::<f32, _>::new(&biquad, r, &mut s).unwrap(),
     );
     check_block_params(
         "dc_block",

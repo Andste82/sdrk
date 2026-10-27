@@ -2,6 +2,7 @@
 
 pub mod agc;
 pub mod basic;
+pub mod biquad;
 pub mod convert;
 pub mod decim;
 pub mod demod;

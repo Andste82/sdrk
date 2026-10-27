@@ -15,6 +15,17 @@ inputs:
     rate_hz: 2400000
     description: "RTL-SDR IQ"
 nodes:
+  # Audio low-pass: a 4th-order Butterworth filter at 4000 Hz after the envelope detector that
+  # limits the hiss and the adjacent-channel whistle above the audio band of a broadcast
+  # channel (the node is not called audio because the output has that name). cutoff_hz can be
+  # changed while the flow runs (set_param), for example to 2500 for speech or 5000 for music;
+  # the filter keeps its state.
+  audio_filter:
+    kind: biquad
+    params:
+      cutoff_hz: 4000
+      order: 4
+      response: lowpass
   # Automatic gain control with slow time constants. The audio is the envelope of the signal,
   # so a gain that reacts within the audio period would follow the modulation and distort it:
   # the attack of 0.1 s and the release of 0.5 s keep the gain constant over many audio
@@ -45,12 +56,13 @@ nodes:
       decimation: 50
       max_taps: 8192
       transition_hz: 2000
-# Channel filter, automatic gain control, envelope detector.
+# Channel filter, automatic gain control, envelope detector, audio low-pass.
 edges:
   - { from: rf, to: tune }
   - { from: tune, to: agc }
   - { from: agc, to: demod }
-  - { from: demod, to: audio }
+  - { from: demod, to: audio_filter }
+  - { from: audio_filter, to: audio }
 # Audio samples (errors when full).
 outputs:
   audio:

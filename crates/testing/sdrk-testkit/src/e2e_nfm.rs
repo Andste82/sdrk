@@ -12,6 +12,10 @@
 //! samples and keeps no audio buffer: the SINAD is accumulated while the audio is produced, the
 //! gate is observed after every squelch sample and the exactly-zero checks run on the fly. It
 //! needs about 50 KiB of the arena for `C32` and about 30 KiB for `CQ15`.
+//!
+//! [`measure_nfm_ctcss`] (M22) adds an 88.5 Hz sub-tone at 10 % of the deviation to the signal and
+//! the `ctcss` node of the updated flow (a fourth-order Butterworth high-pass at 300 Hz,
+//! `BiquadRealBlock`) behind the demodulator.
 
 // See `e2e.rs`: the lint counts every `Result<_, Failure>` temporary separately.
 #![allow(
@@ -24,9 +28,11 @@
 use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::{
-    ARENA_ALIGN, ArenaStorage, Block, BlockSample, ConvertBlock, ConvertConfig, DdcBlock,
-    DdcConfig, FmDemodBlock, FmDemodConfig, SquelchBlock, SquelchConfig,
+    ARENA_ALIGN, ArenaStorage, BiquadConfig, BiquadElem, BiquadRealBlock, BiquadResponse, Block,
+    BlockReal, BlockSample, ConvertBlock, ConvertConfig, DdcBlock, DdcConfig, FmDemodBlock,
+    FmDemodConfig, SquelchBlock, SquelchConfig,
 };
+use sdrk_core::kernels::biquad::BiquadReal;
 use sdrk_core::kernels::convert::Convert;
 use sdrk_core::kernels::decim::ResampleReal;
 use sdrk_core::kernels::demod::QuadDemod;
@@ -35,10 +41,10 @@ use sdrk_core::kernels::squelch::Squelch;
 use sdrk_core::{ComplexSample, Rate, RealSample};
 use sdrk_device::formats;
 
-use crate::arena::Arena;
+use crate::arena::{Arena, Carver};
 use crate::e2e::{CHUNK, E2eSample, IF_RATE_HZ};
 use crate::encode::encode;
-use crate::fm::fm_baseband;
+use crate::fm::{fm_baseband, fm_baseband_two_tones};
 use crate::meters::ToneAccumulator;
 use crate::rng::Pcg32;
 use crate::suite::Failure;
@@ -71,6 +77,18 @@ pub const NFM_MIN_SINAD_Q15_DB: f64 = 25.0;
 pub const NFM_MAX_OPEN_DELAY_S: f64 = 0.001;
 /// The gate must close at most this long after the transmission ends, in seconds.
 pub const NFM_MAX_CLOSE_DELAY_S: f64 = 0.1;
+/// Frequency of the CTCSS sub-tone of [`measure_nfm_ctcss`] in Hz.
+pub const NFM_SUBTONE_HZ: f64 = 88.5;
+/// Deviation of the sub-tone relative to the deviation of the 1 kHz tone.
+pub const NFM_SUBTONE_RATIO: f64 = 0.1;
+/// Cutoff of the `ctcss` high-pass in Hz.
+pub const NFM_CTCSS_CUTOFF_HZ: f64 = 300.0;
+/// Minimum attenuation of the sub-tone against the 1 kHz tone with the `ctcss` node, `f32`, in dB.
+pub const NFM_MIN_SUBTONE_DB_F32: f64 = 50.0;
+/// Minimum attenuation of the sub-tone against the 1 kHz tone with the `ctcss` node, Q15, in dB.
+pub const NFM_MIN_SUBTONE_DB_Q15: f64 = 40.0;
+/// The SINAD with the `ctcss` node may be this much lower than without it, in dB.
+pub const NFM_MAX_SINAD_LOSS_DB: f64 = 1.0;
 /// Audio samples after the gate closed that are exempt from the zero check: the tail of the
 /// audio filter of the demodulator.
 const FILTER_TAIL: usize = 256;
@@ -95,6 +113,52 @@ pub struct NfmMeasurement {
     pub zero_violations: usize,
     /// Audio samples produced in total.
     pub audio_samples: usize,
+    /// Level of the 88.5 Hz component below the 1 kHz tone in dB (Hann-windowed fits over the
+    /// same window as the SINAD).
+    pub subtone_below_db: f64,
+}
+
+/// A Hann-windowed single-tone fit over a window of known length.
+struct WindowedTone {
+    rate: f64,
+    freq: f64,
+    len: usize,
+    n: usize,
+    re: f64,
+    im: f64,
+    weight: f64,
+}
+
+impl WindowedTone {
+    fn new(rate: f64, freq: f64, len: usize) -> Self {
+        Self {
+            rate,
+            freq,
+            len,
+            n: 0,
+            re: 0.0,
+            im: 0.0,
+            weight: 0.0,
+        }
+    }
+
+    fn push(&mut self, x: f64) {
+        let k = self.n as f64;
+        self.n += 1;
+        let w = 0.5 - 0.5 * libm::cos(core::f64::consts::TAU * k / self.len as f64);
+        let phase = core::f64::consts::TAU * self.freq * k / self.rate;
+        self.re += w * x * libm::cos(phase);
+        self.im -= w * x * libm::sin(phase);
+        self.weight += w;
+    }
+
+    /// Amplitude of the tone.
+    fn amplitude(&self) -> f64 {
+        if self.weight == 0.0 {
+            return 0.0;
+        }
+        2.0 * libm::sqrt(self.re * self.re + self.im * self.im) / self.weight
+    }
 }
 
 /// Runs E2E-NFM over `samples` input samples (a multiple of `4 * CHUNK`; the transmission fills
@@ -104,6 +168,74 @@ pub struct NfmMeasurement {
 /// A [`Failure`] if the arena is exhausted, a block fails or `samples` is not a multiple of
 /// `4 * CHUNK`.
 pub fn measure_nfm<T>(arena: &mut Arena<'_>, samples: usize) -> Result<NfmMeasurement, Failure>
+where
+    T: E2eSample + BlockSample,
+    Sdrk: Convert<T>
+        + Ddc<T>
+        + FmDemod<T>
+        + QuadDemod<T>
+        + Squelch<T>
+        + ResampleReal<<T as ComplexSample>::Real>,
+{
+    run_nfm::<T>(&mut arena.carver(), samples, false, None)
+}
+
+/// Runs E2E-NFM with CTCSS (M22): the signal of [`measure_nfm`] with an added sub-tone of
+/// [`NFM_SUBTONE_HZ`] at [`NFM_SUBTONE_RATIO`] of the deviation, through the chain with the
+/// `ctcss` node (`BiquadRealBlock`, high-pass, order 4, [`NFM_CTCSS_CUTOFF_HZ`]) behind
+/// `fm_demod`. The zero check covers the samples before the transmission only: the filter of
+/// the `ctcss` node keeps its state for 0.2 s after the gate closed (f32) or may keep a small
+/// offset (Q15), see `docs/kernels.md`.
+///
+/// # Errors
+/// As [`measure_nfm`].
+pub fn measure_nfm_ctcss<T>(
+    arena: &mut Arena<'_>,
+    samples: usize,
+) -> Result<NfmMeasurement, Failure>
+where
+    T: E2eSample + BlockSample,
+    <T as ComplexSample>::Real: BiquadElem + BlockReal,
+    Sdrk: Convert<T>
+        + Ddc<T>
+        + FmDemod<T>
+        + QuadDemod<T>
+        + Squelch<T>
+        + ResampleReal<<T as ComplexSample>::Real>
+        + BiquadReal<<T as ComplexSample>::Real>,
+{
+    let mut c = arena.carver();
+    let audio_rate = Rate::hz(48_000)?;
+    let cfg = BiquadConfig {
+        response: BiquadResponse::Highpass,
+        cutoff_hz: NFM_CTCSS_CUTOFF_HZ,
+        order: 4,
+        ..BiquadConfig::default()
+    };
+    let bytes = BiquadRealBlock::<<T as ComplexSample>::Real, ArenaStorage<'_>>::storage_bytes(
+        &cfg, audio_rate,
+    )? + ARENA_ALIGN;
+    let mut store = ArenaStorage::new(c.take::<u8>(bytes)?);
+    let mut ctcss =
+        BiquadRealBlock::<<T as ComplexSample>::Real, _>::new(&cfg, audio_rate, &mut store)?;
+    let mut post = |input: &[<T as ComplexSample>::Real],
+                    output: &mut [<T as ComplexSample>::Real]|
+     -> Result<(), Failure> {
+        ctcss.process(input, output)?;
+        Ok(())
+    };
+    run_nfm::<T>(&mut c, samples, true, Some(&mut post))
+}
+
+/// The `ctcss` stage: filters a block of audio.
+type Post<'p, R> = &'p mut dyn FnMut(&[R], &mut [R]) -> Result<(), Failure>;
+
+fn run_nfm<T>(
+    c: &mut Carver<'_>,
+    samples: usize,
+    subtone: bool,
+    mut post: Option<Post<'_, <T as ComplexSample>::Real>>,
+) -> Result<NfmMeasurement, Failure>
 where
     T: E2eSample + BlockSample,
     Sdrk: Convert<T>
@@ -135,7 +267,6 @@ where
         audio_cutoff_hz: 4_000.0,
         audio_decimation: 1,
     };
-    let mut c = arena.carver();
     let ddc_bytes =
         DdcBlock::<T, ArenaStorage<'_>>::storage_bytes(&ddc_cfg, if_rate)? + ARENA_ALIGN;
     let demod_bytes =
@@ -161,6 +292,7 @@ where
     let low = c.take::<T>(CHUNK / NFM_DECIMATION + 4)?;
     let gated = c.take::<T>(CHUNK / NFM_DECIMATION + 4)?;
     let out = c.take::<<T as ComplexSample>::Real>(CHUNK / NFM_DECIMATION + 4)?;
+    let filtered = c.take::<<T as ComplexSample>::Real>(CHUNK / NFM_DECIMATION + 4)?;
 
     let tx_start = samples / 4;
     let tx_end = 3 * samples / 4;
@@ -172,6 +304,8 @@ where
 
     let mut rng = Pcg32::new(1900, 1);
     let mut sinad = ToneAccumulator::new(NFM_AUDIO_RATE_HZ, NFM_AUDIO_HZ);
+    let mut main_tone = WindowedTone::new(NFM_AUDIO_RATE_HZ, NFM_AUDIO_HZ, win_hi - win_lo);
+    let mut low_tone = WindowedTone::new(NFM_AUDIO_RATE_HZ, NFM_SUBTONE_HZ, win_hi - win_lo);
     let (mut gate_index, mut audio_index) = (0usize, 0usize);
     let mut opened_at: Option<usize> = None;
     let mut closed_at: Option<usize> = None;
@@ -184,15 +318,28 @@ where
             let start = chunk * CHUNK + piece * PIECE;
             let block = &mut *scratch;
             if (tx_start..tx_end).contains(&start) {
-                fm_baseband(
-                    block,
-                    IF_RATE_HZ as f64,
-                    NFM_OFFSET_HZ,
-                    NFM_DEVIATION_HZ,
-                    NFM_AUDIO_HZ,
-                    1.0,
-                    start as u64,
-                );
+                if subtone {
+                    fm_baseband_two_tones(
+                        block,
+                        IF_RATE_HZ as f64,
+                        NFM_OFFSET_HZ,
+                        [
+                            (NFM_DEVIATION_HZ, NFM_AUDIO_HZ),
+                            (NFM_SUBTONE_RATIO * NFM_DEVIATION_HZ, NFM_SUBTONE_HZ),
+                        ],
+                        start as u64,
+                    );
+                } else {
+                    fm_baseband(
+                        block,
+                        IF_RATE_HZ as f64,
+                        NFM_OFFSET_HZ,
+                        NFM_DEVIATION_HZ,
+                        NFM_AUDIO_HZ,
+                        1.0,
+                        start as u64,
+                    );
+                }
                 for s in block.iter_mut() {
                     *s *= NFM_AMPLITUDE;
                 }
@@ -243,16 +390,27 @@ where
                 if q.consumed == 0 && q.produced == 0 {
                     return Err(fail("fm_demod made no progress"));
                 }
-                for r in out.iter().take(q.produced) {
+                let demodulated = out.get(..q.produced).unwrap_or_default();
+                let audio: &[<T as ComplexSample>::Real] = match post.as_mut() {
+                    Some(stage) => {
+                        let dst = filtered.get_mut(..q.produced).unwrap_or_default();
+                        stage(demodulated, dst)?;
+                        dst
+                    }
+                    None => demodulated,
+                };
+                for r in audio {
                     let a = audio_index;
                     audio_index += 1;
                     let v = r.to_f64();
                     if (win_lo..win_hi).contains(&a) {
                         sinad.push(v);
+                        main_tone.push(v);
+                        low_tone.push(v);
                     }
                     let must_be_zero = a < audio_start
-                        || a >= after_end
-                        || closed_at.is_some_and(|c| a >= c + FILTER_TAIL);
+                        || (post.is_none()
+                            && (a >= after_end || closed_at.is_some_and(|c| a >= c + FILTER_TAIL)));
                     if must_be_zero {
                         zero_checked += 1;
                         if v != 0.0 {
@@ -276,5 +434,7 @@ where
         zero_checked,
         zero_violations,
         audio_samples: audio_index,
+        subtone_below_db: 20.0
+            * libm::log10(main_tone.amplitude() / low_tone.amplitude().max(f64::MIN_POSITIVE)),
     })
 }

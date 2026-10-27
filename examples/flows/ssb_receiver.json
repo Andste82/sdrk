@@ -17,6 +17,14 @@
     "agc": {
       "kind": "agc"
     },
+    "audio_filter": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 2800,
+        "order": 4,
+        "response": "lowpass"
+      }
+    },
     "demod": {
       "kind": "ssb_demod",
       "params": {
@@ -58,6 +66,10 @@
     },
     {
       "from": "demod",
+      "to": "audio_filter"
+    },
+    {
+      "from": "audio_filter",
       "to": "audio"
     }
   ],

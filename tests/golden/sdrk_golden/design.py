@@ -66,3 +66,47 @@ def tuned_positions(count_in, step):
         out.append((n, p, mu, wrap))
         j += 1
     return out
+
+
+# Biquad design (M22): the RBJ Audio EQ Cookbook and Butterworth cascades in float64.
+# These are the formulas of the rustdoc of ``sdrk_blocks::design::biquad_coefs`` and
+# ``butterworth_sos``, written independently of the Rust code.
+
+
+def biquad_coefs(response, f0, q, fs):
+    """``[b0, b1, b2, a1, a2]`` of one cookbook section, normalized by ``a0``."""
+    assert 0.0 < f0 < fs / 2.0 and q > 0.0
+    w0 = 2.0 * math.pi * f0 / fs
+    c = math.cos(w0)
+    alpha = math.sin(w0) / (2.0 * q)
+    b = {
+        "lowpass": [(1.0 - c) / 2.0, 1.0 - c, (1.0 - c) / 2.0],
+        "highpass": [(1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0],
+        "bandpass": [alpha, 0.0, -alpha],
+        "notch": [1.0, -2.0 * c, 1.0],
+    }[response]
+    a = [1.0 + alpha, -2.0 * c, 1.0 - alpha]
+    return [b[0] / a[0], b[1] / a[0], b[2] / a[0], a[1] / a[0], a[2] / a[0]]
+
+
+def butterworth_sos(response, order, cutoff, fs):
+    """Rows ``[b0, b1, b2, a1, a2]`` of an even-order Butterworth cascade, lowest Q first."""
+    assert response in ("lowpass", "highpass") and order % 2 == 0 and 2 <= order <= 8
+    rows = []
+    for k in range(1, order // 2 + 1):
+        q = 1.0 / (2.0 * math.cos((2.0 * k - 1.0) * math.pi / (2.0 * order)))
+        rows.append(biquad_coefs(response, cutoff, q, fs))
+    return rows
+
+
+def sos_matrix(rows):
+    """The ``scipy.signal`` SOS matrix ``[b0, b1, b2, 1, a1, a2]`` of the rows."""
+    return np.array([[r[0], r[1], r[2], 1.0, r[3], r[4]] for r in rows], dtype=np.float64)
+
+
+def q14(x):
+    """``floor(x * 16384 + 0.5)``; raises if the value does not fit an ``i16``."""
+    v = int(math.floor(float(x) * 16384.0 + 0.5))
+    if not -32768 <= v <= 32767:
+        raise ValueError(f"{x} does not fit Q2.14")
+    return v

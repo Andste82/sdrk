@@ -14,6 +14,19 @@ inputs:
     rate_hz: 2400000
     description: "RTL-SDR IQ"
 nodes:
+  # CTCSS removal: a 4th-order Butterworth high-pass at 300 Hz after the demodulator. Two-way
+  # radio often carries a sub-audible tone (CTCSS, 67 to 254 Hz) that opens the squelch of the
+  # other radios; it is part of the demodulated signal and would be audible as a hum. Voice
+  # for communication needs 300 Hz and above, so the high-pass removes the tone and keeps the
+  # speech. cutoff_hz can be changed while the flow runs (set_param); the filter keeps its
+  # state. At the squelch the audio is exact silence (f32); in a Q15 pipeline this filter may
+  # keep a limit cycle of a few LSB after the gate closes.
+  ctcss:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
   # Quadrature FM demodulation without de-emphasis (two-way radio audio is not
   # pre-emphasised in the same way as broadcast FM). deviation_hz is the deviation that reads
   # full scale: 5000 for 25 kHz channels, 2500 for 12.5 kHz channels. audio_cutoff_hz only
@@ -46,12 +59,13 @@ nodes:
       decimation: 50
       max_taps: 4096
       transition_hz: 4000
-# Channel filter, squelch, demodulator.
+# Channel filter, squelch, demodulator, CTCSS high-pass.
 edges:
   - { from: rf, to: tune }
   - { from: tune, to: gate }
   - { from: gate, to: demod }
-  - { from: demod, to: audio }
+  - { from: demod, to: ctcss }
+  - { from: ctcss, to: audio }
 # Audio samples (errors when full).
 outputs:
   audio:

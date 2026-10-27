@@ -37,7 +37,7 @@ The FIR group delay is exact for symmetric (linear-phase) taps. A filter with as
 
 ## Block-size invariance
 
-Output samples are a function of the absolute input position only, never of how the input was cut into calls: the same input produces bit-identical output whether it arrives in one block or in chunks of any size. `rotate` and `fir` keep their state (`Nco`, `FirState`) between calls and are tested with `check_block_invariance` over random chunk plans; the same holds for `fir_decimate`, `resample`, `quad_demod`, `deemphasis`, `dc_block`, `dc_block_real`, `agc` and `squelch` (20 plans each; the average power and the gate are part of the state).
+Output samples are a function of the absolute input position only, never of how the input was cut into calls: the same input produces bit-identical output whether it arrives in one block or in chunks of any size. `rotate` and `fir` keep their state (`Nco`, `FirState`) between calls and are tested with `check_block_invariance` over random chunk plans; the same holds for `fir_decimate`, `resample`, `quad_demod`, `deemphasis`, `dc_block`, `dc_block_real`, `agc`, `squelch`, `biquad` and `biquad_real` (20 plans each; the average power, the gate and the section histories are part of the state).
 
 The SIMD `rotate` for `C32` ([backends.md](backends.md)) cuts the stream into blocks of `B` samples (a power of two: 512 at SSE, NEON and SIMD128, 1024 at AVX2, 2048 at AVX-512, or the period of the phase sequence if that is shorter) at absolute positions. The position of a sample in its block is not stored: with `inc = 2^t o` (`o` odd) it is `((phase >> t) * o^-1) mod B`, a function of the phase and the increment alone. Every quantity a call computes once (lane offsets, table entries, step) is a function of the increment alone, and table entries are computed only for the positions a call covers but always by the same formula. So every output sample is a function of `(phase_n, inc)` and the input sample, and the output is bit-identical for any split into calls. Its bits can depend on the increment as well as on the phase: after a retune (`set_frequency`) the sample whose phase was still advanced with the old increment can differ from an unchanged run by rounding (about 1e-7). It is numerically still the old-frequency rotation, and the new frequency acts from the next sample on. The pipeline test `time_events.rs` (`a_timed_change_is_exact_at_decimation_1`) therefore checks the first output that changes by more than 1e-6 of the peak (the real change is 8.7e-6), not the first bit difference.
 
@@ -79,7 +79,7 @@ Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, d
 | --- | --- | --- | --- |
 | `convert` | samples per byte of a packing group (for example `1/2` for `cu8`, `2/5` for `packed10`) | `Constant` | 0 |
 | `convert_out` | bytes per sample (the inverse) | `Constant` | 0 |
-| `scale`, `dc_block`, `fm_mod`, `squelch`, `agc` | `1/1` | `Constant` | 0 (`dc_block`: the delay of the one-pole filter depends on the frequency and is not declared) |
+| `scale`, `dc_block`, `fm_mod`, `squelch`, `agc`, `biquad` | `1/1` | `Constant` | 0 (`dc_block`, `biquad`: the delay of the IIR filter depends on the frequency and is not declared) |
 | `fir` with `N` taps | `1/1` | `Constant` | `(N - 1) / 2` |
 | `ddc` with `N` taps, decimation `M` | `1/M` | `Constant` | `(N - 1) / 2` |
 | `duc` with `N` taps, interpolation `L` | `L/1` | `Constant` | `(N - 1) / (2 L)` |

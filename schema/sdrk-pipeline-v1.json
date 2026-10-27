@@ -741,6 +741,72 @@
           },
           {
             "additionalProperties": false,
+            "description": "Filters with a Butterworth low-pass or high-pass, a band-pass or a notch (IIR).",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "biquad"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "cutoff_hz": {
+                    "description": "-3 dB corner of a low-pass or high-pass, centre frequency of a band-pass or notch, in Hz; above 0 and below half the sample rate (for Q15 low-pass and high-pass at least sample rate / 500). Required. Unit: Hz. Typical: 4000 for an AM audio low-pass, 300 to remove CTCSS. Runtime.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "order": {
+                    "default": 2,
+                    "description": "Order of a Butterworth low-pass or high-pass: even, 2 to 8. Must be 2 for band-pass and notch. Typical: 4. Build-time.",
+                    "maximum": 8,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "q": {
+                    "default": 0.7071,
+                    "description": "Quality factor of a band-pass or notch; ignored by low-pass and high-pass. Typical: 2 for a band-pass, 10 for a narrow notch. Runtime.",
+                    "maximum": 1000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "response": {
+                    "default": "lowpass",
+                    "description": "Shape of the filter. Typical: lowpass for hiss, highpass to remove a sub-tone, notch for a whistle. Build-time.",
+                    "enum": [
+                      "lowpass",
+                      "highpass",
+                      "bandpass",
+                      "notch"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "cutoff_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Converts raw device bytes in a sample format to complex samples.",
             "properties": {
               "backend": {

@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "coefs": {
+      "dtype": "i16",
+      "file": "butter2_hp_q15_8192.coefs.bin",
+      "len": 5
+    },
+    "expected": {
+      "dtype": "i16",
+      "file": "butter2_hp_q15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "butter2_hp_q15_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "butter2_hp_q15_8192",
+  "format_version": 1,
+  "kernel": "biquad_real",
+  "notes": "butterworth_sos(highpass, 2, 0.01) as Q2.14; direct form I with one rounding per section; quantized real noise sigma 0.3",
+  "params": {
+    "cutoff_hz": 0.01,
+    "fs_hz": 1.0,
+    "order": 2,
+    "response": "highpass",
+    "sections": 1
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 428,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

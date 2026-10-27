@@ -662,7 +662,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 32] = [
+pub const KERNELS: [KernelSpec; 36] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -688,6 +688,10 @@ pub const KERNELS: [KernelSpec; 32] = [
     spec("agc_cq15", Family::Own, false),
     spec("dc_block_real", Family::Own, false),
     spec("dc_block_real_q15", Family::Own, false),
+    spec("biquad", Family::Own, false),
+    spec("biquad_cq15", Family::Own, false),
+    spec("biquad_real", Family::Own, false),
+    spec("biquad_real_q15", Family::Own, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -2077,9 +2081,13 @@ pub struct Options {
     pub strict: bool,
     /// Not `--no-variants`: also the informational misaligned and small-block runs.
     pub variants: bool,
+    /// `--merge`: with `--kernel`, write the records of the measured kernels into the existing
+    /// results file and keep everything else of it (a full run measures all kernels against
+    /// all references, which a new kernel with no library to compare with does not need).
+    pub merge: bool,
 }
 
-const USAGE: &str = "usage: cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--strict] | --pipeline [--no-write]";
+const USAGE: &str = "usage: cargo xtask count --platform <x86_64|x86_64-avx512|aarch64|wasm32> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--merge] [--strict] | --pipeline [--no-write]";
 
 impl Options {
     /// Parses the arguments after `count`.
@@ -2105,6 +2113,7 @@ impl Options {
                 "--kernel" => o.kernels.push(value()?),
                 "--no-write" => o.write = false,
                 "--no-variants" => o.variants = false,
+                "--merge" => o.merge = true,
                 "--pipeline" => o.pipeline = true,
                 "--strict" => o.strict = true,
                 other => bail!("unknown option `{other}`; {USAGE}"),
@@ -2284,6 +2293,11 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     }
     if options.write && options.kernels.is_empty() && options.levels.is_empty() {
         write_results(root, platform, &limits.caps, &levels, &volk_flags)?;
+    } else if options.write && options.merge {
+        if options.kernels.is_empty() {
+            bail!("--merge needs --kernel");
+        }
+        merge_results(root, platform, &levels)?;
     }
     if options.strict && !blockers.is_empty() {
         eprintln!("--strict: {} entries block a release:", blockers.len());
@@ -2298,6 +2312,46 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         eprintln!("count {platform}: limits exceeded");
     }
     Ok(all_ok)
+}
+
+/// Writes the records of the measured kernels into the results file of `platform`: for every
+/// measured level, the records of the kernels in `measured` replace or add the entries of the
+/// file; every other entry, and the rest of the file, stays as it is.
+///
+/// # Errors
+/// The file cannot be read or written, or it has no entry for a measured level.
+fn merge_results(
+    root: &Path,
+    platform: &str,
+    measured: &serde_json::Map<String, Value>,
+) -> anyhow::Result<()> {
+    let path = root
+        .join("benches")
+        .join("results")
+        .join(format!("{platform}.json"));
+    let mut doc: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path)
+            .with_context(|| format!("cannot read {}", path.display()))?,
+    )?;
+    for (level, new) in measured {
+        let Some(records) = new["kernels"].as_object() else {
+            continue;
+        };
+        let kernels = doc
+            .get_mut("levels")
+            .and_then(|l| l.get_mut(level.as_str()))
+            .and_then(|l| l.get_mut("kernels"))
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| anyhow!("{} has no level {level}", path.display()))?;
+        for (kernel, record) in records {
+            kernels.insert(kernel.clone(), record.clone());
+        }
+    }
+    let mut text = serde_json::to_string_pretty(&doc)?;
+    text.push('\n');
+    std::fs::write(&path, text)?;
+    println!("merged the measured kernels into {}", path.display());
+    Ok(())
 }
 
 #[allow(

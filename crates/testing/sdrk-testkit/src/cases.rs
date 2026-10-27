@@ -102,6 +102,14 @@
 //! | `e2e_ssb_rx_q15` | quick | about 63 KiB (0.2 s of signal, both sidebands) |
 //! | `e2e_ssb_rx_f32` | quick | about 75 KiB (0.2 s of signal, both sidebands) |
 //! | `e2e_ssb_rx_f32_1s`, `e2e_ssb_rx_q15_1s` | full | as the 0.2 s variants (1.0 s of signal) |
+//! | `biquad_c32` | quick | about 56 KiB |
+//! | `biquad_cq15` | quick | about 29 KiB |
+//! | `biquad_real_f32` | quick | about 29 KiB |
+//! | `biquad_real_q15` | quick | about 16 KiB |
+//! | `extremes_m22` | full | about 6 KiB |
+//! | `block_biquad_response` | quick | about 25 KiB |
+//! | `e2e_nfm_ctcss_f32` | full | about 50 KiB (0.4 s of signal, run twice) |
+//! | `e2e_nfm_ctcss_q15` | full | about 30 KiB (0.4 s of signal, run twice) |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |
@@ -113,6 +121,7 @@
 //! | `backend_vs_fallback_quad_demod` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_fm_mod` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_fft` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_biquad` | quick | up to 62 KiB |
 //!
 //! The `backend_vs_fallback_*` cases take the lengths of the matrix (0 to 4096 samples) that
 //! fit the arena they get, so the quick tier runs the shorter ones and the full tier all.
@@ -148,8 +157,9 @@ mod m13;
 mod m19;
 mod m20;
 mod m21;
+mod m22;
 
-pub(crate) static CASES: [TestCase; 114] = [
+pub(crate) static CASES: [TestCase; 123] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -586,6 +596,11 @@ pub(crate) static CASES: [TestCase; 114] = [
         run: m13::backend_vs_fallback_fft,
     },
     TestCase {
+        name: "backend_vs_fallback_biquad",
+        tier: Tier::Quick,
+        run: m13::backend_vs_fallback_biquad,
+    },
+    TestCase {
         name: "squelch_c32",
         tier: Tier::Quick,
         run: m19::squelch_c32,
@@ -719,6 +734,46 @@ pub(crate) static CASES: [TestCase; 114] = [
         name: "e2e_ssb_rx_q15_1s",
         tier: Tier::Full,
         run: m21::e2e_ssb_rx_q15_1s,
+    },
+    TestCase {
+        name: "biquad_c32",
+        tier: Tier::Quick,
+        run: m22::biquad_c32,
+    },
+    TestCase {
+        name: "biquad_cq15",
+        tier: Tier::Quick,
+        run: m22::biquad_cq15,
+    },
+    TestCase {
+        name: "biquad_real_f32",
+        tier: Tier::Quick,
+        run: m22::biquad_real_f32,
+    },
+    TestCase {
+        name: "biquad_real_q15",
+        tier: Tier::Quick,
+        run: m22::biquad_real_q15,
+    },
+    TestCase {
+        name: "extremes_m22",
+        tier: Tier::Full,
+        run: m22::extremes_m22,
+    },
+    TestCase {
+        name: "block_biquad_response",
+        tier: Tier::Quick,
+        run: m22::block_biquad_response,
+    },
+    TestCase {
+        name: "e2e_nfm_ctcss_f32",
+        tier: Tier::Full,
+        run: m22::e2e_nfm_ctcss_f32,
+    },
+    TestCase {
+        name: "e2e_nfm_ctcss_q15",
+        tier: Tier::Full,
+        run: m22::e2e_nfm_ctcss_q15,
     },
 ];
 

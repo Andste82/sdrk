@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "butterworth_lp8.expected.bin",
+      "len": 20
+    }
+  },
+  "case": "butterworth_lp8",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "order/2 cookbook sections with Q_k = 1 / (2 cos((2k - 1) pi / (2 order))), lowest Q first, 5 values per section; sosfreqz equals that of scipy.signal.butter(output='sos') within 1e-9 at 512 frequencies (asserted by the generator)",
+  "params": {
+    "cutoff_hz": 0.05,
+    "fs_hz": 1.0,
+    "order": 8,
+    "response": "lowpass"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-14,
+    "skip": 0
+  }
+}

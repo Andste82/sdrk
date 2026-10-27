@@ -45,6 +45,7 @@ mod storage;
 pub use block::{Block, BlockTiming, FrameBlock, FrameMeta, ParamValue};
 pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_CHUNK, AmDemodBlock, AmDemodConfig};
+pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
 pub use blocks::convert::{ConvertBlock, ConvertConfig};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
 pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig};
@@ -61,7 +62,7 @@ pub use blocks::ssb_demod::{SSB_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideban
 pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
 };
-pub use design::{DesignSpec, DesignWindow};
+pub use design::{BiquadResponse, DesignSpec, DesignWindow};
 pub use error::{Error, Result};
 pub use sample::{BlockReal, BlockSample, TunedElem};
 pub use storage::{ARENA_ALIGN, AlignedBytes, ArenaStorage, Storage};

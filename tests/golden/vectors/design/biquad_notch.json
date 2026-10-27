@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "biquad_notch.expected.bin",
+      "len": 5
+    }
+  },
+  "case": "biquad_notch",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "RBJ Audio EQ Cookbook section [b0, b1, b2, a1, a2] / a0 in float64",
+  "params": {
+    "f0_hz": 0.1,
+    "fs_hz": 1.0,
+    "q": 10.0,
+    "response": "notch"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-14,
+    "skip": 0
+  }
+}

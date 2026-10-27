@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "coefs": {
+      "dtype": "i16",
+      "file": "butter4_lp_cq15_8192.coefs.bin",
+      "len": 10
+    },
+    "expected": {
+      "dtype": "ci16",
+      "file": "butter4_lp_cq15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "butter4_lp_cq15_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "butter4_lp_cq15_8192",
+  "format_version": 1,
+  "kernel": "biquad",
+  "notes": "butterworth_sos(lowpass, 4, 0.1) as Q2.14; direct form I per section, sat16(round_shift(b0 x + b1 x1 + b2 x2 - a1 y1 - a2 y2, 14)); quantized complex noise sigma 0.3",
+  "params": {
+    "cutoff_hz": 0.1,
+    "fs_hz": 1.0,
+    "order": 4,
+    "response": "lowpass",
+    "sections": 2
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 425,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

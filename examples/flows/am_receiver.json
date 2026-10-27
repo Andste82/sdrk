@@ -21,6 +21,14 @@
         "release_s": 0.5
       }
     },
+    "audio_filter": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 4000,
+        "order": 4,
+        "response": "lowpass"
+      }
+    },
     "demod": {
       "kind": "am_demod"
     },
@@ -49,6 +57,10 @@
     },
     {
       "from": "demod",
+      "to": "audio_filter"
+    },
+    {
+      "from": "audio_filter",
       "to": "audio"
     }
   ],

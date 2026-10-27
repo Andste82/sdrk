@@ -47,6 +47,7 @@ impl Scale<CQ15> for Reference {
 }
 
 mod agc;
+mod biquad;
 mod convert;
 mod convert_out;
 mod decim;

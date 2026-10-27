@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "coefs": {
+      "dtype": "f32",
+      "file": "retune_f32_8192.coefs.bin",
+      "len": 10
+    },
+    "expected": {
+      "dtype": "f64",
+      "file": "retune_f32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "retune_f32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "retune_f32_8192",
+  "format_version": 1,
+  "kernel": "biquad_real",
+  "notes": "lowpass order 2 with cutoff 0.05 for samples 0..4095 and 0.15 from 4096 (set_coefs at that sample, history kept); transposed direct form II in float64 with the f32 coefficient values, switching the coefficients at 4096 and keeping s1 and s2; coefs holds both rows (first, second)",
+  "params": {
+    "fs_hz": 1.0,
+    "sections": 1,
+    "switch_at": 4096
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 429,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

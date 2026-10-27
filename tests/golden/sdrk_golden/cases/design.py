@@ -3,6 +3,7 @@
 import numpy as np
 import scipy.signal
 
+from .. import design as sdrk_design
 from .. import scalar_math
 from ..registry import Array, case
 
@@ -80,3 +81,56 @@ def kaiserord_table(rng):
             "expected is beta; width = 2 transition / fs, so fs = 2 makes transition_hz equal to width"
         ),
     )
+
+
+# Biquad design (M22)
+
+BIQUAD_FS = 1.0
+
+
+def _register_biquad(response, q):
+    @case(kernel="design", name=f"biquad_{response}", seed=0)
+    def _case(rng):
+        coefs = sdrk_design.biquad_coefs(response, 0.1, q, BIQUAD_FS)
+        return dict(
+            params={"response": response, "f0_hz": 0.1, "q": q, "fs_hz": BIQUAD_FS},
+            arrays={"expected": Array("f64", np.array(coefs))},
+            tolerance={"class": "max_abs_err", "max_abs_err": 1e-14, "skip": 0},
+            notes="RBJ Audio EQ Cookbook section [b0, b1, b2, a1, a2] / a0 in float64",
+        )
+
+
+for _resp, _q in (("lowpass", 0.7071), ("highpass", 0.7071), ("bandpass", 2.0), ("notch", 10.0)):
+    _register_biquad(_resp, _q)
+
+
+def _register_butterworth(tag, response, order, cutoff):
+    @case(kernel="design", name=f"butterworth_{tag}", seed=0)
+    def _case(rng):
+        rows = sdrk_design.butterworth_sos(response, order, cutoff, BIQUAD_FS)
+        # The cascade must have the response of scipy.signal.butter (bilinear transform
+        # prewarped at the cutoff).
+        btype = "low" if response == "lowpass" else "high"
+        ref = scipy.signal.butter(order, cutoff, btype=btype, fs=BIQUAD_FS, output="sos")
+        _, h_mine = scipy.signal.sosfreqz(sdrk_design.sos_matrix(rows), worN=512)
+        _, h_ref = scipy.signal.sosfreqz(ref, worN=512)
+        assert np.max(np.abs(h_mine - h_ref)) <= 1e-9, np.max(np.abs(h_mine - h_ref))
+        return dict(
+            params={"response": response, "order": order, "cutoff_hz": cutoff, "fs_hz": BIQUAD_FS},
+            arrays={"expected": Array("f64", np.array(rows).reshape(-1))},
+            tolerance={"class": "max_abs_err", "max_abs_err": 1e-14, "skip": 0},
+            notes=(
+                "order/2 cookbook sections with Q_k = 1 / (2 cos((2k - 1) pi / (2 order))), lowest Q "
+                "first, 5 values per section; sosfreqz equals that of scipy.signal.butter(output='sos') "
+                "within 1e-9 at 512 frequencies (asserted by the generator)"
+            ),
+        )
+
+
+for _tag, _resp, _order, _cut in (
+    ("lp2", "lowpass", 2, 0.05),
+    ("lp4", "lowpass", 4, 0.05),
+    ("lp8", "lowpass", 8, 0.05),
+    ("hp6", "highpass", 6, 0.2),
+):
+    _register_butterworth(_tag, _resp, _order, _cut)

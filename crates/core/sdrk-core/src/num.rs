@@ -76,6 +76,26 @@ pub fn q15_from_f64(x: f64) -> Q15 {
     }
 }
 
+/// f64 to a Q2.14 coefficient (scale `2^14`): `floor(x * 16384 + 0.5)`, or `None` if the
+/// result is outside `-32768 ..= 32767` or `x` is NaN (so `-2.0` is exact and `+2.0` is
+/// rejected).
+///
+/// ```
+/// use sdrk_core::num::q14_from_f64;
+/// assert_eq!(q14_from_f64(0.5), Some(8192));
+/// assert_eq!(q14_from_f64(-2.0), Some(-32768));
+/// assert_eq!(q14_from_f64(2.0), None);
+/// ```
+#[inline]
+pub fn q14_from_f64(x: f64) -> Option<i16> {
+    let v = libm::floor(x * 16384.0 + 0.5);
+    if (-32768.0..=32767.0).contains(&v) {
+        Some(v as i16)
+    } else {
+        None
+    }
+}
+
 /// f32 to Q15, computed in f64 (`floor(x * 32768 + 0.5)`, NaN gives 0, saturating).
 ///
 /// ```

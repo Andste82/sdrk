@@ -63,7 +63,12 @@ fn design_cases_are_present() {
         assert!(names.contains(&format!("firwin_kaiser_{tag}")));
     }
     assert!(names.contains(&"kaiserord_table".to_string()));
-    assert_eq!(names.len(), 10);
+    // The biquad design cases (M22) have their own test file.
+    let m09 = names
+        .iter()
+        .filter(|n| !n.starts_with("biquad_") && !n.starts_with("butterworth_"))
+        .count();
+    assert_eq!(m09, 10);
 }
 
 #[test]

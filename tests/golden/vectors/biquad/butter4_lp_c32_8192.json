@@ -1,0 +1,42 @@
+{
+  "arrays": {
+    "coefs": {
+      "dtype": "f32",
+      "file": "butter4_lp_c32_8192.coefs.bin",
+      "len": 10
+    },
+    "expected": {
+      "dtype": "cf64",
+      "file": "butter4_lp_c32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "butter4_lp_c32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "butter4_lp_c32_8192",
+  "format_version": 1,
+  "kernel": "biquad",
+  "notes": "butterworth_sos(lowpass, 4, 0.1) rounded to f32; scipy.signal.sosfilt in float64 with the f32 coefficient values, per component; complex noise sigma 0.3",
+  "params": {
+    "cutoff_hz": 0.1,
+    "fs_hz": 1.0,
+    "order": 4,
+    "response": "lowpass",
+    "sections": 2
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 424,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 100.0
+  }
+}

@@ -14,7 +14,7 @@
 //!
 //! # Memory
 //!
-//! Every case works with an arena of 256 KiB, quick cases with 64 KiB. The
+//! Every case works with an arena of 256 KiB, quick cases with 80 KiB. The
 //! arena use of each registered case is documented in the `cases` module.
 
 use core::fmt::{self, Write};
@@ -24,7 +24,7 @@ use crate::arena::Arena;
 /// How much of the suite to run.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tier {
-    /// Only quick cases (fit a 64 KiB arena, finish fast on a microcontroller).
+    /// Only quick cases (fit an 80 KiB arena, finish fast on a microcontroller).
     Quick,
     /// Every case.
     Full,
@@ -169,7 +169,7 @@ pub trait Reporter {
 ///     fn failed(&mut self, _: &Failure) {}
 ///     fn finished(&mut self, _: &Summary) {}
 /// }
-/// let mut mem = [0u8; 64 * 1024];
+/// let mut mem = [0u8; 80 * 1024];
 /// let mut arena = Arena::new(&mut mem);
 /// let s = run_suite(all_cases(), Tier::Quick, &mut arena, &mut Quiet);
 /// assert_eq!(s.failed, 0);

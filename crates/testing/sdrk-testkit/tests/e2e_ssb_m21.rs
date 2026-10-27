@@ -51,16 +51,16 @@ fn check(m: &SsbMeasurement, samples: usize, min_sinad_db: f64, min_rejection_db
     assert!(m.tone_amplitude > 0.1 * SSB_AMPLITUDE, "{m:?}");
 }
 
-/// The Q15 chain fits the 64 KiB arena of the quick tier; the f32 chain needs about 70 KiB
-/// (the channel filter of 4400 taps and the audio filter of 870 taps are twice as large).
-const QUICK_ARENA: usize = 64 * 1024;
-const F32_ARENA: usize = 80 * 1024;
+/// Both chains fit the 80 KiB arena of the quick tier; the f32 chain needs about 75 KiB, more
+/// than 64 KiB (the channel filter of 4400 taps and the audio filter of 870 taps are twice as
+/// large as in Q15).
+const QUICK_ARENA: usize = 80 * 1024;
 const SIDES: [SsbSideband; 2] = [SsbSideband::Usb, SsbSideband::Lsb];
 
 #[test]
 fn ssb_quick_f32_meets_the_checks() {
     for side in SIDES {
-        let m = run::<C32>(SSB_QUICK_SAMPLES, F32_ARENA, side).unwrap();
+        let m = run::<C32>(SSB_QUICK_SAMPLES, QUICK_ARENA, side).unwrap();
         check(
             &m,
             SSB_QUICK_SAMPLES,
@@ -88,15 +88,16 @@ fn bad_sample_counts_are_rejected() {
     assert!(run::<C32>(0, QUICK_ARENA, SsbSideband::Usb).is_err());
     assert!(run::<C32>(1001, QUICK_ARENA, SsbSideband::Usb).is_err());
     assert!(run::<C32>(SSB_QUICK_SAMPLES, 1024, SsbSideband::Usb).is_err());
-    // The f32 chain does not fit the arena of the quick tier.
-    assert!(run::<C32>(SSB_QUICK_SAMPLES, QUICK_ARENA, SsbSideband::Usb).is_err());
+    // The f32 chain does not fit 64 KiB, but it fits the arena of the quick tier.
+    assert!(run::<C32>(SSB_QUICK_SAMPLES, 64 * 1024, SsbSideband::Usb).is_err());
+    assert!(run::<C32>(SSB_QUICK_SAMPLES, QUICK_ARENA, SsbSideband::Usb).is_ok());
     assert!(run::<CQ15>(SSB_QUICK_SAMPLES, QUICK_ARENA, SsbSideband::Usb).is_ok());
 }
 
 #[test]
 fn ssb_full_f32_meets_the_checks() {
     for side in SIDES {
-        let m = run::<C32>(SSB_FULL_SAMPLES, F32_ARENA, side).unwrap();
+        let m = run::<C32>(SSB_FULL_SAMPLES, QUICK_ARENA, side).unwrap();
         check(
             &m,
             SSB_FULL_SAMPLES,

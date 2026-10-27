@@ -49,7 +49,7 @@ use crate::suite::Failure;
 
 const CASE: &str = "e2e_ssb_rx";
 
-/// Input samples per step through the chain (small, to keep the arena below 64 KiB).
+/// Input samples per step through the chain (small, to keep the arena below 80 KiB).
 const PIECE: usize = 100;
 
 /// Offset of the suppressed carrier from the tuner centre in Hz.

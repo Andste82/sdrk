@@ -249,8 +249,9 @@ pub const TARGETS: [Target; 5] = [
             machine: "mps2-an386",
             cpu: Some("cortex-m4"),
         },
-        // 110 s measured on a quiet machine, 300 s on a loaded one (software `f64` in the references).
-        quick_s: 2 * QUICK_TIMEOUT_S,
+        // 110 s measured on a quiet machine, 300 s on a loaded one (software `f64` in the references);
+        // 627 s since M21 (both E2E-SSB chains in the quick profile).
+        quick_s: 3 * QUICK_TIMEOUT_S,
         full_s: FULL_TIMEOUT_S,
     },
     Target {

@@ -11,6 +11,15 @@ use crate::types::{C32, CQ15, ComplexSample, Q15, RealSample};
 /// Most sections a cascade may have.
 pub const MAX_SECTIONS: usize = 32;
 
+/// The period of the explicit flush of the `f32` states (`C32` and `f32`): section `k` flushes
+/// its two states with `flush_denormal` after every sample `n` (counted from the creation or
+/// the last `reset` of the state) with `(n + k) % FLUSH_PERIOD == FLUSH_PERIOD - 1`. The
+/// schedule depends only on the absolute sample index, so the result does not depend on how
+/// the input is split into calls (decision D17). The skew by the section index lets the
+/// vector paths, where section `k + 1` runs one sample behind section `k`, flush all
+/// sections after the same step.
+pub const FLUSH_PERIOD: usize = 16;
+
 /// The coefficient type of a sample type: `f32` for `C32` and `f32`, `i16` for `CQ15` and `Q15`
 /// (Q2.14: value = raw / 2^14, range -2 ... 2 - 2^-14).
 ///
@@ -70,6 +79,9 @@ macro_rules! biquad_state {
         {
             coefs: Coefs,
             hist: Hist,
+            /// The number of samples processed since `new` or `reset`, modulo
+            /// [`FLUSH_PERIOD`]: the phase of the flush schedule of the `f32` states.
+            phase: u8,
             _t: PhantomData<T>,
         }
 
@@ -87,12 +99,14 @@ macro_rules! biquad_state {
                 Ok(Self {
                     coefs,
                     hist: history,
+                    phase: 0,
                     _t: PhantomData,
                 })
             }
 
             /// Replaces the coefficients (runtime retuning). The number of sections must stay
-            /// the same (else `LengthMismatch`, and nothing changes); the history is kept.
+            /// the same (else `LengthMismatch`, and nothing changes); the history and the
+            /// phase of the flush schedule are kept.
             pub fn set_coefs(&mut self, coefs: Coefs) -> Result<()> {
                 let expected = self.coefs.as_ref().len();
                 let got = coefs.as_ref().len();
@@ -103,9 +117,11 @@ macro_rules! biquad_state {
                 Ok(())
             }
 
-            /// Clears the history (the coefficients are kept).
+            /// Clears the history and the phase of the flush schedule (the coefficients are
+            /// kept).
             pub fn reset(&mut self) {
                 self.hist.as_mut().fill(T::ZERO);
+                self.phase = 0;
             }
 
             /// The number of sections.
@@ -127,6 +143,29 @@ macro_rules! biquad_state {
             /// crates.
             pub fn parts_mut(&mut self) -> (&[[T::Coef; 5]], &mut [T]) {
                 (self.coefs.as_ref(), self.hist.as_mut())
+            }
+
+            /// The phase of the flush schedule of the `f32` states: the number of samples
+            /// processed since `new` or `reset`, modulo [`FLUSH_PERIOD`] (always below it).
+            /// The `Q15` kernels have no flush and leave it at zero.
+            pub fn phase(&self) -> usize {
+                usize::from(self.phase)
+            }
+
+            /// Coefficients, mutable history and the phase of the flush schedule at once, for
+            /// kernel implementations in backend crates: an `f32` kernel reads the phase and
+            /// advances it by the number of samples it processed with
+            /// [`advance_phase`](Self::advance_phase).
+            pub fn parts_phase_mut(&mut self) -> (&[[T::Coef; 5]], &mut [T], usize) {
+                (self.coefs.as_ref(), self.hist.as_mut(), usize::from(self.phase))
+            }
+
+            /// Advances the phase of the flush schedule by `samples` (modulo
+            /// [`FLUSH_PERIOD`]), for kernel implementations after a call of `samples`
+            /// samples.
+            pub fn advance_phase(&mut self, samples: usize) {
+                let next = (usize::from(self.phase) + samples % FLUSH_PERIOD) % FLUSH_PERIOD;
+                self.phase = u8::try_from(next).unwrap_or(0);
             }
         }
 
@@ -218,9 +257,11 @@ pub trait Biquad<T: ComplexSample + BiquadSample> {
     /// is the input of section `k + 1`. The lengths must be equal.
     ///
     /// `C32` (transposed direct form II, `f32` without FMA, per section and component):
-    /// `y = b0 x + s1`; `s1 = (b1 x - a1 y) + s2`; `s2 = b2 x - a2 y`; then both states are
-    /// flushed with `flush_denormal`. The history holds `s1, s2` of section `k` in the entries
-    /// `2k` and `2k + 1`; the rest is unused. `CQ15` (direct form I): `acc = b0 x + b1 x1 +
+    /// `y = b0 x + s1`; `s1 = (b1 x + s2) - a1 y`; `s2 = b2 x - a2 y`. Both states of section
+    /// `k` are flushed with `flush_denormal` after every sample `n` with
+    /// `(n + k) % FLUSH_PERIOD == FLUSH_PERIOD - 1` ([`FLUSH_PERIOD`]; `n` counts the samples
+    /// since `new` or `reset`). The history holds `s1, s2` of section `k` in the entries `4k`
+    /// and `4k + 1`; the rest is unused. `CQ15` (direct form I): `acc = b0 x + b1 x1 +
     /// b2 x2 - a1 y1 - a2 y2` in `i64`, `y = sat16(round_shift(acc, 14))` per section; the
     /// history holds `x1, x2, y1, y2` of section `k` in the entries `4k ..= 4k + 3`. Bit-exact
     /// between `Fallback` and `Reference`. A `C32` state is only valid for the implementation

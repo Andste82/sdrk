@@ -1,7 +1,12 @@
 //! Links the static C reference libraries that `benches/refs/build.sh` built into the prefix
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
-//! cfg (`has_fftw`, `has_kissfft`, `has_ne10`) unset, and its wrapper then reports that the
-//! library is not available.
+//! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_kfr`, `has_cmsis`) unset, and
+//! its wrapper then reports that the library is not available.
+//!
+//! The biquad references (KFR, CMSIS-DSP) exist once per SIMD level (`libkfrbq-<level>.a`,
+//! `libcmsisbq-<level>.a`): the level is the one the target features of this build select, the
+//! same rule as `sdrk-backend-simd` uses for our kernels, so that both sides of a comparison are
+//! compiled for the same instruction set. The level is exported as `SDRK_BIQUAD_REF_LEVEL`.
 
 use std::path::PathBuf;
 
@@ -13,15 +18,39 @@ const LIBRARIES: [(&str, &str, &str); 4] = [
     ("has_gragc", "libgragc.a", "gragc"),
 ];
 
+/// The per-level libraries: cfg name, link name without the level.
+const LEVEL_LIBRARIES: [(&str, &str); 2] = [("has_kfr", "kfrbq"), ("has_cmsis", "cmsisbq")];
+
+/// The SIMD level of the target, from the target features cargo passes to build scripts.
+fn level() -> &'static str {
+    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let features = std::env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();
+    let has = |f: &str| features.split(',').any(|x| x == f);
+    match arch.as_str() {
+        "x86_64" if has("avx512f") => "avx512",
+        "x86_64" if has("avx2") => "avx2",
+        "x86_64" if has("sse4.2") => "sse4.2",
+        "x86_64" => "sse2",
+        "aarch64" => "neon",
+        "wasm32" => "simd128",
+        _ => "none",
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=SDRK_REFS_DIR");
     for (cfg, _, _) in LIBRARIES {
         println!("cargo:rustc-check-cfg=cfg({cfg})");
     }
+    for (cfg, _) in LEVEL_LIBRARIES {
+        println!("cargo:rustc-check-cfg=cfg({cfg})");
+    }
+    let level = level();
+    println!("cargo:rustc-env=SDRK_BIQUAD_REF_LEVEL={level}");
     let Some(prefix) = std::env::var_os("SDRK_REFS_DIR").map(PathBuf::from) else {
         println!(
-            "cargo:warning=SDRK_REFS_DIR is not set; the FFTW, KissFFT and Ne10 comparisons are disabled"
+            "cargo:warning=SDRK_REFS_DIR is not set; the FFTW, KissFFT, Ne10, GNU Radio, KFR and CMSIS-DSP comparisons are disabled"
         );
         return;
     };
@@ -34,7 +63,15 @@ fn main() {
     if stamp.exists() {
         println!("cargo:rerun-if-changed={}", stamp.display());
     }
-    for (cfg, archive, name) in LIBRARIES {
+    let level_libraries = LEVEL_LIBRARIES.map(|(cfg, name)| {
+        let name = format!("{name}-{level}");
+        (cfg, format!("lib{name}.a"), name)
+    });
+    let all = LIBRARIES
+        .iter()
+        .map(|(cfg, archive, name)| (*cfg, (*archive).to_string(), (*name).to_string()))
+        .chain(level_libraries);
+    for (cfg, archive, name) in all {
         let path = lib.join(archive);
         if path.exists() {
             println!("cargo:rerun-if-changed={}", path.display());

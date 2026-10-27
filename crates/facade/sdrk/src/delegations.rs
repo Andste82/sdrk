@@ -79,8 +79,8 @@ crate::delegate! {
     Agc<CQ15>::agc(&self, s: &mut AgcState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     Biquad<C32>::biquad[C: AsRef<[[f32; 5]]>, H: AsRef<[C32]> + AsMut<[C32]>](&self, s: &mut BiquadState<C32, C, H>, input: &[C32], output: &mut [C32]) -> Result<()> => Fast;
     Biquad<CQ15>::biquad[C: AsRef<[[i16; 5]]>, H: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, s: &mut BiquadState<CQ15, C, H>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fast;
-    BiquadReal<f32>::biquad_real[C: AsRef<[[f32; 5]]>, H: AsRef<[f32]> + AsMut<[f32]>](&self, s: &mut BiquadRealState<f32, C, H>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
-    BiquadReal<Q15>::biquad_real[C: AsRef<[[i16; 5]]>, H: AsRef<[Q15]> + AsMut<[Q15]>](&self, s: &mut BiquadRealState<Q15, C, H>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
+    BiquadReal<f32>::biquad_real[C: AsRef<[[f32; 5]]>, H: AsRef<[f32]> + AsMut<[f32]>](&self, s: &mut BiquadRealState<f32, C, H>, input: &[f32], output: &mut [f32]) -> Result<()> => Fast;
+    BiquadReal<Q15>::biquad_real[C: AsRef<[[i16; 5]]>, H: AsRef<[Q15]> + AsMut<[Q15]>](&self, s: &mut BiquadRealState<Q15, C, H>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fast;
     Squelch<C32>::squelch(&self, state: &mut SquelchState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     Squelch<CQ15>::squelch(&self, state: &mut SquelchState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     Window<C32>::window(&self, input: &[C32], output: &mut [C32], w: &[f32]) -> Result<()> => Fallback;

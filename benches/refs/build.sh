@@ -14,12 +14,15 @@
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
+# | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
+# | CMSIS-DSP | 1.18.0 | Apache-2.0 | all (one library per level), generic C, see cmsis-biquad.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15) |
 #
 # The libraries are linked only into the measurement binary of `benches/kernels`, which is
 # built on the measuring machine and never distributed; none of them is a dependency of a
 # library crate of SDRk.
 #
-# Compilers: x86_64 `${CC:-gcc}`/`${CXX:-g++}`, aarch64 `aarch64-linux-gnu-gcc`/`-g++`, wasm32
+# Compilers: x86_64 `${CC:-gcc}`/`${CXX:-g++}`, aarch64 `aarch64-linux-gnu-gcc`/`-g++` (KFR with
+# `${KFR_AARCH64_CXX:-clang++} --target=aarch64-linux-gnu`: GCC rejects KFR's NEON code), wasm32
 # `${WASM_CC:-clang}` with the wasi-libc headers. Their versions are part of the stamp and of
 # <prefix>/refs.json, which xtask copies into the results; the count jobs of CI pin them with
 # a container image and an apt snapshot (see .github/workflows/ci.yml).
@@ -52,6 +55,12 @@ KISSFFT_SHA256=76c1aac87ddb7258f34b08a13f0eebf9e53afa299857568346aa5c82bcafaf1a
 NE10_COMMIT=1f059a764d0e1bc2481c0055c0e71538470baa83
 NE10_URL=https://github.com/projectNe10/Ne10/archive/$NE10_COMMIT.tar.gz
 NE10_SHA256=faf28b2555105224eb76968bad555f7df32cb5b5580b40ed974bbaa2e997f480
+KFR_VERSION=7.2.0
+KFR_URL=https://github.com/kfrlib/kfr/archive/refs/tags/$KFR_VERSION.tar.gz
+KFR_SHA256=4f1603d5b6e609c25d25cff58fe7154a371583fd6d379615b342e44223be0763
+CMSISDSP_VERSION=1.18.0
+CMSISDSP_URL=https://github.com/ARM-software/CMSIS-DSP/archive/refs/tags/v$CMSISDSP_VERSION.tar.gz
+CMSISDSP_SHA256=b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56
 
 # The optimisation flags of the libraries built here without their own build system or with a
 # build system that would tune for the build machine (FFTW adds -mtune=native otherwise).
@@ -61,16 +70,19 @@ case $platform in
     x86_64)
         cc=${CC:-gcc}
         cxx=${CXX:-g++}
+        kfr_cxx=$cxx
         ar=${AR:-ar}
         ;;
     aarch64)
         cc=aarch64-linux-gnu-gcc
         cxx=aarch64-linux-gnu-g++
+        kfr_cxx="${KFR_AARCH64_CXX:-clang++} --target=aarch64-linux-gnu"
         ar=aarch64-linux-gnu-ar
         ;;
     wasm32)
         cc="${WASM_CC:-clang} --target=wasm32-wasip1"
         cxx=""
+        kfr_cxx=""
         ar=${WASM_AR:-llvm-ar}
         ;;
     *)
@@ -85,9 +97,13 @@ cxx_version=""
 if [ -n "$cxx" ]; then
     cxx_version=$(version_of "$cxx")
 fi
+kfr_cxx_version=""
+if [ -n "$kfr_cxx" ]; then
+    kfr_cxx_version=$(version_of "${kfr_cxx%% *}")
+fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c"; echo "$platform|$cc_version|$cxx_version") | sha256sum | cut -d ' ' -f 1)
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -201,6 +217,70 @@ build_gr_agc() {
     $ar rcs "$prefix/lib/libgragc.a" "$work/gr-agc.o"
 }
 
+# The levels of the biquad references with their instruction-set flags: those of the measured
+# SDRk level (the `-C target-cpu` of xtask's plan), so that a reference uses what the level
+# allows and nothing above it.
+biquad_levels() {
+    case $platform in
+        x86_64) echo "sse2:-march=x86-64 sse4.2:-march=x86-64-v2 avx2:-march=x86-64-v3 avx512:-march=sapphirerapids" ;;
+        aarch64) echo "neon:-march=armv8-a" ;;
+        wasm32) echo "simd128:-msimd128" ;;
+    esac
+}
+
+# The common flags of the biquad references: no contraction into FMA (D5 forbids it on our
+# side, so neither side may fuse).
+BIQUAD_OPT="-O3 -ffp-contract=off"
+# KFR without exceptions, RTTI and thread-safe statics: the shim then needs no C++ run-time
+# library (its filter loop throws nothing).
+KFR_CXX_FLAGS="-std=c++20 -fno-exceptions -fno-rtti -fno-threadsafe-statics"
+CMSISDSP_SOURCES="arm_biquad_cascade_df2T_f32 arm_biquad_cascade_df2T_init_f32 arm_biquad_cascade_stereo_df2T_f32 arm_biquad_cascade_stereo_df2T_init_f32 arm_biquad_cascade_df1_q15 arm_biquad_cascade_df1_init_q15"
+# The configuration of CMSIS-DSP's own CMake build for a host (its Python wrapper): no CMSIS
+# Core, generic C, loop unrolling on (the default of its option LOOPUNROLL).
+CMSISDSP_DEFINES="-D__GNUC_PYTHON__ -DARM_MATH_LOOPUNROLL"
+
+# CMSIS-DSP's biquad cascades in generic C (no CMake: the six sources and the handles of
+# cmsis-biquad.c), one library per level: libcmsisbq-<level>.a.
+build_cmsis_biquad() {
+    fetch "$CMSISDSP_URL" "$CMSISDSP_SHA256" "CMSIS-DSP-$CMSISDSP_VERSION.tar.gz"
+    mkdir -p "$work/cmsis"
+    tar -xzf "$downloads/CMSIS-DSP-$CMSISDSP_VERSION.tar.gz" -C "$work/cmsis" --strip-components=1 \
+        "CMSIS-DSP-$CMSISDSP_VERSION/Include" "CMSIS-DSP-$CMSISDSP_VERSION/PrivateInclude" \
+        "CMSIS-DSP-$CMSISDSP_VERSION/Source/FilteringFunctions"
+    local inc=(-I "$work/cmsis/Include" -I "$work/cmsis/PrivateInclude")
+    local entry level march dir src objects
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        dir="$work/cmsis-$level"
+        objects=()
+        mkdir -p "$dir"
+        for src in $CMSISDSP_SOURCES; do
+            $cc $BIQUAD_OPT $march $CMSISDSP_DEFINES "${inc[@]}" \
+                -c "$work/cmsis/Source/FilteringFunctions/$src.c" -o "$dir/$src.o"
+            objects+=("$dir/$src.o")
+        done
+        $cc $BIQUAD_OPT $march $CMSISDSP_DEFINES "${inc[@]}" -c "$here/cmsis-biquad.c" -o "$dir/handles.o"
+        $ar rcs "$prefix/lib/libcmsisbq-$level.a" "${objects[@]}" "$dir/handles.o"
+    done
+}
+
+# KFR's `iir` (header-only, see kfr-biquad.cpp), one library per level: libkfrbq-<level>.a.
+build_kfr_biquad() {
+    fetch "$KFR_URL" "$KFR_SHA256" "kfr-$KFR_VERSION.tar.gz"
+    mkdir -p "$work/kfr"
+    tar -xzf "$downloads/kfr-$KFR_VERSION.tar.gz" -C "$work/kfr" --strip-components=1 \
+        "kfr-$KFR_VERSION/include"
+    local entry level march
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march -I "$work/kfr/include" \
+            -c "$here/kfr-biquad.cpp" -o "$work/kfr-$level.o"
+        $ar rcs "$prefix/lib/libkfrbq-$level.a" "$work/kfr-$level.o"
+    done
+}
+
 KISSFFT_FLAGS=""
 GR_AGC_FLAGS=""
 libraries=()
@@ -210,7 +290,9 @@ case $platform in
         build_fftw
         build_kissfft
         build_gr_agc
-        libraries=(volk fftw kissfft gragc)
+        build_kfr_biquad
+        build_cmsis_biquad
+        libraries=(volk fftw kissfft gragc kfr cmsisdsp)
         ;;
     aarch64)
         build_volk
@@ -218,13 +300,16 @@ case $platform in
         build_kissfft
         build_ne10
         build_gr_agc
-        libraries=(volk fftw kissfft ne10 gragc)
+        build_kfr_biquad
+        build_cmsis_biquad
+        libraries=(volk fftw kissfft ne10 gragc kfr cmsisdsp)
         ;;
     wasm32)
         build_volk_wasm
         build_kissfft
         build_gr_agc
-        libraries=(volk kissfft gragc)
+        build_cmsis_biquad
+        libraries=(volk kissfft gragc cmsisdsp)
         ;;
 esac
 
@@ -234,6 +319,7 @@ esac
     echo "  \"platform\": \"$platform\","
     echo "  \"cc\": \"$cc_version\","
     echo "  \"cxx\": \"$cxx_version\","
+    echo "  \"kfr_cxx\": \"$kfr_cxx_version\","
     echo "  \"libraries\": {"
     sep=""
     for lib in "${libraries[@]}"; do
@@ -242,6 +328,8 @@ esac
             fftw) entry="\"fftw\": { \"version\": \"$FFTW_VERSION\", \"sha256\": \"$FFTW_SHA256\", \"build\": \"--enable-float $([ "$platform" = aarch64 ] && echo --enable-neon || echo --enable-sse2), CFLAGS=$OPT_FLAGS\" }" ;;
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
+            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT, per level $(biquad_levels)\" }" ;;
+            cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"generic C with cmsis-biquad.c: $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels)\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
         printf '%s    %s' "$sep" "$entry"

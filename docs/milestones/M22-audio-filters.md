@@ -176,7 +176,9 @@ pub trait BiquadReal<T: RealSample + BiquadSample> {
 
 Complex variants filter `re` and `im` independently with the same coefficients.
 
-- **f32 (transposed direct form II), per section and component:** `y = b0·x + s1`; `s1 = (b1·x − a1·y) + s2`; `s2 = b2·x − a2·y`; then `s1 = flush_denormal(s1)`, `s2 = flush_denormal(s2)`. The history holds `s1, s2` in its first `2·sections` entries (the rest is unused).
+- **f32 (transposed direct form II), per section and component:** `y = b0·x + s1`; `s1 = (b1·x + s2) − a1·y`; `s2 = b2·x − a2·y`; then `s1 = flush_denormal(s1)`, `s2 = flush_denormal(s2)` on the schedule below. The history holds `s1, s2` of section `k` in the entries `4k` and `4k + 1` (the rest is unused).
+
+  > **Amendment 2026-10-27 (maintainer-approved, D17, D20):** (1) the association of `s1` was `(b1·x − a1·y) + s2`; it is now `(b1·x + s2) − a1·y`, the order of KFR and CMSIS-DSP `df2T_f32`, which is 1.6 to 2.4 dB more accurate on the Butterworth cases (measured in D20). (2) The flush is no longer after every sample: section `k` flushes after every sample `n` with `(n + k) mod 16 = 15` (`n` counted since `new`/`reset`, a phase counter in the state; `reset` clears it, `set_coefs` keeps it). Both keep the result independent of the block split (R6.2) and the flush explicit (R6.3); the golden thresholds are unchanged. (3) The history layout sentence above was corrected to the layout the code has always used (`4k`, `4k + 1`).
 - **Q15 (direct form I), per section and component:** `acc = b0·x + b1·x1 + b2·x2 − a1·y1 − a2·y2` in `i64` (each product `i16 × i16`), `y = sat16(round_shift(acc, 14))`, then `x2 = x1`, `x1 = x`, `y2 = y1`, `y1 = y`. Each section saturates its own output.
 - **Reference:** C32/f32 in f64 (direct form I) with the values of the f32 coefficients converted to f64; CQ15/Q15 the integer model above.
 - **Q15 limits (document in `docs/kernels.md`):** the rounding error of the feedback is amplified by `1 / |1 + a1 + a2|` at DC; for a low-pass or high-pass with a cutoff below about `fs / 500` this exceeds 50 dB and the output is dominated by rounding noise. The `biquad` block rejects such designs for Q15 (§3). DF1 in Q15 can show a small limit cycle at silence; test 6 measures it.
@@ -240,6 +242,8 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | `biquad_real` (f32, Q15) | no | every output depends on the previous output of the same section (a recursion); sections are in series | `info` against the fallback |
 | `biquad` (C32, CQ15) | conditional | `re` and `im` are two independent recursions with the same coefficients and can run in two lanes of one vector with the same operation order per lane (bit-exact with the fallback in f32 and Q15). Implement this path where it saves at least 25 % of the instructions against the fallback at that level; otherwise keep the fallback there and record the measured numbers | against the fallback at every level: `dev` where the two-lane path exists (goal: ≤ 0.75× of the fallback), `info` elsewhere |
 
+> **Amendment 2026-10-27 (maintainer direction, D15 to D18):** the table above is replaced for the biquads. `biquad` and `biquad_real` are accelerated for all four types at every level with a wavefront over the sections (two consecutive sections in the lanes of one vector, the second one sample behind the first; bit-exact with the fallback, D18), and the 25 % rule no longer applies. The SIMD entries are judged against KFR 7.2.0 (`f32`, `C32`; CMSIS-DSP 1.18.0 generic C at `simd128`) and against our fallback (`Q15`, `CQ15`), status `release` (D15); four additional entries `<kernel>_fallback` judge the fallbacks against CMSIS-DSP 1.18.0 generic C, status `release` (D16). All of them meet the release limit at every level (`docs/performance.md`); `biquad_real_fallback` misses the goal at `sse2`, `sse4.2` and `avx2` (open item M22-9).
+
 ### 8. Documentation
 
 `docs/kernels.md` (contracts, Q15 limits, measured limit cycle), `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md` (table, design formulas, the Q15 cutoff limit), `docs/pipeline.md`, `examples/README.md`, `CHANGELOG.md`, `docs/decisions-log.md`.
@@ -269,6 +273,7 @@ All stateful Rust golden tests run whole and in random chunks (ChunkPlan seed = 
 6. Q15 limit cycle: after the input becomes silent, the output of the `butter4_lp` filter settles to a limit cycle or zero; record the largest amplitude in `docs/kernels.md` and assert it is at most 16 LSB.
 7. Extremes (`extremes_m22`): no panic on silence, full scale, NaN and ±∞ (f32), and the Q15 corners.
 8. SIMD: where the two-lane path exists, `backend_vs_fallback_biquad` is bit-exact at every level; the counts pass their limits.
+   > **Amendment 2026-10-27 (maintainer direction, D15 to D18):** the two-lane path is replaced by the wavefront of D18 for all four types at every level, so `backend_vs_fallback_biquad` and `sdrk-backend-simd/tests/biquad.rs` are bit-exact at every level for all four types; the counts are judged against KFR 7.2.0 (`f32`, `C32`; CMSIS-DSP 1.18.0 at `simd128`) and our fallback (`Q15`, `CQ15`) (D15), and the fallbacks against CMSIS-DSP 1.18.0 (D16).
 9. Block rules: description, exact arena, no block struct larger than 512 bytes.
 10. Pipeline: the three updated flows validate, build and run; the silence check of §4 passes in f32 and Q15; E2E checks of §6; schema check; the suite passes on the host and in the emulators (quick profile).
 
@@ -281,20 +286,27 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Kernels `biquad`, `biquad_real` with states, fallback, reference, delegation; `q14_from_f64`
 - [x] Design functions `biquad_coefs`, `butterworth_sos`, `to_q14`, `to_f32_sos`
 - [x] Block `biquad`, pipeline kind, regenerated schema; updated flows with YAML twins
-- [ ] SIMD decision for `biquad` (two-lane path where it pays off), counts and limits
+- [x] SIMD decision for `biquad` (two-lane path where it pays off), counts and limits (amended: wavefront for all four types, D15 to D18)
 - [ ] Golden cases (seeds 424–429 and the design cases), suite, invariance, extremes, E2E checks
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
 
 ## Delivery status
 
-Fully complete: kernels, states, fallback, reference and delegation; design functions; the `biquad` block, pipeline kind and regenerated schema; the updated flows (`nfm_receiver`, `am_receiver`, `ssb_receiver`, with YAML twins); the SIMD paths for `C32` and `CQ15`; golden cases, suite cases, invariance and extremes; documentation. The SSB flow (delivered by M21) uses the audio low-pass (order 4, 2800 Hz) and E2E-SSB stays within its thresholds.
+Complete:
 
-Open (the unticked items above are open only because of these):
+- Kernels `biquad` and `biquad_real` with states, fallback, reference and delegation (the facade delegates both to the backend); `q14_from_f64`. The `f32`/`C32` operation order is the one of D20, the flush schedule the one of D17.
+- Design functions `biquad_coefs`, `butterworth_sos`, `to_q14`, `to_f32_sos`.
+- The `biquad` block, its pipeline kind and the regenerated schema; the updated flows `nfm_receiver`, `am_receiver` and `ssb_receiver` with their YAML twins. The SSB flow (delivered by M21) uses the audio low-pass (order 4, 2800 Hz) and E2E-SSB stays within its thresholds; E2E-AM keeps its thresholds.
+- SIMD (amended, D15 to D19): the wavefront of D18 for all four types at every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`, portable), bit-exact with the fallback. Counts: every `biquad*` entry of `benches/limits.json` is `release` and passes its limit of 1.10 on all four platforms in full `cargo xtask count` runs (`benches/results/`, `docs/performance.md`); `f32`/`C32` against KFR 7.2.0 (CMSIS-DSP 1.18.0 at `simd128`), `Q15`/`CQ15` against our fallback, the fallbacks against CMSIS-DSP 1.18.0.
+- Golden cases (seeds 424 to 429 and the design cases, regenerated with Python 3.12, `--check` passes), suite cases, invariance and extremes; the `f32` thresholds of the block tests and of E2E-NFM with CTCSS.
+- Documentation and the decisions log (D15 to D20).
 
-- M22-1: Q15 limit cycle of the low-cutoff low-pass.
-- M22-2: `ctcss` offset after the squelch closes in Q15 (321 LSB against 16 LSB).
-- M22-3: Q15 notch depth (34.92 dB against 40 dB) and CTCSS SINAD loss (1.07 dB against 1 dB); both specified values are kept in `#[ignore]`d tests.
-- M22-4: `biquad` `C32` keeps the fallback at AVX-512 (25 % rule).
-- M22-5: the `biquad*` count records are merged, not from a full `cargo xtask count` run; `x86_64-avx512`, `aarch64` and `wasm32` counts are left to CI.
-- M22-6: node name `audio_filter` against `audio`.
-- M22-7: golden provenance (`python` field) needs regeneration under a real Python 3.12.
+Open (the unticked checklist item is open only because of M22-2 and M22-3; the other items need a maintainer decision but do not leave a specified check unmet):
+
+- M22-1: Q15 limit cycle of the low-cutoff low-pass (test 6 is met for `butter4_lp`; whether the Q15 cutoff guard of the block should be tightened is undecided).
+- M22-2: `ctcss` offset after the squelch closes in Q15 (321 LSB against the 16 LSB of §4 and test 10); the specified check is an `#[ignore]`d test.
+- M22-3: Q15 notch depth (34.92 dB against 40 dB, test 3) and CTCSS SINAD loss in Q15 (1.07 dB against 1 dB, §6); both specified values are kept in `#[ignore]`d tests.
+- M22-6: node name `audio_filter` against `audio` of §4.
+- M22-8: KFR is not built for wasm32 (it needs Emscripten), so `simd128` is judged against CMSIS-DSP.
+- M22-9: `biquad_real_fallback` (`f32`) at 1.04, 1.09 and 1.01 of CMSIS-DSP at `sse2`, `sse4.2` and `avx2`, above the goal of 1.00 (within the release limit of 1.10).
+- M22-10: `biquad` is not in the Cortex-M4 report (comparison with CMSIS-DSP built with the DSP extension undecided).

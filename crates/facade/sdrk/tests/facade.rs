@@ -204,6 +204,8 @@ fn backend_table_lists_the_m06_kernels() {
         ("agc", SampleType::C32),
         ("biquad", SampleType::C32),
         ("biquad", SampleType::CQ15),
+        ("biquad_real", SampleType::F32),
+        ("biquad_real", SampleType::Q15),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
@@ -219,8 +221,6 @@ fn backend_table_lists_the_m06_kernels() {
         ("dc_block_real", SampleType::F32),
         ("dc_block_real", SampleType::Q15),
         ("agc", SampleType::CQ15),
-        ("biquad_real", SampleType::F32),
-        ("biquad_real", SampleType::Q15),
         ("window", SampleType::C32),
         ("window", SampleType::CQ15),
         ("power_db", SampleType::F32),

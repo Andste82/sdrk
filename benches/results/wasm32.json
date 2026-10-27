@@ -1,5 +1,5 @@
 {
-  "host_cpu": "AMD Ryzen 7 5700U with Radeon Graphics",
+  "host_cpu": "AMD EPYC Processor (with IBPB)",
   "levels": {
     "simd128": {
       "counter": "wasmtime fuel",
@@ -60,96 +60,268 @@
           "verdict": "info"
         },
         "biquad": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
           "goal": true,
           "informational": [
             {
-              "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
-              "other_instr_per_sample": 108.06,
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "n = 64",
+              "other_instr_per_sample": 122.64,
               "other_snr_db": null,
-              "ours_instr_per_sample": 71.34,
-              "ratio": 0.66
+              "ours_instr_per_sample": 60.71,
+              "ratio": 0.5
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "n = 100",
+              "other_instr_per_sample": 121.98,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 54.98,
+              "ratio": 0.45
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 118.83,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 43.04,
+              "ratio": 0.36
             }
           ],
-          "other_instr_per_sample": 108.06,
-          "ours_instr_per_sample": 71.34,
-          "ratio": 0.66,
+          "other_instr_per_sample": 118.83,
+          "ours_instr_per_sample": 43.04,
+          "ratio": 0.36,
           "snr_db": {
-            "other": 134.12,
-            "ours": 134.12
+            "other": 134.9,
+            "ours": 136.06
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "biquad_cq15": {
           "compared_with": "sdrk fallback",
           "goal": true,
           "informational": [
             {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 272.13,
+              "other_snr_db": 56.73,
+              "ours_instr_per_sample": 70.53,
+              "ratio": 0.26
+            },
+            {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
-              "other_instr_per_sample": 276.1,
+              "label": "n = 64",
+              "other_instr_per_sample": 204.06,
               "other_snr_db": null,
-              "ours_instr_per_sample": 94.66,
-              "ratio": 0.34
-            }
-          ],
-          "other_instr_per_sample": 276.1,
-          "ours_instr_per_sample": 94.66,
-          "ratio": 0.34,
-          "snr_db": {
-            "other": 999.0,
-            "ours": 999.0
-          },
-          "status": "dev",
-          "verdict": "warn"
-        },
-        "biquad_real": {
-          "compared_with": "sdrk fallback",
-          "goal": true,
-          "informational": [
+              "ours_instr_per_sample": 107.36,
+              "ratio": 0.53
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "n = 100",
+              "other_instr_per_sample": 202.24,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 98.92,
+              "ratio": 0.49
+            },
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 118.07,
+              "other_instr_per_sample": 199.09,
               "other_snr_db": null,
-              "ours_instr_per_sample": 118.07,
-              "ratio": 1.0
+              "ours_instr_per_sample": 70.53,
+              "ratio": 0.35
             }
           ],
-          "other_instr_per_sample": 118.07,
-          "ours_instr_per_sample": 118.07,
-          "ratio": 1.0,
+          "other_instr_per_sample": 199.09,
+          "ours_instr_per_sample": 70.53,
+          "ratio": 0.35,
           "snr_db": {
-            "other": 134.92,
-            "ours": 134.92
+            "other": 71.59,
+            "ours": 71.59
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
+        },
+        "biquad_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 272.13,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 199.09,
+              "ratio": 0.73
+            }
+          ],
+          "other_instr_per_sample": 272.13,
+          "ours_instr_per_sample": 199.09,
+          "ratio": 0.73,
+          "snr_db": {
+            "other": 56.73,
+            "ours": 71.59
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "biquad_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 118.83,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 68.47,
+              "ratio": 0.58
+            }
+          ],
+          "other_instr_per_sample": 118.83,
+          "ours_instr_per_sample": 68.47,
+          "ratio": 0.58,
+          "snr_db": {
+            "other": 134.9,
+            "ours": 136.06
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "biquad_real": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "n = 64",
+              "other_instr_per_sample": 61.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 56.6,
+              "ratio": 0.92
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "n = 100",
+              "other_instr_per_sample": 60.82,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 51.55,
+              "ratio": 0.85
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 57.94,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 40.08,
+              "ratio": 0.69
+            }
+          ],
+          "other_instr_per_sample": 57.94,
+          "ours_instr_per_sample": 40.09,
+          "ratio": 0.69,
+          "snr_db": {
+            "other": 136.72,
+            "ours": 136.72
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "biquad_real_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 57.94,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 50.79,
+              "ratio": 0.88
+            }
+          ],
+          "other_instr_per_sample": 57.94,
+          "ours_instr_per_sample": 50.79,
+          "ratio": 0.88,
+          "snr_db": {
+            "other": 136.72,
+            "ours": 136.72
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "biquad_real_q15": {
           "compared_with": "sdrk fallback",
           "goal": true,
           "informational": [
             {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 136.07,
+              "other_snr_db": 56.63,
+              "ours_instr_per_sample": 41.21,
+              "ratio": 0.3
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "n = 64",
+              "other_instr_per_sample": 114.16,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 66.02,
+              "ratio": 0.58
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "n = 100",
+              "other_instr_per_sample": 112.67,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 59.67,
+              "ratio": 0.53
+            },
+            {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 142.07,
+              "other_instr_per_sample": 110.07,
               "other_snr_db": null,
-              "ours_instr_per_sample": 142.07,
-              "ratio": 1.0
+              "ours_instr_per_sample": 41.21,
+              "ratio": 0.37
             }
           ],
-          "other_instr_per_sample": 142.07,
-          "ours_instr_per_sample": 142.07,
-          "ratio": 1.0,
+          "other_instr_per_sample": 110.07,
+          "ours_instr_per_sample": 41.21,
+          "ratio": 0.37,
           "snr_db": {
-            "other": 999.0,
-            "ours": 999.0
+            "other": 71.45,
+            "ours": 71.45
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
+        },
+        "biquad_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 136.07,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 110.07,
+              "ratio": 0.81
+            }
+          ],
+          "other_instr_per_sample": 136.07,
+          "ours_instr_per_sample": 110.07,
+          "ratio": 0.81,
+          "snr_db": {
+            "other": 56.63,
+            "ours": 71.45
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
@@ -909,7 +1081,13 @@
   "references": {
     "cc": "Ubuntu clang version 21.1.8 (6ubuntu1)",
     "cxx": "",
+    "kfr_cxx": "",
     "libraries": {
+      "cmsis_dsp": {
+        "build": "generic C with cmsis-biquad.c: -D__GNUC_PYTHON__ -DARM_MATH_LOOPUNROLL -O3 -ffp-contract=off, per level simd128:-msimd128",
+        "sha256": "b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56",
+        "version": "1.18.0"
+      },
       "gnuradio_agc_cc": {
         "build": "-O3 -msimd128",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",

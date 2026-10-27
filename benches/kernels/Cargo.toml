@@ -1,6 +1,6 @@
 [package]
 name = "kernels"
-description = "Instruction-count measurements of the SDRk kernels against VOLK, rustfft, FFTW, KissFFT and Ne10."
+description = "Instruction-count measurements of the SDRk kernels against VOLK, rustfft, FFTW, KissFFT, Ne10, GNU Radio, KFR and CMSIS-DSP."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

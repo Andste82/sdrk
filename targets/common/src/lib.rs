@@ -12,10 +12,11 @@ use sdrk_testkit::{Arena, TestCase, Tier, WriteReporter, run_suite};
 /// Size of the arena every target places in its own static memory (256 KiB).
 pub const ARENA_SIZE: usize = 256 * 1024;
 
-/// Size of the arena of the quick profile (64 KiB): quick cases are sized for it, and a larger
+/// Size of the arena of the quick profile (80 KiB): quick cases are sized for it, and a larger
 /// arena would make some of them run bigger (and, with software floating point, much slower)
-/// variants of their sweeps, for example the 4096-point DFT of the reference.
-pub const QUICK_ARENA_SIZE: usize = 64 * 1024;
+/// variants of their sweeps, for example the 4096-point DFT of the reference. 80 KiB is the
+/// smallest size that holds the `f32` E2E-SSB chain (about 75 KiB).
+pub const QUICK_ARENA_SIZE: usize = 80 * 1024;
 
 /// The tier selected at build time: feature `full`, else quick.
 pub const TIER: Tier = if cfg!(feature = "full") {

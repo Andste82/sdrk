@@ -1,7 +1,7 @@
 //! The test cases registered by [`all_cases`](crate::all_cases).
 //!
 //! Arena use per case (every case needs at most 256 KiB, quick cases at most
-//! 64 KiB):
+//! 80 KiB):
 //!
 //! | Case | Tier | Arena |
 //! | --- | --- | --- |
@@ -99,8 +99,8 @@
 //! | `e2e_am_rx_f32_1s`, `e2e_am_rx_q15_1s` | full | as the 0.2 s variants (1.0 s of signal) |
 //! | `block_ssb_demod_usb`, `block_ssb_demod_lsb` | quick | about 44 KiB |
 //! | `block_ssb_sideband_switch` | quick | about 54 KiB |
-//! | `e2e_ssb_rx_q15` | quick | about 63 KiB (0.2 s of signal, upper sideband) |
-//! | `e2e_ssb_rx_f32` | full | about 75 KiB (0.2 s of signal, both sidebands; the f32 chain does not fit the 64 KiB of the quick tier) |
+//! | `e2e_ssb_rx_q15` | quick | about 63 KiB (0.2 s of signal, both sidebands) |
+//! | `e2e_ssb_rx_f32` | quick | about 75 KiB (0.2 s of signal, both sidebands) |
 //! | `e2e_ssb_rx_f32_1s`, `e2e_ssb_rx_q15_1s` | full | as the 0.2 s variants (1.0 s of signal) |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -702,7 +702,7 @@ pub(crate) static CASES: [TestCase; 114] = [
     },
     TestCase {
         name: "e2e_ssb_rx_f32",
-        tier: Tier::Full,
+        tier: Tier::Quick,
         run: m21::e2e_ssb_rx_f32,
     },
     TestCase {

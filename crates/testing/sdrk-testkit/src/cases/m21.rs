@@ -284,9 +284,7 @@ pub(super) fn e2e_ssb_rx_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
     )
 }
 
-/// The quick Q15 case receives the upper sideband only: on the emulators the double-precision
-/// signal generation dominates the run time, and the lower sideband is covered by the full-tier
-/// cases and by the host tests.
+/// The quick Q15 case receives both sidebands, as the quick f32 case.
 pub(super) fn e2e_ssb_rx_q15(arena: &mut Arena<'_>) -> Result<(), Failure> {
     ssb_case::<CQ15>(
         "e2e_ssb_rx_q15",
@@ -294,7 +292,7 @@ pub(super) fn e2e_ssb_rx_q15(arena: &mut Arena<'_>) -> Result<(), Failure> {
         SSB_QUICK_SAMPLES,
         SSB_MIN_SINAD_Q15_DB,
         SSB_MIN_REJECTION_Q15_DB,
-        &[SsbSideband::Usb],
+        &BOTH,
     )
 }
 

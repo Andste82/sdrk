@@ -27,8 +27,8 @@ fn full_suite_passes_with_a_256_kib_arena() {
 }
 
 #[test]
-fn quick_suite_passes_with_a_64_kib_arena() {
-    let mut mem = vec![0u8; 64 * 1024];
+fn quick_suite_passes_with_an_80_kib_arena() {
+    let mut mem = vec![0u8; 80 * 1024];
     let mut arena = Arena::new(&mut mem);
     let summary = run_suite(
         all_cases(),

@@ -14,7 +14,7 @@
 use core::f64::consts::PI;
 
 use sdrk::Sdrk;
-use sdrk_core::kernels::biquad::{Biquad, BiquadState};
+use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
 use sdrk_core::kernels::convert::{Convert, ConvertOut};
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate};
 use sdrk_core::kernels::demod::{QuadDemod, QuadDemodState};
@@ -898,9 +898,19 @@ const BIQUAD_WILD_Q14: [[i16; 5]; 2] = [
     [i16::MIN, i16::MAX, 20000, i16::MAX, i16::MIN],
 ];
 
-/// The two-lane path of `biquad` on `C32` and `CQ15` (re and im in the two lanes of a vector)
-/// against the fallback: the same bits, also with NaN, infinities and subnormal samples, with
-/// coefficients that overflow and saturate, and in random chunks.
+/// Three sections: a pair and a single last section (the two kinds of pass of the vector paths).
+const BIQUAD3_F32: [[f32; 5]; 3] = [BIQUAD_F32[0], BIQUAD_F32[1], BIQUAD_F32[0]];
+const BIQUAD3_WILD_F32: [[f32; 5]; 3] =
+    [BIQUAD_WILD_F32[0], BIQUAD_WILD_F32[1], BIQUAD_WILD_F32[0]];
+const BIQUAD3_Q14: [[i16; 5]; 3] = [BIQUAD_Q14[0], BIQUAD_Q14[1], BIQUAD_Q14[0]];
+const BIQUAD3_WILD_Q14: [[i16; 5]; 3] =
+    [BIQUAD_WILD_Q14[0], BIQUAD_WILD_Q14[1], BIQUAD_WILD_Q14[0]];
+
+/// The vector paths of `biquad` (`C32`, `CQ15`) and `biquad_real` (`f32`, `Q15`) against the
+/// fallback: the wavefront over pairs of sections and the single last section give the same
+/// bits, also with NaN, infinities, signed zeros and subnormal samples, with coefficients that
+/// overflow and saturate, with two and three sections, and in random chunks (the phase of the
+/// flush schedule of the `f32` states carries over).
 pub(super) fn backend_vs_fallback_biquad(arena: &mut Arena<'_>) -> Result<(), Failure> {
     const CASE: &str = "backend_vs_fallback_biquad";
     const N: usize = 1000;
@@ -937,6 +947,9 @@ pub(super) fn backend_vs_fallback_biquad(arena: &mut Arena<'_>) -> Result<(), Fa
                     .all(|(a, b)| same(a.re, b.re) && same(a.im, b.im)),
                 || fail(CASE, "c32 histories differ", n),
             )?;
+            ensure(a.phase() == d.phase(), || {
+                fail(CASE, "c32 phases differ", n)
+            })?;
         }
     }
     for n in lengths(arena.remaining(), 4 * 3 + 32 * 2) {
@@ -963,6 +976,116 @@ pub(super) fn backend_vs_fallback_biquad(arena: &mut Arena<'_>) -> Result<(), Fa
             })?;
             ensure(a.history() == d.history(), || {
                 fail(CASE, "cq15 histories differ", n)
+            })?;
+        }
+    }
+    for n in lengths(arena.remaining(), 4 * 3 + 32 * 2) {
+        for coefs in [BIQUAD3_F32, BIQUAD3_WILD_F32] {
+            let mut c = arena.carver();
+            let (input, fb, fac) = (c.take::<C32>(n)?, c.take::<C32>(n)?, c.take::<C32>(n)?);
+            let (h1, h2) = (c.take::<C32>(12)?, c.take::<C32>(12)?);
+            for (k, s) in input.iter_mut().enumerate() {
+                *s = match k % 13 {
+                    3 => C32::new(f32::NAN, -0.0),
+                    9 => C32::new(-0.0, 1e-40),
+                    _ => random_c32(&mut rng, 1.5),
+                };
+            }
+            let mut a = BiquadState::<C32, _, _>::new(coefs, h1)?;
+            let mut d = BiquadState::<C32, _, _>::new(coefs, h2)?;
+            Biquad::<C32>::biquad(&Fallback, &mut a, input, fb)?;
+            Biquad::<C32>::biquad(&Sdrk, &mut d, input, fac)?;
+            let same = |a: f32, b: f32| a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan());
+            ensure(
+                fb.iter()
+                    .zip(fac.iter())
+                    .all(|(a, b)| same(a.re, b.re) && same(a.im, b.im)),
+                || fail(CASE, "c32 with three sections differs from the fallback", n),
+            )?;
+            ensure(
+                a.history()
+                    .iter()
+                    .zip(d.history())
+                    .all(|(a, b)| same(a.re, b.re) && same(a.im, b.im)),
+                || fail(CASE, "c32 histories with three sections differ", n),
+            )?;
+            ensure(a.phase() == d.phase(), || {
+                fail(CASE, "c32 phases with three sections differ", n)
+            })?;
+            // The same samples as a real signal.
+            let mut c = arena.carver();
+            let (input, fb, fac) = (c.take::<f32>(n)?, c.take::<f32>(n)?, c.take::<f32>(n)?);
+            let (h1, h2) = (c.take::<f32>(12)?, c.take::<f32>(12)?);
+            for (k, s) in input.iter_mut().enumerate() {
+                *s = match k % 11 {
+                    2 => f32::NAN,
+                    4 => f32::NEG_INFINITY,
+                    6 => -0.0,
+                    8 => 1e-40,
+                    _ => random_c32(&mut rng, 1.5).re,
+                };
+            }
+            let mut a = BiquadRealState::<f32, _, _>::new(coefs, h1)?;
+            let mut d = BiquadRealState::<f32, _, _>::new(coefs, h2)?;
+            BiquadReal::<f32>::biquad_real(&Fallback, &mut a, input, fb)?;
+            BiquadReal::<f32>::biquad_real(&Sdrk, &mut d, input, fac)?;
+            ensure(fb.iter().zip(fac.iter()).all(|(a, b)| same(*a, *b)), || {
+                fail(CASE, "f32 differs from the fallback", n)
+            })?;
+            ensure(
+                a.history()
+                    .iter()
+                    .zip(d.history())
+                    .all(|(a, b)| same(*a, *b)),
+                || fail(CASE, "f32 histories differ", n),
+            )?;
+            ensure(a.phase() == d.phase(), || {
+                fail(CASE, "f32 phases differ", n)
+            })?;
+        }
+    }
+    for n in lengths(arena.remaining(), 2 * 3 + 16 * 2) {
+        for coefs in [BIQUAD3_Q14, BIQUAD3_WILD_Q14] {
+            let mut c = arena.carver();
+            let (input, fb, fac) = (c.take::<Q15>(n)?, c.take::<Q15>(n)?, c.take::<Q15>(n)?);
+            let (h1, h2) = (c.take::<Q15>(12)?, c.take::<Q15>(12)?);
+            for (k, s) in input.iter_mut().enumerate() {
+                *s = match k % 7 {
+                    0 => Q15(-32768),
+                    3 => Q15(32767),
+                    _ => random_cq15(&mut rng, 1.0).re,
+                };
+            }
+            let mut a = BiquadRealState::<Q15, _, _>::new(coefs, h1)?;
+            let mut d = BiquadRealState::<Q15, _, _>::new(coefs, h2)?;
+            BiquadReal::<Q15>::biquad_real(&Fallback, &mut a, input, fb)?;
+            BiquadReal::<Q15>::biquad_real(&Sdrk, &mut d, input, fac)?;
+            ensure(bit_exact(fb, fac).is_none(), || {
+                fail(CASE, "q15 differs from the fallback", n)
+            })?;
+            ensure(a.history() == d.history(), || {
+                fail(CASE, "q15 histories differ", n)
+            })?;
+            // The same coefficients on a complex signal.
+            let mut c = arena.carver();
+            let (input, fb, fac) = (c.take::<CQ15>(n)?, c.take::<CQ15>(n)?, c.take::<CQ15>(n)?);
+            let (h1, h2) = (c.take::<CQ15>(12)?, c.take::<CQ15>(12)?);
+            for s in input.iter_mut() {
+                *s = random_cq15(&mut rng, 1.0);
+            }
+            let mut a = BiquadState::<CQ15, _, _>::new(coefs, h1)?;
+            let mut d = BiquadState::<CQ15, _, _>::new(coefs, h2)?;
+            Biquad::<CQ15>::biquad(&Fallback, &mut a, input, fb)?;
+            Biquad::<CQ15>::biquad(&Sdrk, &mut d, input, fac)?;
+            ensure(bit_exact(fb, fac).is_none(), || {
+                fail(
+                    CASE,
+                    "cq15 with three sections differs from the fallback",
+                    n,
+                )
+            })?;
+            ensure(a.history() == d.history(), || {
+                fail(CASE, "cq15 histories with three sections differ", n)
             })?;
         }
     }
@@ -996,6 +1119,38 @@ pub(super) fn backend_vs_fallback_biquad(arena: &mut Arena<'_>) -> Result<(), Fa
         || BiquadState::<CQ15, _, _>::new(BIQUAD_Q14, [CQ15::default(); 8]),
         |state, i, o| match state {
             Ok(st) => same_rate(i, o, |i, o| Biquad::<CQ15>::biquad(&Sdrk, st, i, o)),
+            Err(e) => Err(e.clone()),
+        },
+    )?;
+    let mut c = arena.carver();
+    let (input, whole, chunked) = (c.take::<f32>(N)?, c.take::<f32>(N)?, c.take::<f32>(N)?);
+    for s in input.iter_mut() {
+        *s = random_c32(&mut rng, 1.0).re;
+    }
+    check_block_invariance(
+        input,
+        whole,
+        chunked,
+        ChunkPlan::new(2204, 53),
+        || BiquadRealState::<f32, _, _>::new(BIQUAD3_F32, [0.0f32; 12]),
+        |state, i, o| match state {
+            Ok(st) => same_rate(i, o, |i, o| BiquadReal::<f32>::biquad_real(&Sdrk, st, i, o)),
+            Err(e) => Err(e.clone()),
+        },
+    )?;
+    let mut c = arena.carver();
+    let (input, whole, chunked) = (c.take::<Q15>(N)?, c.take::<Q15>(N)?, c.take::<Q15>(N)?);
+    for s in input.iter_mut() {
+        *s = random_cq15(&mut rng, 1.0).re;
+    }
+    check_block_invariance(
+        input,
+        whole,
+        chunked,
+        ChunkPlan::new(2205, 53),
+        || BiquadRealState::<Q15, _, _>::new(BIQUAD3_Q14, [Q15(0); 12]),
+        |state, i, o| match state {
+            Ok(st) => same_rate(i, o, |i, o| BiquadReal::<Q15>::biquad_real(&Sdrk, st, i, o)),
             Err(e) => Err(e.clone()),
         },
     )?;

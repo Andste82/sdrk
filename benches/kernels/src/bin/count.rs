@@ -10,7 +10,7 @@
 //! ```
 //!
 //! `<impl>` is `ours`, `fallback`, `volk`, `rustfft`, `fftw` (out of place), `fftw-in-place`,
-//! `kissfft`, `ne10` or `restore`.
+//! `kissfft`, `ne10`, `kfr`, `cmsis` or `restore`.
 //!
 //! `run` performs one warm-up call and then `k` calls on the same buffers between the SSC
 //! markers of Intel SDE; the counters measure the whole process (SDE only the region between

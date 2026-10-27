@@ -1,9 +1,10 @@
 # The benchmark workspace of SDRk: instruction counts of our kernels against VOLK, rustfft,
-# FFTW, KissFFT and Ne10.
+# FFTW, KissFFT, Ne10, GNU Radio, KFR and CMSIS-DSP.
 #
 # It is a workspace of its own and not a member of the repository workspace, because the
-# comparisons link C libraries under their own licenses (VOLK LGPL-3.0-or-later, FFTW
-# GPL-2.0-or-later, KissFFT and Ne10 BSD-3-Clause), which `benches/refs/build.sh` builds from
+# comparisons link C libraries under their own licenses (VOLK LGPL-3.0-or-later, FFTW and KFR
+# GPL-2.0-or-later, GNU Radio GPL-3.0-or-later, KissFFT and Ne10 BSD-3-Clause, CMSIS-DSP
+# Apache-2.0), which `benches/refs/build.sh` builds from
 # pinned tarballs. They are never a dependency of a library crate and never ship with SDRk;
 # `cargo deny` only checks the repository workspace.
 [workspace]

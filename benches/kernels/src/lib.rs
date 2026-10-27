@@ -7,7 +7,7 @@
 use std::hint::black_box;
 use std::sync::Arc;
 
-use cref_sys::{Fftw, FftwR2c, GrAgcCc, KissFft16, Ne10Int16};
+use cref_sys::{CmsisBiquad, Fftw, FftwR2c, GrAgcCc, KfrBiquad, KissFft16, Ne10Int16};
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
@@ -52,6 +52,10 @@ pub enum Impl {
     KissFft,
     /// Ne10's int16 NEON FFT.
     Ne10,
+    /// KFR's biquad cascade (`kfr::iir`), compiled for the level of the build.
+    Kfr,
+    /// CMSIS-DSP's biquad cascades in generic C, compiled for the level of the build.
+    Cmsis,
     /// Only the copy that restores the input of an in-place transform before every call. Its
     /// count is the baseline that xtask subtracts from every FFT comparison.
     Restore,
@@ -59,7 +63,7 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 10] = [
+    pub const ALL: [Impl; 12] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
@@ -69,6 +73,8 @@ impl Impl {
         Impl::FftwInPlace,
         Impl::KissFft,
         Impl::Ne10,
+        Impl::Kfr,
+        Impl::Cmsis,
         Impl::Restore,
     ];
 
@@ -84,6 +90,8 @@ impl Impl {
             Impl::FftwInPlace => "fftw-in-place",
             Impl::KissFft => "kissfft",
             Impl::Ne10 => "ne10",
+            Impl::Kfr => "kfr",
+            Impl::Cmsis => "cmsis",
             Impl::Restore => "restore",
         }
     }
@@ -283,8 +291,9 @@ pub trait Kernel {
 }
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
-/// are appended.
-pub const KERNELS: [&str; 36] = [
+/// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
+/// filter the same input.
+pub const KERNELS: [&str; 40] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -321,11 +330,20 @@ pub const KERNELS: [&str; 36] = [
     "biquad_cq15",
     "biquad_real",
     "biquad_real_q15",
+    "biquad_fallback",
+    "biquad_cq15_fallback",
+    "biquad_real_fallback",
+    "biquad_real_q15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
 pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
-    let idx = KERNELS.iter().position(|k| *k == name)? as u64;
+    KERNELS.iter().position(|k| *k == name)?;
+    let seed_of = name.strip_suffix("_fallback").unwrap_or(name);
+    let idx = KERNELS.iter().position(|k| *k == seed_of)? as u64;
+    let (simd, fallback) = (BiquadEntry::Simd, BiquadEntry::Fallback);
+    let c32 = |c: C32| (c.re, c.im);
+    let cq15 = |c: CQ15| (c.re.0, c.im.0);
     let mut rng = Pcg32::new(1000 + idx);
     let rng = &mut rng;
     Some(match name {
@@ -360,10 +378,14 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
         "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout)),
         "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout)),
-        "biquad" => Box::new(BiquadK::<C32>::new(rng, layout)),
-        "biquad_cq15" => Box::new(BiquadK::<CQ15>::new(rng, layout)),
-        "biquad_real" => Box::new(BiquadRealK::<f32>::new(rng, layout)),
-        "biquad_real_q15" => Box::new(BiquadRealK::<Q15>::new(rng, layout)),
+        "biquad" => Box::new(BiquadK::new(rng, layout, simd, c32)),
+        "biquad_cq15" => Box::new(BiquadK::new(rng, layout, simd, cq15)),
+        "biquad_real" => Box::new(BiquadRealK::<f32>::new(rng, layout, simd)),
+        "biquad_real_q15" => Box::new(BiquadRealK::<Q15>::new(rng, layout, simd)),
+        "biquad_fallback" => Box::new(BiquadK::new(rng, layout, fallback, c32)),
+        "biquad_cq15_fallback" => Box::new(BiquadK::new(rng, layout, fallback, cq15)),
+        "biquad_real_fallback" => Box::new(BiquadRealK::<f32>::new(rng, layout, fallback)),
+        "biquad_real_q15_fallback" => Box::new(BiquadRealK::<Q15>::new(rng, layout, fallback)),
         "fft_64" => Box::new(FftK::new(rng, 64)),
         "fft_1024" => Box::new(FftK::new(rng, 1024)),
         "fft_4096" => Box::new(FftK::new(rng, 4096)),
@@ -2474,7 +2496,10 @@ fn gr_agc_model(input: &[C32]) -> Vec<C32> {
         if gain > max_gain {
             gain = max_gain;
         }
-        #[allow(clippy::cast_possible_truncation, reason = "a model value rounded to f32")]
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "a model value rounded to f32"
+        )]
         out.push(C32::new(re as f32, im as f32));
     }
     out
@@ -2671,7 +2696,7 @@ where
 }
 
 // ---------------------------------------------------------------------------------------------
-// biquad and biquad_real (M22)
+// biquad and biquad_real (M22; references D15, D16)
 
 /// Sections of the measured cascade: the fourth-order Butterworth low-pass at 0.1 of the sample
 /// rate (the filter of the golden cases), `[b0, b1, b2, a1, a2]` per section in `f64`.
@@ -2694,6 +2719,8 @@ fn butter4_lowpass() -> [[f64; 5]; 2] {
 /// A coefficient type of the measurement: `f32`, or the Q2.14 `i16`.
 trait BiquadCoef: Copy {
     fn from_f64(v: f64) -> Self;
+    /// The value the coefficient stands for, in `f64` (exact).
+    fn to_f64(self) -> f64;
 }
 
 impl BiquadCoef for f32 {
@@ -2703,6 +2730,10 @@ impl BiquadCoef for f32 {
     )]
     fn from_f64(v: f64) -> Self {
         v as f32
+    }
+
+    fn to_f64(self) -> f64 {
+        f64::from(self)
     }
 }
 
@@ -2714,6 +2745,10 @@ impl BiquadCoef for i16 {
     fn from_f64(v: f64) -> Self {
         (v * 16384.0).round() as i16
     }
+
+    fn to_f64(self) -> f64 {
+        f64::from(self) / 16384.0
+    }
 }
 
 fn biquad_coefs<C: BiquadCoef>() -> Vec<[C; 5]> {
@@ -2721,6 +2756,57 @@ fn biquad_coefs<C: BiquadCoef>() -> Vec<[C; 5]> {
         .iter()
         .map(|s| s.map(C::from_f64))
         .collect()
+}
+
+/// The f64 model of the cascade, the accuracy reference of every biquad comparison: direct
+/// form I in `f64` with the values of the coefficients of type `C` (as the kernels see them),
+/// without any rounding between the sections. The input is one real channel in any unit (Q15
+/// samples as raw integers); the output is in the same unit.
+fn biquad_model<C: BiquadCoef>(x: impl Iterator<Item = f64>) -> Vec<f64> {
+    let coefs: Vec<[f64; 5]> = biquad_coefs::<C>()
+        .iter()
+        .map(|s| s.map(BiquadCoef::to_f64))
+        .collect();
+    let mut hist = vec![[0.0f64; 4]; coefs.len()];
+    x.map(|mut v| {
+        for (c, h) in coefs.iter().zip(hist.iter_mut()) {
+            let [b0, b1, b2, a1, a2] = *c;
+            let [x1, x2, y1, y2] = *h;
+            let y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            *h = [v, x1, y, y1];
+            v = y;
+        }
+        v
+    })
+    .collect()
+}
+
+/// The model of an interleaved complex signal: re and im filtered apart, interleaved again
+/// (the layout of [`c32s`] and [`cq15s`]).
+fn biquad_model_complex<C: BiquadCoef>(x: &[f64]) -> Vec<f64> {
+    let re = biquad_model::<C>(x.iter().step_by(2).copied());
+    let im = biquad_model::<C>(x.iter().skip(1).step_by(2).copied());
+    re.into_iter().zip(im).flat_map(|(r, i)| [r, i]).collect()
+}
+
+/// Interleaves two planar channels into the layout of [`c32s`] and [`cq15s`].
+fn interleave<T: Copy>(re: &[T], im: &[T], f: impl Fn(T) -> f64) -> Vec<f64> {
+    re.iter()
+        .zip(im)
+        .flat_map(|(r, i)| [f(*r), f(*i)])
+        .collect()
+}
+
+/// `x` viewed as raw `i16` (CMSIS-DSP's `q15_t`).
+fn q15_raw(x: &[Q15]) -> &[i16] {
+    // SAFETY: `Q15` is `repr(transparent)` over `i16`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), x.len()) }
+}
+
+/// Mutable form of [`q15_raw`].
+fn q15_raw_mut(x: &mut [Q15]) -> &mut [i16] {
+    // SAFETY: as in `q15_raw`.
+    unsafe { std::slice::from_raw_parts_mut(x.as_mut_ptr().cast(), x.len()) }
 }
 
 #[inline(never)]
@@ -2743,26 +2829,109 @@ fn biquad_real<T: sdrk_core::RealSample + BiquadSample, B: BiquadReal<T>>(
     let _ = black_box(backend.biquad_real(state, black_box(input), out));
 }
 
-/// `biquad`: the order-4 Butterworth low-pass (two sections) on noise of the amplitude 0.3. The
-/// two-lane path of the SIMD backend is counted against our fallback; no established library has
-/// a complex biquad.
-struct BiquadK<T: SquelchSample + BiquadSample> {
-    input: Aligned<T>,
-    out: Aligned<T>,
+/// Which of the two entries of a biquad kernel a measurement is (D15, D16).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BiquadEntry {
+    /// `biquad`, `biquad_cq15`, `biquad_real`, `biquad_real_q15`: our kernel through the facade
+    /// against KFR (f32, C32) or our fallback (Q15, CQ15), CMSIS-DSP as information or, at
+    /// `simd128`, as the gate.
+    Simd,
+    /// `<kernel>_fallback`: our fallback against CMSIS-DSP's generic C on the same input.
+    Fallback,
 }
 
-impl<T: SquelchSample + BiquadSample> BiquadK<T>
+impl BiquadEntry {
+    /// The implementations the entry runs, given those this build has.
+    fn supports(self, which: Impl, kfr: bool, cmsis: bool) -> bool {
+        match (self, which) {
+            (BiquadEntry::Simd, Impl::Ours) | (_, Impl::Fallback) => true,
+            (BiquadEntry::Simd, Impl::Kfr) => kfr,
+            (_, Impl::Cmsis) => cmsis,
+            _ => false,
+        }
+    }
+}
+
+/// The text of [`Kernel::describe`] for KFR: the release, what the shim calls, the architecture
+/// KFR was compiled for, and how the channels are arranged.
+fn describe_kfr(layout: &str) -> &'static str {
+    let arch = KfrBiquad::arch().unwrap_or("?");
+    Box::leak(
+        format!("KFR 7.2.0 kfr::iir, iir_state<float, 2> ({arch}, -ffp-contract=off){layout}")
+            .into_boxed_str(),
+    )
+}
+
+/// The text of [`Kernel::describe`] for CMSIS-DSP.
+fn describe_cmsis(function: &str) -> &'static str {
+    Box::leak(
+        format!(
+            "CMSIS-DSP 1.18.0 {function}, generic C (-O3 -ffp-contract=off, LOOPUNROLL, {})",
+            cref_sys::BIQUAD_REF_LEVEL
+        )
+        .into_boxed_str(),
+    )
+}
+
+/// The two channels of a complex buffer, apart: KFR has no complex type, and CMSIS-DSP's Q15
+/// cascade has one channel, so they run twice on planar re and im (D15: `2 N` real values; the
+/// deinterleaving is done once at preparation and not counted, the best case for them).
+struct Planar<S> {
+    re: Aligned<S>,
+    im: Aligned<S>,
+    out_re: Aligned<S>,
+    out_im: Aligned<S>,
+}
+
+impl<S: Copy + Default> Planar<S> {
+    fn new<T: Copy>(input: &[T], layout: Layout, split: impl Fn(T) -> (S, S)) -> Self {
+        let skew = layout.skew(core::mem::size_of::<S>());
+        let mut p = Planar {
+            re: Aligned::skewed(input.len(), skew),
+            im: Aligned::skewed(input.len(), skew),
+            out_re: Aligned::skewed(input.len(), skew),
+            out_im: Aligned::skewed(input.len(), skew),
+        };
+        for ((r, i), x) in p.re.iter_mut().zip(p.im.iter_mut()).zip(input) {
+            (*r, *i) = split(*x);
+        }
+        p
+    }
+}
+
+/// `biquad`: the order-4 Butterworth low-pass (two sections) on noise of the amplitude 0.3.
+///
+/// - `C32`, [`BiquadEntry::Simd`]: KFR on planar re and im, CMSIS-DSP's stereo cascade (the two
+///   channels of the C32 layout) as information, at `simd128` as the gate.
+/// - `CQ15`, [`BiquadEntry::Simd`]: our fallback (no SIMD Q15 biquad exists on our levels),
+///   CMSIS-DSP's Q15 cascade on planar re and im as information.
+/// - [`BiquadEntry::Fallback`]: our fallback against the CMSIS-DSP cascade above.
+struct BiquadK<T: SquelchSample + BiquadSample, S> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+    planar: Planar<S>,
+    entry: BiquadEntry,
+}
+
+impl<T: SquelchSample + BiquadSample, S: Copy + Default> BiquadK<T, S>
 where
     T::Coef: BiquadCoef,
 {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(
+        rng: &mut Pcg32,
+        layout: Layout,
+        entry: BiquadEntry,
+        split: impl Fn(T) -> (S, S),
+    ) -> Self {
         let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
         for s in input.iter_mut() {
             *s = T::noise(rng, 0.3);
         }
         BiquadK {
+            planar: Planar::new(&input, layout, split),
             input,
             out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+            entry,
         }
     }
 
@@ -2771,13 +2940,30 @@ where
     }
 }
 
-impl Kernel for BiquadK<C32> {
+impl Kernel for BiquadK<C32, f32> {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let coefs = biquad_coefs::<f32>();
+        let mut kfr =
+            (which == Impl::Kfr).then(|| (KfrBiquad::new(&coefs), KfrBiquad::new(&coefs)));
+        let mut cmsis = (which == Impl::Cmsis).then(|| CmsisBiquad::stereo_df2t_f32(&coefs));
         for _ in 0..k {
             match which {
                 Impl::Ours => biquad(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => biquad(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Kfr => {
+                    let (re, im) = kfr.as_mut().expect("kfr");
+                    let p = &mut self.planar;
+                    re.as_mut().expect("kfr").run(&p.re, &mut p.out_re);
+                    im.as_mut().expect("kfr").run(&p.im, &mut p.out_im);
+                    black_box(&p.out_re);
+                    black_box(&p.out_im);
+                }
+                Impl::Cmsis => cmsis
+                    .as_mut()
+                    .and_then(Option::as_mut)
+                    .expect("cmsis")
+                    .run_stereo(c32_pairs_ref(&self.input), c32_pairs(&mut self.out)),
                 other => unreachable!("biquad has no {other:?}"),
             }
             black_box(&self.out);
@@ -2786,30 +2972,56 @@ impl Kernel for BiquadK<C32> {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        let mut want = vec![C32::default(); self.input.len()];
-        let _ = Reference.biquad(&mut Self::state(), &self.input, &mut want);
-        snr_db(&c32s(&want), &c32s(&self.out))
+        let want = biquad_model_complex::<f32>(&c32s(&self.input));
+        let got = if which == Impl::Kfr {
+            interleave(&self.planar.out_re, &self.planar.out_im, f64::from)
+        } else {
+            c32s(&self.out)
+        };
+        snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        let coefs = biquad_coefs::<f32>();
+        self.entry.supports(
+            which,
+            KfrBiquad::new(&coefs).is_some(),
+            CmsisBiquad::stereo_df2t_f32(&coefs).is_some(),
+        )
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Kfr => {
+                describe_kfr(", two calls on planar re and im (deinterleaving not counted)")
+            }
+            Impl::Cmsis => {
+                describe_cmsis("arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels)")
+            }
             _ => "sdrk",
         }
     }
 }
 
-impl Kernel for BiquadK<CQ15> {
+impl Kernel for BiquadK<CQ15, i16> {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let coefs = biquad_coefs::<i16>();
+        let mut cmsis = (which == Impl::Cmsis)
+            .then(|| (CmsisBiquad::df1_q15(&coefs), CmsisBiquad::df1_q15(&coefs)));
         for _ in 0..k {
             match which {
                 Impl::Ours => biquad(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => biquad(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Cmsis => {
+                    let (re, im) = cmsis.as_mut().expect("cmsis");
+                    let p = &mut self.planar;
+                    re.as_mut().expect("cmsis").run_q15(&p.re, &mut p.out_re);
+                    im.as_mut().expect("cmsis").run_q15(&p.im, &mut p.out_im);
+                    black_box(&p.out_re);
+                    black_box(&p.out_im);
+                }
                 other => unreachable!("biquad_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -2818,35 +3030,48 @@ impl Kernel for BiquadK<CQ15> {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        let mut want = vec![CQ15::default(); self.input.len()];
-        let _ = Reference.biquad(&mut Self::state(), &self.input, &mut want);
-        snr_db(&cq15s(&want, 1.0), &cq15s(&self.out, 1.0))
+        let want = biquad_model_complex::<i16>(&cq15s(&self.input, 1.0));
+        let got = if which == Impl::Cmsis {
+            interleave(&self.planar.out_re, &self.planar.out_im, f64::from)
+        } else {
+            cq15s(&self.out, 1.0)
+        };
+        snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        let cmsis = CmsisBiquad::df1_q15(&biquad_coefs::<i16>()).is_some();
+        self.entry.supports(which, false, cmsis)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis(
+                "arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted)",
+            ),
             _ => "sdrk",
         }
     }
 }
 
-/// `biquad_real` (a recursion per section: not accelerated, so the entries are `info` against
-/// our fallback), on the same filter and noise as `biquad`.
+/// `biquad_real` on the same filter and noise as `biquad`.
+///
+/// - `f32`, [`BiquadEntry::Simd`]: KFR, CMSIS-DSP's `df2T_f32` as information, at `simd128`
+///   as the gate.
+/// - `Q15`, [`BiquadEntry::Simd`]: our fallback, CMSIS-DSP's `df1_q15` as information.
+/// - [`BiquadEntry::Fallback`]: our fallback against the CMSIS-DSP cascade above.
 struct BiquadRealK<T: RealNoise + BiquadSample> {
     input: Aligned<T>,
     out: Aligned<T>,
+    entry: BiquadEntry,
 }
 
 impl<T: RealNoise + BiquadSample> BiquadRealK<T>
 where
     T::Coef: BiquadCoef,
 {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
         for s in input.iter_mut() {
             *s = T::noise(rng, 0.3, 0.0);
@@ -2854,27 +3079,41 @@ where
         BiquadRealK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+            entry,
         }
     }
 
     fn state() -> BiquadRealState<T, Vec<[T::Coef; 5]>, Vec<T>> {
         BiquadRealState::new(biquad_coefs::<T::Coef>(), vec![T::default(); 8]).expect("biquad_real")
     }
+
+    fn accuracy_of(&self) -> f64 {
+        let want = biquad_model::<T::Coef>(self.input.iter().map(|v| v.as_f64()));
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        snr_db(&want, &got)
+    }
 }
 
-impl<T: RealNoise + BiquadSample> Kernel for BiquadRealK<T>
-where
-    T::Coef: BiquadCoef,
-    Sdrk: BiquadReal<T>,
-    Fallback: BiquadReal<T>,
-    Reference: BiquadReal<T>,
-{
+impl Kernel for BiquadRealK<f32> {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let coefs = biquad_coefs::<f32>();
+        let mut kfr = (which == Impl::Kfr).then(|| KfrBiquad::new(&coefs));
+        let mut cmsis = (which == Impl::Cmsis).then(|| CmsisBiquad::df2t_f32(&coefs));
         for _ in 0..k {
             match which {
                 Impl::Ours => biquad_real(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => biquad_real(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Kfr => kfr
+                    .as_mut()
+                    .and_then(Option::as_mut)
+                    .expect("kfr")
+                    .run(&self.input, &mut self.out),
+                Impl::Cmsis => cmsis
+                    .as_mut()
+                    .and_then(Option::as_mut)
+                    .expect("cmsis")
+                    .run_f32(&self.input, &mut self.out),
                 other => unreachable!("biquad_real has no {other:?}"),
             }
             black_box(&self.out);
@@ -2883,21 +3122,215 @@ where
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        let mut want = vec![self.out[0]; self.out.len()];
-        let _ = Reference.biquad_real(&mut Self::state(), &self.input, &mut want);
-        let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
-        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
-        snr_db(&want, &got)
+        self.accuracy_of()
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        let coefs = biquad_coefs::<f32>();
+        self.entry.supports(
+            which,
+            KfrBiquad::new(&coefs).is_some(),
+            CmsisBiquad::df2t_f32(&coefs).is_some(),
+        )
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Kfr => describe_kfr(""),
+            Impl::Cmsis => describe_cmsis("arm_biquad_cascade_df2T_f32"),
             _ => "sdrk",
+        }
+    }
+}
+
+impl Kernel for BiquadRealK<Q15> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        let mut cmsis =
+            (which == Impl::Cmsis).then(|| CmsisBiquad::df1_q15(&biquad_coefs::<i16>()));
+        for _ in 0..k {
+            match which {
+                Impl::Ours => biquad_real(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => biquad_real(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Cmsis => cmsis
+                    .as_mut()
+                    .and_then(Option::as_mut)
+                    .expect("cmsis")
+                    .run_q15(q15_raw(&self.input), q15_raw_mut(&mut self.out)),
+                other => unreachable!("biquad_real_q15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        self.accuracy_of()
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        let cmsis = CmsisBiquad::df1_q15(&biquad_coefs::<i16>()).is_some();
+        self.entry.supports(which, false, cmsis)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis("arm_biquad_cascade_df1_q15 (postShift 1, truncating)"),
+            _ => "sdrk",
+        }
+    }
+}
+
+#[cfg(test)]
+mod biquad_tests {
+    //! The references must compute the filter we compare them with: each is checked against
+    //! our `Reference` kernel on noise, over several calls (the state must carry over), when its
+    //! library is linked (`SDRK_REFS_DIR`; without it the tests pass without checking).
+
+    use super::*;
+
+    /// `input` filtered in three calls of uneven length by `f`.
+    ///
+    /// No call is shorter than the two sections: KFR 7.2.0 loses the state of its cascade on a
+    /// call with fewer samples than sections (its look-ahead consumes the whole call in
+    /// `begin_pass`, and `end_pass` then restores a state that was never saved; measured here:
+    /// 38.8 dB against the reference with a call of one sample). The measurements call it with
+    /// 64 samples and more.
+    fn in_parts<T: Copy + Default>(input: &[T], mut f: impl FnMut(&[T], &mut [T])) -> Vec<T> {
+        let mut out = vec![T::default(); input.len()];
+        let cuts = [0, 7, 1000, input.len()];
+        for w in cuts.windows(2) {
+            f(&input[w[0]..w[1]], &mut out[w[0]..w[1]]);
+        }
+        out
+    }
+
+    fn noise_real(n: usize) -> Vec<f32> {
+        let mut rng = Pcg32::new(7);
+        (0..n).map(|_| rng.unit() * 0.3).collect()
+    }
+
+    fn reference_real_f32(x: &[f32]) -> Vec<f32> {
+        let mut want = vec![0.0f32; x.len()];
+        let mut s = BiquadRealState::new(biquad_coefs::<f32>(), vec![0.0f32; 8]).expect("state");
+        Reference
+            .biquad_real(&mut s, x, &mut want)
+            .expect("reference");
+        want
+    }
+
+    #[test]
+    fn kfr_computes_the_cascade() {
+        let coefs = biquad_coefs::<f32>();
+        if KfrBiquad::new(&coefs).is_none() {
+            eprintln!("KFR is not linked; skipped");
+            return;
+        }
+        let x = noise_real(4096);
+        let mut kfr = KfrBiquad::new(&coefs).expect("kfr");
+        let got = in_parts(&x, |i, o| kfr.run(i, o));
+        let snr = snr_db(&f32s(&reference_real_f32(&x)), &f32s(&got));
+        assert!(snr > 120.0, "KFR against the reference: {snr} dB");
+    }
+
+    #[test]
+    fn cmsis_f32_cascades_compute_the_cascade() {
+        let coefs = biquad_coefs::<f32>();
+        let Some(mut mono) = CmsisBiquad::df2t_f32(&coefs) else {
+            eprintln!("CMSIS-DSP is not linked; skipped");
+            return;
+        };
+        let x = noise_real(4096);
+        let want = reference_real_f32(&x);
+        let got = in_parts(&x, |i, o| mono.run_f32(i, o));
+        let snr = snr_db(&f32s(&want), &f32s(&got));
+        assert!(
+            snr > 120.0,
+            "CMSIS df2T_f32 against the reference: {snr} dB"
+        );
+
+        // The stereo cascade on C32 against our complex reference.
+        let mut rng = Pcg32::new(8);
+        let c: Vec<C32> = (0..4096)
+            .map(|_| C32::new(rng.unit() * 0.3, rng.unit() * 0.3))
+            .collect();
+        let mut want = vec![C32::default(); c.len()];
+        let mut s = BiquadState::new(coefs.clone(), vec![C32::default(); 8]).expect("state");
+        Reference.biquad(&mut s, &c, &mut want).expect("reference");
+        let mut stereo = CmsisBiquad::stereo_df2t_f32(&coefs).expect("stereo");
+        let got = in_parts(&c, |i, o| stereo.run_stereo(c32_pairs_ref(i), c32_pairs(o)));
+        let snr = snr_db(&c32s(&want), &c32s(&got));
+        assert!(
+            snr > 120.0,
+            "CMSIS stereo_df2T_f32 against the reference: {snr} dB"
+        );
+    }
+
+    #[test]
+    fn cmsis_q15_cascade_computes_the_cascade_with_truncation() {
+        let coefs = biquad_coefs::<i16>();
+        let Some(mut cmsis) = CmsisBiquad::df1_q15(&coefs) else {
+            eprintln!("CMSIS-DSP is not linked; skipped");
+            return;
+        };
+        let mut rng = Pcg32::new(9);
+        let x: Vec<Q15> = (0..4096)
+            .map(|_| Q15((rng.unit() * 0.3 * 32768.0) as i16))
+            .collect();
+        let mut want = vec![Q15(0); x.len()];
+        let mut s = BiquadRealState::new(coefs.clone(), vec![Q15(0); 8]).expect("state");
+        Reference
+            .biquad_real(&mut s, &x, &mut want)
+            .expect("reference");
+        let got = in_parts(&x, |i, o| cmsis.run_q15(q15_raw(i), q15_raw_mut(o)));
+        // CMSIS-DSP truncates where we round half up: the outputs differ by small amounts that
+        // the recursion carries on, but they are the same filter.
+        let as_f64 = |v: &[Q15]| v.iter().map(|q| f64::from(q.0)).collect::<Vec<_>>();
+        let snr = snr_db(&as_f64(&want), &as_f64(&got));
+        assert!(snr > 50.0, "CMSIS df1_q15 against the reference: {snr} dB");
+        // A negated -2.0 does not exist in Q15.
+        let mut bad = coefs;
+        bad[0][3] = i16::MIN;
+        assert!(CmsisBiquad::df1_q15(&bad).is_none());
+    }
+
+    #[test]
+    fn the_model_matches_the_reference_kernel() {
+        let x = noise_real(4096);
+        let want = reference_real_f32(&x);
+        let model = biquad_model::<f32>(x.iter().map(|v| f64::from(*v)));
+        let snr = snr_db(&model, &f32s(&want));
+        assert!(snr > 120.0, "model against the reference: {snr} dB");
+    }
+
+    #[test]
+    fn the_measurements_run_every_implementation_they_support() {
+        for name in [
+            "biquad",
+            "biquad_cq15",
+            "biquad_real",
+            "biquad_real_q15",
+            "biquad_fallback",
+            "biquad_cq15_fallback",
+            "biquad_real_fallback",
+            "biquad_real_q15_fallback",
+        ] {
+            let mut kernel = prepare(
+                name,
+                Layout {
+                    n: 512,
+                    misaligned: true,
+                },
+            )
+            .expect(name);
+            for which in Impl::ALL {
+                if kernel.supports(which) {
+                    let snr = kernel.accuracy(which);
+                    assert!(snr > 40.0, "{name} {}: {snr} dB", which.name());
+                }
+            }
         }
     }
 }

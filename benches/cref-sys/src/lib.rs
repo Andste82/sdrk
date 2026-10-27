@@ -1,4 +1,4 @@
-//! The C FFT libraries the SDRk benchmarks compare with, each behind a small owning wrapper:
+//! The C libraries the SDRk benchmarks compare with, each behind a small owning wrapper:
 //!
 //! - [`Fftw`]: FFTW 3 in single precision (GPL-2.0-or-later), a forward transform in place or
 //!   out of place, planned with `FFTW_ESTIMATE`, so that the plan does not depend on timing.
@@ -10,10 +10,18 @@
 //!   1/N (AArch64 only).
 //! - [`GrAgcCc`]: the `agc_cc` loop of GNU Radio (GPL-3.0-or-later), the reference of the `C32`
 //!   `agc`.
+//! - [`KfrBiquad`]: the biquad cascade of KFR 7 (`kfr::iir`, GPL-2.0-or-later), the SIMD
+//!   reference of `biquad` and `biquad_real`.
+//! - [`CmsisBiquad`]: the biquad cascades of CMSIS-DSP in generic C (Apache-2.0), the scalar
+//!   reference of the biquad fallbacks.
 //!
 //! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
 //! constructor returns `None` when its library is not linked. All of them use the interleaved
 //! complex layout of `repr(C)` pairs.
+
+mod biquad;
+
+pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place
 /// (input and output are the same buffer) or out of place.

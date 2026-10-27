@@ -49,7 +49,7 @@ def df2t_f64(x, coefs_by_sample):
     for n, v in enumerate(np.asarray(x, dtype=np.float64).tolist()):
         b0, b1, b2, a1, a2 = coefs_by_sample(n)
         y = b0 * v + s1
-        s1 = (b1 * v - a1 * y) + s2
+        s1 = (b1 * v + s2) - a1 * y
         s2 = b2 * v - a2 * y
         out[n] = y
     return out

@@ -1,6 +1,6 @@
 //! `cargo xtask count`: instruction counts of the SDRk kernels against established libraries
-//! (VOLK, rustfft, FFTW, `KissFFT`; Ne10 for information) and, where none exists, our own
-//! fallback.
+//! (VOLK, rustfft, FFTW, `KissFFT`, GNU Radio, KFR, CMSIS-DSP; Ne10 for information) and,
+//! where none exists, our own fallback.
 //!
 //! The method is differential. The measurement binary of `benches/kernels` (`count run <kernel>
 //! <impl> <k>`) performs one warm-up call and then `k` calls on the same buffers. It is started
@@ -571,6 +571,10 @@ pub enum Reference {
     KissFft,
     /// Ne10, int16 NEON.
     Ne10,
+    /// KFR's biquad cascade (`kfr::iir`), compiled for the level (D15).
+    Kfr,
+    /// CMSIS-DSP's biquad cascades in generic C, compiled for the level (D15, D16).
+    Cmsis,
     /// Our own fallback, where no established library exists.
     Fallback,
     /// Our own numbers of another level (run-time detection against that fixed level).
@@ -589,6 +593,8 @@ impl Reference {
             Reference::FftwInPlace => "fftw-in-place",
             Reference::KissFft => "kissfft",
             Reference::Ne10 => "ne10",
+            Reference::Kfr => "kfr",
+            Reference::Cmsis => "cmsis",
             Reference::Fallback => "fallback",
             Reference::OwnLevel(_) => "ours",
         }
@@ -615,6 +621,17 @@ pub enum Family {
     RealFft,
     /// No established library: our fallback.
     Own,
+    /// The f32 and C32 biquads (D15): KFR's SIMD cascade where the level has a build of it
+    /// (`LevelPlan::kfr`), CMSIS-DSP's generic C as information; at a level without KFR,
+    /// CMSIS-DSP is the gate.
+    Kfr,
+    /// The Q15 and CQ15 biquads (D15): no SIMD library has a Q15 biquad on our levels, so our
+    /// fallback is the gate; CMSIS-DSP's generic C as information.
+    Q15Own,
+    /// A fallback entry (D16, `<kernel>_fallback`): the measured side is our fallback, compiled
+    /// for the level, and the gate is CMSIS-DSP's generic C. Not measured at a level with
+    /// run-time detection, whose fallback is the baseline build.
+    FallbackVsCmsis,
 }
 
 impl Family {
@@ -623,6 +640,23 @@ impl Family {
     #[must_use]
     pub fn is_fft(self) -> bool {
         matches!(self, Family::FftC32 | Family::FftCq15 | Family::RealFft)
+    }
+
+    /// The implementation that is measured: our fallback for a fallback entry, our kernel
+    /// through the facade otherwise.
+    #[must_use]
+    pub fn measured(self) -> &'static str {
+        if self == Family::FallbackVsCmsis {
+            "fallback"
+        } else {
+            "ours"
+        }
+    }
+
+    /// Whether the kernel has an entry at `plan`'s level.
+    #[must_use]
+    pub fn measured_at(self, plan: &LevelPlan) -> bool {
+        !(self == Family::FallbackVsCmsis && plan.baseline.is_some())
     }
 }
 
@@ -662,7 +696,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 36] = [
+pub const KERNELS: [KernelSpec; 40] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -688,10 +722,14 @@ pub const KERNELS: [KernelSpec; 36] = [
     spec("agc_cq15", Family::Own, false),
     spec("dc_block_real", Family::Own, false),
     spec("dc_block_real_q15", Family::Own, false),
-    spec("biquad", Family::Own, false),
-    spec("biquad_cq15", Family::Own, false),
-    spec("biquad_real", Family::Own, false),
-    spec("biquad_real_q15", Family::Own, false),
+    spec("biquad", Family::Kfr, true),
+    spec("biquad_cq15", Family::Q15Own, true),
+    spec("biquad_real", Family::Kfr, true),
+    spec("biquad_real_q15", Family::Q15Own, true),
+    spec("biquad_fallback", Family::FallbackVsCmsis, false),
+    spec("biquad_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("biquad_real_fallback", Family::FallbackVsCmsis, false),
+    spec("biquad_real_q15_fallback", Family::FallbackVsCmsis, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -795,6 +833,9 @@ pub struct LevelPlan {
     pub fft_cq15_extra: &'static [Reference],
     /// Also report the cheapest VOLK implementation of every VOLK kernel (D11).
     pub cheapest_volk: bool,
+    /// KFR is built for this level and gates the f32 and C32 biquads (D15); without it
+    /// CMSIS-DSP does.
+    pub kfr: bool,
     /// Judged against our own numbers of this level instead of the libraries.
     pub baseline: Option<&'static str>,
 }
@@ -824,6 +865,7 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: (Reference::Fftw, &[Reference::RustFft, Reference::Fallback]),
         fft_cq15_extra: &[],
         cheapest_volk: false,
+        kfr: true,
         baseline: None,
     },
     LevelPlan {
@@ -841,6 +883,7 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: (Reference::Fftw, &[Reference::RustFft, Reference::Fallback]),
         fft_cq15_extra: &[],
         cheapest_volk: false,
+        kfr: true,
         baseline: None,
     },
     LevelPlan {
@@ -856,6 +899,7 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: REALFFT,
         fft_cq15_extra: &[],
         cheapest_volk: false,
+        kfr: true,
         baseline: None,
     },
     LevelPlan {
@@ -871,6 +915,7 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: REALFFT,
         fft_cq15_extra: &[],
         cheapest_volk: false,
+        kfr: true,
         baseline: Some("avx2"),
     },
     LevelPlan {
@@ -888,6 +933,7 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: REALFFT,
         fft_cq15_extra: &[],
         cheapest_volk: false,
+        kfr: true,
         baseline: None,
     },
     LevelPlan {
@@ -903,6 +949,7 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: (Reference::RustFft, &[Reference::Fftw, Reference::Fallback]),
         fft_cq15_extra: &[Reference::Ne10],
         cheapest_volk: true,
+        kfr: true,
         baseline: None,
     },
     LevelPlan {
@@ -918,6 +965,8 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: REALFFT,
         fft_cq15_extra: &[],
         cheapest_volk: false,
+        // No KFR for wasm32 (it needs an Emscripten toolchain): CMSIS-DSP gates (D15).
+        kfr: false,
         baseline: None,
     },
 ];
@@ -944,6 +993,10 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
         Family::Own => (Reference::Fallback, Vec::new()),
+        Family::Kfr if plan.kfr => (Reference::Kfr, vec![Reference::Cmsis]),
+        // Without KFR at the level, CMSIS-DSP gates, as it does for a fallback entry.
+        Family::Kfr | Family::FallbackVsCmsis => (Reference::Cmsis, Vec::new()),
+        Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
     }
 }
 
@@ -1772,6 +1825,9 @@ fn measure_level(
         if !only.is_empty() && !only.iter().any(|k| k == spec.name) {
             continue;
         }
+        if !spec.family.measured_at(plan) {
+            continue;
+        }
         let m = measure_kernel(&session, spec, variants, own)?;
         out.push(m);
     }
@@ -1824,8 +1880,9 @@ fn measure_kernel(
     let count = |which: &str, variant: &Variant, config: &Path| -> anyhow::Result<f64> {
         Ok(session.per_sample(spec.name, which, variant, config)? - restore)
     };
-    let ours = count("ours", &standard, pinned)?;
-    let ours_snr_db = session.snr(spec.name, "ours", pinned)?;
+    let measured = spec.family.measured();
+    let ours = count(measured, &standard, pinned)?;
+    let ours_snr_db = session.snr(spec.name, measured, pinned)?;
     let (other, other_snr_db) = match gate {
         Reference::OwnLevel(level) => own
             .get(level)
@@ -1882,7 +1939,7 @@ fn measure_kernel(
         for v in list {
             m.extras.push(Extra {
                 label: v.label(),
-                ours: count("ours", &v, pinned)?,
+                ours: count(measured, &v, pinned)?,
                 other: count(gate.implementation(), &v, pinned)?,
                 compared_with: m.compared_with.clone(),
                 other_snr_db: None,
@@ -2314,9 +2371,80 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     Ok(all_ok)
 }
 
+/// The manifest of the C references of `platform` (`benches/target/refs/<refs>/refs.json`,
+/// written by `benches/refs/build.sh`), or `null` when there is none.
+fn reference_manifest(root: &Path, platform: &str) -> Value {
+    let refs_platform = PLANS
+        .iter()
+        .find(|p| p.platform == platform)
+        .map_or(platform, |p| p.refs);
+    let manifest = root
+        .join("benches")
+        .join("target")
+        .join("refs")
+        .join(refs_platform)
+        .join("refs.json");
+    std::fs::read_to_string(&manifest)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null)
+}
+
+/// Adds to the `references` section of a results file what the manifest of the references has
+/// and the section lacks: a library (`libraries.<name>`) or a top-level fact (a compiler such as
+/// `kfr_cxx`). An entry the section already has is kept, because the records of the kernels
+/// that were not measured again were made with it; the names of the entries that differ from
+/// the manifest are returned, so that the caller can say that a full run is due.
+fn merge_references(section: &mut Value, manifest: &Value) -> Vec<String> {
+    let mut differ = Vec::new();
+    let Some(manifest) = manifest.as_object() else {
+        return differ;
+    };
+    if !section.is_object() {
+        *section = json!({});
+    }
+    let Some(section) = section.as_object_mut() else {
+        return differ;
+    };
+    for (key, value) in manifest {
+        if key == "libraries" {
+            let Some(libraries) = value.as_object() else {
+                continue;
+            };
+            let target = section.entry("libraries").or_insert_with(|| json!({}));
+            if !target.is_object() {
+                *target = json!({});
+            }
+            let Some(target) = target.as_object_mut() else {
+                continue;
+            };
+            for (name, library) in libraries {
+                match target.get(name) {
+                    None => {
+                        target.insert(name.clone(), library.clone());
+                    }
+                    Some(old) if old != library => differ.push(format!("libraries.{name}")),
+                    Some(_) => {}
+                }
+            }
+        } else {
+            match section.get(key) {
+                None => {
+                    section.insert(key.clone(), value.clone());
+                }
+                Some(old) if old != value => differ.push(key.clone()),
+                Some(_) => {}
+            }
+        }
+    }
+    differ
+}
+
 /// Writes the records of the measured kernels into the results file of `platform`: for every
 /// measured level, the records of the kernels in `measured` replace or add the entries of the
-/// file; every other entry, and the rest of the file, stays as it is.
+/// file, and the `references` section gets the libraries and compilers of the manifest of the
+/// references that it lacks (a reference that is new since the last full run); every other
+/// entry, and the rest of the file, stays as it is.
 ///
 /// # Errors
 /// The file cannot be read or written, or it has no entry for a measured level.
@@ -2347,6 +2475,19 @@ fn merge_results(
             kernels.insert(kernel.clone(), record.clone());
         }
     }
+    let manifest = reference_manifest(root, platform);
+    if let Some(object) = doc.as_object_mut() {
+        let section = object.entry("references").or_insert(Value::Null);
+        let differ = merge_references(section, &manifest);
+        if !differ.is_empty() {
+            println!(
+                "note: {} of the references in {} differ from the manifest of the references and are kept until a full run: {}",
+                differ.len(),
+                path.display(),
+                differ.join(", ")
+            );
+        }
+    }
     let mut text = serde_json::to_string_pretty(&doc)?;
     text.push('\n');
     std::fs::write(&path, text)?;
@@ -2365,20 +2506,7 @@ fn write_results(
     levels: &serde_json::Map<String, Value>,
     volk_flags: &Value,
 ) -> anyhow::Result<()> {
-    let refs_platform = PLANS
-        .iter()
-        .find(|p| p.platform == platform)
-        .map_or(platform, |p| p.refs);
-    let manifest = root
-        .join("benches")
-        .join("target")
-        .join("refs")
-        .join(refs_platform)
-        .join("refs.json");
-    let references: Value = std::fs::read_to_string(&manifest)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or(Value::Null);
+    let references = reference_manifest(root, platform);
     let host_cpu = std::fs::read_to_string("/proc/cpuinfo")
         .ok()
         .and_then(|t| {
@@ -2413,6 +2541,42 @@ fn write_results(
 #[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merging_adds_the_new_references_and_keeps_the_measured_ones() {
+        let mut section = json!({
+            "cc": "gcc 15",
+            "libraries": { "volk": { "version": "3.3.0" }, "fftw": { "version": "3.3.10" } },
+        });
+        let manifest = json!({
+            "cc": "gcc 16",
+            "kfr_cxx": "g++ 15",
+            "libraries": {
+                "volk": { "version": "3.3.0" },
+                "fftw": { "version": "3.3.11" },
+                "kfr": { "version": "7.2.0" },
+            },
+        });
+        let differ = merge_references(&mut section, &manifest);
+        assert_eq!(differ, vec!["cc".to_string(), "libraries.fftw".to_string()]);
+        assert_eq!(section["cc"], "gcc 15");
+        assert_eq!(section["kfr_cxx"], "g++ 15");
+        assert_eq!(section["libraries"]["fftw"]["version"], "3.3.10");
+        assert_eq!(section["libraries"]["kfr"]["version"], "7.2.0");
+        assert_eq!(section["libraries"]["volk"]["version"], "3.3.0");
+        let mut empty = Value::Null;
+        assert_eq!(
+            merge_references(&mut empty, &manifest),
+            Vec::<String>::new()
+        );
+        assert_eq!(empty, manifest);
+        let mut kept = json!({ "cc": "gcc 15" });
+        assert_eq!(
+            merge_references(&mut kept, &Value::Null),
+            Vec::<String>::new()
+        );
+        assert_eq!(kept, json!({ "cc": "gcc 15" }));
+    }
 
     #[test]
     fn qemu_option_variables_are_recognised() {
@@ -2835,6 +2999,43 @@ mod tests {
         assert_eq!(
             comparisons(plan("avx2-runtime"), kernel("fir")).0,
             Reference::OwnLevel("avx2")
+        );
+    }
+
+    #[test]
+    fn the_biquads_are_judged_against_kfr_cmsis_and_their_fallback_entries() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
+            for k in ["biquad", "biquad_real"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Kfr, vec![Reference::Cmsis]),
+                    "{k} at {level}"
+                );
+            }
+        }
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("biquad_real")),
+            (Reference::Cmsis, Vec::new())
+        );
+        assert_eq!(
+            comparisons(plan("neon"), kernel("biquad_cq15")),
+            (Reference::Fallback, vec![Reference::Cmsis])
+        );
+        let fallback = kernel("biquad_real_q15_fallback");
+        assert_eq!(fallback.family.measured(), "fallback");
+        assert_eq!(kernel("biquad_real").family.measured(), "ours");
+        assert_eq!(
+            comparisons(plan("avx512"), fallback),
+            (Reference::Cmsis, Vec::new())
+        );
+        assert!(fallback.family.measured_at(plan("simd128")));
+        assert!(!fallback.family.measured_at(plan("avx2-runtime")));
+        assert!(
+            kernel("biquad_real")
+                .family
+                .measured_at(plan("avx2-runtime"))
         );
     }
 

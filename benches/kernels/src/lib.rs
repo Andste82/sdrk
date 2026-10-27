@@ -11,6 +11,7 @@ use cref_sys::{Fftw, FftwR2c, GrAgcCc, KissFft16, Ne10Int16};
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
+use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState};
 use sdrk::kernels::convert::{Convert, ConvertOut};
 use sdrk::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
 use sdrk::kernels::demod::{DcBlockReal, DcBlockRealState, QuadDemod, QuadDemodState};
@@ -283,7 +284,7 @@ pub trait Kernel {
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended.
-pub const KERNELS: [&str; 32] = [
+pub const KERNELS: [&str; 36] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -316,6 +317,10 @@ pub const KERNELS: [&str; 32] = [
     "agc_cq15",
     "dc_block_real",
     "dc_block_real_q15",
+    "biquad",
+    "biquad_cq15",
+    "biquad_real",
+    "biquad_real_q15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -355,6 +360,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
         "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout)),
         "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout)),
+        "biquad" => Box::new(BiquadK::<C32>::new(rng, layout)),
+        "biquad_cq15" => Box::new(BiquadK::<CQ15>::new(rng, layout)),
+        "biquad_real" => Box::new(BiquadRealK::<f32>::new(rng, layout)),
+        "biquad_real_q15" => Box::new(BiquadRealK::<Q15>::new(rng, layout)),
         "fft_64" => Box::new(FftK::new(rng, 64)),
         "fft_1024" => Box::new(FftK::new(rng, 1024)),
         "fft_4096" => Box::new(FftK::new(rng, 4096)),
@@ -2644,6 +2653,238 @@ where
         self.run(which, 1);
         let mut want = vec![self.out[0]; self.out.len()];
         let _ = Reference.dc_block_real(&mut Self::state(), &self.input, &mut want);
+        let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// biquad and biquad_real (M22)
+
+/// Sections of the measured cascade: the fourth-order Butterworth low-pass at 0.1 of the sample
+/// rate (the filter of the golden cases), `[b0, b1, b2, a1, a2]` per section in `f64`.
+fn butter4_lowpass() -> [[f64; 5]; 2] {
+    let k = (std::f64::consts::PI * 0.1).tan();
+    [0, 1].map(|j| {
+        // Damping of the section: 2 sin((2j + 1) pi / 8).
+        let d = 2.0 * (std::f64::consts::PI * f64::from(2 * j + 1) / 8.0).sin();
+        let n = 1.0 / (1.0 + d * k + k * k);
+        [
+            k * k * n,
+            2.0 * k * k * n,
+            k * k * n,
+            2.0 * (k * k - 1.0) * n,
+            (1.0 - d * k + k * k) * n,
+        ]
+    })
+}
+
+/// A coefficient type of the measurement: `f32`, or the Q2.14 `i16`.
+trait BiquadCoef: Copy {
+    fn from_f64(v: f64) -> Self;
+}
+
+impl BiquadCoef for f32 {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a coefficient rounded to f32"
+    )]
+    fn from_f64(v: f64) -> Self {
+        v as f32
+    }
+}
+
+impl BiquadCoef for i16 {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a coefficient within Q2.14"
+    )]
+    fn from_f64(v: f64) -> Self {
+        (v * 16384.0).round() as i16
+    }
+}
+
+fn biquad_coefs<C: BiquadCoef>() -> Vec<[C; 5]> {
+    butter4_lowpass()
+        .iter()
+        .map(|s| s.map(C::from_f64))
+        .collect()
+}
+
+#[inline(never)]
+fn biquad<T: ComplexSample + BiquadSample, B: Biquad<T>>(
+    backend: &B,
+    state: &mut BiquadState<T, Vec<[T::Coef; 5]>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.biquad(state, black_box(input), out));
+}
+
+#[inline(never)]
+fn biquad_real<T: sdrk_core::RealSample + BiquadSample, B: BiquadReal<T>>(
+    backend: &B,
+    state: &mut BiquadRealState<T, Vec<[T::Coef; 5]>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.biquad_real(state, black_box(input), out));
+}
+
+/// `biquad`: the order-4 Butterworth low-pass (two sections) on noise of the amplitude 0.3. The
+/// two-lane path of the SIMD backend is counted against our fallback; no established library has
+/// a complex biquad.
+struct BiquadK<T: SquelchSample + BiquadSample> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: SquelchSample + BiquadSample> BiquadK<T>
+where
+    T::Coef: BiquadCoef,
+{
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
+        for s in input.iter_mut() {
+            *s = T::noise(rng, 0.3);
+        }
+        BiquadK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> BiquadState<T, Vec<[T::Coef; 5]>, Vec<T>> {
+        BiquadState::new(biquad_coefs::<T::Coef>(), vec![T::default(); 8]).expect("biquad")
+    }
+}
+
+impl Kernel for BiquadK<C32> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => biquad(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => biquad(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("biquad has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![C32::default(); self.input.len()];
+        let _ = Reference.biquad(&mut Self::state(), &self.input, &mut want);
+        snr_db(&c32s(&want), &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+impl Kernel for BiquadK<CQ15> {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => biquad(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => biquad(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("biquad_cq15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![CQ15::default(); self.input.len()];
+        let _ = Reference.biquad(&mut Self::state(), &self.input, &mut want);
+        snr_db(&cq15s(&want, 1.0), &cq15s(&self.out, 1.0))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// `biquad_real` (a recursion per section: not accelerated, so the entries are `info` against
+/// our fallback), on the same filter and noise as `biquad`.
+struct BiquadRealK<T: RealNoise + BiquadSample> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: RealNoise + BiquadSample> BiquadRealK<T>
+where
+    T::Coef: BiquadCoef,
+{
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
+        for s in input.iter_mut() {
+            *s = T::noise(rng, 0.3, 0.0);
+        }
+        BiquadRealK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> BiquadRealState<T, Vec<[T::Coef; 5]>, Vec<T>> {
+        BiquadRealState::new(biquad_coefs::<T::Coef>(), vec![T::default(); 8]).expect("biquad_real")
+    }
+}
+
+impl<T: RealNoise + BiquadSample> Kernel for BiquadRealK<T>
+where
+    T::Coef: BiquadCoef,
+    Sdrk: BiquadReal<T>,
+    Fallback: BiquadReal<T>,
+    Reference: BiquadReal<T>,
+{
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => biquad_real(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => biquad_real(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("biquad_real has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![self.out[0]; self.out.len()];
+        let _ = Reference.biquad_real(&mut Self::state(), &self.input, &mut want);
         let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
         let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
         snr_db(&want, &got)

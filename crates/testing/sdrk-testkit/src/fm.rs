@@ -51,3 +51,39 @@ pub fn fm_baseband(
         *o = Complex64::new(libm::cos(phase), libm::sin(phase));
     }
 }
+
+/// Like [`fm_baseband`] for two simultaneous audio tones, each given as `(peak deviation in Hz,
+/// audio frequency in Hz)`:
+///
+/// ```text
+/// phase(n) = 2 pi frac(offset n / rate) + sum_i beta_i (1 - cos(2 pi frac(audio_i n / rate)))
+/// beta_i   = deviation_i / audio_i
+/// ```
+///
+/// The phase depends only on the absolute index `start + i`, so chunked generation gives the same
+/// samples as generating the signal at once. Neither audio frequency may be 0.
+///
+/// ```
+/// use num_complex::Complex64;
+/// let mut out = [Complex64::new(0.0, 0.0); 4];
+/// // Without deviation: a plain carrier at a quarter of the sample rate.
+/// sdrk_testkit::fm::fm_baseband_two_tones(&mut out, 1000.0, 250.0, [(0.0, 100.0), (0.0, 7.0)], 0);
+/// assert!((out[1].im - 1.0).abs() < 1e-12);
+/// ```
+pub fn fm_baseband_two_tones(
+    out: &mut [Complex64],
+    rate_hz: f64,
+    carrier_offset_hz: f64,
+    tones: [(f64, f64); 2],
+    start: u64,
+) {
+    for (i, o) in out.iter_mut().enumerate() {
+        let n = start.wrapping_add(i as u64) as f64;
+        let mut phase = TAU * frac(carrier_offset_hz * n / rate_hz);
+        for (deviation_hz, audio_hz) in tones {
+            let audio = TAU * frac(audio_hz * n / rate_hz);
+            phase += deviation_hz / audio_hz * (1.0 - libm::cos(audio));
+        }
+        *o = Complex64::new(libm::cos(phase), libm::sin(phase));
+    }
+}

@@ -11,12 +11,12 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BlockDescription, BlockSample, ConvertBlock,
-    ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
-    DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, ParamValue, PortType, ResamplerBlock, ResamplerConfig,
-    ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
+    AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
+    BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock,
+    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ParamValue, PortType,
+    ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
 };
 use serde_json::{Map, Value};
 
@@ -729,6 +729,84 @@ impl Kind for SsbDemodKind {
                 cfg, rate, st
             )?)))
         )
+    }
+}
+
+// ------------------------------------------------------------------ biquad
+
+pub(crate) struct BiquadKind;
+
+impl Kind for BiquadKind {
+    type Cfg = BiquadConfig;
+
+    const KIND: &'static str = "biquad";
+    fn kernels() -> &'static [&'static str] {
+        &["biquad", "biquad_real"]
+    }
+    fn default_cfg() -> BiquadConfig {
+        BiquadConfig::default()
+    }
+    fn set(cfg: &mut BiquadConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &BiquadConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        let sections = cfg.sections() as f64;
+        let (rate_out, memory_bytes, cost) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    BiquadBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    BiquadBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                    // Two recursions (re and im) of 5 multiplications per section.
+                    10.0 * sections
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    BiquadRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    BiquadRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
+                    5.0 * sections
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            cost,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &BiquadConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(BiquadBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(BiquadRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 

@@ -14,6 +14,7 @@
 use core::f64::consts::PI;
 
 use sdrk::Sdrk;
+use sdrk_core::kernels::biquad::{Biquad, BiquadState};
 use sdrk_core::kernels::convert::{Convert, ConvertOut};
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate};
 use sdrk_core::kernels::demod::{QuadDemod, QuadDemodState};
@@ -863,5 +864,140 @@ pub(super) fn backend_vs_fallback_fft(arena: &mut Arena<'_>) -> Result<(), Failu
             }
         }
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------- biquad
+
+/// The fourth-order Butterworth low-pass at 0.1 of the sample rate (two sections), in `f32` and
+/// Q2.14.
+const BIQUAD_F32: [[f32; 5]; 2] = [
+    [
+        0.077_956_34,
+        0.155_912_68,
+        0.077_956_34,
+        -1.320_913_4,
+        0.632_738_8,
+    ],
+    [
+        0.061_885_195,
+        0.123_770_39,
+        0.061_885_195,
+        -1.048_599_6,
+        0.296_140_36,
+    ],
+];
+const BIQUAD_Q14: [[i16; 5]; 2] = [
+    [1277, 2554, 1277, -21642, 10367],
+    [1014, 2028, 1014, -17180, 4852],
+];
+/// Sections that overflow and saturate: poles outside the unit circle.
+const BIQUAD_WILD_F32: [[f32; 5]; 2] = [[1.5, -1.9, 1.7, -1.9, 1.5], [-1.2, 1.8, 0.9, 1.9, -1.8]];
+const BIQUAD_WILD_Q14: [[i16; 5]; 2] = [
+    [i16::MAX, i16::MIN, i16::MAX, i16::MIN, i16::MAX],
+    [i16::MIN, i16::MAX, 20000, i16::MAX, i16::MIN],
+];
+
+/// The two-lane path of `biquad` on `C32` and `CQ15` (re and im in the two lanes of a vector)
+/// against the fallback: the same bits, also with NaN, infinities and subnormal samples, with
+/// coefficients that overflow and saturate, and in random chunks.
+pub(super) fn backend_vs_fallback_biquad(arena: &mut Arena<'_>) -> Result<(), Failure> {
+    const CASE: &str = "backend_vs_fallback_biquad";
+    const N: usize = 1000;
+    let mut rng = Pcg32::new(2201, 1);
+    for n in lengths(arena.remaining(), 8 * 3 + 64 * 2) {
+        for coefs in [BIQUAD_F32, BIQUAD_WILD_F32] {
+            let mut c = arena.carver();
+            let (input, fb, fac) = (c.take::<C32>(n)?, c.take::<C32>(n)?, c.take::<C32>(n)?);
+            let (h1, h2) = (c.take::<C32>(8)?, c.take::<C32>(8)?);
+            for (k, s) in input.iter_mut().enumerate() {
+                *s = match k % 13 {
+                    3 => C32::new(f32::NAN, 1.0),
+                    5 => C32::new(f32::INFINITY, 0.0),
+                    7 => C32::new(1e-40, -1e-33),
+                    9 => C32::new(0.0, 0.0),
+                    _ => random_c32(&mut rng, 1.5),
+                };
+            }
+            let mut a = BiquadState::<C32, _, _>::new(coefs, h1)?;
+            let mut d = BiquadState::<C32, _, _>::new(coefs, h2)?;
+            Biquad::<C32>::biquad(&Fallback, &mut a, input, fb)?;
+            Biquad::<C32>::biquad(&Sdrk, &mut d, input, fac)?;
+            let same = |a: f32, b: f32| a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan());
+            ensure(
+                fb.iter()
+                    .zip(fac.iter())
+                    .all(|(a, b)| same(a.re, b.re) && same(a.im, b.im)),
+                || fail(CASE, "c32 differs from the fallback", n),
+            )?;
+            ensure(
+                a.history()
+                    .iter()
+                    .zip(d.history())
+                    .all(|(a, b)| same(a.re, b.re) && same(a.im, b.im)),
+                || fail(CASE, "c32 histories differ", n),
+            )?;
+        }
+    }
+    for n in lengths(arena.remaining(), 4 * 3 + 32 * 2) {
+        for coefs in [BIQUAD_Q14, BIQUAD_WILD_Q14] {
+            let mut c = arena.carver();
+            let (input, fb, fac) = (c.take::<CQ15>(n)?, c.take::<CQ15>(n)?, c.take::<CQ15>(n)?);
+            let (h1, h2) = (c.take::<CQ15>(8)?, c.take::<CQ15>(8)?);
+            for (k, s) in input.iter_mut().enumerate() {
+                *s = if k % 7 == 0 {
+                    CQ15 {
+                        re: Q15(-32768),
+                        im: Q15(32767),
+                    }
+                } else {
+                    random_cq15(&mut rng, 1.0)
+                };
+            }
+            let mut a = BiquadState::<CQ15, _, _>::new(coefs, h1)?;
+            let mut d = BiquadState::<CQ15, _, _>::new(coefs, h2)?;
+            Biquad::<CQ15>::biquad(&Fallback, &mut a, input, fb)?;
+            Biquad::<CQ15>::biquad(&Sdrk, &mut d, input, fac)?;
+            ensure(bit_exact(fb, fac).is_none(), || {
+                fail(CASE, "cq15 differs from the fallback", n)
+            })?;
+            ensure(a.history() == d.history(), || {
+                fail(CASE, "cq15 histories differ", n)
+            })?;
+        }
+    }
+    // Random chunks give the bits of one call.
+    let mut c = arena.carver();
+    let (input, whole, chunked) = (c.take::<C32>(N)?, c.take::<C32>(N)?, c.take::<C32>(N)?);
+    for s in input.iter_mut() {
+        *s = random_c32(&mut rng, 1.0);
+    }
+    check_block_invariance(
+        input,
+        whole,
+        chunked,
+        ChunkPlan::new(2202, 53),
+        || BiquadState::<C32, _, _>::new(BIQUAD_F32, [C32::ZERO; 8]),
+        |state, i, o| match state {
+            Ok(st) => same_rate(i, o, |i, o| Biquad::<C32>::biquad(&Sdrk, st, i, o)),
+            Err(e) => Err(e.clone()),
+        },
+    )?;
+    let mut c = arena.carver();
+    let (input, whole, chunked) = (c.take::<CQ15>(N)?, c.take::<CQ15>(N)?, c.take::<CQ15>(N)?);
+    for s in input.iter_mut() {
+        *s = random_cq15(&mut rng, 1.0);
+    }
+    check_block_invariance(
+        input,
+        whole,
+        chunked,
+        ChunkPlan::new(2203, 53),
+        || BiquadState::<CQ15, _, _>::new(BIQUAD_Q14, [CQ15::default(); 8]),
+        |state, i, o| match state {
+            Ok(st) => same_rate(i, o, |i, o| Biquad::<CQ15>::biquad(&Sdrk, st, i, o)),
+            Err(e) => Err(e.clone()),
+        },
+    )?;
     Ok(())
 }

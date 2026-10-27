@@ -709,5 +709,106 @@
       "status": "info",
       "waiver": "`dc_block_real` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
+  },
+  "biquad": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "dev"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`biquad` `C32` keeps the fallback at AVX-512: the two-lane path measured 31.55 instructions per sample against 37.03 for the fallback compiled for AVX-512 (0.85, a saving of 15 %), below the 25 % that M22 asks for; the fallback (EVEX encoding, 32 registers) needs fewer moves than at the other levels. The comparison is the fallback with itself, reported as information (open item M22-4)"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "dev"
+    }
+  },
+  "biquad_cq15": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "dev"
+    },
+    "avx512": {
+      "status": "dev"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "dev"
+    }
+  },
+  "biquad_real": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`biquad_real` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "biquad_real_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated (every output depends on the previous output of the same section, a recursion with the sections in series, so it stays with the fallback in the facade); the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`biquad_real_q15` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
   }
 }

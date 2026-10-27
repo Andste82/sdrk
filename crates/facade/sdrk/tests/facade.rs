@@ -202,6 +202,8 @@ fn backend_table_lists_the_m06_kernels() {
         ("mag", SampleType::C32),
         ("mag", SampleType::CQ15),
         ("agc", SampleType::C32),
+        ("biquad", SampleType::C32),
+        ("biquad", SampleType::CQ15),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
@@ -217,6 +219,8 @@ fn backend_table_lists_the_m06_kernels() {
         ("dc_block_real", SampleType::F32),
         ("dc_block_real", SampleType::Q15),
         ("agc", SampleType::CQ15),
+        ("biquad_real", SampleType::F32),
+        ("biquad_real", SampleType::Q15),
         ("window", SampleType::C32),
         ("window", SampleType::CQ15),
         ("power_db", SampleType::F32),
@@ -228,6 +232,8 @@ fn backend_table_lists_the_m06_kernels() {
     assert_eq!(backend_for("deemphasis", SampleType::C32), "none");
     assert_eq!(backend_for("squelch", SampleType::F32), "none");
     assert_eq!(backend_for("agc", SampleType::F32), "none");
+    assert_eq!(backend_for("biquad", SampleType::F32), "none");
+    assert_eq!(backend_for("biquad_real", SampleType::C32), "none");
     assert_eq!(backend_for("dc_block_real", SampleType::C32), "none");
     assert_eq!(backend_for("resample_real", SampleType::C32), "none");
     assert_eq!(backend_for("power_db", SampleType::CQ15), "none");
@@ -546,5 +552,69 @@ fn m20_kernels_agree_with_the_fallback() -> Result<()> {
     Sdrk.dc_block_real(&mut sa, &rq, &mut a)?;
     Fallback.dc_block_real(&mut sb, &rq, &mut b)?;
     assert_eq!((a, sa), (b, sb));
+    Ok(())
+}
+
+#[test]
+fn m22_kernels_agree_with_the_fallback() -> Result<()> {
+    use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
+    let mut s = 0x2222_u32;
+    let lcg = |s: &mut u32| {
+        *s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        *s >> 16
+    };
+    let coefs = [[0.2f32, 0.4, 0.2, -0.5, 0.25], [0.1, 0.2, 0.1, -0.9, 0.3]];
+    let c32: Vec<C32> = (0..300)
+        .map(|_| {
+            C32::new(
+                lcg(&mut s) as f32 / 65536.0 - 0.5,
+                lcg(&mut s) as f32 / 65536.0 - 0.5,
+            )
+        })
+        .collect();
+    let (mut sa, mut sb) = (
+        BiquadState::<C32, _, _>::new(coefs, [C32::default(); 8])?,
+        BiquadState::<C32, _, _>::new(coefs, [C32::default(); 8])?,
+    );
+    let (mut a, mut b) = (vec![C32::default(); 300], vec![C32::default(); 300]);
+    Sdrk.biquad(&mut sa, &c32, &mut a)?;
+    Fallback.biquad(&mut sb, &c32, &mut b)?;
+    assert_eq!((a, sa.history()), (b, sb.history()));
+
+    let re: Vec<f32> = c32.iter().map(|c| c.re).collect();
+    let (mut sa, mut sb) = (
+        BiquadRealState::<f32, _, _>::new(coefs, [0.0f32; 8])?,
+        BiquadRealState::<f32, _, _>::new(coefs, [0.0f32; 8])?,
+    );
+    let (mut a, mut b) = (vec![0.0f32; 300], vec![0.0f32; 300]);
+    Sdrk.biquad_real(&mut sa, &re, &mut a)?;
+    Fallback.biquad_real(&mut sb, &re, &mut b)?;
+    assert_eq!((a, sa.history()), (b, sb.history()));
+
+    let qcoefs = [[3000i16, -5000, 3000, -20000, 8000]];
+    let cq: Vec<CQ15> = (0..300)
+        .map(|_| CQ15 {
+            re: Q15(lcg(&mut s) as i16),
+            im: Q15(lcg(&mut s) as i16),
+        })
+        .collect();
+    let (mut sa, mut sb) = (
+        BiquadState::<CQ15, _, _>::new(qcoefs, [CQ15::default(); 4])?,
+        BiquadState::<CQ15, _, _>::new(qcoefs, [CQ15::default(); 4])?,
+    );
+    let (mut a, mut b) = (vec![CQ15::default(); 300], vec![CQ15::default(); 300]);
+    Sdrk.biquad(&mut sa, &cq, &mut a)?;
+    Fallback.biquad(&mut sb, &cq, &mut b)?;
+    assert_eq!((a, sa.history()), (b, sb.history()));
+
+    let rq: Vec<Q15> = cq.iter().map(|c| c.re).collect();
+    let (mut sa, mut sb) = (
+        BiquadRealState::<Q15, _, _>::new(qcoefs, [Q15(0); 4])?,
+        BiquadRealState::<Q15, _, _>::new(qcoefs, [Q15(0); 4])?,
+    );
+    let (mut a, mut b) = (vec![Q15(0); 300], vec![Q15(0); 300]);
+    Sdrk.biquad_real(&mut sa, &rq, &mut a)?;
+    Fallback.biquad_real(&mut sb, &rq, &mut b)?;
+    assert_eq!((a, sa.history()), (b, sb.history()));
     Ok(())
 }

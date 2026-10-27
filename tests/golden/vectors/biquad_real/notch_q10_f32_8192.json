@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "coefs": {
+      "dtype": "f32",
+      "file": "notch_q10_f32_8192.coefs.bin",
+      "len": 5
+    },
+    "expected": {
+      "dtype": "f64",
+      "file": "notch_q10_f32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "notch_q10_f32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "notch_q10_f32_8192",
+  "format_version": 1,
+  "kernel": "biquad_real",
+  "notes": "biquad_coefs(notch, 0.05, 10) rounded to f32; scipy.signal.sosfilt in float64; real noise sigma 0.3",
+  "params": {
+    "fs_hz": 1.0,
+    "sections": 1
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 426,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

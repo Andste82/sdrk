@@ -27,12 +27,13 @@ mod common;
 use common::{check_exact_storage, rate};
 use sdrk::{C32, CQ15, Q15, Rate};
 use sdrk_blocks::{
-    AgcBlock, AgcConfig, AlignedBytes, AmDemodBlock, AmDemodConfig, ArenaStorage, Block,
-    BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock,
-    DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, ResamplerBlock,
-    ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
-    SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    AgcBlock, AgcConfig, AlignedBytes, AmDemodBlock, AmDemodConfig, ArenaStorage, BiquadBlock,
+    BiquadConfig, BiquadElem, BiquadRealBlock, BiquadResponse, Block, BlockSample, ConvertBlock,
+    ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
+    DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
+    FmModBlock, FmModConfig, FrameBlock, ResamplerBlock, ResamplerConfig, ResamplerRealBlock,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -163,6 +164,34 @@ fn filters_exact<T: BlockSample>() {
     }
 }
 
+/// The biquad blocks of the complex type `T` and of the real type `R` take exactly the
+/// storage they report: 5 coefficients and 4 history values per section.
+fn biquad_exact<T: BlockSample + BiquadElem, R: sdrk_blocks::BlockReal + BiquadElem>() {
+    let r = rate(48_000);
+    for (response, order, cutoff_hz) in [
+        (BiquadResponse::Lowpass, 2, 1_000.0),
+        (BiquadResponse::Highpass, 4, 300.0),
+        (BiquadResponse::Lowpass, 8, 2_000.0),
+        (BiquadResponse::Bandpass, 2, 3_000.0),
+        (BiquadResponse::Notch, 2, 1_000.0),
+    ] {
+        let cfg = BiquadConfig {
+            response,
+            order,
+            cutoff_hz,
+            ..BiquadConfig::default()
+        };
+        let bytes = BiquadBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert!(bytes > 0);
+        check_exact_storage(bytes, |a| BiquadBlock::<T, _>::new(&cfg, r, a).map(|_| ()));
+        let bytes = BiquadRealBlock::<R, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert!(bytes > 0);
+        check_exact_storage(bytes, |a| {
+            BiquadRealBlock::<R, _>::new(&cfg, r, a).map(|_| ())
+        });
+    }
+}
+
 fn resamplers_exact<T: BlockSample>() {
     for (tunable, out_hz) in [(false, 32_000.0), (true, 44_100.0), (true, 48_000.0)] {
         let cfg = ResamplerConfig {
@@ -210,6 +239,7 @@ fn complex_blocks_c32() {
     convert_out_exact::<C32>();
     simple_exact::<C32>();
     filters_exact::<C32>();
+    biquad_exact::<C32, f32>();
     resamplers_exact::<C32>();
     spectrum_exact::<C32>();
 }
@@ -220,6 +250,7 @@ fn complex_blocks_cq15() {
     convert_out_exact::<CQ15>();
     simple_exact::<CQ15>();
     filters_exact::<CQ15>();
+    biquad_exact::<CQ15, Q15>();
     resamplers_exact::<CQ15>();
     spectrum_exact::<CQ15>();
 }
@@ -303,8 +334,13 @@ fn no_block_is_larger_than_512_bytes() {
         SquelchBlock,
         AgcBlock,
         AmDemodBlock,
-        SsbDemodBlock
+        SsbDemodBlock,
+        BiquadBlock
     );
+    check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
+    check::<BiquadRealBlock<Q15, A<'static>>>("BiquadRealBlock<Q15>");
+    check::<BiquadRealBlock<f32, sdrk_testkit::VecStorage>>("BiquadRealBlock<f32, Vec>");
+    check::<BiquadRealBlock<Q15, sdrk_testkit::VecStorage>>("BiquadRealBlock<Q15, Vec>");
     check::<ResamplerRealBlock<f32, A<'static>>>("ResamplerRealBlock<f32>");
     check::<ResamplerRealBlock<Q15, A<'static>>>("ResamplerRealBlock<Q15>");
     check::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>("ResamplerRealBlock<Q15, Vec>");
@@ -338,8 +374,13 @@ fn public_types_are_send() {
         SquelchBlock,
         AgcBlock,
         AmDemodBlock,
-        SsbDemodBlock
+        SsbDemodBlock,
+        BiquadBlock
     );
+    assert_send::<BiquadRealBlock<f32, A<'static>>>();
+    assert_send::<BiquadRealBlock<Q15, sdrk_testkit::VecStorage>>();
+    assert_sync::<BiquadRealBlock<Q15, A<'static>>>();
+    assert_send::<BiquadConfig>();
     assert_send::<ResamplerRealBlock<f32, A<'static>>>();
     assert_send::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_send::<ConvertConfig>();

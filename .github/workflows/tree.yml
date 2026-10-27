@@ -1114,6 +1114,29 @@ jobs:
           esac
           cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
             --test spectrum_mag -- --ignored
+      - name: Every CQ15 coefficient through biquad
+        # The rounding and saturation of the f64 arithmetic of the two-lane path against the
+        # fallback: one section with b0 over all 65536 values, on all 65536 inputs.
+        if: matrix.setup != 'int'
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          SDRK_SWEEP_PART: ${{ matrix.part || '0/1' }}
+          # The emulators take every 64th (wasmtime) or 16th (SDE) coefficient.
+          SDRK_SWEEP_STRIDE: ${{ (matrix.setup == 'wasm' && '64') || (matrix.setup == 'sde' && '16') || '1' }}
+        run: |
+          target=()
+          case "${{ matrix.setup }}" in
+            wasm)
+              export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD --"
+              target=(--target wasm32-wasip1) ;;
+            sde)
+              # An explicit `--target` keeps RUSTFLAGS away from the build scripts.
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$SDE64 -spr --"
+              target=(--target x86_64-unknown-linux-gnu) ;;
+          esac
+          cargo test --release -p sdrk-backend-simd --features fft-tables,nco-tables "${target[@]}" \
+            --test biquad -- --ignored
       - name: Every f32 through the integer path of the fallback's convert_out
         # The path is only compiled in on bare-metal Arm and RISC-V; its equality with the f64
         # formula does not depend on the target, so one native run covers it.

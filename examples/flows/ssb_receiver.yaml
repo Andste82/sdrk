@@ -15,6 +15,17 @@ inputs:
     rate_hz: 2400000
     description: "RTL-SDR IQ"
 nodes:
+  # Audio low-pass: a 4th-order Butterworth filter at 2800 Hz after the demodulator. The
+  # demodulator passes 300 to 3000 Hz; the low-pass takes the hiss above the voice band away
+  # (the node is not called audio because the output has that name). cutoff_hz can be changed
+  # while the flow runs (set_param), for example to 2400 on a noisy band; the filter keeps its
+  # state.
+  audio_filter:
+    kind: biquad
+    params:
+      cutoff_hz: 2800
+      order: 4
+      response: lowpass
   # Automatic gain control with the defaults (attack 0.005 s, release 0.2 s), which suit SSB:
   # the audio is the signal itself, not its envelope, so a fast loop that follows the syllables
   # of speech is wanted (AM needs a slow loop, see am_receiver.yaml). It sits after the
@@ -55,13 +66,14 @@ nodes:
       decimation: 50
       max_taps: 8192
       transition_hz: 2000
-# Channel filter, squelch, automatic gain control, SSB demodulator.
+# Channel filter, squelch, automatic gain control, SSB demodulator, audio low-pass.
 edges:
   - { from: rf, to: tune }
   - { from: tune, to: gate }
   - { from: gate, to: agc }
   - { from: agc, to: demod }
-  - { from: demod, to: audio }
+  - { from: demod, to: audio_filter }
+  - { from: audio_filter, to: audio }
 # Audio samples (errors when full).
 outputs:
   audio:

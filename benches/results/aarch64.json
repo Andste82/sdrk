@@ -59,6 +59,98 @@
           "status": "info",
           "verdict": "info"
         },
+        "biquad": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 42.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.04,
+              "ratio": 0.64
+            }
+          ],
+          "other_instr_per_sample": 42.03,
+          "ours_instr_per_sample": 27.04,
+          "ratio": 0.64,
+          "snr_db": {
+            "other": 134.12,
+            "ours": 134.12
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
+        "biquad_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 93.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 38.33,
+              "ratio": 0.41
+            }
+          ],
+          "other_instr_per_sample": 93.04,
+          "ours_instr_per_sample": 38.33,
+          "ratio": 0.41,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
+        "biquad_real": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 46.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 46.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 46.03,
+          "ours_instr_per_sample": 46.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 134.92,
+            "ours": 134.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "biquad_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 50.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 50.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 50.03,
+          "ours_instr_per_sample": 50.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
           "goal": true,

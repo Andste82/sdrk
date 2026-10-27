@@ -10,9 +10,9 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AgcKind, AmDemodKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DucKind, Factory,
-    FirKind, FmDemodKind, FmModKind, Kind, ResamplerKind, ScaleKind, SpectrumKind, SquelchKind,
-    SsbDemodKind,
+    AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DucKind,
+    Factory, FirKind, FmDemodKind, FmModKind, Kind, ResamplerKind, ScaleKind, SpectrumKind,
+    SquelchKind, SsbDemodKind,
 };
 use crate::model::{PipelineSpec, Precision};
 use crate::node::Node;
@@ -162,7 +162,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 15);
+/// assert_eq!(registry.descriptions().count(), 16);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -205,6 +205,7 @@ impl Registry {
         register::<AgcKind>(&mut factories);
         register::<AmDemodKind>(&mut factories);
         register::<SsbDemodKind>(&mut factories);
+        register::<BiquadKind>(&mut factories);
         Self { factories }
     }
 

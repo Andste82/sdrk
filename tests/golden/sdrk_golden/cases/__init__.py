@@ -2,6 +2,7 @@
 
 from . import (  # noqa: F401
     agc,
+    biquad,
     blocks,
     convert,
     convert_out,

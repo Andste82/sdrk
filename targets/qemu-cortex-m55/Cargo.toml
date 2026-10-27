@@ -27,7 +27,8 @@ full = ["sdrk-target-common/full"]
 inherits = "release"
 overflow-checks = true
 debug-assertions = true
-opt-level = "s"
+# `z`: with `s` the image of M21 no longer fits the 512 KiB ITCM.
+opt-level = "z"
 lto = "fat"
 codegen-units = 1
 panic = "abort"

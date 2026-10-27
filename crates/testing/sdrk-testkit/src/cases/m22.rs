@@ -34,8 +34,9 @@ use super::m06::{flat, hand_out, min_snr, same_rate};
 use crate::arena::Arena;
 use crate::e2e::E2eSample;
 use crate::e2e_nfm::{
-    NFM_MAX_CLOSE_DELAY_S, NFM_MAX_OPEN_DELAY_S, NFM_MAX_SINAD_LOSS_DB, NFM_MIN_SUBTONE_DB_F32,
-    NFM_MIN_SUBTONE_DB_Q15, NFM_QUICK_SAMPLES, measure_nfm, measure_nfm_ctcss,
+    NFM_MAX_CLOSE_DELAY_S, NFM_MAX_OPEN_DELAY_S, NFM_MAX_SINAD_LOSS_DB_F32,
+    NFM_MAX_SINAD_LOSS_DB_Q15, NFM_MIN_SUBTONE_DB_F32, NFM_MIN_SUBTONE_DB_Q15, NFM_QUICK_SAMPLES,
+    measure_nfm, measure_nfm_ctcss,
 };
 use crate::r#gen::extreme;
 use crate::invariance::{ChunkPlan, check_block_invariance};
@@ -782,8 +783,8 @@ where
 }
 
 pub(super) fn block_biquad_response(arena: &mut Arena<'_>) -> Result<(), Failure> {
-    // The notch of a Q15 block is limited to 34.9 dB by the Q2.14 coefficients (open item
-    // M22-3); the specified 40 dB hold for f32.
+    // Notch depth: 40 dB for f32, 34 dB for Q15 (the separate Q15 threshold of decision D23;
+    // the Q2.14 coefficients limit the Q15 notch to 34.9 dB).
     real_block_for::<f32>(arena, 40.0)?;
     real_block_for::<Q15>(arena, 34.0)?;
     real_invariance::<f32>(arena)?;
@@ -801,7 +802,7 @@ fn ctcss_case<T>(
     arena: &mut Arena<'_>,
     samples: usize,
     min_subtone_db: f64,
-    max_sinad_loss_db: Option<f64>,
+    max_sinad_loss_db: f64,
 ) -> Result<(), Failure>
 where
     T: E2eSample + BlockSample,
@@ -825,14 +826,12 @@ where
             m.subtone_below_db
         ))
     })?;
-    if let Some(max_loss) = max_sinad_loss_db {
-        ensure(m.sinad_db >= base.sinad_db - max_loss, || {
-            Failure::new(case, "SINAD too far below E2E-NFM").detail(format_args!(
-                "{} dB, E2E-NFM {} dB, allowed loss {max_loss} dB",
-                m.sinad_db, base.sinad_db
-            ))
-        })?;
-    }
+    ensure(m.sinad_db >= base.sinad_db - max_sinad_loss_db, || {
+        Failure::new(case, "SINAD too far below E2E-NFM").detail(format_args!(
+            "{} dB, E2E-NFM {} dB, allowed loss {max_sinad_loss_db} dB",
+            m.sinad_db, base.sinad_db
+        ))
+    })?;
     ensure(
         m.open_delay_s <= NFM_MAX_OPEN_DELAY_S && m.close_delay_s <= NFM_MAX_CLOSE_DELAY_S,
         || Failure::new(case, "the gate switched too late"),
@@ -848,18 +847,17 @@ pub(super) fn e2e_nfm_ctcss_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
         arena,
         NFM_QUICK_SAMPLES,
         NFM_MIN_SUBTONE_DB_F32,
-        Some(NFM_MAX_SINAD_LOSS_DB),
+        NFM_MAX_SINAD_LOSS_DB_F32,
     )
 }
 
-/// The 1 dB SINAD limit is not checked for Q15 here: the chain loses 1.07 dB (open item M22-3).
-/// The ignored host test `ctcss_q15_sinad_within_1_db` keeps the specified check.
+/// Q15 has its own SINAD threshold of 1.1 dB (decision D23; measured 1.07 dB).
 pub(super) fn e2e_nfm_ctcss_q15(arena: &mut Arena<'_>) -> Result<(), Failure> {
     ctcss_case::<CQ15>(
         "e2e_nfm_ctcss_q15",
         arena,
         NFM_QUICK_SAMPLES,
         NFM_MIN_SUBTONE_DB_Q15,
-        None,
+        NFM_MAX_SINAD_LOSS_DB_Q15,
     )
 }

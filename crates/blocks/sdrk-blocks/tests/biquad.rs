@@ -143,25 +143,11 @@ fn notch_removes_1_khz_with_q_10() {
     assert!(tone_gain::<f32>(&c, 2_000.0).abs() < 1.0);
 }
 
-/// The specified depth (40 dB) for Q15. Not met: the zeros of the numerator
-/// `[1, -2 cos w0, 1] / a0` are rounded to Q2.14, which limits the depth to 34.9 dB (open item
-/// M22-3). Run with `--ignored` to see the miss.
+/// The Q15 notch depth: at least 34 dB, the separate Q15 threshold of test 3 (decision D23).
+/// The zeros of the numerator `[1, -2 cos w0, 1] / a0` are rounded to Q2.14, which limits the
+/// depth to 34.9 dB; `f32` keeps the 40 dB above.
 #[test]
-#[ignore = "open item M22-3: the Q2.14 coefficients limit the Q15 notch to 34.9 dB"]
 fn notch_removes_1_khz_with_q_10_in_q15() {
-    let c = BiquadConfig {
-        response: BiquadResponse::Notch,
-        cutoff_hz: 1_000.0,
-        q: 10.0,
-        ..BiquadConfig::default()
-    };
-    let q = tone_gain::<Q15>(&c, 1_000.0);
-    assert!(q <= -40.0, "Q15 notch: {q} dB");
-}
-
-/// Regression guard for the recorded Q15 depth (not a threshold of the specification).
-#[test]
-fn q15_notch_depth_stays_at_the_recorded_value() {
     let c = BiquadConfig {
         response: BiquadResponse::Notch,
         cutoff_hz: 1_000.0,

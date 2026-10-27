@@ -217,7 +217,11 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 - `cargo xtask schema` regenerates the schema (version unchanged). Add the kind to the WASM declarations if they list kinds.
 - `examples/flows/nfm_receiver.json` (+ YAML): a node `ctcss` = `biquad` (highpass, order 4, `cutoff_hz` 300) after `fm_demod`; the comments explain CTCSS (67–254 Hz).
 - **Silence after the squelch (amends M19 test 7):** M19 checks that the audio of `nfm_receiver` is exactly zero while the squelch is closed. With the `ctcss` node this holds for f32 (the DF2T state decays and is flushed to zero; assert exactly zero from 0.2 s after the transmission). For Q15 the DF1 recursion can keep a limit cycle (test 6): assert that the output of `fm_demod` is exactly zero and the output of `ctcss` stays within the limit-cycle amplitude recorded by test 6. The kernel chain of E2E-NFM (M19) has no biquad and keeps its exact-zero check unchanged. Update the M19 flow test accordingly.
+
+  > **Amendment 2026-10-27 (maintainer approval, D22):** the Q15 high-pass of `ctcss` (order 4, 300 Hz at 48 kHz, `fs / 160`) does not settle at a limit cycle but at a constant DC rest of the DF1 recursion (the rounding amplification `1 / |1 + a1 + a2|`): measured 321 LSB (about -40 dBFS, inaudible) after the squelch closes. For Q15 the bound of this silence check is that measured value: the output of `fm_demod` is exactly zero and the output of `ctcss` is exactly zero before the transmission and at most 321 LSB from 0.2 s after it (test `the_q15_flow_keeps_at_most_the_approved_rest_after_the_squelch`). The `f32` flow stays exactly zero. The 16 LSB of test 6 still apply to `butter4_lp`.
 - `am_receiver` and `ssb_receiver`: a node `audio` = `biquad` (lowpass, order 4, `cutoff_hz` 4000 for AM, 2800 for SSB) after the demodulator, with a comment that `cutoff_hz` can be changed at runtime.
+
+  > **Amendment 2026-10-27 (implementer decision, D25):** the node is named `audio_filter`, not `audio`: inputs, nodes and outputs share one namespace (`duplicate_name`) and the output of both flows is already named `audio`; renaming the output instead would break every consumer of the flows.
 
 ### 5. Testkit
 
@@ -226,6 +230,8 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 ### 6. End-to-end checks
 
 - **E2E-NFM with CTCSS (`e2e_nfm_ctcss_{f32,q15}`):** the E2E-NFM signal of M19 with an added 88.5 Hz sub-tone at 10 % of the deviation, through the updated `nfm_receiver` chain: the 88.5 Hz component is at least **50 dB (f32) / 40 dB (Q15)** below the 1 kHz tone, and the SINAD at 1 kHz stays within 1 dB of E2E-NFM.
+
+  > **Amendment 2026-10-27 (maintainer approval, D23):** the SINAD limit is stated separately per type: within **1 dB (f32) / 1.1 dB (Q15)** of E2E-NFM (Q15 measured 1.07 dB, f32 0.67 dB). The Q2.14 coefficients and the single rounding per section of the Q15 DF1 add rounding noise that the `f32` chain does not have. The suite cases `e2e_nfm_ctcss_f32` and `e2e_nfm_ctcss_q15` and the host tests check these limits.
 - E2E-AM and E2E-SSB with the new audio low-pass keep their thresholds.
 
 ### 7. SIMD backend and instruction counts
@@ -268,9 +274,11 @@ All stateful Rust golden tests run whole and in random chunks (ChunkPlan seed = 
 1. Golden tests for every case, whole and chunked; invariance tests for both kernels and the block (20 plans each).
 2. Butterworth: the magnitude response of `butterworth_sos` (f64, evaluated in Rust) is −3.0103 dB ± 0.001 dB at the cutoff for every order.
 3. Block: a 1 kHz tone through `biquad` (lowpass, order 4, cutoff 2 kHz at 48 kHz) is attenuated by less than 0.1 dB, an 8 kHz tone by at least 48 dB; `notch` at 1 kHz with q 10 attenuates 1 kHz by at least 40 dB.
+   > **Amendment 2026-10-27 (maintainer approval, D23):** the notch depth is stated separately per type: at least **40 dB (f32) / 34 dB (Q15)**. The Q2.14 rounding of `b1` moves the zeros of `[1, -2 cos w0, 1] / a0` off the unit circle, which limits the Q15 notch to 34.92 dB.
 4. Runtime: `cutoff_hz` and `q` changes take effect from the next call; the output stays finite.
 5. Validation: Q15 cutoffs below `fs/500`, odd orders, `order ≠ 2` for bandpass/notch and coefficients that do not fit Q2.14 give errors.
 6. Q15 limit cycle: after the input becomes silent, the output of the `butter4_lp` filter settles to a limit cycle or zero; record the largest amplitude in `docs/kernels.md` and assert it is at most 16 LSB.
+   > **Note 2026-10-27 (implementer decision, D24):** met for `butter4_lp` (1 LSB). The Q15 cutoff guard of the block stays `fs / 500` as specified in §3; the growth of the limit cycle at lower cutoffs (1, 5 and 54 LSB at 0.1, 0.05 and 0.02 fs) is documented in `docs/kernels.md` and `docs/blocks.md`.
 7. Extremes (`extremes_m22`): no panic on silence, full scale, NaN and ±∞ (f32), and the Q15 corners.
 8. SIMD: where the two-lane path exists, `backend_vs_fallback_biquad` is bit-exact at every level; the counts pass their limits.
    > **Amendment 2026-10-27 (maintainer direction, D15 to D18):** the two-lane path is replaced by the wavefront of D18 for all four types at every level, so `backend_vs_fallback_biquad` and `sdrk-backend-simd/tests/biquad.rs` are bit-exact at every level for all four types; the counts are judged against KFR 7.2.0 (`f32`, `C32`; CMSIS-DSP 1.18.0 at `simd128`) and our fallback (`Q15`, `CQ15`) (D15), and the fallbacks against CMSIS-DSP 1.18.0 (D16).
@@ -287,7 +295,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Design functions `biquad_coefs`, `butterworth_sos`, `to_q14`, `to_f32_sos`
 - [x] Block `biquad`, pipeline kind, regenerated schema; updated flows with YAML twins
 - [x] SIMD decision for `biquad` (two-lane path where it pays off), counts and limits (amended: wavefront for all four types, D15 to D18)
-- [ ] Golden cases (seeds 424–429 and the design cases), suite, invariance, extremes, E2E checks
+- [x] Golden cases (seeds 424–429 and the design cases), suite, invariance, extremes, E2E checks (amended: separate Q15 thresholds, D22, D23)
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
 
 ## Delivery status
@@ -298,15 +306,12 @@ Complete:
 - Design functions `biquad_coefs`, `butterworth_sos`, `to_q14`, `to_f32_sos`.
 - The `biquad` block, its pipeline kind and the regenerated schema; the updated flows `nfm_receiver`, `am_receiver` and `ssb_receiver` with their YAML twins. The SSB flow (delivered by M21) uses the audio low-pass (order 4, 2800 Hz) and E2E-SSB stays within its thresholds; E2E-AM keeps its thresholds.
 - SIMD (amended, D15 to D19): the wavefront of D18 for all four types at every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`, portable), bit-exact with the fallback. Counts: every `biquad*` entry of `benches/limits.json` is within the limit of 1.10 on all four platforms in full `cargo xtask count` runs (`benches/results/`, `docs/performance.md`); `f32`/`C32` against KFR 7.2.0 (CMSIS-DSP 1.18.0 at `simd128`) and the fallbacks against CMSIS-DSP 1.18.0 are `release`, `Q15`/`CQ15` against our fallback are `info` (D21).
-- Golden cases (seeds 424 to 429 and the design cases, regenerated with Python 3.12, `--check` passes), suite cases, invariance and extremes; the `f32` thresholds of the block tests and of E2E-NFM with CTCSS.
-- Documentation and the decisions log (D15 to D20).
+- Golden cases (seeds 424 to 429 and the design cases, regenerated with Python 3.12, `--check` passes), suite cases, invariance and extremes; the thresholds of the block tests and of E2E-NFM with CTCSS, for Q15 the separately stated ones (notch 34 dB, SINAD loss 1.1 dB, D23; the suite case `e2e_nfm_ctcss_q15` checks the SINAD loss); the silence check of §4 in `f32` (exactly zero) and Q15 (at most 321 LSB, D22). No specified check is `#[ignore]`d.
+- The Q15 cutoff guard `fs / 500` with the limit cycle of low cutoffs documented (D24); the node name `audio_filter` (D25).
+- Documentation and the decisions log (D15 to D25). Open items M22-1, M22-2, M22-3 and M22-6 are closed.
 
-Open (the unticked checklist item is open only because of M22-2 and M22-3; the other items need a maintainer decision but do not leave a specified check unmet):
+Open (maintainer decisions; no specified check is unmet):
 
-- M22-1: Q15 limit cycle of the low-cutoff low-pass (test 6 is met for `butter4_lp`; whether the Q15 cutoff guard of the block should be tightened is undecided).
-- M22-2: `ctcss` offset after the squelch closes in Q15 (321 LSB against the 16 LSB of §4 and test 10); the specified check is an `#[ignore]`d test.
-- M22-3: Q15 notch depth (34.92 dB against 40 dB, test 3) and CTCSS SINAD loss in Q15 (1.07 dB against 1 dB, §6); both specified values are kept in `#[ignore]`d tests.
-- M22-6: node name `audio_filter` against `audio` of §4.
 - M22-8: KFR is not built for wasm32 (it needs Emscripten), so `simd128` is judged against CMSIS-DSP.
 - M22-9: `biquad_real_fallback` (`f32`) at 1.04, 1.09 and 1.01 of CMSIS-DSP at `sse2`, `sse4.2` and `avx2`, above the goal of 1.00 (within the release limit of 1.10).
 - M22-10: `biquad` is not in the Cortex-M4 report (comparison with CMSIS-DSP built with the DSP extension undecided).

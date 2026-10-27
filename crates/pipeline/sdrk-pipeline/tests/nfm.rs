@@ -182,22 +182,17 @@ fn the_threshold_can_be_moved_while_running() {
     assert!(p.set_param("gate", "tau_s", json!(0.1)).is_err());
 }
 
-/// Where the Q15 `ctcss` filter (DF1, high-pass 300 Hz at 48 kHz, order 4) settles after the
-/// squelch closed, in LSB. Measured: a constant 321 LSB (1 %), not a cycle. The 16 LSB of test 6
-/// hold for the low-pass `butter4_lp` at 0.1 fs only; the rounding of a high-pass with a cutoff
-/// of fs / 160 is amplified by `1 / |1 + a1 + a2|` (decisions log, open item M22-2).
-const CTCSS_Q15_SETTLED_LSB: i32 = 321;
+/// The bound for the output of the Q15 `ctcss` filter (DF1, high-pass 300 Hz at 48 kHz, order 4)
+/// after the squelch closed, in LSB. Measured: a constant DC rest of 321 LSB (about -40 dBFS,
+/// inaudible), not a cycle. The 16 LSB of test 6 hold for the low-pass `butter4_lp` at 0.1 fs;
+/// the rounding of a high-pass with a cutoff of fs / 160 is amplified by `1 / |1 + a1 + a2|`.
+/// The maintainer approved the measured value as the Q15 bound (decision D22, M22 section 4);
+/// the `f32` flow stays exactly zero (`the_squelch_gates_the_transmission`).
+const CTCSS_Q15_MAX_REST_LSB: i32 = 321;
 
 #[test]
-fn the_q15_flow_is_silent_after_the_squelch_at_the_recorded_level() {
-    q15_flow_silence(CTCSS_Q15_SETTLED_LSB);
-}
-
-/// The specified limit of test 6 (16 LSB). Not met by the Q15 `ctcss` high-pass.
-#[test]
-#[ignore = "open item M22-2: the Q15 ctcss high-pass settles at 321 LSB, not 16"]
-fn the_q15_flow_is_silent_after_the_squelch_within_16_lsb() {
-    q15_flow_silence(16);
+fn the_q15_flow_keeps_at_most_the_approved_rest_after_the_squelch() {
+    q15_flow_silence(CTCSS_Q15_MAX_REST_LSB);
 }
 
 fn q15_flow_silence(limit_lsb: i32) {
@@ -239,7 +234,7 @@ fn q15_flow_silence(limit_lsb: i32) {
         raw[to + 9600..].iter().all(|v| *v == 0),
         "demod silence after"
     );
-    // ... and the output of `ctcss` (Q15, DF1) stays at the recorded level of test 6.
+    // ... and the output of `ctcss` (Q15, DF1) stays within the approved DC rest (D22).
     let worst = |x: &[i16]| x.iter().map(|v| i32::from(*v).abs()).max().unwrap();
     assert_eq!(worst(&audio[..from]), 0, "before");
     let after = worst(&audio[to + 9600..]);

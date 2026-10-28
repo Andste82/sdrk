@@ -314,6 +314,100 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
+  "fir_interpolate_real": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "VOLK for wasm32 is its portable `generic` code (D12), and its wasm32 build (benches/refs/volk-wasm.c) does not hold `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, reported as information"
+    }
+  },
+  "resample_real": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "VOLK for wasm32 is its portable `generic` code (D12), and its wasm32 build (benches/refs/volk-wasm.c) does not hold `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, reported as information"
+    }
+  },
+  "fir_interpolate_real_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    }
+  },
+  "resample_real_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    }
+  },
   "mag_sq": {
     "sse2": {
       "status": "release"

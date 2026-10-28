@@ -491,13 +491,13 @@ pub(super) fn resample_real_vs_reference(arena: &mut Arena<'_>) -> Result<(), Fa
             fb.get(..n).unwrap_or_default(),
             110.0,
         )?;
-        ensure(
-            bit_exact(
-                fb.get(..n).unwrap_or_default(),
-                fac.get(..n).unwrap_or_default(),
-            )
-            .is_none(),
-            || Failure::new(CASE, "facade differs"),
+        // The SIMD backend sums in another order (and with FMA where the level has it).
+        min_snr(
+            CASE,
+            "facade below 110 dB",
+            rf.get(..n).unwrap_or_default(),
+            fac.get(..n).unwrap_or_default(),
+            110.0,
         )?;
     }
     let mut c = arena.carver();

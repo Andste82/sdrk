@@ -9,5 +9,7 @@ pub mod count;
 pub mod count_embedded;
 pub mod emu;
 pub mod layers;
+pub mod mca;
+pub mod measure;
 pub mod scan;
 pub mod wasm;

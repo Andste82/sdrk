@@ -13,6 +13,11 @@ achievable optimum and a regression guard close to the measured SNR. A bit-exact
 with our own integer model, not closeness to the optimum; the policy adds an SNR check against an `f64`
 golden for those kernels.
 
+**Report.** When the environment variable `SDRK_GOLDEN_REPORT` names a file, every comparison of
+`sdrk_testkit::golden::assert_matches` appends one JSON line to it: the case, the sample type, the class,
+the floor, the achieved SNR, the achievable optimum (the expected values rounded once to the sample type) and
+whether it passed. `cargo measure <kernel>` uses it (`docs/performance.md`).
+
 ## Setup
 
 ```sh

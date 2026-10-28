@@ -1521,6 +1521,64 @@ impl Session {
             .ok_or_else(|| anyhow!("no snr_db in {out}"))
     }
 
+    /// The execution counts per instruction of `which` on `kernel` under callgrind, for level 2
+    /// of the measurement policy: the counts of a run with `calls` calls minus those of a run
+    /// with none, so that only the counted calls remain (the differential method of
+    /// [`Session::per_sample`], per instruction).
+    fn profile(
+        &self,
+        kernel: &str,
+        which: &str,
+        variant: &Variant,
+    ) -> anyhow::Result<crate::mca::Counts> {
+        if self.plan.counter != Counter::Callgrind {
+            bail!(
+                "simulated cycles need the execution counts of callgrind; the level {} counts with {}",
+                self.plan.level,
+                self.plan.counter.describe()
+            );
+        }
+        let calls = K * (N / variant.samples).max(1);
+        let mut runs = Vec::new();
+        for k in [0, calls] {
+            let file = self
+                .scratch
+                .join(format!("mca-{kernel}-{which}-{k}.callgrind"));
+            let run = Run {
+                args: run_args(kernel, which, k, calls, variant),
+                volk_config: &self.volk_config,
+            };
+            let out = self
+                .command("valgrind", &run)
+                .args([
+                    "-q",
+                    "--tool=callgrind",
+                    "--dump-instr=yes",
+                    "--compress-pos=no",
+                    "--compress-strings=no",
+                ])
+                .arg(format!("--callgrind-out-file={}", file.display()))
+                .arg(&self.binary)
+                .args(&run.args)
+                .stdout(Stdio::null())
+                .output()
+                .context("cannot run valgrind")?;
+            if !out.status.success() {
+                bail!(
+                    "callgrind failed for {:?}: {}",
+                    run.args,
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
+            let text = std::fs::read_to_string(&file)
+                .with_context(|| format!("cannot read {}", file.display()))?;
+            runs.push(crate::mca::parse_callgrind(&text));
+        }
+        let [empty, full] = <[crate::mca::Counts; 2]>::try_from(runs)
+            .map_err(|_| anyhow!("two callgrind runs expected"))?;
+        Ok(crate::mca::difference(&full, &empty))
+    }
+
     /// A JSON line of the measurement binary (`info`, `volk-info`, `volk-impls`).
     fn query(&self, args: &[&str]) -> anyhow::Result<Value> {
         let out = self.plain(&Run {
@@ -1777,34 +1835,7 @@ fn measure_level(
     variants: bool,
     own: &BTreeMap<&'static str, OwnNumbers>,
 ) -> anyhow::Result<LevelResult> {
-    let binary = build(root, plan, refs)?;
-    let scratch = root.join("benches").join("target").join(plan.level);
-    std::fs::create_dir_all(&scratch)?;
-    let cpuid = match plan.counter {
-        Counter::Sde(SdeCpu::Sse2) => Some((CPUID_SSE2, "cpuid-sse2.def")),
-        Counter::Sde(SdeCpu::Sse42) => Some((CPUID_SSE42, "cpuid-sse4.2.def")),
-        _ => None,
-    }
-    .map(|(text, name)| -> anyhow::Result<PathBuf> {
-        let path = scratch.join(name);
-        std::fs::write(&path, text)?;
-        Ok(path)
-    })
-    .transpose()?;
-    let session = Session {
-        plan: *plan,
-        binary,
-        volk_config: volk_config(scratch.join("volk-pinned"), plan.volk_pin.config())?,
-        refs_lib: refs.join("lib"),
-        cpuid,
-        scratch: scratch.clone(),
-        qemu: if plan.counter == Counter::Qemu {
-            Some(qemu_tools(root)?)
-        } else {
-            None
-        },
-        markers: std::cell::OnceCell::new(),
-    };
+    let session = session(root, plan, refs)?;
     let volk = session.query(&["volk-info"])?;
     let mut listed: Vec<String> = session
         .plain(&Run {
@@ -1835,6 +1866,43 @@ fn measure_level(
         measurements: out,
         volk,
     })
+}
+
+/// Builds the measurement binary of `plan` and sets up its counting session.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "std::process::Command and the Windows file system calls are large; xtask is a host tool"
+)]
+fn session(root: &Path, plan: &LevelPlan, refs: &Path) -> anyhow::Result<Session> {
+    let binary = build(root, plan, refs)?;
+    let scratch = root.join("benches").join("target").join(plan.level);
+    std::fs::create_dir_all(&scratch)?;
+    let cpuid = match plan.counter {
+        Counter::Sde(SdeCpu::Sse2) => Some((CPUID_SSE2, "cpuid-sse2.def")),
+        Counter::Sde(SdeCpu::Sse42) => Some((CPUID_SSE42, "cpuid-sse4.2.def")),
+        _ => None,
+    }
+    .map(|(text, name)| -> anyhow::Result<PathBuf> {
+        let path = scratch.join(name);
+        std::fs::write(&path, text)?;
+        Ok(path)
+    })
+    .transpose()?;
+    let session = Session {
+        plan: *plan,
+        binary,
+        volk_config: volk_config(scratch.join("volk-pinned"), plan.volk_pin.config())?,
+        refs_lib: refs.join("lib"),
+        cpuid,
+        scratch: scratch.clone(),
+        qemu: if plan.counter == Counter::Qemu {
+            Some(qemu_tools(root)?)
+        } else {
+            None
+        },
+        markers: std::cell::OnceCell::new(),
+    };
+    Ok(session)
 }
 
 #[allow(
@@ -2273,6 +2341,144 @@ fn measure_levels(
                 .ok_or_else(|| anyhow!("no result for the level {}", plan.level))
         })
         .collect()
+}
+
+/// The judged records of `kernels` on the selected levels of `platform`, for `cargo xtask
+/// measure`: one `(level, records)` pair per level, the records as in the results file
+/// (instructions, ratio, comparison, status, verdict, SNR). Nothing is written, and the
+/// informational variants are not measured.
+///
+/// # Errors
+/// An unknown platform, level or kernel, or a tool that is missing or fails.
+pub fn judged_records(
+    root: &Path,
+    platform: &str,
+    levels: &[String],
+    kernels: &[String],
+) -> anyhow::Result<Vec<(&'static str, BTreeMap<String, Value>)>> {
+    let plans = select_plans(platform, levels)?;
+    for k in kernels {
+        if !KERNELS.iter().any(|s| s.name == k) {
+            bail!("unknown kernel `{k}`");
+        }
+    }
+    let limits_path = root.join("benches").join("limits.json");
+    let limits = Limits::parse(
+        &std::fs::read_to_string(&limits_path)
+            .with_context(|| format!("cannot read {}", limits_path.display()))?,
+    )?;
+    let options = Options {
+        platform: Some(platform.to_string()),
+        levels: levels.to_vec(),
+        kernels: kernels.to_vec(),
+        ..Options::default()
+    };
+    let results = measure_levels(root, &plans, &options)?;
+    Ok(plans
+        .iter()
+        .zip(&results)
+        .map(|(plan, result)| {
+            let rule = if plan.baseline.is_some() {
+                Rule::OwnLevel
+            } else {
+                Rule::Reference
+            };
+            let judged = evaluate(&limits, rule, plan.level, &result.measurements);
+            (plan.level, judged.records)
+        })
+        .collect())
+}
+
+/// The instruction profiles of one count entry for level 2: ours and the judged comparison.
+#[derive(Clone, Debug)]
+pub struct EntryProfiles {
+    /// The count entry.
+    pub kernel: String,
+    /// The comparison (as in the results file).
+    pub compared_with: String,
+    /// Samples processed by the counted calls (the divisor of the per-sample figures).
+    pub samples: u64,
+    /// Our side (the fallback for a fallback entry).
+    pub ours: crate::mca::Counts,
+    /// The judged comparison.
+    pub other: crate::mca::Counts,
+}
+
+/// The instruction profiles of `kernels` at `level` of `platform` (level 2 of the measurement
+/// policy): per entry, the execution counts per instruction of the counted calls for our side
+/// and for the judged comparison. Only levels counted with callgrind and judged against a
+/// reference can be profiled; the FFTs have the restore of their input subtracted.
+///
+/// # Errors
+/// An unknown platform, level or kernel, a level that is not counted with callgrind, or a tool
+/// that is missing or fails.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "std::process::Command and the plan table are large; xtask is a host tool"
+)]
+pub fn profiles(
+    root: &Path,
+    platform: &str,
+    level: &str,
+    kernels: &[String],
+) -> anyhow::Result<Vec<EntryProfiles>> {
+    let plan = PLANS
+        .iter()
+        .find(|p| p.platform == platform && p.level == level)
+        .ok_or_else(|| anyhow!("the platform `{platform}` has no level `{level}`"))?;
+    if plan.baseline.is_some() {
+        bail!("the level {level} is judged against our own numbers, not against a reference");
+    }
+    if plan.counter != Counter::Callgrind {
+        bail!(
+            "simulated cycles need the execution counts of callgrind; the level {level} counts with {}",
+            plan.counter.describe()
+        );
+    }
+    let refs = references(root, plan.refs)?;
+    let session = session(root, plan, &refs)?;
+    let mut out = Vec::new();
+    for spec in KERNELS
+        .iter()
+        .filter(|s| kernels.iter().any(|k| k == s.name))
+    {
+        if !spec.family.measured_at(plan) {
+            continue;
+        }
+        let (gate, _) = comparisons(plan, spec);
+        let info = session.query(&["info", spec.name])?;
+        let compared_with = info
+            .get("impls")
+            .and_then(|i| i.get(gate.implementation()))
+            .and_then(Value::as_str)
+            .unwrap_or(gate.implementation())
+            .to_string();
+        println!(
+            "==> {level} {} (instruction profiles, ours vs {compared_with})",
+            spec.name
+        );
+        let standard = Variant::standard(spec);
+        let restore = if spec.family.is_fft() {
+            Some(session.profile(spec.name, "restore", &standard)?)
+        } else {
+            None
+        };
+        let profile = |which: &str| -> anyhow::Result<crate::mca::Counts> {
+            let p = session.profile(spec.name, which, &standard)?;
+            Ok(match &restore {
+                Some(r) => crate::mca::difference(&p, r),
+                None => p,
+            })
+        };
+        out.push(EntryProfiles {
+            kernel: spec.name.to_string(),
+            compared_with,
+            samples: K * (N / standard.samples).max(1) * standard.samples,
+            ours: profile(spec.family.measured())?,
+            other: profile(gate.implementation())?,
+        });
+    }
+    Ok(out)
 }
 
 /// Runs `cargo xtask count ...`.

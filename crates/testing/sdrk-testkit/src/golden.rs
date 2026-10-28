@@ -618,7 +618,118 @@ fn array_sample_type(array: &Array) -> Option<SampleType> {
 ///
 /// Returns the [`Comparison`] on success and [`GoldenError::Mismatch`]
 /// (with case name, achieved SNR and first mismatch index) on failure.
+///
+/// When the environment variable [`REPORT_ENV`] names a file, every call appends
+/// one JSON line with the outcome to it (see [`report_line`]); `cargo xtask
+/// measure` reads these lines. Without the variable nothing is written.
 pub fn assert_matches<T: Sample>(
+    case: &GoldenCase,
+    expected: &Array,
+    actual: &[T],
+) -> Result<Comparison> {
+    let result = compare_case(case, expected, actual);
+    if let Some(path) = std::env::var_os(REPORT_ENV) {
+        let line = report_line::<T>(case, expected, &result);
+        // A report that cannot be written must not hide the outcome of the comparison.
+        let _ = append_line(Path::new(&path), &line);
+    }
+    result
+}
+
+/// The environment variable that turns on the report of [`assert_matches`]: the
+/// path of a file to which one JSON line per comparison is appended.
+pub const REPORT_ENV: &str = "SDRK_GOLDEN_REPORT";
+
+/// The JSON line that [`assert_matches`] appends to the report file for one
+/// comparison:
+///
+/// - `case`: `kernel/case`; `type`: the sample type of the actual data;
+/// - `class`: `bit_exact`, `tolerance` or `max_abs_err`; `snr_db_min`: the floor of a
+///   `tolerance` case;
+/// - `snr_db`: the achieved SNR (`null` when it is not finite; then `exact` tells
+///   whether the error was zero);
+/// - `optimum_db`: for a `tolerance` case, the achievable optimum of the accuracy policy
+///   (`docs/kernels.md`): the SNR that the expected values reach when they are rounded
+///   once to the sample type (f32, or Q15 with round half up and saturation);
+/// - `passed`, and `detail` for a failure.
+#[must_use]
+pub fn report_line<T: Sample>(
+    case: &GoldenCase,
+    expected: &Array,
+    result: &Result<Comparison>,
+) -> String {
+    let finite = |x: f64| if x.is_finite() { Some(x) } else { None };
+    let (class, snr_db_min, skip) = match case.tolerance {
+        Tolerance::BitExact => ("bit_exact", None, None),
+        Tolerance::Snr { min_db, skip, .. } => ("tolerance", Some(min_db), Some(skip)),
+        Tolerance::MaxAbsErr { .. } => ("max_abs_err", None, None),
+    };
+    let snr_db = match result {
+        Ok(c) => c.snr_db,
+        Err(GoldenError::Mismatch { snr_db, .. }) => *snr_db,
+        Err(_) => f64::NAN,
+    };
+    let optimum_db = skip
+        .and_then(|skip| optimum_db(T::TYPE, expected, skip))
+        .and_then(finite);
+    let value = serde_json::json!({
+        "case": format!("{}/{}", case.kernel, case.case),
+        "type": format!("{:?}", T::TYPE),
+        "class": class,
+        "snr_db_min": snr_db_min,
+        "snr_db": finite(snr_db),
+        "exact": snr_db == f64::INFINITY,
+        "optimum_db": optimum_db,
+        "passed": result.is_ok(),
+        "detail": result.as_ref().err().map(ToString::to_string),
+    });
+    value.to_string()
+}
+
+/// The SNR of the expected values rounded once to `sample_type`, against the
+/// expected values themselves; `None` where no rounding rule applies.
+fn optimum_db(sample_type: SampleType, expected: &Array, skip: usize) -> Option<f64> {
+    let round: fn(f64) -> f64 = match sample_type {
+        // The f64 value rounded to the nearest f32 (ties to even), as `as` does.
+        #[allow(clippy::cast_possible_truncation, reason = "the rounding is the point")]
+        SampleType::F32 | SampleType::C32 => |x| f64::from(x as f32),
+        SampleType::Q15 | SampleType::CQ15 => round_q15,
+        _ => return None,
+    };
+    let view = expected_view(expected).ok()?;
+    let c = match &view {
+        View::Real(e) => compare_real(e, e.iter().map(|&x| round(x)), skip),
+        View::Complex(e) => compare_complex(
+            e,
+            e.iter().map(|c| Complex64::new(round(c.re), round(c.im))),
+            skip,
+        ),
+    };
+    Some(c.snr_db)
+}
+
+/// `x` rounded to Q15 by the rules of the numeric contract (round half up, saturate),
+/// as an f64 value.
+fn round_q15(x: f64) -> f64 {
+    let raw = libm::floor(x * 32768.0 + 0.5).clamp(-32768.0, 32767.0);
+    raw / 32768.0
+}
+
+/// Appends `line` and a newline to `path` with one write, so that the lines of tests
+/// that run in parallel do not interleave.
+fn append_line(path: &Path, line: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut text = String::with_capacity(line.len() + 1);
+    text.push_str(line);
+    text.push('\n');
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?
+        .write_all(text.as_bytes())
+}
+
+fn compare_case<T: Sample>(
     case: &GoldenCase,
     expected: &Array,
     actual: &[T],

@@ -123,6 +123,39 @@ fn the_measured_platforms_report_every_biquad_entry() {
     }
 }
 
+/// Both sides of the Cortex-M4 comparison are tuned for the same core (D30): the workload is
+/// built with `-C target-cpu=cortex-m4`, as CMSIS-DSP is with `-mcpu=cortex-m4`, and the report
+/// records it.
+#[test]
+fn the_cortex_m4_workload_is_built_for_the_cpu_of_the_reference() {
+    let config = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("targets")
+        .join("qemu-cortex-m4")
+        .join(".cargo")
+        .join("config.toml");
+    let text = fs::read_to_string(&config).expect("read the cargo config of the M4 target");
+    let flag = format!("\"target-cpu={}\"", xtask::count_embedded::TARGET_CPU);
+    assert!(
+        text.lines()
+            .any(|l| l.trim_start().starts_with("rustflags") && l.contains(&flag)),
+        "{} does not set {flag}",
+        config.display()
+    );
+    let result = bench_file("results/cortex-m4.json");
+    assert_eq!(
+        result["build"]["target_cpu"].as_str(),
+        Some(xtask::count_embedded::TARGET_CPU)
+    );
+    let cmsis = result["references"]["libraries"]["cmsis_dsp"]["build"]
+        .as_str()
+        .unwrap_or("");
+    assert!(
+        cmsis.contains(&format!("-mcpu={}", xtask::count_embedded::TARGET_CPU)),
+        "{cmsis}"
+    );
+}
+
 /// The Cortex-M4 report (open item M22-10, closed) has the four biquad kernels of our fallback
 /// with CMSIS-DSP built for the M4F next to them and both SNRs on the same input, and no limit
 /// or verdict (report only, like every entry of that report).

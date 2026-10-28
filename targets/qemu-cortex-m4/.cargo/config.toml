@@ -1,5 +1,9 @@
 [build]
 target = "thumbv7em-none-eabihf"
 
+# `target-cpu=cortex-m4`: the code is tuned for the CPU it runs on (QEMU `-cpu cortex-m4`), as
+# CMSIS-DSP, the reference of the Cortex-M4 report, is compiled with `-mcpu=cortex-m4` (D30).
+# Without it LLVM tunes for a generic Armv7E-M and selects `vmla.f32`/`vmls.f32`, which the
+# Cortex-M4 executes in 3 cycles against 1 + 1 for `vmul.f32` and `vadd.f32`.
 [target.thumbv7em-none-eabihf]
-rustflags = ["-C", "link-arg=-Tlink.x"]
+rustflags = ["-C", "link-arg=-Tlink.x", "-C", "target-cpu=cortex-m4"]

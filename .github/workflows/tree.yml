@@ -990,42 +990,68 @@ jobs:
 
   count_m4_qemu:
     # Instructions per sample of the fallback on a Cortex-M4F, the biquad kernels next to
-    # CMSIS-DSP built for the M4F; report only, no limits.
+    # CMSIS-DSP built for the M4F; report only, no limits. In the pinned container with the apt
+    # snapshot of the other count jobs, so that arm-none-eabi-gcc (the compiler of the CMSIS-DSP
+    # reference, benches/refs/build.sh cortex-m4) is the one of the committed results.
     name: count_m4_qemu
     needs: build_m4_qemu
     if: ${{ inputs.scope == 'full' }}
     runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
     timeout-minutes: 120
     steps:
+      - name: Packages of the pinned snapshot (the C cross compiler of CMSIS-DSP, QEMU build tools)
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+          apt-get update --snapshot "$COUNT_IMAGE_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
+            git ca-certificates curl xz-utils build-essential ninja-build pkg-config \
+            python3 python3-venv libglib2.0-dev libpixman-1-dev \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/rust
+      - name: Install toolchain from rust-toolchain.toml
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+      - uses: Swatinem/rust-cache@v2
         with:
-          cache-key: count-m4
+          shared-key: count-m4
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Cache the C references
+        uses: actions/cache@v4
+        with:
+          path: benches/target/refs
+          key: refs-cortex-m4-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
       - name: Cache QEMU with plugins
         id: qemu-cache
         uses: actions/cache@v4
         with:
           path: ~/qemu-prefix
-          key: qemu-arm-softmmu-${{ env.CI_QEMU_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+          key: qemu-arm-softmmu-${{ env.CI_QEMU_VERSION }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
       - name: Build QEMU (system mode, Arm) with plugin support
         # The plugin API must match the plugin that `xtask` builds from the same tag.
         if: steps.qemu-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libglib2.0-dev libpixman-1-dev python3-venv
-          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" | tar -xJ
-          mkdir qemu-build && cd qemu-build
-          ../qemu-$CI_QEMU_VERSION/configure --prefix="$HOME/qemu-prefix" --target-list=arm-softmmu --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
+          echo "$CI_QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
+          tar -xJf ~/qemu.tar.xz -C "$HOME"
+          mkdir -p ~/qemu-build-arm && cd ~/qemu-build-arm
+          ~/qemu-$CI_QEMU_VERSION/configure --prefix="$HOME/qemu-prefix" --target-list=arm-softmmu --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
           ninja
           ninja install
       - name: Use QEMU
+        shell: bash
         run: |
-          sudo apt-get install -y libglib2.0-dev pkg-config
           echo "SDRK_QEMU_ARM=$HOME/qemu-prefix/bin/qemu-system-arm" >> "$GITHUB_ENV"
           echo "SDRK_QEMU_TAG=v$CI_QEMU_VERSION" >> "$GITHUB_ENV"
-      - name: Install the C cross compiler of the CMSIS-DSP reference
-        # benches/refs/build.sh cortex-m4: arm-none-eabi-gcc with the newlib headers.
-        run: sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Compiler of the CMSIS-DSP reference
+        run: arm-none-eabi-gcc --version | head -n 1
       - name: Count
         run: cargo xtask count --platform cortex-m4
       - name: Report

@@ -335,35 +335,103 @@ fn cascade_f32<T: F32Section>(
 
 /// The `Q15` and `CQ15` cascade for targets with 64-bit integer registers (64-bit targets and
 /// wasm32): the state and the coefficients as `i64`, both components of a `CQ15` sample in one
-/// pass.
+/// pass, and the sections of `Q15` in pairs (each sample through both).
 #[cfg_attr(
     all(target_pointer_width = "32", not(target_family = "wasm")),
     allow(dead_code)
 )]
 mod q15_wide {
-    use super::{BiquadSample, CQ15, Error, Q15, Result, Sample, check_len};
+    use super::{BiquadSample, CQ15, Error, Q15, Result, Sample, apply, check_len, split};
 
-    /// Direct form I of one Q15 component with Q2.14 coefficients (as `i64`): the output and the
-    /// new `[x1, x2, y1, y2]`.
-    #[inline(always)]
-    fn df1(c: &[i64; 5], h: [i64; 4], x: i64) -> (i64, [i64; 4]) {
-        let [b0, b1, b2, a1, a2] = *c;
-        let [x1, x2, y1, y2] = h;
-        let acc = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-        // `sat16(round_shift(acc, 14))`: the five products of 16-bit values sum to less than
-        // 2^33 in magnitude, so the rounding addition cannot overflow and `round_shift` never
-        // saturates; the clamp compiles to two conditional moves instead of branches.
-        let y = ((acc + (1 << 13)) >> 14).clamp(-32768, 32767);
-        (y, [x, x1, y, y1])
+    /// The rounding constant of `round_shift(acc, 14)`.
+    const ROUND: i64 = 1 << 13;
+
+    /// One Q15 component of one section: direct form I with the history `x1, x2, y1, y2` and two
+    /// carried partial sums, `s = b1 x1 + b2 x2 - a1 y1 - a2 y2 + 2^13` (the part of the next
+    /// accumulator that is known before the next input) and `q = b2 x1 - a2 y1 + 2^13` (the part
+    /// of the `s` after it that is known before the next output).
+    ///
+    /// `y = sat16((b0 x + s) >> 14)` is `sat16(round_shift(b0 x + b1 x1 + b2 x2 - a1 y1 - a2 y2,
+    /// 14))` of the specification: the five products of 16-bit values sum to less than 2^33 in
+    /// magnitude, every sum is exact in `i64`, so the grouping does not change the value. It
+    /// changes the dependency chain from one output to the next to one product, a subtraction,
+    /// the addition of `b0 x` and the shift: the next `s` is `(b1 x + q) - a1 y`, with `y` in a
+    /// single term. The compiler regroups the terms of one expression (written as one sum, it
+    /// adds `a1 y1 + a2 y2` first and the rounding constant after the subtraction, three more
+    /// steps in the chain), but not across the iterations of the loop, so the carried sums keep
+    /// their grouping.
+    ///
+    /// The step needs only `s` and `q`. The history `x1, x2, y1, y2` is the caller's state; it
+    /// is kept up to date only by the steps of the last two samples of a buffer
+    /// ([`Df1::step_tracked`]), so that the loop does not move it every sample (on wasm32 every
+    /// move is an instruction).
+    #[derive(Clone, Copy)]
+    pub(super) struct Df1 {
+        x1: i64,
+        x2: i64,
+        y1: i64,
+        y2: i64,
+        s: i64,
+        q: i64,
+    }
+
+    impl Df1 {
+        #[inline(always)]
+        fn new(c: &[i64; 5], [x1, x2, y1, y2]: [i64; 4]) -> Df1 {
+            let [_, b1, b2, a1, a2] = *c;
+            Df1 {
+                x1,
+                x2,
+                y1,
+                y2,
+                s: b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2 + ROUND,
+                q: b2 * x1 - a2 * y1 + ROUND,
+            }
+        }
+
+        #[inline(always)]
+        fn history(&self) -> [i64; 4] {
+            [self.x1, self.x2, self.y1, self.y2]
+        }
+
+        /// One sample; the history is left behind (see [`Df1::step_tracked`]).
+        #[inline(always)]
+        fn step(&mut self, c: &[i64; 5], x: i64) -> i64 {
+            let [b0, b1, b2, a1, a2] = *c;
+            let y = ((b0 * x + self.s) >> 14).clamp(-32768, 32767);
+            self.s = (b1 * x + self.q) - a1 * y;
+            self.q = b2 * x - a2 * y + ROUND;
+            y
+        }
+
+        /// [`Df1::step`] that also moves the history; the last two samples of a buffer take it,
+        /// so that the history is that of the last two samples afterwards (or, after a shorter
+        /// buffer, moved on by its samples).
+        #[inline(always)]
+        fn step_tracked(&mut self, c: &[i64; 5], x: i64) -> i64 {
+            let y = self.step(c, x);
+            self.x2 = self.x1;
+            self.y2 = self.y1;
+            self.x1 = x;
+            self.y1 = y;
+            y
+        }
     }
 
     /// One section of a Q15 sample type (`Q15`, `CQ15`): direct form I, the state as `i64`.
     pub(super) trait Q15Section: Sample + BiquadSample<Coef = i16> {
+        /// Whether the cascade runs two sections per pass: `Q15` has one dependency chain per
+        /// section, so a pair keeps two in flight; `CQ15` already has two (its components).
+        const PAIRED: bool;
         type State: Copy;
 
-        fn load(hist: &[Self]) -> Option<Self::State>;
+        fn load(c: &[i64; 5], hist: &[Self]) -> Option<Self::State>;
         fn store(state: &Self::State, hist: &mut [Self]);
+        /// One sample; the history is complete only after [`Q15Section::step_tracked`] of the
+        /// last two samples.
         fn step(c: &[i64; 5], state: &mut Self::State, x: Self) -> Self;
+        /// One sample that moves the history (the last two samples of a buffer).
+        fn step_tracked(c: &[i64; 5], state: &mut Self::State, x: Self) -> Self;
     }
 
     /// An `i64` that holds an `i16` (the output of `sat16`).
@@ -374,61 +442,89 @@ mod q15_wide {
     }
 
     impl Q15Section for Q15 {
-        type State = [i64; 4];
+        const PAIRED: bool = true;
+        type State = Df1;
 
         #[inline]
-        fn load(hist: &[Q15]) -> Option<[i64; 4]> {
+        fn load(c: &[i64; 5], hist: &[Q15]) -> Option<Df1> {
             let [x1, x2, y1, y2] = *hist else { return None };
-            Some([x1, x2, y1, y2].map(|v| i64::from(v.0)))
+            Some(Df1::new(c, [x1, x2, y1, y2].map(|v| i64::from(v.0))))
         }
 
         #[inline]
-        fn store(state: &[i64; 4], hist: &mut [Q15]) {
-            for (h, v) in hist.iter_mut().zip(state) {
-                *h = Q15(to_i16(*v));
+        fn store(state: &Df1, hist: &mut [Q15]) {
+            for (h, v) in hist.iter_mut().zip(state.history()) {
+                *h = Q15(to_i16(v));
             }
         }
 
         #[inline(always)]
-        fn step(c: &[i64; 5], state: &mut [i64; 4], x: Q15) -> Q15 {
-            let (y, next) = df1(c, *state, i64::from(x.0));
-            *state = next;
-            Q15(to_i16(y))
+        fn step(c: &[i64; 5], state: &mut Df1, x: Q15) -> Q15 {
+            Q15(to_i16(state.step(c, i64::from(x.0))))
+        }
+
+        #[inline(always)]
+        fn step_tracked(c: &[i64; 5], state: &mut Df1, x: Q15) -> Q15 {
+            Q15(to_i16(state.step_tracked(c, i64::from(x.0))))
         }
     }
 
     impl Q15Section for CQ15 {
-        type State = [[i64; 4]; 2];
+        const PAIRED: bool = false;
+        type State = [Df1; 2];
 
         #[inline]
-        fn load(hist: &[CQ15]) -> Option<[[i64; 4]; 2]> {
+        fn load(c: &[i64; 5], hist: &[CQ15]) -> Option<[Df1; 2]> {
             let [x1, x2, y1, y2] = *hist else { return None };
             let h = [x1, x2, y1, y2];
-            Some([h.map(|v| i64::from(v.re.0)), h.map(|v| i64::from(v.im.0))])
+            Some([
+                Df1::new(c, h.map(|v| i64::from(v.re.0))),
+                Df1::new(c, h.map(|v| i64::from(v.im.0))),
+            ])
         }
 
         #[inline]
-        fn store(state: &[[i64; 4]; 2], hist: &mut [CQ15]) {
+        fn store(state: &[Df1; 2], hist: &mut [CQ15]) {
             let [re, im] = state;
-            for ((h, r), i) in hist.iter_mut().zip(re).zip(im) {
+            for ((h, r), i) in hist.iter_mut().zip(re.history()).zip(im.history()) {
                 *h = CQ15 {
-                    re: Q15(to_i16(*r)),
-                    im: Q15(to_i16(*i)),
+                    re: Q15(to_i16(r)),
+                    im: Q15(to_i16(i)),
                 };
             }
         }
 
         #[inline(always)]
-        fn step(c: &[i64; 5], state: &mut [[i64; 4]; 2], x: CQ15) -> CQ15 {
+        fn step(c: &[i64; 5], state: &mut [Df1; 2], x: CQ15) -> CQ15 {
             let [re, im] = state;
-            let (yr, nr) = df1(c, *re, i64::from(x.re.0));
-            let (yi, ni) = df1(c, *im, i64::from(x.im.0));
-            (*re, *im) = (nr, ni);
             CQ15 {
-                re: Q15(to_i16(yr)),
-                im: Q15(to_i16(yi)),
+                re: Q15(to_i16(re.step(c, i64::from(x.re.0)))),
+                im: Q15(to_i16(im.step(c, i64::from(x.im.0)))),
             }
         }
+
+        #[inline(always)]
+        fn step_tracked(c: &[i64; 5], state: &mut [Df1; 2], x: CQ15) -> CQ15 {
+            let [re, im] = state;
+            CQ15 {
+                re: Q15(to_i16(re.step_tracked(c, i64::from(x.re.0)))),
+                im: Q15(to_i16(im.step_tracked(c, i64::from(x.im.0)))),
+            }
+        }
+    }
+
+    /// `f(x, tracked)` of every sample, `tracked` being `true` for the last two only: from
+    /// `input` to `output`, or in place in `output` if `input` is `None`.
+    #[inline(always)]
+    fn apply_tracked<T: Copy>(
+        input: Option<&[T]>,
+        output: &mut [T],
+        mut f: impl FnMut(T, bool) -> T,
+    ) {
+        let (head, tail) = output.split_at_mut(output.len().saturating_sub(2));
+        let (xh, xt) = split(input, head.len());
+        apply(xh, head, |x| f(x, false));
+        apply(xt, tail, |x| f(x, true));
     }
 
     pub(super) fn cascade_q15<T: Q15Section>(
@@ -439,19 +535,41 @@ mod q15_wide {
     ) -> Result<()> {
         check_len(input.len(), output.len())?;
         let internal = || Error::Internal("biquad history");
-        for (k, (c, h)) in coefs.iter().zip(hist.chunks_exact_mut(4)).enumerate() {
-            let c = c.map(i64::from);
-            let mut state = T::load(h).ok_or_else(internal)?;
-            if k == 0 {
-                for (x, o) in input.iter().zip(output.iter_mut()) {
-                    *o = T::step(&c, &mut state, *x);
+        let per = if T::PAIRED { 2 } else { 1 };
+        for (j, (c, h)) in coefs.chunks(per).zip(hist.chunks_mut(4 * per)).enumerate() {
+            let src = (j == 0).then_some(input);
+            match c {
+                [a, b] => {
+                    let (ca, cb) = (a.map(i64::from), b.map(i64::from));
+                    let (ha, hb) = h.split_at_mut(4.min(h.len()));
+                    let mut sa = T::load(&ca, ha).ok_or_else(internal)?;
+                    let mut sb = T::load(&cb, hb).ok_or_else(internal)?;
+                    apply_tracked(src, output, |x, tracked| {
+                        if tracked {
+                            let y = T::step_tracked(&ca, &mut sa, x);
+                            T::step_tracked(&cb, &mut sb, y)
+                        } else {
+                            let y = T::step(&ca, &mut sa, x);
+                            T::step(&cb, &mut sb, y)
+                        }
+                    });
+                    T::store(&sa, ha);
+                    T::store(&sb, hb);
                 }
-            } else {
-                for o in output.iter_mut() {
-                    *o = T::step(&c, &mut state, *o);
+                [a] => {
+                    let ca = a.map(i64::from);
+                    let mut sa = T::load(&ca, h).ok_or_else(internal)?;
+                    apply_tracked(src, output, |x, tracked| {
+                        if tracked {
+                            T::step_tracked(&ca, &mut sa, x)
+                        } else {
+                            T::step(&ca, &mut sa, x)
+                        }
+                    });
+                    T::store(&sa, h);
                 }
+                _ => return Err(internal()),
             }
-            T::store(&state, h);
         }
         Ok(())
     }

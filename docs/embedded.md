@@ -51,7 +51,7 @@ The suite on the MCUs is the whole testkit suite: kernels in both directions, fu
 | `qemu-riscv32` | RAM at `0x80000000` (16 MiB used of the default 128 MiB) | same RAM, stack at the top | QEMU documentation "RISC-V Generic Virtual Platform"; `hw/riscv/virt.c` |
 | `esp32p4`, `esp32s3` | the linker scripts of `esp-hal` (`linkall.x`) | | `esp-hal` 1.2.2 |
 
-`memory.x` is copied by `build.rs` into `OUT_DIR` so that `cortex-m-rt` (0.7) and `riscv-rt` (0.18) find it. The Cortex-M55 needs the optimisation level `z`: the image (vector table, code and constants, 457 KB since M21) must fit the 512 KiB ITCM, which is where the vector table is; with `s` it overflowed by about 2.5 to 3.9 KB.
+`memory.x` is copied by `build.rs` into `OUT_DIR` so that `cortex-m-rt` (0.7) and `riscv-rt` (0.18) find it. The Cortex-M55 needs the optimisation level `z`: the image (vector table, code and constants, 457 KB since M21) must fit the 512 KiB ITCM, which is where the vector table is; with `s` it overflowed by about 2.5 to 3.9 KB. The code at `z` is slower: the full profile took about 58 minutes at M21 and ran past the 3600 s of the other QEMU targets with the cases of M22, so this target has 7200 s for the full profile.
 
 ## ESP32 builds
 

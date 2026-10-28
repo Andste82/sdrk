@@ -262,9 +262,11 @@ pub const TARGETS: [Target; 5] = [
             machine: "mps3-an547",
             cpu: None,
         },
-        // 200 s measured (code in the 512 KiB ITCM needs opt-level `s`).
+        // 200 s measured for the quick profile (the code must fit the 512 KiB ITCM: opt-level `z`
+        // since M21, `s` before). The full profile took about 58 minutes at M21 and ran past
+        // 3600 s with the cases of M22 (nightly of 2026-10-28), so it gets twice the default.
         quick_s: 3 * QUICK_TIMEOUT_S,
-        full_s: FULL_TIMEOUT_S,
+        full_s: 2 * FULL_TIMEOUT_S,
     },
     Target {
         name: "qemu-riscv32",

@@ -18,7 +18,10 @@
 //! processed deinterleaved, one vector of oscillator values per vector of real parts.
 //!
 //! `CQ15`: the table lookup and the integer arithmetic of the fallback, vectorised, bit-exact
-//! (also for the last partial vector, which is processed zero-padded).
+//! (also for the last partial vector, which is processed zero-padded). With the static tables
+//! (`nco-tables`) every level has its own path: the complex product with `pmaddwd` (x86),
+//! `i32x4.dot_i16x8_s` (SIMD128) or the widening `smull`/`smlsl`/`smlal` with `sqrshrn` (NEON)
+//! instead of four 32-bit multiplications and the clamp; see the module `x86_q15`.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::mix::{Nco, Rotate};
@@ -787,41 +790,540 @@ fn q15_vector<S: SimdToken>(simd: S, x: &[i16], y: &mut [i16], p: S::u32s) {
     packed.bitcast::<S::i16s>().store_slice(y);
 }
 
-/// Rotates all `CQ15` samples; the last partial vector is processed zero-padded (every lane is
-/// computed on its own, so the result is the same as for a whole vector).
+/// Runs `vector` over the vectors of `N` values (`N / 2` samples) of `x` and `y`; the last
+/// partial vector is processed zero-padded (every lane is computed on its own, so the result
+/// is the same as for a whole vector).
 #[inline(always)]
-fn rotate_q15<S: SimdToken>(simd: S, phase: u32, inc: u32, input: &[i16], out: &mut [i16]) {
-    let h = S::i32s::LEN;
-    let ramp = S::u32s::from_fn(simd, |l| (l as u32).wrapping_mul(inc));
-    let step = S::u32s::splat(simd, (h as u32).wrapping_mul(inc));
-    let mut p = S::u32s::splat(simd, phase) + ramp;
+fn q15_vectors<const N: usize>(
+    x: &[i16],
+    y: &mut [i16],
+    mut vector: impl FnMut(&[i16], &mut [i16]),
+) {
     // Both sides cut to the common length, so that the loop has a single exit condition (with
     // run-time detection the kernel is not inlined behind the length check of the caller).
-    let n = input.len().min(out.len());
-    let (input, out) = (
-        input.get(..n).unwrap_or_default(),
-        out.get_mut(..n).unwrap_or_default(),
+    let n = x.len().min(y.len());
+    let (x, y) = (
+        x.get(..n).unwrap_or_default(),
+        y.get_mut(..n).unwrap_or_default(),
     );
-    let mut xs = input.chunks_exact(2 * h);
-    let mut ys = out.chunks_exact_mut(2 * h);
-    for (x, y) in (&mut xs).zip(&mut ys) {
-        q15_vector(simd, x, y, p);
-        p += step;
+    let mut xs = x.chunks_exact(N);
+    let mut ys = y.chunks_exact_mut(N);
+    for (xv, yv) in (&mut xs).zip(&mut ys) {
+        vector(xv, yv);
     }
     let (xt, yt) = (xs.remainder(), ys.into_remainder());
     if !xt.is_empty() {
-        let mut tmp_in = [0i16; 32];
-        let mut tmp_out = [0i16; 32];
+        let (mut tmp_in, mut tmp_out) = ([0i16; N], [0i16; N]);
         if let Some(d) = tmp_in.get_mut(..xt.len()) {
             d.copy_from_slice(xt);
         }
-        if let (Some(x), Some(y)) = (tmp_in.get(..2 * h), tmp_out.get_mut(..2 * h)) {
-            q15_vector(simd, x, y, p);
-        }
+        vector(&tmp_in, &mut tmp_out);
         if let Some(s) = tmp_out.get(..yt.len()) {
             yt.copy_from_slice(s);
         }
     }
+}
+
+/// Rotates all `CQ15` samples with the generic code.
+#[inline(always)]
+fn rotate_q15_generic<S: SimdToken>(simd: S, phase: u32, inc: u32, input: &[i16], out: &mut [i16]) {
+    let h = S::i32s::LEN;
+    let ramp = S::u32s::from_fn(simd, |l| (l as u32).wrapping_mul(inc));
+    let step = S::u32s::splat(simd, (h as u32).wrapping_mul(inc));
+    let mut p = S::u32s::splat(simd, phase) + ramp;
+    let vector = |x: &[i16], y: &mut [i16]| {
+        q15_vector(simd, x, y, p);
+        p += step;
+    };
+    match h {
+        4 => q15_vectors::<8>(input, out, vector),
+        8 => q15_vectors::<16>(input, out, vector),
+        _ => q15_vectors::<32>(input, out, vector),
+    }
+}
+
+/// Rotates all `CQ15` samples, with the path of the level where it has one.
+#[inline(always)]
+fn rotate_q15<S: SimdToken>(simd: S, phase: u32, inc: u32, input: &[i16], out: &mut [i16]) {
+    let level = simd.level();
+    #[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
+    {
+        if let Some(t) = level.as_avx512() {
+            return x86_q15::rotate_avx512(t, phase, inc, input, out);
+        }
+        if let Some(t) = level.as_avx2() {
+            return x86_q15::rotate_avx2(t, phase, inc, input, out);
+        }
+        if let Some(t) = level.as_sse4_2() {
+            return x86_q15::rotate_sse4_2(t, phase, inc, input, out);
+        }
+        if let Some(t) = crate::level::sse2_only(level) {
+            return x86_q15::rotate_sse2(t, phase, inc, input, out);
+        }
+    }
+    #[cfg(all(feature = "nco-tables", target_arch = "aarch64"))]
+    if let Some(t) = level.as_neon() {
+        return neon_q15::rotate_neon(t, phase, inc, input, out);
+    }
+    // SIMD128 also without the static tables, which wasm32 builds leave out by default.
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    if let Some(t) = level.as_wasm_simd128() {
+        return wasm_q15::rotate_simd128(t, phase, inc, input, out);
+    }
+    let _ = level;
+    rotate_q15_generic(simd, phase, inc, input, out);
+}
+
+/// The phases `phase + l inc` of the lanes `l < N`.
+#[cfg(any(
+    feature = "nco-tables",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+#[inline(always)]
+fn ramp<const N: usize>(phase: u32, inc: u32) -> [u32; N] {
+    core::array::from_fn(|l| phase.wrapping_add((l as u32).wrapping_mul(inc)))
+}
+
+/// The `CQ15` paths of x86.
+///
+/// The oscillator is the table lookup of `table::x86` (bit-exact with the fallback), except
+/// that the byte offsets of the entries go from the vector to the general registers through
+/// one store and scalar loads instead of `movd`/`pextrd`: those are two micro-ops each on the
+/// ports that also serve the vector loads on Zen (`FP45`), which bounded the loop there.
+///
+/// The complex multiplication uses `pmaddwd` on the `(I, Q)` pairs of the samples and the
+/// oscillator. With `x = (xr, xi)` and the oscillator `(c, s)` in one 32-bit lane,
+/// `pmaddwd(x, (s, c))` is `xr s + xi c` and `pmaddwd(x, (c, !s))` is `xr c + xi (-s - 1)`, so
+/// that adding `xi` gives `xr c - xi s`: `!s` is the negation that cannot overflow (`s` can be
+/// -32768). The sums are exact in `i32` (`|x| |(c, s)| < 2^31`), and the arithmetic shift by 15
+/// after adding `2^14` with the saturating pack is the `round_shift` and `sat16` of
+/// `cq15_mul`, bit for bit.
+#[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
+#[allow(unsafe_code)]
+mod x86_q15 {
+    #[cfg(target_arch = "x86_64")]
+    use core::arch::x86_64::{
+        __m128, __m128i, __m256i, __m512i, _mm_add_epi16, _mm_add_epi32, _mm_and_si128,
+        _mm_castpd_si128, _mm_castps_si128, _mm_castsi128_pd, _mm_castsi128_ps, _mm_loadh_pd,
+        _mm_loadl_epi64, _mm_madd_epi16, _mm_mulhrs_epi16, _mm_or_si128, _mm_packs_epi32,
+        _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_shuffle_epi8, _mm_shuffle_ps,
+        _mm_shufflehi_epi16, _mm_shufflelo_epi16, _mm_slli_epi32, _mm_srai_epi32, _mm_srli_epi32,
+        _mm_storeu_si128, _mm_unpackhi_epi16, _mm_unpackhi_epi32, _mm_unpackhi_epi64,
+        _mm_unpacklo_epi16, _mm_unpacklo_epi32, _mm_xor_si128, _mm256_add_epi16, _mm256_add_epi32,
+        _mm256_and_si256, _mm256_castps_si256, _mm256_castsi128_si256, _mm256_castsi256_ps,
+        _mm256_inserti128_si256, _mm256_madd_epi16, _mm256_mulhrs_epi16, _mm256_packs_epi32,
+        _mm256_set1_epi16, _mm256_set1_epi32, _mm256_setr_epi8, _mm256_shuffle_epi8,
+        _mm256_shuffle_ps, _mm256_slli_epi32, _mm256_srai_epi32, _mm256_srli_epi32,
+        _mm256_storeu_si256, _mm256_xor_si256, _mm512_add_epi32, _mm512_broadcast_i32x4,
+        _mm512_madd_epi16, _mm512_packs_epi32, _mm512_rol_epi32, _mm512_set1_epi32,
+        _mm512_shuffle_epi8, _mm512_srai_epi32, _mm512_xor_si512,
+    };
+
+    use fearless_simd::{SimdFrom, i16x8, i16x16, i16x32, prelude::*, u32x4, u32x8, u32x16};
+
+    use super::{q15_vectors, ramp};
+    use crate::table::COS_SIN_Q15;
+    use crate::table::x86::cos_sin_q15_x16;
+
+    /// `!0xFFFF`: the mask that turns `(c, s)` into `(c, !s)`.
+    const NOT_SIN: i32 = !0xFFFF;
+    /// The rounding term of the shift by 15.
+    const ROUND: i32 = 1 << 14;
+
+    /// The byte offsets `8 * (p >> 20)` of the table entries of four phases.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn offsets_x4(p: __m128i) -> [u32; 4] {
+        let o = _mm_and_si128(_mm_srli_epi32::<17>(p), _mm_set1_epi32(0x7FF8));
+        let mut buf = [0u32; 4];
+        let ptr = buf.as_mut_ptr();
+        // SAFETY: `buf` is the 16 bytes that the store writes and the four `u32` that the
+        // loads read; the volatile loads keep the compiler from turning them into extracts.
+        unsafe {
+            _mm_storeu_si128(ptr.cast(), o);
+            core::array::from_fn(|k| core::ptr::read_volatile(ptr.add(k)))
+        }
+    }
+
+    /// The byte offsets `8 * (p >> 20)` of the table entries of eight phases.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn offsets_x8(p: __m256i) -> [u32; 8] {
+        let o = _mm256_and_si256(_mm256_srli_epi32::<17>(p), _mm256_set1_epi32(0x7FF8));
+        let mut buf = [0u32; 8];
+        let ptr = buf.as_mut_ptr();
+        // SAFETY: `buf` is the 32 bytes that the store writes and the eight `u32` that the
+        // loads read; the volatile loads keep the compiler from turning them into extracts.
+        unsafe {
+            _mm256_storeu_si256(ptr.cast(), o);
+            core::array::from_fn(|k| core::ptr::read_volatile(ptr.add(k)))
+        }
+    }
+
+    /// The table entries at the byte offsets `a` and `b` (from [`offsets_x4`] or
+    /// [`offsets_x8`]) as the low and the high half of a vector.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn pair(a: u32, b: u32) -> __m128 {
+        let base = core::ptr::from_ref(&COS_SIN_Q15).cast::<u8>();
+        // SAFETY: the offsets are lanes masked with `0x7FF8`, multiples of 8 below 32 KiB,
+        // so each 8-byte load reads one entry of the 32 KiB table.
+        unsafe {
+            let lo = _mm_loadl_epi64(base.add(a as usize).cast());
+            let v = _mm_loadh_pd(_mm_castsi128_pd(lo), base.add(b as usize).cast());
+            _mm_castsi128_ps(_mm_castpd_si128(v))
+        }
+    }
+
+    /// The table values `a` (the pairs `(cos, sin)`) and the differences `d` of four phases.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn entries_x4(p: __m128i) -> (__m128i, __m128i) {
+        let [i0, i1, i2, i3] = offsets_x4(p);
+        let (e01, e23) = (pair(i0, i1), pair(i2, i3));
+        (
+            _mm_castps_si128(_mm_shuffle_ps::<0x88>(e01, e23)),
+            _mm_castps_si128(_mm_shuffle_ps::<0xDD>(e01, e23)),
+        )
+    }
+
+    /// `(cos, sin)` as a `CQ15` pair per lane of four phases, with `pmulhrsw`, as
+    /// `cos_sin_q15_x4` of the table.
+    #[target_feature(enable = "sse4.2")]
+    #[inline]
+    fn lookup_x4(p: __m128i) -> __m128i {
+        let (a, d) = entries_x4(p);
+        // The fractions `(p >> 5) & 0x7FFF` in both halves: bytes 1 and 2 of `p << 3`.
+        let dup = _mm_setr_epi8(1, 2, 1, 2, 5, 6, 5, 6, 9, 10, 9, 10, 13, 14, 13, 14);
+        let f = _mm_shuffle_epi8(_mm_slli_epi32::<3>(p), dup);
+        let f = _mm_and_si128(f, _mm_set1_epi16(0x7FFF));
+        _mm_add_epi16(a, _mm_mulhrs_epi16(d, f))
+    }
+
+    /// [`lookup_x4`] on SSE2, as `cos_sin_q15_x4_sse2` of the table: the rounding product
+    /// with `pmaddwd` on the pairs `(d, 1) * (f15, 2^14)`, a shift and a pack.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn lookup_x4_sse2(p: __m128i) -> __m128i {
+        let (a, d) = entries_x4(p);
+        let f = _mm_or_si128(
+            _mm_and_si128(_mm_srli_epi32::<5>(p), _mm_set1_epi32(0x7FFF)),
+            _mm_set1_epi32(1 << 30),
+        );
+        let one = _mm_set1_epi16(1);
+        let lo = _mm_madd_epi16(_mm_unpacklo_epi16(d, one), _mm_unpacklo_epi32(f, f));
+        let hi = _mm_madd_epi16(_mm_unpackhi_epi16(d, one), _mm_unpackhi_epi32(f, f));
+        let r = _mm_packs_epi32(_mm_srai_epi32::<15>(lo), _mm_srai_epi32::<15>(hi));
+        _mm_add_epi16(a, r)
+    }
+
+    /// `(cos, sin)` as a `CQ15` pair per lane of eight phases, as `cos_sin_q15_x8` of the
+    /// table.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn lookup_x8(p: __m256i) -> __m256i {
+        let [i0, i1, i2, i3, i4, i5, i6, i7] = offsets_x8(p);
+        let quad = |a: u32, b: u32, c: u32, d: u32| {
+            let lo = _mm256_castsi128_si256(_mm_castps_si128(pair(a, b)));
+            _mm256_castsi256_ps(_mm256_inserti128_si256::<1>(
+                lo,
+                _mm_castps_si128(pair(c, d)),
+            ))
+        };
+        // [e0 e1 | e4 e5], [e2 e3 | e6 e7]: one in-lane shuffle gives samples 0 to 7 in order.
+        let e0 = quad(i0, i1, i4, i5);
+        let e1 = quad(i2, i3, i6, i7);
+        let a = _mm256_castps_si256(_mm256_shuffle_ps::<0x88>(e0, e1));
+        let d = _mm256_castps_si256(_mm256_shuffle_ps::<0xDD>(e0, e1));
+        let dup = _mm256_setr_epi8(
+            1, 2, 1, 2, 5, 6, 5, 6, 9, 10, 9, 10, 13, 14, 13, 14, 1, 2, 1, 2, 5, 6, 5, 6, 9, 10, 9,
+            10, 13, 14, 13, 14,
+        );
+        let f = _mm256_shuffle_epi8(_mm256_slli_epi32::<3>(p), dup);
+        let f = _mm256_and_si256(f, _mm256_set1_epi16(0x7FFF));
+        _mm256_add_epi16(a, _mm256_mulhrs_epi16(d, f))
+    }
+
+    /// The byte shuffle that swaps the 16-bit halves of every 32-bit lane.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn swap_bytes() -> __m128i {
+        _mm_setr_epi8(2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13)
+    }
+
+    /// The byte shuffle that interleaves `[r0 r1 r2 r3 i0 i1 i2 i3]` to `[r0 i0 r1 i1 ...]`.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn zip_bytes() -> __m128i {
+        _mm_setr_epi8(0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15)
+    }
+
+    /// The rotated samples `x` (four) with the oscillator `cs` and its swapped form `sc`, as
+    /// `[re0 re1 re2 re3 im0 im1 im2 im3]`.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn cmul_x4(x: __m128i, cs: __m128i, sc: __m128i) -> __m128i {
+        let round = _mm_set1_epi32(ROUND);
+        let cn = _mm_xor_si128(cs, _mm_set1_epi32(NOT_SIN));
+        let re = _mm_add_epi32(
+            _mm_madd_epi16(x, cn),
+            _mm_add_epi32(_mm_srai_epi32::<16>(x), round),
+        );
+        let im = _mm_add_epi32(_mm_madd_epi16(x, sc), round);
+        _mm_packs_epi32(_mm_srai_epi32::<15>(re), _mm_srai_epi32::<15>(im))
+    }
+
+    /// Four samples on SSSE3 and later: the halves swapped and interleaved with `pshufb`.
+    #[target_feature(enable = "sse4.2")]
+    #[inline]
+    fn rotate_x4(x: __m128i, cs: __m128i) -> __m128i {
+        let v = cmul_x4(x, cs, _mm_shuffle_epi8(cs, swap_bytes()));
+        _mm_shuffle_epi8(v, zip_bytes())
+    }
+
+    /// Four samples on SSE2: the halves swapped with `pshuflw`/`pshufhw`, interleaved with an
+    /// unpack.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn rotate_x4_sse2(x: __m128i, cs: __m128i) -> __m128i {
+        let sc = _mm_shufflehi_epi16::<0xB1>(_mm_shufflelo_epi16::<0xB1>(cs));
+        let v = cmul_x4(x, cs, sc);
+        _mm_unpacklo_epi16(v, _mm_unpackhi_epi64(v, v))
+    }
+
+    /// The `vpshufb` control that swaps the 16-bit halves of every 32-bit lane, hidden from
+    /// the optimiser. Without tuning for a CPU with a fast `pshufb` (the build with run-time
+    /// detection) LLVM lowers the visible constant to `vpshuflw` and `vpshufhw`, one
+    /// instruction more per vector; the opaque value costs one load per call.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn swap_x8() -> __m256i {
+        core::hint::black_box(_mm256_setr_epi8(
+            2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13, 2, 3, 0, 1, 6, 7, 4, 5, 10, 11,
+            8, 9, 14, 15, 12, 13,
+        ))
+    }
+
+    /// Eight samples; `swap` is [`swap_x8`].
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn rotate_x8(x: __m256i, cs: __m256i, swap: __m256i) -> __m256i {
+        let zip = _mm256_setr_epi8(
+            0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15, 0, 1, 8, 9, 2, 3, 10, 11, 4, 5,
+            12, 13, 6, 7, 14, 15,
+        );
+        let round = _mm256_set1_epi32(ROUND);
+        let cn = _mm256_xor_si256(cs, _mm256_set1_epi32(NOT_SIN));
+        let sc = _mm256_shuffle_epi8(cs, swap);
+        let re = _mm256_add_epi32(
+            _mm256_madd_epi16(x, cn),
+            _mm256_add_epi32(_mm256_srai_epi32::<16>(x), round),
+        );
+        let im = _mm256_add_epi32(_mm256_madd_epi16(x, sc), round);
+        let v = _mm256_packs_epi32(_mm256_srai_epi32::<15>(re), _mm256_srai_epi32::<15>(im));
+        _mm256_shuffle_epi8(v, zip)
+    }
+
+    /// Sixteen samples.
+    #[target_feature(enable = "avx512f,avx512bw")]
+    #[inline]
+    fn rotate_x16(x: __m512i, cs: __m512i) -> __m512i {
+        let zip = _mm512_broadcast_i32x4(zip_bytes());
+        let round = _mm512_set1_epi32(ROUND);
+        let cn = _mm512_xor_si512(cs, _mm512_set1_epi32(NOT_SIN));
+        let sc = _mm512_rol_epi32::<16>(cs);
+        let re = _mm512_add_epi32(
+            _mm512_madd_epi16(x, cn),
+            _mm512_add_epi32(_mm512_srai_epi32::<16>(x), round),
+        );
+        let im = _mm512_add_epi32(_mm512_madd_epi16(x, sc), round);
+        let v = _mm512_packs_epi32(_mm512_srai_epi32::<15>(re), _mm512_srai_epi32::<15>(im));
+        _mm512_shuffle_epi8(v, zip)
+    }
+
+    fearless_simd::kernel!(
+        pub(super) fn rotate_sse2(t: Sse2, phase: u32, inc: u32, x: &[i16], y: &mut [i16]) {
+            let mut p: __m128i = u32x4::from_slice(t, &ramp::<4>(phase, inc)).into();
+            let step = _mm_set1_epi32(inc.wrapping_mul(4) as i32);
+            q15_vectors::<8>(x, y, |xv, yv| {
+                let v = rotate_x4_sse2(i16x8::from_slice(t, xv).into(), lookup_x4_sse2(p));
+                i16x8::simd_from(t, v).store_slice(yv);
+                p = _mm_add_epi32(p, step);
+            });
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn rotate_sse4_2(t: Sse4_2, phase: u32, inc: u32, x: &[i16], y: &mut [i16]) {
+            let mut p: __m128i = u32x4::from_slice(t, &ramp::<4>(phase, inc)).into();
+            let step = _mm_set1_epi32(inc.wrapping_mul(4) as i32);
+            q15_vectors::<8>(x, y, |xv, yv| {
+                let v = rotate_x4(i16x8::from_slice(t, xv).into(), lookup_x4(p));
+                i16x8::simd_from(t, v).store_slice(yv);
+                p = _mm_add_epi32(p, step);
+            });
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn rotate_avx2(t: Avx2, phase: u32, inc: u32, x: &[i16], y: &mut [i16]) {
+            let mut p: __m256i = u32x8::from_slice(t, &ramp::<8>(phase, inc)).into();
+            let step = _mm256_set1_epi32(inc.wrapping_mul(8) as i32);
+            let swap = swap_x8();
+            q15_vectors::<16>(x, y, |xv, yv| {
+                let v = rotate_x8(i16x16::from_slice(t, xv).into(), lookup_x8(p), swap);
+                i16x16::simd_from(t, v).store_slice(yv);
+                p = _mm256_add_epi32(p, step);
+            });
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn rotate_avx512(t: Avx512, phase: u32, inc: u32, x: &[i16], y: &mut [i16]) {
+            let mut p: __m512i = u32x16::from_slice(t, &ramp::<16>(phase, inc)).into();
+            let step = _mm512_set1_epi32(inc.wrapping_mul(16) as i32);
+            q15_vectors::<32>(x, y, |xv, yv| {
+                let v = rotate_x16(i16x32::from_slice(t, xv).into(), cos_sin_q15_x16(p));
+                i16x32::simd_from(t, v).store_slice(yv);
+                p = _mm512_add_epi32(p, step);
+            });
+        }
+    );
+}
+
+/// The `CQ15` path of NEON: eight samples per step, deinterleaved by `ld2`, the products
+/// widened with `smull`/`smlsl`/`smlal` and narrowed by `sqrshrn #15`, which is the
+/// `round_shift` and `sat16` of `cq15_mul` (the sums are exact in `i32`).
+#[cfg(all(feature = "nco-tables", target_arch = "aarch64"))]
+#[allow(unsafe_code)]
+mod neon_q15 {
+    use core::arch::aarch64::{
+        int16x8x2_t, vaddq_u32, vdupq_n_u32, vget_low_s16, vld1q_u32, vld2q_s16, vmlal_high_s16,
+        vmlal_s16, vmlsl_high_s16, vmlsl_s16, vmull_high_s16, vmull_s16, vqrshrn_high_n_s32,
+        vqrshrn_n_s32, vreinterpretq_s16_u32, vst2q_s16, vuzp1q_s16, vuzp2q_s16,
+    };
+
+    use super::{q15_vectors, ramp};
+    use crate::table::neon::cos_sin_q15_x4;
+
+    fearless_simd::kernel!(
+        pub(super) fn rotate_neon(_t: Neon, phase: u32, inc: u32, x: &[i16], y: &mut [i16]) {
+            let r = ramp::<4>(phase, inc);
+            // SAFETY: `r` is the four `u32` that `vld1q_u32` reads.
+            let mut p = unsafe { vld1q_u32(r.as_ptr()) };
+            let half = vdupq_n_u32(inc.wrapping_mul(4));
+            let step = vdupq_n_u32(inc.wrapping_mul(8));
+            q15_vectors::<16>(x, y, |xv, yv| {
+                let (Some(xv), Some(yv)) = (xv.first_chunk::<16>(), yv.first_chunk_mut::<16>())
+                else {
+                    return;
+                };
+                // SAFETY: `xv` is the 16 values that `vld2q_s16` reads.
+                let v = unsafe { vld2q_s16(xv.as_ptr()) };
+                let (xr, xi) = (v.0, v.1);
+                let lo = vreinterpretq_s16_u32(cos_sin_q15_x4(p));
+                let hi = vreinterpretq_s16_u32(cos_sin_q15_x4(vaddq_u32(p, half)));
+                let (c, s) = (vuzp1q_s16(lo, hi), vuzp2q_s16(lo, hi));
+                let (xr0, xi0) = (vget_low_s16(xr), vget_low_s16(xi));
+                let (c0, s0) = (vget_low_s16(c), vget_low_s16(s));
+                let re0 = vmlsl_s16(vmull_s16(xr0, c0), xi0, s0);
+                let re1 = vmlsl_high_s16(vmull_high_s16(xr, c), xi, s);
+                let im0 = vmlal_s16(vmull_s16(xr0, s0), xi0, c0);
+                let im1 = vmlal_high_s16(vmull_high_s16(xr, s), xi, c);
+                let re = vqrshrn_high_n_s32::<15>(vqrshrn_n_s32::<15>(re0), re1);
+                let im = vqrshrn_high_n_s32::<15>(vqrshrn_n_s32::<15>(im0), im1);
+                // SAFETY: `yv` is the 16 values that `vst2q_s16` writes.
+                unsafe { vst2q_s16(yv.as_mut_ptr(), int16x8x2_t(re, im)) };
+                p = vaddq_u32(p, step);
+            });
+        }
+    );
+}
+
+/// The `CQ15` path of SIMD128: the `pmaddwd` form of the x86 paths with `i32x4.dot_i16x8_s`
+/// and the saturating `i16x8.narrow_i32x4_s`. The oscillator comes from the entry table with
+/// `nco-tables` and from `COS_Q15` itself without (the default of wasm32 builds).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[cfg_attr(not(feature = "nco-tables"), allow(unsafe_code))]
+mod wasm_q15 {
+    use core::arch::wasm32::{
+        i8x16_shuffle, i16x8_narrow_i32x4, i32x4_add, i32x4_dot_i16x8, i32x4_shr, i32x4_splat,
+        u32x4, v128, v128_xor,
+    };
+    #[cfg(not(feature = "nco-tables"))]
+    use core::arch::wasm32::{
+        i16x8_add, i16x8_q15mulr_sat, i16x8_sub, i32x4_shl, i32x4_sub, u32x4_extract_lane,
+        u32x4_shr, u32x4_splat, v128_and, v128_or,
+    };
+
+    use fearless_simd::{i16x8, prelude::*};
+
+    use super::{q15_vectors, ramp};
+    #[cfg(feature = "nco-tables")]
+    use crate::table::wasm::cos_sin_q15_x4;
+    #[cfg(not(feature = "nco-tables"))]
+    use sdrk_core::tables::COS_Q15;
+
+    /// `(cos, sin)` as a `CQ15` pair per lane of four phases from `COS_Q15`, bit-exact with
+    /// the fallback: each neighbour pair `COS_Q15[i], COS_Q15[i + 1]` is one 32-bit load, and
+    /// `a + round_shift((b - a) f15, 15)` is `i16x8.q15mulr_sat_s` (see `table`).
+    #[cfg(not(feature = "nco-tables"))]
+    #[inline(always)]
+    fn cos_sin_q15_x4(p: v128) -> v128 {
+        let base = COS_Q15.as_ptr();
+        // SAFETY: `i = p >> 20` is at most 4095, so the two values `i` and `i + 1` that the
+        // unaligned 32-bit load reads are inside the 4097 entries of the table.
+        let pair =
+            |i: u32| unsafe { core::ptr::read_unaligned(base.add(i as usize).cast::<u32>()) };
+        let ic = u32x4_shr(p, 20);
+        let is = u32x4_shr(i32x4_sub(p, u32x4_splat(1 << 30)), 20);
+        let lanes = |i: v128| {
+            u32x4(
+                pair(u32x4_extract_lane::<0>(i)),
+                pair(u32x4_extract_lane::<1>(i)),
+                pair(u32x4_extract_lane::<2>(i)),
+                pair(u32x4_extract_lane::<3>(i)),
+            )
+        };
+        let (c, s) = (lanes(ic), lanes(is));
+        // [a_c a_s] and [b_c b_s] per sample.
+        let a = i8x16_shuffle::<0, 1, 16, 17, 4, 5, 20, 21, 8, 9, 24, 25, 12, 13, 28, 29>(c, s);
+        let b = i8x16_shuffle::<2, 3, 18, 19, 6, 7, 22, 23, 10, 11, 26, 27, 14, 15, 30, 31>(c, s);
+        let f = v128_and(u32x4_shr(p, 5), u32x4_splat(0x7FFF));
+        let f = v128_or(f, i32x4_shl(f, 16));
+        i16x8_add(a, i16x8_q15mulr_sat(i16x8_sub(b, a), f))
+    }
+
+    fearless_simd::kernel!(
+        pub(super) fn rotate_simd128(
+            t: WasmSimd128,
+            phase: u32,
+            inc: u32,
+            x: &[i16],
+            y: &mut [i16],
+        ) {
+            let [p0, p1, p2, p3] = ramp::<4>(phase, inc);
+            let mut p = u32x4(p0, p1, p2, p3);
+            let step = i32x4_splat(inc.wrapping_mul(4) as i32);
+            let round = i32x4_splat(1 << 14);
+            let not_sin = i32x4_splat(!0xFFFF);
+            q15_vectors::<8>(x, y, |xv, yv| {
+                let x: v128 = i16x8::from_slice(t, xv).into();
+                let cs = cos_sin_q15_x4(p);
+                let sc =
+                    i8x16_shuffle::<2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13>(cs, cs);
+                let re = i32x4_add(
+                    i32x4_dot_i16x8(x, v128_xor(cs, not_sin)),
+                    i32x4_add(i32x4_shr(x, 16), round),
+                );
+                let im = i32x4_add(i32x4_dot_i16x8(x, sc), round);
+                let v = i16x8_narrow_i32x4(i32x4_shr(re, 15), i32x4_shr(im, 15));
+                let v = i8x16_shuffle::<0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15>(v, v);
+                i16x8::simd_from(t, v).store_slice(yv);
+                p = i32x4_add(p, step);
+            });
+        }
+    );
 }
 
 impl Rotate<C32> for Simd {

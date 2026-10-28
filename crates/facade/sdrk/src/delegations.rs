@@ -95,8 +95,8 @@ crate::delegate! {
     Fft<CQ15>::fft[Tw: AsRef<[CQ15]>](&self, plan: &FftPlan<CQ15, Tw>, data: &mut [CQ15], dir: Direction, scaling: Scaling) -> Result<FftScale> => Fast;
     ConvertOut<C32>::convert_out(&self, format: &SampleFormat, input: &[C32], output: &mut [u8]) -> Result<usize> => Fast;
     ConvertOut<CQ15>::convert_out(&self, format: &SampleFormat, input: &[CQ15], output: &mut [u8]) -> Result<usize> => Fast;
-    ConvertOutReal<f32>::convert_out_real(&self, format: &SampleFormat, input: &[f32], output: &mut [u8]) -> Result<usize> => Fallback;
-    ConvertOutReal<Q15>::convert_out_real(&self, format: &SampleFormat, input: &[Q15], output: &mut [u8]) -> Result<usize> => Fallback;
+    ConvertOutReal<f32>::convert_out_real(&self, format: &SampleFormat, input: &[f32], output: &mut [u8]) -> Result<usize> => Fast;
+    ConvertOutReal<Q15>::convert_out_real(&self, format: &SampleFormat, input: &[Q15], output: &mut [u8]) -> Result<usize> => Fast;
     FirInterpolate<C32>::fir_interpolate[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut FirInterpState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
     FirInterpolate<CQ15>::fir_interpolate[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut FirInterpState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fast;
     FirInterpolateReal<f32>::fir_interpolate_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut FirInterpRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fallback;

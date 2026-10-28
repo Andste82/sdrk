@@ -33,6 +33,30 @@ fn div_even(a: i64, d: i64) -> i64 {
     }
 }
 
+/// `x` clamped to `[lo, hi]` (`x` is not NaN).
+#[inline]
+fn f64_clamp(x: f64, lo: f64, hi: f64) -> f64 {
+    let x = if x < lo { lo } else { x };
+    if x > hi { hi } else { x }
+}
+
+/// `1.5 * 2^52`: adding it to an `f64` of magnitude below `2^51` rounds that to an integer with
+/// ties to even, which then sits in the low bits of the sum.
+const ROUND_MAGIC: f64 = 6_755_399_441_055_744.0;
+
+/// `x` (`|x| < 2^51`) rounded to the nearest integer with ties to even. With hardware `f64` one
+/// addition of [`ROUND_MAGIC`] (in the default rounding mode, which Rust assumes); where `f64` is
+/// emulated in software ([`INTEGER_PATH`]) `libm::roundeven`, which costs less than an emulated
+/// addition.
+#[inline]
+fn round_even(x: f64) -> i64 {
+    if INTEGER_PATH {
+        libm::roundeven(x) as i64
+    } else {
+        ((x + ROUND_MAGIC).to_bits() as i64).wrapping_sub(ROUND_MAGIC.to_bits() as i64)
+    }
+}
+
 /// Whether [`Enc::f32_raw`] takes the integer path where the format allows it. Only on bare-metal
 /// 32-bit Arm and RISC-V: there `f64` arithmetic is emulated in software and the integer path
 /// costs about an eighth of the instructions (measured on Cortex-M4F, Cortex-M55 and RV32IMAC);
@@ -79,13 +103,10 @@ struct Enc {
     float: bool,
     /// `U8` container (offset 127.5).
     u8_container: bool,
-    /// Bits of the storage word (12 and 10 for the packed containers).
-    cbits: u32,
     /// Valid bits.
     bits: u32,
     /// Left shift of `Msb` alignment (0 otherwise and for packed containers).
     shift: u32,
-    big: bool,
     explicit: Option<i64>,
     offset: f64,
     full_scale: f64,
@@ -94,12 +115,17 @@ struct Enc {
     int_scale: Option<i32>,
     lo: i64,
     hi: i64,
+    /// `lo` and `hi` as `f64`.
+    lo_f: f64,
+    hi_f: f64,
+    /// Mask of the storage word (12 and 10 bits for the packed containers).
+    mask: u64,
 }
 
 impl Enc {
     fn new(format: &SampleFormat) -> Self {
         let bits = u32::from(format.bits());
-        let (cbits, packed) = match format.container() {
+        let (cbits, packed): (u32, bool) = match format.container() {
             Container::U8 | Container::I8 => (8, false),
             Container::I16 => (16, false),
             Container::I32 | Container::F32 => (32, false),
@@ -124,14 +150,12 @@ impl Enc {
         Self {
             float: format.container() == Container::F32,
             u8_container,
-            cbits,
             bits,
             shift: if format.align() == Align::Msb && !packed {
                 cbits.saturating_sub(bits)
             } else {
                 0
             },
-            big: format.endian() == Endian::Big,
             explicit: match format.full_scale() {
                 FullScale::Explicit(n) => Some(i64::from(n)),
                 FullScale::PowerOfTwo => None,
@@ -141,6 +165,13 @@ impl Enc {
             int_scale,
             lo,
             hi,
+            lo_f: lo as f64,
+            hi_f: hi as f64,
+            mask: if cbits >= 32 {
+                u64::from(u32::MAX)
+            } else {
+                (1u64 << cbits) - 1
+            },
         }
     }
 
@@ -167,17 +198,15 @@ impl Enc {
         }
     }
 
-    /// [`Enc::f32_raw`] by the `f64` formula.
+    /// [`Enc::f32_raw`] by the `f64` formula. The sum is clamped to the integer bounds before
+    /// the rounding, which commutes with it (the bounds are integers).
     fn f32_raw_f64(&self, x: f32) -> i64 {
         let a = if x.is_nan() { 0.0 } else { f64::from(x) };
-        let v = libm::roundeven(a * self.full_scale + self.offset);
-        if v >= self.hi as f64 {
-            self.hi
-        } else if v <= self.lo as f64 {
-            self.lo
-        } else {
-            v as i64
-        }
+        round_even(f64_clamp(
+            a * self.full_scale + self.offset,
+            self.lo_f,
+            self.hi_f,
+        ))
     }
 
     /// The effective raw value of a Q15 sample by the integer rules (ties to even, like the f64
@@ -199,20 +228,7 @@ impl Enc {
 
     /// The storage word of an effective raw value (alignment, truncation to the container).
     fn word(&self, raw: i64) -> u32 {
-        let mask = if self.cbits >= 32 {
-            u64::from(u32::MAX)
-        } else {
-            (1u64 << self.cbits) - 1
-        };
-        ((raw << self.shift) as u64 & mask) as u32
-    }
-
-    fn f32_word(&self, x: f32) -> u32 {
-        if self.float {
-            x.to_bits()
-        } else {
-            self.word(self.f32_raw(x))
-        }
+        ((raw << self.shift) as u64 & self.mask) as u32
     }
 
     fn q15_word(&self, q: Q15) -> u32 {
@@ -229,10 +245,10 @@ fn head<const N: usize>(bytes: &[u8; N], n: usize) -> Result<&[u8]> {
     bytes.get(..n).ok_or(Error::Internal("conversion index"))
 }
 
-/// Writes the `values` storage words of the stream (`word(k)` is value `k` in stream order).
-fn write_words(
+/// Writes the `values` storage words of a packed stream (`Packed12`, `Packed10`; `word(k)` is
+/// value `k` in stream order).
+fn write_packed(
     format: &SampleFormat,
-    enc: &Enc,
     values: usize,
     word: impl Fn(usize) -> Option<u32>,
     output: &mut [u8],
@@ -240,31 +256,6 @@ fn write_words(
     let internal = || Error::Internal("conversion index");
     let w = |k: usize| word(k).ok_or_else(internal);
     match format.container() {
-        Container::U8 | Container::I8 => {
-            for (k, b) in output.iter_mut().take(values).enumerate() {
-                *b = w(k)? as u8;
-            }
-        }
-        Container::I16 => {
-            for (k, chunk) in output.chunks_exact_mut(2).take(values).enumerate() {
-                let v = w(k)? as u16;
-                chunk.copy_from_slice(&if enc.big {
-                    v.to_be_bytes()
-                } else {
-                    v.to_le_bytes()
-                });
-            }
-        }
-        Container::I32 | Container::F32 => {
-            for (k, chunk) in output.chunks_exact_mut(4).take(values).enumerate() {
-                let v = w(k)?;
-                chunk.copy_from_slice(&if enc.big {
-                    v.to_be_bytes()
-                } else {
-                    v.to_le_bytes()
-                });
-            }
-        }
         Container::Packed12 => {
             for (g, chunk) in output.chunks_exact_mut(3).take(values / 2).enumerate() {
                 let acc = (w(2 * g)? & 0xFFF) | (w(2 * g + 1)? & 0xFFF) << 12;
@@ -285,47 +276,106 @@ fn write_words(
     Ok(())
 }
 
-/// Encodes complex samples; `conv(sample, imag)` gives the storage word of one component.
-fn encode_complex<T: Copy>(
-    format: &SampleFormat,
-    enc: &Enc,
-    input: &[T],
-    output: &mut [u8],
-    conv: impl Fn(T, bool) -> u32,
-) -> Result<usize> {
-    let bytes = plan_out(format, input.len(), output.len(), false)?;
-    let n = input.len();
-    let planar = format.layout() == Layout::Planar;
-    let swap = format.swap_iq();
-    let word = |k: usize| -> Option<u32> {
-        let (s, second) = if planar {
-            if k >= n { (k - n, true) } else { (k, false) }
-        } else {
-            (k / 2, k % 2 == 1)
-        };
-        input.get(s).map(|x| conv(*x, second != swap))
-    };
-    let out = output
-        .get_mut(..bytes)
-        .ok_or(Error::Internal("conversion index"))?;
-    write_words(format, enc, n * 2, word, out)?;
-    Ok(bytes)
+/// The order of the components in the stream.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    /// One value per sample.
+    Real,
+    /// Both components of a sample next to each other.
+    Interleaved,
+    /// All first components, then all second ones.
+    Planar,
 }
 
-/// Encodes real samples; `conv(sample)` gives the storage word.
-fn encode_real<T: Copy>(
+/// Writes one storage word of `W` bytes (1, 2 or 4) into `o` (`W` bytes long).
+#[inline]
+fn put<const W: usize>(o: &mut [u8], v: u32, big: bool) {
+    let bytes = if big {
+        v.to_be_bytes()
+    } else {
+        v.to_le_bytes()
+    };
+    let at = if big { 4 - W } else { 0 };
+    if let Some(src) = bytes.get(at..at + W) {
+        o.copy_from_slice(src);
+    }
+}
+
+/// Writes the storage words of `input` in a byte-aligned container of `W` bytes: `word(x, c)`
+/// is component `c` of the stream (0 or 1; always 0 for [`Shape::Real`]) of sample `x`.
+#[inline]
+fn write_aligned<T: Copy, const W: usize>(
+    shape: Shape,
+    big: bool,
+    input: &[T],
+    out: &mut [u8],
+    word: impl Fn(T, usize) -> u32,
+) {
+    match shape {
+        Shape::Real => {
+            for (&x, o) in input.iter().zip(out.chunks_exact_mut(W)) {
+                put::<W>(o, word(x, 0), big);
+            }
+        }
+        Shape::Interleaved => {
+            for (&x, o) in input.iter().zip(out.chunks_exact_mut(2 * W)) {
+                let (a, b) = o.split_at_mut(W);
+                put::<W>(a, word(x, 0), big);
+                put::<W>(b, word(x, 1), big);
+            }
+        }
+        Shape::Planar => {
+            let (first, second) = out.split_at_mut(input.len().saturating_mul(W).min(out.len()));
+            for (c, half) in [first, second].into_iter().enumerate() {
+                for (&x, o) in input.iter().zip(half.chunks_exact_mut(W)) {
+                    put::<W>(o, word(x, c), big);
+                }
+            }
+        }
+    }
+}
+
+/// Encodes `input` (complex samples for `real == false`, else real ones) into the first bytes of
+/// `output`; `word(x, c)` is the storage word of component `c` of sample `x` (0 the real part, 1
+/// the imaginary one; 0 for a real sample). Returns the number of bytes written.
+fn encode<T: Copy>(
     format: &SampleFormat,
-    enc: &Enc,
     input: &[T],
     output: &mut [u8],
-    conv: impl Fn(T) -> u32,
+    real: bool,
+    word: impl Fn(T, usize) -> u32,
 ) -> Result<usize> {
-    let bytes = plan_out(format, input.len(), output.len(), true)?;
-    let word = |k: usize| input.get(k).map(|x| conv(*x));
+    let bytes = plan_out(format, input.len(), output.len(), real)?;
     let out = output
         .get_mut(..bytes)
         .ok_or(Error::Internal("conversion index"))?;
-    write_words(format, enc, input.len(), word, out)?;
+    let shape = match format.layout() {
+        Layout::Real => Shape::Real,
+        Layout::Planar => Shape::Planar,
+        Layout::Interleaved => Shape::Interleaved,
+    };
+    let swap = usize::from(format.swap_iq() && shape != Shape::Real);
+    // Component `c` of the stream is component `c ^ swap` of the sample.
+    let word = |x: T, c: usize| word(x, c ^ swap);
+    let big = format.endian() == Endian::Big;
+    match format.container() {
+        Container::U8 | Container::I8 => write_aligned::<T, 1>(shape, big, input, out, word),
+        Container::I16 => write_aligned::<T, 2>(shape, big, input, out, word),
+        Container::I32 | Container::F32 => write_aligned::<T, 4>(shape, big, input, out, word),
+        _ => {
+            let n = input.len();
+            let values = if real { n } else { 2 * n };
+            let at = |k: usize| -> Option<u32> {
+                let (s, c) = match shape {
+                    Shape::Interleaved => (k / 2, k % 2),
+                    Shape::Planar if k >= n => (k - n, 1),
+                    Shape::Real | Shape::Planar => (k, 0),
+                };
+                input.get(s).map(|&x| word(x, c))
+            };
+            write_packed(format, values, at, out)?;
+        }
+    }
     Ok(bytes)
 }
 
@@ -337,9 +387,14 @@ impl ConvertOut<C32> for Fallback {
         output: &mut [u8],
     ) -> Result<usize> {
         let enc = Enc::new(format);
-        encode_complex(format, &enc, input, output, |x, im| {
-            enc.f32_word(if im { x.im } else { x.re })
-        })
+        let part = |x: C32, c: usize| if c == 0 { x.re } else { x.im };
+        if enc.float {
+            encode(format, input, output, false, |x, c| part(x, c).to_bits())
+        } else {
+            encode(format, input, output, false, |x, c| {
+                enc.word(enc.f32_raw(part(x, c)))
+            })
+        }
     }
 }
 
@@ -351,8 +406,8 @@ impl ConvertOut<CQ15> for Fallback {
         output: &mut [u8],
     ) -> Result<usize> {
         let enc = Enc::new(format);
-        encode_complex(format, &enc, input, output, |x, im| {
-            enc.q15_word(if im { x.im } else { x.re })
+        encode(format, input, output, false, |x, c| {
+            enc.q15_word(if c == 0 { x.re } else { x.im })
         })
     }
 }
@@ -365,7 +420,11 @@ impl ConvertOutReal<f32> for Fallback {
         output: &mut [u8],
     ) -> Result<usize> {
         let enc = Enc::new(format);
-        encode_real(format, &enc, input, output, |x| enc.f32_word(x))
+        if enc.float {
+            encode(format, input, output, true, |x, _| x.to_bits())
+        } else {
+            encode(format, input, output, true, |x, _| enc.word(enc.f32_raw(x)))
+        }
     }
 }
 
@@ -377,7 +436,7 @@ impl ConvertOutReal<Q15> for Fallback {
         output: &mut [u8],
     ) -> Result<usize> {
         let enc = Enc::new(format);
-        encode_real(format, &enc, input, output, |x| enc.q15_word(x))
+        encode(format, input, output, true, |x, _| enc.q15_word(x))
     }
 }
 
@@ -446,6 +505,114 @@ mod tests {
         }
         for f in [formats::CU8, formats::CF32, formats::I2S32_MSB] {
             assert!(Enc::new(&f).int_scale.is_none());
+        }
+    }
+
+    /// `x` rounded with ties to even by `libm`, the formula before the clamp was moved in front
+    /// of the rounding.
+    fn libm_raw(enc: &Enc, x: f32) -> i64 {
+        let a = if x.is_nan() { 0.0 } else { f64::from(x) };
+        let v = libm::roundeven(a * enc.full_scale + enc.offset);
+        if v >= enc.hi as f64 {
+            enc.hi
+        } else if v <= enc.lo as f64 {
+            enc.lo
+        } else {
+            v as i64
+        }
+    }
+
+    #[test]
+    fn round_even_at_ties_and_bounds() {
+        let mut values = std::vec![0.0f64, -0.0, 0.25, -0.25, 0.75, -0.75];
+        for k in -70i32..70 {
+            let t = f64::from(k) + 0.5;
+            values.extend([
+                t,
+                libm::nextafter(t, f64::INFINITY),
+                libm::nextafter(t, f64::NEG_INFINITY),
+                f64::from(k),
+            ]);
+        }
+        for b in [
+            127.5f64,
+            255.0,
+            2047.5,
+            32767.5,
+            8_388_607.5,
+            2_147_483_647.0,
+        ] {
+            for t in [b, -b - 1.0, b - 1.0, -b] {
+                values.extend([
+                    t,
+                    libm::nextafter(t, f64::INFINITY),
+                    libm::nextafter(t, f64::NEG_INFINITY),
+                ]);
+            }
+        }
+        for &x in &values {
+            assert_eq!(round_even(x), libm::roundeven(x) as i64, "x = {x:e}");
+        }
+    }
+
+    #[test]
+    fn f64_path_matches_libm_rounding_for_every_format() {
+        let mut values = std::vec![
+            0.0f32,
+            -0.0,
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::MAX,
+            f32::MIN,
+            f32::from_bits(1),
+            1.0,
+            -1.0,
+            1.0e-30,
+            -1.0e-30,
+            -1.0e-15,
+            -1.0e-17,
+            65536.0,
+            -65536.0,
+        ];
+        // Ties and their neighbours at the LSB of every scale, with and without the offset of
+        // `U8` (`(k + 1/2) / 2^b` and `k / 2^b`).
+        for b in [7, 11, 15, 23, 31] {
+            let unit = libm::ldexpf(1.0, -b);
+            for k in -300i32..300 {
+                for t in [(k as f32 + 0.5) * unit, k as f32 * unit] {
+                    values.extend([
+                        t,
+                        libm::nextafterf(t, f32::INFINITY),
+                        libm::nextafterf(t, f32::NEG_INFINITY),
+                    ]);
+                }
+            }
+        }
+        for f in [
+            formats::CU8,
+            formats::CS8,
+            formats::CS16,
+            formats::CS16_PLANAR,
+            formats::PACKED12,
+            formats::PACKED10,
+            formats::SC16_Q11,
+            formats::I2S32_MSB,
+            formats::RS16,
+            SampleFormat::new(
+                Container::I32,
+                32,
+                true,
+                Layout::Interleaved,
+                Align::Lsb,
+                Endian::Big,
+            )
+            .unwrap(),
+        ] {
+            let enc = Enc::new(&f);
+            for &x in &values {
+                assert_eq!(enc.f32_raw_f64(x), libm_raw(&enc, x), "{f:?}, x = {x:e}");
+            }
         }
     }
 

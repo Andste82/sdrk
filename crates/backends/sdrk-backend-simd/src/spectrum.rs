@@ -1,4 +1,4 @@
-//! `mag_sq` and `mag`.
+//! `mag_sq`, `mag`, `window` and `power_db`.
 //!
 //! All variants are bit-exact with the fallback. The loops split the buffers once into whole
 //! blocks of [`UNROLL`] vectors, whole vectors and the scalar tail, and iterate over the chunks
@@ -19,9 +19,18 @@
 //! correction step in each direction (`root_q15` for the idea and the bound); every level but
 //! the generic one has a path of its own that takes the products from `pmaddwd`, `smlal` or
 //! `i32x4.dot_i16x8_s` (module `x86`, `neon`, `wasm`).
+//!
+//! `window` multiplies each component by the weight of its sample, the weights duplicated for
+//! both parts by a shuffle. `C32` runs the generic code on every level but NEON, where `ld2`/`st2`
+//! split and interleave the parts instead. `CQ15` is `q15_mul`:
+//! `pmulhrsw` with a fix of the one overflow at SSE4.2, AVX2 and AVX-512, `pmulhw`/`pmullw` at
+//! SSE2, `sqrdmulh` on NEON and `i16x8.q15mulr_sat_s` on wasm32 (loop form [`window_steps!`]).
+//!
+//! `power_db` is `libm::log10f` step by step on whole vectors ([`power_db_vector`]), so it is
+//! bit-exact with the fallback as well; the generic code on every level.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
-use sdrk_core::kernels::spectrum::{Mag, MagSq};
+use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::{C32, CQ15, Q15, Result};
 
 use crate::Simd;
@@ -153,6 +162,49 @@ macro_rules! steps {
         done
     }};
 }
+
+/// The loop of a level-specific `window` path: `$body` with `$i: &[_; 2 V]`, `$o: &mut [_; 2 V]`
+/// (the interleaved values of `V = $v` samples) and `$w: &[_; V]` (their weights) over the whole
+/// steps, in blocks of [`WINDOW_UNROLL`] steps (an inner loop of constant length, which the
+/// compiler writes out in the run-time-dispatched build as in the static ones) and then one
+/// step at a time. Evaluates to the number of samples done.
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+macro_rules! window_steps {
+    ($input:expr, $out:expr, $w:expr, $v:literal, |$i:ident, $o:ident, $wv:ident| $body:block) => {{
+        // A closure, not inline code: two expansions of the body would exceed the stack frame
+        // the lint allows. It inherits the target features of the function and is inlined.
+        let step = |$i: &[_; 2 * $v], $o: &mut [_; 2 * $v], $wv: &[_; $v]| $body;
+        let n = $out.len().min($input.len()).min(2 * $w.len()) / (2 * $v);
+        let (input, _) = $input.split_at(2 * $v * n);
+        let (out, _) = $out.split_at_mut(2 * $v * n);
+        let (w, _) = $w.split_at($v * n);
+        let (bi, input) = input.as_chunks::<{ 2 * $v * $crate::spectrum::WINDOW_UNROLL }>();
+        let (bo, out) = out.as_chunks_mut::<{ 2 * $v * $crate::spectrum::WINDOW_UNROLL }>();
+        let (bw, w) = w.as_chunks::<{ $v * $crate::spectrum::WINDOW_UNROLL }>();
+        for ((i, o), w) in bi.iter().zip(bo).zip(bw) {
+            let (i, _) = i.as_chunks::<{ 2 * $v }>();
+            let (o, _) = o.as_chunks_mut::<{ 2 * $v }>();
+            let (w, _) = w.as_chunks::<$v>();
+            for ((i, o), w) in i.iter().zip(o).zip(w) {
+                step(i, o, w);
+            }
+        }
+        let (input, _) = input.as_chunks::<{ 2 * $v }>();
+        let (out, _) = out.as_chunks_mut::<{ 2 * $v }>();
+        let (w, _) = w.as_chunks::<$v>();
+        for ((i, o), w) in input.iter().zip(out).zip(w) {
+            step(i, o, w);
+        }
+        $v * n
+    }};
+}
+
+/// Steps per block of the `window` loops.
+pub(crate) const WINDOW_UNROLL: usize = 4;
 
 /// `re*re + im*im` of one vector of `2 l` interleaved floats into `l` outputs.
 #[inline(always)]
@@ -426,6 +478,284 @@ impl Mag<CQ15> for Simd {
     }
 }
 
+/// `x * w` per component of `input` (interleaved floats) with one weight per sample.
+#[inline(always)]
+fn window_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32], w: &[f32]) {
+    #[cfg(target_arch = "aarch64")]
+    let (input, out, w) = {
+        let done = match simd.level().as_neon() {
+            Some(t) => neon::window_f32(t, input, out, w),
+            None => 0,
+        };
+        let (Some(input), Some(out), Some(w)) = (
+            input.get(2 * done..),
+            out.get_mut(2 * done..),
+            w.get(done..),
+        ) else {
+            return;
+        };
+        (input, out, w)
+    };
+    // Blocks of `WINDOW_UNROLL` vectors of weights (an inner loop of constant length, which the
+    // compiler writes out on every level), then the scalar tail, which the compiler vectorizes.
+    // A second vector loop for the rest would double the body and exceed the stack frame the
+    // lint allows.
+    let l = S::f32s::LEN;
+    let block = WINDOW_UNROLL * l;
+    let n = out.len().min(input.len()).min(2 * w.len()) / (2 * block);
+    let (vi, ri) = input.split_at(2 * block * n);
+    let (vo, ro) = out.split_at_mut(2 * block * n);
+    let (vw, rw) = w.split_at(block * n);
+    for ((i, o), w) in vi
+        .chunks_exact(2 * block)
+        .zip(vo.chunks_exact_mut(2 * block))
+        .zip(vw.chunks_exact(block))
+    {
+        for ((i, o), w) in i
+            .chunks_exact(2 * l)
+            .zip(o.chunks_exact_mut(2 * l))
+            .zip(w.chunks_exact(l))
+        {
+            let w = S::f32s::from_slice(simd, w);
+            // `[w0, w0, w1, w1, ...]` and the upper half of the same.
+            let (wa, wb) = w.interleave(w);
+            let (i0, i1) = i.split_at(l);
+            let (o0, o1) = o.split_at_mut(l);
+            (S::f32s::from_slice(simd, i0) * wa).store_slice(o0);
+            (S::f32s::from_slice(simd, i1) * wb).store_slice(o1);
+        }
+    }
+    for ((o, x), &w) in ro
+        .as_chunks_mut::<2>()
+        .0
+        .iter_mut()
+        .zip(ri.as_chunks::<2>().0)
+        .zip(rw)
+    {
+        let ([o0, o1], [re, im]) = (o, *x);
+        (*o0, *o1) = (re * w, im * w);
+    }
+}
+
+impl Window<C32> for Simd {
+    fn window(&self, input: &[C32], output: &mut [C32], w: &[f32]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        check_len(input.len(), w.len())?;
+        let input: &[f32] = bytemuck::cast_slice(input);
+        let output: &mut [f32] = bytemuck::cast_slice_mut(output);
+        dispatch!(simd => window_f32(simd, input, output, w));
+        Ok(())
+    }
+}
+
+/// `q15_mul(x, w) = sat16((x w + 2^14) >> 15)` of one vector of values and one of weights.
+#[inline(always)]
+fn q15_mul_vector<S: SimdToken>(simd: S, x: S::i16s, w: S::i16s) -> S::i16s {
+    let (x0, x1) = x.widen();
+    let (w0, w1) = w.widen();
+    let half = S::i32s::splat(simd, 1 << 14);
+    let p0 = (x0 * w0 + half) >> 15u32;
+    let p1 = (x1 * w1 + half) >> 15u32;
+    // Only `(-32768)^2` leaves the range: 32768 saturates to 32767.
+    p0.saturating_narrow(p1)
+}
+
+/// `q15_mul` per component of `input` (interleaved Q15 values) with one weight per sample,
+/// bit-exact with the fallback.
+#[inline(always)]
+fn window_q15<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16], w: &[i16]) {
+    let done = window_q15_level(simd, input, out, w);
+    let (Some(input), Some(out), Some(w)) = (
+        input.get(2 * done..),
+        out.get_mut(2 * done..),
+        w.get(done..),
+    ) else {
+        return;
+    };
+    // The generic code serves the tails of the level paths and the levels without one, so it
+    // runs one step at a time.
+    let l = S::i16s::LEN;
+    let n = out.len().min(input.len()).min(2 * w.len()) / (2 * l);
+    let (vi, ri) = input.split_at(2 * l * n);
+    let (vo, ro) = out.split_at_mut(2 * l * n);
+    let (vw, rw) = w.split_at(l * n);
+    for ((i, o), w) in vi
+        .chunks_exact(2 * l)
+        .zip(vo.chunks_exact_mut(2 * l))
+        .zip(vw.chunks_exact(l))
+    {
+        let w = S::i16s::from_slice(simd, w);
+        let (wa, wb) = w.interleave(w);
+        let (i0, i1) = i.split_at(l);
+        let (o0, o1) = o.split_at_mut(l);
+        q15_mul_vector(simd, S::i16s::from_slice(simd, i0), wa).store_slice(o0);
+        q15_mul_vector(simd, S::i16s::from_slice(simd, i1), wb).store_slice(o1);
+    }
+    for ((o, x), &w) in ro
+        .as_chunks_mut::<2>()
+        .0
+        .iter_mut()
+        .zip(ri.as_chunks::<2>().0)
+        .zip(rw)
+    {
+        let ([o0, o1], [re, im]) = (o, *x);
+        let mul = |x: i16| ((i32::from(x) * i32::from(w) + (1 << 14)) >> 15).min(32767) as i16;
+        (*o0, *o1) = (mul(re), mul(im));
+    }
+}
+
+/// The level-specific path of `window` `CQ15` for the current level, if there is one: returns
+/// the number of leading samples done.
+#[inline(always)]
+fn window_q15_level<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16], w: &[i16]) -> usize {
+    let level = simd.level();
+    #[cfg(target_arch = "x86_64")]
+    {
+        if let Some(t) = level.as_avx512() {
+            return x86::window_q15_avx512(t, input, out, w);
+        }
+        if let Some(t) = level.as_avx2() {
+            return x86::window_q15_avx2(t, input, out, w);
+        }
+        if let Some(t) = level.as_sse4_2() {
+            return x86::window_q15_sse4_2(t, input, out, w);
+        }
+        if let Some(t) = crate::level::sse2_only(level) {
+            return x86::window_q15_sse2(t, input, out, w);
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = level.as_neon() {
+        return neon::window_q15(t, input, out, w);
+    }
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    if let Some(t) = level.as_wasm_simd128() {
+        return wasm::window_q15(t, input, out, w);
+    }
+    let _ = (level, input, out, w);
+    0
+}
+
+impl Window<CQ15> for Simd {
+    fn window(&self, input: &[CQ15], output: &mut [CQ15], w: &[Q15]) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        check_len(input.len(), w.len())?;
+        let input: &[i16] = bytemuck::cast_slice(input);
+        let output: &mut [i16] = bytemuck::cast_slice_mut(output);
+        let w: &[i16] = bytemuck::cast_slice(w);
+        dispatch!(simd => window_q15(simd, input, output, w));
+        Ok(())
+    }
+}
+
+/// Smallest linear power that `power_db` evaluates (the `FLOOR` of the fallback).
+const FLOOR: f32 = 1e-20;
+
+/// The scalar `power_db` of the fallback: `10 log10f(max(p, 1e-20)) + offset_db`.
+#[inline(always)]
+fn to_db(p: f32, offset_db: f32) -> f32 {
+    let p = if p > FLOOR { p } else { FLOOR };
+    10.0 * libm::log10f(p) + offset_db
+}
+
+/// `10 log10(max(p, 1e-20)) + offset` of one vector, bit-exact with the fallback: the steps of
+/// `libm::log10f` (FreeBSD `e_log10f.c`) in the same order and without fused multiply-add. After
+/// the floor every lane is a normal positive number or `+inf`, so of the special cases of
+/// `log10f` only `+inf` remains (`log10f(1) = 0` is also what the general steps give).
+#[inline(always)]
+fn power_db_vector<S: SimdToken>(simd: S, p: S::f32s, offset: S::f32s) -> S::f32s {
+    // The constants of `libm::log10f` (FreeBSD `e_log10f.c`), by their bits.
+    const IVLN10HI: f32 = f32::from_bits(0x3ede_6000);
+    const IVLN10LO: f32 = f32::from_bits(0xb804_ead9);
+    const LOG10_2HI: f32 = f32::from_bits(0x3e9a_2080);
+    const LOG10_2LO: f32 = f32::from_bits(0x3554_27db);
+    const LG1: f32 = f32::from_bits(0x3f2a_aaaa);
+    const LG2: f32 = f32::from_bits(0x3ecc_ce13);
+    const LG3: f32 = f32::from_bits(0x3e91_e9ee);
+    const LG4: f32 = f32::from_bits(0x3e78_9e26);
+    let floor = S::f32s::splat(simd, FLOOR);
+    // `p > FLOOR ? p : FLOOR`: NaN takes the floor too. On x86 that is `maxps(p, FLOOR)`, which
+    // returns its second operand where either is NaN (the scalar level uses `f32::max`, which
+    // returns the operand that is not NaN); elsewhere the maximum may return NaN.
+    #[cfg(target_arch = "x86_64")]
+    let x = p.max(floor);
+    #[cfg(not(target_arch = "x86_64"))]
+    let x = p.simd_gt(floor).select(p, floor);
+    // Reduce `x` to `2^k m` with `m` in `[sqrt(2)/2, sqrt(2))`.
+    let ix = x.bitcast::<S::u32s>() + (0x3f80_0000 - 0x3f35_04f3);
+    let k: S::i32s = (ix >> 23u32).bitcast::<S::i32s>() - 0x7f;
+    let m: S::f32s = ((ix & 0x007f_ffff) + 0x3f35_04f3).bitcast();
+    let f = m - 1.0;
+    let s = f / (f + 2.0);
+    let z = s * s;
+    let w = z * z;
+    let t1 = w * (w * LG4 + LG2);
+    let t2 = z * (w * LG3 + LG1);
+    let r = t2 + t1;
+    let hfsq = f * 0.5 * f;
+    let hi: S::f32s = ((f - hfsq).bitcast::<S::u32s>() & 0xffff_f000).bitcast();
+    let lo = f - hi - hfsq + s * (hfsq + r);
+    let dk: S::f32s = k.to_float();
+    let y = dk * LOG10_2LO + (lo + hi) * IVLN10LO + lo * IVLN10HI + hi * IVLN10HI + dk * LOG10_2HI;
+    let y = x.simd_eq(S::f32s::splat(simd, f32::INFINITY)).select(x, y);
+    y * 10.0 + offset
+}
+
+/// `power_db` of linear powers in `f32`.
+#[inline(always)]
+fn power_db_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32], offset_db: f32) {
+    let l = S::f32s::LEN;
+    let offset = S::f32s::splat(simd, offset_db);
+    let n = out.len().min(input.len()) / l;
+    let (vi, ri) = input.split_at(l * n);
+    let (vo, ro) = out.split_at_mut(l * n);
+    for (i, o) in vi.chunks_exact(l).zip(vo.chunks_exact_mut(l)) {
+        power_db_vector(simd, S::f32s::from_slice(simd, i), offset).store_slice(o);
+    }
+    for (o, &p) in ro.iter_mut().zip(ri) {
+        *o = to_db(p, offset_db);
+    }
+}
+
+impl PowerDb<f32> for Simd {
+    fn power_db(&self, input: &[f32], output: &mut [f32], offset_db: f32) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        dispatch!(simd => power_db_f32(simd, input, output, offset_db));
+        Ok(())
+    }
+}
+
+/// `power_db` of Q15 powers (`raw / 32768`, exact in `f32`).
+#[inline(always)]
+fn power_db_q15<S: SimdToken>(simd: S, input: &[i16], out: &mut [f32], offset_db: f32) {
+    let l = S::i16s::LEN;
+    let offset = S::f32s::splat(simd, offset_db);
+    let n = out.len().min(input.len()) / l;
+    let (vi, ri) = input.split_at(l * n);
+    let (vo, ro) = out.split_at_mut(l * n);
+    for (i, o) in vi.chunks_exact(l).zip(vo.chunks_exact_mut(l)) {
+        let (a, b) = S::i16s::from_slice(simd, i).widen();
+        let scale = 1.0 / 32768.0;
+        let a = a.to_float::<S::f32s>() * scale;
+        let b = b.to_float::<S::f32s>() * scale;
+        let (o0, o1) = o.split_at_mut(l / 2);
+        power_db_vector(simd, a, offset).store_slice(o0);
+        power_db_vector(simd, b, offset).store_slice(o1);
+    }
+    for (o, &p) in ro.iter_mut().zip(ri) {
+        *o = to_db(f32::from(p) / 32768.0, offset_db);
+    }
+}
+
+impl PowerDb<Q15> for Simd {
+    fn power_db(&self, input: &[Q15], output: &mut [f32], offset_db: f32) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let input: &[i16] = bytemuck::cast_slice(input);
+        dispatch!(simd => power_db_q15(simd, input, output, offset_db));
+        Ok(())
+    }
+}
+
 #[cfg(target_arch = "x86_64")]
 mod x86 {
     //! `CQ15` with `pmaddwd`: `re*re + im*im` of a sample is one lane of the multiply-add of
@@ -436,22 +766,137 @@ mod x86 {
 
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
-        __m128i, __m256i, __m512i, _mm_add_epi32, _mm_cmpgt_epi32, _mm_cvtepi32_ps,
-        _mm_cvtps_epi32, _mm_madd_epi16, _mm_max_epi16, _mm_min_ps, _mm_packs_epi32,
-        _mm_set1_epi16, _mm_set1_epi32, _mm_set1_ps, _mm_sqrt_ps, _mm_srli_epi32, _mm_sub_epi32,
-        _mm256_add_epi32, _mm256_cmpgt_epi32, _mm256_cvtepi32_ps, _mm256_cvtps_epi32,
-        _mm256_madd_epi16, _mm256_max_epi16, _mm256_min_ps, _mm256_packs_epi32,
+        __m128i, __m256i, __m512i, _mm_add_epi16, _mm_add_epi32, _mm_adds_epi16, _mm_avg_epu16,
+        _mm_cmpeq_epi16, _mm_cmpgt_epi32, _mm_cvtepi32_ps, _mm_cvtps_epi32, _mm_madd_epi16,
+        _mm_max_epi16, _mm_min_ps, _mm_mulhi_epi16, _mm_mulhrs_epi16, _mm_mullo_epi16,
+        _mm_packs_epi32, _mm_set1_epi16, _mm_set1_epi32, _mm_set1_ps, _mm_setzero_si128,
+        _mm_sqrt_ps, _mm_srli_epi16, _mm_srli_epi32, _mm_sub_epi32, _mm_unpackhi_epi16,
+        _mm_unpacklo_epi16, _mm_xor_si128, _mm256_add_epi32, _mm256_cmpeq_epi16,
+        _mm256_cmpgt_epi32, _mm256_cvtepi32_ps, _mm256_cvtps_epi32, _mm256_madd_epi16,
+        _mm256_max_epi16, _mm256_min_ps, _mm256_mulhrs_epi16, _mm256_packs_epi32,
         _mm256_permute4x64_epi64, _mm256_set1_epi16, _mm256_set1_epi32, _mm256_set1_ps,
-        _mm256_sqrt_ps, _mm256_srli_epi32, _mm256_sub_epi32, _mm512_add_epi32,
-        _mm512_cmpge_epi32_mask, _mm512_cmpgt_epi32_mask, _mm512_cvtepi32_ps, _mm512_cvtps_epi32,
-        _mm512_cvtsepi32_epi16, _mm512_madd_epi16, _mm512_mask_add_epi32, _mm512_mask_sub_epi32,
-        _mm512_max_epi16, _mm512_max_epi32, _mm512_min_ps, _mm512_set1_epi16, _mm512_set1_epi32,
-        _mm512_set1_ps, _mm512_sqrt_ps, _mm512_srli_epi32, _mm512_sub_epi32,
+        _mm256_sqrt_ps, _mm256_srli_epi32, _mm256_sub_epi32, _mm256_unpackhi_epi16,
+        _mm256_unpacklo_epi16, _mm256_xor_si256, _mm512_add_epi16, _mm512_add_epi32,
+        _mm512_cmpeq_epi16_mask, _mm512_cmpge_epi32_mask, _mm512_cmpgt_epi32_mask,
+        _mm512_cvtepi32_ps, _mm512_cvtps_epi32, _mm512_cvtsepi32_epi16, _mm512_madd_epi16,
+        _mm512_mask_add_epi32, _mm512_mask_mov_epi16, _mm512_mask_sub_epi32, _mm512_max_epi16,
+        _mm512_max_epi32, _mm512_min_ps, _mm512_mulhrs_epi16, _mm512_permutexvar_epi16,
+        _mm512_set_epi16, _mm512_set1_epi16, _mm512_set1_epi32, _mm512_set1_ps, _mm512_sqrt_ps,
+        _mm512_srli_epi32, _mm512_sub_epi32,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{i16x8, i16x16, i16x32};
 
     use super::{Split, UNROLL, split};
+
+    // `window` of `CQ15`: `pmulhrsw` (SSSE3) is `(x w + 2^14) >> 15` in 16 bits, the rounding of
+    // `q15_mul`. The one product outside the range is `(-32768)^2`, whose 32768 wraps to
+    // -32768; any other result is at least -32767 (`-32768 * 32767` gives -32767), so the
+    // lanes equal to -32768 are exactly those to saturate, and the XOR with the mask of the
+    // comparison turns them into 32767. Each weight is duplicated for the real and the
+    // imaginary part with the unpack instructions.
+
+    fearless_simd::kernel!(
+        pub(super) fn window_q15_sse4_2(
+            t: Sse4_2,
+            input: &[i16],
+            out: &mut [i16],
+            w: &[i16],
+        ) -> usize {
+            let min = _mm_set1_epi16(i16::MIN);
+            let mul = |x: &[i16], w: __m128i| -> __m128i {
+                let x: __m128i = i16x8::from_slice(t, x).into();
+                let r = _mm_mulhrs_epi16(x, w);
+                _mm_xor_si128(r, _mm_cmpeq_epi16(r, min))
+            };
+            window_steps!(input, out, w, 8, |i, o, wv| {
+                let wv: __m128i = i16x8::load_array_ref(t, wv).into();
+                let (i0, i1) = i.split_at(8);
+                let (o0, o1) = o.split_at_mut(8);
+                i16x8::simd_from(t, mul(i0, _mm_unpacklo_epi16(wv, wv))).store_slice(o0);
+                i16x8::simd_from(t, mul(i1, _mm_unpackhi_epi16(wv, wv))).store_slice(o1);
+            })
+        }
+    );
+
+    // SSE2 has no `pmulhrsw`: the product `P = 2^16 h + l` comes in its signed high half `h`
+    // (`pmulhw`) and its unsigned low half `l` (`pmullw`), and `(P + 2^14) >> 15` is
+    // `2 h + ((l + 2^14) >> 15)`, where the second term is `((l >> 14) + 1) >> 1`, the rounding
+    // average (`pavgw`) of `l >> 14` and 0. The doubling saturates (`paddsw`): `2 h` leaves the
+    // range only for `P = 2^30`, the product `(-32768)^2`, whose result saturates to 32767 (its
+    // low half is 0); every other sum stays in range.
+    fearless_simd::kernel!(
+        pub(super) fn window_q15_sse2(t: Sse2, input: &[i16], out: &mut [i16], w: &[i16]) -> usize {
+            let zero = _mm_setzero_si128();
+            let mul = |x: &[i16], w: __m128i| -> __m128i {
+                let x: __m128i = i16x8::from_slice(t, x).into();
+                let h = _mm_mulhi_epi16(x, w);
+                let l = _mm_mullo_epi16(x, w);
+                let round = _mm_avg_epu16(_mm_srli_epi16::<14>(l), zero);
+                _mm_add_epi16(_mm_adds_epi16(h, h), round)
+            };
+            window_steps!(input, out, w, 8, |i, o, wv| {
+                let wv: __m128i = i16x8::load_array_ref(t, wv).into();
+                let (i0, i1) = i.split_at(8);
+                let (o0, o1) = o.split_at_mut(8);
+                i16x8::simd_from(t, mul(i0, _mm_unpacklo_epi16(wv, wv))).store_slice(o0);
+                i16x8::simd_from(t, mul(i1, _mm_unpackhi_epi16(wv, wv))).store_slice(o1);
+            })
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn window_q15_avx2(t: Avx2, input: &[i16], out: &mut [i16], w: &[i16]) -> usize {
+            let min = _mm256_set1_epi16(i16::MIN);
+            let mul = |x: &[i16], w: __m256i| -> __m256i {
+                let x: __m256i = i16x16::from_slice(t, x).into();
+                let r = _mm256_mulhrs_epi16(x, w);
+                _mm256_xor_si256(r, _mm256_cmpeq_epi16(r, min))
+            };
+            window_steps!(input, out, w, 16, |i, o, wv| {
+                // `vpunpck*wd` work within the 128-bit halves: `vpermq` first puts the weights of
+                // samples 0-3 and 8-11 into the low half, those of 4-7 and 12-15 into the high.
+                let wv: __m256i = i16x16::load_array_ref(t, wv).into();
+                let wv = _mm256_permute4x64_epi64::<0b11_01_10_00>(wv);
+                let (i0, i1) = i.split_at(16);
+                let (o0, o1) = o.split_at_mut(16);
+                i16x16::simd_from(t, mul(i0, _mm256_unpacklo_epi16(wv, wv))).store_slice(o0);
+                i16x16::simd_from(t, mul(i1, _mm256_unpackhi_epi16(wv, wv))).store_slice(o1);
+            })
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn window_q15_avx512(
+            t: Avx512,
+            input: &[i16],
+            out: &mut [i16],
+            w: &[i16],
+        ) -> usize {
+            let min = _mm512_set1_epi16(i16::MIN);
+            let max = _mm512_set1_epi16(i16::MAX);
+            // The word indices `[0, 0, 1, 1, ..., 15, 15]` and `[16, 16, ..., 31, 31]`.
+            let lo = _mm512_set_epi16(
+                15, 15, 14, 14, 13, 13, 12, 12, 11, 11, 10, 10, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4,
+                3, 3, 2, 2, 1, 1, 0, 0,
+            );
+            let hi = _mm512_add_epi16(lo, _mm512_set1_epi16(16));
+            let mul = |x: &[i16], w: __m512i| -> __m512i {
+                let x: __m512i = i16x32::from_slice(t, x).into();
+                let r = _mm512_mulhrs_epi16(x, w);
+                _mm512_mask_mov_epi16(r, _mm512_cmpeq_epi16_mask(r, min), max)
+            };
+            window_steps!(input, out, w, 32, |i, o, wv| {
+                let wv: __m512i = i16x32::load_array_ref(t, wv).into();
+                let (i0, i1) = i.split_at(32);
+                let (o0, o1) = o.split_at_mut(32);
+                let w0 = _mm512_permutexvar_epi16(lo, wv);
+                let w1 = _mm512_permutexvar_epi16(hi, wv);
+                i16x32::simd_from(t, mul(i0, w0)).store_slice(o0);
+                i16x32::simd_from(t, mul(i1, w1)).store_slice(o1);
+            })
+        }
+    );
 
     /// The rounding term `2^14`.
     const HALF: i32 = 1 << 14;
@@ -634,17 +1079,63 @@ mod neon {
     #![allow(unsafe_code)]
 
     use core::arch::aarch64::{
-        float32x4x2_t, float32x4x4_t, int16x8_t, int16x8x2_t, int16x8x4_t, uint32x4_t, vcgtq_u32,
-        vcvtaq_u32_f32, vcvtq_f32_u32, vdupq_n_f32, vget_low_s16, vld2q_s16, vld4q_s16,
-        vmlal_high_s16, vmlal_s16, vmlaq_u32, vmull_high_s16, vmull_s16, vmulq_f32, vpaddq_f32,
-        vqdmlal_high_s16, vqdmlal_s16, vqdmull_high_s16, vqdmull_s16, vqmovn_high_s32, vqmovn_s32,
-        vqrshrn_high_n_s32, vqrshrn_n_s32, vreinterpretq_s32_u32, vreinterpretq_u32_s32,
-        vsqrtq_f32, vst1q_s16, vst2q_s16, vsubq_f32, vsubq_u32,
+        float32x4_t, float32x4x2_t, float32x4x4_t, int16x8_t, int16x8x2_t, int16x8x4_t, uint32x4_t,
+        vcgtq_u32, vcvtaq_u32_f32, vcvtq_f32_u32, vdupq_n_f32, vget_low_s16, vld2q_f32, vld2q_s16,
+        vld4q_s16, vmlal_high_s16, vmlal_s16, vmlaq_u32, vmull_high_s16, vmull_s16, vmulq_f32,
+        vpaddq_f32, vqdmlal_high_s16, vqdmlal_s16, vqdmull_high_s16, vqdmull_s16, vqmovn_high_s32,
+        vqmovn_s32, vqrdmulhq_s16, vqrshrn_high_n_s32, vqrshrn_n_s32, vreinterpretq_s32_u32,
+        vreinterpretq_u32_s32, vsqrtq_f32, vst1q_s16, vst2q_f32, vst2q_s16, vsubq_f32, vsubq_u32,
+        vzip1q_s16, vzip2q_s16,
     };
     use fearless_simd::prelude::*;
-    use fearless_simd::{f32x8, f32x16};
+    use fearless_simd::{f32x4, f32x8, f32x16, i16x8};
 
     use super::{Split, UNROLL, split};
+
+    /// The 8 values of `x` (4 samples) split into the real and the imaginary parts.
+    #[inline(always)]
+    fn load2_f32(x: &[f32; 8]) -> float32x4x2_t {
+        // SAFETY: `vld2q_f32` reads 8 consecutive `f32` with no alignment requirement beyond
+        // that of `f32`, and `x` holds exactly 8. NEON is part of the AArch64 baseline.
+        unsafe { vld2q_f32(x.as_ptr()) }
+    }
+
+    /// Stores the real and the imaginary parts of 4 samples interleaved into `o`.
+    #[inline(always)]
+    fn store2_f32(o: &mut [f32; 8], re: float32x4_t, im: float32x4_t) {
+        // SAFETY: `vst2q_f32` writes 8 consecutive `f32` with no alignment requirement beyond
+        // that of `f32`, and `o` holds exactly 8 and is borrowed exclusively.
+        unsafe { vst2q_f32(o.as_mut_ptr(), float32x4x2_t(re, im)) }
+    }
+
+    fearless_simd::kernel!(
+        pub(super) fn window_f32(t: Neon, input: &[f32], out: &mut [f32], w: &[f32]) -> usize {
+            // `ld2` splits the samples into their real and imaginary parts, both are multiplied
+            // by the weights as they are, and `st2` interleaves them again: no shuffle of the
+            // weights. Four steps per iteration, which advance the pointers by post-indexing.
+            window_steps!(input, out, w, 4, |i, o, wv| {
+                let wv: float32x4_t = f32x4::load_array_ref(t, wv).into();
+                let x = load2_f32(i);
+                store2_f32(o, vmulq_f32(x.0, wv), vmulq_f32(x.1, wv));
+            })
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn window_q15(t: Neon, input: &[i16], out: &mut [i16], w: &[i16]) -> usize {
+            // `sqrdmulh` is `sat((2 x w + 2^15) >> 16)`, which is `q15_mul` exactly, saturation
+            // of `(-32768)^2` included; `zip1`/`zip2` duplicate each weight for both parts.
+            window_steps!(input, out, w, 8, |i, o, wv| {
+                let wv: int16x8_t = i16x8::load_array_ref(t, wv).into();
+                let (i0, i1) = i.split_at(8);
+                let (o0, o1) = o.split_at_mut(8);
+                let x0: int16x8_t = i16x8::from_slice(t, i0).into();
+                let x1: int16x8_t = i16x8::from_slice(t, i1).into();
+                i16x8::simd_from(t, vqrdmulhq_s16(x0, vzip1q_s16(wv, wv))).store_slice(o0);
+                i16x8::simd_from(t, vqrdmulhq_s16(x1, vzip2q_s16(wv, wv))).store_slice(o1);
+            })
+        }
+    );
 
     /// The 32 values of `x` (16 samples) split four ways: the real parts of the even samples,
     /// their imaginary parts, then the same of the odd samples.
@@ -764,13 +1255,36 @@ mod wasm {
 
     use core::arch::wasm32::{
         f32x4_add, f32x4_convert_i32x4, f32x4_min, f32x4_splat, f32x4_sqrt, i16x8_max,
-        i16x8_narrow_i32x4, i16x8_splat, i32x4_add, i32x4_dot_i16x8, i32x4_gt, i32x4_shr,
-        i32x4_splat, i32x4_sub, i32x4_trunc_sat_f32x4, u16x8_min, u16x8_splat, v128,
+        i16x8_narrow_i32x4, i16x8_q15mulr_sat, i16x8_shuffle, i16x8_splat, i32x4_add,
+        i32x4_dot_i16x8, i32x4_gt, i32x4_shr, i32x4_splat, i32x4_sub, i32x4_trunc_sat_f32x4,
+        u16x8_min, u16x8_splat, v128,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, i16x8};
 
     use super::{Split, split};
+
+    fearless_simd::kernel!(
+        pub(super) fn window_q15(
+            t: WasmSimd128,
+            input: &[i16],
+            out: &mut [i16],
+            w: &[i16],
+        ) -> usize {
+            // `i16x8.q15mulr_sat_s` is `q15_mul` exactly, saturation of `(-32768)^2` included.
+            window_steps!(input, out, w, 8, |i, o, wv| {
+                let wv: v128 = i16x8::load_array_ref(t, wv).into();
+                let (i0, i1) = i.split_at(8);
+                let (o0, o1) = o.split_at_mut(8);
+                let x0: v128 = i16x8::from_slice(t, i0).into();
+                let x1: v128 = i16x8::from_slice(t, i1).into();
+                let w0 = i16x8_shuffle::<0, 0, 1, 1, 2, 2, 3, 3>(wv, wv);
+                let w1 = i16x8_shuffle::<4, 4, 5, 5, 6, 6, 7, 7>(wv, wv);
+                i16x8::simd_from(t, i16x8_q15mulr_sat(x0, w0)).store_slice(o0);
+                i16x8::simd_from(t, i16x8_q15mulr_sat(x1, w1)).store_slice(o1);
+            })
+        }
+    );
 
     /// Steps per block: [`steps!`] writes the blocks out on wasm32, which pays off up to 32
     /// steps (64 gain about 1% more for twice the code and the longer tails).
@@ -833,8 +1347,29 @@ mod wasm {
 
 #[cfg(test)]
 mod tests {
-    use super::{mag_q15_level, mag_sq_f32_level, mag_sq_q15_level};
+    use super::{mag_q15_level, mag_sq_f32_level, mag_sq_q15_level, window_q15_level};
     use crate::level::{dispatch, name};
+
+    #[test]
+    fn the_window_path_of_the_current_level_runs_on_all_whole_steps() {
+        let step = match name() {
+            "avx512" => 32,
+            "avx2" => 16,
+            "sse4.2" | "sse2" | "neon" | "simd128" => 8,
+            _ => 0,
+        };
+        // `q15_mul(1000, 16384)` is 500.
+        let input = [1000i16; 2 * 300];
+        let w = [16384i16; 300];
+        for n in 0..=300 {
+            let mut out = [0i16; 2 * 300];
+            let ((x, _), (y, _)) = (input.split_at(2 * n), out.split_at_mut(2 * n));
+            let done = dispatch!(simd => window_q15_level(simd, x, y, &w[..n]));
+            assert_eq!(done, n.checked_rem(step).map_or(0, |r| n - r), "n {n}");
+            assert!(y.iter().take(2 * done).all(|&v| v == 500), "n {n}");
+            assert!(y.iter().skip(2 * done).all(|&v| v == 0), "n {n}");
+        }
+    }
 
     /// The samples per step of the level-specific path of `mag` `CQ15` at `level`, `0` where the
     /// level has none (`mag` `C32` has none on any level).

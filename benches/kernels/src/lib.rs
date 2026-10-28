@@ -25,7 +25,7 @@ use sdrk::kernels::filter::{Fir, FirState};
 use sdrk::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk::kernels::mix::{Nco, Rotate};
 use sdrk::kernels::modulate::{FmMod, FmModState};
-use sdrk::kernels::spectrum::{Mag, MagSq};
+use sdrk::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk::kernels::squelch::{Squelch, SquelchState};
 use sdrk::{C32, CQ15, ComplexSample, Fallback, Q15, Rate, Sdrk};
 use sdrk_core::Reference;
@@ -298,7 +298,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 47] = [
+pub const KERNELS: [&str; 51] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -346,6 +346,10 @@ pub const KERNELS: [&str; 47] = [
     "deemphasis_q15",
     "dc_block",
     "dc_block_cq15",
+    "window",
+    "window_cq15",
+    "power_db",
+    "power_db_q15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -389,6 +393,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "squelch_cq15" => Box::new(SquelchK::<CQ15>::new(rng, layout)),
         "mag" => Box::new(MagK::new(rng, layout)),
         "mag_q15" => Box::new(MagQ15K::new(rng, layout)),
+        "window" => Box::new(WindowK::new(rng, layout)),
+        "window_cq15" => Box::new(WindowQ15K::new(rng, layout)),
+        "power_db" => Box::new(PowerDbK::new(rng, layout)),
+        "power_db_q15" => Box::new(PowerDbQ15K::new(rng, layout)),
         "agc" => Box::new(AgcK::<C32>::new(rng, layout)),
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
         "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout)),
@@ -2583,6 +2591,319 @@ impl Kernel for MagQ15K {
 
     fn volk_functions(&self) -> &'static [&'static str] {
         &["volk_16ic_magnitude_16i"]
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// window and power_db
+
+/// A periodic Hann window of `n` values, the typical weights of `window`.
+fn hann(n: usize) -> Vec<f64> {
+    (0..n)
+        .map(|i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos())
+        .collect()
+}
+
+#[inline(never)]
+fn window<T: ComplexSample, B: Window<T>>(backend: &B, input: &[T], out: &mut [T], w: &[T::Real]) {
+    let _ = black_box(backend.window(black_box(input), out, black_box(w)));
+}
+
+/// `window` of C32 samples against `volk_32fc_32f_multiply_32fc` (a complex vector times a
+/// real one, the same work; only VOLK's own build has it, not the generic wasm32 library).
+struct WindowK {
+    input: Aligned<C32>,
+    w: Aligned<f32>,
+    out: Aligned<C32>,
+}
+
+impl WindowK {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut w = Aligned::<f32>::skewed(layout.n, layout.skew(4));
+        for (d, v) in w.iter_mut().zip(hann(layout.n)) {
+            *d = v as f32;
+        }
+        WindowK {
+            input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
+            w,
+            out: Aligned::skewed(layout.n, layout.skew(8)),
+        }
+    }
+}
+
+impl Kernel for WindowK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => window(&Sdrk, &self.input, &mut self.out, &self.w),
+                Impl::Fallback => window(&Fallback, &self.input, &mut self.out, &self.w),
+                // SAFETY: input, weights and output hold `n` elements.
+                Impl::Volk => unsafe {
+                    volk_sys::native::volk_32fc_32f_multiply_32fc(
+                        self.out.as_mut_ptr().cast(),
+                        self.input.as_ptr().cast(),
+                        self.w.as_ptr(),
+                        self.input.len() as u32,
+                    );
+                },
+                other => unreachable!("window has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let want: Vec<f64> = self
+            .input
+            .iter()
+            .zip(self.w.iter())
+            .flat_map(|(x, &w)| {
+                let w = f64::from(w);
+                [f64::from(x.re) * w, f64::from(x.im) * w]
+            })
+            .collect();
+        snr_db(&want, &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::NATIVE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => "volk_32fc_32f_multiply_32fc",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        if volk_sys::NATIVE {
+            &["volk_32fc_32f_multiply_32fc"]
+        } else {
+            &[]
+        }
+    }
+}
+
+/// `window` of CQ15 samples with Q15 weights (no established library has a complex-by-real
+/// Q15 multiply with the rounding of `q15_mul` on our levels: compared with our fallback).
+struct WindowQ15K {
+    input: Aligned<CQ15>,
+    w: Aligned<Q15>,
+    out: Aligned<CQ15>,
+}
+
+impl WindowQ15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut w = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
+        for (d, v) in w.iter_mut().zip(hann(layout.n)) {
+            *d = Q15((v * 32767.0).round() as i16);
+        }
+        WindowQ15K {
+            input: noise_cq15(rng, layout.n, 23_000.0, layout.skew(4)),
+            w,
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+        }
+    }
+}
+
+impl Kernel for WindowQ15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => window(&Sdrk, &self.input, &mut self.out, &self.w),
+                Impl::Fallback => window(&Fallback, &self.input, &mut self.out, &self.w),
+                other => unreachable!("window_cq15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        // The unrounded products in Q15 units of the output.
+        let want: Vec<f64> = self
+            .input
+            .iter()
+            .zip(self.w.iter())
+            .flat_map(|(x, w)| {
+                let w = f64::from(w.0) / 32768.0;
+                [f64::from(x.re.0) * w, f64::from(x.im.0) * w]
+            })
+            .collect();
+        snr_db(&want, &cq15s(&self.out, 1.0))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+#[inline(never)]
+fn power_db<T: sdrk::RealSample, B: PowerDb<T>>(backend: &B, input: &[T], out: &mut [f32]) {
+    let _ = black_box(backend.power_db(black_box(input), out, black_box(POWER_DB_OFFSET)));
+}
+
+/// The offset of the `power_db` measurements in dB.
+const POWER_DB_OFFSET: f32 = -3.0;
+
+/// `10 log10(max(p, 1e-20)) + offset` in f64, the reference of the `power_db` accuracy.
+fn power_db_model(p: f64) -> f64 {
+    10.0 * p.max(1e-20).log10() + f64::from(POWER_DB_OFFSET)
+}
+
+/// `power_db` of f32 powers against VOLK's base-2 logarithm, scaled and offset with VOLK
+/// (`volk_32f_log2_32f`, `volk_32f_s32f_multiply_32f` by `10 log10(2)`,
+/// `volk_32f_s32f_add_32f`; the same work without the floor). The powers spread over 70 dB.
+struct PowerDbK {
+    input: Aligned<f32>,
+    out: Aligned<f32>,
+}
+
+impl PowerDbK {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<f32>::skewed(layout.n, layout.skew(4));
+        for p in input.iter_mut() {
+            *p = 10f32.powf(3.5 * rng.unit() - 2.5);
+        }
+        PowerDbK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+        }
+    }
+}
+
+impl Kernel for PowerDbK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => power_db(&Sdrk, &self.input, &mut self.out),
+                Impl::Fallback => power_db(&Fallback, &self.input, &mut self.out),
+                // SAFETY: input and output hold `n` elements; the last two calls work in place,
+                // which VOLK allows for element-wise kernels.
+                Impl::Volk => unsafe {
+                    let n = self.input.len() as u32;
+                    let out = self.out.as_mut_ptr();
+                    volk_sys::native::volk_32f_log2_32f(out, self.input.as_ptr(), n);
+                    volk_sys::native::volk_32f_s32f_multiply_32f(
+                        out,
+                        out,
+                        10.0 * std::f32::consts::LOG10_2,
+                        n,
+                    );
+                    volk_sys::native::volk_32f_s32f_add_32f(out, out, POWER_DB_OFFSET, n);
+                },
+                other => unreachable!("power_db has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let want: Vec<f64> = self
+            .input
+            .iter()
+            .map(|&p| power_db_model(f64::from(p)))
+            .collect();
+        snr_db(&want, &f32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::NATIVE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => {
+                "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f"
+            }
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        if volk_sys::NATIVE {
+            &[
+                "volk_32f_log2_32f",
+                "volk_32f_s32f_multiply_32f",
+                "volk_32f_s32f_add_32f",
+            ]
+        } else {
+            &[]
+        }
+    }
+}
+
+/// `power_db` of Q15 powers (no established library: compared with our fallback). The raw
+/// powers spread over 45 dB below full scale.
+struct PowerDbQ15K {
+    input: Aligned<Q15>,
+    out: Aligned<f32>,
+}
+
+impl PowerDbQ15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
+        for p in input.iter_mut() {
+            *p = Q15((32767.0 * 10f32.powf(2.25 * rng.unit() - 2.25)) as i16);
+        }
+        PowerDbQ15K {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+        }
+    }
+}
+
+impl Kernel for PowerDbQ15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => power_db(&Sdrk, &self.input, &mut self.out),
+                Impl::Fallback => power_db(&Fallback, &self.input, &mut self.out),
+                other => unreachable!("power_db_q15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let want: Vec<f64> = self
+            .input
+            .iter()
+            .map(|p| power_db_model(f64::from(p.0) / 32768.0))
+            .collect();
+        snr_db(&want, &f32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
     }
 }
 

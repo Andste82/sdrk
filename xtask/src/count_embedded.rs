@@ -30,6 +30,11 @@ use crate::emu::{Tool, find_tool};
 /// Samples per call of the workload binary (a kernel of `n` samples, or an FFT of `n` points).
 pub const SAMPLES_PER_CALL: u64 = 1024;
 
+/// The CPU the workload is compiled for (`-C target-cpu`, set in
+/// `targets/qemu-cortex-m4/.cargo/config.toml`): the CPU of the QEMU machine and the
+/// `-mcpu` of the CMSIS-DSP reference, so that both sides are tuned for the same core (D30).
+pub const TARGET_CPU: &str = "cortex-m4";
+
 /// Samples per call of the biquad kernels: those of the host counts (`benches/kernels`).
 pub const BIQUAD_SAMPLES_PER_CALL: u64 = 4096;
 
@@ -280,6 +285,11 @@ pub fn run(root: &Path, only: &[String], write: bool) -> anyhow::Result<bool> {
             "platform": "cortex-m4",
             "machine": "qemu-system-arm -machine mps2-an386 -cpu cortex-m4",
             "status": "report only, no limits",
+            "build": {
+                "target": "thumbv7em-none-eabihf",
+                "target_cpu": TARGET_CPU,
+                "profile": "emu",
+            },
             "method": {
                 "k": K,
                 "samples_per_call": SAMPLES_PER_CALL,

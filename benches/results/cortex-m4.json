@@ -1,19 +1,24 @@
 {
+  "build": {
+    "profile": "emu",
+    "target": "thumbv7em-none-eabihf",
+    "target_cpu": "cortex-m4"
+  },
   "kernels": {
     "agc": {
       "implementation": "fallback",
-      "instructions_per_sample": 76.16
+      "instructions_per_sample": 73.66
     },
     "agc_cq15": {
       "implementation": "fallback",
-      "instructions_per_sample": 1333.88
+      "instructions_per_sample": 1336.96
     },
     "biquad": {
       "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), Cortex-M4 with the FPU (-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -O3 -ffp-contract=off, LOOPUNROLL, CMSIS-Core 6.3.0)",
       "implementation": "fallback",
-      "instructions_per_sample": 36.77,
+      "instructions_per_sample": 50.27,
       "other_instr_per_sample": 45.0,
-      "ratio": 0.82,
+      "ratio": 1.12,
       "samples_per_call": 4096,
       "snr_db": {
         "other": 134.9,
@@ -23,9 +28,9 @@
     "biquad_cq15": {
       "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), Cortex-M4 with the DSP extension (ARM_MATH_DSP; -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -O3 -ffp-contract=off, LOOPUNROLL, CMSIS-Core 6.3.0)",
       "implementation": "fallback",
-      "instructions_per_sample": 73.29,
+      "instructions_per_sample": 82.05,
       "other_instr_per_sample": 66.05,
-      "ratio": 1.11,
+      "ratio": 1.24,
       "samples_per_call": 4096,
       "snr_db": {
         "other": 56.73,
@@ -35,9 +40,9 @@
     "biquad_real": {
       "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, Cortex-M4 with the FPU (-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -O3 -ffp-contract=off, LOOPUNROLL, CMSIS-Core 6.3.0)",
       "implementation": "fallback",
-      "instructions_per_sample": 13.88,
+      "instructions_per_sample": 21.88,
       "other_instr_per_sample": 22.5,
-      "ratio": 0.62,
+      "ratio": 0.97,
       "samples_per_call": 4096,
       "snr_db": {
         "other": 136.72,
@@ -47,9 +52,9 @@
     "biquad_real_q15": {
       "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), Cortex-M4 with the DSP extension (ARM_MATH_DSP; -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -O3 -ffp-contract=off, LOOPUNROLL, CMSIS-Core 6.3.0)",
       "implementation": "fallback",
-      "instructions_per_sample": 33.53,
+      "instructions_per_sample": 37.78,
       "other_instr_per_sample": 33.03,
-      "ratio": 1.02,
+      "ratio": 1.14,
       "samples_per_call": 4096,
       "snr_db": {
         "other": 56.63,
@@ -58,19 +63,19 @@
     },
     "convert_cs16": {
       "implementation": "fallback",
-      "instructions_per_sample": 159.23
+      "instructions_per_sample": 162.23
     },
     "convert_cs8": {
       "implementation": "fallback",
-      "instructions_per_sample": 135.23
+      "instructions_per_sample": 136.23
     },
     "convert_out_cs16": {
       "implementation": "fallback",
-      "instructions_per_sample": 151.93
+      "instructions_per_sample": 151.45
     },
     "dc_block_real": {
       "implementation": "fallback",
-      "instructions_per_sample": 10.77
+      "instructions_per_sample": 10.9
     },
     "dc_block_real_q15": {
       "implementation": "fallback",
@@ -78,35 +83,35 @@
     },
     "fft_1024": {
       "implementation": "fallback",
-      "instructions_per_sample": 258.87
+      "instructions_per_sample": 278.86
     },
     "fft_cq15_1024": {
       "implementation": "fallback",
-      "instructions_per_sample": 1408.23
+      "instructions_per_sample": 1366.67
     },
     "fir": {
       "implementation": "fallback",
-      "instructions_per_sample": 452.36
+      "instructions_per_sample": 562.01
     },
     "fir_decimate": {
       "implementation": "fallback",
-      "instructions_per_sample": 116.39
+      "instructions_per_sample": 141.7
     },
     "fm_mod": {
       "implementation": "fallback",
-      "instructions_per_sample": 421.06
+      "instructions_per_sample": 423.06
     },
     "mag_sq": {
       "implementation": "fallback",
-      "instructions_per_sample": 5.4
+      "instructions_per_sample": 6.4
     },
     "quad_demod": {
       "implementation": "fallback",
-      "instructions_per_sample": 97.89
+      "instructions_per_sample": 107.63
     },
     "rotate": {
       "implementation": "fallback",
-      "instructions_per_sample": 33.04
+      "instructions_per_sample": 34.53
     }
   },
   "machine": "qemu-system-arm -machine mps2-an386 -cpu cortex-m4",

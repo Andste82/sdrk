@@ -165,7 +165,7 @@ ENV SDRK_LLVM_MCA=/opt/llvm-mca-23.1.1/bin/llvm-mca
 ARG OSACA_VERSION=0.7.1
 ARG UICA_COMMIT=6ebeeab0f8705cae4b17a9362f9c65ef91f5cc44
 RUN UV_PYTHON_INSTALL_DIR=/opt/uv-python uv venv --python 3.12 /opt/sdrk-perf-venv \
-    && VIRTUAL_ENV=/opt/sdrk-perf-venv uv pip install osaca==$OSACA_VERSION plotly \
+    && VIRTUAL_ENV=/opt/sdrk-perf-venv uv pip install osaca==$OSACA_VERSION plotly setuptools \
     && git clone https://github.com/andreas-abel/uiCA.git /opt/uiCA \
     && cd /opt/uiCA \
     && git checkout $UICA_COMMIT \

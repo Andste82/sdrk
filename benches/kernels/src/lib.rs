@@ -14,7 +14,10 @@ use sdrk::kernels::agc::{Agc, AgcState};
 use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState};
 use sdrk::kernels::convert::{Convert, ConvertOut, ConvertOutReal};
 use sdrk::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
-use sdrk::kernels::demod::{DcBlockReal, DcBlockRealState, QuadDemod, QuadDemodState};
+use sdrk::kernels::demod::{
+    DcBlock, DcBlockReal, DcBlockRealState, DcBlockState, Deemphasis, DeemphasisState, QuadDemod,
+    QuadDemodState,
+};
 use sdrk::kernels::fft::{Direction, Fft, FftPlan, RealFft, RealFftPlan, Scaling};
 use sdrk::kernels::filter::{Fir, FirState};
 use sdrk::kernels::interp::{FirInterpState, FirInterpolate};
@@ -293,7 +296,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 43] = [
+pub const KERNELS: [&str; 47] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -337,6 +340,10 @@ pub const KERNELS: [&str; 43] = [
     "convert_out_real_rs16",
     "convert_out_real_rs8",
     "convert_out_real_ru8",
+    "deemphasis",
+    "deemphasis_q15",
+    "dc_block",
+    "dc_block_cq15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -384,6 +391,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
         "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout)),
         "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout)),
+        "deemphasis" => Box::new(DeemphasisK::<f32>::new(rng, layout)),
+        "deemphasis_q15" => Box::new(DeemphasisK::<Q15>::new(rng, layout)),
+        "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout)),
+        "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout)),
         "biquad" => Box::new(BiquadK::new(rng, layout, simd, c32)),
         "biquad_cq15" => Box::new(BiquadK::new(rng, layout, simd, cq15)),
         "biquad_real" => Box::new(BiquadRealK::<f32>::new(rng, layout, simd)),
@@ -2771,6 +2782,192 @@ where
         let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
         let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
         snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// `deemphasis` (a first-order recursion on the previous output: not accelerated, so the entries
+/// are `info` against our fallback). The input is noise of 0.5, the time constant 75 us at
+/// 48 kHz (`alpha` about 0.24).
+struct DeemphasisK<T: RealNoise> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: RealNoise> DeemphasisK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
+        for s in input.iter_mut() {
+            *s = T::noise(rng, 0.5, 0.0);
+        }
+        DeemphasisK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> DeemphasisState<T> {
+        DeemphasisState::new(75e-6, Rate::hz(48_000).expect("rate")).expect("deemphasis")
+    }
+}
+
+#[inline(never)]
+fn deemphasis<T: sdrk_core::RealSample, B: Deemphasis<T>>(
+    backend: &B,
+    state: &mut DeemphasisState<T>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.deemphasis(state, black_box(input), out));
+}
+
+impl<T: RealNoise> Kernel for DeemphasisK<T>
+where
+    Sdrk: Deemphasis<T>,
+    Fallback: Deemphasis<T>,
+    Reference: Deemphasis<T>,
+{
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => deemphasis(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => deemphasis(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("deemphasis has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![self.out[0]; self.out.len()];
+        let _ = Reference.deemphasis(&mut Self::state(), &self.input, &mut want);
+        let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// A complex sample for the `dc_block` measurements.
+trait DcNoise: ComplexSample {
+    /// Noise of the given amplitude as a fraction of full scale, plus the offset `(0.3, -0.2)`.
+    fn noise(rng: &mut Pcg32, amplitude: f32) -> Self;
+    /// The pole `0.999`.
+    fn pole() -> Self::Real;
+    /// The components as f64.
+    fn flat(x: &[Self]) -> Vec<f64>;
+}
+
+impl DcNoise for C32 {
+    fn noise(rng: &mut Pcg32, amplitude: f32) -> Self {
+        C32::new(rng.unit() * amplitude + 0.3, rng.unit() * amplitude - 0.2)
+    }
+
+    fn pole() -> f32 {
+        0.999
+    }
+
+    fn flat(x: &[Self]) -> Vec<f64> {
+        c32s(x)
+    }
+}
+
+impl DcNoise for CQ15 {
+    fn noise(rng: &mut Pcg32, amplitude: f32) -> Self {
+        CQ15 {
+            re: <Q15 as RealNoise>::noise(rng, amplitude, 0.3),
+            im: <Q15 as RealNoise>::noise(rng, amplitude, -0.2),
+        }
+    }
+
+    fn pole() -> Q15 {
+        Q15(32_735)
+    }
+
+    fn flat(x: &[Self]) -> Vec<f64> {
+        cq15s(x, 1.0)
+    }
+}
+
+/// `dc_block` (a first-order recursion per component, as `dc_block_real`: not accelerated, so the
+/// entries are `info` against our fallback).
+struct DcBlockK<T: DcNoise> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: DcNoise> DcBlockK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
+        for s in input.iter_mut() {
+            *s = T::noise(rng, 0.2);
+        }
+        DcBlockK {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> DcBlockState<T> {
+        DcBlockState::new(T::pole()).expect("dc_block")
+    }
+}
+
+#[inline(never)]
+fn dc_block<T: ComplexSample, B: DcBlock<T>>(
+    backend: &B,
+    state: &mut DcBlockState<T>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.dc_block(state, black_box(input), out));
+}
+
+impl<T: DcNoise> Kernel for DcBlockK<T>
+where
+    Sdrk: DcBlock<T>,
+    Fallback: DcBlock<T>,
+    Reference: DcBlock<T>,
+{
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => dc_block(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => dc_block(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("dc_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![self.out[0]; self.out.len()];
+        let _ = Reference.dc_block(&mut Self::state(), &self.input, &mut want);
+        snr_db(&T::flat(&want), &T::flat(&self.out))
     }
 
     fn supports(&self, which: Impl) -> bool {

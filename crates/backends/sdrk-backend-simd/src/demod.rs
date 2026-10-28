@@ -3,7 +3,10 @@
 //! The argument is computed with a vectorised `atan2`: octant reduction to `[0, 1]`, a second
 //! reduction to `[0, tan(pi/8)]`, then the Cephes `atanf` polynomial. The maximum error of the
 //! approximation is 1e-7 rad (about 130 dB below a full-scale argument), well inside the
-//! contract of 100 dB (`C32`) and 70 dB (`CQ15`). Each output depends only on the current and
+//! contract of 100 dB (`C32`) and 70 dB (`CQ15`). `C32` and `CQ15` share the same `atan2` with a
+//! single division ([`atan2_c32`]; `CQ15` converts its exact integer products to `f32` first),
+//! except `CQ15` on AVX-512, which keeps a variant with two divisions ([`atan2_q15`]).
+//! Each output depends only on the current and
 //! the previous input sample, so the result is independent of how the input is split into
 //! blocks.
 //!
@@ -24,19 +27,19 @@ use crate::util::check_len;
 
 /// `tan(pi / 8)`.
 const TAN_PI_8: f32 = 0.414_213_57;
-/// `3 pi / 4`.
-const THREE_PI_4: f32 = 2.356_194_5;
 /// `pi / 4` with the low 3 bits of the significand cleared, so that `m * PI4_HI` is exact for
 /// every `m` in `0..=4`.
 const PI4_HI: f32 = f32::from_bits(FRAC_PI_4.to_bits() & !7);
 /// `pi / 4 - PI4_HI`.
 const PI4_LO: f32 = (core::f64::consts::FRAC_PI_4 - PI4_HI as f64) as f32;
+/// `3 pi / 4`.
+const THREE_PI_4: f32 = 2.356_194_5;
 /// `PI4_LO / PI4_HI`: `m PI4_LO` from `m PI4_HI`.
 const LO_PER_HI: f32 = (PI4_LO as f64 / PI4_HI as f64) as f32;
 /// The most lanes of an `f32` vector (AVX-512).
 const MAX_LANES: usize = 16;
 
-/// `atan2(y, x)` in radians for `C32`; 0 where both are zero.
+/// `atan2(y, x)` in radians; 0 where both are zero (`C32`, and `CQ15` from its products).
 ///
 /// One division: `t = lo / hi` with `lo = min(|x|, |y|)` and `hi = max(|x|, |y|)`, or
 /// `t = (lo - hi) / (lo + hi)` where `lo / hi` is above `tan(pi/8)` (then
@@ -95,7 +98,8 @@ fn atan2_c32<S: SimdToken>(simd: S, y: S::f32s, x: S::f32s) -> S::f32s {
     (r.bitcast::<S::u32s>() | (y.bitcast::<S::u32s>() & sign)).bitcast::<S::f32s>()
 }
 
-/// `atan2(y, x)` in radians for `CQ15`; 0 where both are zero. Maximum error about 1e-7.
+/// `atan2(y, x)` in radians with two divisions (`lo / hi`, then the second reduction), for `CQ15`
+/// on AVX-512 only; 0 where both are zero. Maximum error about 1e-7.
 ///
 /// The octant of the result is folded into a single addition `K + S * v` (`v` is the arc tangent
 /// of the reduced argument, `K` a multiple of pi/4 chosen by the octant, `S` = +-1), so that the
@@ -395,7 +399,13 @@ fn discriminate<S: SimdToken>(
     let (pr, pi) = ((p << 16u32) >> 16u32, p >> 16u32);
     let re = (xr * pr).to_float::<S::f32s>() + (xi * pi).to_float::<S::f32s>();
     let im = (xi * pr).to_float::<S::f32s>() - (xr * pi).to_float::<S::f32s>();
-    let arg = atan2_q15(simd, im, re);
+    // The single division of `atan2_c32` is faster at every level but AVX-512, where the two
+    // divisions of `atan2_q15` simulate 4 % faster on `znver4` (issue #20).
+    let arg = if S::f32s::LEN == 16 {
+        atan2_q15(simd, im, re)
+    } else {
+        atan2_c32(simd, im, re)
+    };
     // `phi = atan2 / pi` in units of 2^-15, rounded half up, saturated.
     let v = arg * c.k + 0.5;
     let phi = if is_sse2_baseline(simd) {
@@ -500,7 +510,11 @@ impl QuadDemod<CQ15> for Simd {
 mod tests {
     use fearless_simd::Simd as SimdToken;
 
+    use sdrk_core::kernels::demod::{QuadDemod, QuadDemodState};
+    use sdrk_core::{CQ15, Fallback, Q15};
+
     use super::{discriminate_generic, discriminate_vectors};
+    use crate::Simd;
     use crate::level::dispatch;
 
     /// The outputs of the path of the level and of the portable code for `n` outputs.
@@ -534,6 +548,76 @@ mod tests {
                     generic.map(f32::to_bits),
                     "{offset} {n}"
                 );
+            }
+        }
+    }
+
+    /// `CQ15` samples: noise, zeros, the full-scale corners and signs, so that the products reach
+    /// `+-2^31` and both components of a product can be zero.
+    fn cq15_input() -> [CQ15; 200] {
+        let mut state = 11u32;
+        core::array::from_fn(|i| {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let (a, b) = ((state >> 16) as i16, (state >> 3) as i16);
+            let (re, im) = match i % 17 {
+                3 => (0, 0),
+                5 => (i16::MIN, i16::MIN),
+                6 => (i16::MAX, i16::MIN),
+                7 => (i16::MIN, i16::MAX),
+                8 => (0, i16::MIN),
+                9 => (i16::MIN, 0),
+                10 => (a, 0),
+                11 => (0, b),
+                12 => (a, a),
+                13 => (-1, 1),
+                _ => (a, b),
+            };
+            CQ15 {
+                re: Q15(re),
+                im: Q15(im),
+            }
+        })
+    }
+
+    #[test]
+    fn cq15_is_within_one_lsb_of_the_fallback_and_independent_of_the_blocks() {
+        let input = cq15_input();
+        for gain in [Q15::MAX, Q15(20_000), Q15(-32_768)] {
+            // Every length up to more than two vectors of AVX-512 (all tails), from a nonzero state.
+            for n in 0..=72 {
+                let x = &input[..n];
+                let mut s1 = QuadDemodState::<CQ15>::new();
+                s1.set_prev(input[199]);
+                let mut s2 = s1;
+                let mut want = [Q15(0); 72];
+                let mut got = [Q15(0); 72];
+                QuadDemod::<CQ15>::quad_demod(&Fallback, &mut s1, x, &mut want[..n], gain).unwrap();
+                QuadDemod::<CQ15>::quad_demod(&Simd, &mut s2, x, &mut got[..n], gain).unwrap();
+                for (k, (w, g)) in want.iter().zip(&got).enumerate() {
+                    assert!(
+                        (i32::from(w.0) - i32::from(g.0)).abs() <= 1,
+                        "{n} {k}: {w:?} {g:?}"
+                    );
+                }
+                assert_eq!(s1, s2);
+            }
+            // Blocks of 1 to 23 samples give the bits of the whole buffer.
+            let mut whole = [Q15(0); 200];
+            QuadDemod::<CQ15>::quad_demod(
+                &Simd,
+                &mut QuadDemodState::new(),
+                &input,
+                &mut whole,
+                gain,
+            )
+            .unwrap();
+            for step in 1..=23 {
+                let mut state = QuadDemodState::new();
+                let mut parts = [Q15(0); 200];
+                for (i, o) in input.chunks(step).zip(parts.chunks_mut(step)) {
+                    QuadDemod::<CQ15>::quad_demod(&Simd, &mut state, i, o, gain).unwrap();
+                }
+                assert_eq!(whole, parts, "{step}");
             }
         }
     }

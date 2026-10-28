@@ -770,6 +770,126 @@
       "waiver": "`dc_block_real` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
   },
+  "deemphasis": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "deemphasis_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`deemphasis` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "dc_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "dc_block_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`dc_block` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
   "biquad": {
     "sse2": {
       "status": "release"

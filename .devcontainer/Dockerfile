@@ -9,7 +9,8 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/cargo/bin:$PATH
 
 # Base tools, C toolchain, Python for tests/golden/generate.py (M04), emulators
-# (M13/M15: QEMU user mode for aarch64/riscv, system mode for Arm and RISC-V),
+# (M13/M15: QEMU user mode for aarch64/riscv, system mode for Arm and RISC-V;
+# since Ubuntu 26.04 qemu-system-riscv32 is in its own package qemu-system-riscv),
 # valgrind (callgrind, M13), libvolk (M13 comparison via volk-sys), binaryen
 # (wasm-opt, M14), cross tools for objdump/size, and what benches/refs/build.sh
 # needs for the C references (g++ and the libc for aarch64, wasi-libc and
@@ -44,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     qemu-user \
     qemu-system-arm \
     qemu-system-misc \
+    qemu-system-riscv \
     gcc-aarch64-linux-gnu \
     g++-aarch64-linux-gnu \
     libc6-dev-arm64-cross \

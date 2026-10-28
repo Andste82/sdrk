@@ -72,6 +72,18 @@ The method is decided (D33); the tooling is planned:
 
 **Derived figure, for orientation only.** `MS/s per GHz = 1000 / cycles per sample` may be computed to estimate how much signal one core can process: it is the simulated in-core throughput with the data in L1, an upper bound. For large blocks of streaming kernels the memory caps it: `samples/s = min(f_CPU / cycles per sample, bandwidth / bytes per sample)`. It is neither published as a result nor gated.
 
+### Working rule for optimizing (D37)
+
+Decided. Until the cycles of every level can be simulated by `cargo measure`, a kernel is optimized like this:
+
+| Code | Steered by | Checked on the other levels by |
+| --- | --- | --- |
+| Code shared by all levels: the portable fallback, generic `fearless_simd` code | the simulated cycles at `avx2` (`znver3` and `alderlake`) | the instruction counts of every level (the gate); a cycle check of the other levels when their instructions rise against the trend, and as a sample before a kernel change is merged |
+| Code of one level: a hand-written SIMD path for `sse2`, `neon`, `avx512`, ... | the simulated cycles of that level | the instruction counts of that level; `avx2` cycles say nothing about it |
+| `simd128` and in-order cores (Cortex-M, ESP32) | the instruction counts | nothing else: WASM cannot be simulated, and on in-order cores instructions are close to cycles |
+
+Why: for the `Q15` biquad fallback (D36) a shorter dependency chain at `avx2` was also faster at `sse2`, `sse4.2`, `avx512` and `neon` in 13 of 16 comparisons (level and core model), but not in all of them (`neon` `cortex-a72` unchanged for `CQ15`; `avx512` `znver4` uncertain, `llvm-mca` and OSACA disagree). The gain at `avx2` is a good guide for shared code, not a proof for the other levels.
+
 ### How the cycles are simulated
 
 Implemented in `xtask/src/mca.rs` (D35) and run by `cargo measure`:

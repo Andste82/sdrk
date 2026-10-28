@@ -302,7 +302,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 55] = [
+pub const KERNELS: [&str; 56] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -358,6 +358,7 @@ pub const KERNELS: [&str; 55] = [
     "resample_real",
     "fir_interpolate_real_q15",
     "resample_real_q15",
+    "fm_mod_cq15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -417,6 +418,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "quad_demod" => Box::new(QuadK::new(rng, layout)),
         "quad_demod_cq15" => Box::new(QuadQ15K::new(rng, layout)),
         "fm_mod" => Box::new(FmModK::new(rng, layout)),
+        "fm_mod_cq15" => Box::new(FmModQ15K::new(rng, layout)),
         "squelch" => Box::new(SquelchK::<C32>::new(rng, layout)),
         "squelch_cq15" => Box::new(SquelchK::<CQ15>::new(rng, layout)),
         "mag" => Box::new(MagK::new(rng, layout)),
@@ -2170,6 +2172,72 @@ impl Kernel for FmModK {
         let mut want = vec![C32::default(); self.input.len()];
         let _ = Reference.fm_mod(&mut Self::state(), &self.input, &mut want);
         snr_db(&c32s(&want), &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// `fm_mod` of Q15 input to CQ15 (no established library has a fixed-point FM modulator:
+/// compared with our fallback, so the entry is information).
+struct FmModQ15K {
+    input: Aligned<Q15>,
+    out: Aligned<CQ15>,
+}
+
+impl FmModQ15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut input = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
+        for s in input.iter_mut() {
+            *s = Q15((rng.unit() * 32767.0) as i16);
+        }
+        FmModQ15K {
+            input,
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+        }
+    }
+}
+
+#[inline(never)]
+fn fm_mod_cq15<B: FmMod<CQ15>>(
+    backend: &B,
+    state: &mut FmModState,
+    input: &[Q15],
+    out: &mut [CQ15],
+) {
+    let _ = black_box(backend.fm_mod(state, black_box(input), out));
+}
+
+impl Kernel for FmModQ15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = FmModK::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => fm_mod_cq15(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => fm_mod_cq15(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("fm_mod_cq15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        // `q / 32768` is exact in f32, so the C32 reference has the same phases; its unit
+        // vector is scaled to the CQ15 amplitude `1 - 2^-15` in Q15 units.
+        let input: Vec<f32> = self.input.iter().map(|q| f32::from(q.0) / 32768.0).collect();
+        let mut want = vec![C32::default(); input.len()];
+        let _ = Reference.fm_mod(&mut FmModK::state(), &input, &mut want);
+        let want: Vec<f64> = c32s(&want).iter().map(|v| v * 32767.0).collect();
+        snr_db(&want, &cq15s(&self.out, 1.0))
     }
 
     fn supports(&self, which: Impl) -> bool {

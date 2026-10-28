@@ -292,24 +292,21 @@ pub(crate) fn cos_sin_q15_packed<S: SimdToken>(simd: S, p: S::u32s) -> S::u32s {
 pub(crate) mod x86 {
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
-        __m128, __m128i, __m256, __m256d, __m256i, __m512, __m512i, _mm_add_epi16, _mm_add_ps,
-        _mm_and_si128, _mm_castpd_ps, _mm_castps_pd, _mm_castps_si128, _mm_castsi128_ps,
-        _mm_cvtepi32_ps, _mm_cvtsi128_si32, _mm_extract_epi32, _mm_madd_epi16, _mm_mul_ps,
-        _mm_mulhrs_epi16, _mm_or_si128, _mm_packs_epi32, _mm_set_epi64x, _mm_set1_epi16,
-        _mm_set1_epi32, _mm_setr_epi8, _mm_shuffle_epi8, _mm_shuffle_epi32, _mm_shuffle_ps,
-        _mm_slli_epi32, _mm_srai_epi32, _mm_srli_epi32, _mm_unpackhi_epi16, _mm_unpackhi_epi32,
-        _mm_unpackhi_pd, _mm_unpackhi_ps, _mm_unpacklo_epi16, _mm_unpacklo_epi32, _mm_unpacklo_pd,
-        _mm_unpacklo_ps, _mm256_add_epi16, _mm256_add_ps, _mm256_and_si256, _mm256_castpd_ps,
-        _mm256_castps_pd, _mm256_castps_si256, _mm256_castps128_ps256, _mm256_castsi128_si256,
-        _mm256_castsi256_ps, _mm256_cvtepi32_ps, _mm256_extract_epi32, _mm256_insertf128_ps,
-        _mm256_inserti128_si256, _mm256_mul_ps, _mm256_mulhrs_epi16, _mm256_permutevar8x32_ps,
-        _mm256_set1_epi16, _mm256_set1_epi32, _mm256_setr_epi8, _mm256_setr_epi32,
-        _mm256_shuffle_epi8, _mm256_shuffle_ps, _mm256_slli_epi32, _mm256_srli_epi32,
-        _mm256_unpackhi_pd, _mm256_unpacklo_pd, _mm512_add_epi16, _mm512_add_ps, _mm512_and_si512,
-        _mm512_castpd_ps, _mm512_castsi512_si256, _mm512_cvtepi32_ps, _mm512_extracti64x4_epi64,
-        _mm512_i32gather_epi64, _mm512_i32gather_pd, _mm512_mul_ps, _mm512_mulhrs_epi16,
-        _mm512_or_si512, _mm512_permutex2var_epi32, _mm512_permutexvar_ps, _mm512_set1_epi32,
-        _mm512_setr_epi32, _mm512_slli_epi32, _mm512_srli_epi32,
+        __m128, __m128i, __m256i, __m512, __m512i, _mm_add_epi16, _mm_add_ps, _mm_and_si128,
+        _mm_castpd_ps, _mm_castps_pd, _mm_castps_si128, _mm_castsi128_ps, _mm_cvtepi32_ps,
+        _mm_cvtsi128_si32, _mm_extract_epi32, _mm_madd_epi16, _mm_mul_ps, _mm_mulhrs_epi16,
+        _mm_or_si128, _mm_packs_epi32, _mm_set_epi64x, _mm_set1_epi16, _mm_set1_epi32,
+        _mm_setr_epi8, _mm_shuffle_epi8, _mm_shuffle_epi32, _mm_shuffle_ps, _mm_slli_epi32,
+        _mm_srai_epi32, _mm_srli_epi32, _mm_unpackhi_epi16, _mm_unpackhi_epi32, _mm_unpackhi_pd,
+        _mm_unpackhi_ps, _mm_unpacklo_epi16, _mm_unpacklo_epi32, _mm_unpacklo_pd, _mm_unpacklo_ps,
+        _mm256_add_epi16, _mm256_and_si256, _mm256_castps_si256, _mm256_castsi128_si256,
+        _mm256_castsi256_ps, _mm256_extract_epi32, _mm256_inserti128_si256, _mm256_mulhrs_epi16,
+        _mm256_set1_epi16, _mm256_set1_epi32, _mm256_setr_epi8, _mm256_shuffle_epi8,
+        _mm256_shuffle_ps, _mm256_slli_epi32, _mm256_srli_epi32, _mm512_add_epi16, _mm512_add_ps,
+        _mm512_and_si512, _mm512_castpd_ps, _mm512_castsi512_si256, _mm512_cvtepi32_ps,
+        _mm512_extracti64x4_epi64, _mm512_i32gather_epi64, _mm512_i32gather_pd, _mm512_mul_ps,
+        _mm512_mulhrs_epi16, _mm512_or_si512, _mm512_permutex2var_epi32, _mm512_permutexvar_ps,
+        _mm512_set1_epi32, _mm512_setr_epi32, _mm512_slli_epi32, _mm512_srli_epi32,
     };
 
     use fearless_simd::{Simd as SimdToken, f32x4, prelude::*};
@@ -378,32 +375,6 @@ pub(crate) mod x86 {
             interp_x2(e0, e1, _mm_unpacklo_ps(f, f)),
             interp_x2(e2, e3, _mm_unpackhi_ps(f, f)),
         )
-    }
-
-    /// Interleaved `(cos, sin)` of eight phases: samples 0 to 3, samples 4 to 7.
-    #[target_feature(enable = "avx2")]
-    #[inline]
-    pub(crate) fn cos_sin_f32_x8<S: SimdToken>(simd: S, p: __m256i) -> (__m256, __m256) {
-        let frac = _mm256_and_si256(p, _mm256_set1_epi32(0xF_FFFF));
-        let f = _mm256_cvtepi32_ps(frac);
-        let pair = |a: i32, b: i32| {
-            let lo = _mm256_castps128_ps256(load_f32(simd, a));
-            _mm256_castps_pd(_mm256_insertf128_ps::<1>(lo, load_f32(simd, b)))
-        };
-        let o = _mm256_and_si256(_mm256_srli_epi32::<16>(p), _mm256_set1_epi32(0xFFF0));
-        // [e0 | e2], [e1 | e3]: one in-lane unpack gives samples 0 to 3 in output order.
-        let e02 = pair(_mm256_extract_epi32::<0>(o), _mm256_extract_epi32::<2>(o));
-        let e13 = pair(_mm256_extract_epi32::<1>(o), _mm256_extract_epi32::<3>(o));
-        let e46 = pair(_mm256_extract_epi32::<4>(o), _mm256_extract_epi32::<6>(o));
-        let e57 = pair(_mm256_extract_epi32::<5>(o), _mm256_extract_epi32::<7>(o));
-        let lo = _mm256_permutevar8x32_ps(f, _mm256_setr_epi32(0, 0, 1, 1, 2, 2, 3, 3));
-        let hi = _mm256_permutevar8x32_ps(f, _mm256_setr_epi32(4, 4, 5, 5, 6, 6, 7, 7));
-        let interp = |e0: __m256d, e1: __m256d, f: __m256| {
-            let a = _mm256_castpd_ps(_mm256_unpacklo_pd(e0, e1));
-            let d = _mm256_castpd_ps(_mm256_unpackhi_pd(e0, e1));
-            _mm256_add_ps(a, _mm256_mul_ps(d, f))
-        };
-        (interp(e02, e13, lo), interp(e46, e57, hi))
     }
 
     /// Interleaved `(cos, sin)` of sixteen phases: samples 0 to 7, samples 8 to 15. The entry

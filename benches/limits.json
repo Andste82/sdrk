@@ -617,6 +617,32 @@
       "status": "release"
     }
   },
+  "fm_mod_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+    }
+  },
   "fft_64": {
     "sse2": {
       "status": "release"

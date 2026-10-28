@@ -989,7 +989,8 @@ jobs:
           retention-days: 30
 
   count_m4_qemu:
-    # Instructions per sample of the fallback on a Cortex-M4F; report only, no limits yet.
+    # Instructions per sample of the fallback on a Cortex-M4F, the biquad kernels next to
+    # CMSIS-DSP built for the M4F; report only, no limits.
     name: count_m4_qemu
     needs: build_m4_qemu
     if: ${{ inputs.scope == 'full' }}
@@ -1022,6 +1023,9 @@ jobs:
           sudo apt-get install -y libglib2.0-dev pkg-config
           echo "SDRK_QEMU_ARM=$HOME/qemu-prefix/bin/qemu-system-arm" >> "$GITHUB_ENV"
           echo "SDRK_QEMU_TAG=v$CI_QEMU_VERSION" >> "$GITHUB_ENV"
+      - name: Install the C cross compiler of the CMSIS-DSP reference
+        # benches/refs/build.sh cortex-m4: arm-none-eabi-gcc with the newlib headers.
+        run: sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
       - name: Count
         run: cargo xtask count --platform cortex-m4
       - name: Report

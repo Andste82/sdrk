@@ -1650,7 +1650,7 @@ pub(crate) fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<(
 
 /// Builds the C references of `platform` (a no-op when they are up to date) and returns their
 /// prefix.
-fn references(root: &Path, platform: &str) -> anyhow::Result<PathBuf> {
+pub(crate) fn references(root: &Path, platform: &str) -> anyhow::Result<PathBuf> {
     let prefix = root
         .join("benches")
         .join("target")

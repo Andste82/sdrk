@@ -333,118 +333,283 @@ fn cascade_f32<T: F32Section>(
     Ok(())
 }
 
-/// Direct form I of one Q15 component with Q2.14 coefficients (as `i64`): the output and the
-/// new `[x1, x2, y1, y2]`.
-#[inline(always)]
-fn df1(c: &[i64; 5], h: [i64; 4], x: i64) -> (i64, [i64; 4]) {
-    let [b0, b1, b2, a1, a2] = *c;
-    let [x1, x2, y1, y2] = h;
-    let acc = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-    // `sat16(round_shift(acc, 14))`: the five products of 16-bit values sum to less than
-    // 2^33 in magnitude, so the rounding addition cannot overflow and `round_shift` never
-    // saturates; the clamp compiles to two conditional moves instead of branches.
-    let y = ((acc + (1 << 13)) >> 14).clamp(-32768, 32767);
-    (y, [x, x1, y, y1])
-}
+/// The `Q15` and `CQ15` cascade for targets with 64-bit integer registers (64-bit targets and
+/// wasm32): the state and the coefficients as `i64`, both components of a `CQ15` sample in one
+/// pass.
+#[cfg_attr(
+    all(target_pointer_width = "32", not(target_family = "wasm")),
+    allow(dead_code)
+)]
+mod q15_wide {
+    use super::{BiquadSample, CQ15, Error, Q15, Result, Sample, check_len};
 
-/// One section of a Q15 sample type (`Q15`, `CQ15`): direct form I, the state as `i64`.
-trait Q15Section: Sample + BiquadSample<Coef = i16> {
-    type State: Copy;
-
-    fn load(hist: &[Self]) -> Option<Self::State>;
-    fn store(state: &Self::State, hist: &mut [Self]);
-    fn step(c: &[i64; 5], state: &mut Self::State, x: Self) -> Self;
-}
-
-/// An `i64` that holds an `i16` (the output of `sat16`).
-#[inline(always)]
-#[allow(clippy::cast_possible_truncation, reason = "the value is within i16")]
-fn to_i16(v: i64) -> i16 {
-    v as i16
-}
-
-impl Q15Section for Q15 {
-    type State = [i64; 4];
-
-    #[inline]
-    fn load(hist: &[Q15]) -> Option<[i64; 4]> {
-        let [x1, x2, y1, y2] = *hist else { return None };
-        Some([x1, x2, y1, y2].map(|v| i64::from(v.0)))
-    }
-
-    #[inline]
-    fn store(state: &[i64; 4], hist: &mut [Q15]) {
-        for (h, v) in hist.iter_mut().zip(state) {
-            *h = Q15(to_i16(*v));
-        }
-    }
-
+    /// Direct form I of one Q15 component with Q2.14 coefficients (as `i64`): the output and the
+    /// new `[x1, x2, y1, y2]`.
     #[inline(always)]
-    fn step(c: &[i64; 5], state: &mut [i64; 4], x: Q15) -> Q15 {
-        let (y, next) = df1(c, *state, i64::from(x.0));
-        *state = next;
-        Q15(to_i16(y))
-    }
-}
-
-impl Q15Section for CQ15 {
-    type State = [[i64; 4]; 2];
-
-    #[inline]
-    fn load(hist: &[CQ15]) -> Option<[[i64; 4]; 2]> {
-        let [x1, x2, y1, y2] = *hist else { return None };
-        let h = [x1, x2, y1, y2];
-        Some([h.map(|v| i64::from(v.re.0)), h.map(|v| i64::from(v.im.0))])
+    fn df1(c: &[i64; 5], h: [i64; 4], x: i64) -> (i64, [i64; 4]) {
+        let [b0, b1, b2, a1, a2] = *c;
+        let [x1, x2, y1, y2] = h;
+        let acc = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        // `sat16(round_shift(acc, 14))`: the five products of 16-bit values sum to less than
+        // 2^33 in magnitude, so the rounding addition cannot overflow and `round_shift` never
+        // saturates; the clamp compiles to two conditional moves instead of branches.
+        let y = ((acc + (1 << 13)) >> 14).clamp(-32768, 32767);
+        (y, [x, x1, y, y1])
     }
 
-    #[inline]
-    fn store(state: &[[i64; 4]; 2], hist: &mut [CQ15]) {
-        let [re, im] = state;
-        for ((h, r), i) in hist.iter_mut().zip(re).zip(im) {
-            *h = CQ15 {
-                re: Q15(to_i16(*r)),
-                im: Q15(to_i16(*i)),
-            };
-        }
+    /// One section of a Q15 sample type (`Q15`, `CQ15`): direct form I, the state as `i64`.
+    pub(super) trait Q15Section: Sample + BiquadSample<Coef = i16> {
+        type State: Copy;
+
+        fn load(hist: &[Self]) -> Option<Self::State>;
+        fn store(state: &Self::State, hist: &mut [Self]);
+        fn step(c: &[i64; 5], state: &mut Self::State, x: Self) -> Self;
     }
 
+    /// An `i64` that holds an `i16` (the output of `sat16`).
     #[inline(always)]
-    fn step(c: &[i64; 5], state: &mut [[i64; 4]; 2], x: CQ15) -> CQ15 {
-        let [re, im] = state;
-        let (yr, nr) = df1(c, *re, i64::from(x.re.0));
-        let (yi, ni) = df1(c, *im, i64::from(x.im.0));
-        (*re, *im) = (nr, ni);
-        CQ15 {
-            re: Q15(to_i16(yr)),
-            im: Q15(to_i16(yi)),
-        }
+    #[allow(clippy::cast_possible_truncation, reason = "the value is within i16")]
+    fn to_i16(v: i64) -> i16 {
+        v as i16
     }
-}
 
-fn cascade_q15<T: Q15Section>(
-    coefs: &[[i16; 5]],
-    hist: &mut [T],
-    input: &[T],
-    output: &mut [T],
-) -> Result<()> {
-    check_len(input.len(), output.len())?;
-    let internal = || Error::Internal("biquad history");
-    for (k, (c, h)) in coefs.iter().zip(hist.chunks_exact_mut(4)).enumerate() {
-        let c = c.map(i64::from);
-        let mut state = T::load(h).ok_or_else(internal)?;
-        if k == 0 {
-            for (x, o) in input.iter().zip(output.iter_mut()) {
-                *o = T::step(&c, &mut state, *x);
-            }
-        } else {
-            for o in output.iter_mut() {
-                *o = T::step(&c, &mut state, *o);
+    impl Q15Section for Q15 {
+        type State = [i64; 4];
+
+        #[inline]
+        fn load(hist: &[Q15]) -> Option<[i64; 4]> {
+            let [x1, x2, y1, y2] = *hist else { return None };
+            Some([x1, x2, y1, y2].map(|v| i64::from(v.0)))
+        }
+
+        #[inline]
+        fn store(state: &[i64; 4], hist: &mut [Q15]) {
+            for (h, v) in hist.iter_mut().zip(state) {
+                *h = Q15(to_i16(*v));
             }
         }
-        T::store(&state, h);
+
+        #[inline(always)]
+        fn step(c: &[i64; 5], state: &mut [i64; 4], x: Q15) -> Q15 {
+            let (y, next) = df1(c, *state, i64::from(x.0));
+            *state = next;
+            Q15(to_i16(y))
+        }
     }
-    Ok(())
+
+    impl Q15Section for CQ15 {
+        type State = [[i64; 4]; 2];
+
+        #[inline]
+        fn load(hist: &[CQ15]) -> Option<[[i64; 4]; 2]> {
+            let [x1, x2, y1, y2] = *hist else { return None };
+            let h = [x1, x2, y1, y2];
+            Some([h.map(|v| i64::from(v.re.0)), h.map(|v| i64::from(v.im.0))])
+        }
+
+        #[inline]
+        fn store(state: &[[i64; 4]; 2], hist: &mut [CQ15]) {
+            let [re, im] = state;
+            for ((h, r), i) in hist.iter_mut().zip(re).zip(im) {
+                *h = CQ15 {
+                    re: Q15(to_i16(*r)),
+                    im: Q15(to_i16(*i)),
+                };
+            }
+        }
+
+        #[inline(always)]
+        fn step(c: &[i64; 5], state: &mut [[i64; 4]; 2], x: CQ15) -> CQ15 {
+            let [re, im] = state;
+            let (yr, nr) = df1(c, *re, i64::from(x.re.0));
+            let (yi, ni) = df1(c, *im, i64::from(x.im.0));
+            (*re, *im) = (nr, ni);
+            CQ15 {
+                re: Q15(to_i16(yr)),
+                im: Q15(to_i16(yi)),
+            }
+        }
+    }
+
+    pub(super) fn cascade_q15<T: Q15Section>(
+        coefs: &[[i16; 5]],
+        hist: &mut [T],
+        input: &[T],
+        output: &mut [T],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let internal = || Error::Internal("biquad history");
+        for (k, (c, h)) in coefs.iter().zip(hist.chunks_exact_mut(4)).enumerate() {
+            let c = c.map(i64::from);
+            let mut state = T::load(h).ok_or_else(internal)?;
+            if k == 0 {
+                for (x, o) in input.iter().zip(output.iter_mut()) {
+                    *o = T::step(&c, &mut state, *x);
+                }
+            } else {
+                for o in output.iter_mut() {
+                    *o = T::step(&c, &mut state, *o);
+                }
+            }
+            T::store(&state, h);
+        }
+        Ok(())
+    }
 }
+
+/// The `Q15` and `CQ15` cascade for targets with 32-bit integer registers (Cortex-M, 32-bit
+/// RISC-V): the state as `i32`, each product a 32 x 32 -> 64 bit multiply-accumulate, the
+/// components of a `CQ15` sample in two passes (D28). It gives the same output as
+/// [`q15_wide`] bit for bit (the arithmetic is exact in both); on 64-bit targets and wasm32 it
+/// costs more instructions (the widening of every operand, two loops for `CQ15`), on the
+/// Cortex-M4 a quarter to a third of [`q15_wide`].
+#[cfg_attr(
+    not(all(target_pointer_width = "32", not(target_family = "wasm"))),
+    allow(dead_code)
+)]
+mod q15_narrow {
+    use super::{BiquadSample, CQ15, Error, Q15, Result, Sample, apply, check_len};
+
+    /// Direct form I of one Q15 component with Q2.14 coefficients: the output and the new
+    /// `[x1, x2, y1, y2]`. `c` is `[b0, b1, b2, -a1, -a2]` (see [`q15_coefs`]), so that the sum is
+    /// one chain of products added to the rounding constant; every value is an `i16` held in an
+    /// `i32`, and every product of two of them is exact in `i64` (a 32 x 32 -> 64 bit
+    /// multiply-accumulate on 32-bit cores, where `i64` operands cost a full 64-bit product).
+    #[inline(always)]
+    fn df1(c: &[i32; 5], h: [i32; 4], x: i32) -> (i32, [i32; 4]) {
+        let [b0, b1, b2, na1, na2] = *c;
+        let [x1, x2, y1, y2] = h;
+        let mul = |u: i32, v: i32| i64::from(u) * i64::from(v);
+        // `sat16(round_shift(acc, 14))` with `acc = b0 x + b1 x1 + b2 x2 - a1 y1 - a2 y2`: the five
+        // products of 16-bit values sum to less than 2^33 in magnitude, so the rounding addition
+        // cannot overflow, and the shifted sum is below 2^20 in magnitude, so it is exact in `i32`,
+        // where the clamp is one saturation (`ssat` on Arm) or two conditional moves.
+        let acc =
+            (1i64 << 13) + mul(b0, x) + mul(b1, x1) + mul(b2, x2) + mul(na1, y1) + mul(na2, y2);
+        let y = to_i32(acc >> 14).clamp(-32768, 32767);
+        (y, [x, x1, y, y1])
+    }
+
+    /// The coefficients of [`df1`]: `[b0, b1, b2, -a1, -a2]` as `i32` (`-a` is exact there, also
+    /// for `a = -2.0`, raw -32768).
+    #[inline]
+    fn q15_coefs(c: &[i16; 5]) -> [i32; 5] {
+        let [b0, b1, b2, a1, a2] = c.map(i32::from);
+        [b0, b1, b2, -a1, -a2]
+    }
+
+    /// An `i32` that holds an `i16` (the output of `sat16`).
+    #[inline(always)]
+    #[allow(clippy::cast_possible_truncation, reason = "the value is within i16")]
+    fn to_i16(v: i32) -> i16 {
+        v as i16
+    }
+
+    /// An `i64` below 2^20 in magnitude (the shifted sum of [`df1`]), as `i32`.
+    #[inline(always)]
+    #[allow(clippy::cast_possible_truncation, reason = "the value is within i32")]
+    fn to_i32(v: i64) -> i32 {
+        v as i32
+    }
+
+    /// One section on one component over the buffer: `get` reads the component of a sample and
+    /// `set` replaces it; the history `h` holds `x1, x2, y1, y2` in that component. From `input`
+    /// to `output` (the other components are copied from `input`), or in place if `input` is
+    /// `None`. `None` if `h` does not have four entries.
+    #[inline(always)]
+    fn df1_pass<T: Copy>(
+        c: &[i32; 5],
+        h: &mut [T],
+        input: Option<&[T]>,
+        output: &mut [T],
+        get: impl Fn(T) -> i16,
+        set: impl Fn(T, i16) -> T,
+    ) -> Option<()> {
+        let [x1, x2, y1, y2] = *h else { return None };
+        let mut state = [x1, x2, y1, y2].map(|v| i32::from(get(v)));
+        apply(input, output, |x| {
+            let (y, next) = df1(c, state, i32::from(get(x)));
+            state = next;
+            set(x, to_i16(y))
+        });
+        for (e, v) in h.iter_mut().zip(state) {
+            *e = set(*e, to_i16(v));
+        }
+        Some(())
+    }
+
+    /// A Q15 sample type (`Q15`, `CQ15`): one section of direct form I over the buffer, one
+    /// component after the other (the state of one component, `x1, x2, y1, y2` as `i32`, stays in
+    /// registers on 32-bit cores; both components at once would not).
+    pub(super) trait Q15Section: Sample + BiquadSample<Coef = i16> {
+        /// [`df1_pass`] for every component; `None` if `h` does not have four entries.
+        fn section(
+            c: &[i32; 5],
+            h: &mut [Self],
+            input: Option<&[Self]>,
+            output: &mut [Self],
+        ) -> Option<()>;
+    }
+
+    impl Q15Section for Q15 {
+        #[inline(always)]
+        fn section(
+            c: &[i32; 5],
+            h: &mut [Q15],
+            input: Option<&[Q15]>,
+            output: &mut [Q15],
+        ) -> Option<()> {
+            df1_pass(c, h, input, output, |v| v.0, |_, y| Q15(y))
+        }
+    }
+
+    impl Q15Section for CQ15 {
+        #[inline(always)]
+        fn section(
+            c: &[i32; 5],
+            h: &mut [CQ15],
+            input: Option<&[CQ15]>,
+            output: &mut [CQ15],
+        ) -> Option<()> {
+            // The first pass copies `im` from the input; the second then runs in place.
+            df1_pass(
+                c,
+                h,
+                input,
+                output,
+                |v| v.re.0,
+                |v, y| CQ15 { re: Q15(y), ..v },
+            )?;
+            df1_pass(
+                c,
+                h,
+                None,
+                output,
+                |v| v.im.0,
+                |v, y| CQ15 { im: Q15(y), ..v },
+            )
+        }
+    }
+
+    pub(super) fn cascade_q15<T: Q15Section>(
+        coefs: &[[i16; 5]],
+        hist: &mut [T],
+        input: &[T],
+        output: &mut [T],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (k, (c, h)) in coefs.iter().zip(hist.chunks_exact_mut(4)).enumerate() {
+            T::section(&q15_coefs(c), h, (k == 0).then_some(input), output)
+                .ok_or(Error::Internal("biquad history"))?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(target_pointer_width = "32", not(target_family = "wasm")))]
+use q15_narrow::cascade_q15;
+#[cfg(not(all(target_pointer_width = "32", not(target_family = "wasm"))))]
+use q15_wide::cascade_q15;
 
 impl Biquad<C32> for Fallback {
     fn biquad<C, H>(
@@ -511,5 +676,89 @@ impl BiquadReal<Q15> for Fallback {
     {
         let (coefs, hist) = s.parts_mut();
         cascade_q15(coefs, hist, input, output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The two Q15 cascades must agree bit for bit; only one of them runs in the kernel tests
+    //! of a target.
+
+    use std::vec;
+    use std::vec::Vec;
+
+    use super::{CQ15, Q15, q15_narrow, q15_wide};
+
+    /// A small linear congruential generator.
+    fn next(s: &mut u32) -> i16 {
+        *s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (*s >> 16) as i16
+    }
+
+    /// Coefficient sets: the fourth-order Butterworth low-pass of the counts, the extremes of
+    /// Q2.14 (including a = -2.0, raw -32768) and random values (unstable filters too: the
+    /// output saturates, which both must do alike).
+    fn coefs(seed: &mut u32) -> [Vec<[i16; 5]>; 4] {
+        let random: Vec<[i16; 5]> = (0..3).map(|_| [(); 5].map(|()| next(seed))).collect();
+        [
+            vec![
+                [1277, 2554, 1277, -21642, 10367],
+                [1014, 2028, 1014, -17180, 4852],
+            ],
+            vec![[i16::MIN, i16::MAX, i16::MIN, i16::MIN, i16::MAX]],
+            vec![[i16::MAX, i16::MIN, i16::MAX, i16::MAX, i16::MIN]; 2],
+            random,
+        ]
+    }
+
+    #[test]
+    fn the_narrow_q15_cascade_equals_the_wide_one() {
+        let mut seed = 0x2468_ace1;
+        for c in coefs(&mut seed) {
+            for full_scale in [false, true] {
+                let sample = |s: &mut u32| {
+                    let v = next(s);
+                    if full_scale { v } else { v / 8 }
+                };
+                let input: Vec<Q15> = (0..301).map(|_| Q15(sample(&mut seed))).collect();
+                let cinput: Vec<CQ15> = (0..301)
+                    .map(|_| CQ15 {
+                        re: Q15(sample(&mut seed)),
+                        im: Q15(sample(&mut seed)),
+                    })
+                    .collect();
+                let mut hist = [
+                    vec![Q15::default(); 4 * c.len()],
+                    vec![Q15::default(); 4 * c.len()],
+                ];
+                let mut chist = [
+                    vec![CQ15::default(); 4 * c.len()],
+                    vec![CQ15::default(); 4 * c.len()],
+                ];
+                // Three calls of uneven length: the history must carry over alike.
+                for range in [0..1, 1..100, 100..301] {
+                    let mut out = [
+                        vec![Q15::default(); range.len()],
+                        vec![Q15::default(); range.len()],
+                    ];
+                    let [hw, hn] = &mut hist;
+                    let [ow, on] = &mut out;
+                    q15_wide::cascade_q15(&c, hw, &input[range.clone()], ow).unwrap();
+                    q15_narrow::cascade_q15(&c, hn, &input[range.clone()], on).unwrap();
+                    assert_eq!(ow, on, "{c:?}");
+                    let mut cout = [
+                        vec![CQ15::default(); range.len()],
+                        vec![CQ15::default(); range.len()],
+                    ];
+                    let [hw, hn] = &mut chist;
+                    let [ow, on] = &mut cout;
+                    q15_wide::cascade_q15(&c, hw, &cinput[range.clone()], ow).unwrap();
+                    q15_narrow::cascade_q15(&c, hn, &cinput[range.clone()], on).unwrap();
+                    assert_eq!(ow, on, "{c:?}");
+                }
+                assert_eq!(hist[0], hist[1]);
+                assert_eq!(chist[0], chist[1]);
+            }
+        }
     }
 }

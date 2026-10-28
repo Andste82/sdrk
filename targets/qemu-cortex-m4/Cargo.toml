@@ -27,6 +27,10 @@ heapless = "0.9.3"
 full = ["sdrk-target-common/full"]
 # Append one always-failing case; the host must report the run as failed.
 inject-failure = []
+# Link CMSIS-DSP's biquad cascades into the `count` workload (`<kernel>@cmsis`): the library
+# that `benches/refs/build.sh cortex-m4` builds under `$SDRK_REFS_DIR` (set by
+# `cargo xtask count --platform cortex-m4`).
+cmsis-dsp = []
 
 [profile.emu]
 inherits = "release"

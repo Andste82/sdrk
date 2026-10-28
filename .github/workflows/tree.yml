@@ -799,9 +799,20 @@ jobs:
         run: |
           # The image has no CA certificates, which the https snapshot needs: take them from the
           # image's own mirror first (they are installed again from the snapshot below).
-          apt-get update
+          # A mirror that answers 502/503 makes `apt-get update` warn and exit 0, and the install
+          # then finds no packages (nightly of 2026-10-27, issue 38): apt retries every download,
+          # `--error-on=any` turns a failed index into an error and the loop retries the update.
+          echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          apt_update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt-get update --snapshot "$COUNT_IMAGE_SNAPSHOT"
+          apt_update --snapshot "$COUNT_IMAGE_SNAPSHOT"
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
             git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
             python3 python3-mako valgrind
@@ -897,9 +908,20 @@ jobs:
     steps:
       - name: Packages of the pinned snapshot (compilers, cross compilers, VOLK and QEMU build tools)
         run: |
-          apt-get update
+          # A mirror that answers 502/503 makes `apt-get update` warn and exit 0, and the install
+          # then finds no packages (nightly of 2026-10-27, issue 38): apt retries every download,
+          # `--error-on=any` turns a failed index into an error and the loop retries the update.
+          echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          apt_update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt-get update --snapshot "$COUNT_IMAGE_SNAPSHOT"
+          apt_update --snapshot "$COUNT_IMAGE_SNAPSHOT"
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
             git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
             python3 python3-mako python3-venv valgrind clang llvm wasi-libc \
@@ -1003,9 +1025,20 @@ jobs:
     steps:
       - name: Packages of the pinned snapshot (the C cross compiler of CMSIS-DSP, QEMU build tools)
         run: |
-          apt-get update
+          # A mirror that answers 502/503 makes `apt-get update` warn and exit 0, and the install
+          # then finds no packages (nightly of 2026-10-27, issue 38): apt retries every download,
+          # `--error-on=any` turns a failed index into an error and the loop retries the update.
+          echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          apt_update
           DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt-get update --snapshot "$COUNT_IMAGE_SNAPSHOT"
+          apt_update --snapshot "$COUNT_IMAGE_SNAPSHOT"
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
             git ca-certificates curl xz-utils build-essential ninja-build pkg-config \
             python3 python3-venv libglib2.0-dev libpixman-1-dev \

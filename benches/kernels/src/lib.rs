@@ -2833,8 +2833,7 @@ fn biquad_real<T: sdrk_core::RealSample + BiquadSample, B: BiquadReal<T>>(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BiquadEntry {
     /// `biquad`, `biquad_cq15`, `biquad_real`, `biquad_real_q15`: our kernel through the facade
-    /// against KFR (f32, C32) or our fallback (Q15, CQ15), CMSIS-DSP as information or, at
-    /// `simd128`, as the gate.
+    /// against KFR (f32, C32) or our fallback (Q15, CQ15), CMSIS-DSP as information.
     Simd,
     /// `<kernel>_fallback`: our fallback against CMSIS-DSP's generic C on the same input.
     Fallback,
@@ -2902,7 +2901,7 @@ impl<S: Copy + Default> Planar<S> {
 /// `biquad`: the order-4 Butterworth low-pass (two sections) on noise of the amplitude 0.3.
 ///
 /// - `C32`, [`BiquadEntry::Simd`]: KFR on planar re and im, CMSIS-DSP's stereo cascade (the two
-///   channels of the C32 layout) as information, at `simd128` as the gate.
+///   channels of the C32 layout) as information.
 /// - `CQ15`, [`BiquadEntry::Simd`]: our fallback (no SIMD Q15 biquad exists on our levels),
 ///   CMSIS-DSP's Q15 cascade on planar re and im as information.
 /// - [`BiquadEntry::Fallback`]: our fallback against the CMSIS-DSP cascade above.
@@ -3057,8 +3056,7 @@ impl Kernel for BiquadK<CQ15, i16> {
 
 /// `biquad_real` on the same filter and noise as `biquad`.
 ///
-/// - `f32`, [`BiquadEntry::Simd`]: KFR, CMSIS-DSP's `df2T_f32` as information, at `simd128`
-///   as the gate.
+/// - `f32`, [`BiquadEntry::Simd`]: KFR, CMSIS-DSP's `df2T_f32` as information.
 /// - `Q15`, [`BiquadEntry::Simd`]: our fallback, CMSIS-DSP's `df1_q15` as information.
 /// - [`BiquadEntry::Fallback`]: our fallback against the CMSIS-DSP cascade above.
 struct BiquadRealK<T: RealNoise + BiquadSample> {

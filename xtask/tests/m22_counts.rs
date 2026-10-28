@@ -1,5 +1,5 @@
 //! M22 with the references of D15 and D16: `biquad` C32 and `biquad_real` f32 are counted
-//! against KFR (CMSIS-DSP at `simd128`, where KFR is not built), `biquad` CQ15 and
+//! against KFR at every level (CMSIS-DSP as information), `biquad` CQ15 and
 //! `biquad_real` Q15 against our fallback (no SIMD Q15 biquad exists on our levels), and four
 //! fallback entries count our fallback against CMSIS-DSP's generic C. The entries against a
 //! reference library are `release`; the two Q15 SIMD entries are `info`, because our own fallback
@@ -59,10 +59,9 @@ fn every_biquad_entry_has_its_status_at_every_level() {
     }
 }
 
-/// The comparison an entry is judged against at a level.
-fn expected(kernel: &str, level: &str) -> &'static str {
+/// The comparison an entry is judged against (the same at every level).
+fn expected(kernel: &str) -> &'static str {
     match kernel {
-        "biquad" | "biquad_real" if level == "simd128" => "CMSIS-DSP",
         "biquad" | "biquad_real" => "KFR",
         "biquad_cq15" | "biquad_real_q15" => "fallback",
         _ => "CMSIS-DSP",
@@ -91,7 +90,7 @@ fn the_measured_platforms_report_every_biquad_entry() {
                         "{platform}/{level}/{kernel}: {entry}"
                     );
                 }
-                let want = expected(kernel, level);
+                let want = expected(kernel);
                 assert!(
                     entry["compared_with"]
                         .as_str()

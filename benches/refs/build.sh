@@ -14,8 +14,10 @@
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
-# | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
+# | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++), wasm32 (clang++, KFR's Emscripten configuration: `sse41` over the SSE headers of Emscripten); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
 # | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU; see cmsis-biquad.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27) |
+# | wasi-sdk sysroot | 34.0 | Apache-2.0 WITH LLVM-exception (libc++), the licenses of wasi-libc | wasm32 (headers only: libc++ and wasi-libc for the KFR shim, which needs no C++ run-time library) | KFR needs a C++ standard library |
+# | Emscripten | 6.0.12 | MIT or NCSA | wasm32 (headers only: the `*intrin.h` of system/include/compat, SSE written with SIMD128) | KFR's x86 code on wasm32, as emcc builds it with `-msse4.1 -msimd128` |
 # | CMSIS 6 (CMSIS-Core) | 6.3.0 | Apache-2.0 | cortex-m4 (headers only: `cmsis_compiler.h` and the intrinsics such as `__SMLALD` that CMSIS-DSP uses with the DSP extension) | needed by CMSIS-DSP outside its host configuration |
 #
 # The libraries are linked only into the measurement binary of `benches/kernels`, which is
@@ -24,7 +26,8 @@
 #
 # Compilers: x86_64 `${CC:-gcc}`/`${CXX:-g++}`, aarch64 `aarch64-linux-gnu-gcc`/`-g++` (KFR with
 # `${KFR_AARCH64_CXX:-clang++} --target=aarch64-linux-gnu`: GCC rejects KFR's NEON code), wasm32
-# `${WASM_CC:-clang}` with the wasi-libc headers, cortex-m4 `${M4_CC:-arm-none-eabi-gcc}` with the
+# `${WASM_CC:-clang}` with the wasi-libc headers (KFR with `${WASM_CXX:-clang++}` and the wasi-sdk
+# sysroot above), cortex-m4 `${M4_CC:-arm-none-eabi-gcc}` with the
 # newlib headers (`libnewlib-arm-none-eabi`: CMSIS-DSP includes `string.h` and `math.h`; the
 # biquad sources need only `memset`, which `compiler_builtins` of the Rust workload provides).
 # Their versions are part of the stamp and of <prefix>/refs.json, which xtask copies into the
@@ -69,6 +72,14 @@ CMSISDSP_SHA256=b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56
 CMSISCORE_VERSION=6.3.0
 CMSISCORE_URL=https://github.com/ARM-software/CMSIS_6/archive/refs/tags/v$CMSISCORE_VERSION.tar.gz
 CMSISCORE_SHA256=331df74000876b8fb07933658cbf402c4d9f831b429258792d2c34ab5a6c5bf7
+# KFR on wasm32: the C++ standard library of wasi-sdk and the SSE headers of Emscripten, the
+# releases that were current when KFR 7.2.0 came out (2026-10-12).
+WASISYSROOT_VERSION=34.0
+WASISYSROOT_URL=https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sysroot-$WASISYSROOT_VERSION.tar.gz
+WASISYSROOT_SHA256=9d813544eeebe38b7b8f2244ed591de46b6db812c6dd1a257ff9f0d2a905a2be
+EMSCRIPTEN_VERSION=6.0.12
+EMSCRIPTEN_URL=https://github.com/emscripten-core/emscripten/archive/refs/tags/$EMSCRIPTEN_VERSION.tar.gz
+EMSCRIPTEN_SHA256=795ef929e4dee52bf03de3742c4252bb121e742afac896378d969b5da2db86eb
 
 # The optimisation flags of the libraries built here without their own build system or with a
 # build system that would tune for the build machine (FFTW adds -mtune=native otherwise).
@@ -90,7 +101,7 @@ case $platform in
     wasm32)
         cc="${WASM_CC:-clang} --target=wasm32-wasip1"
         cxx=""
-        kfr_cxx=""
+        kfr_cxx="${WASM_CXX:-clang++} --target=wasm32-wasip1"
         ar=${WASM_AR:-llvm-ar}
         ;;
     cortex-m4)
@@ -300,17 +311,44 @@ build_cmsis_biquad() {
     done
 }
 
+# The flags of KFR on wasm32 beyond those of the level. KFR has no wasm32 code of its own: its
+# CMake build for Emscripten sets KFR_ARCH=sse41 and compiles with `-msse4.1 -msimd128`, which
+# emcc turns into the macros below and Emscripten's SSE headers (SSE intrinsics written with
+# SIMD128). KFR_WASM_FLAGS repeats that with the headers of the pinned Emscripten release and the
+# libc++ and wasi-libc headers of the pinned wasi-sdk sysroot. Without exceptions and RTTI the
+# shim needs no library of either: it calls aligned_alloc and free of the Rust target's wasi-libc.
+# KFR's generic architecture is no alternative: it does not compile in 7.2.0 (bitshuffle.hpp
+# names an intr::bitpermute_pair that only the x86 and ARM code define).
+KFR_WASM_FLAGS=""
+prepare_kfr_wasm() {
+    fetch "$WASISYSROOT_URL" "$WASISYSROOT_SHA256" "wasi-sysroot-$WASISYSROOT_VERSION.tar.gz"
+    fetch "$EMSCRIPTEN_URL" "$EMSCRIPTEN_SHA256" "emscripten-$EMSCRIPTEN_VERSION.tar.gz"
+    local sysroot="$work/wasi-sysroot" sse="$work/emscripten-sse"
+    mkdir -p "$sysroot" "$sse"
+    tar -xzf "$downloads/wasi-sysroot-$WASISYSROOT_VERSION.tar.gz" -C "$sysroot" --strip-components=1 \
+        "wasi-sysroot-$WASISYSROOT_VERSION/include/wasm32-wasip1" \
+        "wasi-sysroot-$WASISYSROOT_VERSION/include/c++"
+    tar -xzf "$downloads/emscripten-$EMSCRIPTEN_VERSION.tar.gz" -C "$sse" --strip-components=4 \
+        --wildcards "emscripten-$EMSCRIPTEN_VERSION/system/include/compat/*intrin.h"
+    KFR_WASM_FLAGS="--sysroot=$sysroot -nostdinc++ -isystem $sysroot/include/wasm32-wasip1/noeh/c++/v1"
+    KFR_WASM_FLAGS+=" -isystem $sysroot/include/c++/v1 -isystem $sse"
+    KFR_WASM_FLAGS+=" -D__SSE__=1 -D__SSE2__=1 -D__SSE3__=1 -D__SSSE3__=1 -D__SSE4_1__=1"
+}
+
 # KFR's `iir` (header-only, see kfr-biquad.cpp), one library per level: libkfrbq-<level>.a.
 build_kfr_biquad() {
     fetch "$KFR_URL" "$KFR_SHA256" "kfr-$KFR_VERSION.tar.gz"
     mkdir -p "$work/kfr"
     tar -xzf "$downloads/kfr-$KFR_VERSION.tar.gz" -C "$work/kfr" --strip-components=1 \
         "kfr-$KFR_VERSION/include"
+    if [ "$platform" = wasm32 ]; then
+        prepare_kfr_wasm
+    fi
     local entry level march
     for entry in $(biquad_levels); do
         level=${entry%%:*}
         march=${entry#*:}
-        $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march -I "$work/kfr/include" \
+        $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march $KFR_WASM_FLAGS -I "$work/kfr/include" \
             -c "$here/kfr-biquad.cpp" -o "$work/kfr-$level.o"
         $ar rcs "$prefix/lib/libkfrbq-$level.a" "$work/kfr-$level.o"
     done
@@ -343,8 +381,9 @@ case $platform in
         build_volk_wasm
         build_kissfft
         build_gr_agc
+        build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk kissfft gragc cmsisdsp)
+        libraries=(volk kissfft gragc kfr wasisysroot emscripten cmsisdsp)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -367,7 +406,9 @@ esac
             fftw) entry="\"fftw\": { \"version\": \"$FFTW_VERSION\", \"sha256\": \"$FFTW_SHA256\", \"build\": \"--enable-float $([ "$platform" = aarch64 ] && echo --enable-neon || echo --enable-sse2), CFLAGS=$OPT_FLAGS\" }" ;;
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
-            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT, per level $(biquad_levels)\" }" ;;
+            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
+            wasisysroot) entry="\"wasi_sysroot\": { \"version\": \"$WASISYSROOT_VERSION\", \"sha256\": \"$WASISYSROOT_SHA256\", \"build\": \"headers of libc++ and wasi-libc for KFR\" }" ;;
+            emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;
             cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;

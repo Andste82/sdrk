@@ -78,9 +78,15 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         aarch64-unknown-linux-gnu \
     && rustup toolchain install nightly --profile minimal --component miri --component rust-src
 
-# Cargo tools. Pin versions with --version when a milestone fixes them
-# (wasm-bindgen-cli must match the wasm-bindgen crate version of M14).
-RUN cargo install --locked cargo-deny wasm-bindgen-cli wasmtime-cli cbindgen iai-callgrind-runner \
+# Cargo tools. Pin versions with --version when a milestone fixes them:
+# wasm-bindgen-cli must equal the `wasm-bindgen = "=..."` of bindings/wasm (M14),
+# cargo-nextest the NEXTEST_VERSION of .github/workflows/tree.yml (the test
+# commands of docs/testing.md use it); cargo-fuzz runs the nightly fuzz job.
+ARG WASM_BINDGEN_VERSION=0.2.129
+ARG NEXTEST_VERSION=0.9.148
+RUN cargo install --locked cargo-deny wasmtime-cli cbindgen iai-callgrind-runner cargo-fuzz \
+    && cargo install --locked wasm-bindgen-cli --version $WASM_BINDGEN_VERSION \
+    && cargo install --locked cargo-nextest --version $NEXTEST_VERSION \
     && rm -rf /usr/local/cargo/registry /usr/local/cargo/git
 
 # Instruction counting (cargo xtask count, docs/performance.md), pinned to the
@@ -110,6 +116,19 @@ RUN curl -sfL -o /tmp/qemu.tar.xz https://download.qemu.org/qemu-$QEMU_PLUGINS_V
     && cd / && rm -rf /tmp/qemu.tar.xz /tmp/qemu-$QEMU_PLUGINS_VERSION
 ENV SDRK_SDE=/usr/local/bin/sde64
 ENV SDRK_QEMU_AARCH64=/opt/qemu-plugins/bin/qemu-aarch64
+
+# Golden generator: byte-identical output needs Python 3.12 with the pinned
+# NumPy and SciPy of tests/golden/requirements.txt (tests/golden/README.md);
+# Ubuntu 26.04 ships a newer Python, so uv installs 3.12 into a venv that
+# python3.12 runs. uv is installed here; the venv of the cycle-simulation tools
+# below uses it too.
+COPY tests/golden/requirements.txt /tmp/golden-requirements.txt
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+    && UV_PYTHON_INSTALL_DIR=/opt/uv-python uv venv --python 3.12 /opt/sdrk-golden-venv \
+    && VIRTUAL_ENV=/opt/sdrk-golden-venv uv pip install -r /tmp/golden-requirements.txt \
+    && printf '#!/bin/sh\nexec /opt/sdrk-golden-venv/bin/python "$@"\n' > /usr/local/bin/python3.12 \
+    && chmod +x /usr/local/bin/python3.12 \
+    && rm /tmp/golden-requirements.txt
 
 # Simulated cycles per sample (level 2 of the measurement policy, D33 in
 # docs/decisions-log.md, docs/performance.md#measurement-policy):
@@ -163,18 +182,6 @@ RUN UV_PYTHON_INSTALL_DIR=/opt/uv-python uv venv --python 3.12 /opt/sdrk-perf-ve
     && ln -s /opt/sdrk-perf-venv/bin/osaca /usr/local/bin/osaca
 ENV SDRK_OSACA=/usr/local/bin/osaca
 ENV SDRK_UICA=/usr/local/bin/uiCA
-
-# Golden generator: byte-identical output needs Python 3.12 with the pinned
-# NumPy and SciPy of tests/golden/requirements.txt (tests/golden/README.md);
-# Ubuntu 26.04 ships a newer Python, so uv installs 3.12 into a venv that
-# python3.12 runs.
-COPY tests/golden/requirements.txt /tmp/golden-requirements.txt
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
-    && UV_PYTHON_INSTALL_DIR=/opt/uv-python uv venv --python 3.12 /opt/sdrk-golden-venv \
-    && VIRTUAL_ENV=/opt/sdrk-golden-venv uv pip install -r /tmp/golden-requirements.txt \
-    && printf '#!/bin/sh\nexec /opt/sdrk-golden-venv/bin/python "$@"\n' > /usr/local/bin/python3.12 \
-    && chmod +x /usr/local/bin/python3.12 \
-    && rm /tmp/golden-requirements.txt
 
 # Not installed here, because the milestones download them pinned and
 # checksum-verified through xtask: esp-emulator and the Espressif QEMU fork

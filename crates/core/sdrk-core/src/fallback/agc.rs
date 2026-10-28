@@ -4,7 +4,7 @@ use crate::Fallback;
 use crate::error::Result;
 use crate::kernels::agc::{Agc, AgcParts, AgcState};
 use crate::kernels::check_len;
-use crate::num::{near_int_plus_half_f64, round_sqrt_u32, sat16, sqrt_f32};
+use crate::num::{sat16, sqrt_f32, sqrt_f64};
 use crate::types::{C32, CQ15, Q15};
 
 /// Samples per iteration of the `C32` loop of the fallback. The loop is a recursion on the
@@ -332,6 +332,73 @@ fn run_gains<const HOLD: bool>(
 const P47: f64 = 140_737_488_355_328.0;
 const P48: f64 = 281_474_976_710_656.0;
 
+/// The candidate `k` of a quotient from its f64 estimate `est` (`0 <= est < 2^50`), for
+/// [`settle`]: for `est >= 1/2` an integer within `1/2` of `est + 1/2`; below `1/2` it is `0`
+/// (`est < 1/4`) or `1`.
+///
+/// x86-64: `est + (2^52 - 1/2)` is at least `2^52` for `est >= 1/2`, where the ulp is 1, so it
+/// rounds `est - 1/2` to an integer `j` and its bits minus those of `2^52` are `j`; `k = j + 1`
+/// is the bits minus those of `2^52 - 1/2`, the float below `2^52`. Below `1/2` the sum rounds
+/// to `2^52 - 1/2` (`k = 0`) or to `2^52` (`k = 1`). One addition, one move to an integer
+/// register and one subtraction: a saturating `as` costs about five instructions more there,
+/// and rounding `est + 1/2` with `2^52` (the same `k` for `est >= 1/2`) one addition more on
+/// the path of the gain. Elsewhere `trunc(est) + 1` (`est + 1/2 - (trunc(est) + 1)` is
+/// `frac(est) - 1/2`), one instruction and an addition on AArch64 (`fcvtzu`) and on wasm32.
+#[allow(
+    clippy::inline_always,
+    reason = "part of the per-sample update of the `CQ15` gain"
+)]
+#[inline(always)]
+fn candidate(est: f64) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // 2^52 - 1/2, the largest float below 2^52.
+        const MAGIC: f64 = 4_503_599_627_370_495.5;
+        (est + MAGIC).to_bits().wrapping_sub(MAGIC.to_bits())
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        est as u64 + 1
+    }
+}
+
+/// The rounded square root `round_sqrt(s)` of the specification for `0 <= s <= 2^32`, with one
+/// f64 square root: the integer nearest to `sqrt(s)`.
+///
+/// Why it is exact: `s` is exact in f64 and the square root (at most `2^16`) is correctly
+/// rounded, with an ulp of at most `2^-36`. The rounded root steps from `n` to `n + 1`
+/// between `s = n^2 + n` and `n^2 + n + 1`, where `sqrt(s)` is `n + 1/2 - 0.25 / (n + 1/2 +
+/// sqrt(s))` and `n + 1/2 + 0.75 / (n + 1/2 + sqrt(s))`: at least `0.25 / (2^17 + 1) > 2^-20`
+/// away from `n + 1/2`, far more than the half ulp (`2^-37`) by which the rounded square root
+/// can move. So `fl(sqrt(s))` is never within `2^-21` of a half integer, and the only integer
+/// within `1/2` of it is the rounded root. The unit test checks both sides of every step for
+/// every `n` up to `2^16` (both functions are monotone in `s`, so that is every `s`).
+///
+/// x86-64: `r + 2^52` rounds the root `r` to the nearest integer `n` (the ulp in `[2^52,
+/// 2^53)` is 1), and its bits are those of `2^52` plus `n`; the low 32 bits of `2^52` are
+/// zero and `n <= 2^16`, so the low 32 bits are `n` (a 32-bit move to an integer register, no
+/// subtraction; a saturating `as` costs about five instructions more there). Elsewhere
+/// `trunc(r + 1/2)` (`r + 1/2` is exact), one instruction on AArch64 (`fcvtzs`) and one
+/// operator on wasm32 (`i64.trunc_sat_f64_s`).
+#[allow(
+    clippy::inline_always,
+    reason = "part of the per-sample update of the `CQ15` gain"
+)]
+#[inline(always)]
+fn round_sqrt_u32(s: u64) -> i64 {
+    // `s` is below 2^63, so the signed conversion (one instruction on x86-64) is exact.
+    let r = sqrt_f64(s as i64 as f64);
+    #[cfg(target_arch = "x86_64")]
+    {
+        const MAGIC: f64 = 4_503_599_627_370_496.0; // 2^52
+        i64::from((r + MAGIC).to_bits() as u32)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        (r + 0.5) as i64
+    }
+}
+
 /// `floor(n / d)` from a candidate `k` with `|n - k d| < 2^63` and `k - 1 <= n / d < k + 1`:
 /// `n - k d` is then exact as the wrapping difference of the low 64 bits (`n_lo`, `k d mod
 /// 2^64`) read as `i64`, and its sign tells `k` from `k - 1`. Integer operations of 64 bits
@@ -357,10 +424,12 @@ fn settle(k: u64, n_lo: u64, d: u64) -> u64 {
 /// Bound argument: the real quotient `x = a 2^48 / den` is at most `gain < 2^47`. The f64
 /// estimate divides `fl(a) 2^47` by `fl(floor(den / 2))` (three roundings of at most `2^-53`
 /// each, and `floor(den / 2)` differs from `den / 2` by less than `2^-58` relatively), so it
-/// is within `2^47 (3.0001 * 2^-53 + 2^-58) < 0.05` of `x`. `k` is an integer within `1/2` of
-/// `estimate + 1/2` ([`near_int_plus_half_f64`]), so the exact quotient `t = x + floor(den /
-/// 2) / den` (the added part is in `(1/2 - 2^-58, 1/2]`) lies within `1/2 + 0.05` of `k`, so
-/// `|n - k den| < 0.55 * 0.854 * 2^64 < 2^63` and [`settle`] gives `floor(t)`.
+/// is within `2^47 (3.0001 * 2^-53 + 2^-58) < 0.05` of `x`. The real quotient is at least
+/// `g_min div / (den / 2^48) > 2^25.3 * 1025 / 55939 > 2^19`, so the estimate is above `1/2`
+/// and `k` is an integer within `1/2` of `estimate + 1/2` ([`candidate`]), so the exact
+/// quotient `t = x + floor(den / 2) / den` (the added part is in `(1/2 - 2^-58, 1/2]`) lies
+/// within `1/2 + 0.05` of `k`, so `|n - k den| < 0.55 * 0.854 * 2^64 < 2^63` and [`settle`]
+/// gives `floor(t)`.
 #[allow(
     clippy::inline_always,
     reason = "part of the per-sample update of the `CQ15` gain"
@@ -372,34 +441,70 @@ fn attack_q(a: u64, den: u64) -> u64 {
     // give the same values as unsigned ones.
     let est = (a as i64 as f64) * P47 / (half as i64 as f64);
     // The estimate is below 2^47.
-    let k = near_int_plus_half_f64(est);
+    let k = candidate(est);
     // `a 2^48 + half` modulo 2^64 (the shift drops the high bits).
     settle(k, (a << 48).wrapping_add(half), den)
 }
 
+/// The constants of [`release_q`] for a release rate `r_r` (`1 <= r_r <= 2^47`).
+#[derive(Clone, Copy)]
+struct Release {
+    /// `r_r`.
+    rr: u64,
+    /// `2^48 / r_r` rounded to f64, the scale of the divisor of the estimate.
+    scale: f64,
+    /// `2^48`, hidden from the compiler (`black_box`, once per call): with the constant it
+    /// turns `k * (div << 48)` into `((k << 48) - ...) * div` and puts a shift and a
+    /// subtraction after the estimate `k` on the path of the gain; with a value it does not
+    /// know, `div * 2^48` is one multiplication beside that path and `k * divisor` one on it.
+    unit: u64,
+}
+
+impl Release {
+    fn new(rr: u64) -> Self {
+        Self {
+            rr,
+            // `r_r` is at most 2^47 (signed conversion, as in `attack_q`).
+            scale: P48 / (rr as i64 as f64),
+            unit: core::hint::black_box(1 << 48),
+        }
+    }
+}
+
 /// The release step of the `CQ15` gain: `floor((p + div 2^47) / (div 2^48))` with
-/// `p = gain * re` and `re = r_r e`, i.e. `floor(gain r_r e / (div 2^48) + 1/2)` of the specification
-/// (the same value as `floor(floor((p + div 2^47) / 2^48) / div)`).
+/// `p = gain * r_r * e`, i.e. `floor(gain r_r e / (div 2^48) + 1/2)` of the specification
+/// (the same value as `floor(floor((p + div 2^47) / 2^48) / div)`), with the constants `c` of
+/// [`Release`].
 ///
-/// Domain: `0 < gain < 2^47`, `r_r <= 2^47`, `0 <= e <= ref <= 2^15` (so `re < 2^62`),
-/// `256 <= div <= 2^15` with `e / div < 4.02` (`div = max(level, ref >> 2)`).
+/// Domain: `0 < gain < 2^47`, `1 <= r_r <= 2^47`, `0 <= e <= ref <= 2^15` (so `r_r e <
+/// 2^62`), `256 <= div <= 2^15` with `e / div < 4.02` (`div = max(level, ref >> 2)`).
+///
+/// The estimate is `gain e / (div (2^48 / r_r))`: the rate is moved into the divisor, so that
+/// neither the numerator nor the divisor waits for the product `r_r e` (an integer
+/// multiplication and a conversion after the level), which only the exact correction needs.
 ///
 /// Bound argument: the real value `x = p / (div 2^48)` is below `2^47 * 2^47 * 4.02 / 2^48 <
-/// 2^48.01`. The f64 estimate has three roundings (`fl(re)`, the product, the quotient; `div
-/// 2^48` is exact), so it is within `2^48.01 * 3.0001 * 2^-53 < 0.1` of `x`. `k` is an integer
-/// within `1/2` of `estimate + 1/2`, so the exact quotient `t = x + 1/2` lies within `1/2 +
-/// 0.1` of `k`, so `|n - k div 2^48| < 0.6 * 2^63` and [`settle`] gives `floor(t)`.
+/// 2^48.01`. The f64 estimate has four roundings (the product `gain e`, the scale, the divisor
+/// `div scale`, the quotient; `gain`, `e` and `div` are exact), so it is within `2^48.01 *
+/// 4.0001 * 2^-53 < 0.13` of `x`. For an estimate of at least `1/2`, `k` is an integer within
+/// `1/2` of `estimate + 1/2` ([`candidate`]), so the exact quotient `t = x + 1/2` lies within
+/// `1/2 + 0.13` of `k`, so `|n - k div 2^48| < 0.63 * 2^63`. Below `1/2` (`e` zero or small)
+/// `k` is `0` for an estimate below `1/4`, where `t < 0.88` and `n < 0.88 div 2^48 < 2^63`, and
+/// `1` otherwise, where `0.62 < t < 1.13`; either way `k - 1 <= t < k + 1` and [`settle`]
+/// gives `floor(t)`.
 #[allow(
     clippy::inline_always,
     reason = "part of the per-sample update of the `CQ15` gain"
 )]
 #[inline(always)]
-fn release_q(gain: u64, re: u64, div: u64) -> u64 {
-    // `gain` and `re` are below 2^63 (signed conversions, as in `attack_q`).
-    let est = (gain as i64 as f64) * (re as i64 as f64) / (div as i64 as f64 * P48);
+fn release_q(gain: u64, e: u64, div: u64, c: Release) -> u64 {
+    // `gain` is below 2^47, `e` and `div` below 2^16 (signed conversions, as in `attack_q`).
+    let est = (gain as i64 as f64) * (e as i64 as f64) / (div as i64 as f64 * c.scale);
     // The estimate is below 2^49.
-    let k = near_int_plus_half_f64(est);
-    settle(k, gain.wrapping_mul(re).wrapping_add(div << 47), div << 48)
+    let k = candidate(est);
+    // `div 2^48` (at most 2^63) and its half.
+    let d = div * c.unit;
+    settle(k, gain.wrapping_mul(c.rr * e).wrapping_add(d >> 1), d)
 }
 
 impl Agc<CQ15> for Fallback {
@@ -407,40 +512,61 @@ impl Agc<CQ15> for Fallback {
         check_len(input.len(), output.len())?;
         let par = state.parts_mut();
         let mut gain = *par.g_q;
+        let release = Release::new(par.rr_q as u64);
         for (o, &x) in output.iter_mut().zip(input) {
             // `round_shift(x * gain, 32)` without its saturation: `|x * gain|` is below 2^15 *
             // 2^47, so adding 2^31 cannot overflow.
-            let scale = |v: Q15| Q15(sat16((i64::from(v.0) * gain + (1 << 31)) >> 32));
-            let y = CQ15 {
-                re: scale(x.re),
-                im: scale(x.im),
+            let shift = |v: Q15| (i64::from(v.0) * gain + (1 << 31)) >> 32;
+            let (mut re, mut im) = (shift(x.re), shift(x.im));
+            // `sat16` of both. x86-64: as a branch, because the output saturates rarely and a
+            // compare and select per component would lie on the path from the gain to the
+            // level; the `black_box` on the rare path keeps the compiler from turning it into
+            // selects. Elsewhere the selects are faster (fewer instructions on AArch64 and
+            // wasm32, and fewer cycles on the Cortex-A76 model).
+            #[cfg(target_arch = "x86_64")]
+            {
+                let wide = |v: i64| !(-32768..=32767).contains(&v);
+                if wide(re) || wide(im) {
+                    re = i64::from(sat16(core::hint::black_box(re)));
+                    im = i64::from(sat16(im));
+                }
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                re = i64::from(sat16(re));
+                im = i64::from(sat16(im));
+            }
+            *o = CQ15 {
+                re: Q15(re as i16),
+                im: Q15(im as i16),
             };
-            *o = y;
             // An input of exactly zero carries no information: hold the gain.
             if x.re.0 == 0 && x.im.0 == 0 {
                 continue;
             }
-            let (re, im) = (i64::from(y.re.0), i64::from(y.im.0));
             // At most 2 * 32768^2 = 2^31.
             let level = round_sqrt_u32((re * re + im * im) as u64);
             let err = par.ref_q - level;
             // The same values as the `i128` formulas of `Reference` (which divide by `2 *
             // den` after adding `den`), computed from an f64 estimate and an exact correction
             // in 64-bit integers (`attack_q`, `release_q`).
-            let next = if err < 0 {
+            // `clamp(next, g_min, g_max)` of the specification on one side per branch: the
+            // attack never raises the gain (its quotient is at most `gain`, which is at most
+            // `g_max`) and the release never lowers it (it adds a quotient of non-negative
+            // values to `gain`, which is at least `g_min`), so the other side would change no
+            // value; one compare and select less on the path of the gain.
+            gain = if err < 0 {
                 let div = level.min(par.hi_q) as u64;
                 // Below 0.854 * 2^64 (see `attack_q`).
                 let den = (div << 48) + (par.ra_q as u64) * err.unsigned_abs();
-                // The quotient is at most `gain`.
-                attack_q(gain as u64 * div, den)
+                // The quotient is at most `gain` (below 2^47), so the narrowing is exact.
+                (attack_q(gain as u64 * div, den) as i64).max(par.gmin_q)
             } else {
                 let div = level.max(par.lo_q) as u64;
-                // `r_r e` is below 2^47 * 2^15.
-                gain as u64 + release_q(gain as u64, par.rr_q as u64 * err as u64, div)
+                // The sum is below 2^49, so the narrowing is exact.
+                let step = release_q(gain as u64, err as u64, div, release);
+                ((gain as u64 + step) as i64).min(par.gmax_q)
             };
-            // The limits bound `next` (below 2^49) to the Q.32 range, so the narrowing is
-            // exact; `max` then `min` is `clamp` for `gmin_q <= gmax_q` without its check.
-            gain = (next as i64).max(par.gmin_q).min(par.gmax_q);
         }
         *par.g_q = gain;
         Ok(())
@@ -453,8 +579,8 @@ mod tests {
     //! the rounded square root, the whole kernel domain at its edges, random points of it, and
     //! numerators placed next to a multiple of the divisor (where an estimate is off by one).
 
-    use super::{attack_q, release_q};
-    use crate::num::{round_sqrt, round_sqrt_u32};
+    use super::{Release, attack_q, candidate, release_q, round_sqrt_u32};
+    use crate::num::round_sqrt;
 
     /// xorshift64.
     struct Rng(u64);
@@ -486,6 +612,44 @@ mod tests {
     const GMAX: u64 = 135_818_791_317_412;
     const RMAX: u64 = 1 << 47;
 
+    /// What [`settle`](super::settle) needs of the candidate: for an estimate of at least
+    /// `1/2` an integer within `1/2` of `estimate + 1/2`, below `1/2` zero (below `1/4`, on
+    /// x86-64) or one; at the switch points of the rounding and across the whole range.
+    #[test]
+    fn the_candidate_is_within_one_half_of_the_estimate_plus_one_half() {
+        let check = |est: f64| {
+            let k = candidate(est);
+            if est >= 0.5 {
+                let d = k as f64 - (est + 0.5);
+                assert!(d.abs() <= 0.5, "{est}: {k}");
+            } else {
+                assert!(k <= 1, "{est}: {k}");
+                if cfg!(target_arch = "x86_64") && est < 0.25 {
+                    assert_eq!(k, 0, "{est}");
+                }
+            }
+        };
+        let mut rng = Rng(0x1357_9bdf_2468_ace0);
+        for n in 0..4096u32 {
+            let base = f64::from(n) / 8.0;
+            for e in [
+                base,
+                base.next_up(),
+                base.next_down().max(0.0),
+                base + 0.5,
+                base + 0.25,
+            ] {
+                check(e);
+            }
+        }
+        for _ in 0..1_000_000 {
+            // Log-uniform up to 2^49, the largest estimate of the kernel.
+            let e = (rng.next() >> 11) as f64 / (1u64 << 53) as f64;
+            check(e * (1u64 << (rng.next() % 50)) as f64);
+        }
+        check((1u64 << 49) as f64);
+    }
+
     #[test]
     fn round_sqrt_u32_is_exact_on_both_sides_of_every_step() {
         for n in 0..(1u64 << 16) {
@@ -514,10 +678,10 @@ mod tests {
     /// One release of the kernel.
     fn release_case(gain: u64, level: u64, reference: u64, rr: u64) {
         let div = level.max(reference >> 2);
-        let re = rr * (reference - level);
+        let e = reference - level;
         assert_eq!(
-            release_q(gain, re, div),
-            release_exact(gain, re, div),
+            release_q(gain, e, div, Release::new(rr)),
+            release_exact(gain, rr * e, div),
             "g {gain} l {level} ref {reference} rr {rr}"
         );
     }
@@ -587,19 +751,23 @@ mod tests {
                     checked += 1;
                 }
             }
-            // Release: `gain * re + div 2^47` within `gain` of `q div 2^48`.
+            // Release: `gain * r_r * e + div 2^47` within `r_r e` of `q div 2^48`, with the
+            // gain chosen for a random `q` of the gain range (small rates put the numerator
+            // close to the multiple).
             let div = rng.range(256, 32768);
-            let gain = rng.range(GMIN, GMAX);
-            let q = rng.range(1, (1 << 48) - 1);
-            let target = ((u128::from(q) * u128::from(div)) << 48) - (u128::from(div) << 47);
-            let re0 = (target / u128::from(gain)) as u64;
-            for re in [re0.saturating_sub(1), re0, re0 + 1] {
-                // The domain: `re < 2^62` and `gain re / (div 2^48) < 2^48.01`.
-                if re < (1 << 62) && u128::from(gain) * u128::from(re) < u128::from(div) << 96 {
+            let e = rng.range(1, (4 * div).min(32768));
+            let rr = (rng.range(1, RMAX) >> (rng.next() % 48)).max(1);
+            let re = u128::from(rr * e);
+            let unit = u128::from(div) << 48;
+            let q = u128::from(rng.range(GMIN, GMAX)) * re / unit + 1;
+            let g0 = ((q * unit - (unit >> 1)) / re) as u64;
+            for gain in [g0.saturating_sub(1), g0, g0 + 1] {
+                // The domain: the gain range and `gain r_r e / (div 2^48) < 2^48.01`.
+                if (GMIN..=GMAX).contains(&gain) && u128::from(gain) * re < unit << 48 {
                     assert_eq!(
-                        release_q(gain, re, div),
-                        release_exact(gain, re, div),
-                        "g {gain} re {re} div {div}"
+                        release_q(gain, e, div, Release::new(rr)),
+                        release_exact(gain, rr * e, div),
+                        "g {gain} rr {rr} e {e} div {div}"
                     );
                     checked += 1;
                 }
@@ -933,5 +1101,144 @@ mod c32_tests {
     #[ignore = "long; run in release"]
     fn c32_fallback_matches_the_model_on_long_random_signals() {
         random_run(0x5eed_a6c3_2000_0002, 1_000_000);
+    }
+}
+
+#[cfg(all(test, feature = "reference"))]
+mod cq15_tests {
+    //! The `CQ15` fallback against `Reference` (`i128` arithmetic), bit for bit, where its
+    //! update takes the less common paths: outputs that saturate in one component, in the
+    //! other or in both (the saturation is a branch of its own), outputs at and next to the
+    //! bounds `-32768` and `32767`, gains at both limits, and the release with a zero or small
+    //! error (an estimate below one half), in calls of every length from 1 to 9 samples.
+    #![allow(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::cast_possible_truncation
+    )]
+
+    use crate::kernels::agc::{Agc, AgcState};
+    use crate::types::Sample;
+    use crate::{CQ15, Fallback, Q15, Rate, Reference};
+    use std::{format, vec, vec::Vec};
+
+    /// xorshift64.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn sample(&mut self, amp: i64) -> i16 {
+            if amp == 0 {
+                return 0;
+            }
+            let span = (2 * amp + 1) as u64;
+            (((self.next() % span) as i64) - amp).clamp(-32768, 32767) as i16
+        }
+    }
+
+    fn state(reference: f64, attack: f64, release: f64, gains: (f64, f64, f64)) -> AgcState<CQ15> {
+        let (min, max, init) = gains;
+        AgcState::new(
+            reference,
+            attack,
+            release,
+            min,
+            max,
+            init,
+            Rate::hz(48_000).unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// Fallback and `Reference` from equal states over `x`, the fallback in calls of `chunk`
+    /// samples.
+    fn check(st: AgcState<CQ15>, x: &[CQ15], chunk: usize, what: &str) {
+        let (mut sf, mut sr) = (st, st);
+        let mut want = vec![CQ15::ZERO; x.len()];
+        Reference.agc(&mut sr, x, &mut want).unwrap();
+        let mut got = vec![CQ15::ZERO; x.len()];
+        for (i, o) in x.chunks(chunk).zip(got.chunks_mut(chunk)) {
+            Fallback.agc(&mut sf, i, o).unwrap();
+        }
+        if let Some(i) = want.iter().zip(&got).position(|(w, g)| w != g) {
+            panic!("{what}: sample {i}: {:?} against {:?}", got[i], want[i]);
+        }
+        assert_eq!(sf, sr, "{what}: state");
+    }
+
+    /// Blocks in which the output saturates in the real part only, the imaginary part only,
+    /// both or neither, with the gain moving between them; full-scale corners and samples whose
+    /// output lands next to the bounds at a gain of one.
+    fn signal(rng: &mut Rng, n: usize) -> Vec<CQ15> {
+        let mut out = Vec::with_capacity(n);
+        let corners = [
+            (32767, 0),
+            (-32768, 0),
+            (0, 32767),
+            (0, -32768),
+            (32767, -32768),
+            (-32768, -32768),
+            (1, -32768),
+            (32766, 1),
+        ];
+        while out.len() < n {
+            let kind = rng.next() % 6;
+            for _ in 0..=(rng.next() % 40) {
+                let (re, im) = match kind {
+                    0 => (rng.sample(32768), rng.sample(30)),
+                    1 => (rng.sample(30), rng.sample(32768)),
+                    2 => (rng.sample(32768), rng.sample(32768)),
+                    3 => corners[(rng.next() % corners.len() as u64) as usize],
+                    4 => (rng.sample(3), rng.sample(3)),
+                    _ => (rng.sample(2000), rng.sample(2000)),
+                };
+                out.push(CQ15 {
+                    re: Q15(re),
+                    im: Q15(im),
+                });
+            }
+        }
+        out.truncate(n);
+        out
+    }
+
+    #[test]
+    fn cq15_fallback_matches_the_reference_where_the_output_saturates() {
+        let mut rng = Rng(0x00c1_5a6c_05a7_u64);
+        let fastest = 1.45 / 48_000.0;
+        let params = [
+            (0.5, 0.005, 0.05, (-20.0, 60.0, 0.0)),
+            (1.0, fastest, fastest, (-40.0, 90.0, 90.0)),
+            (1.0 / 32.0, fastest, 0.2, (-40.0, 90.0, -40.0)),
+            (0.7, 0.0005, 0.01, (0.0, 0.0, 0.0)),
+            (0.25, 0.1, fastest, (-6.0, 30.0, 30.0)),
+            (0.999, 0.002, 2.0, (-40.0, 12.0, 6.0)),
+        ];
+        let mut saturated = 0usize;
+        for (k, &(reference, attack, release, gains)) in params.iter().enumerate() {
+            let st = state(reference, attack, release, gains);
+            let x = signal(&mut rng, 6000);
+            // Count the saturating outputs of the reference run, to be sure the test reaches
+            // that path.
+            let (mut sr, mut y) = (st, vec![CQ15::ZERO; x.len()]);
+            Reference.agc(&mut sr, &x, &mut y).unwrap();
+            saturated += y
+                .iter()
+                .filter(|s| [s.re.0, s.im.0].iter().any(|&v| v == 32767 || v == -32768))
+                .count();
+            for chunk in 1..=9 {
+                check(st, &x, chunk, &format!("params {k} chunk {chunk}"));
+            }
+            // A single sample from the state, for every corner and gain limit.
+            for &s in &x[..200] {
+                check(st, &[s], 1, &format!("params {k} single {s:?}"));
+            }
+        }
+        assert!(saturated > 1000, "{saturated}");
     }
 }

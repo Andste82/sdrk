@@ -36,6 +36,10 @@ pub const MAX_BLOCKS: usize = 64;
 pub const ITERATIONS: u32 = 200;
 /// Addresses of one object that are further apart than this are disassembled separately.
 const CLUSTER_GAP: u64 = 4096;
+/// Blocks with the same count are joined into one loop body when the code between them, which
+/// never ran, is at most this many bytes (the cold paths of a loop body: a saturation, an
+/// error branch).
+pub const REGION_GAP: u64 = 256;
 
 /// The core models of an instruction-set level (D33): the reference model, on which a branch is
 /// judged, and the counter-model of another vendor or core generation.
@@ -219,6 +223,8 @@ pub struct Block {
     pub object: String,
     /// Address of the first instruction.
     pub address: u64,
+    /// Address of the last instruction.
+    pub end: u64,
     /// Executions.
     pub count: u64,
     /// The instructions for `llvm-mca`.
@@ -254,9 +260,11 @@ pub fn blocks(object: &str, code: &[Instruction], counts: &BTreeMap<u64, u64>) -
         let block = current.get_or_insert_with(|| Block {
             object: object.to_string(),
             address: *address,
+            end: *address,
             count,
             text: Vec::new(),
         });
+        block.end = *address;
         block.text.push(text.clone());
         let mnemonic = text.split_whitespace().next().unwrap_or_default();
         if is_transfer(mnemonic) {
@@ -267,7 +275,33 @@ pub fn blocks(object: &str, code: &[Instruction], counts: &BTreeMap<u64, u64>) -
     out
 }
 
-/// The basic blocks of a profile, the most executed instructions first.
+/// Joins the basic blocks of one object (in address order) into loop bodies: consecutive blocks
+/// with the same count whose gap holds only code that never ran ([`REGION_GAP`]). A loop body
+/// with a branch inside (a saturation compiled to a jump over a cold path) is cut into several
+/// basic blocks; simulated one by one, each would be a loop of its own, and the dependency chain
+/// that runs through all of them would be lost. Joined, `llvm-mca` sees the whole body, which is
+/// the path the loop takes when the cold paths do not run.
+#[must_use]
+pub fn regions(blocks: Vec<Block>) -> Vec<Block> {
+    let mut out: Vec<Block> = Vec::new();
+    for b in blocks {
+        if let Some(last) = out.last_mut()
+            && last.object == b.object
+            && last.count == b.count
+            && b.address > last.end
+            && b.address - last.end <= REGION_GAP
+        {
+            last.end = b.end;
+            last.text.extend(b.text);
+            continue;
+        }
+        out.push(b);
+    }
+    out
+}
+
+/// The loop bodies of a profile ([`blocks`] joined by [`regions`]), the most executed
+/// instructions first.
 ///
 /// # Errors
 /// `objdump` cannot run.
@@ -299,7 +333,7 @@ pub fn profile_blocks(counts: &Counts) -> anyhow::Result<Vec<Block>> {
         ranges.extend(cluster);
         for (lo, hi) in ranges {
             let code = disassemble(object, lo, hi)?;
-            out.extend(blocks(object, &code, &addresses));
+            out.extend(regions(blocks(object, &code, &addresses)));
         }
     }
     out.sort_by(|a, b| {
@@ -426,7 +460,18 @@ pub fn simulate(
             break;
         }
         seen += b.executed();
-        match simulate_block(&b.text, triple, cpu) {
+        let timing = simulate_block(&b.text, triple, cpu);
+        if std::env::var_os("SDRK_MCA_DEBUG").is_some() {
+            eprintln!(
+                "mca {cpu}: {:#x}..{:#x} {} instructions x {} -> {:?}",
+                b.address,
+                b.end,
+                b.text.len(),
+                b.count,
+                timing.as_ref().map_err(ToString::to_string)
+            );
+        }
+        match timing {
             Ok(t) => {
                 covered += b.executed();
                 cycles += b.count as f64 * t.cycles;
@@ -524,6 +569,29 @@ fn=h
         assert_eq!(b[0].text.len(), 3);
         assert_eq!((b[1].address, b[1].count), (3, 8));
         assert_eq!((b[2].address, b[2].count), (4, 1));
+        // The first two blocks have the same count and are adjacent: one loop body.
+        let r = regions(b);
+        assert_eq!(r.len(), 2);
+        assert_eq!((r[0].address, r[0].end, r[0].text.len()), (0, 3, 4));
+    }
+
+    #[test]
+    fn regions_do_not_join_distant_or_different_blocks() {
+        let block = |address: u64, end: u64, count: u64| Block {
+            object: "o".to_string(),
+            address,
+            end,
+            count,
+            text: vec!["x".to_string()],
+        };
+        let r = regions(vec![
+            block(0, 10, 5),
+            block(20, 30, 5),
+            block(30 + REGION_GAP + 1, 400, 5),
+            block(410, 420, 6),
+        ]);
+        assert_eq!(r.len(), 3);
+        assert_eq!(r[0].text.len(), 2);
     }
 
     #[test]

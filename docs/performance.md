@@ -77,11 +77,11 @@ The method is decided (D33); the tooling is planned:
 Implemented in `xtask/src/mca.rs` (D35) and run by `cargo measure`:
 
 1. callgrind records the execution count of every instruction (`--dump-instr=yes`) of a run with the counted calls and of a run without them; the difference belongs to the counted calls, as in the differential method above (for an FFT, the restore of the input is subtracted as well).
-2. The executed instructions are cut into basic blocks: runs of consecutive instructions with the same count, ended by every jump, call and return. `objdump` disassembles them from the object files of the measured process (our binary, the static references, VOLK's shared library).
+2. The executed instructions are cut into basic blocks: runs of consecutive instructions with the same count, ended by every jump, call and return. Adjacent blocks with the same count, separated only by code that never ran (at most 256 bytes: a saturation or an error path compiled as a jump), are joined into one loop body, so that a dependency chain through a branch inside the loop is simulated as a whole. `objdump` disassembles them from the object files of the measured process (our binary, the static references, VOLK's shared library).
 3. Starting from the most executed instructions, blocks are simulated until 99 % of the executed instructions are covered (at most 64 blocks). `llvm-mca` simulates each block as a loop of 200 iterations on the model and gives its cycles per iteration and its port bound (`Block RThroughput`).
 4. The cycles and port bounds of the blocks, weighted by their execution counts, give the cycles per sample and the port bound per sample. The instructions outside the simulated blocks get the cycles per instruction of the simulated ones (the coverage is reported). The efficiency is `port bound / cycles`; the bottleneck class is `throughput` from an efficiency of 0.8 up and `latency` below.
 
-Every block is simulated as if it repeated back to back with itself. That is the steady state of a loop body; for a block that runs once per call it is an approximation, which is small when loop bodies cover most of the instructions.
+`SDRK_MCA_DEBUG=1` prints every simulated body (addresses, instructions, executions, cycles and port bound per iteration). Every body is simulated as if it repeated back to back with itself. That is the steady state of a loop body; for a block that runs once per call it is an approximation, which is small when loop bodies cover most of the instructions.
 
 ### Efficiency: a measure without a reference
 

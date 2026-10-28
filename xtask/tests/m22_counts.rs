@@ -123,3 +123,48 @@ fn the_measured_platforms_report_every_biquad_entry() {
         }
     }
 }
+
+/// The Cortex-M4 report (open item M22-10, closed) has the four biquad kernels of our fallback
+/// with CMSIS-DSP built for the M4F next to them and both SNRs on the same input, and no limit
+/// or verdict (report only, like every entry of that report).
+#[test]
+fn the_cortex_m4_report_compares_the_biquad_fallback_with_cmsis_dsp() {
+    let result = bench_file("results/cortex-m4.json");
+    assert_eq!(result["status"].as_str(), Some("report only, no limits"));
+    let libraries = &result["references"]["libraries"];
+    assert_eq!(libraries["cmsis_dsp"]["version"].as_str(), Some("1.18.0"));
+    assert_eq!(libraries["cmsis_core"]["version"].as_str(), Some("6.3.0"));
+    for kernel in SIMD {
+        let entry = &result["kernels"][kernel];
+        assert_eq!(
+            entry["implementation"].as_str(),
+            Some("fallback"),
+            "{kernel}"
+        );
+        assert_eq!(entry["samples_per_call"].as_u64(), Some(4096), "{kernel}");
+        let ours = entry["instructions_per_sample"].as_f64().unwrap_or(0.0);
+        let other = entry["other_instr_per_sample"].as_f64().unwrap_or(0.0);
+        assert!(ours > 0.0 && other > 0.0, "cortex-m4/{kernel}: {entry}");
+        let ratio = entry["ratio"].as_f64().unwrap_or(f64::NAN);
+        assert!(
+            (ratio - ours / other).abs() < 0.01,
+            "cortex-m4/{kernel}: {entry}"
+        );
+        assert!(
+            entry["compared_with"]
+                .as_str()
+                .is_some_and(|c| c.contains("CMSIS-DSP 1.18.0") && c.contains("Cortex-M4")),
+            "cortex-m4/{kernel}: {entry}"
+        );
+        for side in ["ours", "other"] {
+            assert!(
+                entry["snr_db"][side].as_f64().is_some_and(|v| v > 40.0),
+                "cortex-m4/{kernel}: {entry}"
+            );
+        }
+        assert!(
+            entry["status"].is_null() && entry["verdict"].is_null(),
+            "{kernel}"
+        );
+    }
+}

@@ -13,7 +13,8 @@ ENV PATH=/usr/local/cargo/bin:$PATH
 # valgrind (callgrind, M13), libvolk (M13 comparison via volk-sys), binaryen
 # (wasm-opt, M14), cross tools for objdump/size, and what benches/refs/build.sh
 # needs for the C references (g++ and the libc for aarch64, wasi-libc and
-# llvm-ar for wasm32, mako for VOLK).
+# llvm-ar for wasm32, the newlib headers for CMSIS-DSP on the Cortex-M4, mako
+# for VOLK).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -50,6 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     llvm \
     python3-mako \
     gcc-arm-none-eabi \
+    libnewlib-arm-none-eabi \
     binutils-arm-none-eabi \
     binutils-riscv64-unknown-elf \
     libglib2.0-dev \

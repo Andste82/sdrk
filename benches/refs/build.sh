@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the C reference libraries of `cargo xtask count` from pinned release tarballs.
 #
-#   benches/refs/build.sh <x86_64|aarch64|wasm32> <prefix>
+#   benches/refs/build.sh <x86_64|aarch64|wasm32|cortex-m4> <prefix>
 #
 # xtask runs this script before it builds the measurement binary of a platform; it returns at
 # once when <prefix> already holds a build of this script with the same compilers. CI caches
@@ -15,7 +15,8 @@
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 # | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
-# | CMSIS-DSP | 1.18.0 | Apache-2.0 | all (one library per level), generic C, see cmsis-biquad.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15) |
+# | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU; see cmsis-biquad.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27) |
+# | CMSIS 6 (CMSIS-Core) | 6.3.0 | Apache-2.0 | cortex-m4 (headers only: `cmsis_compiler.h` and the intrinsics such as `__SMLALD` that CMSIS-DSP uses with the DSP extension) | needed by CMSIS-DSP outside its host configuration |
 #
 # The libraries are linked only into the measurement binary of `benches/kernels`, which is
 # built on the measuring machine and never distributed; none of them is a dependency of a
@@ -23,17 +24,20 @@
 #
 # Compilers: x86_64 `${CC:-gcc}`/`${CXX:-g++}`, aarch64 `aarch64-linux-gnu-gcc`/`-g++` (KFR with
 # `${KFR_AARCH64_CXX:-clang++} --target=aarch64-linux-gnu`: GCC rejects KFR's NEON code), wasm32
-# `${WASM_CC:-clang}` with the wasi-libc headers. Their versions are part of the stamp and of
-# <prefix>/refs.json, which xtask copies into the results; the count jobs of CI pin them with
-# a container image and an apt snapshot (see .github/workflows/ci.yml).
+# `${WASM_CC:-clang}` with the wasi-libc headers, cortex-m4 `${M4_CC:-arm-none-eabi-gcc}` with the
+# newlib headers (`libnewlib-arm-none-eabi`: CMSIS-DSP includes `string.h` and `math.h`; the
+# biquad sources need only `memset`, which `compiler_builtins` of the Rust workload provides).
+# Their versions are part of the stamp and of <prefix>/refs.json, which xtask copies into the
+# results; the count jobs of CI pin them with a container image and an apt snapshot (see
+# .github/workflows/ci.yml).
 #
 # Needs curl, sha256sum, tar, make, cmake, ninja and python3 with mako (VOLK), and for the
-# platforms aarch64 and wasm32 the cross compilers above. Environment: SDRK_REFS_DOWNLOADS
-# (download cache, default <prefix>/../downloads), SDRK_REFS_JOBS (default 2).
+# platforms aarch64, wasm32 and cortex-m4 the cross compilers above. Environment:
+# SDRK_REFS_DOWNLOADS (download cache, default <prefix>/../downloads), SDRK_REFS_JOBS (default 2).
 set -euo pipefail
 
 if [ $# -ne 2 ]; then
-    echo "usage: $0 <x86_64|aarch64|wasm32> <prefix>" >&2
+    echo "usage: $0 <x86_64|aarch64|wasm32|cortex-m4> <prefix>" >&2
     exit 2
 fi
 platform=$1
@@ -61,6 +65,10 @@ KFR_SHA256=4f1603d5b6e609c25d25cff58fe7154a371583fd6d379615b342e44223be0763
 CMSISDSP_VERSION=1.18.0
 CMSISDSP_URL=https://github.com/ARM-software/CMSIS-DSP/archive/refs/tags/v$CMSISDSP_VERSION.tar.gz
 CMSISDSP_SHA256=b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56
+# The CMSIS release that was current when CMSIS-DSP 1.18.0 came out (2026-09-10).
+CMSISCORE_VERSION=6.3.0
+CMSISCORE_URL=https://github.com/ARM-software/CMSIS_6/archive/refs/tags/v$CMSISCORE_VERSION.tar.gz
+CMSISCORE_SHA256=331df74000876b8fb07933658cbf402c4d9f831b429258792d2c34ab5a6c5bf7
 
 # The optimisation flags of the libraries built here without their own build system or with a
 # build system that would tune for the build machine (FFTW adds -mtune=native otherwise).
@@ -85,6 +93,12 @@ case $platform in
         kfr_cxx=""
         ar=${WASM_AR:-llvm-ar}
         ;;
+    cortex-m4)
+        cc=${M4_CC:-arm-none-eabi-gcc}
+        cxx=""
+        kfr_cxx=""
+        ar=${M4_AR:-arm-none-eabi-ar}
+        ;;
     *)
         echo "unknown platform $platform" >&2
         exit 2
@@ -103,7 +117,7 @@ if [ -n "$kfr_cxx" ]; then
 fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -219,12 +233,14 @@ build_gr_agc() {
 
 # The levels of the biquad references with their instruction-set flags: those of the measured
 # SDRk level (the `-C target-cpu` of xtask's plan), so that a reference uses what the level
-# allows and nothing above it.
+# allows and nothing above it. A comma stands for a space (the list is split at spaces); the
+# Cortex-M4 entry is the M4F of the report with its DSP extension and its single-precision FPU.
 biquad_levels() {
     case $platform in
         x86_64) echo "sse2:-march=x86-64 sse4.2:-march=x86-64-v2 avx2:-march=x86-64-v3 avx512:-march=sapphirerapids" ;;
         aarch64) echo "neon:-march=armv8-a" ;;
         wasm32) echo "simd128:-msimd128" ;;
+        cortex-m4) echo "cortex-m4:-mcpu=cortex-m4,-mfpu=fpv4-sp-d16,-mfloat-abi=hard,-mthumb" ;;
     esac
 }
 
@@ -238,9 +254,16 @@ CMSISDSP_SOURCES="arm_biquad_cascade_df2T_f32 arm_biquad_cascade_df2T_init_f32 a
 # The configuration of CMSIS-DSP's own CMake build for a host (its Python wrapper): no CMSIS
 # Core, generic C, loop unrolling on (the default of its option LOOPUNROLL).
 CMSISDSP_DEFINES="-D__GNUC_PYTHON__ -DARM_MATH_LOOPUNROLL"
+# On the Cortex-M4 the configuration of a device build: CMSIS-Core instead of __GNUC_PYTHON__,
+# so that arm_math_types.h sets ARM_MATH_DSP from __ARM_FEATURE_DSP and the Q15 cascade takes its
+# DSP-extension path (__SMLAD, __SMLALD, __PKHBT on two samples per word); loop unrolling on.
+if [ "$platform" = cortex-m4 ]; then
+    CMSISDSP_DEFINES="-DARM_MATH_LOOPUNROLL"
+fi
 
-# CMSIS-DSP's biquad cascades in generic C (no CMake: the six sources and the handles of
-# cmsis-biquad.c), one library per level: libcmsisbq-<level>.a.
+# CMSIS-DSP's biquad cascades (no CMake: the six sources and the handles of cmsis-biquad.c),
+# one library per level: libcmsisbq-<level>.a. Generic C on the hosts; on the Cortex-M4 with
+# CMSIS-Core and the bump allocator of cmsis-m4-heap.c (there is no C library on the target).
 build_cmsis_biquad() {
     fetch "$CMSISDSP_URL" "$CMSISDSP_SHA256" "CMSIS-DSP-$CMSISDSP_VERSION.tar.gz"
     mkdir -p "$work/cmsis"
@@ -248,10 +271,18 @@ build_cmsis_biquad() {
         "CMSIS-DSP-$CMSISDSP_VERSION/Include" "CMSIS-DSP-$CMSISDSP_VERSION/PrivateInclude" \
         "CMSIS-DSP-$CMSISDSP_VERSION/Source/FilteringFunctions"
     local inc=(-I "$work/cmsis/Include" -I "$work/cmsis/PrivateInclude")
+    if [ "$platform" = cortex-m4 ]; then
+        fetch "$CMSISCORE_URL" "$CMSISCORE_SHA256" "CMSIS_6-$CMSISCORE_VERSION.tar.gz"
+        mkdir -p "$work/cmsis-core"
+        tar -xzf "$downloads/CMSIS_6-$CMSISCORE_VERSION.tar.gz" -C "$work/cmsis-core" --strip-components=4 \
+            "CMSIS_6-$CMSISCORE_VERSION/CMSIS/Core/Include"
+        inc+=(-I "$work/cmsis-core")
+    fi
     local entry level march dir src objects
     for entry in $(biquad_levels); do
         level=${entry%%:*}
         march=${entry#*:}
+        march=${march//,/ }
         dir="$work/cmsis-$level"
         objects=()
         mkdir -p "$dir"
@@ -260,6 +291,10 @@ build_cmsis_biquad() {
                 -c "$work/cmsis/Source/FilteringFunctions/$src.c" -o "$dir/$src.o"
             objects+=("$dir/$src.o")
         done
+        if [ "$platform" = cortex-m4 ]; then
+            $cc $BIQUAD_OPT $march -c "$here/cmsis-m4-heap.c" -o "$dir/heap.o"
+            objects+=("$dir/heap.o")
+        fi
         $cc $BIQUAD_OPT $march $CMSISDSP_DEFINES "${inc[@]}" -c "$here/cmsis-biquad.c" -o "$dir/handles.o"
         $ar rcs "$prefix/lib/libcmsisbq-$level.a" "${objects[@]}" "$dir/handles.o"
     done
@@ -311,6 +346,10 @@ case $platform in
         build_cmsis_biquad
         libraries=(volk kissfft gragc cmsisdsp)
         ;;
+    cortex-m4)
+        build_cmsis_biquad
+        libraries=(cmsisdsp cmsiscore)
+        ;;
 esac
 
 # The manifest that xtask records in benches/results/<platform>.json.
@@ -329,7 +368,8 @@ esac
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT, per level $(biquad_levels)\" }" ;;
-            cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"generic C with cmsis-biquad.c: $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels)\" }" ;;
+            cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
+            cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
         printf '%s    %s' "$sep" "$entry"

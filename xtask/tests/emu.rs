@@ -299,6 +299,27 @@ fn the_instruction_count_is_the_difference_per_sample() {
     assert!(per_sample(2_000, 1_000, 16, 1024).is_err());
 }
 
+#[test]
+fn the_biquad_kernels_of_the_cortex_m4_count_take_the_host_block_and_a_reference() {
+    use xtask::count_embedded::{KERNELS, cmsis_reference, samples_per_call};
+    for kernel in KERNELS {
+        let biquad = kernel.starts_with("biquad");
+        assert_eq!(cmsis_reference(kernel).is_some(), biquad, "{kernel}");
+        assert_eq!(samples_per_call(kernel), if biquad { 4096 } else { 1024 });
+    }
+    assert!(cmsis_reference("biquad_cq15").is_some_and(|c| c.contains("ARM_MATH_DSP")));
+}
+
+#[test]
+fn the_cortex_m4_snr_is_computed_from_the_printed_energies() {
+    use xtask::count_embedded::snr_db;
+    let v = snr_db("sdrk-snr biquad sig=100.0 err=0.01\nsdrk-count biquad k=0 ok=true\n").unwrap();
+    assert!((v - 40.0).abs() < 1e-9);
+    assert_eq!(snr_db("sdrk-snr x sig=1.5 err=0.0").unwrap(), 999.0);
+    assert!(snr_db("sdrk-count biquad k=0 ok=true").is_err());
+    assert!(snr_db("sdrk-snr x sig=1.5").is_err());
+}
+
 #[cfg(unix)]
 mod process {
     use std::process::Command;

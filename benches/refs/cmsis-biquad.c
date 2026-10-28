@@ -3,7 +3,10 @@
  * ARM_MATH_LOOPUNROLL, the defaults of its own CMake build for a host), behind owning handles
  * for the instruction counts of `cargo xtask count` (benches/cref-sys). benches/refs/build.sh
  * compiles this file and the CMSIS-DSP sources it calls once per SIMD level with the flags of
- * that level, into the library of that level (libcmsisbq-<level>.a).
+ * that level, into the library of that level (libcmsisbq-<level>.a). For the Cortex-M4 report
+ * the same file is built with CMSIS-Core instead of __GNUC_PYTHON__ (the DSP extension and the
+ * FPU of the M4F), with malloc from cmsis-m4-heap.c, and called from
+ * targets/qemu-cortex-m4/src/bin/count.rs.
  *
  * The coefficients are given in SDRk's order and sign, `[b0, b1, b2, a1, a2]` per section with
  * `y = b0 x + b1 x1 + b2 x2 - a1 y1 - a2 y2`; CMSIS-DSP adds the feedback terms, so the handles

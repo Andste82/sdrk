@@ -308,10 +308,9 @@ Complete:
 - SIMD (amended, D15 to D19): the wavefront of D18 for all four types at every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`, portable), bit-exact with the fallback. Counts: every `biquad*` entry of `benches/limits.json` is within the limit of 1.10 on all four platforms in full `cargo xtask count` runs (`benches/results/`, `docs/performance.md`); `f32`/`C32` against KFR 7.2.0 (CMSIS-DSP 1.18.0 at `simd128`) and the fallbacks against CMSIS-DSP 1.18.0 are `release`, `Q15`/`CQ15` against our fallback are `info` (D21).
 - Golden cases (seeds 424 to 429 and the design cases, regenerated with Python 3.12, `--check` passes), suite cases, invariance and extremes; the thresholds of the block tests and of E2E-NFM with CTCSS, for Q15 the separately stated ones (notch 34 dB, SINAD loss 1.1 dB, D23; the suite case `e2e_nfm_ctcss_q15` checks the SINAD loss); the silence check of §4 in `f32` (exactly zero) and Q15 (at most 321 LSB, D22). No specified check is `#[ignore]`d.
 - The Q15 cutoff guard `fs / 500` with the limit cycle of low cutoffs documented (D24); the node name `audio_filter` (D25).
-- Documentation and the decisions log (D15 to D25). Open items M22-1, M22-2, M22-3 and M22-6 are closed.
+- Documentation and the decisions log (D15 to D25). Open items M22-1, M22-2, M22-3, M22-6 and M22-9 are closed (M22-9: `biquad_real_fallback` at 0.99, 0.98 and 0.95 of CMSIS-DSP at `sse2`, `sse4.2` and `avx2`, D26).
 
 Open (maintainer decisions; no specified check is unmet):
 
 - M22-8: KFR is not built for wasm32 (it needs Emscripten), so `simd128` is judged against CMSIS-DSP.
-- M22-9: `biquad_real_fallback` (`f32`) at 1.04, 1.09 and 1.01 of CMSIS-DSP at `sse2`, `sse4.2` and `avx2`, above the goal of 1.00 (within the release limit of 1.10).
 - M22-10: `biquad` is not in the Cortex-M4 report (comparison with CMSIS-DSP built with the DSP extension undecided).

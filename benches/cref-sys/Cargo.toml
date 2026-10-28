@@ -1,6 +1,6 @@
 [package]
 name = "cref-sys"
-description = "Hand-written declarations of the C libraries the SDRk benchmarks compare with: FFTW, KissFFT, Ne10, GNU Radio agc_cc, KFR and CMSIS-DSP."
+description = "Hand-written declarations of the C libraries the SDRk benchmarks compare with: FFTW, KissFFT, Ne10, GNU Radio agc_cc and pwr_squelch_cc, KFR and CMSIS-DSP."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

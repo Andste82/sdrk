@@ -1,7 +1,7 @@
 //! Links the static C reference libraries that `benches/refs/build.sh` built into the prefix
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
-//! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_kfr`, `has_cmsis`) unset, and
-//! its wrapper then reports that the library is not available.
+//! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_kfr`,
+//! `has_cmsis`) unset, and its wrapper then reports that the library is not available.
 //!
 //! The biquad references (KFR, CMSIS-DSP) exist once per SIMD level (`libkfrbq-<level>.a`,
 //! `libcmsisbq-<level>.a`): the level is the one the target features of this build select, the
@@ -11,11 +11,12 @@
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 4] = [
+const LIBRARIES: [(&str, &str, &str); 5] = [
     ("has_fftw", "libfftw3f.a", "fftw3f"),
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
     ("has_gragc", "libgragc.a", "gragc"),
+    ("has_grsquelch", "libgrsquelch.a", "grsquelch"),
 ];
 
 /// The per-level libraries: cfg name, link name without the level.

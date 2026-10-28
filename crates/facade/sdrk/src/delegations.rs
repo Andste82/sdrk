@@ -65,8 +65,8 @@ crate::delegate! {
     FirDecimate<CQ15>::fir_decimate[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut FirDecimState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fast;
     Resample<C32>::resample[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut ResampleState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
     Resample<CQ15>::resample[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut ResampleState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fast;
-    ResampleReal<f32>::resample_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut ResampleRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fallback;
-    ResampleReal<Q15>::resample_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut ResampleRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fallback;
+    ResampleReal<f32>::resample_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut ResampleRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fast;
+    ResampleReal<Q15>::resample_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut ResampleRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fast;
     QuadDemod<C32>::quad_demod(&self, state: &mut QuadDemodState<C32>, input: &[C32], output: &mut [f32], gain: f32) -> Result<()> => Fast;
     QuadDemod<CQ15>::quad_demod(&self, state: &mut QuadDemodState<CQ15>, input: &[CQ15], output: &mut [Q15], gain: Q15) -> Result<()> => Fast;
     Deemphasis<f32>::deemphasis(&self, state: &mut DeemphasisState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
@@ -99,8 +99,8 @@ crate::delegate! {
     ConvertOutReal<Q15>::convert_out_real(&self, format: &SampleFormat, input: &[Q15], output: &mut [u8]) -> Result<usize> => Fast;
     FirInterpolate<C32>::fir_interpolate[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut FirInterpState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
     FirInterpolate<CQ15>::fir_interpolate[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut FirInterpState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fast;
-    FirInterpolateReal<f32>::fir_interpolate_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut FirInterpRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fallback;
-    FirInterpolateReal<Q15>::fir_interpolate_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut FirInterpRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fallback;
+    FirInterpolateReal<f32>::fir_interpolate_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut FirInterpRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fast;
+    FirInterpolateReal<Q15>::fir_interpolate_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut FirInterpRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fast;
     FmMod<C32>::fm_mod(&self, s: &mut FmModState, input: &[f32], output: &mut [C32]) -> Result<()> => Fast;
     FmMod<CQ15>::fm_mod(&self, s: &mut FmModState, input: &[Q15], output: &mut [CQ15]) -> Result<()> => Fast;
     Dot<C32>::dot(&self, x: &[C32], taps: &[f32]) -> Result<C32> => Fallback;

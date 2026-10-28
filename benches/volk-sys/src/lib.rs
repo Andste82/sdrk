@@ -40,6 +40,9 @@ pub const NATIVE: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
 /// The signature of `volk_32fc_32f_dot_prod_32fc` and its aligned variant.
 pub type DotProd = unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const f32, c_uint);
 
+/// The signature of `volk_32f_x2_dot_prod_32f` and its aligned variant.
+pub type DotProdReal = unsafe extern "C" fn(*mut f32, *const f32, *const f32, c_uint);
+
 /// VOLK's `volk_func_desc_t`: the implementations of a kernel on the machine VOLK selected.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -56,6 +59,8 @@ pub struct volk_func_desc_t {
 
 #[cfg(not(no_volk))]
 mod ffi {
+    #[cfg(not(target_arch = "wasm32"))]
+    use super::DotProdReal;
     use super::{DotProd, lv_16sc_t, lv_32fc_t, volk_func_desc_t};
     use core::ffi::{c_char, c_uint};
 
@@ -112,6 +117,13 @@ mod ffi {
         pub fn volk_get_machine() -> *const c_char;
         pub fn volk_version() -> *const c_char;
         pub fn volk_compiler_flags() -> *const c_char;
+    }
+
+    // The wasm32 build of VOLK (`benches/refs/volk-wasm.c`) holds only the kernels above.
+    #[cfg(not(target_arch = "wasm32"))]
+    unsafe extern "C" {
+        pub static mut volk_32f_x2_dot_prod_32f_a: Option<DotProdReal>;
+        pub fn volk_32f_x2_dot_prod_32f_get_func_desc() -> volk_func_desc_t;
     }
 }
 
@@ -255,6 +267,26 @@ pub fn dot_prod_a() -> Option<DotProd> {
     None
 }
 
+/// The current value of `volk_32f_x2_dot_prod_32f_a`, the aligned dot product as GNU Radio's
+/// `fir_filter_fff` calls it (see [`dot_prod_a`]). `None` on wasm32, whose build of VOLK does not
+/// have it.
+#[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+#[must_use]
+pub fn dot_prod_real_a() -> Option<DotProdReal> {
+    // SAFETY: a plain read of the variable; only VOLK's stub writes it, on the first call.
+    unsafe { (&raw const ffi::volk_32f_x2_dot_prod_32f_a).read() }
+}
+
+/// Without VOLK, or on wasm32: `None`.
+#[cfg(any(no_volk, target_arch = "wasm32"))]
+#[must_use]
+pub fn dot_prod_real_a() -> Option<DotProdReal> {
+    None
+}
+
+/// Whether [`dot_prod_real_a`] is available in this build.
+pub const AVAILABLE_REAL_DOT: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
+
 /// VOLK's alignment in bytes (the largest alignment of the selected machine's architectures).
 #[cfg(not(no_volk))]
 #[must_use]
@@ -358,6 +390,8 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
             "volk_32f_s32f_multiply_32f" => native::ffi::volk_32f_s32f_multiply_32f_get_func_desc,
             #[cfg(not(target_arch = "wasm32"))]
             "volk_32f_s32f_add_32f" => native::ffi::volk_32f_s32f_add_32f_get_func_desc,
+            #[cfg(not(target_arch = "wasm32"))]
+            "volk_32f_x2_dot_prod_32f" => ffi::volk_32f_x2_dot_prod_32f_get_func_desc,
             _ => return None,
         };
         // SAFETY: the descriptor functions take no arguments; the descriptor points to static

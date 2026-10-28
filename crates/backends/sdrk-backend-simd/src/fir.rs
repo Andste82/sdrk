@@ -1,5 +1,6 @@
 //! The FIR family: `fir`, `fir_decimate` and the polyphase interpolator `fir_interpolate`
-//! (also exposed as `resample`).
+//! (also exposed as `resample`), and the polyphase kernels of real signals `resample_real` and
+//! `fir_interpolate_real`.
 //!
 //! Every output is one dot product of the taps with a window of the input. The window may reach
 //! back into the filter history, so the input is seen as the virtual stream `history ++ input`.
@@ -18,22 +19,30 @@
 //!   AVX-512, NEON) use it (decision D5); the others multiply and add separately.
 //! - `C32` `resample` and `fir_interpolate` run every branch of the polyphase filter as such a
 //!   contiguous filter: the outputs with the same phase have their windows `M` samples apart
-//!   (see [`polyphase_c32`]), and the filter length is not limited.
+//!   (see [`polyphase_f32`]), and the filter length is not limited. `f32` `resample_real` and
+//!   `fir_interpolate_real` run the same code with one component per sample instead of two (the
+//!   const parameter `C` of the forms).
 //! - `CQ15` `fir`, `fir_decimate` and the polyphase kernels compute one output at a time in the
 //!   chunk form with the taps prepared once per call, reversed and duplicated for the real
 //!   and the imaginary lane. A window that reaches into the history is assembled chunk by chunk
 //!   with the same chunk boundaries. The polyphase kernels (`resample`, `fir_interpolate`)
 //!   prepare the taps of all branches at once; a filter that does not fit, and every `CQ15`
-//!   filter with more than [`PREP_TAPS`] taps, runs on the fallback.
+//!   filter with more than [`PREP_TAPS`] taps, runs on the fallback. `Q15` `resample_real` and
+//!   `fir_interpolate_real` do the same with one lane per tap.
 //!
-//! `C32` results are within the contract of `docs/kernels.md` (110 dB) but not bit-identical
-//! with the fallback, because the sums are formed in a different order (and fused on the levels
-//! with FMA). `CQ15` results are exact integer sums and therefore bit-identical.
+//! `C32` and `f32` results are within the contract of `docs/kernels.md` (110 dB) but not
+//! bit-identical with the fallback, because the sums are formed in a different order (and fused on
+//! the levels with FMA). `CQ15` and `Q15` results are exact integer sums and therefore
+//! bit-identical.
 
 use fearless_simd::{Simd as SimdToken, f32x4, f32x8, f32x16, f64x2, prelude::*};
-use sdrk_core::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
+use sdrk_core::kernels::decim::{
+    FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
+};
 use sdrk_core::kernels::filter::{Fir, FirState};
-use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
+use sdrk_core::kernels::interp::{
+    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
+};
 use sdrk_core::num::Acc64;
 use sdrk_core::{C32, CQ15, Fallback, Progress, Q15, Result};
 
@@ -43,24 +52,25 @@ use crate::util::{check_len, internal};
 
 /// The longest `CQ15` contiguous filter (`fir`, `fir_decimate`) of this backend.
 const PREP_TAPS: usize = 256;
-/// Samples (window positions, whole chunks) in the prepared storage of one call; the prepared
-/// branches of a polyphase filter must fit.
+/// Complex samples (window positions, whole chunks) in the prepared storage of one call (twice
+/// as many real samples); the prepared branches of a polyphase filter must fit.
 const CAPACITY: usize = 384;
 
-/// The virtual stream `history ++ input`, both as interleaved component slices.
-struct Win<'a, T> {
+/// The virtual stream `history ++ input`, both as interleaved component slices of `C`
+/// components per sample (2 for complex samples, 1 for real ones).
+struct Win<'a, T, const C: usize> {
     hist: &'a [T],
     input: &'a [T],
     /// Number of history samples.
     h: usize,
 }
 
-impl<'a, T: Copy + Default> Win<'a, T> {
+impl<'a, T: Copy + Default, const C: usize> Win<'a, T, C> {
     fn new(hist: &'a [T], input: &'a [T]) -> Self {
         Self {
             hist,
             input,
-            h: hist.len() / 2,
+            h: hist.len() / C,
         }
     }
 
@@ -68,25 +78,31 @@ impl<'a, T: Copy + Default> Win<'a, T> {
     #[inline(always)]
     fn direct(&self, pos: usize, lanes: usize) -> Option<&'a [T]> {
         if pos >= self.h {
-            let o = 2 * (pos - self.h);
+            let o = C * (pos - self.h);
             self.input.get(o..o + lanes)
         } else {
-            let o = 2 * pos;
+            let o = C * pos;
             self.hist.get(o..o + lanes)
         }
     }
 }
 
 /// Copies the samples `s .. end` of the virtual stream `hist ++ input` (interleaved component
-/// slices), as far as they exist, to the start of `dst` (the rest of `dst` is untouched): the part
-/// in the history, then the part in the input.
+/// slices of `C` components per sample), as far as they exist, to the start of `dst` (the rest
+/// of `dst` is untouched): the part in the history, then the part in the input.
 #[inline(always)]
-fn fill_window<T: Copy>(hist: &[T], input: &[T], s: usize, end: usize, dst: &mut [T]) {
-    let (h, len) = (hist.len() / 2, input.len() / 2);
+fn fill_window<T: Copy, const C: usize>(
+    hist: &[T],
+    input: &[T],
+    s: usize,
+    end: usize,
+    dst: &mut [T],
+) {
+    let (h, len) = (hist.len() / C, input.len() / C);
     if s < h
         && let (Some(src), Some(dst)) = (
-            hist.get(2 * s..2 * end.min(h)),
-            dst.get_mut(..2 * (end.min(h) - s)),
+            hist.get(C * s..C * end.min(h)),
+            dst.get_mut(..C * (end.min(h) - s)),
         )
     {
         dst.copy_from_slice(src);
@@ -94,8 +110,8 @@ fn fill_window<T: Copy>(hist: &[T], input: &[T], s: usize, end: usize, dst: &mut
     let (from, to) = (s.max(h), end.min(h + len));
     if from < to
         && let (Some(src), Some(dst)) = (
-            input.get(2 * (from - h)..2 * (to - h)),
-            dst.get_mut(2 * (from - s)..2 * (to - s)),
+            input.get(C * (from - h)..C * (to - h)),
+            dst.get_mut(C * (from - s)..C * (to - s)),
         )
     {
         dst.copy_from_slice(src);
@@ -103,12 +119,13 @@ fn fill_window<T: Copy>(hist: &[T], input: &[T], s: usize, end: usize, dst: &mut
 }
 
 /// Geometry of the prepared branches of a polyphase filter with `n` taps and factor `up` for
-/// chunks of `g` samples.
+/// chunks of `g` samples of `c` components (each tap is stored `c` times).
 #[derive(Clone, Copy)]
 struct Branches {
     n: usize,
     up: usize,
     g: usize,
+    c: usize,
 }
 
 impl Branches {
@@ -126,12 +143,12 @@ impl Branches {
         t.div_ceil(self.g) * self.g
     }
 
-    /// Offset in floats of the branch `phase` in the prepared storage.
+    /// Offset in components of the branch `phase` in the prepared storage.
     fn offset(self, phase: usize) -> usize {
         let hi = self.n.div_ceil(self.up);
         let r = self.n - (hi - 1) * self.up; // branches 0..r have `hi` taps, the others `hi - 1`
         let first = phase.min(r);
-        2 * (first * self.padded(hi) + (phase - first) * self.padded(hi - 1))
+        self.c * (first * self.padded(hi) + (phase - first) * self.padded(hi - 1))
     }
 
     /// Whether all branches fit into the storage.
@@ -144,14 +161,14 @@ impl Branches {
         let branches = self.up.min(self.n);
         let total =
             r.min(branches) * self.padded(hi) + branches.saturating_sub(r) * self.padded(hi - 1);
-        total <= CAPACITY
+        self.c * total <= 2 * CAPACITY
     }
 }
 
 // ---------------------------------------------------------------------------------------------
 // C32 contiguous filters (`fir`, `fir_decimate`, the polyphase branches)
 
-/// Taps in one block of the `C32` contiguous filters. A longer filter adds the partial dot
+/// Taps in one block of the `C32` and `f32` contiguous filters. A longer filter adds the partial dot
 /// products of its blocks in the output.
 const BLOCK_TAPS: usize = 128;
 /// Samples of the scratch window that serves the outputs whose windows reach into the history
@@ -162,7 +179,7 @@ const IOTA: [f32; 16] = [
     0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
 ];
 
-/// The `f32` vectors the `C32` filters run on: `f32x4`, `f32x8` or `f32x16`, the native width
+/// The `f32` vectors the `C32` and `f32` filters run on: `f32x4`, `f32x8` or `f32x16`, the native width
 /// of the level.
 trait Lanes<S: SimdToken>: SimdFloat<S, Element = f32> {
     /// Adds the upper half of the complex lanes to the lower half until two are left.
@@ -197,6 +214,14 @@ impl<S: SimdToken> Lanes<S> for f32x16<S> {
 fn pair_sums<S: SimdToken>(a: f32x4<S>, b: f32x4<S>) -> f32x4<S> {
     let (a, b): (f64x2<S>, f64x2<S>) = (a.bitcast(), b.bitcast());
     a.zip_low(b).bitcast::<f32x4<S>>() + a.zip_high(b).bitcast::<f32x4<S>>()
+}
+
+/// `[sum a, sum b, sum c, sum d]`: the sums of the four lanes of each (real samples). Every sum
+/// is `(x0 + x2) + (x1 + x3)` whatever the other vectors are.
+#[inline(always)]
+fn quad_sums<S: SimdToken>(a: f32x4<S>, b: f32x4<S>, c: f32x4<S>, d: f32x4<S>) -> f32x4<S> {
+    let (p, r) = (pair_sums(a, b), pair_sums(c, d));
+    p.unzip_low(r) + p.unzip_high(r)
 }
 
 /// `acc + a * b`, fused on the levels with FMA (decision D5). Elsewhere it is the separate
@@ -268,7 +293,7 @@ trait Form {
     /// The longest run whose windows lie in `avail` samples (`needed` of it is at most `avail`).
     fn fits(&self, avail: usize) -> usize;
 
-    /// Computes the `out.len() / 2` outputs of a run whose windows lie in `region`, or adds
+    /// Computes the outputs of a run whose windows lie in `region` (`C` floats each), or adds
     /// them to `out` (`add`).
     fn run(&self, region: &[f32], out: &mut [f32], add: bool);
 
@@ -331,20 +356,22 @@ impl TapUnit for Quad {
     }
 }
 
-/// The chunk form: the dot product of a window with the prepared taps in chunks of `L / 2`
-/// samples (unit `T`), for `B` outputs at a time that share every tap vector; the windows are
-/// `step` samples apart, so this serves every decimation factor. The chunks run in groups of
-/// `U`; the products of a group are summed in `I` interleaved chains (chunk `u` to chain
-/// `u % I`), which are added and then added to the output's total. The chunks after the last
-/// group form one more such group. The lanes of the partial last chunk beyond the window are
-/// cleared before the multiplication, so a NaN or an infinity there does not leak in. The complex
-/// lanes of a total are added by halving, and two outputs share the last step.
+/// The chunk form: the dot product of a window with the prepared taps in chunks of `L / C`
+/// samples of `C` components (unit `T`), for `B` outputs at a time that share every tap vector;
+/// the windows are `step` samples apart, so this serves every decimation factor. The chunks run
+/// in groups of `U`; the products of a group are summed in `I` interleaved chains (chunk `u` to
+/// chain `u % I`), which are added and then added to the output's total. The chunks after the
+/// last group form one more such group. The lanes of the partial last chunk beyond the window
+/// are cleared before the multiplication, so a NaN or an infinity there does not leak in. The
+/// lanes of a total are added by halving down to four, then two outputs (complex samples) or
+/// four (real samples) share the last steps.
 struct ChunkForm<
     'a,
     S: SimdToken,
     V: Lanes<S>,
     T: Unit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const U: usize,
     const I: usize,
@@ -365,16 +392,17 @@ impl<
     V: Lanes<S>,
     T: Unit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const U: usize,
     const I: usize,
     const FMA: bool,
-> ChunkForm<'_, S, V, T, L, B, U, I, FMA>
+> ChunkForm<'_, S, V, T, L, C, B, U, I, FMA>
 {
     /// Samples one window reads (whole chunks).
     #[inline(always)]
     fn span(&self) -> usize {
-        self.taps.len() * (L / 2)
+        self.taps.len() * (L / C)
     }
 
     /// Adds tap chunk `t` times the samples `d[b]` to chain `u % I` of every output `b` (the
@@ -486,7 +514,35 @@ impl<
     /// Stores (or adds) the totals of `B` consecutive outputs to `out`.
     #[inline(always)]
     fn put_all(tot: [V; B], out: &mut [f32], add: bool) {
-        let sums = tot.map(V::fold);
+        // A loop, not `map`: the compiler may keep the closure of `map` out of line, and a
+        // closure does not inherit the target features of the level (the run-time detection
+        // build then passes every vector through memory).
+        let Some(first) = tot.first() else {
+            return;
+        };
+        let mut sums = [f32x4::splat(first.token(), 0.0); B];
+        for (s, t) in sums.iter_mut().zip(tot) {
+            *s = t.fold();
+        }
+        if C == 1 {
+            // Real samples: four outputs share the last steps.
+            let (quads, rest) = sums.as_chunks::<4>();
+            let mut d = out.chunks_mut(4);
+            for (&[a, b, c, e], d) in quads.iter().zip(&mut d) {
+                put(quad_sums(a, b, c, e), d, add);
+            }
+            // The outputs after the last four are padded with the last of them; `d` holds
+            // only theirs.
+            if let (Some(&last), Some(d)) = (rest.last(), d.next()) {
+                // No closure: a closure does not inherit the target features of the level.
+                let mut v = [last; 3];
+                for (v, r) in v.iter_mut().zip(rest) {
+                    *v = *r;
+                }
+                put(quad_sums(v[0], v[1], v[2], last), d, add);
+            }
+            return;
+        }
         let (pairs, odd) = sums.as_chunks::<2>();
         let mut d = out.chunks_mut(4);
         for (&[a, b], d) in pairs.iter().zip(&mut d) {
@@ -505,11 +561,12 @@ impl<
     V: Lanes<S>,
     T: Unit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const U: usize,
     const I: usize,
     const FMA: bool,
-> Form for ChunkForm<'_, S, V, T, L, B, U, I, FMA>
+> Form for ChunkForm<'_, S, V, T, L, C, B, U, I, FMA>
 {
     #[inline(always)]
     fn needed(&self, k: usize) -> usize {
@@ -533,10 +590,10 @@ impl<
 
     #[inline(always)]
     fn run(&self, region: &[f32], out: &mut [f32], add: bool) {
-        let k = out.len() / 2;
-        let (step, len) = (2 * self.step, self.taps.len() * L);
+        let k = out.len() / C;
+        let (step, len) = (C * self.step, self.taps.len() * L);
         let mut i = 0;
-        for dst in out.chunks_exact_mut(2 * B) {
+        for dst in out.chunks_exact_mut(C * B) {
             let o = i * step;
             let Some(pass) = region.get(o..o + (B - 1) * step + len) else {
                 return;
@@ -576,7 +633,7 @@ impl<
             }
             Self::put_all(
                 self.pass(wins),
-                out.get_mut(2 * i..).unwrap_or(&mut []),
+                out.get_mut(C * i..).unwrap_or(&mut []),
                 add,
             );
         }
@@ -586,10 +643,10 @@ impl<
 /// Taps per block of the transposed form.
 const TBLOCK: usize = 8;
 
-/// The transposed form for consecutive outputs (`step = 1`): a vector holds `L / 2`
+/// The transposed form for consecutive outputs (`step = 1`): a vector holds `L / C`
 /// consecutive outputs, and every reversed tap multiplies the samples at its offset for `B` such
 /// vectors at a time, so there is no partial chunk and no horizontal sum. The vectors of a pass
-/// are `D` samples apart (`L / 2` or a multiple of it): on x86, where the samples are the memory
+/// are `D` samples apart (`L / C` or a multiple of it): on x86, where the samples are the memory
 /// operand of the multiplication, `D >= TBLOCK` keeps the loads of different taps apart (the
 /// compiler would otherwise keep the overlapping ones in registers and spill), and a run covers
 /// the outputs in between with further passes. The products of a block of [`TBLOCK`] taps are
@@ -602,6 +659,7 @@ struct TransForm<
     V: Lanes<S>,
     T: TapUnit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const D: usize,
     const I: usize,
@@ -618,14 +676,15 @@ impl<
     V: Lanes<S>,
     T: TapUnit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const D: usize,
     const I: usize,
     const FMA: bool,
-> TransForm<'_, S, V, T, L, B, D, I, FMA>
+> TransForm<'_, S, V, T, L, C, B, D, I, FMA>
 {
     /// Adds the block of taps `tb` to `tot` for the `P` output vectors `D` samples apart whose
-    /// windows begin at `w` (floats; tap `m` reads from float `2 m` on).
+    /// windows begin at `w` (floats; tap `m` reads from float `C m` on).
     #[inline(always)]
     fn block<const P: usize>(&self, tb: &[T], w: &[f32], tot: &mut [V; P]) {
         let simd = self.simd;
@@ -633,7 +692,7 @@ impl<
         for (m, t) in tb.iter().enumerate() {
             let t = t.load::<S, V>(simd);
             for (p, c) in chains.iter_mut().enumerate() {
-                let o = 2 * (m + p * D);
+                let o = C * (m + p * D);
                 if let (Some(d), Some(x)) = (w.get(o..o + L), c.get_mut(m % I)) {
                     let d = V::from_slice(simd, d);
                     *x = if m < I {
@@ -654,16 +713,16 @@ impl<
     #[inline(always)]
     fn pass<const P: usize>(&self, x: &[f32]) -> Option<[V; P]> {
         let n = self.taps.len();
-        let x = x.get(..2 * ((P - 1) * D + L / 2 + n - 1))?;
-        let span = 2 * ((P - 1) * D + L / 2 + TBLOCK - 1);
+        let x = x.get(..C * ((P - 1) * D + L / C + n - 1))?;
+        let span = C * ((P - 1) * D + L / C + TBLOCK - 1);
         let mut tot = [V::splat(self.simd, 0.0); P];
         let (blocks, rest) = self.taps.as_chunks::<TBLOCK>();
         for (k, tb) in blocks.iter().enumerate() {
-            let w = x.get(2 * k * TBLOCK..2 * k * TBLOCK + span)?;
+            let w = x.get(C * k * TBLOCK..C * k * TBLOCK + span)?;
             self.block(tb, w, &mut tot);
         }
         if !rest.is_empty() {
-            let w = x.get(2 * blocks.len() * TBLOCK..)?;
+            let w = x.get(C * blocks.len() * TBLOCK..)?;
             self.block(rest, w, &mut tot);
         }
         Some(tot)
@@ -675,15 +734,16 @@ impl<
     V: Lanes<S>,
     T: TapUnit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const D: usize,
     const I: usize,
     const FMA: bool,
-> Form for TransForm<'_, S, V, T, L, B, D, I, FMA>
+> Form for TransForm<'_, S, V, T, L, C, B, D, I, FMA>
 {
     #[inline(always)]
     fn needed(&self, k: usize) -> usize {
-        k.div_ceil(L / 2) * (L / 2) + self.taps.len() - 1
+        k.div_ceil(L / C) * (L / C) + self.taps.len() - 1
     }
 
     #[inline(always)]
@@ -693,7 +753,7 @@ impl<
 
     #[inline(always)]
     fn fits(&self, avail: usize) -> usize {
-        let g = L / 2;
+        let g = L / C;
         let n = self.taps.len();
         if avail + 1 >= n + g {
             (avail + 1 - n) / g * g
@@ -704,13 +764,13 @@ impl<
 
     #[inline(always)]
     fn run(&self, region: &[f32], out: &mut [f32], add: bool) {
-        let g = L / 2;
-        let k = out.len() / 2;
+        let g = L / C;
+        let k = out.len() / C;
         let mut i = 0;
         // `D / g` passes of `B` vectors cover the `B D` outputs from `i` on.
-        for dst in out.chunks_exact_mut(2 * B * D) {
+        for dst in out.chunks_exact_mut(C * B * D) {
             for q in 0..D / g {
-                let x = region.get(2 * (i + q * g)..).unwrap_or(&[]);
+                let x = region.get(C * (i + q * g)..).unwrap_or(&[]);
                 let Some(v) = self.pass::<B>(x) else {
                     return;
                 };
@@ -722,11 +782,11 @@ impl<
             i += B * D;
         }
         while i < k {
-            let x = region.get(2 * i..).unwrap_or(&[]);
+            let x = region.get(C * i..).unwrap_or(&[]);
             let Some([v]) = self.pass::<1>(x) else {
                 return;
             };
-            put(v, out.get_mut(2 * i..).unwrap_or(&mut []), add);
+            put(v, out.get_mut(C * i..).unwrap_or(&mut []), add);
             i += g;
         }
     }
@@ -739,15 +799,19 @@ const SCRATCH_OUT: usize = 48;
 /// The outputs `j, j + 1, ...` of a strided output: every `stride`-th sample of `out` from sample
 /// `j * stride` on.
 #[inline(always)]
-fn strided(out: &mut [f32], j: usize, stride: usize) -> impl Iterator<Item = &mut [f32]> {
-    out.chunks_exact_mut(2).skip(j * stride).step_by(stride)
+fn strided<const C: usize>(
+    out: &mut [f32],
+    j: usize,
+    stride: usize,
+) -> impl Iterator<Item = &mut [f32]> {
+    out.chunks_exact_mut(C).skip(j * stride).step_by(stride)
 }
 
-/// Runs `f` on `region` for the `y.len() / 2` outputs from output `j` of the strided output
+/// Runs `f` on `region` for the `y.len() / C` outputs from output `j` of the strided output
 /// `out`, through `y`: with `add` the outputs are first gathered into `y`, and afterwards `y` is
 /// spread over them.
 #[inline(always)]
-fn run_strided<F: Form>(
+fn run_strided<F: Form, const C: usize>(
     f: &F,
     region: &[f32],
     y: &mut [f32],
@@ -756,36 +820,40 @@ fn run_strided<F: Form>(
     stride: usize,
     add: bool,
 ) {
-    // Output `j + i` is the sample `(j + i) stride` of `out`: the first sample of what is left of
-    // `out` after the previous output and the `stride - 1` samples after it.
-    let skip = 2 * stride.saturating_sub(1);
+    // Output `j + i` is the sample `(j + i) stride` of `out`. `step_by` keeps the step to the next
+    // output a pointer addition: splitting off the rest of `out` per output made a chain of bound
+    // checks and conditional moves. (Chunks of `stride` samples and an index per output simulated
+    // a little faster at `avx2`, but their run-time detection builds took 1.02 to 1.13 times the
+    // instructions of the `avx2` build.)
+    let samples = out.as_chunks_mut::<C>().0;
+    let first = j * stride;
     if add {
-        let mut rest = out.get(2 * j * stride..).unwrap_or_default();
-        for d in y.as_chunks_mut::<2>().0 {
-            let Some((s, tail)) = rest.split_first_chunk::<2>() else {
-                break;
-            };
+        let from = samples
+            .get(first..)
+            .unwrap_or_default()
+            .iter()
+            .step_by(stride);
+        for (d, s) in y.as_chunks_mut::<C>().0.iter_mut().zip(from) {
             *d = *s;
-            rest = tail.get(skip..).unwrap_or_default();
         }
     }
     f.run(region, y, add);
-    let mut rest = out.get_mut(2 * j * stride..).unwrap_or_default();
-    for s in y.as_chunks::<2>().0 {
-        let Some((d, tail)) = rest.split_first_chunk_mut::<2>() else {
-            break;
-        };
+    let to = samples
+        .get_mut(first..)
+        .unwrap_or_default()
+        .iter_mut()
+        .step_by(stride);
+    for (d, s) in to.zip(y.as_chunks::<C>().0) {
         *d = *s;
-        rest = tail.get_mut(skip..).unwrap_or_default();
     }
 }
 
-/// The outputs of one tap block: output `j` (of `out.len() / 2`) has its window at sample
+/// The outputs of one tap block: output `j` (of `out.len() / C`) has its window at sample
 /// `first + j * step` of the virtual stream `hist ++ input`. Runs whose windows lie inside the
 /// input read it in place; the others are copied to `scratch` first, so every output is computed
 /// by the same arithmetic wherever its window lies.
 #[inline(always)]
-fn drive<F: Form>(
+fn drive<F: Form, const C: usize>(
     f: &F,
     hist: &[f32],
     input: &[f32],
@@ -795,8 +863,8 @@ fn drive<F: Form>(
     add: bool,
     scratch: &mut [f32; 2 * SCRATCH],
 ) {
-    let (h, len) = (hist.len() / 2, input.len() / 2);
-    let count = out.len() / 2;
+    let (h, len) = (hist.len() / C, input.len() / C);
+    let count = out.len() / C;
     let mut j = 0;
     while j < count {
         let s = first + j * step;
@@ -805,7 +873,7 @@ fn drive<F: Form>(
             let o = s - h;
             let k = f.fits(len.saturating_sub(o)).min(rest);
             if k > 0 {
-                if let (Some(x), Some(y)) = (input.get(2 * o..), out.get_mut(2 * j..2 * (j + k))) {
+                if let (Some(x), Some(y)) = (input.get(C * o..), out.get_mut(C * j..C * (j + k))) {
                     f.run(x, y, add);
                 }
                 j += k;
@@ -820,21 +888,21 @@ fn drive<F: Form>(
         if k == 0 {
             return;
         }
-        fill_window(hist, input, s, s + f.needed(k), scratch);
-        if let Some(y) = out.get_mut(2 * j..2 * (j + k)) {
+        fill_window::<_, C>(hist, input, s, s + f.needed(k), scratch);
+        if let Some(y) = out.get_mut(C * j..C * (j + k)) {
             f.run(scratch, y, add);
         }
         j += k;
     }
 }
 
-/// [`drive`] for strided outputs (the polyphase filters): output `j` (of `out.len() / 2` divided
+/// [`drive`] for strided outputs (the polyphase filters): output `j` (of `out.len() / C` divided
 /// by `ostride`, rounded up) is sample `j * ostride` of `out`. The outputs of a run are computed
 /// into the scratch and then spread over `out`: a run that reads the input in place uses the
 /// whole scratch for its outputs (whole passes of the form where possible), a run through the
 /// scratch its last [`SCRATCH_OUT`] samples.
 #[inline(always)]
-fn drive_strided<F: Form>(
+fn drive_strided<F: Form, const C: usize>(
     f: &F,
     hist: &[f32],
     input: &[f32],
@@ -845,8 +913,8 @@ fn drive_strided<F: Form>(
     add: bool,
     scratch: &mut [f32; 2 * SCRATCH],
 ) {
-    let (h, len) = (hist.len() / 2, input.len() / 2);
-    let count = (out.len() / 2).div_ceil(ostride);
+    let (h, len) = (hist.len() / C, input.len() / C);
+    let count = (out.len() / C).div_ceil(ostride);
     let pass = f.pass_outputs();
     let mut j = 0;
     while j < count {
@@ -857,8 +925,8 @@ fn drive_strided<F: Form>(
             let k = f.fits(len.saturating_sub(o)).min(rest);
             let k = k.min((SCRATCH / pass).max(1) * pass).min(SCRATCH);
             if k > 0 {
-                if let (Some(x), Some(y)) = (input.get(2 * o..), scratch.get_mut(..2 * k)) {
-                    run_strided(f, x, y, out, j, ostride, add);
+                if let (Some(x), Some(y)) = (input.get(C * o..), scratch.get_mut(..C * k)) {
+                    run_strided::<_, C>(f, x, y, out, j, ostride, add);
                 }
                 j += k;
                 continue;
@@ -873,10 +941,10 @@ fn drive_strided<F: Form>(
         if k == 0 {
             return;
         }
-        let (region, tail) = scratch.split_at_mut(2 * room);
-        fill_window(hist, input, s, s + f.needed(k), region);
-        if let Some(y) = tail.get_mut(..2 * k) {
-            run_strided(f, region, y, out, j, ostride, add);
+        let (region, tail) = scratch.split_at_mut(C * room);
+        fill_window::<_, C>(hist, input, s, s + f.needed(k), region);
+        if let Some(y) = tail.get_mut(..C * k) {
+            run_strided::<_, C>(f, region, y, out, j, ostride, add);
         }
         j += k;
     }
@@ -888,7 +956,7 @@ fn drive_strided<F: Form>(
 #[repr(C, align(16))]
 struct Quad([f32; 4]);
 
-/// Whether the level has fused multiply-add for the `C32` filters (decision D5: AVX2, AVX-512
+/// Whether the level has fused multiply-add for the `C32` and `f32` filters (decision D5: AVX2, AVX-512
 /// and NEON; never on the levels without it, and never in the fallback).
 #[inline(always)]
 fn has_fma<S: SimdToken>(simd: S) -> bool {
@@ -925,7 +993,7 @@ fn prepare_strided<D>(dst: &mut [D], block: &[f32], tstride: usize, f: impl Fn(f
     }
 }
 
-/// One tap block of a `C32` contiguous filter with consecutive outputs: the transposed form
+/// One tap block of a `C32` or `f32` contiguous filter with consecutive outputs: the transposed form
 /// (tap unit `T`, `B` vectors `D` samples apart, `I` chains) with the taps of `block`, every
 /// `tstride`-th float of it (see [`contiguous`]).
 #[inline(always)]
@@ -934,6 +1002,7 @@ fn transposed_block<
     V: Lanes<S>,
     T: TapUnit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const D: usize,
     const I: usize,
@@ -961,19 +1030,19 @@ fn transposed_block<
             *d = T::of(t);
         }
     }
-    let form = TransForm::<S, V, T, L, B, D, I, FMA> {
+    let form = TransForm::<S, V, T, L, C, B, D, I, FMA> {
         simd,
         taps: prepared.get(..cnt).unwrap_or(&[]),
         _lanes: core::marker::PhantomData,
     };
     if STRIDED {
-        drive_strided(&form, hist, input, out, first, 1, ostride, add, scratch);
+        drive_strided::<_, C>(&form, hist, input, out, first, 1, ostride, add, scratch);
     } else {
-        drive(&form, hist, input, out, first, 1, add, scratch);
+        drive::<_, C>(&form, hist, input, out, first, 1, add, scratch);
     }
 }
 
-/// One tap block of a `C32` contiguous filter with any step: the chunk form (chunk unit `T`,
+/// One tap block of a `C32` or `f32` contiguous filter with any step: the chunk form (chunk unit `T`,
 /// `B` outputs, groups of `U` chunks, `I` chains) with the taps of `block`, every `tstride`-th
 /// float of it (see [`contiguous`]).
 #[inline(always)]
@@ -982,6 +1051,7 @@ fn chunked_block<
     V: Lanes<S>,
     T: Unit,
     const L: usize,
+    const C: usize,
     const B: usize,
     const U: usize,
     const I: usize,
@@ -1000,44 +1070,44 @@ fn chunked_block<
     ostride: usize,
     add: bool,
 ) {
-    // The taps written twice (real and imaginary lane), zero beyond the window; a quad holds
-    // two taps. The chunk width divides `BLOCK_TAPS`, so the chunks end inside the storage.
+    // The taps written `C` times (real and imaginary lane of a complex sample), zero beyond the
+    // window. The chunk width divides `BLOCK_TAPS`, so the chunks end inside the storage.
     let mut storage = [Quad([0.0; 4]); BLOCK_TAPS / 2];
     let floats: &mut [f32] = bytemuck::cast_slice_mut(&mut storage);
     let cnt = block.len().div_ceil(tstride);
     if STRIDED {
-        prepare_strided(floats.as_chunks_mut::<2>().0, block, tstride, |t| [t, t]);
+        prepare_strided(floats.as_chunks_mut::<C>().0, block, tstride, |t| [t; C]);
     } else {
         for (d, &t) in floats
-            .as_chunks_mut::<2>()
+            .as_chunks_mut::<C>()
             .0
             .iter_mut()
             .zip(block.iter().rev())
         {
-            *d = [t, t];
+            *d = [t; C];
         }
     }
-    let g = L / 2;
+    let g = L / C;
     let nc = cnt.div_ceil(g);
     let rem = cnt % g;
     let mask = (rem > 0).then(|| {
-        V::from_slice(simd, IOTA.get(..L).unwrap_or(&[])).simd_lt(V::splat(simd, (2 * rem) as f32))
+        V::from_slice(simd, IOTA.get(..L).unwrap_or(&[])).simd_lt(V::splat(simd, (C * rem) as f32))
     });
     let chunks: &[T] = bytemuck::cast_slice(&storage);
-    let form = ChunkForm::<S, V, T, L, B, U, I, FMA> {
+    let form = ChunkForm::<S, V, T, L, C, B, U, I, FMA> {
         simd,
         taps: chunks.get(..nc).unwrap_or(&[]),
         mask,
         step,
     };
     if STRIDED {
-        drive_strided(&form, hist, input, out, first, step, ostride, add, scratch);
+        drive_strided::<_, C>(&form, hist, input, out, first, step, ostride, add, scratch);
     } else {
-        drive(&form, hist, input, out, first, step, add, scratch);
+        drive::<_, C>(&form, hist, input, out, first, step, add, scratch);
     }
 }
 
-/// A `C32` contiguous filter on vectors `V` of `L` lanes: output `j` is the dot product of the taps
+/// A contiguous filter of `C32` (`C = 2`) or `f32` (`C = 1`) samples on vectors `V` of `L` lanes: output `j` is the dot product of the taps
 /// with the window at sample `first + j * step` of `hist ++ input`. With `STRIDED` (a branch of a
 /// polyphase filter) the taps are every `tstride`-th float of `taps` from the first on and output
 /// `j` is sample `j * ostride` of `out` (see [`drive_strided`]); without it (`fir`, `fir_decimate`)
@@ -1052,6 +1122,7 @@ fn contiguous<
     TT: TapUnit,
     CT: Unit,
     const L: usize,
+    const C: usize,
     const FMA: bool,
     const TB: usize,
     const TD: usize,
@@ -1073,7 +1144,8 @@ fn contiguous<
 ) {
     // The parameters of a level must agree; a mismatch is a build error.
     const {
-        assert!(V::LEN == L && size_of::<CT>() == 4 * L && BLOCK_TAPS.is_multiple_of(L / 2));
+        assert!(V::LEN == L && size_of::<CT>() == 4 * L && (C == 1 || C == 2));
+        assert!(BLOCK_TAPS.is_multiple_of(L / C) && TD.is_multiple_of(L / C));
     }
     let (tstride, ostride) = if STRIDED { (tstride, ostride) } else { (1, 1) };
     let n = taps.len().div_ceil(tstride);
@@ -1087,7 +1159,7 @@ fn contiguous<
         let block = taps.get(from..tstride * (end - 1) + 1).unwrap_or(&[]);
         let (start, add) = (first + skip, skip > 0);
         if step == 1 {
-            transposed_block::<S, V, TT, L, TB, TD, TI, FMA, STRIDED>(
+            transposed_block::<S, V, TT, L, C, TB, TD, TI, FMA, STRIDED>(
                 simd,
                 block,
                 tstride,
@@ -1100,7 +1172,7 @@ fn contiguous<
                 add,
             );
         } else {
-            chunked_block::<S, V, CT, L, CB, CU, CI, FMA, STRIDED>(
+            chunked_block::<S, V, CT, L, C, CB, CU, CI, FMA, STRIDED>(
                 simd,
                 block,
                 tstride,
@@ -1135,19 +1207,65 @@ fn contiguous_c32<S: SimdToken, const STRIDED: bool>(
     let fma = has_fma(simd);
     let x86 = cfg!(target_arch = "x86_64");
     match S::f32s::LEN {
-        16 => contiguous::<S, f32x16<S>, f32, [f32; 16], 16, true, 14, 8, 1, 7, 8, 1, STRIDED>(
+        16 => contiguous::<S, f32x16<S>, f32, [f32; 16], 16, 2, true, 14, 8, 1, 7, 8, 1, STRIDED>(
             simd, taps, tstride, hist, input, out, first, step, ostride,
         ),
-        8 => contiguous::<S, f32x8<S>, f32, [f32; 8], 8, true, 7, 8, 1, 6, 8, 1, STRIDED>(
+        8 => contiguous::<S, f32x8<S>, f32, [f32; 8], 8, 2, true, 7, 8, 1, 6, 8, 1, STRIDED>(
             simd, taps, tstride, hist, input, out, first, step, ostride,
         ),
-        _ if fma => contiguous::<S, f32x4<S>, f32, [f32; 4], 4, true, 7, 2, 1, 7, 8, 1, STRIDED>(
+        _ if fma => {
+            contiguous::<S, f32x4<S>, f32, [f32; 4], 4, 2, true, 7, 2, 1, 7, 8, 1, STRIDED>(
+                simd, taps, tstride, hist, input, out, first, step, ostride,
+            );
+        }
+        _ if x86 => contiguous::<S, f32x4<S>, Quad, Quad, 4, 2, false, 4, 8, 2, 7, 8, 1, STRIDED>(
             simd, taps, tstride, hist, input, out, first, step, ostride,
         ),
-        _ if x86 => contiguous::<S, f32x4<S>, Quad, Quad, 4, false, 4, 8, 2, 7, 8, 1, STRIDED>(
+        _ => contiguous::<S, f32x4<S>, f32, [f32; 4], 4, 2, false, 8, 2, 1, 8, 8, 1, STRIDED>(
             simd, taps, tstride, hist, input, out, first, step, ostride,
         ),
-        _ => contiguous::<S, f32x4<S>, f32, [f32; 4], 4, false, 8, 2, 1, 8, 8, 1, STRIDED>(
+    }
+}
+
+/// The `f32` contiguous filter of real samples (see [`contiguous`]) with the parameters of the
+/// level: the branches of `resample_real` and `fir_interpolate_real` (always strided). A vector
+/// holds twice as many real samples as complex ones, so the transposed form steps its vectors
+/// `L` samples apart, and the chunk form computes a multiple of four outputs per pass (four
+/// outputs share the last steps of their sums). AVX-512 runs the chunk form on `f32x8` with the
+/// parameters of AVX2: on `f32x16` the halving of every total down to four lanes cost more than
+/// the wider products saved (`resample_real` 3 / 2 with 64 taps per branch: 14.9 / 13.2 against
+/// 8.8 / 8.2 cycles per sample on `znver4` / `sapphirerapids`). The `C32` chunk form keeps
+/// `f32x16` there (`f32x8` was slower: `resample` 14.5 / 13.4 against 11.7 / 10.2).
+#[inline(always)]
+fn contiguous_real<S: SimdToken>(
+    simd: S,
+    taps: &[f32],
+    tstride: usize,
+    hist: &[f32],
+    input: &[f32],
+    out: &mut [f32],
+    first: usize,
+    step: usize,
+    ostride: usize,
+) {
+    let fma = has_fma(simd);
+    let x86 = cfg!(target_arch = "x86_64");
+    match S::f32s::LEN {
+        16 if step == 1 => {
+            contiguous::<S, f32x16<S>, f32, [f32; 16], 16, 1, true, 14, 16, 1, 8, 8, 1, true>(
+                simd, taps, tstride, hist, input, out, first, step, ostride,
+            );
+        }
+        8 | 16 => contiguous::<S, f32x8<S>, f32, [f32; 8], 8, 1, true, 7, 8, 1, 8, 8, 1, true>(
+            simd, taps, tstride, hist, input, out, first, step, ostride,
+        ),
+        _ if fma => contiguous::<S, f32x4<S>, f32, [f32; 4], 4, 1, true, 7, 4, 1, 8, 8, 1, true>(
+            simd, taps, tstride, hist, input, out, first, step, ostride,
+        ),
+        _ if x86 => contiguous::<S, f32x4<S>, Quad, Quad, 4, 1, false, 4, 8, 2, 8, 8, 1, true>(
+            simd, taps, tstride, hist, input, out, first, step, ostride,
+        ),
+        _ => contiguous::<S, f32x4<S>, f32, [f32; 4], 4, 1, false, 8, 4, 1, 8, 8, 1, true>(
             simd, taps, tstride, hist, input, out, first, step, ostride,
         ),
     }
@@ -1156,13 +1274,13 @@ fn contiguous_c32<S: SimdToken, const STRIDED: bool>(
 // ---------------------------------------------------------------------------------------------
 // CQ15
 
-/// Storage for the prepared taps of `CQ15` (twice the taps, reversed and duplicated).
+/// Storage for the prepared taps of `CQ15` and `Q15` (the taps reversed, `C` times each).
 type TapStorageQ15 = [i16; 2 * CAPACITY];
 
-struct Q15Engine<'a, S: SimdToken> {
+struct Q15Engine<'a, S: SimdToken, const C: usize> {
     simd: S,
     taps: &'a [i16],
-    win: Win<'a, i16>,
+    win: Win<'a, i16, C>,
     out: &'a mut [i16],
     td: &'a mut TapStorageQ15,
 }
@@ -1190,12 +1308,12 @@ impl<S: SimdToken> Q15Acc<S> {
     }
 }
 
-impl<S: SimdToken> Q15Engine<'_, S> {
+impl<S: SimdToken, const C: usize> Q15Engine<'_, S, C> {
     /// Prepares the taps of the contiguous filter: sample `m` of the window pairs with
     /// `h[n - 1 - m]`.
     #[inline(always)]
     fn prepare(&mut self) {
-        for (pair, &h) in self.td.chunks_exact_mut(2).zip(self.taps.iter().rev()) {
+        for (pair, &h) in self.td.chunks_exact_mut(C).zip(self.taps.iter().rev()) {
             pair.fill(h);
         }
     }
@@ -1207,7 +1325,8 @@ impl<S: SimdToken> Q15Engine<'_, S> {
         let geom = Branches {
             n,
             up,
-            g: S::i16s::LEN / 2,
+            g: S::i16s::LEN / C,
+            c: C,
         };
         for phase in 0..up.min(n) {
             let t = geom.len(phase);
@@ -1218,9 +1337,8 @@ impl<S: SimdToken> Q15Engine<'_, S> {
                     .get(phase + up * (t - 1 - m))
                     .copied()
                     .unwrap_or(0);
-                if let Some([re, im]) = self.td.get_mut(off + 2 * m..off + 2 * m + 2) {
-                    *re = h;
-                    *im = h;
+                if let Some(lanes) = self.td.get_mut(off + C * m..off + C * m + C) {
+                    lanes.fill(h);
                 }
             }
         }
@@ -1233,7 +1351,7 @@ impl<S: SimdToken> Q15Engine<'_, S> {
     fn dot(&mut self, j: usize, start: usize, n_taps: usize, tap_offset: usize) {
         let simd = self.simd;
         let l = S::i16s::LEN;
-        let g = l / 2;
+        let g = l / C;
         let (full, rem) = (n_taps / g, n_taps % g);
         let zero = S::i64s::splat(simd, 0);
         let mut acc = Q15Acc::<S> {
@@ -1245,7 +1363,7 @@ impl<S: SimdToken> Q15Engine<'_, S> {
         let td = self.td.get(tap_offset..).unwrap_or(&[]);
         let mut c = 0;
         if start >= self.win.h {
-            let o = 2 * (start - self.win.h);
+            let o = C * (start - self.win.h);
             if let (Some(win), Some(taps)) =
                 (self.win.input.get(o..o + l * full), td.get(..l * full))
             {
@@ -1264,7 +1382,7 @@ impl<S: SimdToken> Q15Engine<'_, S> {
                 S::i16s::from_slice(simd, d)
             } else {
                 let mut tmp = [0i16; 64];
-                fill_window(self.win.hist, self.win.input, pos, pos + take, &mut tmp);
+                fill_window::<_, C>(self.win.hist, self.win.input, pos, pos + take, &mut tmp);
                 S::i16s::from_slice(simd, tmp.get(..l).unwrap_or(&[0; 64]))
             };
             let t = td
@@ -1274,6 +1392,13 @@ impl<S: SimdToken> Q15Engine<'_, S> {
             c += 1;
         }
         let sum = (acc.a0 + acc.a1) + (acc.a2 + acc.a3);
+        if C == 1 {
+            let total: i64 = sum.as_slice().iter().sum();
+            if let Some(o) = self.out.get_mut(j) {
+                *o = Acc64(total).finish().0;
+            }
+            return;
+        }
         let (mut re, mut im) = (0i64, 0i64);
         for pair in sum.as_slice().chunks_exact(2) {
             if let [r, i] = *pair {
@@ -1291,8 +1416,8 @@ impl<S: SimdToken> Q15Engine<'_, S> {
 /// Outputs `j = 0..count` of a contiguous `CQ15` filter; the window of output `j` begins at
 /// sample `first + j * step` (the history holds `n - 1` samples, so that is its oldest sample).
 #[inline(always)]
-fn drive_contiguous<S: SimdToken>(
-    e: &mut Q15Engine<'_, S>,
+fn drive_contiguous<S: SimdToken, const C: usize>(
+    e: &mut Q15Engine<'_, S, C>,
     n_taps: usize,
     count: usize,
     first: usize,
@@ -1308,8 +1433,8 @@ fn drive_contiguous<S: SimdToken>(
 /// (of `produced`) has the phase and the window end of [`polyphase_outputs`] from the phase state
 /// `q`.
 #[inline(always)]
-fn drive_polyphase<S: SimdToken>(
-    e: &mut Q15Engine<'_, S>,
+fn drive_polyphase<S: SimdToken, const C: usize>(
+    e: &mut Q15Engine<'_, S, C>,
     geom: Branches,
     hist_len: usize,
     down: usize,
@@ -1470,7 +1595,7 @@ fn fir_cq15<S: SimdToken>(simd: S, taps: &[i16], hist: &[i16], input: &[i16], ou
     let mut e = Q15Engine {
         simd,
         taps,
-        win: Win::new(hist, input),
+        win: Win::<_, 2>::new(hist, input),
         out,
         td: &mut storage,
     };
@@ -1509,21 +1634,22 @@ fn decimate_cq15<S: SimdToken>(
     let mut e = Q15Engine {
         simd,
         taps,
-        win: Win::new(hist, input),
+        win: Win::<_, 2>::new(hist, input),
         out,
         td: &mut storage,
     };
     drive_contiguous(&mut e, n, count, first, factor);
 }
 
-/// `resample` and `fir_interpolate` for `C32` (the bookkeeping of [`polyphase_plan`]). The outputs
-/// `r, r + L, r + 2 L, ...` of a call share the phase of output `r`, and their windows are `M`
-/// samples apart, so each of these progressions is one contiguous filter with the taps of its
+/// `resample` and `fir_interpolate` for `C32` (`C = 2`), `resample_real` and
+/// `fir_interpolate_real` for `f32` (`C = 1`), with the bookkeeping of [`polyphase_plan`]. The
+/// outputs `r, r + L, r + 2 L, ...` of a call share the phase of output `r`, and their windows are
+/// `M` samples apart, so each of these progressions is one contiguous filter with the taps of its
 /// branch, step `M` and output stride `L`: the transposed form for `fir_interpolate` (`M = 1`), the
 /// chunk form for every other `M`. Each output is therefore computed as `fir` or `fir_decimate`
 /// computes it, whichever way the input was split into blocks.
 #[inline(always)]
-fn polyphase_c32<S: SimdToken>(
+fn polyphase_f32<S: SimdToken, const C: usize>(
     simd: S,
     taps: &[f32],
     hist: &[f32],
@@ -1539,33 +1665,38 @@ fn polyphase_c32<S: SimdToken>(
     }
     let n = taps.len();
     let (consumed, produced, new_q) =
-        polyphase_plan(*q, up, down, input.len() / 2, out.len() / 2).ok_or_else(window_err)?;
+        polyphase_plan(*q, up, down, input.len() / C, out.len() / C).ok_or_else(window_err)?;
     // `usize` to `i128` is lossless.
     let (q0, l, m) = (i128::from(*q), up as i128, down as i128);
-    let hist_len = hist.len() / 2;
-    let out = out.get_mut(..2 * produced).ok_or_else(window_err)?;
+    let hist_len = hist.len() / C;
+    let out = out.get_mut(..C * produced).ok_or_else(window_err)?;
     for r in 0..up.min(produced) {
         // Output `r` is ready after `c` input samples; its window ends at the newest of them.
         let (c, phase) = polyphase_output(q0 + r as i128 * m, l)?;
-        let y = out.get_mut(2 * r..).ok_or_else(window_err)?;
+        let y = out.get_mut(C * r..).ok_or_else(window_err)?;
         let Some(branch) = taps.get(phase..).filter(|b| !b.is_empty()) else {
             // A phase beyond the taps (`L > N`) has no taps: its outputs are zero.
-            strided(y, 0, up).for_each(|d| d.fill(0.0));
+            strided::<C>(y, 0, up).for_each(|d| d.fill(0.0));
             continue;
         };
         let t = (n - phase).div_ceil(up);
         let first = (hist_len + c).checked_sub(t).ok_or_else(window_err)?;
-        contiguous_c32::<_, true>(simd, branch, up, hist, input, y, first, down, up);
+        if C == 2 {
+            contiguous_c32::<_, true>(simd, branch, up, hist, input, y, first, down, up);
+        } else {
+            contiguous_real(simd, branch, up, hist, input, y, first, down, up);
+        }
     }
     *q = new_q;
     Ok((consumed, produced))
 }
 
-/// `resample` and `fir_interpolate` for `CQ15` (the bookkeeping of [`polyphase_plan`]), one
+/// `resample` and `fir_interpolate` for `CQ15` (`C = 2`), `resample_real` and `fir_interpolate_real`
+/// for `Q15` (`C = 1`), with the bookkeeping of [`polyphase_plan`], one
 /// output at a time; `None` (with nothing touched) if the branches do not fit the prepared
 /// storage.
 #[inline(always)]
-fn polyphase_cq15<S: SimdToken>(
+fn polyphase_q15<S: SimdToken, const C: usize>(
     simd: S,
     taps: &[i16],
     hist: &[i16],
@@ -1578,19 +1709,20 @@ fn polyphase_cq15<S: SimdToken>(
     let geom = Branches {
         n: taps.len(),
         up,
-        g: S::i16s::LEN / 2,
+        g: S::i16s::LEN / C,
+        c: C,
     };
     if !geom.fits() {
         return Ok(None);
     }
-    let (consumed, produced, new_q) = polyphase_plan(*q, up, down, input.len() / 2, out.len() / 2)
+    let (consumed, produced, new_q) = polyphase_plan(*q, up, down, input.len() / C, out.len() / C)
         .ok_or_else(|| internal("resampler window"))?;
-    let hist_len = hist.len() / 2;
+    let hist_len = hist.len() / C;
     let mut storage: TapStorageQ15 = [0i16; 2 * CAPACITY];
     let mut e = Q15Engine {
         simd,
         taps,
-        win: Win::new(hist, input),
+        win: Win::<_, C>::new(hist, input),
         out,
         td: &mut storage,
     };
@@ -1686,84 +1818,127 @@ macro_rules! decimate_impl {
 decimate_impl!(C32, f32, f32, decimate_c32, usize::MAX);
 decimate_impl!(CQ15, Q15, i16, decimate_cq15, PREP_TAPS);
 
-impl Resample<C32> for Simd {
-    fn resample<Tp, Hist>(
-        &self,
-        state: &mut ResampleState<C32, Tp, Hist>,
-        input: &[C32],
-        output: &mut [C32],
-    ) -> Result<Progress>
-    where
-        Tp: AsRef<[f32]>,
-        Hist: AsRef<[C32]> + AsMut<[C32]>,
-    {
-        let p = state.parts_mut();
-        let (consumed, produced) = {
-            let h: &[f32] = bytemuck::cast_slice(&*p.hist);
-            let x: &[f32] = bytemuck::cast_slice(input);
-            let y: &mut [f32] = bytemuck::cast_slice_mut(output);
-            let (taps, up, down) = (p.taps, p.up, p.down);
-            dispatch!(simd => polyphase_c32(simd, taps, h, x, y, up, down, &mut *p.q))?
-        };
-        commit(p.hist, input, consumed, produced, "resampler window")
-    }
+/// `resample` (complex) and `resample_real` of `f32` taps: `C` floats per sample.
+macro_rules! resample_f32_impl {
+    ($tr:ident, $method:ident, $state:ident, $t:ty, $c:literal) => {
+        impl $tr<$t> for Simd {
+            fn $method<Tp, Hist>(
+                &self,
+                state: &mut $state<$t, Tp, Hist>,
+                input: &[$t],
+                output: &mut [$t],
+            ) -> Result<Progress>
+            where
+                Tp: AsRef<[f32]>,
+                Hist: AsRef<[$t]> + AsMut<[$t]>,
+            {
+                let p = state.parts_mut();
+                let (consumed, produced) = {
+                    let h: &[f32] = bytemuck::cast_slice(&*p.hist);
+                    let x: &[f32] = bytemuck::cast_slice(input);
+                    let y: &mut [f32] = bytemuck::cast_slice_mut(output);
+                    let (taps, up, down) = (p.taps, p.up, p.down);
+                    dispatch!(simd => polyphase_f32::<_, $c>(
+                        simd, taps, h, x, y, up, down, &mut *p.q
+                    ))?
+                };
+                commit(p.hist, input, consumed, produced, "resampler window")
+            }
+        }
+    };
 }
 
-impl Resample<CQ15> for Simd {
-    fn resample<Tp, Hist>(
-        &self,
-        state: &mut ResampleState<CQ15, Tp, Hist>,
-        input: &[CQ15],
-        output: &mut [CQ15],
-    ) -> Result<Progress>
-    where
-        Tp: AsRef<[Q15]>,
-        Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
-    {
-        let p = state.parts_mut();
-        let ran = {
-            let t: &[i16] = bytemuck::cast_slice(p.taps);
-            let h: &[i16] = bytemuck::cast_slice(&*p.hist);
-            let x: &[i16] = bytemuck::cast_slice(input);
-            let y: &mut [i16] = bytemuck::cast_slice_mut(output);
-            let (up, down) = (p.up, p.down);
-            dispatch!(simd => polyphase_cq15(simd, t, h, x, y, up, down, &mut *p.q))?
-        };
-        // A filter whose branches do not fit the prepared storage runs on the fallback; nothing
-        // of the state has been touched then.
-        let Some((consumed, produced)) = ran else {
-            return Fallback.resample(state, input, output);
-        };
-        commit(p.hist, input, consumed, produced, "resampler window")
-    }
+resample_f32_impl!(Resample, resample, ResampleState, C32, 2);
+resample_f32_impl!(ResampleReal, resample_real, ResampleRealState, f32, 1);
+
+/// `resample` (complex) and `resample_real` of `Q15` taps: `C` `i16` per sample.
+macro_rules! resample_q15_impl {
+    ($tr:ident, $method:ident, $state:ident, $t:ty, $c:literal) => {
+        impl $tr<$t> for Simd {
+            fn $method<Tp, Hist>(
+                &self,
+                state: &mut $state<$t, Tp, Hist>,
+                input: &[$t],
+                output: &mut [$t],
+            ) -> Result<Progress>
+            where
+                Tp: AsRef<[Q15]>,
+                Hist: AsRef<[$t]> + AsMut<[$t]>,
+            {
+                let p = state.parts_mut();
+                let ran = {
+                    let t: &[i16] = bytemuck::cast_slice(p.taps);
+                    let h: &[i16] = bytemuck::cast_slice(&*p.hist);
+                    let x: &[i16] = bytemuck::cast_slice(input);
+                    let y: &mut [i16] = bytemuck::cast_slice_mut(output);
+                    let (up, down) = (p.up, p.down);
+                    dispatch!(simd => polyphase_q15::<_, $c>(
+                        simd, t, h, x, y, up, down, &mut *p.q
+                    ))?
+                };
+                // A filter whose branches do not fit the prepared storage runs on the fallback;
+                // nothing of the state has been touched then.
+                let Some((consumed, produced)) = ran else {
+                    return Fallback.$method(state, input, output);
+                };
+                commit(p.hist, input, consumed, produced, "resampler window")
+            }
+        }
+    };
 }
 
-impl FirInterpolate<C32> for Simd {
-    fn fir_interpolate<Tp, Hist>(
-        &self,
-        state: &mut FirInterpState<C32, Tp, Hist>,
-        input: &[C32],
-        output: &mut [C32],
-    ) -> Result<Progress>
-    where
-        Tp: AsRef<[f32]>,
-        Hist: AsRef<[C32]> + AsMut<[C32]>,
-    {
-        self.resample(state.inner_mut(), input, output)
-    }
+resample_q15_impl!(Resample, resample, ResampleState, CQ15, 2);
+resample_q15_impl!(ResampleReal, resample_real, ResampleRealState, Q15, 1);
+
+/// `fir_interpolate` (complex) and `fir_interpolate_real`: the resampler with `down = 1`.
+macro_rules! interpolate_impl {
+    ($tr:ident, $method:ident, $state:ident, $resample:ident, $t:ty, $tap:ty) => {
+        impl $tr<$t> for Simd {
+            fn $method<Tp, Hist>(
+                &self,
+                state: &mut $state<$t, Tp, Hist>,
+                input: &[$t],
+                output: &mut [$t],
+            ) -> Result<Progress>
+            where
+                Tp: AsRef<[$tap]>,
+                Hist: AsRef<[$t]> + AsMut<[$t]>,
+            {
+                self.$resample(state.inner_mut(), input, output)
+            }
+        }
+    };
 }
 
-impl FirInterpolate<CQ15> for Simd {
-    fn fir_interpolate<Tp, Hist>(
-        &self,
-        state: &mut FirInterpState<CQ15, Tp, Hist>,
-        input: &[CQ15],
-        output: &mut [CQ15],
-    ) -> Result<Progress>
-    where
-        Tp: AsRef<[Q15]>,
-        Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
-    {
-        self.resample(state.inner_mut(), input, output)
-    }
-}
+interpolate_impl!(
+    FirInterpolate,
+    fir_interpolate,
+    FirInterpState,
+    resample,
+    C32,
+    f32
+);
+interpolate_impl!(
+    FirInterpolate,
+    fir_interpolate,
+    FirInterpState,
+    resample,
+    CQ15,
+    Q15
+);
+interpolate_impl!(
+    FirInterpolateReal,
+    fir_interpolate_real,
+    FirInterpRealState,
+    resample_real,
+    f32,
+    f32
+);
+interpolate_impl!(
+    FirInterpolateReal,
+    fir_interpolate_real,
+    FirInterpRealState,
+    resample_real,
+    Q15,
+    Q15
+);

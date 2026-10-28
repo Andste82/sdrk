@@ -15,14 +15,18 @@ use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
 use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState};
 use sdrk::kernels::convert::{Convert, ConvertOut, ConvertOutReal};
-use sdrk::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
+use sdrk::kernels::decim::{
+    FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
+};
 use sdrk::kernels::demod::{
     DcBlock, DcBlockReal, DcBlockRealState, DcBlockState, Deemphasis, DeemphasisState, QuadDemod,
     QuadDemodState,
 };
 use sdrk::kernels::fft::{Direction, Fft, FftPlan, RealFft, RealFftPlan, Scaling};
 use sdrk::kernels::filter::{Fir, FirState};
-use sdrk::kernels::interp::{FirInterpState, FirInterpolate};
+use sdrk::kernels::interp::{
+    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
+};
 use sdrk::kernels::mix::{Nco, Rotate};
 use sdrk::kernels::modulate::{FmMod, FmModState};
 use sdrk::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
@@ -298,7 +302,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 51] = [
+pub const KERNELS: [&str; 55] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -350,6 +354,10 @@ pub const KERNELS: [&str; 51] = [
     "window_cq15",
     "power_db",
     "power_db_q15",
+    "fir_interpolate_real",
+    "resample_real",
+    "fir_interpolate_real_q15",
+    "resample_real_q15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -378,6 +386,26 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "fir_decimate" => Box::new(DecimateK::new(rng, layout)),
         "fir_interpolate" => Box::new(PolyK::new(rng, layout, INTERP_TAPS, INTERP, 1)),
         "resample" => Box::new(PolyK::new(
+            rng,
+            layout,
+            RESAMPLE_TAPS,
+            RESAMPLE_UP,
+            RESAMPLE_DOWN,
+        )),
+        "fir_interpolate_real" => {
+            Box::new(PolyRealK::<f32>::new(rng, layout, INTERP_TAPS, INTERP, 1))
+        }
+        "resample_real" => Box::new(PolyRealK::<f32>::new(
+            rng,
+            layout,
+            RESAMPLE_TAPS,
+            RESAMPLE_UP,
+            RESAMPLE_DOWN,
+        )),
+        "fir_interpolate_real_q15" => {
+            Box::new(PolyRealK::<Q15>::new(rng, layout, INTERP_TAPS, INTERP, 1))
+        }
+        "resample_real_q15" => Box::new(PolyRealK::<Q15>::new(
             rng,
             layout,
             RESAMPLE_TAPS,
@@ -1502,6 +1530,287 @@ impl Kernel for PolyK {
 
     fn volk_functions(&self) -> &'static [&'static str] {
         &["volk_32fc_32f_dot_prod_32fc"]
+    }
+}
+
+/// GNU Radio's `fir_filter_fff` (`filterN`): [`GrFir`] for real samples, with VOLK's aligned
+/// `volk_32f_x2_dot_prod_32f_a` on the input pointer rounded down to VOLK's alignment and the
+/// tap copy that starts with as many zeros as the pointer was rounded down by.
+struct GrFirReal {
+    /// `taps[al]`: `al` zeros, then the reversed taps.
+    taps: Vec<Aligned<f32>>,
+    ntaps: usize,
+    /// VOLK's alignment in bytes (a power of two, at most [`LEAD`]).
+    align: usize,
+    result: Aligned<f32>,
+}
+
+impl GrFirReal {
+    fn new(taps: &[f32]) -> Self {
+        let align = volk_sys::alignment().clamp(1, LEAD);
+        let copies = (align / std::mem::size_of::<f32>()).max(1);
+        let reversed: Vec<f32> = taps.iter().rev().copied().collect();
+        let taps = (0..copies)
+            .map(|al| {
+                let mut t = Aligned::<f32>::new(reversed.len() + al);
+                t[al..].copy_from_slice(&reversed);
+                t
+            })
+            .collect();
+        GrFirReal {
+            taps,
+            ntaps: reversed.len(),
+            align,
+            result: Aligned::new(1),
+        }
+    }
+
+    /// `sum_i window[i] * taps[ntaps - 1 - i]` through the dot product `dot`.
+    ///
+    /// # Safety
+    /// `window` points at `ntaps` samples inside an [`Aligned`] buffer.
+    #[inline(always)]
+    unsafe fn dot_at(&mut self, dot: volk_sys::DotProdReal, window: *const f32) -> f32 {
+        let result = self.result.as_mut_ptr();
+        let p = window as usize;
+        let al = (p & (self.align - 1)) / std::mem::size_of::<f32>();
+        // SAFETY: as in `GrFir::dot_at`: the rounded-down pointer lies inside the leading padding
+        // of the buffer's allocation, the call reads `ntaps + al` samples that end where the
+        // window ends, `al < taps.len()` and each tap copy holds `ntaps + al` values.
+        unsafe {
+            dot(
+                result,
+                window.sub(al),
+                self.taps.get_unchecked(al).as_ptr(),
+                (self.ntaps + al) as u32,
+            );
+            *result
+        }
+    }
+}
+
+/// GNU Radio's polyphase filters `interp_fir_filter_fff` and `rational_resampler_fff`: one
+/// [`GrFirReal`] per branch, one aligned dot product per output, the bookkeeping of [`GrPoly`].
+struct GrPolyReal {
+    branches: Vec<GrFirReal>,
+    up: usize,
+    down: usize,
+}
+
+impl GrPolyReal {
+    fn new(taps: &[f32], up: usize, down: usize) -> Self {
+        assert_eq!(
+            taps.len() % up,
+            0,
+            "GrPolyReal: the branches must have equal lengths"
+        );
+        let branches = (0..up)
+            .map(|p| {
+                let b: Vec<f32> = taps.iter().skip(p).step_by(up).copied().collect();
+                GrFirReal::new(&b)
+            })
+            .collect();
+        GrPolyReal { branches, up, down }
+    }
+
+    /// The `out.len()` outputs from phase 0, the window of the first ending at sample
+    /// `ntaps - 1` of `input`, which is the whole of an [`Aligned`] buffer (VOLK reads into its
+    /// leading padding).
+    ///
+    /// # Panics
+    /// If `input` is too short, or VOLK's real dot product is not available.
+    fn filter(&mut self, input: &[f32], out: &mut [f32]) {
+        let ntaps = self.branches[0].ntaps;
+        let last = (out.len().saturating_sub(1) * self.down) / self.up;
+        assert!(
+            out.is_empty() || last + ntaps <= input.len(),
+            "GrPolyReal: input too short"
+        );
+        let dot = volk_sys::dot_prod_real_a().expect("VOLK is not available");
+        let (mut ctr, mut i) = (0usize, 0usize);
+        for o in out.iter_mut() {
+            // SAFETY: the window of this output, `ntaps` samples from `i <= last`, lies in
+            // `input` (checked above); every branch has `ntaps` taps.
+            *o = unsafe {
+                self.branches
+                    .get_unchecked_mut(ctr)
+                    .dot_at(dot, input.as_ptr().add(i))
+            };
+            ctr += self.down;
+            while ctr >= self.up {
+                ctr -= self.up;
+                i += 1;
+            }
+        }
+    }
+}
+
+/// `fir_interpolate_real` (`down = 1`) or `resample_real` by `up / down` with real samples `T`
+/// (`f32` or `Q15`), with the taps and ratios of [`PolyK`]. `n` is the number of outputs per
+/// call. `f32` is compared with VOLK as GNU Radio's `fff` polyphase filters call it; `Q15` has no
+/// established library (VOLK has no 16-bit real dot product) and is compared with our fallback.
+struct PolyRealK<T: RealNoise> {
+    /// `ntaps / up - 1` history samples, then the input.
+    buf: Aligned<T>,
+    taps: Vec<T>,
+    out: Aligned<T>,
+    state: PolyRealState<T>,
+    /// GNU Radio's filter, for `f32` only.
+    gr: Option<GrPolyReal>,
+    up: usize,
+    down: usize,
+}
+
+/// The state of a [`PolyRealK`]: the interpolator for `down = 1`, else the resampler.
+enum PolyRealState<T: RealNoise> {
+    Interpolate(FirInterpRealState<T, Vec<T>, Vec<T>>),
+    Resample(ResampleRealState<T, Vec<T>, Vec<T>>),
+}
+
+impl<T: RealNoise> PolyRealK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout, ntaps: usize, up: usize, down: usize) -> Self {
+        let scale = 1.0 / (ntaps as f32).sqrt();
+        let taps: Vec<T> = (0..ntaps).map(|_| T::noise(rng, scale, 0.0)).collect();
+        let branch = ntaps / up;
+        let size = std::mem::size_of::<T>();
+        // Enough input for `n` outputs from any phase counter.
+        let input = layout.n * down / up + 2;
+        let mut buf =
+            Aligned::<T>::skewed(input + branch - 1, layout.skew_before(size, branch - 1));
+        for s in buf.iter_mut() {
+            *s = T::noise(rng, 0.9, 0.0);
+        }
+        let gr = T::as_f32(&taps).map(|f| GrPolyReal::new(f, up, down));
+        PolyRealK {
+            buf,
+            state: Self::state(&taps, up, down),
+            taps,
+            gr,
+            out: Aligned::skewed(layout.n, layout.skew(size)),
+            up,
+            down,
+        }
+    }
+
+    fn state(taps: &[T], up: usize, down: usize) -> PolyRealState<T> {
+        let hist = vec![T::default(); taps.len().div_ceil(up)];
+        if down == 1 {
+            let state = FirInterpRealState::new(taps.to_vec(), hist, up);
+            PolyRealState::Interpolate(state.expect("taps"))
+        } else {
+            PolyRealState::Resample(Self::resampler(taps, up, down))
+        }
+    }
+
+    fn resampler(taps: &[T], up: usize, down: usize) -> ResampleRealState<T, Vec<T>, Vec<T>> {
+        let hist = vec![T::default(); taps.len().div_ceil(up)];
+        ResampleRealState::new(taps.to_vec(), hist, up, down).expect("taps")
+    }
+
+    fn branch(&self) -> usize {
+        self.taps.len() / self.up
+    }
+}
+
+#[inline(never)]
+fn resample_real<T: sdrk_core::RealSample, B: ResampleReal<T>>(
+    backend: &B,
+    state: &mut ResampleRealState<T, Vec<T>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.resample_real(state, black_box(input), out));
+}
+
+#[inline(never)]
+fn fir_interpolate_real<T: sdrk_core::RealSample, B: FirInterpolateReal<T>>(
+    backend: &B,
+    state: &mut FirInterpRealState<T, Vec<T>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.fir_interpolate_real(state, black_box(input), out));
+}
+
+impl<T: RealNoise> Kernel for PolyRealK<T>
+where
+    Sdrk: ResampleReal<T> + FirInterpolateReal<T>,
+    Fallback: ResampleReal<T> + FirInterpolateReal<T>,
+    Reference: ResampleReal<T>,
+{
+    fn run(&mut self, which: Impl, k: usize) {
+        let input = &self.buf[self.branch() - 1..];
+        for _ in 0..k {
+            let out = &mut self.out;
+            match (which, &mut self.state) {
+                (Impl::Ours, PolyRealState::Interpolate(s)) => {
+                    fir_interpolate_real(&Sdrk, s, input, out);
+                }
+                (Impl::Fallback, PolyRealState::Interpolate(s)) => {
+                    fir_interpolate_real(&Fallback, s, input, out);
+                }
+                (Impl::Ours, PolyRealState::Resample(s)) => resample_real(&Sdrk, s, input, out),
+                (Impl::Fallback, PolyRealState::Resample(s)) => {
+                    resample_real(&Fallback, s, input, out);
+                }
+                (Impl::Volk, _) => {
+                    let (Some(gr), Some(x), Some(y)) =
+                        (self.gr.as_mut(), T::as_f32(&self.buf), T::as_f32_mut(out))
+                    else {
+                        unreachable!("VOLK compares f32 only");
+                    };
+                    gr.filter(x, y);
+                }
+                (other, _) => unreachable!("the real polyphase filters have no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.state = Self::state(&self.taps, self.up, self.down);
+        self.run(which, 1);
+        // The interpolator is the resampler with `down = 1`.
+        let mut s = Self::resampler(&self.taps, self.up, self.down);
+        let mut want = vec![T::default(); self.out.len()];
+        let p = Reference
+            .resample_real(&mut s, &self.buf[self.branch() - 1..], &mut want)
+            .expect("resample_real");
+        // VOLK sees real history samples instead of zeros: compare only the outputs whose
+        // windows lie in the input.
+        let skip = self.branch() * self.up / self.down + 1;
+        let len = p.produced;
+        let f = |x: &[T]| x.iter().map(|v| v.as_f64()).collect::<Vec<f64>>();
+        snr_db(&f(&want[skip..len]), &f(&self.out[skip..len]))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => self.gr.is_some() && volk_sys::AVAILABLE_REAL_DOT,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match (which, self.down == 1) {
+            (Impl::Volk, true) => {
+                "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it"
+            }
+            (Impl::Volk, false) => {
+                "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it"
+            }
+            (Impl::Fallback, _) => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        if self.gr.is_some() {
+            &["volk_32f_x2_dot_prod_32f"]
+        } else {
+            &[]
+        }
     }
 }
 
@@ -3070,6 +3379,10 @@ trait RealNoise: sdrk_core::RealSample {
     fn pole() -> Self;
     /// The value as f64.
     fn as_f64(self) -> f64;
+    /// `x` as `f32` samples if `Self` is `f32`.
+    fn as_f32(x: &[Self]) -> Option<&[f32]>;
+    /// `x` as `f32` samples if `Self` is `f32`.
+    fn as_f32_mut(x: &mut [Self]) -> Option<&mut [f32]>;
 }
 
 impl RealNoise for f32 {
@@ -3084,6 +3397,14 @@ impl RealNoise for f32 {
     fn as_f64(self) -> f64 {
         f64::from(self)
     }
+
+    fn as_f32(x: &[Self]) -> Option<&[f32]> {
+        Some(x)
+    }
+
+    fn as_f32_mut(x: &mut [Self]) -> Option<&mut [f32]> {
+        Some(x)
+    }
 }
 
 impl RealNoise for Q15 {
@@ -3097,6 +3418,14 @@ impl RealNoise for Q15 {
 
     fn as_f64(self) -> f64 {
         f64::from(self.0)
+    }
+
+    fn as_f32(_: &[Self]) -> Option<&[f32]> {
+        None
+    }
+
+    fn as_f32_mut(_: &mut [Self]) -> Option<&mut [f32]> {
+        None
     }
 }
 

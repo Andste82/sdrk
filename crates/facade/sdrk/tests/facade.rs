@@ -210,12 +210,12 @@ fn backend_table_lists_the_m06_kernels() {
         ("window", SampleType::CQ15),
         ("power_db", SampleType::F32),
         ("power_db", SampleType::Q15),
+        ("resample_real", SampleType::F32),
+        ("resample_real", SampleType::Q15),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
     for (kernel, ty) in [
-        ("resample_real", SampleType::F32),
-        ("resample_real", SampleType::Q15),
         ("deemphasis", SampleType::F32),
         ("deemphasis", SampleType::Q15),
         ("dc_block", SampleType::C32),
@@ -323,7 +323,9 @@ fn m06_kernels_agree_with_the_fallback() -> Result<()> {
         Sdrk.resample_real(&mut sa, &xr, &mut a)?,
         Fallback.resample_real(&mut sb, &xr, &mut b)?,
     );
-    assert_eq!((pa, a), (pb, b));
+    assert_eq!(pa, pb);
+    assert_close(&b[..pb.produced], &a[..pa.produced]);
+    assert_eq!(sa.phase(), sb.phase());
     let xq: Vec<Q15> = cq.iter().map(|v| v.re).collect();
     let (mut sa, mut sb) = (
         ResampleRealState::<Q15, _, _>::new(tapsq, [Q15(0); 3], 1, 2)?,

@@ -32,6 +32,11 @@ pub struct lv_16sc_t {
 /// Whether the library was found at build time.
 pub const AVAILABLE: bool = cfg!(not(no_volk));
 
+/// Whether the functions of [`native`] exist: VOLK's own build (x86-64, AArch64). The wasm32
+/// library of `benches/refs/volk-wasm.c` has only the generic protokernels of the other
+/// declarations.
+pub const NATIVE: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
+
 /// The signature of `volk_32fc_32f_dot_prod_32fc` and its aligned variant.
 pub type DotProd = unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const f32, c_uint);
 
@@ -171,6 +176,68 @@ wrappers! {
     fn volk_32fc_s32f_atan2_32f(out: *mut f32, input: *const lv_32fc_t, norm: f32, n: u32);
 }
 
+/// The VOLK functions that only VOLK's own build has ([`NATIVE`]): without them (wasm32, or no
+/// VOLK) every wrapper is a failing stub.
+pub mod native {
+    use super::lv_32fc_t;
+
+    #[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+    pub(crate) mod ffi {
+        use crate::{lv_32fc_t, volk_func_desc_t};
+        use core::ffi::c_uint;
+
+        // Function-pointer variables, as in the parent module.
+        unsafe extern "C" {
+            pub static mut volk_32fc_32f_multiply_32fc:
+                Option<unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const f32, c_uint)>;
+            pub static mut volk_32f_log2_32f:
+                Option<unsafe extern "C" fn(*mut f32, *const f32, c_uint)>;
+            pub static mut volk_32f_s32f_multiply_32f:
+                Option<unsafe extern "C" fn(*mut f32, *const f32, f32, c_uint)>;
+            pub static mut volk_32f_s32f_add_32f:
+                Option<unsafe extern "C" fn(*mut f32, *const f32, f32, c_uint)>;
+
+            pub fn volk_32fc_32f_multiply_32fc_get_func_desc() -> volk_func_desc_t;
+            pub fn volk_32f_log2_32f_get_func_desc() -> volk_func_desc_t;
+            pub fn volk_32f_s32f_multiply_32f_get_func_desc() -> volk_func_desc_t;
+            pub fn volk_32f_s32f_add_32f_get_func_desc() -> volk_func_desc_t;
+        }
+    }
+
+    macro_rules! native_wrappers {
+        ($( $(#[$m:meta])* fn $name:ident($($a:ident: $t:ty),*); )+) => {
+            $(
+                $(#[$m])*
+                #[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+                pub unsafe fn $name($($a: $t),*) {
+                    // SAFETY: as for the wrappers of the parent module.
+                    unsafe {
+                        if let Some(f) = (&raw const ffi::$name).read() {
+                            f($($a),*)
+                        }
+                    }
+                }
+                $(#[$m])*
+                #[cfg(any(no_volk, target_arch = "wasm32"))]
+                pub unsafe fn $name($(_: $t),*) {
+                    unreachable!("this VOLK function is not available")
+                }
+            )+
+        };
+    }
+
+    native_wrappers! {
+        /// `out[i] = a[i] * b[i]`, a complex vector times a real one.
+        fn volk_32fc_32f_multiply_32fc(out: *mut lv_32fc_t, a: *const lv_32fc_t, b: *const f32, n: u32);
+        /// `out[i] = log2(in[i])`.
+        fn volk_32f_log2_32f(out: *mut f32, input: *const f32, n: u32);
+        /// `out[i] = in[i] * scalar`.
+        fn volk_32f_s32f_multiply_32f(out: *mut f32, input: *const f32, scalar: f32, n: u32);
+        /// `out[i] = in[i] + scalar`.
+        fn volk_32f_s32f_add_32f(out: *mut f32, input: *const f32, scalar: f32, n: u32);
+    }
+}
+
 /// The current value of `volk_32fc_32f_dot_prod_32fc_a`, the aligned dot product as GNU Radio's
 /// `fir_filter_ccf` calls it: no alignment check per call. Before the first call it is VOLK's
 /// initialisation stub, which resolves and calls the implementation.
@@ -281,6 +348,16 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
                 ffi::volk_32fc_x2_multiply_conjugate_32fc_get_func_desc
             }
             "volk_32fc_s32f_atan2_32f" => ffi::volk_32fc_s32f_atan2_32f_get_func_desc,
+            #[cfg(not(target_arch = "wasm32"))]
+            "volk_32fc_32f_multiply_32fc" => {
+                native::ffi::volk_32fc_32f_multiply_32fc_get_func_desc
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            "volk_32f_log2_32f" => native::ffi::volk_32f_log2_32f_get_func_desc,
+            #[cfg(not(target_arch = "wasm32"))]
+            "volk_32f_s32f_multiply_32f" => native::ffi::volk_32f_s32f_multiply_32f_get_func_desc,
+            #[cfg(not(target_arch = "wasm32"))]
+            "volk_32f_s32f_add_32f" => native::ffi::volk_32f_s32f_add_32f_get_func_desc,
             _ => return None,
         };
         // SAFETY: the descriptor functions take no arguments; the descriptor points to static

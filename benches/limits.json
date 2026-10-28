@@ -354,6 +354,106 @@
       "status": "release"
     }
   },
+  "window": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "VOLK's `volk_32fc_32f_multiply_32fc` exists only in VOLK's own build; the generic wasm32 library of `benches/refs/volk-wasm.c` does not have it (extending it would rebuild the references of every platform), so our fallback is the comparison, which is information under D32"
+    }
+  },
+  "window_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the same loop as at `avx2` (checked in the disassembly); the run-time dispatch adds a fixed cost of about 80 to 120 instructions per call, 0.02 to 0.03 per sample at n = 4096, which is 3 to 4 % of this kernel of 0.76 instructions per sample"
+    }
+  },
+  "power_db": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.6 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.6 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "VOLK's `volk_32f_log2_32f` exists only in VOLK's own build; the generic wasm32 library of `benches/refs/volk-wasm.c` does not have it (extending it would rebuild the references of every platform), so our fallback is the comparison, which is information under D32"
+    }
+  },
+  "power_db_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+    }
+  },
   "quad_demod": {
     "sse2": {
       "status": "info",

@@ -619,6 +619,10 @@ pub enum Family {
     /// The real-input FFT: per level (`LevelPlan::rfft`) FFTW's real-input transform or rustfft's
     /// real planner (`realfft`), our fallback as information.
     RealFft,
+    /// A VOLK kernel that only VOLK's own build has (x86-64, AArch64): the wasm32 library of
+    /// `benches/refs/volk-wasm.c` has the generic protokernels of the other VOLK kernels only,
+    /// so at `simd128` our fallback is the comparison.
+    VolkNative,
     /// No established library: our fallback.
     Own,
     /// The f32 and C32 biquads (D15): KFR's SIMD cascade where the level has a build of it
@@ -696,7 +700,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 47] = [
+pub const KERNELS: [KernelSpec; 51] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -721,6 +725,10 @@ pub const KERNELS: [KernelSpec; 47] = [
     spec("squelch_cq15", Family::Own, false),
     spec("mag", Family::Volk, false),
     spec("mag_q15", Family::Volk, false),
+    spec("window", Family::VolkNative, false),
+    spec("window_cq15", Family::Own, false),
+    spec("power_db", Family::VolkNative, false),
+    spec("power_db_q15", Family::Own, false),
     spec("agc", Family::GnuRadio, false),
     spec("agc_cq15", Family::Own, false),
     spec("dc_block_real", Family::Own, false),
@@ -999,6 +1007,15 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
+        Family::VolkNative if plan.level == "simd128" => (Reference::Fallback, Vec::new()),
+        Family::VolkNative => {
+            let extras = if plan.cheapest_volk {
+                vec![Reference::VolkCheapest]
+            } else {
+                Vec::new()
+            };
+            (Reference::Volk, extras)
+        }
         Family::Own => (Reference::Fallback, Vec::new()),
         Family::Kfr if plan.kfr => (Reference::Kfr, vec![Reference::Cmsis]),
         // Without KFR at the level, CMSIS-DSP gates, as it does for a fallback entry.
@@ -1026,6 +1043,10 @@ volk_32fc_magnitude_32f a_sse u_sse
 volk_16ic_magnitude_16i a_sse generic
 volk_32fc_x2_multiply_conjugate_32fc generic generic
 volk_32fc_s32f_atan2_32f generic generic
+volk_32fc_32f_multiply_32fc a_sse generic
+volk_32f_log2_32f generic generic
+volk_32f_s32f_multiply_32f a_sse u_sse
+volk_32f_s32f_add_32f a_sse u_sse
 ";
 
 /// The defaults of VOLK 3.3's `sse4_2_64_mmx` machine for the level `sse4.2`.
@@ -1042,6 +1063,10 @@ volk_32fc_magnitude_32f a_sse3 u_sse3
 volk_16ic_magnitude_16i a_sse3 generic
 volk_32fc_x2_multiply_conjugate_32fc a_sse3 u_sse3
 volk_32fc_s32f_atan2_32f generic generic
+volk_32fc_32f_multiply_32fc a_sse generic
+volk_32f_log2_32f a_sse4_1 u_sse4_1
+volk_32f_s32f_multiply_32f a_sse u_sse
+volk_32f_s32f_add_32f a_sse u_sse
 ";
 
 /// The VOLK implementations that need no more than AVX2 and FMA, for the levels `avx2` and
@@ -1062,6 +1087,10 @@ volk_32fc_magnitude_32f a_avx u_avx
 volk_16ic_magnitude_16i a_avx2 u_avx2
 volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx
 volk_32fc_s32f_atan2_32f a_avx2_fma u_avx2_fma
+volk_32fc_32f_multiply_32fc a_avx generic
+volk_32f_log2_32f a_avx2_fma u_avx2_fma
+volk_32f_s32f_multiply_32f a_avx u_avx
+volk_32f_s32f_add_32f a_avx u_avx
 ";
 
 /// The default dispatch of VOLK 3.3's `neonv8` machine (what QEMU's CPU selects), pinned so
@@ -1082,12 +1111,16 @@ volk_32fc_magnitude_32f neonv8 neonv8
 volk_16ic_magnitude_16i neonv8 neonv8
 volk_32fc_x2_multiply_conjugate_32fc neonv8 neonv8
 volk_32fc_s32f_atan2_32f neonv8 neonv8
+volk_32fc_32f_multiply_32fc neonv8 neonv8
+volk_32f_log2_32f neonv8 neonv8
+volk_32f_s32f_multiply_32f neonv8 neonv8
+volk_32f_s32f_add_32f neonv8 neonv8
 ";
 
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 12] = [
+const VOLK_FUNCTIONS: [&str; 16] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
     "volk_32f_s32f_convert_16i",
@@ -1100,6 +1133,10 @@ const VOLK_FUNCTIONS: [&str; 12] = [
     "volk_16ic_magnitude_16i",
     "volk_32fc_x2_multiply_conjugate_32fc",
     "volk_32fc_s32f_atan2_32f",
+    "volk_32fc_32f_multiply_32fc",
+    "volk_32f_log2_32f",
+    "volk_32f_s32f_multiply_32f",
+    "volk_32f_s32f_add_32f",
 ];
 
 /// CPUID of SDE for the level `sse2`: `GenuineIntel`, family 15, SSE2 and nothing above it; XSAVE

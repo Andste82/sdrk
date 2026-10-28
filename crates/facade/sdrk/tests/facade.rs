@@ -206,6 +206,10 @@ fn backend_table_lists_the_m06_kernels() {
         ("biquad", SampleType::CQ15),
         ("biquad_real", SampleType::F32),
         ("biquad_real", SampleType::Q15),
+        ("window", SampleType::C32),
+        ("window", SampleType::CQ15),
+        ("power_db", SampleType::F32),
+        ("power_db", SampleType::Q15),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
@@ -221,10 +225,6 @@ fn backend_table_lists_the_m06_kernels() {
         ("dc_block_real", SampleType::F32),
         ("dc_block_real", SampleType::Q15),
         ("agc", SampleType::CQ15),
-        ("window", SampleType::C32),
-        ("window", SampleType::CQ15),
-        ("power_db", SampleType::F32),
-        ("power_db", SampleType::Q15),
     ] {
         assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
     }
@@ -476,7 +476,6 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
     // Everything else stays with the fallback or the chained fused kernels.
     for (kernel, ty) in [
         ("scale", SampleType::C32),
-        ("window", SampleType::C32),
         ("deemphasis", SampleType::F32),
         ("dot", SampleType::C32),
     ] {

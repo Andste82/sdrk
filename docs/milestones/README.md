@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M22 are delivered (M22 with open items M22-8, M22-9 and M22-10); M16 to M18 and M23 to M25 are planned (the receive series M19 to M23, M24 and M25 use nothing from M16 to M18, see the *Order* section of M19).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M22 are delivered (M22 with open items M22-8 and M22-10); M16 to M18 and M23 to M25 are planned (the receive series M19 to M23, M24 and M25 use nothing from M16 to M18, see the *Order* section of M19).
 
 | # | File | Plan phase | Delivers |
 | --- | --- | --- | --- |

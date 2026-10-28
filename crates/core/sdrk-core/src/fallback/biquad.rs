@@ -29,6 +29,14 @@ trait F32Section: Sample + BiquadSample<Coef = f32> {
     fn load(hist: &[Self]) -> Option<Self::State>;
     fn store(state: &Self::State, hist: &mut [Self]);
     fn step(c: &[f32; 5], state: &mut Self::State, x: Self) -> Self;
+    /// [`step`](Self::step) with the output written to `o` before the state update (the same
+    /// operations in the same order, so the same bits). Stored first, the output register is
+    /// free for the last product of the update, which saves a register copy per sample on
+    /// two-operand instruction sets (SSE); the default stores after the step.
+    #[inline(always)]
+    fn step_store(c: &[f32; 5], state: &mut Self::State, x: Self, o: &mut Self) {
+        *o = Self::step(c, state, x);
+    }
     fn flush(state: &mut Self::State);
     /// Whether two sections run sample by sample (each sample through both, `f32`) or one
     /// after the other over the buffer (`C32`, whose two states per section and component
@@ -39,11 +47,23 @@ trait F32Section: Sample + BiquadSample<Coef = f32> {
 /// Transposed direct form II of one `f32` component without the flush.
 #[inline(always)]
 fn df2t(c: &[f32; 5], s: &mut [f32; 2], x: f32) -> f32 {
-    let [b0, b1, b2, a1, a2] = *c;
-    let y = b0 * x + s[0];
+    let y = df2t_out(c, s, x);
+    df2t_update(c, s, x, y);
+    y
+}
+
+/// The output `y = b0 x + s1` of [`df2t`].
+#[inline(always)]
+fn df2t_out(c: &[f32; 5], s: &[f32; 2], x: f32) -> f32 {
+    c[0] * x + s[0]
+}
+
+/// The state update of [`df2t`] for the input `x` and the output `y`.
+#[inline(always)]
+fn df2t_update(c: &[f32; 5], s: &mut [f32; 2], x: f32, y: f32) {
+    let [_, b1, b2, a1, a2] = *c;
     s[0] = (b1 * x + s[1]) - a1 * y;
     s[1] = b2 * x - a2 * y;
-    y
 }
 
 impl F32Section for f32 {
@@ -66,6 +86,13 @@ impl F32Section for f32 {
     #[inline(always)]
     fn step(c: &[f32; 5], state: &mut [f32; 2], x: f32) -> f32 {
         df2t(c, state, x)
+    }
+
+    #[inline(always)]
+    fn step_store(c: &[f32; 5], state: &mut [f32; 2], x: f32, o: &mut f32) {
+        let y = df2t_out(c, state, x);
+        *o = y;
+        df2t_update(c, state, x, y);
     }
 
     #[inline(always)]
@@ -247,9 +274,9 @@ fn pair_block_f32<T: F32Section>(
     x: &[T; 16],
     o: &mut [T; 16],
 ) {
-    let mut f = |x: T| {
+    let mut f = |x: T, o: &mut T| {
         let y = T::step(ca, sa, x);
-        T::step(cb, sb, y)
+        T::step_store(cb, sb, y, o);
     };
     let (x15, x1) = x.split_at(15);
     let (o15, o1) = o.split_at_mut(15);
@@ -257,13 +284,18 @@ fn pair_block_f32<T: F32Section>(
     // sample, a sixth of the work.
     for (o, x) in o15.chunks_exact_mut(5).zip(x15.chunks_exact(5)) {
         for (o, x) in o.iter_mut().zip(x) {
-            *o = f(*x);
+            f(*x, o);
         }
     }
-    T::flush(sb);
+    // B flushes after its sample 14, which is the same as before its step of sample 15 and so
+    // after the step of A (the two states are independent): both flushes sit between the two
+    // steps of the last sample, where the four state values are flushed together. This sample
+    // stores after the update: with `step_store` here aarch64 needs 6 more instructions per
+    // block and x86 saves only one.
     for (o, x) in o1.iter_mut().zip(x1) {
         let y = T::step(ca, sa, *x);
         T::flush(sa);
+        T::flush(sb);
         *o = T::step(cb, sb, y);
     }
 }

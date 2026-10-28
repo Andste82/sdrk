@@ -5,6 +5,14 @@ kernels and the Python Q15 integer model (`sdrk_golden/q15.py`) for bit-exact Q1
 `vectors/` are committed to git and read by `sdrk_testkit::golden` (feature `std`). Never edit them by
 hand and never generate them with code from this repository.
 
+The golden of a tolerance case is the mathematical optimum: the result computed in `f64`, treated as
+exact (except `squelch`, whose cases come from an exact float32 model, see `docs/kernels.md`). It is the
+first accuracy target of a kernel, not only a pass/fail check. The `snr_db_min` stored in a case is the contract
+floor; the accuracy policy in [`docs/kernels.md`](../../docs/kernels.md#accuracy-policy) adds the
+achievable optimum and a regression guard close to the measured SNR. A bit-exact Q15 case proves agreement
+with our own integer model, not closeness to the optimum; the policy adds an SNR check against an `f64`
+golden for those kernels.
+
 ## Setup
 
 ```sh

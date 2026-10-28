@@ -251,7 +251,7 @@ Correctness rests on a chain of trust; performance is measured against establish
 
 Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filters, FFT and demodulation.
 
-**Performance is measured by counting executed instructions in the same emulator**, for our kernel and for the established library, with identical input size and build flags. Instruction counts are deterministic, so there is no measurement noise; real-hardware timing follows later.
+**Performance is measured by counting executed instructions in the same emulator**, for our kernel and for the established library, with identical input size and build flags. Instruction counts are deterministic, so there is no measurement noise. Speed in the core is added by static simulation, not by real-hardware timing (see the measurement policy below).
 
 | Platform | Counting tool | Compared against |
 | --- | --- | --- |
@@ -270,7 +270,13 @@ Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filt
 
 `docs/performance.md` and `benches/limits.json` are the current contract; they supersede these tables where they differ.
 
-Comparisons always hold accuracy equal, shown by the error against the f64 reference. Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels; real-time targets per platform are set once real hardware is in use.
+Comparisons hold accuracy at least equal (within 1 dB or better), shown by the error against the f64 reference. Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels.
+
+**Measurement policy (D32 to D34, issue #20; details in [performance.md](performance.md#measurement-policy) and [kernels.md](kernels.md#accuracy-policy)):**
+
+- **Fair comparison.** Every SIMD branch is compared with an established library at the same level, with the same algorithm class and the same work; the fallback with established scalar code. SIMD against our own fallback is at most `info`, never a gate. Without any fair reference, the efficiency of the branch is judged instead.
+- **Speed, not only work.** Instructions measure work. Once level 2 is built, the branch of each instruction-set level on out-of-order cores is judged by cycles per sample simulated with `llvm-mca` (one reference core model and one counter-model per level, ratios only, no real hardware, no calibration), together with its efficiency (port bound / cycles). Instructions stay the gate on in-order cores and WASM, and everywhere until level 2 exists.
+- **Accuracy against the optimum.** The f64 golden is the mathematical optimum and the first target, for float and Q15 kernels. An established library is a yardstick only where the optimum cannot be reached by principle or data type. Regression guards close to the measured SNR complement the loose contract floors.
 
 ## Outside this repo and follow-up projects
 
@@ -344,9 +350,9 @@ A server with an SDR, a web UI and MCP access: mark a signal in the waterfall, t
 | Byte order | little-endian targets only (all current targets are); zero-copy reinterpretation relies on it; big-endian is not supported |
 | Bit-exactness | reference and fallback always; accelerated variants bit-exact for simple kernels, minimum SNR otherwise; WASM relaxed SIMD is opt-in and only bound to the numeric contract's tolerance |
 | Fused kernels | kept only if their instruction count beats the chained single kernels |
-| Performance target | instruction count in the emulator vs. the established library: goal ≤ 1.00×, release limit ≤ 1.10×, dev ≤ 1.50× (decision D14) |
+| Performance target | instruction count in the emulator vs. the established library: goal ≤ 1.00×, release limit ≤ 1.10×, dev ≤ 1.50× (decision D14); on x86-64 and AArch64 simulated cycles per sample once level 2 exists (D33) |
 | Counting on ESP32 | S3: QEMU instruction-count plugin (plugin-enabled build of the Espressif fork); P4: static count of the inner loops from the disassembly; exact counting in esp-emulator would be a welcome upstream contribution |
-| Real-time targets | deferred until real hardware is in use |
+| Real-time targets | deferred until real hardware is in use; the speed judgement of level 2 (D33) uses simulation only |
 | YAML crate | `serde-saphyr` (pure Rust, no `unsafe-libyaml`), behind the `yaml` feature, not in the WASM build; version pinned at the start of phase 3 |
 | Dependency hygiene | `cargo deny` in CI for security advisories and licenses; no GPL dependencies in the library |
 | Releases | semver; `sdrk-device` reaches 1.0 early, other crates stay 0.x until phase 9; changelog and publishing order in CONTRIBUTING.md |

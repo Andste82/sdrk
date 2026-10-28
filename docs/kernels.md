@@ -27,7 +27,7 @@ For every kernel `foo` there is:
 
 ## Numeric contract
 
-Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance* (minimum SNR against the f64 reference). One exception to the f64 reference rule: a kernel whose output depends on a discrete decision (`squelch`) fixes its arithmetic in the specification, the reference follows it exactly and the golden cases come from an exact float32 model (see `squelch` below). Q15 rules: round half up, saturate, `-1 * -1 = 32767` (except the encoding rules of `convert_out`, which round half to even, see there).
+Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance* (minimum SNR against the f64 reference). One exception to the f64 reference rule: a kernel whose output depends on a discrete decision (`squelch`) fixes its arithmetic in the specification, the reference follows it exactly and the golden cases come from an exact float32 model (see `squelch` below). Q15 rules: round half up, saturate, `-1 * -1 = 32767` (except the encoding rules of `convert_out`, which round half to even, see there). The SNR thresholds of the table are guaranteed floors, not accuracy targets; the target is the achievable optimum of the [accuracy policy](#accuracy-policy).
 
 | Kernel | Trait | Sample types | Class | Contract |
 | --- | --- | --- | --- | --- |
@@ -267,6 +267,27 @@ Every kernel is covered by three layers, all provided by `sdrk-testkit`:
 3. **Extreme inputs**: `r#gen::extreme::silence`, `full_scale_alternating` (`+-(1 - 2^-15)` on both components) and `f32_specials` (0.0, -0.0, NaN, +inf, -inf, a denormal, `f32::MAX`) feed every kernel. A kernel must not panic, must saturate Q15 results and must keep feedback state finite (`flush_denormal`).
 
 Test inputs come from deterministic generators (`r#gen::tone`, `noise`, `chirp`, ...) that depend only on the absolute sample index, so chunked and whole generation agree bit for bit. Raw device formats are checked against the independent oracle `encode::encode` / `encode::decode_reference`, never against the code under test.
+
+### Accuracy policy
+
+Maintainer decision D34 (issue #20). The layers above prove that a kernel is **correct**: it meets the minimum SNR of its contract, and the backends agree with the fallback. They do not prove that it is **as accurate as it can be**. The contract thresholds are deliberately loose floors. `biquad` met its 90 to 100 dB golden thresholds at about 135 dB, and only the comparison with KFR and CMSIS-DSP showed the 1.1 to 1.2 dB that the operation order lost (fixed by D20). An optimization (summation order, FMA, blocking) can lose tens of dB while every test stays green.
+
+**The golden is the target, not the library.** The f64 golden from NumPy/SciPy is the mathematical optimum. An established library is one more implementation that deviates from it, through speed-for-accuracy trade-offs or bugs. The goal is to be better than other libraries, not equal to them, so the comparison has a fixed order:
+
+| Step | Comparison | When |
+| --- | --- | --- |
+| 1 | The SNR against the f64 golden, measured against the **achievable optimum**: the SNR that the f64 result reaches when it is rounded once to the output type. That optimum is about 150 dB for an `f32` output; for a `Q15` output it depends on the level, about 98 dB for a full-scale sine (`6.02 * 16 + 1.76`). Step 1 is a target, not a gate: the measured SNR and its distance from the optimum are recorded. | always, for float **and** Q15 kernels |
+| 2 | Our distance from the optimum against the distance of an established implementation of the same algorithm, both measured against the same f64 golden (`count accuracy`, [performance.md](performance.md#method)). Without a counted reference there is no step 2; steps 1 and 3 still apply. | only where the algorithm loses precision beyond the one rounding of step 1, by principle or data type: a recursion, an accumulation in the working type (`f32` sums, `Q15` states), rounding between stages |
+| 3 | A regression guard: the lowest SNR measured over the levels and builds, minus 1 dB. It is stored in the case next to the contract floor `snr_db_min` and checked by the tests. The relaxed WASM build (feature `relaxed-simd`) is bound to the contract floor only. | always, so that an optimization that loses accuracy fails a test instead of passing silently |
+
+Consequences:
+
+1. **The reference library is a yardstick, never the target.** "At most 1 dB below the comparison" in `count accuracy` is a floor for step 2. A library that is less accurate than we are does not lower our goal.
+2. **Two numbers per tolerance case.** The contract floor stays the documented guarantee of the table above. The test additionally checks the regression guard of step 3, close to the measured value.
+3. **Q15 kernels also need an SNR against an f64 golden.** Their bit-exact goldens compare with our own Python integer model (`tests/golden/sdrk_golden/q15.py`). That proves that Rust and the model compute the same thing, so the result cannot drift unnoticed. It does not show how close the rounding definition is to the optimum. Example: the Q15 `biquad` rounds and reaches 71.5 dB against the f64 model, CMSIS-DSP truncates and reaches 56.7 dB. That number comes from `count accuracy` today, not from a test.
+4. **Every external reference brings its accuracy comparison.** `count accuracy` runs for every count entry, as the information for step 2.
+
+Status: step 2 exists for the counted entries (`count accuracy`). Step 1 against the achievable optimum, the regression guards of step 3 and the Q15 SNR checks are planned; the kernels whose contract floor is their only accuracy guard today are listed in issue #20.
 
 ### The suite
 

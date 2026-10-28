@@ -292,6 +292,8 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | `stereo_pll` (f32, Q15) | no | the loop is a per-sample recursion: the phase of every sample depends on the detector output of the previous one | `info` against the fallback at every level; listed under "Not accelerated" in `docs/backends.md` |
 | `stereo_matrix` (C32, CQ15) | yes | element-wise additions (and saturation) on interleaved pairs | against the fallback at every level (`dev`, goal ≤ 0.5× of the fallback); the CQ15 saturation path gets a boundary sweep |
 
+**Note 2026-10-28 (D32):** our own fallback is no fair gate for a SIMD branch. Unless an established library with the same work is found, the `stereo_matrix` entries are `info` against the fallback, with the reason in the `waiver` text, and get the efficiency verdict of `docs/performance.md#measurement-policy`.
+
 The block's other kernels (`quad_demod`, `biquad_real`, `fir_decimate`, `biquad`) keep the decisions of their milestones. Add an `info` row for the whole `fm_stereo` block at 480 kHz to `docs/performance.md` (instructions per input sample, fallback and best level), next to the `fm_demod` row.
 
 ### 9. Documentation

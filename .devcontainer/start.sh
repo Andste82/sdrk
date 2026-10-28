@@ -32,10 +32,10 @@ fi
 # Build image if missing (or unconditionally when rebuild was requested).
 if [[ "$REBUILD" == "1" ]]; then
   echo "Rebuilding image '$IMAGE_NAME' from $SCRIPT_DIR"
-  docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+  docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile" "$PROJECT_ROOT"
 elif ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
   echo "Image '$IMAGE_NAME' not found — building from $SCRIPT_DIR"
-  docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+  docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile" "$PROJECT_ROOT"
 fi
 
 # On rebuild, stop and remove any existing container so a fresh one is started

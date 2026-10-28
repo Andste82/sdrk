@@ -229,6 +229,8 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | `halfband_decimate_real` (f32, Q15) | yes | as above for real lanes | against our `halfband_decimate` per value, `info` (no real `fir_decimate` path exists in the backend) |
 | `real_to_complex` (C32, CQ15) | yes | the shift is a sign pattern on lanes and the filter is the halfband | against our `halfband_decimate` on the shifted samples at the same level (`Reference::OwnKernel`, `release` with the default limit 1.10) |
 
+**Note 2026-10-28 (D32):** a comparison with one of our own kernels is not an established reference. Under the measurement policy (`docs/performance.md#measurement-policy`) it can show that the halfband path saves work over our `fir_decimate`, but it is no fair gate. Before this milestone starts, the maintainer decides whether the `Reference::OwnKernel` entries may stay `release`, or become `info` with an efficiency verdict and an established reference for the gate where one exists.
+
 **Comparison with an own kernel (extension of `xtask count`, normative):**
 
 - `xtask/src/count.rs`: a new variant `Reference::OwnKernel { kernel: &'static str }`; `implementation()` returns `"ours"`. The measurement binary (`benches/kernels`) gets the comparison workloads `fir_decimate_x2_halfband_taps` (`fir_decimate` with factor 2 and the expanded halfband taps of the kernel's workload) and `halfband_decimate_shifted` (`halfband_decimate` on the input after the `(−j)^n` shift, the shift itself done outside the counted region), counted with the same differential method and level as the kernel.

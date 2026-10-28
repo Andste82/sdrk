@@ -1,6 +1,6 @@
 # Performance
 
-Performance is measured in executed instructions per sample in an emulator and compared with an established library (VOLK, FFTW, rustfft, KissFFT; CMSIS-DSP and ESP-DSP for the embedded backends to come) at equal accuracy against the f64 reference.
+Today performance is measured in executed instructions per sample in an emulator and compared with an established library (VOLK, FFTW, rustfft, KissFFT, KFR, CMSIS-DSP; ESP-DSP for the embedded backends to come) at equal accuracy against the f64 reference. The [measurement policy](#measurement-policy) below says what is compared with what, and how the measurement moves from instructions to simulated cycles.
 
 | Instructions per sample vs. reference library | Meaning |
 | --- | --- |
@@ -8,7 +8,98 @@ Performance is measured in executed instructions per sample in an emulator and c
 | ≤ 1.10× | release limit; CI fails above it for a `release` entry |
 | ≤ 1.50× | allowed only while a kernel is under development (`dev`), never in a release |
 
-Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels. They say nothing about cache behaviour, the cost of one instruction (a gather is one instruction and many cycles) or the clock; they are the portable, reproducible measure of how much work a kernel does. Kernels that use gathers (`fm_mod` at `avx512`, and the NCO lookups of `rotate` `CQ15` there) need a wall-clock check on real AVX-512 hardware (Zen 4, Sapphire Rapids) before their counts are taken as a gain.
+Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels. They say nothing about cache behaviour, the cost of one instruction (a gather is one instruction and many cycles) or the clock; they are the portable, reproducible measure of how much work a kernel does. Kernels that use gathers (`fm_mod` at `avx512`, and the NCO lookups of `rotate` `CQ15` there) are therefore not shown to be faster by their counts. There is no real hardware for a wall-clock check (D33), and the simulation of the next section has low confidence for gathers. Issue #20 proposes to try a gather-free form first: in-register tables with permutes (`vpermps`, `vpermi2ps`).
+
+## Measurement policy
+
+This section is the maintainer's policy (D32 to D34; worked out in issue #20). It applies to every new or changed kernel, entry of `benches/limits.json` and row of the results. Where the current entries do not follow it yet, issue #20 lists them; the [status](#status-of-the-policy) at the end of this section says what exists today.
+
+Each rule below is marked as one of three kinds: **decided** (applies now), **planned** (decided, but the tooling does not exist yet) or **proposed** (a threshold that still needs the maintainer's confirmation).
+
+**Until the planned tooling exists:** instructions per sample stay the gate on every platform, with the limits of the table above. A SIMD branch without a fair reference is `info` and its `waiver` text names the reason. `count accuracy` stays the accuracy check of the counts.
+
+### Three questions, three measures
+
+| Question | Measure | Source | Kind |
+| --- | --- | --- | --- |
+| How much work does the kernel do? | instructions per sample | SDE, callgrind, QEMU plug-in, wasmtime fuel (this file, [Method](#method)) | measured, exact |
+| How fast is it in the core? | cycles per sample, and the efficiency (below) | `llvm-mca` ([level 2](#speed-simulated-cycles-per-sample-level-2-planned), planned) | simulated, relative only |
+| How accurate is it? | SNR against the f64 golden | golden vectors and `count accuracy` ([kernels.md](kernels.md#accuracy-policy)) | measured, exact |
+
+Speed and accuracy are judged independently. A kernel that is faster but less accurate than allowed fails, and so does one that is accurate but too slow.
+
+### What is compared with what (D32)
+
+Decided. The goal is an optimal branch for every kernel at every SIMD level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`), and an efficient portable fallback. Whether a branch is optimal is only known by comparing it with a well-known, well-tested library that does the same thing.
+
+| Our side | Fair comparison | Examples |
+| --- | --- | --- |
+| SIMD branch of a level | SIMD code of an established library at the **same level**, the **same algorithm class** and the **same work** | VOLK, KFR, FFTW, IPP, rustfft |
+| Scalar fallback | established **scalar** code of the same algorithm | CMSIS-DSP generic C, the loops of GNU Radio |
+| A branch for which no such library exists | the efficiency of the branch ([below](#efficiency-a-measure-without-a-reference)), recorded per kernel | the `Q15` and `CQ15` biquads, which no library has in SIMD on our levels |
+| SIMD branch against our own fallback | never a gate: at most `info` | a SIMD branch beats a scalar loop almost always, so the ratio says nothing about whether the branch is good |
+
+"The same work" is meant literally: no apples against oranges. Where the reference does less (for example no NaN rule) or more, the difference is named next to the entry, and the entry is only `release` if the comparison is still fair.
+
+### Speed: simulated cycles per sample (level 2, planned)
+
+Instructions per sample measure work, not speed: `cycles per sample = instructions per sample / IPC`, and the IPC ranges from about 0.3 to 5 depending on the code. The usual optimizations for out-of-order cores *add* instructions and make the code faster: several accumulators to break an add chain (`dot`, `fir`), loop unrolling, the wavefront of D18 in `biquad`. A gate on instructions would penalize them. Example: one `f32` biquad section takes 15 instructions and 10.0 cycles per sample on Zen 4 (an IPC of 1.5); the ports would allow 2.5 cycles, but the chain add → broadcast → mul → sub limits it. No instruction count shows that.
+
+The method is decided (D33); the tooling is planned:
+
+1. **Optimize per instruction-set level, not per CPU.** The branch of a level must use its instruction set efficiently. Different CPU generations run it at different speeds, and that is accepted. There are no vendor- or model-specific branches.
+2. **Metric.** Cycles per sample simulated by `llvm-mca` in a pinned LLVM version, so the numbers are deterministic. The judgement uses no real hardware and no calibration, and absolute cycles or MS/s are not published.
+3. **Only ratios.** `llvm-mca` is typically 10 to 30 % off, with outliers above 2×. Only the ratio ours / reference with the same tool and the same core model is used; systematic model errors largely cancel in it.
+4. **One reference model per level and one counter-model of another vendor or core generation.** A branch is judged on the reference model. On the counter-model its ratio may be only slightly worse (the proposed bound is below), so that it is not tuned to the quirks of one model.
+
+   | Level | Reference model | Counter-model |
+   | --- | --- | --- |
+   | `sse2`, `sse4.2` | `skylake` | `znver2` |
+   | `avx2` | `znver3` | `alderlake` |
+   | `avx512` (built for `x86-64-v4`, vendor-neutral) | `znver4` | `sapphirerapids` |
+   | `neon` | `cortex-a72` (Raspberry Pi 4) | `cortex-a76` (Raspberry Pi 5) |
+
+   **Open (`neon`):** in LLVM 21, `cortex-a72` and `cortex-a76` have no scheduling models of their own and give the results of `cortex-a57`, so this pair checks nothing; `neoverse-n1` and `neoverse-v2` have their own models. The `neon` pair needs a maintainer decision before level 2 is built.
+
+5. **The whole kernel, not a hand-picked loop.** The counters above already give the execution count of every basic block. The hot blocks are found from these counts, and their simulated cycles are weighted by them. This covers FFT stages, prologue, tail and dispatch, and it works for reference libraries without markers (VOLK, KFR, FFTW codelets).
+6. **Known blind spots**, recorded with every result: cache and memory bandwidth (every count uses 4096 samples, which fit in L1); memory dependencies across iterations (in-place FFT, filter state in memory, store-to-load forwarding); branch mispredictions in prologue and tail; gathers, divisions, square roots and microcode (low confidence: no value is published for them).
+
+**Where instructions stay the gate** (decided, applies once level 2 exists). On in-order cores (Cortex-M, ESP32) instructions are close to cycles, and WASM cannot be simulated (the engine generates the machine code). There the instruction ratio stays the gate. On x86-64 and AArch64 it becomes a cheap regression guard next to the simulated cycles.
+
+**Proposed gates** (issue #20, not yet in `benches/limits.json`): on the reference model ours / reference ≤ 1.00 is the goal and the release limit of the table above applies; on the counter-model the ratio may be at most about 5 % worse than on the reference model (2 % would be inside the modelling error and cause churn).
+
+**Optional plausibility check** (proposed): `perf stat` on a Raspberry Pi 4 (Cortex-A72) for the `neon` branch. It checks the simulated ratios for plausibility and does not calibrate them.
+
+**Derived figure, for orientation only.** `MS/s per GHz = 1000 / cycles per sample` may be computed to estimate how much signal one core can process: it is the simulated in-core throughput with the data in L1, an upper bound. For large blocks of streaming kernels the memory caps it: `samples/s = min(f_CPU / cycles per sample, bandwidth / bytes per sample)`. It is neither published as a result nor gated.
+
+### Efficiency: a measure without a reference
+
+`llvm-mca` also gives the port bound of a block (its `Block RThroughput`): the cycles per iteration that the pressure on the execution ports alone would allow, without dependencies. The efficiency of a branch is
+
+```text
+efficiency = port bound / simulated cycles
+```
+
+For a whole kernel both are sums over its hot blocks, weighted by their execution counts.
+
+- **Near 1:** the execution units are busy; the instruction set is used well, and only less work can make the branch faster.
+- **Low:** a dependency chain limits the code (one biquad section: 2.5 / 10 = 0.25); only another algorithm can help, such as the wavefront of D18.
+
+Each result carries its bottleneck class: latency, ports, frontend, or not modelled. A branch without a fair reference gets an efficiency floor of its own: it is set per kernel and level, with its bottleneck class, when level 2 is introduced, and is approved by the maintainer. This replaces the earlier wording "about as efficient as our other SIMD branches".
+
+### Accuracy (D34)
+
+The f64 golden is the mathematical optimum and the first target; an established library is only a yardstick where that optimum cannot be reached. The rules are in [kernels.md](kernels.md#accuracy-policy). For the counts this means: `count accuracy` measures both sides against the same f64 model, and "at most 1 dB below the comparison" is a floor, never the target. A comparison that is less accurate than we are does not lower our goal.
+
+### Status of the policy
+
+| Part | State |
+| --- | --- |
+| Instructions per sample, `count accuracy` | in place (this file) |
+| Fair references for every entry | partly: the entries gated against our own fallback, the kernels without a SIMD branch or without a count are listed in issue #20 (groups A to D) |
+| Simulated cycles (`count mca`, `cargo xtask mca`, `benches/results/mca.json`), efficiency | planned; the recursive kernels (`biquad`, `dc_block`, `deemphasis`, `agc`, `squelch`) first, because their instruction ratio differs most from the cycles |
+| `avx512` measurement build and KFR reference at `x86-64-v4` instead of `sapphirerapids` | planned |
+| Accuracy against the achievable optimum, SNR regression guards, Q15 SNR against an f64 golden | planned ([kernels.md](kernels.md#accuracy-policy)) |
 
 ## Method
 
@@ -93,6 +184,7 @@ VOLK's dispatcher is pinned per level by a `volk_config` that xtask writes (`ben
 - VOLK has no SSE implementation of `rotator2` and `atan2`; at `sse2` and `sse4.2` the dispatcher takes their scalar `generic` code, so `rotate` and `quad_demod` are `info` at both levels. VOLK has no implementation of `multiply_conjugate` and `8i_s32f_convert_32f` below SSE3 and SSE4.1 either, but the `generic` code of the conversion is vectorized with SSE2 by the compiler, so `convert_cs8` and `convert_cu8` are judged against it at `sse2`.
 - At `simd128`, see above.
 - `info` entries are reported with their numbers and never judged; the reason is the `waiver` text of the entry.
+- Under the [measurement policy](#what-is-compared-with-what-d32) our own fallback is no fair gate for a SIMD branch. The SIMD entries of `rotate` `CQ15`, `mag_sq` `CQ15`, `quad_demod` `CQ15` and `fm_mod` `C32` are still `release` against it; they get an established reference or become `info` with an efficiency verdict (issue #20, group A). The biquad Q15 entries are already `info` (D21); their efficiency verdict is pending. The `info` entries of `squelch`, `agc` `CQ15` and `dc_block_real` compare the fallback with itself and still need a scalar reference (group B).
 
 ## Limits
 

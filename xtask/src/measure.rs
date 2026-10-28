@@ -118,6 +118,10 @@ pub fn count_entries(kernel: &str) -> Vec<String> {
 ///
 /// # Errors
 /// The directory cannot be read.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls are large; xtask is a host tool"
+)]
 pub fn golden_kernels(root: &Path, kernel: &str) -> anyhow::Result<Vec<String>> {
     let dir = root.join("tests").join("golden").join("vectors");
     let mut out = Vec::new();

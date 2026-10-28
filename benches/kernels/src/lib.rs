@@ -12,7 +12,7 @@ use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
 use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState};
-use sdrk::kernels::convert::{Convert, ConvertOut};
+use sdrk::kernels::convert::{Convert, ConvertOut, ConvertOutReal};
 use sdrk::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
 use sdrk::kernels::demod::{DcBlockReal, DcBlockRealState, QuadDemod, QuadDemodState};
 use sdrk::kernels::fft::{Direction, Fft, FftPlan, RealFft, RealFftPlan, Scaling};
@@ -24,7 +24,7 @@ use sdrk::kernels::spectrum::{Mag, MagSq};
 use sdrk::kernels::squelch::{Squelch, SquelchState};
 use sdrk::{C32, CQ15, ComplexSample, Fallback, Q15, Rate, Sdrk};
 use sdrk_core::Reference;
-use sdrk_device::{SampleFormat, formats};
+use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, formats};
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 /// Samples per call unless overridden.
@@ -293,7 +293,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 40] = [
+pub const KERNELS: [&str; 43] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -334,6 +334,9 @@ pub const KERNELS: [&str; 40] = [
     "biquad_cq15_fallback",
     "biquad_real_fallback",
     "biquad_real_q15_fallback",
+    "convert_out_real_rs16",
+    "convert_out_real_rs8",
+    "convert_out_real_ru8",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -353,6 +356,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "convert_out_cs16" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cs16)),
         "convert_out_cs8" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cs8)),
         "convert_out_cu8" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cu8)),
+        "convert_out_real_rs16" => Box::new(ConvertOutK::real(rng, layout, OutFormat::Cs16)),
+        "convert_out_real_rs8" => Box::new(ConvertOutK::real(rng, layout, OutFormat::Cs8)),
+        "convert_out_real_ru8" => Box::new(ConvertOutK::real(rng, layout, OutFormat::Cu8)),
         "rotate" => Box::new(RotateK::new(rng, layout)),
         "rotate_cq15" => Box::new(RotateQ15K::new(rng, layout)),
         "fir" => Box::new(FirK::new(rng, layout)),
@@ -636,6 +642,27 @@ impl OutFormat {
         }
     }
 
+    /// The real format with the same encoding of one value (`RS16`, and the real 8-bit
+    /// formats, which have no constant).
+    fn real_format(self) -> SampleFormat {
+        let byte = |container, signed| {
+            SampleFormat::new(
+                container,
+                8,
+                signed,
+                DataLayout::Real,
+                Align::Lsb,
+                Endian::Little,
+            )
+            .expect("a valid real 8-bit format")
+        };
+        match self {
+            OutFormat::Cs16 => formats::RS16,
+            OutFormat::Cs8 => byte(Container::I8, true),
+            OutFormat::Cu8 => byte(Container::U8, false),
+        }
+    }
+
     fn component_bytes(self) -> usize {
         match self {
             OutFormat::Cs16 => 2,
@@ -662,10 +689,13 @@ impl OutFormat {
     }
 }
 
-/// `convert_out` from C32 to a raw interleaved format.
+/// `convert_out` from C32 to a raw interleaved format, or `convert_out_real` from f32 to the
+/// real format of the same encoding (`real`; VOLK converts the same values either way).
 struct ConvertOutK {
     format: OutFormat,
+    real: bool,
     input: Aligned<C32>,
+    real_input: Aligned<f32>,
     out: Aligned<u8>,
     n: usize,
 }
@@ -675,9 +705,52 @@ impl ConvertOutK {
         let bytes = 2 * layout.n * format.component_bytes();
         ConvertOutK {
             format,
+            real: false,
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
+            real_input: Aligned::new(0),
             out: Aligned::skewed(bytes, layout.skew(2 * format.component_bytes())),
             n: layout.n,
+        }
+    }
+
+    fn real(rng: &mut Pcg32, layout: Layout, format: OutFormat) -> Self {
+        let mut real_input = Aligned::<f32>::skewed(layout.n, layout.skew(4));
+        for v in real_input.iter_mut() {
+            *v = rng.unit() * 0.9;
+        }
+        ConvertOutK {
+            format,
+            real: true,
+            input: Aligned::new(0),
+            real_input,
+            out: Aligned::skewed(
+                layout.n * format.component_bytes(),
+                layout.skew(format.component_bytes()),
+            ),
+            n: layout.n,
+        }
+    }
+
+    /// The number of values converted per call.
+    fn values(&self) -> usize {
+        if self.real { self.n } else { 2 * self.n }
+    }
+
+    /// The input values.
+    fn floats(&self) -> Vec<f64> {
+        if self.real {
+            f32s(&self.real_input)
+        } else {
+            c32s(&self.input)
+        }
+    }
+
+    /// The first input value.
+    fn input_ptr(&self) -> *const f32 {
+        if self.real {
+            self.real_input.as_ptr()
+        } else {
+            self.input.as_ptr().cast::<f32>()
         }
     }
 }
@@ -692,19 +765,36 @@ fn convert_out<B: ConvertOut<C32>>(
     let _ = black_box(backend.convert_out(format, black_box(input), out));
 }
 
+#[inline(never)]
+fn convert_out_real<B: ConvertOutReal<f32>>(
+    backend: &B,
+    format: &SampleFormat,
+    input: &[f32],
+    out: &mut [u8],
+) {
+    let _ = black_box(backend.convert_out_real(format, black_box(input), out));
+}
+
 impl Kernel for ConvertOutK {
     fn run(&mut self, which: Impl, k: usize) {
         let format = self.format.format();
+        let real_format = &self.format.real_format();
         let (scale, offset) = self.format.scale_offset();
-        let values = 2 * self.n as u32;
+        let values = self.values() as u32;
         for _ in 0..k {
             match which {
+                Impl::Ours if self.real => {
+                    convert_out_real(&Sdrk, real_format, &self.real_input, &mut self.out);
+                }
+                Impl::Fallback if self.real => {
+                    convert_out_real(&Fallback, real_format, &self.real_input, &mut self.out);
+                }
                 Impl::Ours => convert_out(&Sdrk, format, &self.input, &mut self.out),
                 Impl::Fallback => convert_out(&Fallback, format, &self.input, &mut self.out),
                 Impl::Volk => {
-                    let input = self.input.as_ptr().cast::<f32>();
+                    let input = self.input_ptr();
                     match self.format {
-                        // SAFETY: the input holds `2 n` floats, the output `2 n` `i16` values
+                        // SAFETY: the input holds `values` floats, the output `values` `i16` values
                         // (kept 2-byte aligned by the even skew).
                         OutFormat::Cs16 => unsafe {
                             volk_sys::volk_32f_s32f_convert_16i(
@@ -714,7 +804,7 @@ impl Kernel for ConvertOutK {
                                 values,
                             );
                         },
-                        // SAFETY: the input holds `2 n` floats, the output `2 n` bytes.
+                        // SAFETY: the input holds `values` floats, the output `values` bytes.
                         OutFormat::Cs8 => unsafe {
                             volk_sys::volk_32f_s32f_convert_8i(
                                 self.out.as_mut_ptr().cast(),
@@ -723,7 +813,7 @@ impl Kernel for ConvertOutK {
                                 values,
                             );
                         },
-                        // SAFETY: the input holds `2 n` floats, the output `2 n` bytes.
+                        // SAFETY: the input holds `values` floats, the output `values` bytes.
                         OutFormat::Cu8 => unsafe {
                             volk_sys::volk_32f_s32f_x2_convert_8u(
                                 self.out.as_mut_ptr(),
@@ -746,8 +836,8 @@ impl Kernel for ConvertOutK {
         // The ideal output is the unquantised value; the SNR is the quantisation noise (the
         // offset of CU8 is removed from both, so that it does not count as signal).
         let (scale, offset) = self.format.scale_offset();
-        let want: Vec<f64> = c32s(&self.input).iter().map(|x| x * scale).collect();
-        let got: Vec<f64> = (0..2 * self.n)
+        let want: Vec<f64> = self.floats().iter().map(|x| x * scale).collect();
+        let got: Vec<f64> = (0..self.values())
             .map(|i| self.format.value(&self.out, i) - offset)
             .collect();
         snr_db(&want, &got)

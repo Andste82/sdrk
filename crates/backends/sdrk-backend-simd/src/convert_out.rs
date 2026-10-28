@@ -1,8 +1,10 @@
-//! `convert_out`: `C32` / `CQ15` to raw device bytes.
+//! `convert_out`: `C32` / `CQ15` to raw device bytes, and `convert_out_real`: `f32` / `Q15` to
+//! the real formats of the same encodings.
 //!
-//! The same formats as in `convert` run vectorised (`U8`, `I8` and little-endian `I16`); the
-//! rest goes to the fallback. Bit-exact with the fallback: `x * full_scale + offset` rounded to
-//! the nearest integer with ties to even, saturation and NaN as amplitude 0.
+//! The same formats as in `convert` run vectorised (`U8`, `I8` and little-endian `I16`; for the
+//! real kernels `RS16` and the real 8-bit formats, through the same code with one value per
+//! sample); the rest goes to the fallback. Bit-exact with the fallback: `x * full_scale +
+//! offset` rounded to the nearest integer with ties to even, saturation and NaN as amplitude 0.
 //!
 //! - `I16` and `I8` have a power-of-two scale and no offset, so `v = x * scale` is exact in
 //!   `f32` and its rounding to even is the specification. NaN is cleared and the upper side
@@ -34,14 +36,35 @@
 //! vector go through the scalar formulas.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
-use sdrk_core::kernels::convert::ConvertOut;
-use sdrk_core::{C32, CQ15, Fallback, Result};
-use sdrk_device::SampleFormat;
+use sdrk_core::kernels::convert::{ConvertOut, ConvertOutReal};
+use sdrk_core::{C32, CQ15, Fallback, Q15, Result};
+use sdrk_device::{Align, Container, Endian, FullScale, Layout, SampleFormat, formats};
 
 use crate::Simd;
 use crate::convert::{Kind, fast_kind};
 use crate::level::dispatch;
 use crate::util;
+
+/// The vector-path kind of a real format, if it has one: the per-value encodings of
+/// [`fast_kind`] with one value per sample (`RS16`, and the real `U8` and `I8` formats).
+#[inline(always)]
+fn real_kind(format: &SampleFormat) -> Option<Kind> {
+    if *format == formats::RS16 {
+        return Some(Kind::I16);
+    }
+    if format.layout() != Layout::Real
+        || format.full_scale() != FullScale::PowerOfTwo
+        || format.align() != Align::Lsb
+    {
+        return None;
+    }
+    match (format.container(), format.bits(), format.signed()) {
+        (Container::U8, 8, false) => Some(Kind::U8),
+        (Container::I8, 8, true) => Some(Kind::I8),
+        (Container::I16, 16, true) if format.endian() == Endian::Little => Some(Kind::I16),
+        _ => None,
+    }
+}
 
 /// Number of output bytes for the fast path, else `None` (the fallback reports the error).
 fn fast_bytes(kind: Kind, components: usize, output_len: usize) -> Option<usize> {
@@ -263,9 +286,9 @@ mod x86 {
         _MM_FROUND_NO_EXC, _MM_FROUND_TO_NEG_INF, _mm_add_ps, _mm_and_ps, _mm_castps_si128,
         _mm_cmpord_ps, _mm_cvtps_epi32, _mm_load_ps, _mm_min_epi8, _mm_min_epu8, _mm_min_ps,
         _mm_mul_ps, _mm_or_si128, _mm_packs_epi16, _mm_packs_epi32, _mm_set1_epi8, _mm_set1_ps,
-        _mm_sub_ps, _mm_xor_si128, _mm256_and_ps, _mm256_castps_si256, _mm256_cmp_ps,
-        _mm256_cvtps_epi32, _mm256_fmadd_ps, _mm256_min_epi8, _mm256_min_epu8, _mm256_min_ps,
-        _mm256_mul_ps, _mm256_or_si256, _mm256_packs_epi16, _mm256_packs_epi32,
+        _mm_sub_ps, _mm_xor_si128, _mm256_and_ps, _mm256_and_si256, _mm256_castps_si256,
+        _mm256_cmp_ps, _mm256_cvtps_epi32, _mm256_fmadd_ps, _mm256_min_epi8, _mm256_min_epu8,
+        _mm256_min_ps, _mm256_mul_ps, _mm256_or_si256, _mm256_packs_epi16, _mm256_packs_epi32,
         _mm256_permute4x64_epi64, _mm256_permutevar8x32_epi32, _mm256_set1_epi8, _mm256_set1_ps,
         _mm256_setr_epi32, _mm256_sub_ps, _mm256_xor_si256, _mm512_cmp_ps_mask,
         _mm512_cvtsepi32_epi8, _mm512_cvtsepi32_epi16, _mm512_fmadd_ps,
@@ -361,8 +384,8 @@ mod x86 {
 
     fearless_simd::kernel!(
         /// AVX2 over whole vectors; returns the number of floats done. `vcvtps2dq` rounds to
-        /// even; NaN is cleared and the upper side of `CS16` and `CS8` capped before it (it
-        /// gives `i32::MIN` for both), the packs saturate, the byte bound of the module
+        /// even; for `CS16` and `CS8` the upper side is capped before it and NaN cleared after
+        /// it (it gives `i32::MIN` for both), the packs saturate, the byte bound of the module
         /// documentation finishes `CU8` and `vpermq`/`vpermd` undo the in-lane order of the
         /// packs.
         #[inline(always)]
@@ -375,10 +398,14 @@ mod x86 {
             let sign = _mm256_set1_epi8(i8::MIN);
             let order = _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7);
             let load = |x: &[f32]| -> __m256 { f32x8::from_slice(t, x).into() };
+            // `vminps` returns its second operand where one is NaN: `min(s, v)` caps `v` at `s`
+            // and keeps NaN, which `vcvtps2dq` turns into `i32::MIN`; the lane mask of `x`
+            // ordered, computed beside the product, clears it.
             let signed = |x: &[f32], s: __m256| -> __m256i {
-                let v = _mm256_mul_ps(load(x), s);
-                let v = _mm256_and_ps(v, _mm256_cmp_ps::<_CMP_ORD_Q>(v, v));
-                _mm256_cvtps_epi32(_mm256_min_ps(v, s))
+                let x = load(x);
+                let ordered = _mm256_castps_si256(_mm256_cmp_ps::<_CMP_ORD_Q>(x, x));
+                let r = _mm256_cvtps_epi32(_mm256_min_ps(s, _mm256_mul_ps(x, s)));
+                _mm256_and_si256(r, ordered)
             };
             // `w = x * 128 + 2^-47` with NaN as 0, and `rint(w - C)`.
             let offset = |x: &[f32]| -> __m256 {
@@ -736,6 +763,55 @@ impl ConvertOut<CQ15> for Simd {
         let input: &[i16] = bytemuck::cast_slice(input);
         match kind {
             // Little-endian `cs16` is byte-identical to `CQ15`.
+            Kind::I16 => out.copy_from_slice(bytes_in),
+            Kind::I8 => dispatch!(simd => q15_to_i8(simd, input, out)),
+            Kind::U8 => dispatch!(simd => q15_to_u8(simd, input, out)),
+        }
+        Ok(bytes)
+    }
+}
+
+impl ConvertOutReal<f32> for Simd {
+    fn convert_out_real(
+        &self,
+        format: &SampleFormat,
+        input: &[f32],
+        output: &mut [u8],
+    ) -> Result<usize> {
+        let Some(kind) = real_kind(format) else {
+            return Fallback.convert_out_real(format, input, output);
+        };
+        let Some(bytes) = fast_bytes(kind, input.len(), output.len()) else {
+            return Fallback.convert_out_real(format, input, output);
+        };
+        let Some(out) = output.get_mut(..bytes) else {
+            return Fallback.convert_out_real(format, input, output);
+        };
+        dispatch!(simd => f32_out(simd, kind, input, out));
+        Ok(bytes)
+    }
+}
+
+impl ConvertOutReal<Q15> for Simd {
+    fn convert_out_real(
+        &self,
+        format: &SampleFormat,
+        input: &[Q15],
+        output: &mut [u8],
+    ) -> Result<usize> {
+        let Some(kind) = real_kind(format) else {
+            return Fallback.convert_out_real(format, input, output);
+        };
+        let Some(bytes) = fast_bytes(kind, input.len(), output.len()) else {
+            return Fallback.convert_out_real(format, input, output);
+        };
+        let Some(out) = output.get_mut(..bytes) else {
+            return Fallback.convert_out_real(format, input, output);
+        };
+        let bytes_in: &[u8] = bytemuck::cast_slice(input);
+        let input: &[i16] = bytemuck::cast_slice(input);
+        match kind {
+            // Little-endian `RS16` is byte-identical to `Q15`.
             Kind::I16 => out.copy_from_slice(bytes_in),
             Kind::I8 => dispatch!(simd => q15_to_i8(simd, input, out)),
             Kind::U8 => dispatch!(simd => q15_to_u8(simd, input, out)),

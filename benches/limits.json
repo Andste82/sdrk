@@ -212,22 +212,28 @@
   },
   "rotate_cq15": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
     }
   },
   "fir": {

@@ -1,6 +1,6 @@
 # Development image for SDRk: everything the milestones M00-M16 need on a Linux
 # host (Rust with all targets, Python golden generator, emulators, instruction
-# counting, WASM tooling). Build context: the repository root.
+# counting, cycle simulation, WASM tooling). Build context: the repository root.
 FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -110,6 +110,59 @@ RUN curl -sfL -o /tmp/qemu.tar.xz https://download.qemu.org/qemu-$QEMU_PLUGINS_V
     && cd / && rm -rf /tmp/qemu.tar.xz /tmp/qemu-$QEMU_PLUGINS_VERSION
 ENV SDRK_SDE=/usr/local/bin/sde64
 ENV SDRK_QEMU_AARCH64=/opt/qemu-plugins/bin/qemu-aarch64
+
+# Simulated cycles per sample (level 2 of the measurement policy, D33 in
+# docs/decisions-log.md, docs/performance.md#measurement-policy):
+# - llvm-mca of LLVM 23.1.1 (the LLVM of the Rust toolchain at the time of the
+#   decision), built from the release source with the X86 and AArch64 targets
+#   only; the Ubuntu llvm package has another version and must not be used for
+#   the published ratios. The checksum is the one of the release attestation.
+ARG LLVM_MCA_VERSION=23.1.1
+ARG LLVM_MCA_SHA256=ebe9be46fe8756d58c5b198ffad0fa2a766257add81a4dc52179bfacc7888ee6
+RUN curl -sfL -o /tmp/llvm.tar.xz \
+       https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_MCA_VERSION/llvm-project-$LLVM_MCA_VERSION.src.tar.xz \
+    && echo "$LLVM_MCA_SHA256  /tmp/llvm.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/llvm.tar.xz -C /tmp \
+       llvm-project-$LLVM_MCA_VERSION.src/llvm \
+       llvm-project-$LLVM_MCA_VERSION.src/cmake \
+       llvm-project-$LLVM_MCA_VERSION.src/third-party \
+       llvm-project-$LLVM_MCA_VERSION.src/libc \
+    && cmake -S /tmp/llvm-project-$LLVM_MCA_VERSION.src/llvm -B /tmp/llvm-build -G Ninja \
+       -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD="X86;AArch64" \
+       -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF \
+       -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF \
+       -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_USE_LINKER=lld \
+    && ninja -C /tmp/llvm-build llvm-mca \
+    && install -D /tmp/llvm-build/bin/llvm-mca /opt/llvm-mca-$LLVM_MCA_VERSION/bin/llvm-mca \
+    && rm -rf /tmp/llvm.tar.xz /tmp/llvm-project-$LLVM_MCA_VERSION.src /tmp/llvm-build
+ENV SDRK_LLVM_MCA=/opt/llvm-mca-23.1.1/bin/llvm-mca
+
+# - Second opinions where a decision depends on a single result (D33): OSACA
+#   (AGPL-3.0; Zen, Intel, Neoverse N1/V2, Cortex-A72) from PyPI, and uiCA
+#   (AGPL-3.0; Intel cores) at a pinned commit. Both are development tools that
+#   only read assembly; nothing of them is linked into SDRk. uiCA's setup
+#   downloads the current instructions.xml of uops.info, which has no version;
+#   its SHA-256 is kept next to the data in /opt/uiCA/instructions.xml.sha256.
+ARG OSACA_VERSION=0.7.1
+ARG UICA_COMMIT=6ebeeab0f8705cae4b17a9362f9c65ef91f5cc44
+RUN UV_PYTHON_INSTALL_DIR=/opt/uv-python uv venv --python 3.12 /opt/sdrk-perf-venv \
+    && VIRTUAL_ENV=/opt/sdrk-perf-venv uv pip install osaca==$OSACA_VERSION plotly \
+    && git clone https://github.com/andreas-abel/uiCA.git /opt/uiCA \
+    && cd /opt/uiCA \
+    && git checkout $UICA_COMMIT \
+    && git submodule update --init \
+    && cd XED-to-XML && /opt/sdrk-perf-venv/bin/python ./mfile.py --opt=2 --no-encoder pymodule \
+    && cp xed.* .. && cd .. \
+    && git submodule deinit -f --all && rm -rf .git/modules/* \
+    && curl -sfL -o instructions.xml https://www.uops.info/instructions.xml \
+    && sha256sum instructions.xml > instructions.xml.sha256 \
+    && /opt/sdrk-perf-venv/bin/python ./convertXML.py instructions.xml \
+    && rm instructions.xml \
+    && printf '#!/bin/sh\nexec /opt/sdrk-perf-venv/bin/python /opt/uiCA/uiCA.py "$@"\n' > /usr/local/bin/uiCA \
+    && chmod +x /usr/local/bin/uiCA \
+    && ln -s /opt/sdrk-perf-venv/bin/osaca /usr/local/bin/osaca
+ENV SDRK_OSACA=/usr/local/bin/osaca
+ENV SDRK_UICA=/usr/local/bin/uiCA
 
 # Golden generator: byte-identical output needs Python 3.12 with the pinned
 # NumPy and SciPy of tests/golden/requirements.txt (tests/golden/README.md);

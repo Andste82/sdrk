@@ -965,8 +965,8 @@ pub const PLANS: [LevelPlan; 7] = [
         rfft: REALFFT,
         fft_cq15_extra: &[],
         cheapest_volk: false,
-        // No KFR for wasm32 (it needs an Emscripten toolchain): CMSIS-DSP gates (D15).
-        kfr: false,
+        // KFR in its Emscripten configuration (sse41 over SIMD128, benches/refs/build.sh, D29).
+        kfr: true,
         baseline: None,
     },
 ];
@@ -3006,7 +3006,7 @@ mod tests {
     fn the_biquads_are_judged_against_kfr_cmsis_and_their_fallback_entries() {
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
-        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
             for k in ["biquad", "biquad_real"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
@@ -3015,10 +3015,6 @@ mod tests {
                 );
             }
         }
-        assert_eq!(
-            comparisons(plan("simd128"), kernel("biquad_real")),
-            (Reference::Cmsis, Vec::new())
-        );
         assert_eq!(
             comparisons(plan("neon"), kernel("biquad_cq15")),
             (Reference::Fallback, vec![Reference::Cmsis])

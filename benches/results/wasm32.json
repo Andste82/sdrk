@@ -60,39 +60,47 @@
           "verdict": "info"
         },
         "biquad": {
-          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
           "goal": true,
           "informational": [
             {
               "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
-              "label": "n = 64",
-              "other_instr_per_sample": 122.64,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 60.71,
-              "ratio": 0.5
-            },
-            {
-              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
-              "label": "n = 100",
-              "other_instr_per_sample": 121.98,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 54.98,
-              "ratio": 0.45
-            },
-            {
-              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
-              "label": "misaligned by one sample",
+              "label": "information: cmsis",
               "other_instr_per_sample": 118.83,
-              "other_snr_db": null,
+              "other_snr_db": 134.9,
               "ours_instr_per_sample": 43.04,
               "ratio": 0.36
+            },
+            {
+              "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
+              "label": "n = 64",
+              "other_instr_per_sample": 112.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 60.74,
+              "ratio": 0.54
+            },
+            {
+              "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
+              "label": "n = 100",
+              "other_instr_per_sample": 106.61,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 55.0,
+              "ratio": 0.52
+            },
+            {
+              "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 96.78,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 43.04,
+              "ratio": 0.44
             }
           ],
-          "other_instr_per_sample": 118.83,
+          "other_instr_per_sample": 96.77,
           "ours_instr_per_sample": 43.04,
-          "ratio": 0.36,
+          "ratio": 0.44,
           "snr_db": {
-            "other": 134.9,
+            "other": 136.06,
             "ours": 136.06
           },
           "status": "release",
@@ -192,37 +200,45 @@
           "verdict": "pass"
         },
         "biquad_real": {
-          "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off)",
           "goal": true,
           "informational": [
             {
               "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 57.94,
+              "other_snr_db": 136.72,
+              "ours_instr_per_sample": 40.09,
+              "ratio": 0.69
+            },
+            {
+              "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off)",
               "label": "n = 64",
-              "other_instr_per_sample": 61.27,
+              "other_instr_per_sample": 56.19,
               "other_snr_db": null,
               "ours_instr_per_sample": 56.6,
-              "ratio": 0.92
+              "ratio": 1.01
             },
             {
-              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off)",
               "label": "n = 100",
-              "other_instr_per_sample": 60.82,
+              "other_instr_per_sample": 53.34,
               "other_snr_db": null,
               "ours_instr_per_sample": 51.55,
-              "ratio": 0.85
+              "ratio": 0.97
             },
             {
-              "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse41, -ffp-contract=off)",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 57.94,
+              "other_instr_per_sample": 48.39,
               "other_snr_db": null,
               "ours_instr_per_sample": 40.08,
-              "ratio": 0.69
+              "ratio": 0.83
             }
           ],
-          "other_instr_per_sample": 57.94,
+          "other_instr_per_sample": 48.39,
           "ours_instr_per_sample": 40.09,
-          "ratio": 0.69,
+          "ratio": 0.83,
           "snr_db": {
             "other": 136.72,
             "ours": 136.72
@@ -1081,17 +1097,27 @@
   "references": {
     "cc": "Ubuntu clang version 21.1.8 (6ubuntu1)",
     "cxx": "",
-    "kfr_cxx": "",
+    "kfr_cxx": "Ubuntu clang version 21.1.8 (6ubuntu1)",
     "libraries": {
       "cmsis_dsp": {
         "build": "generic C with cmsis-biquad.c: -D__GNUC_PYTHON__ -DARM_MATH_LOOPUNROLL -O3 -ffp-contract=off, per level simd128:-msimd128",
         "sha256": "b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56",
         "version": "1.18.0"
       },
+      "emscripten": {
+        "build": "SSE headers of system/include/compat for KFR",
+        "sha256": "795ef929e4dee52bf03de3742c4252bb121e742afac896378d969b5da2db86eb",
+        "version": "6.0.12"
+      },
       "gnuradio_agc_cc": {
         "build": "-O3 -msimd128",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
         "version": "main at ec1bf15"
+      },
+      "kfr": {
+        "build": "kfr-biquad.cpp: clang++ --target=wasm32-wasip1 -std=c++20 -fno-exceptions -fno-rtti -fno-threadsafe-statics -O3 -ffp-contract=off, KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten), per level simd128:-msimd128",
+        "sha256": "4f1603d5b6e609c25d25cff58fe7154a371583fd6d379615b342e44223be0763",
+        "version": "7.2.0"
       },
       "kissfft": {
         "build": "-O3 -msimd128 -DFIXED_POINT=16",
@@ -1102,6 +1128,11 @@
         "build": "generic protokernels, -O3 -msimd128",
         "sha256": "89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628",
         "version": "3.3.0"
+      },
+      "wasi_sysroot": {
+        "build": "headers of libc++ and wasi-libc for KFR",
+        "sha256": "9d813544eeebe38b7b8f2244ed591de46b6db812c6dd1a257ff9f0d2a905a2be",
+        "version": "34.0"
       }
     },
     "platform": "wasm32"

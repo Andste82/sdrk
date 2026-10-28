@@ -10,6 +10,8 @@
 //!   1/N (AArch64 only).
 //! - [`GrAgcCc`]: the `agc_cc` loop of GNU Radio (GPL-3.0-or-later), the reference of the `C32`
 //!   `agc`.
+//! - [`GrPwrSquelchCc`]: the `pwr_squelch_cc` loop of GNU Radio (GPL-3.0-or-later), the
+//!   reference of the `C32` `squelch`.
 //! - [`KfrBiquad`]: the biquad cascade of KFR 7 (`kfr::iir`, GPL-2.0-or-later), the SIMD
 //!   reference of `biquad` and `biquad_real`.
 //! - [`CmsisBiquad`]: the biquad cascades of CMSIS-DSP in generic C (Apache-2.0), the scalar
@@ -426,5 +428,87 @@ impl GrAgcCc {
         }
         #[cfg(not(has_gragc))]
         let _ = n;
+    }
+}
+
+/// The `pwr_squelch_cc` block of GNU Radio (`benches/refs/gr-squelch.c`): the object of the C
+/// translation, which holds the table of its virtual functions, in storage of this wrapper.
+pub struct GrPwrSquelchCc {
+    object: Box<[u64; GR_PWR_SQUELCH_WORDS]>,
+}
+
+/// Words of storage for the C object (it needs 80 bytes on the 64-bit targets).
+const GR_PWR_SQUELCH_WORDS: usize = 16;
+
+#[cfg(has_grsquelch)]
+mod grsquelch_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_pwr_squelch_cc_size() -> usize;
+        pub fn sdrk_gr_pwr_squelch_cc_init(
+            object: *mut u64,
+            db: f64,
+            alpha: f64,
+            ramp: core::ffi::c_int,
+            gate: bool,
+        );
+        pub fn sdrk_gr_pwr_squelch_cc_work(
+            object: *mut u64,
+            noutput_items: core::ffi::c_int,
+            input: *const [f32; 2],
+            output: *mut [f32; 2],
+        ) -> core::ffi::c_int;
+    }
+}
+
+impl GrPwrSquelchCc {
+    /// The object `pwr_squelch_cc(db, alpha, ramp, gate)`; `None` without the library.
+    ///
+    /// # Panics
+    /// If the C object does not fit the storage of the wrapper.
+    #[must_use]
+    pub fn new(db: f64, alpha: f64, ramp: i32, gate: bool) -> Option<Self> {
+        if !cfg!(has_grsquelch) {
+            return None;
+        }
+        let mut object = Box::new([0u64; GR_PWR_SQUELCH_WORDS]);
+        #[cfg(has_grsquelch)]
+        // SAFETY: the storage is checked to hold the object, and it is 8-byte aligned.
+        unsafe {
+            assert!(
+                grsquelch_ffi::sdrk_gr_pwr_squelch_cc_size() <= 8 * GR_PWR_SQUELCH_WORDS,
+                "pwr_squelch_cc: the object is too large"
+            );
+            grsquelch_ffi::sdrk_gr_pwr_squelch_cc_init(object.as_mut_ptr(), db, alpha, ramp, gate);
+        }
+        #[cfg(not(has_grsquelch))]
+        let _ = (db, alpha, ramp, gate, &mut object);
+        Some(GrPwrSquelchCc { object })
+    }
+
+    /// `general_work` over `input`; returns the number of outputs written (all of them while
+    /// the block does not gate).
+    ///
+    /// # Panics
+    /// If the buffers differ in length or hold more than `i32::MAX` samples.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) -> usize {
+        assert_eq!(input.len(), output.len(), "pwr_squelch_cc: length mismatch");
+        let n = core::ffi::c_int::try_from(input.len()).expect("pwr_squelch_cc: too many samples");
+        #[cfg(has_grsquelch)]
+        // SAFETY: both buffers hold `n` pairs and do not overlap (an exclusive borrow of the
+        // output); the object was initialized by `new`.
+        let written = unsafe {
+            grsquelch_ffi::sdrk_gr_pwr_squelch_cc_work(
+                self.object.as_mut_ptr(),
+                n,
+                input.as_ptr(),
+                output.as_mut_ptr(),
+            )
+        };
+        #[cfg(not(has_grsquelch))]
+        let written = {
+            let _ = &mut self.object;
+            n
+        };
+        usize::try_from(written).unwrap_or(0)
     }
 }

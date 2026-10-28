@@ -769,3 +769,216 @@ fn cq15_close_level_is_limited_to_minus_90_db() {
     assert!(st.set_thresholds(-89.0, 3.0).is_err());
     assert_eq!(st, before);
 }
+
+/// Runs `Fallback` and `Reference` over `input` in calls of random lengths (0 to 40 samples,
+/// so that every exit of the fallback's gate loops lands at every position of a call) and
+/// checks outputs and state bit for bit after every call.
+fn agree_in_random_calls<T: sdrk_core::ComplexSample>(
+    rng: &mut Pcg32,
+    new: impl Fn() -> SquelchState<T>,
+    input: &[T],
+) -> usize
+where
+    Fallback: Squelch<T>,
+    Reference: Squelch<T>,
+{
+    let (mut sa, mut sb) = (new(), new());
+    let mut a = vec![T::ZERO; input.len()];
+    let mut b = vec![T::ZERO; input.len()];
+    let (mut at, mut toggles, mut was_open) = (0, 0, sa.is_open());
+    while at < input.len() {
+        let n = (rng.below(41) as usize).min(input.len() - at);
+        let range = at..at + n;
+        Fallback
+            .squelch(&mut sa, &input[range.clone()], &mut a[range.clone()])
+            .unwrap();
+        Reference
+            .squelch(&mut sb, &input[range.clone()], &mut b[range.clone()])
+            .unwrap();
+        assert_eq!(
+            bit_exact(&a[range.clone()], &b[range]),
+            None,
+            "call at {at}"
+        );
+        assert_eq!(sa, sb, "state after the call at {at}");
+        assert_eq!(
+            sa.average_power().to_bits(),
+            sb.average_power().to_bits(),
+            "average after the call at {at}"
+        );
+        toggles += usize::from(sa.is_open() != was_open);
+        was_open = sa.is_open();
+        at += n;
+    }
+    toggles
+}
+
+/// `alpha = 1 - exp(-1 / (fs tau))` for a wanted `alpha` (inverse of the rule of `new`).
+fn tau_for_alpha(alpha: f64) -> f64 {
+    -1.0 / (FS as f64 * (1.0 - alpha).ln())
+}
+
+/// Every path of the `C32` fallback against the reference: the open and the closed loop,
+/// their exits at the levels, the flush to zero reached from both gate states (silence after
+/// a burst decays below `1e-30`), averages next to `1e-30`, non-finite powers (NaN, an
+/// infinite component, a power that overflows) in both gate states, and coefficients from
+/// the largest (0.5) to a small one.
+#[test]
+fn c32_fallback_matches_the_reference_on_every_path() {
+    let mut rng = Pcg32::new(95, 1);
+    let mut input = Vec::new();
+    for burst in 0..24 {
+        let loud = 10f64.powf(-f64::from(burst % 6));
+        for _ in 0..rng.below(200) + 20 {
+            input.push(C32::new(
+                (rng.normal() * loud) as f32,
+                (rng.normal() * loud) as f32,
+            ));
+        }
+        match burst % 4 {
+            // Silence long enough for the average to be flushed (at alpha >= 0.05).
+            0 => input.extend(std::iter::repeat_n(C32::ZERO, 2000)),
+            // Powers next to the flush level and to the smallest normal numbers.
+            1 => {
+                for _ in 0..400 {
+                    let a = 10f64.powf(-14.0 - 2.0 * rng.next_f64());
+                    input.push(C32::new(
+                        (rng.normal() * a) as f32,
+                        (rng.normal() * a) as f32,
+                    ));
+                }
+            }
+            // Non-finite powers while the gate is open (right after the burst) and closed.
+            2 => {
+                for (k, x) in [
+                    C32::new(f32::NAN, 0.0),
+                    C32::new(f32::INFINITY, 1.0),
+                    C32::new(f32::MAX, f32::MAX),
+                    C32::new(0.0, f32::NEG_INFINITY),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    input.push(x);
+                    input.extend(std::iter::repeat_n(C32::new(1e-9, 0.0), 30 * k));
+                }
+            }
+            _ => input.extend(std::iter::repeat_n(C32::new(3e-3, -2e-3), 300)),
+        }
+    }
+    for alpha in [0.5, 0.31, 0.05] {
+        // The last four put the close level below `1e-30` (a subnormal one, the smallest
+        // subnormal and zero): the open gate then needs the flush above the close level.
+        for (t, h) in [
+            (-40.0, 3.0),
+            (-150.0, 0.0),
+            (0.0, 20.0),
+            (-60.0, 0.0),
+            (-150.0, 155.0),
+            (-10.0, 400.0),
+            (-150.0, 300.0),
+            (0.0, 1000.0),
+        ] {
+            let new = || SquelchState::<C32>::new(t, h, tau_for_alpha(alpha), rate()).unwrap();
+            let toggles = agree_in_random_calls(&mut rng, new, &input);
+            if t == -40.0 {
+                assert!(toggles >= 10, "alpha {alpha}: only {toggles} gate changes");
+            }
+        }
+    }
+    // The flush is reached: the average ends at exactly zero after the last silence.
+    let mut st = SquelchState::<C32>::new(-40.0, 3.0, tau_for_alpha(0.5), rate()).unwrap();
+    let mut out = vec![C32::ZERO; 400];
+    Fallback
+        .squelch(&mut st, &[C32::new(0.5, 0.5); 400], &mut out)
+        .unwrap();
+    Fallback
+        .squelch(&mut st, &[C32::ZERO; 400], &mut out)
+        .unwrap();
+    assert_eq!(st.average_power().to_bits(), 0f64.to_bits());
+}
+
+/// A large hysteresis below a low threshold puts the `C32` close level below `1e-30` (or at
+/// zero): an open gate whose average decays into `(close, 1e-30)` is flushed to zero and,
+/// for a close level above zero, closed, as in the reference.
+#[test]
+fn c32_fallback_flushes_above_a_close_level_below_1e_30() {
+    for (t, h, alpha) in [
+        (-150.0, 155.0, None),
+        (-150.0, 170.0, None),
+        (-150.0, 200.0, None),
+        (-150.0, 300.0, None),
+        (-10.0, 400.0, Some(0.5)),
+        (0.0, 1000.0, Some(0.5)),
+    ] {
+        let tau = alpha.map_or(1e-4, tau_for_alpha);
+        let new = || SquelchState::<C32>::new(t, h, tau, rate()).unwrap();
+        let (loud, quiet) = if alpha.is_some() {
+            (C32::new(1.0, 0.0), C32::new(1e-17, 0.0))
+        } else {
+            (C32::new(0.5, 0.5), C32::new(1e-30, 0.0))
+        };
+        let mut input = vec![loud; 100];
+        input.extend(std::iter::repeat_n(quiet, 3000));
+        let (mut sa, mut sb) = (new(), new());
+        let mut a = vec![C32::ZERO; input.len()];
+        let mut b = vec![C32::ZERO; input.len()];
+        Fallback.squelch(&mut sa, &input, &mut a).unwrap();
+        Reference.squelch(&mut sb, &input, &mut b).unwrap();
+        assert_eq!(bit_exact(&a, &b), None, "threshold {t}, hysteresis {h}");
+        assert_eq!(sa, sb, "threshold {t}, hysteresis {h}");
+        assert_eq!(
+            sa.average_power().to_bits(),
+            sb.average_power().to_bits(),
+            "threshold {t}, hysteresis {h}"
+        );
+        assert_eq!(sa.average_power().to_bits(), 0f64.to_bits());
+    }
+}
+
+/// Every path of the `CQ15` fallback (the carried `p + 2^30` and its split into the high and
+/// the low 31 bits) against the reference: full-scale runs that drive the average to its
+/// largest value (`(-32768, -32768)` has the power `2^31` in Q30), digital silence, single
+/// LSBs, random noise, and the largest and smallest coefficients.
+#[test]
+fn cq15_fallback_matches_the_reference_on_every_path() {
+    let mut rng = Pcg32::new(96, 1);
+    let cq = |re: i32, im: i32| CQ15 {
+        re: Q15(re as i16),
+        im: Q15(im as i16),
+    };
+    let mut input = Vec::new();
+    for round in 0..16 {
+        input.extend(std::iter::repeat_n(cq(-32768, -32768), 300 + 100 * round));
+        input.extend(std::iter::repeat_n(cq(32767, -32768), 50));
+        input.extend(std::iter::repeat_n(cq(0, 0), 500));
+        input.extend(std::iter::repeat_n(cq(1, 0), 200));
+        input.extend(std::iter::repeat_n(cq(-1, 1), 200));
+        for _ in 0..300 {
+            let a = 10f64.powf(-4.0 * rng.next_f64());
+            let v = |r: &mut Pcg32| (r.normal() * a * 32768.0).round().clamp(-32768.0, 32767.0);
+            input.push(cq(v(&mut rng) as i32, v(&mut rng) as i32));
+        }
+    }
+    // alpha 0.5, a typical one, and the smallest Q31 coefficient (1 / 2^31).
+    let smallest = tau_for_alpha(1.0 / 2_147_483_648.0);
+    for tau in [tau_for_alpha(0.5), TAU, smallest] {
+        for (t, h) in [(-40.0, 3.0), (-90.0, 0.0), (0.0, 0.0), (-3.0, 60.0)] {
+            if t - h < -90.0 {
+                continue;
+            }
+            let new = || SquelchState::<CQ15>::new(t, h, tau, rate()).unwrap();
+            agree_in_random_calls(&mut rng, new, &input);
+        }
+    }
+    // The average after a long full-scale run is the largest the recursion reaches: just
+    // below 2.0 (2^62 in Q61) and the same in both implementations.
+    let full = vec![cq(-32768, -32768); 20_000];
+    let mut out = vec![CQ15::ZERO; full.len()];
+    let new = || SquelchState::<CQ15>::new(-40.0, 3.0, tau_for_alpha(0.5), rate()).unwrap();
+    let (mut sa, mut sb) = (new(), new());
+    Fallback.squelch(&mut sa, &full, &mut out).unwrap();
+    Reference.squelch(&mut sb, &full, &mut out).unwrap();
+    assert_eq!(sa, sb);
+    assert!(sa.average_power() > 1.99 && sa.average_power() <= 2.0);
+}

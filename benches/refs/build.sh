@@ -14,6 +14,7 @@
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
+# | GNU Radio `pwr_squelch_cc` | main at ec1bf15 (squelch_base_cc_impl.cc and pwr_squelch_cc_impl of gr-analog), see gr-squelch.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `squelch` |
 # | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++), wasm32 (clang++, KFR's Emscripten configuration: `sse41` over the SSE headers of Emscripten); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
 # | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU; see cmsis-biquad.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27) |
 # | wasi-sdk sysroot | 34.0 | Apache-2.0 WITH LLVM-exception (libc++), the licenses of wasi-libc | wasm32 (headers only: libc++ and wasi-libc for the KFR shim, which needs no C++ run-time library) | KFR needs a C++ standard library |
@@ -128,7 +129,7 @@ if [ -n "$kfr_cxx" ]; then
 fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -240,6 +241,12 @@ build_gr_agc() {
     fi
     $cc $GR_AGC_FLAGS -c "$here/gr-agc.c" -o "$work/gr-agc.o"
     $ar rcs "$prefix/lib/libgragc.a" "$work/gr-agc.o"
+}
+
+# The loop of GNU Radio's pwr_squelch_cc, compiled with the same generic flags.
+build_gr_squelch() {
+    $cc $GR_AGC_FLAGS -c "$here/gr-squelch.c" -o "$work/gr-squelch.o"
+    $ar rcs "$prefix/lib/libgrsquelch.a" "$work/gr-squelch.o"
 }
 
 # The levels of the biquad references with their instruction-set flags: those of the measured
@@ -363,9 +370,10 @@ case $platform in
         build_fftw
         build_kissfft
         build_gr_agc
+        build_gr_squelch
         build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk fftw kissfft gragc kfr cmsisdsp)
+        libraries=(volk fftw kissfft gragc grsquelch kfr cmsisdsp)
         ;;
     aarch64)
         build_volk
@@ -373,17 +381,19 @@ case $platform in
         build_kissfft
         build_ne10
         build_gr_agc
+        build_gr_squelch
         build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk fftw kissfft ne10 gragc kfr cmsisdsp)
+        libraries=(volk fftw kissfft ne10 gragc grsquelch kfr cmsisdsp)
         ;;
     wasm32)
         build_volk_wasm
         build_kissfft
         build_gr_agc
+        build_gr_squelch
         build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk kissfft gragc kfr wasisysroot emscripten cmsisdsp)
+        libraries=(volk kissfft gragc grsquelch kfr wasisysroot emscripten cmsisdsp)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -406,6 +416,7 @@ esac
             fftw) entry="\"fftw\": { \"version\": \"$FFTW_VERSION\", \"sha256\": \"$FFTW_SHA256\", \"build\": \"--enable-float $([ "$platform" = aarch64 ] && echo --enable-neon || echo --enable-sse2), CFLAGS=$OPT_FLAGS\" }" ;;
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
+            grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
             wasisysroot) entry="\"wasi_sysroot\": { \"version\": \"$WASISYSROOT_VERSION\", \"sha256\": \"$WASISYSROOT_SHA256\", \"build\": \"headers of libc++ and wasi-libc for KFR\" }" ;;
             emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;

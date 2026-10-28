@@ -7,7 +7,9 @@
 use std::hint::black_box;
 use std::sync::Arc;
 
-use cref_sys::{CmsisBiquad, Fftw, FftwR2c, GrAgcCc, KfrBiquad, KissFft16, Ne10Int16};
+use cref_sys::{
+    CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrPwrSquelchCc, KfrBiquad, KissFft16, Ne10Int16,
+};
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
@@ -42,8 +44,8 @@ pub enum Impl {
     Fallback,
     /// VOLK, called as GNU Radio calls it.
     Volk,
-    /// The loop of a GNU Radio block that is not a VOLK kernel (`agc_cc`), compiled as GNU
-    /// Radio compiles it.
+    /// The loop of a GNU Radio block that is not a VOLK kernel (`agc_cc`, `pwr_squelch_cc`),
+    /// compiled as GNU Radio compiles it.
     GnuRadio,
     /// rustfft, `FftPlanner` (it picks the best planner of the CPU).
     RustFft,
@@ -1868,9 +1870,10 @@ impl Kernel for FmModK {
 // ---------------------------------------------------------------------------------------------
 // squelch
 
-/// `squelch` (no established library: compared with our fallback; not accelerated, so the
-/// entries are `info`). The input is noise with a loud burst in the middle third, so the gate
-/// opens and closes once per call.
+/// `squelch` (not accelerated: the fallback at every level). `C32` is compared with the
+/// `pwr_squelch_cc` loop of GNU Radio, `CQ15` (no counterpart in GNU Radio) with our fallback
+/// (`info`). The input is noise with a loud burst in the middle third, so the gate opens and
+/// closes once per call.
 struct SquelchK<T: ComplexSample> {
     input: Aligned<T>,
     out: Aligned<T>,
@@ -1925,13 +1928,54 @@ fn squelch<T: ComplexSample, B: Squelch<T>>(
     let _ = black_box(backend.squelch(state, black_box(input), out));
 }
 
+/// `alpha = 1 - exp(-1 / (fs tau))` of [`SquelchK::state`] (48 kHz, 2 ms) in f64, as GNU
+/// Radio takes it.
+fn gr_squelch_alpha() -> f64 {
+    1.0 - (-1.0 / (48_000.0 * 0.002f64)).exp()
+}
+
+/// The `pwr_squelch_cc` of GNU Radio with the parameters of the measurement: the open level of
+/// [`SquelchK::state`] as its threshold (it has no hysteresis), the same smoothing coefficient,
+/// no ramp and no gating (zeros while muted, as ours).
+fn gr_squelch() -> Option<GrPwrSquelchCc> {
+    GrPwrSquelchCc::new(-40.0, gr_squelch_alpha(), 0, false)
+}
+
+/// The f64 model of the `pwr_squelch_cc` loop, the accuracy reference of [`Impl::GnuRadio`]:
+/// the power in f64, the average in f64, open while it is at or above the threshold.
+fn gr_squelch_model(input: &[C32]) -> Vec<C32> {
+    let alpha = gr_squelch_alpha();
+    let threshold = 10f64.powf(-40.0 / 10.0);
+    let mut pwr = 0.0f64;
+    input
+        .iter()
+        .map(|x| {
+            let q = f64::from(x.re) * f64::from(x.re) + f64::from(x.im) * f64::from(x.im);
+            pwr = alpha * q + (1.0 - alpha) * pwr;
+            if pwr < threshold {
+                C32::new(0.0, 0.0)
+            } else {
+                *x
+            }
+        })
+        .collect()
+}
+
 impl Kernel for SquelchK<C32> {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let mut gr = gr_squelch();
         for _ in 0..k {
             match which {
                 Impl::Ours => squelch(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => squelch(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::GnuRadio => {
+                    let written = gr
+                        .as_mut()
+                        .expect("gnuradio")
+                        .work(c32_pairs_ref(&self.input), c32_pairs(&mut self.out));
+                    debug_assert_eq!(written, self.input.len());
+                }
                 other => unreachable!("squelch has no {other:?}"),
             }
             black_box(&self.out);
@@ -1940,18 +1984,30 @@ impl Kernel for SquelchK<C32> {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        let mut want = vec![C32::default(); self.input.len()];
-        let _ = Reference.squelch(&mut Self::state(), &self.input, &mut want);
+        let want = if which == Impl::GnuRadio {
+            gr_squelch_model(&self.input)
+        } else {
+            let mut want = vec![C32::default(); self.input.len()];
+            let _ = Reference.squelch(&mut Self::state(), &self.input, &mut want);
+            want
+        };
         snr_db(&c32s(&want), &c32s(&self.out))
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::GnuRadio => gr_squelch().is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => {
+                "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)"
+            }
             _ => "sdrk",
         }
     }

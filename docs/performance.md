@@ -72,6 +72,17 @@ The method is decided (D33); the tooling is planned:
 
 **Derived figure, for orientation only.** `MS/s per GHz = 1000 / cycles per sample` may be computed to estimate how much signal one core can process: it is the simulated in-core throughput with the data in L1, an upper bound. For large blocks of streaming kernels the memory caps it: `samples/s = min(f_CPU / cycles per sample, bandwidth / bytes per sample)`. It is neither published as a result nor gated.
 
+### How the cycles are simulated
+
+Implemented in `xtask/src/mca.rs` (D35) and run by `cargo measure`:
+
+1. callgrind records the execution count of every instruction (`--dump-instr=yes`) of a run with the counted calls and of a run without them; the difference belongs to the counted calls, as in the differential method above (for an FFT, the restore of the input is subtracted as well).
+2. The executed instructions are cut into basic blocks: runs of consecutive instructions with the same count, ended by every jump, call and return. `objdump` disassembles them from the object files of the measured process (our binary, the static references, VOLK's shared library).
+3. Starting from the most executed instructions, blocks are simulated until 99 % of the executed instructions are covered (at most 64 blocks). `llvm-mca` simulates each block as a loop of 200 iterations on the model and gives its cycles per iteration and its port bound (`Block RThroughput`).
+4. The cycles and port bounds of the blocks, weighted by their execution counts, give the cycles per sample and the port bound per sample. The instructions outside the simulated blocks get the cycles per instruction of the simulated ones (the coverage is reported). The efficiency is `port bound / cycles`; the bottleneck class is `throughput` from an efficiency of 0.8 up and `latency` below.
+
+Every block is simulated as if it repeated back to back with itself. That is the steady state of a loop body; for a block that runs once per call it is an approximation, which is small when loop bodies cover most of the instructions.
+
 ### Efficiency: a measure without a reference
 
 `llvm-mca` also gives the port bound of a block (its `Block RThroughput`): the cycles per iteration that the pressure on the execution ports alone would allow, without dependencies. The efficiency of a branch is
@@ -97,9 +108,11 @@ The f64 golden is the mathematical optimum and the first target; an established 
 | --- | --- |
 | Instructions per sample, `count accuracy` | in place (this file) |
 | Fair references for every entry | partly: the entries gated against our own fallback, the kernels without a SIMD branch or without a count are listed in issue #20 (groups A to D) |
-| Simulated cycles (`count mca`, `cargo xtask mca`, `benches/results/mca.json`), efficiency | planned; the recursive kernels (`biquad`, `dc_block`, `deemphasis`, `agc`, `squelch`) first, because their instruction ratio differs most from the cycles |
+| Simulated cycles and efficiency | reported by `cargo measure` at `avx2` (callgrind), not judged and not written to `benches/results`; the levels under SDE and QEMU need their own execution counts, the gates are proposed |
 | `avx512` measurement build and KFR reference at `x86-64-v4` instead of `sapphirerapids` | planned |
-| Accuracy against the achievable optimum, SNR regression guards, Q15 SNR against an f64 golden | planned ([kernels.md](kernels.md#accuracy-policy)) |
+| Accuracy against the achievable optimum | measured and shown per golden case by `cargo measure` (not judged) |
+| SNR regression guards, Q15 SNR against an f64 golden | planned ([kernels.md](kernels.md#accuracy-policy)) |
+| One command per kernel (`cargo measure`) | instructions, count accuracy and golden cases; cycles once level 2 exists |
 
 ## Method
 
@@ -384,7 +397,22 @@ cargo xtask count --pipeline                 # needs valgrind
 cargo xtask count --platform cortex-m4       # needs qemu-system-arm with plugins, arm-none-eabi-gcc and the newlib headers
 ```
 
-Options: `--level L` and `--kernel NAME` (repeatable) restrict the run (the results file is written only for a complete run), `--no-write` keeps `benches/results` unchanged, `--no-variants` skips the informational misaligned and small-block runs, and `--strict` fails for every entry that is not a clean `release` entry (the release check of open item M13-4).
+**One kernel at a glance.** `cargo measure <kernel>` (alias of `cargo xtask measure`) runs every measurement of the [measurement policy](#measurement-policy) that exists for one kernel and prints it as tables; `target/measure/<kernel>.json` gets the same as JSON (`--json` prints it instead of the tables). The name selects every count entry and golden directory that is the name or starts with it and `_` (`biquad_real` selects `biquad_real`, `biquad_real_q15`, `biquad_real_fallback`, `biquad_real_q15_fallback` and the golden cases of `biquad_real`).
+
+```sh
+cargo measure biquad_real                          # the platform of the host, every level
+cargo measure biquad_real --level avx2             # one level (repeatable)
+cargo measure fir --platform x86_64-avx512         # another platform (repeatable)
+cargo measure fft --no-count                       # only the golden cases (--no-golden: only the counts)
+```
+
+- **Counts:** the judged records of `cargo xtask count` for the selected entries (instructions of ours and of the comparison, the ratio, the status and verdict of `benches/limits.json`, the SNR of both against the f64 model). It needs the counters of the level, like `cargo xtask count`; a platform that cannot be counted is reported as not measured. `benches/results` is not written, and the informational variants are not run.
+- **Golden cases:** the golden tests of `sdrk-testkit` (the host build, which detects the level at run time) with the report of `sdrk_testkit::golden` (`SDRK_GOLDEN_REPORT`, [tests/golden/README.md](../tests/golden/README.md)). Per case: the contract floor, the measured SNR (the lowest of all comparisons of the case), the achievable optimum (the expected values rounded once to the sample type) and the distance to it ([kernels.md](kernels.md#accuracy-policy)).
+- **Cycles** (level 2, report only; `--no-cycles` skips them): for every level counted with callgrind (today `avx2`), the execution counts per instruction of ours and of the judged comparison, simulated by `llvm-mca` on the reference model and the counter-model of the level ([how](#how-the-cycles-are-simulated)). Per entry and model: the cycles per sample of both sides, their ratio, our efficiency, the bottleneck class and the coverage. The levels counted under an emulator (SDE, QEMU) and `simd128` are listed as not simulated.
+
+The command fails (exit code 1) when an entry is judged `fail`, a platform cannot be counted or a golden case fails.
+
+Options of `cargo xtask count`: `--level L` and `--kernel NAME` (repeatable) restrict the run (the results file is written only for a complete run), `--no-write` keeps `benches/results` unchanged, `--no-variants` skips the informational misaligned and small-block runs, and `--strict` fails for every entry that is not a clean `release` entry (the release check of open item M13-4).
 
 Tools.
 

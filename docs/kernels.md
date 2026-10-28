@@ -287,7 +287,7 @@ Consequences:
 3. **Q15 kernels also need an SNR against an f64 golden.** Their bit-exact goldens compare with our own Python integer model (`tests/golden/sdrk_golden/q15.py`). That proves that Rust and the model compute the same thing, so the result cannot drift unnoticed. It does not show how close the rounding definition is to the optimum. Example: the Q15 `biquad` rounds and reaches 71.5 dB against the f64 model, CMSIS-DSP truncates and reaches 56.7 dB. That number comes from `count accuracy` today, not from a test.
 4. **Every external reference brings its accuracy comparison.** `count accuracy` runs for every count entry, as the information for step 2.
 
-Status: step 2 exists for the counted entries (`count accuracy`). Step 1 against the achievable optimum, the regression guards of step 3 and the Q15 SNR checks are planned; the kernels whose contract floor is their only accuracy guard today are listed in issue #20.
+Status: step 2 exists for the counted entries (`count accuracy`). Step 1 is measured: `cargo measure <kernel>` shows per golden case the SNR, the optimum and the distance ([performance.md](performance.md#running-the-measurements)); nothing judges it yet. The regression guards of step 3 and the Q15 SNR checks are planned; the kernels whose contract floor is their only accuracy guard today are listed in issue #20.
 
 ### The suite
 

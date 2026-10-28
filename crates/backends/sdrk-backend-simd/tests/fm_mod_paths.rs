@@ -201,6 +201,28 @@ fn chunking_does_not_change_the_result() {
     }
     assert_eq!(bits(&whole), bits(&parts));
     assert_eq!(s1.phase(), s2.phase());
+    // The `CQ15` variant, with full-scale samples between the noise.
+    let q: Vec<Q15> = (0..n)
+        .map(|i| match i % 97 {
+            3 => Q15(-32768),
+            4 => Q15(32767),
+            _ => Q15(rng.next_u32() as i16),
+        })
+        .collect();
+    let mut s1 = start;
+    let mut whole = vec![CQ15::default(); n];
+    Simd.fm_mod(&mut s1, &q, &mut whole).unwrap();
+    let mut s2 = start;
+    let mut parts = vec![CQ15::default(); n];
+    let mut at = 0;
+    for c in chunks(&mut rng, n) {
+        Simd.fm_mod(&mut s2, &q[at..at + c], &mut parts[at..at + c])
+            .unwrap();
+        at += c;
+    }
+    assert_eq!(whole, parts);
+    assert_eq!(s1.phase(), s2.phase());
+    check_q15(start, &q, "chunking input");
 }
 
 #[test]

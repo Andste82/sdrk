@@ -27,6 +27,15 @@
 //! for the next vector. With the feature `nco-tables` the lookups use the entry tables of
 //! `table.rs`; without it only SIMD128 keeps a level-specific path for `C32` (it reads
 //! `COS_F32` directly), every other level and variant runs the generic code.
+//!
+//! AVX2 runs a block in two passes: first the phases of the block into a buffer on the stack
+//! (with the steps of the next vector computed before the scan of the current one), then the
+//! lookups, which read the table offsets with scalar loads from that buffer. One loop with
+//! both halves keeps more instructions waiting for the long chain of a vector (conversion,
+//! product, floor, scan, extraction, table load, interpolation) than the schedulers hold
+//! (`llvm-mca` `znver3`: the vector scheduler full in most cycles, 33.6 simulated cycles per vector against a port bound of 12.5), and the lane
+//! extractions compete with the shuffles for the same ports. A block that fails the input
+//! test skips the second pass.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
@@ -331,32 +340,39 @@ mod x86 {
         _MM_FROUND_NO_EXC, _MM_FROUND_TO_NEG_INF, _mm_add_epi32, _mm_add_pd, _mm_and_si128,
         _mm_castpd_ps, _mm_castps_si128, _mm_cmpgt_epi32, _mm_cmplt_epi16, _mm_cmplt_pd,
         _mm_cvtepi16_epi32, _mm_cvtepi32_pd, _mm_cvtps_pd, _mm_cvtsi128_si32, _mm_floor_pd,
-        _mm_max_epi16, _mm_max_epi32, _mm_movehl_ps, _mm_movemask_epi8, _mm_mul_pd, _mm_set1_epi16,
-        _mm_set1_epi32, _mm_set1_pd, _mm_setzero_si128, _mm_shuffle_epi32, _mm_shuffle_ps,
-        _mm_slli_si128, _mm_srai_epi32, _mm_sub_pd, _mm_unpackhi_epi16, _mm_unpackhi_epi64,
-        _mm_unpacklo_epi16, _mm256_add_epi32, _mm256_add_pd, _mm256_and_si256, _mm256_castpd_ps,
-        _mm256_castpd_si256, _mm256_castps_pd, _mm256_castps_si256, _mm256_castps256_ps128,
-        _mm256_cmpgt_epi32, _mm256_cvtepi32_pd, _mm256_cvtps_pd, _mm256_cvtsi256_si32,
-        _mm256_extractf128_ps, _mm256_floor_pd, _mm256_max_epi32, _mm256_movemask_epi8,
-        _mm256_mul_pd, _mm256_permute2x128_si256, _mm256_permute4x64_pd,
-        _mm256_permutevar8x32_epi32, _mm256_set1_epi32, _mm256_set1_pd, _mm256_setzero_si256,
-        _mm256_shuffle_epi32, _mm256_shuffle_ps, _mm256_slli_si256, _mm512_add_epi32,
-        _mm512_add_pd, _mm512_add_round_pd, _mm512_and_si512, _mm512_bslli_epi128,
-        _mm512_castpd_si512, _mm512_castps_pd, _mm512_castps_si512, _mm512_castps512_ps256,
-        _mm512_castsi512_si256, _mm512_cmpgt_epi32_mask, _mm512_cvtepi16_epi32, _mm512_cvtepi32_pd,
-        _mm512_cvtps_pd, _mm512_cvtsi512_si32, _mm512_extractf64x4_pd, _mm512_extracti64x4_epi64,
+        _mm_max_epi16, _mm_max_epi32, _mm_movehl_ps, _mm_movemask_epi8, _mm_mul_pd, _mm_set_epi64x,
+        _mm_set1_epi16, _mm_set1_epi32, _mm_set1_pd, _mm_setzero_si128, _mm_shuffle_epi32,
+        _mm_shuffle_ps, _mm_slli_si128, _mm_srai_epi32, _mm_sub_pd, _mm_unpackhi_epi16,
+        _mm_unpackhi_epi64, _mm_unpacklo_epi16, _mm256_add_epi16, _mm256_add_epi32, _mm256_add_pd,
+        _mm256_add_ps, _mm256_and_si256, _mm256_castpd_ps, _mm256_castpd_si256, _mm256_castps_pd,
+        _mm256_castps_si256, _mm256_castps128_ps256, _mm256_castps256_ps128,
+        _mm256_castsi128_si256, _mm256_castsi256_ps, _mm256_cmpgt_epi32, _mm256_cvtepi32_pd,
+        _mm256_cvtepi32_ps, _mm256_cvtps_pd, _mm256_cvtsi256_si32, _mm256_extractf128_ps,
+        _mm256_floor_pd, _mm256_insertf128_ps, _mm256_inserti128_si256, _mm256_max_epi32,
+        _mm256_movemask_epi8, _mm256_mul_pd, _mm256_mul_ps, _mm256_mulhrs_epi16,
+        _mm256_permute2x128_si256, _mm256_permute4x64_pd, _mm256_permutevar8x32_epi32,
+        _mm256_permutevar8x32_ps, _mm256_set1_epi16, _mm256_set1_epi32, _mm256_set1_pd,
+        _mm256_setr_epi8, _mm256_setr_epi32, _mm256_setzero_ps, _mm256_setzero_si256,
+        _mm256_shuffle_epi8, _mm256_shuffle_epi32, _mm256_shuffle_ps, _mm256_slli_epi32,
+        _mm256_slli_si256, _mm256_unpackhi_pd, _mm256_unpacklo_pd, _mm512_add_epi32, _mm512_add_pd,
+        _mm512_add_round_pd, _mm512_and_si512, _mm512_bslli_epi128, _mm512_castpd_si512,
+        _mm512_castps_pd, _mm512_castps_si512, _mm512_castps512_ps256, _mm512_castsi512_si256,
+        _mm512_cmpgt_epi32_mask, _mm512_cvtepi16_epi32, _mm512_cvtepi32_pd, _mm512_cvtps_pd,
+        _mm512_cvtsi512_si32, _mm512_extractf64x4_pd, _mm512_extracti64x4_epi64,
         _mm512_maskz_permutexvar_epi32, _mm512_max_epi32, _mm512_mul_pd, _mm512_permutex2var_epi32,
         _mm512_permutexvar_epi32, _mm512_set1_epi32, _mm512_set1_pd, _mm512_setr_epi32,
         _mm512_setzero_si512,
     };
 
-    use fearless_simd::{f32x4, f32x8, f32x16, i16x8, i16x16, prelude::*};
-
-    use super::{MAGIC, blocks};
-    use crate::table::x86::{
-        cos_sin_f32_x4, cos_sin_f32_x8, cos_sin_f32_x16, cos_sin_q15_x4, cos_sin_q15_x4_sse2,
-        cos_sin_q15_x8, cos_sin_q15_x16,
+    use fearless_simd::{
+        Simd as SimdToken, f32x4, f32x8, f32x16, i16x8, i16x16, prelude::*, u32x8,
     };
+
+    use super::{BLOCK, MAGIC, blocks};
+    use crate::table::x86::{
+        cos_sin_f32_x4, cos_sin_f32_x16, cos_sin_q15_x4, cos_sin_q15_x4_sse2, cos_sin_q15_x16,
+    };
+    use crate::table::{entry_f32_at, entry_q15_at};
 
     /// The running maximum of the input test on SSE2, which has no 32-bit maximum: the 16-bit
     /// maximum of the high halves of the absolute values (the low halves are cleared).
@@ -618,6 +634,20 @@ mod x86 {
         _mm256_castpd_si256(_mm256_permute4x64_pd::<0xD8>(w))
     }
 
+    /// [`floor_x8`] of `lo` = samples 0, 1, 4, 5 and `hi` = samples 2, 3, 6, 7: the low words
+    /// of the two vectors interleave in-lane into sample order, without the cross-lane permute.
+    /// For `CQ15`, whose input is reordered by the shuffle that selects the halves anyway;
+    /// for `C32` the reordered input costs more than the permute saves (`alderlake`).
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn floor_x8_split(lo: __m256d, hi: __m256d) -> __m256i {
+        let magic = _mm256_set1_pd(MAGIC);
+        let a = _mm256_castpd_ps(_mm256_add_pd(_mm256_floor_pd(lo), magic));
+        let b = _mm256_castpd_ps(_mm256_add_pd(_mm256_floor_pd(hi), magic));
+        // [a0 a1 b0 b1 | a2 a3 b2 b3] in 32-bit lanes: samples 0 to 3 | 4 to 7.
+        _mm256_castps_si256(_mm256_shuffle_ps::<0x88>(a, b))
+    }
+
     /// The phases `carry + inclusive prefix sum of st` of eight steps: an in-lane scan, then
     /// the total of the low half added to the high half.
     #[target_feature(enable = "avx2")]
@@ -643,6 +673,107 @@ mod x86 {
         )
     }
 
+    /// Pass 1 of the AVX2 modulators: the phases of the vectors of eight samples of `xb` into
+    /// `phases`, with `steps` giving the wrapped steps of one vector. The steps of the next vector
+    /// are computed before the phases of the current one (software pipelining), so that the long
+    /// chain of the steps (conversion, product, floor) does not hold the scan back.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn phases_x8<S: SimdToken, T>(
+        simd: S,
+        xb: &[T],
+        phases: &mut [u32],
+        carry: &mut __m256i,
+        mut steps: impl FnMut(&[T]) -> __m256i,
+    ) {
+        let Some((first, rest)) = xb.split_at_checked(8) else {
+            return;
+        };
+        let mut st = steps(first);
+        let mut outs = phases.chunks_exact_mut(8);
+        let mut scan = |s: __m256i, out: &mut [u32]| {
+            let p = scan_x8(s, *carry);
+            *carry = _mm256_permutevar8x32_epi32(p, _mm256_set1_epi32(7));
+            u32x8::simd_from(simd, p).store_slice(out);
+        };
+        for (xv, out) in rest.chunks_exact(8).zip(&mut outs) {
+            let next = steps(xv);
+            scan(st, out);
+            st = next;
+        }
+        if let Some(out) = outs.next() {
+            scan(st, out);
+        }
+    }
+
+    /// Interleaved `(cos, sin)` of the eight phases `ph` (samples 0 to 3, samples 4 to 7):
+    /// the entries of `COS_SIN_F32` interpolated as in `cos_sin_f32_x4` of `table.rs`, with
+    /// the table offsets from scalar loads of the phases (integer instructions) instead of lane
+    /// extractions (two vector instructions per lane).
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn lookup_x8<S: SimdToken>(simd: S, ph: &[u32]) -> (__m256, __m256) {
+        let &[o0, o1, o2, o3, o4, o5, o6, o7] = ph else {
+            return (_mm256_setzero_ps(), _mm256_setzero_ps());
+        };
+        let p: __m256i = u32x8::from_slice(simd, ph).into();
+        let f = _mm256_cvtepi32_ps(_mm256_and_si256(p, _mm256_set1_epi32(0xF_FFFF)));
+        // The byte offset `16 * (p >> 20)` of the entry.
+        let load =
+            |p: u32| -> __m128 { f32x4::simd_from(simd, entry_f32_at((p >> 16) & 0xFFF0)).into() };
+        let pair = |a: u32, b: u32| {
+            _mm256_castps_pd(_mm256_insertf128_ps::<1>(
+                _mm256_castps128_ps256(load(a)),
+                load(b),
+            ))
+        };
+        // [e0 | e2], [e1 | e3]: one in-lane unpack gives samples 0 to 3 in output order.
+        let (e02, e13, e46, e57) = (pair(o0, o2), pair(o1, o3), pair(o4, o6), pair(o5, o7));
+        let lo = _mm256_permutevar8x32_ps(f, _mm256_setr_epi32(0, 0, 1, 1, 2, 2, 3, 3));
+        let hi = _mm256_permutevar8x32_ps(f, _mm256_setr_epi32(4, 4, 5, 5, 6, 6, 7, 7));
+        let interp = |e0: __m256d, e1: __m256d, f: __m256| {
+            let a = _mm256_castpd_ps(_mm256_unpacklo_pd(e0, e1));
+            let d = _mm256_castpd_ps(_mm256_unpackhi_pd(e0, e1));
+            _mm256_add_ps(a, _mm256_mul_ps(d, f))
+        };
+        (interp(e02, e13, lo), interp(e46, e57, hi))
+    }
+
+    /// `(cos, sin)` as a `CQ15` pair per lane of the eight phases `ph`: the same entries and
+    /// operations as `cos_sin_q15_x8` of `table.rs`, with the table offsets from scalar loads
+    /// of the phases (see [`lookup_x8`]).
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn lookup_q15_x8<S: SimdToken>(simd: S, ph: &[u32]) -> __m256i {
+        let &[p0, p1, p2, p3, p4, p5, p6, p7] = ph else {
+            return _mm256_setzero_si256();
+        };
+        // The byte offset `8 * (p >> 20)` of the entry.
+        let entry = |p: u32| -> i64 { bytemuck::cast(entry_q15_at((p >> 17) & 0x7FF8)) };
+        let quad = |a: u32, b: u32, c: u32, d: u32| {
+            let lo = _mm256_castsi128_si256(_mm_set_epi64x(entry(b), entry(a)));
+            _mm256_castsi256_ps(_mm256_inserti128_si256::<1>(
+                lo,
+                _mm_set_epi64x(entry(d), entry(c)),
+            ))
+        };
+        // [e0 e1 | e4 e5], [e2 e3 | e6 e7]: one in-lane shuffle gives samples 0 to 7 in order.
+        let e0 = quad(p0, p1, p4, p5);
+        let e1 = quad(p2, p3, p6, p7);
+        let a = _mm256_castps_si256(_mm256_shuffle_ps::<0x88>(e0, e1));
+        let d = _mm256_castps_si256(_mm256_shuffle_ps::<0xDD>(e0, e1));
+        // The fractions `(p >> 5) & 0x7FFF` in both 16-bit halves of a lane: bytes 1 and 2 of
+        // `p << 3`, twice (as in `table.rs`).
+        let p: __m256i = u32x8::from_slice(simd, ph).into();
+        let dup = _mm256_setr_epi8(
+            1, 2, 1, 2, 5, 6, 5, 6, 9, 10, 9, 10, 13, 14, 13, 14, 1, 2, 1, 2, 5, 6, 5, 6, 9, 10, 9,
+            10, 13, 14, 13, 14,
+        );
+        let f = _mm256_shuffle_epi8(_mm256_slli_epi32::<3>(p), dup);
+        let f = _mm256_and_si256(f, _mm256_set1_epi16(0x7FFF));
+        _mm256_add_epi16(a, _mm256_mulhrs_epi16(d, f))
+    }
+
     fearless_simd::kernel!(
         pub(super) fn f32_avx2(
             t: Avx2,
@@ -654,28 +785,31 @@ mod x86 {
         ) -> (usize, u32) {
             let kk = _mm256_set1_pd(k);
             let abs = _mm256_set1_epi32(i32::MAX);
-            let last = _mm256_set1_epi32(7);
             let mut carry = _mm256_set1_epi32(phase as i32);
+            let mut phases = [0u32; BLOCK * 8];
             let done = blocks(8, x, y, |xb, yb| {
                 let start = carry;
                 let mut m = _mm256_setzero_si256();
-                for (xv, yv) in xb.chunks_exact(8).zip(yb.chunks_exact_mut(16)) {
+                // Pass 1: the phases of the block.
+                phases_x8(t, xb, &mut phases, &mut carry, |xv: &[f32]| {
                     let x: __m256 = f32x8::from_slice(t, xv).into();
                     m = _mm256_max_epi32(m, _mm256_and_si256(_mm256_castps_si256(x), abs));
                     let (lo, hi) = scaled_x8(x, kk);
-                    let p = scan_x8(floor_x8(lo, hi), carry);
-                    carry = _mm256_permutevar8x32_epi32(p, last);
-                    let (o0, o1) = cos_sin_f32_x8(t, p);
+                    floor_x8(lo, hi)
+                });
+                let over = _mm256_cmpgt_epi32(m, _mm256_set1_epi32(limit));
+                if _mm256_movemask_epi8(over) != 0 {
+                    carry = start;
+                    return false;
+                }
+                // Pass 2: the lookups.
+                for (pv, yv) in phases.chunks_exact(8).zip(yb.chunks_exact_mut(16)) {
+                    let (o0, o1) = lookup_x8(t, pv);
                     let (d0, d1) = yv.split_at_mut(8);
                     f32x8::simd_from(t, o0).store_slice(d0);
                     f32x8::simd_from(t, o1).store_slice(d1);
                 }
-                let over = _mm256_cmpgt_epi32(m, _mm256_set1_epi32(limit));
-                let ok = _mm256_movemask_epi8(over) == 0;
-                if !ok {
-                    carry = start;
-                }
-                ok
+                true
             });
             (done, _mm256_cvtsi256_si32(carry) as u32)
         }
@@ -691,18 +825,22 @@ mod x86 {
         ) -> (usize, u32) {
             let kk = _mm256_set1_pd(k15);
             let half = _mm256_set1_pd(0.5);
-            let last = _mm256_set1_epi32(7);
             let mut carry = _mm256_set1_epi32(phase as i32);
+            let mut phases = [0u32; BLOCK * 8];
             let done = blocks(8, x, y, |xb, yb| {
-                for (xv, yv) in xb.chunks_exact(8).zip(yb.chunks_exact_mut(16)) {
+                // Pass 1: the phases of the block.
+                phases_x8(t, xb, &mut phases, &mut carry, |xv: &[i16]| {
                     let q: __m128i = i16x8::from_slice(t, xv).into();
-                    let lo = _mm256_cvtepi32_pd(_mm_cvtepi16_epi32(q));
-                    let hi = _mm256_cvtepi32_pd(_mm_cvtepi16_epi32(_mm_unpackhi_epi64(q, q)));
+                    // Samples 0, 1, 4, 5 and 2, 3, 6, 7 (the order of `floor_x8_split`).
+                    let lo = _mm256_cvtepi32_pd(_mm_cvtepi16_epi32(_mm_shuffle_epi32::<0x08>(q)));
+                    let hi = _mm256_cvtepi32_pd(_mm_cvtepi16_epi32(_mm_shuffle_epi32::<0x0D>(q)));
                     let lo = _mm256_add_pd(_mm256_mul_pd(lo, kk), half);
                     let hi = _mm256_add_pd(_mm256_mul_pd(hi, kk), half);
-                    let p = scan_x8(floor_x8(lo, hi), carry);
-                    carry = _mm256_permutevar8x32_epi32(p, last);
-                    i16x16::simd_from(t, cos_sin_q15_x8(p)).store_slice(yv);
+                    floor_x8_split(lo, hi)
+                });
+                // Pass 2: the lookups.
+                for (pv, yv) in phases.chunks_exact(8).zip(yb.chunks_exact_mut(16)) {
+                    i16x16::simd_from(t, lookup_q15_x8(t, pv)).store_slice(yv);
                 }
                 true
             });

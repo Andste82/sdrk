@@ -32,10 +32,17 @@ pub struct lv_16sc_t {
 /// Whether the library was found at build time.
 pub const AVAILABLE: bool = cfg!(not(no_volk));
 
-/// Whether the functions of [`native`] exist: VOLK's own build (x86-64, AArch64). The wasm32
-/// library of `benches/refs/volk-wasm.c` has only the generic protokernels of the other
-/// declarations.
+/// Whether the linked VOLK is VOLK's own build (x86-64, AArch64) with its SIMD protokernels.
+/// The comparisons of the first rounds that use the functions of [`native`],
+/// [`volk_8i_convert_16i`] and [`volk_32f_x2_dot_prod_32f`] check this constant (or
+/// [`HAS_8I_CONVERT_16I`], [`AVAILABLE_REAL_DOT`]) and therefore stay off on wasm32.
 pub const NATIVE: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
+
+/// Whether every function declared here links: with VOLK on every platform. Since the fallback
+/// round the wasm32 library of `benches/refs/volk-wasm.c` exports the generic protokernels of
+/// all declarations (VOLK's own dispatch on a machine without SIMD), so a comparison that
+/// should also run at `simd128` checks this constant instead of [`NATIVE`].
+pub const FULL: bool = AVAILABLE;
 
 /// The signature of `volk_32fc_32f_dot_prod_32fc` and its aligned variant.
 pub type DotProd = unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const f32, c_uint);
@@ -59,7 +66,6 @@ pub struct volk_func_desc_t {
 
 #[cfg(not(no_volk))]
 mod ffi {
-    #[cfg(not(target_arch = "wasm32"))]
     use super::DotProdReal;
     use super::{DotProd, lv_16sc_t, lv_32fc_t, volk_func_desc_t};
     use core::ffi::{c_char, c_uint};
@@ -72,8 +78,6 @@ mod ffi {
             Option<unsafe extern "C" fn(*mut f32, *const i8, f32, c_uint)>;
         pub static mut volk_16i_s32f_convert_32f:
             Option<unsafe extern "C" fn(*mut f32, *const i16, f32, c_uint)>;
-        // Not in the wasm32 build of `benches/refs/volk-wasm.c`.
-        #[cfg(not(target_arch = "wasm32"))]
         pub static mut volk_8i_convert_16i:
             Option<unsafe extern "C" fn(*mut i16, *const i8, c_uint)>;
         pub static mut volk_32f_s32f_convert_16i:
@@ -107,7 +111,6 @@ mod ffi {
 
         pub fn volk_8i_s32f_convert_32f_get_func_desc() -> volk_func_desc_t;
         pub fn volk_16i_s32f_convert_32f_get_func_desc() -> volk_func_desc_t;
-        #[cfg(not(target_arch = "wasm32"))]
         pub fn volk_8i_convert_16i_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32f_s32f_convert_16i_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32f_s32f_convert_8i_get_func_desc() -> volk_func_desc_t;
@@ -126,14 +129,16 @@ mod ffi {
         pub fn volk_compiler_flags() -> *const c_char;
     }
 
-    // The wasm32 build of VOLK (`benches/refs/volk-wasm.c`) holds only the kernels above.
-    #[cfg(not(target_arch = "wasm32"))]
     unsafe extern "C" {
         pub static mut volk_32f_x2_dot_prod_32f_a: Option<DotProdReal>;
         pub static mut volk_32f_x2_dot_prod_32f:
             Option<unsafe extern "C" fn(*mut f32, *const f32, *const f32, c_uint)>;
+        pub static mut volk_32fc_x2_dot_prod_32fc: Option<
+            unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const lv_32fc_t, c_uint),
+        >;
 
         pub fn volk_32f_x2_dot_prod_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_x2_dot_prod_32fc_get_func_desc() -> volk_func_desc_t;
     }
 }
 
@@ -201,24 +206,20 @@ wrappers! {
     fn volk_32fc_32f_dot_prod_32fc(result: *mut lv_32fc_t, a: *const lv_32fc_t, taps: *const f32, n: u32);
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 wrappers! {
     /// `*result = sum a[i] * b[i]`.
     fn volk_32f_x2_dot_prod_32f(result: *mut f32, a: *const f32, b: *const f32, n: u32);
+    /// `*result = sum a[i] * b[i]` of complex vectors (no conjugate).
+    fn volk_32fc_x2_dot_prod_32fc(result: *mut lv_32fc_t, a: *const lv_32fc_t, b: *const lv_32fc_t, n: u32);
 }
 
-/// Without this kernel (wasm32): never called, see [`NATIVE`].
-#[cfg(target_arch = "wasm32")]
-pub unsafe fn volk_32f_x2_dot_prod_32f(_: *mut f32, _: *const f32, _: *const f32, _: u32) {
-    unreachable!("VOLK for wasm32 has no volk_32f_x2_dot_prod_32f")
-}
-
-/// The VOLK functions that only VOLK's own build has ([`NATIVE`]): without them (wasm32, or no
-/// VOLK) every wrapper is a failing stub.
+/// The VOLK functions that the first rounds compared only against VOLK's own build
+/// ([`NATIVE`]); since the fallback round they exist on wasm32 too (see [`FULL`]). Without
+/// VOLK every wrapper is a failing stub.
 pub mod native {
     use super::lv_32fc_t;
 
-    #[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+    #[cfg(not(no_volk))]
     pub(crate) mod ffi {
         use crate::{lv_32fc_t, volk_func_desc_t};
         use core::ffi::c_uint;
@@ -245,7 +246,7 @@ pub mod native {
         ($( $(#[$m:meta])* fn $name:ident($($a:ident: $t:ty),*); )+) => {
             $(
                 $(#[$m])*
-                #[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+                #[cfg(not(no_volk))]
                 pub unsafe fn $name($($a: $t),*) {
                     // SAFETY: as for the wrappers of the parent module.
                     unsafe {
@@ -255,7 +256,7 @@ pub mod native {
                     }
                 }
                 $(#[$m])*
-                #[cfg(any(no_volk, target_arch = "wasm32"))]
+                #[cfg(no_volk)]
                 pub unsafe fn $name($(_: $t),*) {
                     unreachable!("this VOLK function is not available")
                 }
@@ -275,12 +276,12 @@ pub mod native {
     }
 }
 
-/// Whether [`volk_8i_convert_16i`] is in the linked VOLK: not in the wasm32 build of the
-/// generic protokernels (`benches/refs/volk-wasm.c`).
+/// Whether the comparison with [`volk_8i_convert_16i`] of the first rounds runs: with VOLK's own
+/// build only (see [`NATIVE`]); the function itself links wherever VOLK does ([`FULL`]).
 pub const HAS_8I_CONVERT_16I: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
 
 /// `out[i] = in[i] * 256`.
-#[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+#[cfg(not(no_volk))]
 pub unsafe fn volk_8i_convert_16i(out: *mut i16, input: *const i8, n: u32) {
     // SAFETY: as in the functions of `wrappers!`.
     unsafe {
@@ -290,8 +291,8 @@ pub unsafe fn volk_8i_convert_16i(out: *mut i16, input: *const i8, n: u32) {
     }
 }
 
-/// Not available in this build (see [`HAS_8I_CONVERT_16I`]).
-#[cfg(any(no_volk, target_arch = "wasm32"))]
+/// Without VOLK.
+#[cfg(no_volk)]
 pub unsafe fn volk_8i_convert_16i(_: *mut i16, _: *const i8, _: u32) {
     unreachable!("volk_8i_convert_16i is not available")
 }
@@ -314,23 +315,23 @@ pub fn dot_prod_a() -> Option<DotProd> {
 }
 
 /// The current value of `volk_32f_x2_dot_prod_32f_a`, the aligned dot product as GNU Radio's
-/// `fir_filter_fff` calls it (see [`dot_prod_a`]). `None` on wasm32, whose build of VOLK does not
-/// have it.
-#[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+/// `fir_filter_fff` calls it (see [`dot_prod_a`]).
+#[cfg(not(no_volk))]
 #[must_use]
 pub fn dot_prod_real_a() -> Option<DotProdReal> {
     // SAFETY: a plain read of the variable; only VOLK's stub writes it, on the first call.
     unsafe { (&raw const ffi::volk_32f_x2_dot_prod_32f_a).read() }
 }
 
-/// Without VOLK, or on wasm32: `None`.
-#[cfg(any(no_volk, target_arch = "wasm32"))]
+/// Without VOLK: `None`.
+#[cfg(no_volk)]
 #[must_use]
 pub fn dot_prod_real_a() -> Option<DotProdReal> {
     None
 }
 
-/// Whether [`dot_prod_real_a`] is available in this build.
+/// Whether the comparison with [`dot_prod_real_a`] of the first rounds runs: with VOLK's own
+/// build only (see [`NATIVE`]); the function itself links wherever VOLK does ([`FULL`]).
 pub const AVAILABLE_REAL_DOT: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
 
 /// VOLK's alignment in bytes (the largest alignment of the selected machine's architectures).
@@ -412,7 +413,6 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
         let get: unsafe extern "C" fn() -> volk_func_desc_t = match name {
             "volk_8i_s32f_convert_32f" => ffi::volk_8i_s32f_convert_32f_get_func_desc,
             "volk_16i_s32f_convert_32f" => ffi::volk_16i_s32f_convert_32f_get_func_desc,
-            #[cfg(not(target_arch = "wasm32"))]
             "volk_8i_convert_16i" => ffi::volk_8i_convert_16i_get_func_desc,
             "volk_32f_s32f_convert_16i" => ffi::volk_32f_s32f_convert_16i_get_func_desc,
             "volk_32f_s32f_convert_8i" => ffi::volk_32f_s32f_convert_8i_get_func_desc,
@@ -428,18 +428,12 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
                 ffi::volk_32fc_x2_multiply_conjugate_32fc_get_func_desc
             }
             "volk_32fc_s32f_atan2_32f" => ffi::volk_32fc_s32f_atan2_32f_get_func_desc,
-            #[cfg(not(target_arch = "wasm32"))]
-            "volk_32fc_32f_multiply_32fc" => {
-                native::ffi::volk_32fc_32f_multiply_32fc_get_func_desc
-            }
-            #[cfg(not(target_arch = "wasm32"))]
+            "volk_32fc_32f_multiply_32fc" => native::ffi::volk_32fc_32f_multiply_32fc_get_func_desc,
             "volk_32f_log2_32f" => native::ffi::volk_32f_log2_32f_get_func_desc,
-            #[cfg(not(target_arch = "wasm32"))]
             "volk_32f_s32f_multiply_32f" => native::ffi::volk_32f_s32f_multiply_32f_get_func_desc,
-            #[cfg(not(target_arch = "wasm32"))]
             "volk_32f_s32f_add_32f" => native::ffi::volk_32f_s32f_add_32f_get_func_desc,
-            #[cfg(not(target_arch = "wasm32"))]
             "volk_32f_x2_dot_prod_32f" => ffi::volk_32f_x2_dot_prod_32f_get_func_desc,
+            "volk_32fc_x2_dot_prod_32fc" => ffi::volk_32fc_x2_dot_prod_32fc_get_func_desc,
             _ => return None,
         };
         // SAFETY: the descriptor functions take no arguments; the descriptor points to static

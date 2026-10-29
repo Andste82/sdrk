@@ -180,7 +180,7 @@ fn backends_names_the_backend_of_every_kernel() {
         assert_eq!(string(&b, "fir_decimate"), "simd");
     }
     assert_eq!(string(&b, "ddc"), "chained");
-    assert_eq!(string(&b, "scale"), "fallback");
+    assert_eq!(string(&b, "squelch"), "fallback");
 }
 
 #[wasm_bindgen_test]

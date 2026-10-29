@@ -231,7 +231,7 @@ fn validate_schema_and_backends() {
     assert!(backends.iter().all(|(_, b)| *b != "none"), "{backends:?}");
     let backend = |kernel: &str| backends.iter().find(|(k, _)| *k == kernel).unwrap().1;
     assert_eq!(backend("ddc"), "chained");
-    assert_eq!(backend("scale"), "fallback");
+    assert_eq!(backend("squelch"), "fallback");
     assert_eq!(
         backend("rotate"),
         if sdrk::SIMD_BACKEND {

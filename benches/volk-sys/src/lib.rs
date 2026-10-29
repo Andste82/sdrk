@@ -92,6 +92,7 @@ mod ffi {
             ),
         >;
         pub static mut volk_32fc_32f_dot_prod_32fc_a: Option<DotProd>;
+        pub static mut volk_32fc_32f_dot_prod_32fc: Option<DotProd>;
         pub static mut volk_32fc_magnitude_squared_32f:
             Option<unsafe extern "C" fn(*mut f32, *const lv_32fc_t, c_uint)>;
         pub static mut volk_32fc_magnitude_32f:
@@ -129,6 +130,9 @@ mod ffi {
     #[cfg(not(target_arch = "wasm32"))]
     unsafe extern "C" {
         pub static mut volk_32f_x2_dot_prod_32f_a: Option<DotProdReal>;
+        pub static mut volk_32f_x2_dot_prod_32f:
+            Option<unsafe extern "C" fn(*mut f32, *const f32, *const f32, c_uint)>;
+
         pub fn volk_32f_x2_dot_prod_32f_get_func_desc() -> volk_func_desc_t;
     }
 }
@@ -192,6 +196,21 @@ wrappers! {
     );
     /// `out[i] = atan2(im, re) / norm`.
     fn volk_32fc_s32f_atan2_32f(out: *mut f32, input: *const lv_32fc_t, norm: f32, n: u32);
+    /// `*result = sum a[i] * taps[i]` of complex samples with real taps (with the alignment
+    /// check of the dispatcher).
+    fn volk_32fc_32f_dot_prod_32fc(result: *mut lv_32fc_t, a: *const lv_32fc_t, taps: *const f32, n: u32);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+wrappers! {
+    /// `*result = sum a[i] * b[i]`.
+    fn volk_32f_x2_dot_prod_32f(result: *mut f32, a: *const f32, b: *const f32, n: u32);
+}
+
+/// Without this kernel (wasm32): never called, see [`NATIVE`].
+#[cfg(target_arch = "wasm32")]
+pub unsafe fn volk_32f_x2_dot_prod_32f(_: *mut f32, _: *const f32, _: *const f32, _: u32) {
+    unreachable!("VOLK for wasm32 has no volk_32f_x2_dot_prod_32f")
 }
 
 /// The VOLK functions that only VOLK's own build has ([`NATIVE`]): without them (wasm32, or no

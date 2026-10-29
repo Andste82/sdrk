@@ -700,7 +700,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 59] = [
+pub const KERNELS: [KernelSpec; 65] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -753,6 +753,12 @@ pub const KERNELS: [KernelSpec; 59] = [
     spec("biquad_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("biquad_real_fallback", Family::FallbackVsCmsis, false),
     spec("biquad_real_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("dot", Family::Volk, true),
+    spec("dot_cq15", Family::Own, true),
+    spec("dot_real", Family::VolkNative, true),
+    spec("dot_real_q15", Family::Own, true),
+    spec("scale", Family::VolkNative, false),
+    spec("scale_cq15", Family::Own, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -3274,6 +3280,22 @@ mod tests {
         assert_eq!(
             comparisons(plan("avx2-runtime"), kernel("fir")).0,
             Reference::OwnLevel("avx2")
+        );
+        // VOLK's wasm32 build has no `volk_32f_x2_dot_prod_32f` and no `volk_32f_s32f_multiply_32f`.
+        for k in ["dot_real", "scale"] {
+            assert_eq!(comparisons(plan("avx2"), kernel(k)).0, Reference::Volk);
+            assert_eq!(
+                comparisons(plan("neon"), kernel(k)),
+                (Reference::Volk, vec![Reference::VolkCheapest])
+            );
+            assert_eq!(
+                comparisons(plan("simd128"), kernel(k)),
+                (Reference::Fallback, Vec::new())
+            );
+        }
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("dot")).0,
+            Reference::Volk
         );
     }
 

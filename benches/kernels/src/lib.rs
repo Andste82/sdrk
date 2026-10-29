@@ -314,7 +314,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 112] = [
+pub const KERNELS: [&str; 120] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -427,6 +427,14 @@ pub const KERNELS: [&str; 112] = [
     "fir_interpolate_real_q15_fallback",
     "resample_real_fallback",
     "resample_real_q15_fallback",
+    "mag_sq_fallback",
+    "mag_sq_q15_fallback",
+    "mag_fallback",
+    "mag_q15_fallback",
+    "window_fallback",
+    "window_cq15_fallback",
+    "power_db_fallback",
+    "power_db_q15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -511,8 +519,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             RESAMPLE_UP,
             RESAMPLE_DOWN,
         )),
-        "mag_sq" => Box::new(MagSqK::new(rng, layout)),
-        "mag_sq_q15" => Box::new(MagSqQ15K::new(rng, layout)),
+        "mag_sq" => Box::new(MagSqK::new(rng, layout, simd)),
+        "mag_sq_q15" => Box::new(MagSqQ15K::new(rng, layout, simd)),
+        "mag_sq_fallback" => Box::new(MagSqK::new(rng, layout, fallback)),
+        "mag_sq_q15_fallback" => Box::new(MagSqQ15K::new(rng, layout, fallback)),
         "quad_demod" => Box::new(QuadK::new(rng, layout)),
         "quad_demod_cq15" => Box::new(QuadQ15K::new(rng, layout)),
         "fm_mod" => Box::new(FmModK::new(rng, layout, simd)),
@@ -521,12 +531,18 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "fm_mod_cq15_fallback" => Box::new(FmModQ15K::new(rng, layout, fallback)),
         "squelch" => Box::new(SquelchK::<C32>::new(rng, layout)),
         "squelch_cq15" => Box::new(SquelchK::<CQ15>::new(rng, layout)),
-        "mag" => Box::new(MagK::new(rng, layout)),
-        "mag_q15" => Box::new(MagQ15K::new(rng, layout)),
-        "window" => Box::new(WindowK::new(rng, layout)),
-        "window_cq15" => Box::new(WindowQ15K::new(rng, layout)),
-        "power_db" => Box::new(PowerDbK::new(rng, layout)),
-        "power_db_q15" => Box::new(PowerDbQ15K::new(rng, layout)),
+        "mag" => Box::new(MagK::new(rng, layout, simd)),
+        "mag_q15" => Box::new(MagQ15K::new(rng, layout, simd)),
+        "window" => Box::new(WindowK::new(rng, layout, simd)),
+        "window_cq15" => Box::new(WindowQ15K::new(rng, layout, simd)),
+        "power_db" => Box::new(PowerDbK::new(rng, layout, simd)),
+        "power_db_q15" => Box::new(PowerDbQ15K::new(rng, layout, simd)),
+        "mag_fallback" => Box::new(MagK::new(rng, layout, fallback)),
+        "mag_q15_fallback" => Box::new(MagQ15K::new(rng, layout, fallback)),
+        "window_fallback" => Box::new(WindowK::new(rng, layout, fallback)),
+        "window_cq15_fallback" => Box::new(WindowQ15K::new(rng, layout, fallback)),
+        "power_db_fallback" => Box::new(PowerDbK::new(rng, layout, fallback)),
+        "power_db_q15_fallback" => Box::new(PowerDbQ15K::new(rng, layout, fallback)),
         "agc" => Box::new(AgcK::<C32>::new(rng, layout)),
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
         "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout, simd)),
@@ -2385,21 +2401,37 @@ where
 // ---------------------------------------------------------------------------------------------
 // Spectrum and demodulation
 
+/// Whether a spectrum entry (`mag_sq`, `mag`, `window`, `power_db`) runs `which`: the SIMD
+/// entry our kernel, our fallback and its library (`simd_ref`, VOLK), the `<kernel>_fallback`
+/// entry our fallback and CMSIS-DSP's generic C.
+fn spectrum_supports(entry: BiquadEntry, which: Impl, simd_ref: bool) -> bool {
+    match (entry, which) {
+        (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
+        (BiquadEntry::Simd, Impl::Volk) => simd_ref,
+        (BiquadEntry::Fallback, Impl::Cmsis) => cref_sys::cmsis_dsp::AVAILABLE,
+        _ => false,
+    }
+}
+
 #[inline(never)]
 fn mag_sq<T: ComplexSample, B: MagSq<T>>(backend: &B, input: &[T], out: &mut [T::Real]) {
     let _ = black_box(backend.mag_sq(black_box(input), out));
 }
 
+/// `mag_sq` of C32 samples: the SIMD entry against `volk_32fc_magnitude_squared_32f`, the
+/// fallback entry against `arm_cmplx_mag_squared_f32` (the same work).
 struct MagSqK {
     input: Aligned<C32>,
     out: Aligned<f32>,
+    entry: BiquadEntry,
 }
 
 impl MagSqK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         MagSqK {
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
     }
 }
@@ -2418,6 +2450,10 @@ impl Kernel for MagSqK {
                         self.input.len() as u32,
                     );
                 },
+                Impl::Cmsis => cref_sys::cmsis_dsp::cmplx_mag_squared_f32(
+                    c32_pairs_ref(&self.input),
+                    &mut self.out,
+                ),
                 other => unreachable!("mag_sq has no {other:?}"),
             }
             black_box(&self.out);
@@ -2435,16 +2471,13 @@ impl Kernel for MagSqK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
-            _ => false,
-        }
+        spectrum_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32fc_magnitude_squared_32f",
+            Impl::Cmsis => describe_cmsis("arm_cmplx_mag_squared_f32"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -2455,18 +2488,22 @@ impl Kernel for MagSqK {
     }
 }
 
-/// `mag_sq` of CQ15 samples into Q15 (VOLK has no squared 16-bit magnitude: compared with our
-/// fallback).
+/// `mag_sq` of CQ15 samples into Q15 (VOLK has no squared 16-bit magnitude: the SIMD entry is
+/// compared with our fallback). The fallback entry is compared with `arm_cmplx_mag_squared_q15`,
+/// which returns Q3.13 (each square shifted right by 17, truncating; scaled by 4 for the
+/// accuracy).
 struct MagSqQ15K {
     input: Aligned<CQ15>,
     out: Aligned<Q15>,
+    entry: BiquadEntry,
 }
 
 impl MagSqQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         MagSqQ15K {
             input: noise_cq15(rng, layout.n, 23_000.0, layout.skew(4)),
             out: Aligned::skewed(layout.n, layout.skew(2)),
+            entry,
         }
     }
 }
@@ -2477,6 +2514,10 @@ impl Kernel for MagSqQ15K {
             match which {
                 Impl::Ours => mag_sq(&Sdrk, &self.input, &mut self.out),
                 Impl::Fallback => mag_sq(&Fallback, &self.input, &mut self.out),
+                Impl::Cmsis => cref_sys::cmsis_dsp::cmplx_mag_squared_q15(
+                    cq15_pairs(&self.input),
+                    q15_raw_mut(&mut self.out),
+                ),
                 other => unreachable!("mag_sq_q15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -2491,16 +2532,19 @@ impl Kernel for MagSqQ15K {
             .iter()
             .map(|v| (f64::from(v.re.0).powi(2) + f64::from(v.im.0).powi(2)) / 32768.0)
             .collect();
-        let got: Vec<f64> = self.out.iter().map(|q| f64::from(q.0)).collect();
+        // CMSIS-DSP's Q3.13 in Q15 units.
+        let unit = if which == Impl::Cmsis { 4.0 } else { 1.0 };
+        let got: Vec<f64> = self.out.iter().map(|q| f64::from(q.0) * unit).collect();
         snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        spectrum_supports(self.entry, which, false)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Cmsis => describe_cmsis("arm_cmplx_mag_squared_q15 (Q3.13, truncating)"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -3509,17 +3553,20 @@ fn mag<T: ComplexSample, B: Mag<T>>(backend: &B, input: &[T], out: &mut [T::Real
     let _ = black_box(backend.mag(black_box(input), out));
 }
 
-/// `mag` of C32 samples against `volk_32fc_magnitude_32f`.
+/// `mag` of C32 samples: the SIMD entry against `volk_32fc_magnitude_32f`, the fallback entry
+/// against `arm_cmplx_mag_f32` (`sqrtf` of the sum, the same work).
 struct MagK {
     input: Aligned<C32>,
     out: Aligned<f32>,
+    entry: BiquadEntry,
 }
 
 impl MagK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         MagK {
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
     }
 }
@@ -3538,6 +3585,9 @@ impl Kernel for MagK {
                         self.input.len() as u32,
                     );
                 },
+                Impl::Cmsis => {
+                    cref_sys::cmsis_dsp::cmplx_mag_f32(c32_pairs_ref(&self.input), &mut self.out);
+                }
                 other => unreachable!("mag has no {other:?}"),
             }
             black_box(&self.out);
@@ -3555,16 +3605,13 @@ impl Kernel for MagK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
-            _ => false,
-        }
+        spectrum_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32fc_magnitude_32f",
+            Impl::Cmsis => describe_cmsis("arm_cmplx_mag_f32"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -3577,17 +3624,20 @@ impl Kernel for MagK {
 
 /// `mag` of CQ15 samples against `volk_16ic_magnitude_16i`. VOLK rounds differently (it scales
 /// to float and back), so the accuracy rule compares the SNR of both against the unrounded
-/// magnitude.
+/// magnitude. The fallback entry is compared with `arm_cmplx_mag_q15`, which returns Q2.14 from
+/// its own Q31 square root (scaled by 2 for the accuracy).
 struct MagQ15K {
     input: Aligned<CQ15>,
     out: Aligned<Q15>,
+    entry: BiquadEntry,
 }
 
 impl MagQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         MagQ15K {
             input: noise_cq15(rng, layout.n, 23_000.0, layout.skew(4)),
             out: Aligned::skewed(layout.n, layout.skew(2)),
+            entry,
         }
     }
 }
@@ -3607,6 +3657,10 @@ impl Kernel for MagQ15K {
                         self.input.len() as u32,
                     );
                 },
+                Impl::Cmsis => cref_sys::cmsis_dsp::cmplx_mag_q15(
+                    cq15_pairs(&self.input),
+                    q15_raw_mut(&mut self.out),
+                ),
                 other => unreachable!("mag_q15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -3620,21 +3674,20 @@ impl Kernel for MagQ15K {
             .iter()
             .map(|v| f64::from(v.re.0).hypot(f64::from(v.im.0)))
             .collect();
-        let got: Vec<f64> = self.out.iter().map(|q| f64::from(q.0)).collect();
+        // CMSIS-DSP's Q2.14 in Q15 units.
+        let unit = if which == Impl::Cmsis { 2.0 } else { 1.0 };
+        let got: Vec<f64> = self.out.iter().map(|q| f64::from(q.0) * unit).collect();
         snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
-            _ => false,
-        }
+        spectrum_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_16ic_magnitude_16i",
+            Impl::Cmsis => describe_cmsis("arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31)"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -3661,15 +3714,17 @@ fn window<T: ComplexSample, B: Window<T>>(backend: &B, input: &[T], out: &mut [T
 }
 
 /// `window` of C32 samples against `volk_32fc_32f_multiply_32fc` (a complex vector times a
-/// real one, the same work; only VOLK's own build has it, not the generic wasm32 library).
+/// real one, the same work; on wasm32 its generic protokernel).
+/// The fallback entry is compared with `arm_cmplx_mult_real_f32` (the same work).
 struct WindowK {
     input: Aligned<C32>,
     w: Aligned<f32>,
     out: Aligned<C32>,
+    entry: BiquadEntry,
 }
 
 impl WindowK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut w = Aligned::<f32>::skewed(layout.n, layout.skew(4));
         for (d, v) in w.iter_mut().zip(hann(layout.n)) {
             *d = v as f32;
@@ -3678,6 +3733,7 @@ impl WindowK {
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
             w,
             out: Aligned::skewed(layout.n, layout.skew(8)),
+            entry,
         }
     }
 }
@@ -3697,6 +3753,11 @@ impl Kernel for WindowK {
                         self.input.len() as u32,
                     );
                 },
+                Impl::Cmsis => cref_sys::cmsis_dsp::cmplx_mult_real_f32(
+                    c32_pairs_ref(&self.input),
+                    &self.w,
+                    c32_pairs(&mut self.out),
+                ),
                 other => unreachable!("window has no {other:?}"),
             }
             black_box(&self.out);
@@ -3718,23 +3779,20 @@ impl Kernel for WindowK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::NATIVE,
-            _ => false,
-        }
+        spectrum_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32fc_32f_multiply_32fc",
+            Impl::Cmsis => describe_cmsis("arm_cmplx_mult_real_f32"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        if volk_sys::NATIVE {
+        if volk_sys::FULL {
             &["volk_32fc_32f_multiply_32fc"]
         } else {
             &[]
@@ -3743,15 +3801,18 @@ impl Kernel for WindowK {
 }
 
 /// `window` of CQ15 samples with Q15 weights (no established library has a complex-by-real
-/// Q15 multiply with the rounding of `q15_mul` on our levels: compared with our fallback).
+/// Q15 multiply with the rounding of `q15_mul` on our levels: the SIMD entry is compared with
+/// our fallback). The fallback entry is compared with `arm_cmplx_mult_real_q15` (the same
+/// products, truncated instead of rounded).
 struct WindowQ15K {
     input: Aligned<CQ15>,
     w: Aligned<Q15>,
     out: Aligned<CQ15>,
+    entry: BiquadEntry,
 }
 
 impl WindowQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut w = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
         for (d, v) in w.iter_mut().zip(hann(layout.n)) {
             *d = Q15((v * 32767.0).round() as i16);
@@ -3760,6 +3821,7 @@ impl WindowQ15K {
             input: noise_cq15(rng, layout.n, 23_000.0, layout.skew(4)),
             w,
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
     }
 }
@@ -3770,6 +3832,11 @@ impl Kernel for WindowQ15K {
             match which {
                 Impl::Ours => window(&Sdrk, &self.input, &mut self.out, &self.w),
                 Impl::Fallback => window(&Fallback, &self.input, &mut self.out, &self.w),
+                Impl::Cmsis => cref_sys::cmsis_dsp::cmplx_mult_real_q15(
+                    cq15_pairs(&self.input),
+                    q15_raw(&self.w),
+                    cq15_pairs_mut(&mut self.out),
+                ),
                 other => unreachable!("window_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -3792,11 +3859,12 @@ impl Kernel for WindowQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        spectrum_supports(self.entry, which, false)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Cmsis => describe_cmsis("arm_cmplx_mult_real_q15 (truncating)"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -3811,6 +3879,35 @@ fn power_db<T: sdrk::RealSample, B: PowerDb<T>>(backend: &B, input: &[T], out: &
 /// The offset of the `power_db` measurements in dB.
 const POWER_DB_OFFSET: f32 = -3.0;
 
+/// `x.len()` as the block length of a CMSIS-DSP call.
+fn n_u32<T>(x: &[T]) -> u32 {
+    u32::try_from(x.len()).expect("block too long")
+}
+
+/// The decibel steps after CMSIS-DSP's natural logarithm, in place: `arm_scale_f32` by
+/// `10 / ln 10`, then the offset (a plain loop: the shim has no `arm_offset_f32`).
+fn cmsis_db_scale(out: &mut [f32]) {
+    let (input, dst) = (out.as_ptr(), out.as_mut_ptr());
+    // SAFETY: `arm_scale_f32` is element-wise and works in place on the `n` values of `out`.
+    unsafe {
+        cref_sys::cmsis_dsp::ffi::arm_scale_f32(
+            input,
+            10.0 * std::f32::consts::LOG10_E,
+            dst,
+            n_u32(out),
+        );
+    }
+    for v in out.iter_mut() {
+        *v += POWER_DB_OFFSET;
+    }
+}
+
+/// `power_db` with CMSIS-DSP (see [`PowerDbK`]): no floor (the measured powers are positive).
+fn cmsis_power_db(input: &[f32], out: &mut [f32]) {
+    cref_sys::cmsis_dsp::vlog_f32(input, out);
+    cmsis_db_scale(out);
+}
+
 /// `10 log10(max(p, 1e-20)) + offset` in f64, the reference of the `power_db` accuracy.
 fn power_db_model(p: f64) -> f64 {
     10.0 * p.max(1e-20).log10() + f64::from(POWER_DB_OFFSET)
@@ -3819,13 +3916,17 @@ fn power_db_model(p: f64) -> f64 {
 /// `power_db` of f32 powers against VOLK's base-2 logarithm, scaled and offset with VOLK
 /// (`volk_32f_log2_32f`, `volk_32f_s32f_multiply_32f` by `10 log10(2)`,
 /// `volk_32f_s32f_add_32f`; the same work without the floor). The powers spread over 70 dB.
+/// The fallback entry is compared with CMSIS-DSP's natural logarithm, scaled by `10 / ln 10`
+/// (`arm_vlog_f32` in place, `arm_scale_f32`) and offset by a plain loop (the shim has no
+/// `arm_offset_f32`); a polynomial of another accuracy class.
 struct PowerDbK {
     input: Aligned<f32>,
     out: Aligned<f32>,
+    entry: BiquadEntry,
 }
 
 impl PowerDbK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<f32>::skewed(layout.n, layout.skew(4));
         for p in input.iter_mut() {
             *p = 10f32.powf(3.5 * rng.unit() - 2.5);
@@ -3833,6 +3934,7 @@ impl PowerDbK {
         PowerDbK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
     }
 }
@@ -3857,6 +3959,7 @@ impl Kernel for PowerDbK {
                     );
                     volk_sys::native::volk_32f_s32f_add_32f(out, out, POWER_DB_OFFSET, n);
                 },
+                Impl::Cmsis => cmsis_power_db(&self.input, &mut self.out),
                 other => unreachable!("power_db has no {other:?}"),
             }
             black_box(&self.out);
@@ -3874,23 +3977,22 @@ impl Kernel for PowerDbK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::NATIVE,
-            _ => false,
-        }
+        spectrum_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
-            Impl::Volk => "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
+            Impl::Volk => {
+                "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f"
+            }
+            Impl::Cmsis => describe_cmsis("arm_vlog_f32 + arm_scale_f32 (+ offset loop)"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        if volk_sys::NATIVE {
+        if volk_sys::FULL {
             &[
                 "volk_32f_log2_32f",
                 "volk_32f_s32f_multiply_32f",
@@ -3902,15 +4004,18 @@ impl Kernel for PowerDbK {
     }
 }
 
-/// `power_db` of Q15 powers (no established library: compared with our fallback). The raw
-/// powers spread over 45 dB below full scale.
+/// `power_db` of Q15 powers (no established library: the SIMD entry is compared with our
+/// fallback). The raw powers spread over 45 dB below full scale. The fallback entry is compared
+/// with `arm_q15_to_float` followed by the CMSIS-DSP steps of [`PowerDbK`] (information: no
+/// library converts Q15 powers to decibels).
 struct PowerDbQ15K {
     input: Aligned<Q15>,
     out: Aligned<f32>,
+    entry: BiquadEntry,
 }
 
 impl PowerDbQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
         for p in input.iter_mut() {
             *p = Q15((32767.0 * 10f32.powf(2.25 * rng.unit() - 2.25)) as i16);
@@ -3918,6 +4023,7 @@ impl PowerDbQ15K {
         PowerDbQ15K {
             input,
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
     }
 }
@@ -3928,6 +4034,14 @@ impl Kernel for PowerDbQ15K {
             match which {
                 Impl::Ours => power_db(&Sdrk, &self.input, &mut self.out),
                 Impl::Fallback => power_db(&Fallback, &self.input, &mut self.out),
+                Impl::Cmsis => {
+                    cref_sys::cmsis_dsp::q15_to_float(q15_raw(&self.input), &mut self.out);
+                    let (input, out) = (self.out.as_ptr(), self.out.as_mut_ptr());
+                    // SAFETY: `arm_vlog_f32` is element-wise and works in place on the `n`
+                    // values of the output.
+                    unsafe { cref_sys::cmsis_dsp::ffi::arm_vlog_f32(input, out, n_u32(&self.out)) };
+                    cmsis_db_scale(&mut self.out);
+                }
                 other => unreachable!("power_db_q15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -3945,11 +4059,14 @@ impl Kernel for PowerDbQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        spectrum_supports(self.entry, which, false)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Cmsis => {
+                describe_cmsis("arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop)")
+            }
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -4747,7 +4864,7 @@ fn biquad_real<T: sdrk_core::RealSample + BiquadSample, B: BiquadReal<T>>(
 }
 
 /// Which of the two entries of a kernel with a `<kernel>_fallback` entry a measurement is (the
-/// biquads of D15 and D16, `dot`, `dot_real`, `scale`, `rotate`, `fm_mod`).
+/// biquads of D15 and D16, the spectrum kernels, `dot`, `dot_real`, `scale`, `rotate`, `fm_mod`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BiquadEntry {
     /// `biquad`, `biquad_cq15`, `biquad_real`, `biquad_real_q15`: our kernel through the facade

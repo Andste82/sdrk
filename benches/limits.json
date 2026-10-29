@@ -1559,5 +1559,137 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "fft_64_fallback": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cfft_f32` uses radix-8 and radix-4 passes, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+    }
+  },
+  "fft_1024_fallback": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "dev"
+    }
+  },
+  "fft_4096_fallback": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cfft_f32` uses radix-8 and radix-4 passes, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+    }
+  },
+  "fft_cq15_1024_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+    }
+  },
+  "fft_cq15_1024_default_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+    }
+  },
+  "rfft_1024_fallback": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_rfft_fast_f32` uses a radix-8 and radix-4 complex FFT, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+    }
   }
 }

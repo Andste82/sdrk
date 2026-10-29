@@ -645,6 +645,14 @@ pub enum Family {
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
     /// (`dc_block_fallback`, `dc_block_real_fallback`).
     FallbackVsLiquid,
+    /// The fallback entry of a `C32` or real-input FFT (`fft_<n>_fallback`,
+    /// `rfft_<n>_fallback`): as [`Family::FallbackVsCmsis`] against `arm_cfft_f32` or
+    /// `arm_rfft_fast_f32`, with the input restore of the FFTs subtracted.
+    FftFallbackVsCmsis,
+    /// The fallback entry of a `CQ15` FFT (`fft_cq15_<n>..._fallback`): as
+    /// [`Family::FftFallbackVsCmsis`] against `arm_cfft_q15` (fixed `1/N` scaling with
+    /// truncating shifts), with `KissFFT` (scalar C as well) as information.
+    FftCq15FallbackVsCmsis,
 }
 
 impl Family {
@@ -652,15 +660,26 @@ impl Family {
     /// of the measurement binary) and whose sizes are part of the name.
     #[must_use]
     pub fn is_fft(self) -> bool {
-        matches!(self, Family::FftC32 | Family::FftCq15 | Family::RealFft)
+        matches!(
+            self,
+            Family::FftC32
+                | Family::FftCq15
+                | Family::RealFft
+                | Family::FftFallbackVsCmsis
+                | Family::FftCq15FallbackVsCmsis
+        )
     }
 
-    /// Whether this is a fallback entry (`<kernel>_fallback`).
+    /// A fallback entry (`<kernel>_fallback`), whose measured side is our fallback.
     #[must_use]
     pub fn is_fallback_entry(self) -> bool {
         matches!(
             self,
-            Family::FallbackVsCmsis | Family::FallbackVsGnuRadio | Family::FallbackVsLiquid
+            Family::FallbackVsCmsis
+                | Family::FallbackVsGnuRadio
+                | Family::FallbackVsLiquid
+                | Family::FftFallbackVsCmsis
+                | Family::FftCq15FallbackVsCmsis
         )
     }
 
@@ -718,7 +737,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 68] = [
+pub const KERNELS: [KernelSpec; 74] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -787,6 +806,20 @@ pub const KERNELS: [KernelSpec; 68] = [
     fft("fft_cq15_1024_default", Family::FftCq15, 1024),
     fft("fft_cq15_1024_full_scale", Family::FftCq15, 1024),
     fft("rfft_1024", Family::RealFft, 1024),
+    fft("fft_64_fallback", Family::FftFallbackVsCmsis, 64),
+    fft("fft_1024_fallback", Family::FftFallbackVsCmsis, 1024),
+    fft("fft_4096_fallback", Family::FftFallbackVsCmsis, 4096),
+    fft(
+        "fft_cq15_1024_fallback",
+        Family::FftCq15FallbackVsCmsis,
+        1024,
+    ),
+    fft(
+        "fft_cq15_1024_default_fallback",
+        Family::FftCq15FallbackVsCmsis,
+        1024,
+    ),
+    fft("rfft_1024_fallback", Family::FftFallbackVsCmsis, 1024),
 ];
 
 /// The CPU Intel SDE emulates.
@@ -1053,7 +1086,10 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
         Family::Own => (Reference::Fallback, Vec::new()),
         Family::Kfr if plan.kfr => (Reference::Kfr, vec![Reference::Cmsis]),
         // Without KFR at the level, CMSIS-DSP gates, as it does for a fallback entry.
-        Family::Kfr | Family::FallbackVsCmsis => (Reference::Cmsis, Vec::new()),
+        Family::Kfr | Family::FallbackVsCmsis | Family::FftFallbackVsCmsis => {
+            (Reference::Cmsis, Vec::new())
+        }
+        Family::FftCq15FallbackVsCmsis => (Reference::Cmsis, vec![Reference::KissFft]),
         Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
         Family::FallbackVsGnuRadio => (Reference::GnuRadio, Vec::new()),
         Family::FallbackVsLiquid => (Reference::Liquid, Vec::new()),
@@ -2441,6 +2477,10 @@ fn measure_levels(
 ///
 /// # Errors
 /// An unknown platform, level or kernel, or a tool that is missing or fails.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the kernel table is large; xtask is a host tool"
+)]
 pub fn judged_records(
     root: &Path,
     platform: &str,
@@ -3385,6 +3425,44 @@ mod tests {
     }
 
     #[test]
+    fn the_fft_fallback_entries_are_judged_against_cmsis_with_the_restore_subtracted() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            for k in [
+                "fft_64_fallback",
+                "fft_1024_fallback",
+                "fft_4096_fallback",
+                "rfft_1024_fallback",
+            ] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Cmsis, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+            for k in ["fft_cq15_1024_fallback", "fft_cq15_1024_default_fallback"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Cmsis, vec![Reference::KissFft]),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in [
+            "fft_1024_fallback",
+            "fft_cq15_1024_fallback",
+            "rfft_1024_fallback",
+        ] {
+            let family = kernel(k).family;
+            assert!(family.is_fft(), "{k}");
+            assert_eq!(family.measured(), "fallback", "{k}");
+            assert!(!family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        assert_eq!(kernel("fft_1024").family.measured(), "ours");
+    }
+
+    #[test]
     fn both_runs_of_a_measurement_have_arguments_of_the_same_length() {
         let variant = Variant {
             samples: 64,
@@ -3447,8 +3525,15 @@ mod tests {
         sorted.dedup();
         assert_eq!(sorted.len(), names.len());
         for spec in &KERNELS {
-            let complex = matches!(spec.family, Family::FftC32 | Family::FftCq15);
-            let real = spec.family == Family::RealFft;
+            let fallback = spec.family.is_fft() && spec.family.is_fallback_entry();
+            let complex = matches!(spec.family, Family::FftC32 | Family::FftCq15)
+                || (fallback && spec.name.starts_with("fft_"));
+            let real =
+                spec.family == Family::RealFft || (fallback && spec.name.starts_with("rfft_"));
+            assert_eq!(
+                fallback,
+                spec.name.ends_with("_fallback") && (complex || real)
+            );
             assert_eq!(complex, spec.name.starts_with("fft_"), "{}", spec.name);
             assert_eq!(real, spec.name.starts_with("rfft_"), "{}", spec.name);
             let fft = spec.family.is_fft();

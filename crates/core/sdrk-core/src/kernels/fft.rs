@@ -103,7 +103,7 @@ pub struct FftPlan<T: ComplexSample, Tw: AsRef<[T]>> {
     pub(crate) twiddles: Tw,
     /// 1 for `new`/`from_twiddles`, `4096 / n` for `from_static_4096`.
     pub(crate) tw_stride: usize,
-    _sample: PhantomData<fn() -> T>,
+    pub(crate) _sample: PhantomData<fn() -> T>,
 }
 
 impl<T: ComplexSample, Tw: AsRef<[T]> + AsMut<[T]>> FftPlan<T, Tw> {

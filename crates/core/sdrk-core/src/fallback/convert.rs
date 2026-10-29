@@ -8,6 +8,94 @@ use crate::kernels::convert::{Convert, ConvertReal, plan};
 use crate::num::{q15_from_f32, round_shift, sat16};
 use crate::types::{C32, CQ15, ComplexSample, Q15};
 
+/// The formats with a direct loop over the values: one value per byte or 16-bit word, all bits
+/// of the container valid, power-of-two full scale, interleaved without I/Q swap or real (the
+/// values are then in stream order). The general decoder below costs tens of instructions per
+/// value; these loops are a few, and the compiler vectorizes them where the target can.
+#[derive(Clone, Copy)]
+enum Direct {
+    U8,
+    I8,
+    I16Le,
+    I16Be,
+}
+
+impl Direct {
+    fn of(format: &SampleFormat) -> Option<Self> {
+        if format.layout() == Layout::Planar
+            || format.swap_iq()
+            || format.full_scale() != FullScale::PowerOfTwo
+            || format.align() != Align::Lsb
+        {
+            return None;
+        }
+        match (format.container(), format.bits(), format.signed()) {
+            (Container::U8, 8, false) => Some(Self::U8),
+            (Container::I8, 8, true) => Some(Self::I8),
+            (Container::I16, 16, true) if format.endian() == Endian::Big => Some(Self::I16Be),
+            (Container::I16, 16, true) => Some(Self::I16Le),
+            _ => None,
+        }
+    }
+
+    /// Converts all values of `input` to `out` (as many as both hold) with the formulas of
+    /// [`ToF32`]: every result is exact in `f32` (`x * 2^-15`, `x * 2^-7`, `u * 2^-7 - 255/256`),
+    /// so these give the same bits.
+    fn to_f32(self, input: &[u8], out: &mut [f32]) {
+        const INV_128: f32 = 1.0 / 128.0;
+        const INV_32768: f32 = 1.0 / 32768.0;
+        match self {
+            Self::U8 => {
+                for (o, &b) in out.iter_mut().zip(input) {
+                    *o = f32::from(b) * INV_128 - 255.0 / 256.0;
+                }
+            }
+            Self::I8 => {
+                for (o, &b) in out.iter_mut().zip(input) {
+                    *o = f32::from(b as i8) * INV_128;
+                }
+            }
+            Self::I16Le => {
+                for (o, b) in out.iter_mut().zip(input.as_chunks::<2>().0) {
+                    *o = f32::from(i16::from_le_bytes(*b)) * INV_32768;
+                }
+            }
+            Self::I16Be => {
+                for (o, b) in out.iter_mut().zip(input.as_chunks::<2>().0) {
+                    *o = f32::from(i16::from_be_bytes(*b)) * INV_32768;
+                }
+            }
+        }
+    }
+
+    /// Converts all values of `input` to `out` with the formulas of [`ToQ15`] (`U8Pow(7)`,
+    /// `Shl(8)`, `Shl(0)`), none of which saturates.
+    fn to_q15(self, input: &[u8], out: &mut [i16]) {
+        match self {
+            Self::U8 => {
+                for (o, &b) in out.iter_mut().zip(input) {
+                    *o = (2 * i16::from(b) - 255) << 7;
+                }
+            }
+            Self::I8 => {
+                for (o, &b) in out.iter_mut().zip(input) {
+                    *o = i16::from(b as i8) << 8;
+                }
+            }
+            Self::I16Le => {
+                for (o, b) in out.iter_mut().zip(input.as_chunks::<2>().0) {
+                    *o = i16::from_le_bytes(*b);
+                }
+            }
+            Self::I16Be => {
+                for (o, b) in out.iter_mut().zip(input.as_chunks::<2>().0) {
+                    *o = i16::from_be_bytes(*b);
+                }
+            }
+        }
+    }
+}
+
 /// Reads `N` bytes at `off`.
 fn bytes<const N: usize>(input: &[u8], off: usize) -> Option<[u8; N]> {
     input.get(off..off.checked_add(N)?)?.try_into().ok()
@@ -203,6 +291,13 @@ fn run_complex<T: ComplexSample>(
 impl Convert<C32> for Fallback {
     fn convert(&self, format: &SampleFormat, input: &[u8], output: &mut [C32]) -> Result<usize> {
         let samples = plan(format, input.len(), output.len(), false)?;
+        if let Some(direct) = Direct::of(format) {
+            let out = output
+                .get_mut(..samples)
+                .ok_or(Error::Internal("conversion index"))?;
+            direct.to_f32(input, bytemuck::cast_slice_mut(out));
+            return Ok(samples);
+        }
         let map = ToF32::new(format);
         run_complex(format, input, output, samples, |e| map.map(e))
     }
@@ -211,6 +306,13 @@ impl Convert<C32> for Fallback {
 impl Convert<CQ15> for Fallback {
     fn convert(&self, format: &SampleFormat, input: &[u8], output: &mut [CQ15]) -> Result<usize> {
         let samples = plan(format, input.len(), output.len(), false)?;
+        if let Some(direct) = Direct::of(format) {
+            let out = output
+                .get_mut(..samples)
+                .ok_or(Error::Internal("conversion index"))?;
+            direct.to_q15(input, bytemuck::cast_slice_mut(out));
+            return Ok(samples);
+        }
         let map = ToQ15::new(format);
         run_complex(format, input, output, samples, |e| map.map(e))
     }
@@ -239,6 +341,13 @@ impl ConvertReal<f32> for Fallback {
         output: &mut [f32],
     ) -> Result<usize> {
         let samples = plan(format, input.len(), output.len(), true)?;
+        if let Some(direct) = Direct::of(format) {
+            let out = output
+                .get_mut(..samples)
+                .ok_or(Error::Internal("conversion index"))?;
+            direct.to_f32(input, out);
+            return Ok(samples);
+        }
         let map = ToF32::new(format);
         run_real(format, input, output, samples, |e| map.map(e))
     }
@@ -252,6 +361,13 @@ impl ConvertReal<Q15> for Fallback {
         output: &mut [Q15],
     ) -> Result<usize> {
         let samples = plan(format, input.len(), output.len(), true)?;
+        if let Some(direct) = Direct::of(format) {
+            let out = output
+                .get_mut(..samples)
+                .ok_or(Error::Internal("conversion index"))?;
+            direct.to_q15(input, bytemuck::cast_slice_mut(out));
+            return Ok(samples);
+        }
         let map = ToQ15::new(format);
         run_real(format, input, output, samples, |e| map.map(e))
     }

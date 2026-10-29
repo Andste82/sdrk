@@ -700,10 +700,13 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 56] = [
+pub const KERNELS: [KernelSpec; 59] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
+    spec("convert_real_rs16", Family::Volk, true),
+    spec("convert_cq15_cs8", Family::Volk, true),
+    spec("convert_cq15_cu8", Family::VolkAndOwn, true),
     spec("convert_out_cs16", Family::Volk, true),
     spec("convert_out_cs8", Family::Volk, true),
     spec("convert_out_cu8", Family::Volk, true),
@@ -991,11 +994,18 @@ pub const PLANS: [LevelPlan; 7] = [
     },
 ];
 
+/// The VOLK entries whose VOLK function is not in the wasm32 build of the generic protokernels
+/// (`benches/refs/volk-wasm.c`): at `simd128` they are compared with our fallback (`info`).
+const NOT_IN_VOLK_WASM: [&str; 2] = ["convert_cq15_cs8", "convert_cq15_cu8"];
+
 /// The judged comparison of a kernel on a level and the informational ones.
 #[must_use]
 pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     if let Some(level) = plan.baseline {
         return (Reference::OwnLevel(level), Vec::new());
+    }
+    if plan.level == "simd128" && NOT_IN_VOLK_WASM.contains(&spec.name) {
+        return (Reference::Fallback, Vec::new());
     }
     match spec.family {
         Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
@@ -1023,13 +1033,14 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
 
 /// The defaults of VOLK 3.3's `sse2_64_mmx` machine for the level `sse2` (the strict SSE2 CPU
 /// of SDE selects that machine). VOLK has no SSE2 implementation of `rotator2`, `atan2`,
-/// `multiply_conjugate` and `8i_s32f_convert_32f`: their portable `generic` code remains. The
-/// compiler vectorizes that of `8i_s32f_convert_32f` with SSE2, a fair reference; `rotator2` and
+/// `multiply_conjugate`, `8i_s32f_convert_32f` and `8i_convert_16i`: their portable `generic`
+/// code remains. The compiler vectorizes that of the two conversions with SSE2, a fair reference; `rotator2` and
 /// `atan2` have no SSE implementation at all and their `generic` code is scalar, so those entries
 /// are `info`.
 const VOLK_SSE2_CONFIG: &str = "\
 volk_8i_s32f_convert_32f generic generic
 volk_16i_s32f_convert_32f a_sse u_sse
+volk_8i_convert_16i generic generic
 volk_32f_s32f_convert_16i a_sse2 u_sse2
 volk_32f_s32f_convert_8i a_sse2 u_sse2
 volk_32f_s32f_x2_convert_8u a_sse2 u_sse2
@@ -1051,6 +1062,7 @@ volk_32f_x2_dot_prod_32f a_sse u_sse
 const VOLK_SSE42_CONFIG: &str = "\
 volk_8i_s32f_convert_32f a_sse4_1 u_sse4_1
 volk_16i_s32f_convert_32f a_sse4_1 u_sse4_1
+volk_8i_convert_16i a_sse4_1 u_sse4_1
 volk_32f_s32f_convert_16i a_sse2 u_sse2
 volk_32f_s32f_convert_8i a_sse2 u_sse2
 volk_32f_s32f_x2_convert_8u a_sse2 u_sse2
@@ -1076,6 +1088,7 @@ volk_32f_x2_dot_prod_32f a_sse4_1 u_sse4_1
 const VOLK_AVX2_CONFIG: &str = "\
 volk_8i_s32f_convert_32f a_avx2 u_avx2
 volk_16i_s32f_convert_32f a_avx2 u_avx2
+volk_8i_convert_16i a_avx2 u_avx2
 volk_32f_s32f_convert_16i a_avx2 u_avx2
 volk_32f_s32f_convert_8i a_avx2 u_avx2
 volk_32f_s32f_x2_convert_8u a_avx2_fma u_avx2_fma
@@ -1101,6 +1114,7 @@ volk_32f_x2_dot_prod_32f a_avx2_fma u_avx2_fma
 const VOLK_NEON_CONFIG: &str = "\
 volk_8i_s32f_convert_32f neonv8 neonv8
 volk_16i_s32f_convert_32f neonv8 neonv8
+volk_8i_convert_16i neon neon
 volk_32f_s32f_convert_16i neonv8 neonv8
 volk_32f_s32f_convert_8i neonv8 neonv8
 volk_32f_s32f_x2_convert_8u neonv8 neonv8
@@ -1121,9 +1135,10 @@ volk_32f_x2_dot_prod_32f neonv8 neonv8
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 17] = [
+const VOLK_FUNCTIONS: [&str; 18] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
+    "volk_8i_convert_16i",
     "volk_32f_s32f_convert_16i",
     "volk_32f_s32f_convert_8i",
     "volk_32f_s32f_x2_convert_8u",

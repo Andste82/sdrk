@@ -5,8 +5,9 @@
  *
  * VOLK has no wasm32 machine. On a machine without SIMD its dispatcher ranks every kernel's
  * implementations by their dependencies and takes the first one with the highest rank, which
- * is `generic` for every kernel below (atan2 has `polynomial` with the same rank after it), so
- * this file reproduces VOLK's default dispatch there. Built by benches/refs/build.sh.
+ * is `generic` for every kernel below (atan2 has `polynomial` with the same rank after it; the
+ * `orc` variants of the multiply, add and convert kernels are not built, as in VOLK's own build
+ * with ENABLE_ORC=OFF), so this file reproduces VOLK's default dispatch there. Built by benches/refs/build.sh.
  */
 #define LV_HAVE_GENERIC 1
 
@@ -17,15 +18,22 @@
 
 #include <volk/volk_16i_s32f_convert_32f.h>
 #include <volk/volk_16ic_magnitude_16i.h>
+#include <volk/volk_32f_log2_32f.h>
+#include <volk/volk_32f_s32f_add_32f.h>
 #include <volk/volk_32f_s32f_convert_16i.h>
 #include <volk/volk_32f_s32f_convert_8i.h>
+#include <volk/volk_32f_s32f_multiply_32f.h>
 #include <volk/volk_32f_s32f_x2_convert_8u.h>
+#include <volk/volk_32f_x2_dot_prod_32f.h>
 #include <volk/volk_32fc_32f_dot_prod_32fc.h>
+#include <volk/volk_32fc_32f_multiply_32fc.h>
 #include <volk/volk_32fc_magnitude_32f.h>
 #include <volk/volk_32fc_magnitude_squared_32f.h>
 #include <volk/volk_32fc_s32f_atan2_32f.h>
 #include <volk/volk_32fc_s32fc_x2_rotator2_32fc.h>
+#include <volk/volk_32fc_x2_dot_prod_32fc.h>
 #include <volk/volk_32fc_x2_multiply_conjugate_32fc.h>
+#include <volk/volk_8i_convert_16i.h>
 #include <volk/volk_8i_s32f_convert_32f.h>
 
 /* VOLK's `volk_func_desc_t`: the implementations of a kernel on the selected machine. */
@@ -63,6 +71,13 @@ GENERIC_KERNEL(volk_32fc_magnitude_squared_32f)
 GENERIC_KERNEL(volk_16ic_magnitude_16i)
 GENERIC_KERNEL(volk_32fc_x2_multiply_conjugate_32fc)
 GENERIC_KERNEL(volk_32fc_s32f_atan2_32f)
+GENERIC_KERNEL(volk_8i_convert_16i)
+GENERIC_KERNEL(volk_32f_x2_dot_prod_32f)
+GENERIC_KERNEL(volk_32fc_x2_dot_prod_32fc)
+GENERIC_KERNEL(volk_32fc_32f_multiply_32fc)
+GENERIC_KERNEL(volk_32f_s32f_multiply_32f)
+GENERIC_KERNEL(volk_32f_s32f_add_32f)
+GENERIC_KERNEL(volk_32f_log2_32f)
 
 /* The machine `generic` has no SIMD architecture and therefore an alignment of 1. */
 size_t volk_get_alignment(void) { return 1; }

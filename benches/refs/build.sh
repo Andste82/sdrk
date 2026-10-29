@@ -9,14 +9,19 @@
 #
 # | Library | Version | License | Platforms | Use |
 # | --- | --- | --- | --- | --- |
-# | VOLK | 3.3.0 | LGPL-3.0-or-later | x86_64, aarch64 (shared, CMake Release, no ORC); wasm32 (the `generic` protokernels, static, see volk-wasm.c) | the reference of the streaming kernels |
+# | VOLK | 3.3.0 | LGPL-3.0-or-later | x86_64, aarch64 (shared, CMake Release, no ORC); wasm32 (the `generic` protokernels, static, see volk-wasm.c; since the fallback round with the multiply, log2, scalar multiply and add, dot product and 8i-to-16i kernels) | the reference of the streaming kernels; VOLK's generic `multiply_conjugate` in gr-quad-demod.c |
 # | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, information on `neon` |
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 # | GNU Radio `pwr_squelch_cc` | main at ec1bf15 (squelch_base_cc_impl.cc and pwr_squelch_cc_impl of gr-analog), see gr-squelch.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `squelch` |
+# | GNU Radio `rotator` | main at ec1bf15 (rotator.h of gr-blocks, the scalar `rotate`), see gr-rotator.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of the `C32` `rotate` fallback |
+# | GNU Radio `frequency_modulator_fc` | main at ec1bf15 (frequency_modulator_fc_impl.cc of gr-analog with `gr::fxpt` and its sine table), see gr-fm-mod.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `fm_mod` |
+# | GNU Radio `quadrature_demod_cf` | main at ec1bf15 (quadrature_demod_cf_impl.cc of gr-analog, `fast_atan2f` of gnuradio-runtime, VOLK's generic `multiply_conjugate`), see gr-quad-demod.c and gr-fast-atan2f.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, two object files) | the scalar reference of `quad_demod` |
+# | GNU Radio `fm_deemph` | main at ec1bf15 (fm_emph.py of gr-analog, `iir_filter_ffd` of gr-filter), see gr-deemph.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `deemphasis` |
+# | liquid-dsp `iirfilt` DC blocker | 1.8.3 (iirfilt.proto.c and dotprod.proto.c, portable dot products), see liquid-dcblock.c and liquid-dotprod.c | MIT | x86_64, aarch64, wasm32 (static, two object files) | the scalar reference of `dc_block` and `dc_block_real` |
 # | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++), wasm32 (clang++, KFR's Emscripten configuration: `sse41` over the SSE headers of Emscripten); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
-# | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU; see cmsis-biquad.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27) |
+# | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU (biquads only); see cmsis-biquad.c and cmsis-dsp.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27); the scalar references of the fallback round (conversions, products, magnitudes, sine and arc tangent, logarithm, FIR filters, FFTs: libcmsisdsp-<level>.a) |
 # | wasi-sdk sysroot | 34.0 | Apache-2.0 WITH LLVM-exception (libc++), the licenses of wasi-libc | wasm32 (headers only: libc++ and wasi-libc for the KFR shim, which needs no C++ run-time library) | KFR needs a C++ standard library |
 # | Emscripten | 6.0.12 | MIT or NCSA | wasm32 (headers only: the `*intrin.h` of system/include/compat, SSE written with SIMD128) | KFR's x86 code on wasm32, as emcc builds it with `-msse4.1 -msimd128` |
 # | CMSIS 6 (CMSIS-Core) | 6.3.0 | Apache-2.0 | cortex-m4 (headers only: `cmsis_compiler.h` and the intrinsics such as `__SMLALD` that CMSIS-DSP uses with the DSP extension) | needed by CMSIS-DSP outside its host configuration |
@@ -129,7 +134,9 @@ if [ -n "$kfr_cxx" ]; then
 fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
+    "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" \
+    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -249,6 +256,34 @@ build_gr_squelch() {
     $ar rcs "$prefix/lib/libgrsquelch.a" "$work/gr-squelch.o"
 }
 
+# The scalar references of the fallback round from GNU Radio, compiled with the same generic
+# flags as agc_cc: the scalar rotator, frequency_modulator_fc, quadrature_demod_cf (with
+# fast_atan2f in an object file of its own, as in libgnuradio-runtime, and VOLK's generic
+# multiply_conjugate from the unpacked VOLK release, so it runs after build_volk or
+# build_volk_wasm) and the IIR filter of fm_deemph. One library per block.
+build_gr_fallback() {
+    local volk_inc=(-I "$work/volk/include" -I "$work/volk/kernels")
+    $cc $GR_AGC_FLAGS -c "$here/gr-rotator.c" -o "$work/gr-rotator.o"
+    $ar rcs "$prefix/lib/libgrrotator.a" "$work/gr-rotator.o"
+    $cc $GR_AGC_FLAGS -c "$here/gr-fm-mod.c" -o "$work/gr-fm-mod.o"
+    $ar rcs "$prefix/lib/libgrfmmod.a" "$work/gr-fm-mod.o"
+    $cc $GR_AGC_FLAGS "${volk_inc[@]}" -c "$here/gr-quad-demod.c" -o "$work/gr-quad-demod.o"
+    $cc $GR_AGC_FLAGS -c "$here/gr-fast-atan2f.c" -o "$work/gr-fast-atan2f.o"
+    $ar rcs "$prefix/lib/libgrquaddemod.a" "$work/gr-quad-demod.o" "$work/gr-fast-atan2f.o"
+    $cc $GR_AGC_FLAGS -c "$here/gr-deemph.c" -o "$work/gr-deemph.o"
+    $ar rcs "$prefix/lib/libgrdeemph.a" "$work/gr-deemph.o"
+}
+
+# liquid-dsp's DC blocker (iirfilt with its portable dot products, liquid-dcblock.c and
+# liquid-dotprod.c), with liquid's own optimisation level (-O3 in its CMakeLists.txt), the
+# generic flags of the GNU Radio references.
+LIQUID_VERSION=1.8.3
+build_liquid_dcblock() {
+    $cc $GR_AGC_FLAGS -c "$here/liquid-dotprod.c" -o "$work/liquid-dotprod.o"
+    $cc $GR_AGC_FLAGS -c "$here/liquid-dcblock.c" -o "$work/liquid-dcblock.o"
+    $ar rcs "$prefix/lib/libliquiddc.a" "$work/liquid-dotprod.o" "$work/liquid-dcblock.o"
+}
+
 # The levels of the biquad references with their instruction-set flags: those of the measured
 # SDRk level (the `-C target-cpu` of xtask's plan), so that a reference uses what the level
 # allows and nothing above it. A comma stands for a space (the list is split at spaces); the
@@ -318,6 +353,73 @@ build_cmsis_biquad() {
     done
 }
 
+# The CMSIS-DSP sources of the scalar references of the fallback round (below Source/), with
+# the sources they need (arm_sqrt_q31, arm_divide_q15, arm_abs_q15, the radix kernels, the
+# bit reversals and the common tables and constant structures of the transforms).
+CMSISDSP_FALLBACK_SOURCES="SupportFunctions/arm_q7_to_float SupportFunctions/arm_q15_to_float SupportFunctions/arm_q7_to_q15
+    SupportFunctions/arm_float_to_q15 SupportFunctions/arm_float_to_q7 SupportFunctions/arm_q15_to_q7
+    BasicMathFunctions/arm_dot_prod_f32 BasicMathFunctions/arm_dot_prod_q15 BasicMathFunctions/arm_scale_f32
+    BasicMathFunctions/arm_scale_q15 BasicMathFunctions/arm_mult_f32 BasicMathFunctions/arm_mult_q15
+    BasicMathFunctions/arm_abs_q15
+    ComplexMathFunctions/arm_cmplx_dot_prod_f32 ComplexMathFunctions/arm_cmplx_dot_prod_q15
+    ComplexMathFunctions/arm_cmplx_mult_real_f32 ComplexMathFunctions/arm_cmplx_mult_real_q15
+    ComplexMathFunctions/arm_cmplx_mult_cmplx_f32 ComplexMathFunctions/arm_cmplx_mult_cmplx_q15
+    ComplexMathFunctions/arm_cmplx_conj_f32 ComplexMathFunctions/arm_cmplx_mag_squared_f32
+    ComplexMathFunctions/arm_cmplx_mag_squared_q15 ComplexMathFunctions/arm_cmplx_mag_f32 ComplexMathFunctions/arm_cmplx_mag_q15
+    ControllerFunctions/arm_sin_cos_f32 ControllerFunctions/arm_sin_cos_q31
+    FastMathFunctions/arm_sin_f32 FastMathFunctions/arm_cos_f32 FastMathFunctions/arm_sin_q15 FastMathFunctions/arm_cos_q15
+    FastMathFunctions/arm_atan2_f32 FastMathFunctions/arm_atan2_q15 FastMathFunctions/arm_vlog_f32
+    FastMathFunctions/arm_sqrt_q31 FastMathFunctions/arm_divide_q15
+    FilteringFunctions/arm_fir_f32 FilteringFunctions/arm_fir_q15 FilteringFunctions/arm_fir_init_f32 FilteringFunctions/arm_fir_init_q15
+    FilteringFunctions/arm_fir_decimate_f32 FilteringFunctions/arm_fir_decimate_q15
+    FilteringFunctions/arm_fir_decimate_init_f32 FilteringFunctions/arm_fir_decimate_init_q15
+    FilteringFunctions/arm_fir_interpolate_f32 FilteringFunctions/arm_fir_interpolate_q15
+    FilteringFunctions/arm_fir_interpolate_init_f32 FilteringFunctions/arm_fir_interpolate_init_q15
+    TransformFunctions/arm_cfft_f32 TransformFunctions/arm_cfft_q15 TransformFunctions/arm_cfft_radix8_f32
+    TransformFunctions/arm_cfft_radix4_q15 TransformFunctions/arm_bitreversal TransformFunctions/arm_bitreversal2
+    TransformFunctions/arm_cfft_init_f32 TransformFunctions/arm_rfft_fast_f32 TransformFunctions/arm_rfft_fast_init_f32
+    CommonTables/arm_common_tables CommonTables/arm_const_structs"
+
+# The scalar references of the fallback round from CMSIS-DSP (generic C with the defines and
+# flags of the biquad references, D16), one library per level: libcmsisdsp-<level>.a with the
+# sources above and the handles of cmsis-dsp.c. Not on the Cortex-M4 (its report compares the
+# biquads only). Runs after build_cmsis_biquad, which unpacks the headers.
+build_cmsis_dsp() {
+    local dirs=() src
+    for src in $CMSISDSP_FALLBACK_SOURCES; do
+        dirs+=("CMSIS-DSP-$CMSISDSP_VERSION/Source/${src%%/*}")
+    done
+    tar -xzf "$downloads/CMSIS-DSP-$CMSISDSP_VERSION.tar.gz" -C "$work/cmsis" --strip-components=1 \
+        $(printf '%s\n' "${dirs[@]}" | sort -u)
+    local inc=(-I "$work/cmsis/Include" -I "$work/cmsis/PrivateInclude")
+    local entry level march dir objects pids
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        march=${march//,/ }
+        dir="$work/cmsisdsp-$level"
+        mkdir -p "$dir"
+        objects=()
+        pids=()
+        # The sources are independent: compile them $jobs at a time.
+        for src in $CMSISDSP_FALLBACK_SOURCES; do
+            $cc $BIQUAD_OPT $march $CMSISDSP_DEFINES "${inc[@]}" \
+                -c "$work/cmsis/Source/$src.c" -o "$dir/${src##*/}.o" &
+            pids+=($!)
+            objects+=("$dir/${src##*/}.o")
+            if [ ${#pids[@]} -ge "$jobs" ]; then
+                wait "${pids[0]}"
+                pids=("${pids[@]:1}")
+            fi
+        done
+        for pid in "${pids[@]}"; do
+            wait "$pid"
+        done
+        $cc $BIQUAD_OPT $march $CMSISDSP_DEFINES "${inc[@]}" -c "$here/cmsis-dsp.c" -o "$dir/handles.o"
+        $ar rcs "$prefix/lib/libcmsisdsp-$level.a" "${objects[@]}" "$dir/handles.o"
+    done
+}
+
 # The flags of KFR on wasm32 beyond those of the level. KFR has no wasm32 code of its own: its
 # CMake build for Emscripten sets KFR_ARCH=sse41 and compiles with `-msse4.1 -msimd128`, which
 # emcc turns into the macros below and Emscripten's SSE headers (SSE intrinsics written with
@@ -371,9 +473,12 @@ case $platform in
         build_kissfft
         build_gr_agc
         build_gr_squelch
+        build_gr_fallback
+        build_liquid_dcblock
         build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk fftw kissfft gragc grsquelch kfr cmsisdsp)
+        build_cmsis_dsp
+        libraries=(volk fftw kissfft gragc grsquelch grfallback liquiddc kfr cmsisdsp)
         ;;
     aarch64)
         build_volk
@@ -382,18 +487,24 @@ case $platform in
         build_ne10
         build_gr_agc
         build_gr_squelch
+        build_gr_fallback
+        build_liquid_dcblock
         build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk fftw kissfft ne10 gragc grsquelch kfr cmsisdsp)
+        build_cmsis_dsp
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback liquiddc kfr cmsisdsp)
         ;;
     wasm32)
         build_volk_wasm
         build_kissfft
         build_gr_agc
         build_gr_squelch
+        build_gr_fallback
+        build_liquid_dcblock
         build_kfr_biquad
         build_cmsis_biquad
-        libraries=(volk kissfft gragc grsquelch kfr wasisysroot emscripten cmsisdsp)
+        build_cmsis_dsp
+        libraries=(volk kissfft gragc grsquelch grfallback liquiddc kfr wasisysroot emscripten cmsisdsp)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -417,10 +528,12 @@ esac
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
+            grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
+            liquiddc) entry="\"liquid_dsp_dc_blocker\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(cat "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"liquid-dotprod.c liquid-dcblock.c (portable dot products): $GR_AGC_FLAGS\" }" ;;
             kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
             wasisysroot) entry="\"wasi_sysroot\": { \"version\": \"$WASISYSROOT_VERSION\", \"sha256\": \"$WASISYSROOT_SHA256\", \"build\": \"headers of libc++ and wasi-libc for KFR\" }" ;;
             emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;
-            cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
+            cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c and cmsis-dsp.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac

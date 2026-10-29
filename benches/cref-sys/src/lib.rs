@@ -16,14 +16,26 @@
 //!   reference of `biquad` and `biquad_real`.
 //! - [`CmsisBiquad`]: the biquad cascades of CMSIS-DSP in generic C (Apache-2.0), the scalar
 //!   reference of the biquad fallbacks.
+//! - [`cmsis_dsp`]: the scalar references of the fallback round from CMSIS-DSP in generic C
+//!   (conversions, dot products, scaling and products, magnitudes, logarithm, sine, cosine and
+//!   arc tangent, FIR filters, decimators and interpolators, complex and real FFTs), one library
+//!   per SIMD level like the biquads.
+//! - [`gnuradio`]: the GNU Radio references of the fallback round ([`GrRotator`],
+//!   [`GrFrequencyModulatorFc`], [`GrQuadratureDemodCf`], [`GrFmDeemph`]).
+//! - [`liquid`]: liquid-dsp's DC blocker ([`LiquidDcBlocker`], [`LiquidDcBlockerCrcf`], MIT).
 //!
 //! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
 //! constructor returns `None` when its library is not linked. All of them use the interleaved
 //! complex layout of `repr(C)` pairs.
 
 mod biquad;
+pub mod cmsis_dsp;
+pub mod gnuradio;
+pub mod liquid;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
+pub use gnuradio::{GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator};
+pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place
 /// (input and output are the same buffer) or out of place.

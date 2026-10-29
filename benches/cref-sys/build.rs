@@ -1,26 +1,36 @@
 //! Links the static C reference libraries that `benches/refs/build.sh` built into the prefix
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
-//! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_kfr`,
-//! `has_cmsis`) unset, and its wrapper then reports that the library is not available.
+//! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_grrotator`,
+//! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_liquiddc`, `has_kfr`, `has_cmsis`,
+//! `has_cmsisdsp`) unset, and its wrapper then reports that the library is not available.
 //!
-//! The biquad references (KFR, CMSIS-DSP) exist once per SIMD level (`libkfrbq-<level>.a`,
-//! `libcmsisbq-<level>.a`): the level is the one the target features of this build select, the
+//! The biquad references (KFR, CMSIS-DSP) and the other CMSIS-DSP references exist once per SIMD
+//! level (`libkfrbq-<level>.a`, `libcmsisbq-<level>.a`, `libcmsisdsp-<level>.a`): the level is the one the target features of this build select, the
 //! same rule as `sdrk-backend-simd` uses for our kernels, so that both sides of a comparison are
 //! compiled for the same instruction set. The level is exported as `SDRK_BIQUAD_REF_LEVEL`.
 
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 5] = [
+const LIBRARIES: [(&str, &str, &str); 10] = [
     ("has_fftw", "libfftw3f.a", "fftw3f"),
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
     ("has_gragc", "libgragc.a", "gragc"),
     ("has_grsquelch", "libgrsquelch.a", "grsquelch"),
+    ("has_grrotator", "libgrrotator.a", "grrotator"),
+    ("has_grfmmod", "libgrfmmod.a", "grfmmod"),
+    ("has_grquaddemod", "libgrquaddemod.a", "grquaddemod"),
+    ("has_grdeemph", "libgrdeemph.a", "grdeemph"),
+    ("has_liquiddc", "libliquiddc.a", "liquiddc"),
 ];
 
 /// The per-level libraries: cfg name, link name without the level.
-const LEVEL_LIBRARIES: [(&str, &str); 2] = [("has_kfr", "kfrbq"), ("has_cmsis", "cmsisbq")];
+const LEVEL_LIBRARIES: [(&str, &str); 3] = [
+    ("has_kfr", "kfrbq"),
+    ("has_cmsis", "cmsisbq"),
+    ("has_cmsisdsp", "cmsisdsp"),
+];
 
 /// The SIMD level of the target, from the target features cargo passes to build scripts.
 fn level() -> &'static str {
@@ -51,7 +61,7 @@ fn main() {
     println!("cargo:rustc-env=SDRK_BIQUAD_REF_LEVEL={level}");
     let Some(prefix) = std::env::var_os("SDRK_REFS_DIR").map(PathBuf::from) else {
         println!(
-            "cargo:warning=SDRK_REFS_DIR is not set; the FFTW, KissFFT, Ne10, GNU Radio, KFR and CMSIS-DSP comparisons are disabled"
+            "cargo:warning=SDRK_REFS_DIR is not set; the FFTW, KissFFT, Ne10, GNU Radio, liquid-dsp, KFR and CMSIS-DSP comparisons are disabled"
         );
         return;
     };

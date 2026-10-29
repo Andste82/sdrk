@@ -10,7 +10,6 @@ use crate::kernels::check_len;
 use crate::kernels::fft::{
     Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling, irfft_with, rfft_with,
 };
-use crate::num::{round_shift, sat16};
 use crate::types::{C32, CQ15, Q15};
 
 fn tw_error() -> Error {
@@ -35,10 +34,18 @@ fn bit_reverse<T>(data: &mut [T], log2n: u32) {
 
 /// One radix-2 stage of `C32` data: `half` is the half block length, `step` the twiddle step.
 fn stage_c32(data: &mut [C32], tw: &[C32], half: usize, step: usize, inverse: bool) -> Result<()> {
+    // The twiddles of a block are `tw[k * step]` for `k < half`: checked once here instead of
+    // once per butterfly.
+    if half == 0 || step == 0 || (half - 1).saturating_mul(step) >= tw.len() {
+        return Err(tw_error());
+    }
     for block in data.chunks_exact_mut(2 * half) {
         let (lo, hi) = block.split_at_mut(half);
-        for (k, (a, c)) in lo.iter_mut().zip(hi.iter_mut()).enumerate() {
-            let w = tw.get(k * step).ok_or_else(tw_error)?;
+        for ((a, c), w) in lo
+            .iter_mut()
+            .zip(hi.iter_mut())
+            .zip(tw.iter().step_by(step))
+        {
             let wi = if inverse { -w.im } else { w.im };
             let tr = w.re * c.re - wi * c.im;
             let ti = w.re * c.im + wi * c.re;
@@ -62,14 +69,39 @@ fn stage_q15(
     inverse: bool,
     shift: u32,
 ) -> Result<usize> {
+    // One copy per shift, so that the rounding shifts are constants.
+    match shift {
+        0 => stage_q15_by::<0>(data, tw, half, step, inverse),
+        1 => stage_q15_by::<1>(data, tw, half, step, inverse),
+        2 => stage_q15_by::<2>(data, tw, half, step, inverse),
+        _ => Err(Error::Internal("block-floating-point shift")),
+    }
+}
+
+/// [`stage_q15`] with the output shift `SHIFT`.
+///
+/// The same values as `sat16(round_shift(x, s))` of `crate::num`: the operands are far from the
+/// range of `i64` (a twiddle product below `2^31` in magnitude, a sum below `2^17`), so the
+/// saturating addition of `round_shift` is a plain one and the rounding is `(x + 2^(s - 1)) >> s`
+/// with the shifts as constants.
+fn stage_q15_by<const SHIFT: u32>(
+    data: &mut [CQ15],
+    tw: &[CQ15],
+    half: usize,
+    step: usize,
+    inverse: bool,
+) -> Result<usize> {
     let mut clamped = 0usize;
     let mut store = |v: i64| -> Q15 {
-        let r = round_shift(v, shift);
-        let s = sat16(r);
-        if i64::from(s) != r {
-            clamped += 1;
-        }
-        Q15(s)
+        let r = if SHIFT == 0 {
+            v
+        } else {
+            (v + (1 << (SHIFT - 1))) >> SHIFT
+        };
+        // `sat16` as a clamp, which compiles without branches.
+        let s = r.clamp(-32768, 32767);
+        clamped += usize::from(s != r);
+        Q15(s as i16)
     };
     for block in data.chunks_exact_mut(2 * half) {
         let (lo, hi) = block.split_at_mut(half);
@@ -78,8 +110,8 @@ fn stage_q15(
             let (wr, wi) = (i64::from(w.re.0), i64::from(w.im.0));
             let wi = if inverse { -wi } else { wi };
             let (cr, ci) = (i64::from(c.re.0), i64::from(c.im.0));
-            let tr = round_shift(wr * cr - wi * ci, 15);
-            let ti = round_shift(wr * ci + wi * cr, 15);
+            let tr = (wr * cr - wi * ci + (1 << 14)) >> 15;
+            let ti = (wr * ci + wi * cr + (1 << 14)) >> 15;
             let (ar, ai) = (i64::from(a.re.0), i64::from(a.im.0));
             *a = CQ15 {
                 re: store(ar + tr),
@@ -313,5 +345,107 @@ mod tests {
         let clamped = stage_q15(&mut data, &tw, 1, 1, false, 0).unwrap();
         assert_eq!(clamped, 1);
         assert_eq!(data[0].re, Q15(32767));
+    }
+
+    /// `stage_q15` as the formula of `docs/kernels.md` with `round_shift` and `sat16`, written
+    /// out per butterfly: the twiddle product rounded to Q15, the sum shifted with rounding and
+    /// saturated, and the clamps counted.
+    fn stage_q15_formula(
+        data: &mut [CQ15],
+        tw: &[CQ15],
+        half: usize,
+        step: usize,
+        inverse: bool,
+        shift: u32,
+    ) -> usize {
+        use crate::num::{round_shift, sat16};
+        let mut clamped = 0;
+        let mut store = |v: i64| {
+            let r = round_shift(v, shift);
+            let s = sat16(r);
+            clamped += usize::from(i64::from(s) != r);
+            Q15(s)
+        };
+        for block in data.chunks_exact_mut(2 * half) {
+            let (lo, hi) = block.split_at_mut(half);
+            for (k, (a, c)) in lo.iter_mut().zip(hi.iter_mut()).enumerate() {
+                let w = tw[k * step];
+                let (wr, wi) = (i64::from(w.re.0), i64::from(w.im.0));
+                let wi = if inverse { -wi } else { wi };
+                let (cr, ci) = (i64::from(c.re.0), i64::from(c.im.0));
+                let tr = round_shift(wr * cr - wi * ci, 15);
+                let ti = round_shift(wr * ci + wi * cr, 15);
+                let (ar, ai) = (i64::from(a.re.0), i64::from(a.im.0));
+                *a = CQ15 {
+                    re: store(ar + tr),
+                    im: store(ai + ti),
+                };
+                *c = CQ15 {
+                    re: store(ar - tr),
+                    im: store(ai - ti),
+                };
+            }
+        }
+        clamped
+    }
+
+    #[test]
+    fn the_q15_stage_is_the_formula_bit_for_bit() {
+        // Random components and twiddles over the whole range, with the extremes mixed in
+        // (`-32768` makes the largest products and sums, and with shift 0 most clamps).
+        let mut s = 7u64;
+        let value = |s: &mut u64| -> Q15 {
+            let r = lcg(s);
+            Q15(match r % 8 {
+                0 => -32768,
+                1 => 32767,
+                _ => (r >> 3) as u16 as i16,
+            })
+        };
+        for log2 in 1..=6 {
+            let n = 1usize << log2;
+            let x: std::vec::Vec<CQ15> = (0..n)
+                .map(|_| CQ15 {
+                    re: value(&mut s),
+                    im: value(&mut s),
+                })
+                .collect();
+            let tw: std::vec::Vec<CQ15> = (0..n / 2)
+                .map(|_| CQ15 {
+                    re: value(&mut s),
+                    im: value(&mut s),
+                })
+                .collect();
+            for stage in 1..=log2 {
+                let half = 1usize << (stage - 1);
+                let step = n >> stage;
+                for inverse in [false, true] {
+                    for shift in 0..=2 {
+                        let mut want = x.clone();
+                        let mut got = x.clone();
+                        let clamps = stage_q15_formula(&mut want, &tw, half, step, inverse, shift);
+                        let counted = stage_q15(&mut got, &tw, half, step, inverse, shift).unwrap();
+                        assert_eq!(got, want, "n={n} half={half} {inverse} shift {shift}");
+                        assert_eq!(counted, clamps, "n={n} half={half} {inverse} shift {shift}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_stages_reject_a_short_twiddle_table() {
+        let mut q = [CQ15::default(); 8];
+        let tw = [CQ15::default(); 3];
+        // The butterflies of half 4 need the twiddles 0 to 3 (step 1), those of half 2 and step
+        // 3 the twiddles 0 and 3.
+        assert!(stage_q15(&mut q, &tw, 4, 1, false, 1).is_err());
+        assert!(stage_q15(&mut q, &tw, 2, 1, false, 3).is_err());
+        let mut c = [C32::default(); 8];
+        let tw = [C32::default(); 3];
+        assert!(stage_c32(&mut c, &tw, 4, 1, false).is_err());
+        assert!(stage_c32(&mut c, &tw, 2, 3, false).is_err());
+        assert!(stage_c32(&mut c, &tw, 2, 2, false).is_ok());
+        assert!(stage_c32(&mut c, &tw, 2, 1, false).is_ok());
     }
 }

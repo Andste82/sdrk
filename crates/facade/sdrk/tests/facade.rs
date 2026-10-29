@@ -98,18 +98,14 @@ fn backend_table_lists_the_m05_kernels() {
     for (kernel, ty) in [
         ("convert", SampleType::C32),
         ("convert", SampleType::CQ15),
+        ("convert_real", SampleType::F32),
+        ("convert_real", SampleType::Q15),
         ("rotate", SampleType::C32),
         ("rotate", SampleType::CQ15),
         ("fir", SampleType::C32),
         ("fir", SampleType::CQ15),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
-    }
-    for (kernel, ty) in [
-        ("convert_real", SampleType::F32),
-        ("convert_real", SampleType::Q15),
-    ] {
-        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
     }
     assert_eq!(backend_for("convert", SampleType::F32), "none");
     assert_eq!(backend_for("convert_real", SampleType::C32), "none");

@@ -67,6 +67,68 @@
       "status": "release"
     }
   },
+  "convert_real_rs16": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_cq15_cs8": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "the wasm32 build of VOLK (`benches/refs/volk-wasm.c`) has no `volk_8i_convert_16i`; compared with our fallback, so the comparison is information"
+    }
+  },
+  "convert_cq15_cu8": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "the wasm32 build of VOLK (`benches/refs/volk-wasm.c`) has no `volk_8i_convert_16i`; compared with our fallback, so the comparison is information"
+    }
+  },
   "convert_out_cs16": {
     "sse2": {
       "status": "release"

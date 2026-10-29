@@ -1,4 +1,4 @@
-//! `convert`: raw device bytes to `C32` / `CQ15`.
+//! `convert`: raw device bytes to `C32` / `CQ15`; `convert_real` to `f32` / `Q15`.
 //!
 //! The common interleaved formats (`U8`, `I8` and little-endian `I16` with the full container
 //! as valid bits, power-of-two full scale, no I/Q swap) run vectorised; every other format and
@@ -26,15 +26,17 @@
 //!   fold into the offsets of the loads and stores.
 //!
 //! The generic `fearless_simd` code runs on a level without a path, and the values after the
-//! last whole vector go through the scalar formulas.
+//! last whole vector go through the scalar formulas. To `CQ15` the generic code widens and
+//! shifts (`I16` is a copy). `convert_real` of the same formats with `Layout::Real` converts the
+//! values in pairs through `convert`.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
-use sdrk_core::kernels::convert::Convert;
-use sdrk_core::{C32, CQ15, Fallback, Result};
+use sdrk_core::kernels::convert::{Convert, ConvertReal};
+use sdrk_core::{C32, CQ15, ComplexSample, Fallback, Q15, Result};
 use sdrk_device::{Align, Container, Endian, FullScale, Layout, SampleFormat, formats};
 
 use crate::Simd;
-use crate::level::{dispatch, is_sse2_baseline};
+use crate::level::{dispatch_fn, is_sse2_baseline};
 use crate::util;
 
 /// The formats with a vector path.
@@ -86,10 +88,45 @@ pub(crate) fn fast_kind(format: &SampleFormat) -> Option<Kind> {
     }
 }
 
+/// The vector-path kind of a real format, if it has one: the values are in stream order as
+/// those of an interleaved format, so the same paths convert them. (The tests are those of
+/// [`fast_kind`]; a shared helper, or a shared [`fast_samples`] with the number of values per
+/// sample as an argument, changes the code LLVM generates for `convert` and costs it about 15
+/// instructions per call at SSE4.2.)
+#[inline(always)]
+fn fast_kind_real(format: &SampleFormat) -> Option<Kind> {
+    if *format == formats::RS16 {
+        return Some(Kind::I16);
+    }
+    if format.layout() != Layout::Real
+        || format.swap_iq()
+        || format.full_scale() != FullScale::PowerOfTwo
+        || format.align() != Align::Lsb
+    {
+        return None;
+    }
+    match (format.container(), format.bits(), format.signed()) {
+        (Container::U8, 8, false) => Some(Kind::U8),
+        (Container::I8, 8, true) => Some(Kind::I8),
+        (Container::I16, 16, true) if format.endian() == Endian::Little => Some(Kind::I16),
+        _ => None,
+    }
+}
+
 /// The number of samples if `input_len` bytes and `output_len` samples are valid for the fast
 /// path (whole samples and enough room), else `None` so that the fallback reports the error.
 fn fast_samples(kind: Kind, input_len: usize, output_len: usize) -> Option<usize> {
     let per_sample = 2 * kind.width();
+    if !input_len.is_multiple_of(per_sample) {
+        return None;
+    }
+    let samples = input_len / per_sample;
+    (output_len >= samples).then_some(samples)
+}
+
+/// [`fast_samples`] of a real format (one value per sample).
+fn fast_samples_real(kind: Kind, input_len: usize, output_len: usize) -> Option<usize> {
+    let per_sample = kind.width();
     if !input_len.is_multiple_of(per_sample) {
         return None;
     }
@@ -291,6 +328,12 @@ fn level_path<S: SimdToken>(simd: S, kind: Kind, bytes: &[u8], out: &mut [f32]) 
     let _ = (level, float_bits, kind, bytes, out);
     None
 }
+
+// The entries of the paths, one function per level (see `dispatch_fn!`): with the level
+// detected at run time they cost fewer instructions per call than `dispatch!`.
+dispatch_fn!(fn f32_run(kind: Kind, input: &[u8], out: &mut [f32]) => f32_in);
+dispatch_fn!(fn i8_q15_run(input: &[u8], out: &mut [i16]) => i8_to_q15);
+dispatch_fn!(fn u8_q15_run(input: &[u8], out: &mut [i16]) => u8_to_q15);
 
 /// `CU8`, `CS8` or `CS16` to `C32` (as interleaved `f32`).
 #[inline(always)]
@@ -751,21 +794,63 @@ mod wasm {
     }
 }
 
+/// Runs `unit` (one vector of bytes to two vectors of Q15 values) over all whole vectors, four
+/// per iteration of the main loop (the loop overhead is a third of the work otherwise), then
+/// one per iteration; returns the number of values done.
+#[inline(always)]
+fn q15_blocks<S: SimdToken>(
+    simd: S,
+    bytes: &[u8],
+    out: &mut [i16],
+    unit: impl Fn(S::u8s) -> (S::i16s, S::i16s),
+) -> usize {
+    // A function, not a closure: in the run-time dispatched build a closure here stays an
+    // out-of-line call per vector.
+    #[inline(always)]
+    fn vector<S: SimdToken>(
+        simd: S,
+        h: usize,
+        unit: &impl Fn(S::u8s) -> (S::i16s, S::i16s),
+        b: &[u8],
+        o: &mut [i16],
+    ) {
+        let (lo, hi) = unit(S::u8s::from_slice(simd, b));
+        let (o_lo, o_hi) = o.split_at_mut(h);
+        lo.store_slice(o_lo);
+        hi.store_slice(o_hi);
+    }
+    let n = S::u8s::LEN;
+    let h = S::i16s::LEN;
+    let blocks = bytes.len().min(out.len()) / (4 * n) * 4 * n;
+    let mut ic = bytes.chunks_exact(4 * n);
+    let mut oc = out.chunks_exact_mut(4 * n);
+    for (b, o) in (&mut ic).zip(&mut oc) {
+        for (b, o) in b.chunks_exact(n).zip(o.chunks_exact_mut(n)) {
+            vector(simd, h, &unit, b, o);
+        }
+    }
+    let mut ic = ic.remainder().chunks_exact(n);
+    let mut oc = oc.into_remainder().chunks_exact_mut(n);
+    let mut done = blocks;
+    for (b, o) in (&mut ic).zip(&mut oc) {
+        vector(simd, h, &unit, b, o);
+        done += n;
+    }
+    done
+}
+
 /// `CS8` to Q15: `x << 8`.
 #[inline(always)]
 fn i8_to_q15<S: SimdToken>(simd: S, bytes: &[u8], out: &mut [i16]) {
-    let n = S::i8s::LEN;
-    let h = S::i16s::LEN;
-    let mut ic = bytes.chunks_exact(n);
-    let mut oc = out.chunks_exact_mut(n);
-    for (b, o) in (&mut ic).zip(&mut oc) {
-        let v: S::i8s = S::u8s::from_slice(simd, b).bitcast();
-        let (lo, hi) = v.widen();
-        let (o_lo, o_hi) = o.split_at_mut(h);
-        (lo << 8u32).store_slice(o_lo);
-        (hi << 8u32).store_slice(o_hi);
-    }
-    for (o, &b) in oc.into_remainder().iter_mut().zip(ic.remainder()) {
+    let done = q15_blocks(simd, bytes, out, |v| {
+        let (lo, hi) = v.bitcast::<S::i8s>().widen();
+        (lo << 8u32, hi << 8u32)
+    });
+    let (bytes, out) = (
+        bytes.get(done..).unwrap_or_default(),
+        out.get_mut(done..).unwrap_or_default(),
+    );
+    for (o, &b) in out.iter_mut().zip(bytes) {
         *o = i16::from(b as i8) << 8;
     }
 }
@@ -773,31 +858,26 @@ fn i8_to_q15<S: SimdToken>(simd: S, bytes: &[u8], out: &mut [i16]) {
 /// `CU8` to Q15: `(2x - 255) << 7`.
 #[inline(always)]
 fn u8_to_q15<S: SimdToken>(simd: S, bytes: &[u8], out: &mut [i16]) {
-    let n = S::u8s::LEN;
-    let h = S::i16s::LEN;
     let c255 = S::i16s::splat(simd, 255);
-    let mut ic = bytes.chunks_exact(n);
-    let mut oc = out.chunks_exact_mut(n);
-    for (b, o) in (&mut ic).zip(&mut oc) {
-        let v = S::u8s::from_slice(simd, b);
+    let done = q15_blocks(simd, bytes, out, |v| {
         let (lo, hi) = v.widen();
         let lo: S::i16s = lo.bitcast();
         let hi: S::i16s = hi.bitcast();
-        let (o_lo, o_hi) = o.split_at_mut(h);
-        (((lo + lo) - c255) << 7u32).store_slice(o_lo);
-        (((hi + hi) - c255) << 7u32).store_slice(o_hi);
-    }
-    for (o, &b) in oc.into_remainder().iter_mut().zip(ic.remainder()) {
+        (((lo + lo) - c255) << 7u32, ((hi + hi) - c255) << 7u32)
+    });
+    let (bytes, out) = (
+        bytes.get(done..).unwrap_or_default(),
+        out.get_mut(done..).unwrap_or_default(),
+    );
+    for (o, &b) in out.iter_mut().zip(bytes) {
         *o = (2 * i16::from(b) - 255) << 7;
     }
 }
 
-/// The bytes of a `CQ15` slice as `i16` values.
-fn q15_view(out: &mut [CQ15]) -> &mut [i16] {
-    bytemuck::cast_slice_mut(out)
-}
-
 impl Convert<C32> for Simd {
+    // Not inlined into `convert_real`, which calls it for the pairs of values: inlined there,
+    // the checks no longer fold for each kind.
+    #[inline(never)]
     fn convert(&self, format: &SampleFormat, input: &[u8], output: &mut [C32]) -> Result<usize> {
         let Some(kind) = fast_kind(format) else {
             return Fallback.convert(format, input, output);
@@ -808,13 +888,14 @@ impl Convert<C32> for Simd {
         let Some(out) = output.get_mut(..samples) else {
             return Fallback.convert(format, input, output);
         };
-        let out: &mut [f32] = bytemuck::cast_slice_mut(out);
-        dispatch!(simd => f32_in(simd, kind, input, out));
+        f32_run(kind, input, bytemuck::cast_slice_mut(out));
         Ok(samples)
     }
 }
 
 impl Convert<CQ15> for Simd {
+    // Not inlined into `convert_real` (see `Convert<C32>`).
+    #[inline(never)]
     fn convert(&self, format: &SampleFormat, input: &[u8], output: &mut [CQ15]) -> Result<usize> {
         let Some(kind) = fast_kind(format) else {
             return Fallback.convert(format, input, output);
@@ -825,16 +906,83 @@ impl Convert<CQ15> for Simd {
         let Some(out) = output.get_mut(..samples) else {
             return Fallback.convert(format, input, output);
         };
-        let out = q15_view(out);
+        let out: &mut [i16] = bytemuck::cast_slice_mut(out);
         match kind {
             // Little-endian `cs16` is byte-identical to `CQ15`.
             Kind::I16 => {
                 let bytes: &mut [u8] = bytemuck::cast_slice_mut(out);
                 bytes.copy_from_slice(input);
             }
-            Kind::I8 => dispatch!(simd => i8_to_q15(simd, input, out)),
-            Kind::U8 => dispatch!(simd => u8_to_q15(simd, input, out)),
+            Kind::I8 => i8_q15_run(input, out),
+            Kind::U8 => u8_q15_run(input, out),
         }
         Ok(samples)
+    }
+}
+
+/// The interleaved format whose values are those of a real format of `kind`.
+fn complex_of(kind: Kind) -> &'static SampleFormat {
+    match kind {
+        Kind::U8 => &formats::CU8,
+        Kind::I8 => &formats::CS8,
+        Kind::I16 => &formats::CS16,
+    }
+}
+
+/// `convert_real` of a real format with a vector path: the values in pairs through `convert`
+/// of the interleaved format (so that each level path has one call site, which LLVM inlines;
+/// with two it calls them out of line, about 25 instructions more per call at SSE4.2), an odd
+/// last value through the fallback.
+fn real_in<T: ComplexSample>(
+    format: &SampleFormat,
+    input: &[u8],
+    output: &mut [T::Real],
+) -> Result<usize>
+where
+    Simd: Convert<T>,
+    Fallback: ConvertReal<T::Real>,
+{
+    let Some(kind) = fast_kind_real(format) else {
+        return Fallback.convert_real(format, input, output);
+    };
+    let Some(samples) = fast_samples_real(kind, input.len(), output.len()) else {
+        return Fallback.convert_real(format, input, output);
+    };
+    let Some(out) = output.get_mut(..samples) else {
+        return Fallback.convert_real(format, input, output);
+    };
+    let pairs = samples / 2;
+    let (out, last) = out.split_at_mut(2 * pairs);
+    let (bytes, rest) = input.split_at(2 * pairs * kind.width());
+    Simd.convert(
+        complex_of(kind),
+        bytes,
+        bytemuck::cast_slice_mut::<_, T>(out),
+    )?;
+    if !last.is_empty() {
+        Fallback.convert_real(format, rest, last)?;
+    }
+    Ok(samples)
+}
+
+impl ConvertReal<f32> for Simd {
+    fn convert_real(
+        &self,
+        format: &SampleFormat,
+        input: &[u8],
+        output: &mut [f32],
+    ) -> Result<usize> {
+        real_in::<C32>(format, input, output)
+    }
+}
+
+impl ConvertReal<Q15> for Simd {
+    fn convert_real(
+        &self,
+        format: &SampleFormat,
+        input: &[u8],
+        output: &mut [Q15],
+    ) -> Result<usize> {
+        real_in::<CQ15>(format, input, output)
     }
 }

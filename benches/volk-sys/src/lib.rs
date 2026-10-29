@@ -72,6 +72,10 @@ mod ffi {
             Option<unsafe extern "C" fn(*mut f32, *const i8, f32, c_uint)>;
         pub static mut volk_16i_s32f_convert_32f:
             Option<unsafe extern "C" fn(*mut f32, *const i16, f32, c_uint)>;
+        // Not in the wasm32 build of `benches/refs/volk-wasm.c`.
+        #[cfg(not(target_arch = "wasm32"))]
+        pub static mut volk_8i_convert_16i:
+            Option<unsafe extern "C" fn(*mut i16, *const i8, c_uint)>;
         pub static mut volk_32f_s32f_convert_16i:
             Option<unsafe extern "C" fn(*mut i16, *const f32, f32, c_uint)>;
         pub static mut volk_32f_s32f_convert_8i:
@@ -102,6 +106,8 @@ mod ffi {
 
         pub fn volk_8i_s32f_convert_32f_get_func_desc() -> volk_func_desc_t;
         pub fn volk_16i_s32f_convert_32f_get_func_desc() -> volk_func_desc_t;
+        #[cfg(not(target_arch = "wasm32"))]
+        pub fn volk_8i_convert_16i_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32f_s32f_convert_16i_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32f_s32f_convert_8i_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32f_s32f_x2_convert_8u_get_func_desc() -> volk_func_desc_t;
@@ -250,6 +256,27 @@ pub mod native {
     }
 }
 
+/// Whether [`volk_8i_convert_16i`] is in the linked VOLK: not in the wasm32 build of the
+/// generic protokernels (`benches/refs/volk-wasm.c`).
+pub const HAS_8I_CONVERT_16I: bool = AVAILABLE && cfg!(not(target_arch = "wasm32"));
+
+/// `out[i] = in[i] * 256`.
+#[cfg(all(not(no_volk), not(target_arch = "wasm32")))]
+pub unsafe fn volk_8i_convert_16i(out: *mut i16, input: *const i8, n: u32) {
+    // SAFETY: as in the functions of `wrappers!`.
+    unsafe {
+        if let Some(f) = (&raw const ffi::volk_8i_convert_16i).read() {
+            f(out, input, n);
+        }
+    }
+}
+
+/// Not available in this build (see [`HAS_8I_CONVERT_16I`]).
+#[cfg(any(no_volk, target_arch = "wasm32"))]
+pub unsafe fn volk_8i_convert_16i(_: *mut i16, _: *const i8, _: u32) {
+    unreachable!("volk_8i_convert_16i is not available")
+}
+
 /// The current value of `volk_32fc_32f_dot_prod_32fc_a`, the aligned dot product as GNU Radio's
 /// `fir_filter_ccf` calls it: no alignment check per call. Before the first call it is VOLK's
 /// initialisation stub, which resolves and calls the implementation.
@@ -366,6 +393,8 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
         let get: unsafe extern "C" fn() -> volk_func_desc_t = match name {
             "volk_8i_s32f_convert_32f" => ffi::volk_8i_s32f_convert_32f_get_func_desc,
             "volk_16i_s32f_convert_32f" => ffi::volk_16i_s32f_convert_32f_get_func_desc,
+            #[cfg(not(target_arch = "wasm32"))]
+            "volk_8i_convert_16i" => ffi::volk_8i_convert_16i_get_func_desc,
             "volk_32f_s32f_convert_16i" => ffi::volk_32f_s32f_convert_16i_get_func_desc,
             "volk_32f_s32f_convert_8i" => ffi::volk_32f_s32f_convert_8i_get_func_desc,
             "volk_32f_s32f_x2_convert_8u" => ffi::volk_32f_s32f_x2_convert_8u_get_func_desc,

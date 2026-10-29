@@ -14,7 +14,7 @@ use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
 use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState};
-use sdrk::kernels::convert::{Convert, ConvertOut, ConvertOutReal};
+use sdrk::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
 use sdrk::kernels::decim::{
     FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
 };
@@ -302,7 +302,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 56] = [
+pub const KERNELS: [&str; 59] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -359,6 +359,9 @@ pub const KERNELS: [&str; 56] = [
     "fir_interpolate_real_q15",
     "resample_real_q15",
     "fm_mod_cq15",
+    "convert_real_rs16",
+    "convert_cq15_cs8",
+    "convert_cq15_cu8",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -375,6 +378,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "convert_cs8" => Box::new(ConvertIn::new(rng, layout, InFormat::Cs8)),
         "convert_cs16" => Box::new(ConvertIn::new(rng, layout, InFormat::Cs16)),
         "convert_cu8" => Box::new(ConvertIn::new(rng, layout, InFormat::Cu8)),
+        "convert_real_rs16" => Box::new(ConvertIn::new(rng, layout, InFormat::Rs16)),
+        "convert_cq15_cs8" => Box::new(ConvertQ15In::new(rng, layout, InFormat::Cs8)),
+        "convert_cq15_cu8" => Box::new(ConvertQ15In::new(rng, layout, InFormat::Cu8)),
         "convert_out_cs16" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cs16)),
         "convert_out_cs8" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cs8)),
         "convert_out_cu8" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cu8)),
@@ -503,6 +509,8 @@ enum InFormat {
     Cs8,
     Cs16,
     Cu8,
+    /// Real `i16`, little endian (`ConvertReal<f32>`).
+    Rs16,
 }
 
 impl InFormat {
@@ -511,14 +519,20 @@ impl InFormat {
             InFormat::Cs8 => &formats::CS8,
             InFormat::Cs16 => &formats::CS16,
             InFormat::Cu8 => &formats::CU8,
+            InFormat::Rs16 => &formats::RS16,
         }
     }
 
     fn component_bytes(self) -> usize {
         match self {
             InFormat::Cs8 | InFormat::Cu8 => 1,
-            InFormat::Cs16 => 2,
+            InFormat::Cs16 | InFormat::Rs16 => 2,
         }
+    }
+
+    /// Values per sample.
+    fn components(self) -> usize {
+        if self == InFormat::Rs16 { 1 } else { 2 }
     }
 
     /// The f64 value of the component at byte offset `2 * i` (CS16: little endian).
@@ -526,12 +540,15 @@ impl InFormat {
         match self {
             InFormat::Cs8 => f64::from(raw[i] as i8) / 128.0,
             InFormat::Cu8 => (f64::from(raw[i]) - 127.5) / 128.0,
-            InFormat::Cs16 => f64::from(i16::from_le_bytes([raw[2 * i], raw[2 * i + 1]])) / 32768.0,
+            InFormat::Cs16 | InFormat::Rs16 => {
+                f64::from(i16::from_le_bytes([raw[2 * i], raw[2 * i + 1]])) / 32768.0
+            }
         }
     }
 }
 
-/// `convert` from a raw interleaved format to C32.
+/// `convert` from a raw interleaved format to C32, or `convert_real` from a raw real format to
+/// f32 (in the first `n` floats of `out`).
 struct ConvertIn {
     format: InFormat,
     raw: Aligned<u8>,
@@ -544,27 +561,7 @@ struct ConvertIn {
 
 impl ConvertIn {
     fn new(rng: &mut Pcg32, layout: Layout, format: InFormat) -> Self {
-        let bytes = 2 * layout.n * format.component_bytes();
-        let mut raw = Aligned::<u8>::skewed(bytes, layout.skew(2 * format.component_bytes()));
-        match format {
-            InFormat::Cs16 => {
-                let (pairs, _) = raw.as_chunks_mut::<2>();
-                for b in pairs {
-                    *b = (rng.next_u32() as i16).to_le_bytes();
-                }
-            }
-            InFormat::Cs8 | InFormat::Cu8 => {
-                for b in raw.iter_mut() {
-                    *b = rng.next_u32() as u8;
-                }
-            }
-        }
-        let mut signed = Aligned::<u8>::skewed(bytes, layout.skew(2 * format.component_bytes()));
-        if format == InFormat::Cu8 {
-            for (s, r) in signed.iter_mut().zip(raw.iter()) {
-                *s = r ^ 0x80;
-            }
-        }
+        let (raw, signed) = convert_input(rng, layout, format);
         ConvertIn {
             format,
             raw,
@@ -573,6 +570,47 @@ impl ConvertIn {
             n: layout.n,
         }
     }
+
+    /// The `f32` output values: `2 n` of a complex format, `n` of a real one.
+    fn values(&self) -> usize {
+        self.format.components() * self.n
+    }
+}
+
+/// The first `values` floats of `out` (at most `2 out.len()`).
+fn floats(out: &mut [C32], values: usize) -> &mut [f32] {
+    assert!(values <= 2 * out.len());
+    // SAFETY: `C32` is two `f32` (`repr(C)`), so `out` holds `2 out.len() >= values` floats;
+    // the slice borrows `out` mutably.
+    unsafe { std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<f32>(), values) }
+}
+
+/// The raw input of `n` samples of `format`, and for `CU8` the bytes with the sign bit flipped
+/// (`u - 128` as `i8`), the input of the VOLK comparisons.
+fn convert_input(rng: &mut Pcg32, layout: Layout, format: InFormat) -> (Aligned<u8>, Aligned<u8>) {
+    let sample = format.components() * format.component_bytes();
+    let bytes = layout.n * sample;
+    let mut raw = Aligned::<u8>::skewed(bytes, layout.skew(sample));
+    match format {
+        InFormat::Cs16 | InFormat::Rs16 => {
+            let (pairs, _) = raw.as_chunks_mut::<2>();
+            for b in pairs {
+                *b = (rng.next_u32() as i16).to_le_bytes();
+            }
+        }
+        InFormat::Cs8 | InFormat::Cu8 => {
+            for b in raw.iter_mut() {
+                *b = rng.next_u32() as u8;
+            }
+        }
+    }
+    let mut signed = Aligned::<u8>::skewed(bytes, layout.skew(sample));
+    if format == InFormat::Cu8 {
+        for (s, r) in signed.iter_mut().zip(raw.iter()) {
+            *s = r ^ 0x80;
+        }
+    }
+    (raw, signed)
 }
 
 // The calls of our kernels go through these wrappers, which are never inlined into the
@@ -585,12 +623,39 @@ fn convert_in<B: Convert<C32>>(backend: &B, format: &SampleFormat, raw: &[u8], o
     let _ = black_box(backend.convert(format, black_box(raw), out));
 }
 
+#[inline(never)]
+fn convert_real_in<B: ConvertReal<f32>>(
+    backend: &B,
+    format: &SampleFormat,
+    raw: &[u8],
+    out: &mut [f32],
+) {
+    let _ = black_box(backend.convert_real(format, black_box(raw), out));
+}
+
+#[inline(never)]
+fn convert_cq15_in<B: Convert<CQ15>>(
+    backend: &B,
+    format: &SampleFormat,
+    raw: &[u8],
+    out: &mut [CQ15],
+) {
+    let _ = black_box(backend.convert(format, black_box(raw), out));
+}
+
 impl Kernel for ConvertIn {
     fn run(&mut self, which: Impl, k: usize) {
         let format = self.format.format();
-        let values = 2 * self.n as u32;
+        let values = self.values() as u32;
+        let real = self.format == InFormat::Rs16;
         for _ in 0..k {
             match which {
+                Impl::Ours if real => {
+                    convert_real_in(&Sdrk, format, &self.raw, floats(&mut self.out, self.n));
+                }
+                Impl::Fallback if real => {
+                    convert_real_in(&Fallback, format, &self.raw, floats(&mut self.out, self.n));
+                }
                 Impl::Ours => convert_in(&Sdrk, format, &self.raw, &mut self.out),
                 Impl::Fallback => convert_in(&Fallback, format, &self.raw, &mut self.out),
                 Impl::Volk => {
@@ -605,9 +670,10 @@ impl Kernel for ConvertIn {
                                 values,
                             );
                         },
-                        // SAFETY: `raw` holds `2 n` little-endian `i16` values (the alignment
-                        // of an `i16` is kept by the even skew), `out` `2 n` floats.
-                        InFormat::Cs16 => unsafe {
+                        // SAFETY: `raw` holds `values` little-endian `i16` values (the
+                        // alignment of an `i16` is kept by the even skew), `out` at least
+                        // `values` floats.
+                        InFormat::Cs16 | InFormat::Rs16 => unsafe {
                             volk_sys::volk_16i_s32f_convert_32f(
                                 out,
                                 self.raw.as_ptr().cast(),
@@ -642,10 +708,11 @@ impl Kernel for ConvertIn {
                 *v = C32::new(v.re + 0.5 / 128.0, v.im + 0.5 / 128.0);
             }
         }
-        let want: Vec<f64> = (0..2 * self.n)
+        let values = self.values();
+        let want: Vec<f64> = (0..values)
             .map(|i| self.format.value(&self.raw, i))
             .collect();
-        snr_db(&want, &c32s(&self.out))
+        snr_db(&want, &c32s(&self.out)[..values])
     }
 
     fn supports(&self, which: Impl) -> bool {
@@ -671,8 +738,103 @@ impl Kernel for ConvertIn {
     fn volk_functions(&self) -> &'static [&'static str] {
         match self.format {
             InFormat::Cs8 | InFormat::Cu8 => &["volk_8i_s32f_convert_32f"],
-            InFormat::Cs16 => &["volk_16i_s32f_convert_32f"],
+            InFormat::Cs16 | InFormat::Rs16 => &["volk_16i_s32f_convert_32f"],
         }
+    }
+}
+
+/// `convert` from a raw interleaved 8-bit format to CQ15.
+struct ConvertQ15In {
+    format: InFormat,
+    raw: Aligned<u8>,
+    /// CU8 only: the bytes with the sign bit flipped, the input of the VOLK comparison.
+    signed: Aligned<u8>,
+    out: Aligned<CQ15>,
+    n: usize,
+}
+
+impl ConvertQ15In {
+    fn new(rng: &mut Pcg32, layout: Layout, format: InFormat) -> Self {
+        let (raw, signed) = convert_input(rng, layout, format);
+        ConvertQ15In {
+            format,
+            raw,
+            signed,
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+            n: layout.n,
+        }
+    }
+}
+
+impl Kernel for ConvertQ15In {
+    fn run(&mut self, which: Impl, k: usize) {
+        let format = self.format.format();
+        let values = 2 * self.n as u32;
+        for _ in 0..k {
+            match which {
+                Impl::Ours => convert_cq15_in(&Sdrk, format, &self.raw, &mut self.out),
+                Impl::Fallback => convert_cq15_in(&Fallback, format, &self.raw, &mut self.out),
+                Impl::Volk => {
+                    // VOLK converts signed bytes only. `(u - 128) << 8` from the flipped bytes
+                    // is the same work as the CU8 conversion `(2u - 255) << 7` apart from its
+                    // offset 128, which `accuracy` adds outside the counted region.
+                    let input = if self.format == InFormat::Cu8 {
+                        &self.signed
+                    } else {
+                        &self.raw
+                    };
+                    // SAFETY: `input` holds `2 n` bytes, `out` `2 n` `i16` values.
+                    unsafe {
+                        volk_sys::volk_8i_convert_16i(
+                            self.out.as_mut_ptr().cast(),
+                            input.as_ptr().cast(),
+                            values,
+                        );
+                    }
+                }
+                other => unreachable!("convert has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        if which == Impl::Volk && self.format == InFormat::Cu8 {
+            for v in self.out.iter_mut() {
+                *v = CQ15 {
+                    re: Q15(v.re.0 + 128),
+                    im: Q15(v.im.0 + 128),
+                };
+            }
+        }
+        let want: Vec<f64> = (0..2 * self.n)
+            .map(|i| self.format.value(&self.raw, i))
+            .collect();
+        snr_db(&want, &cq15s(&self.out, 1.0 / 32768.0))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::HAS_8I_CONVERT_16I,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match (which, self.format) {
+            (Impl::Volk, InFormat::Cu8) => {
+                "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)"
+            }
+            (Impl::Volk, _) => "volk_8i_convert_16i",
+            (Impl::Fallback, _) => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        &["volk_8i_convert_16i"]
     }
 }
 

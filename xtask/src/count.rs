@@ -737,7 +737,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 86] = [
+pub const KERNELS: [KernelSpec; 92] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -823,6 +823,12 @@ pub const KERNELS: [KernelSpec; 86] = [
     spec("dot_real_q15", Family::Own, true),
     spec("scale", Family::VolkNative, false),
     spec("scale_cq15", Family::Own, false),
+    spec("dot_fallback", Family::FallbackVsCmsis, false),
+    spec("dot_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("dot_real_fallback", Family::FallbackVsCmsis, false),
+    spec("dot_real_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("scale_fallback", Family::FallbackVsCmsis, false),
+    spec("scale_cq15_fallback", Family::FallbackVsCmsis, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -2496,7 +2502,7 @@ fn measure_levels(
 /// An unknown platform, level or kernel, or a tool that is missing or fails.
 #[allow(
     clippy::large_stack_frames,
-    reason = "the kernel table is large; xtask is a host tool"
+    reason = "the unoptimized build copies the table `KERNELS` onto the stack; xtask is a host tool"
 )]
 pub fn judged_records(
     root: &Path,
@@ -3477,6 +3483,30 @@ mod tests {
             assert!(!family.measured_at(plan("avx2-runtime")), "{k}");
         }
         assert_eq!(kernel("fft_1024").family.measured(), "ours");
+    }
+
+    #[test]
+    fn the_dot_and_scale_fallbacks_are_judged_against_cmsis_dsp() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for k in [
+            "dot_fallback",
+            "dot_cq15_fallback",
+            "dot_real_fallback",
+            "dot_real_q15_fallback",
+            "scale_fallback",
+            "scale_cq15_fallback",
+        ] {
+            assert_eq!(kernel(k).family.measured(), "fallback", "{k}");
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Cmsis, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+            assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
     }
 
     #[test]

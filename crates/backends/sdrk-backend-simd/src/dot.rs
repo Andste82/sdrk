@@ -105,11 +105,52 @@ fn dot_f32_v<S: SimdToken, V: SimdFloat<S, Element = f32>, const FMA: bool, cons
     sum
 }
 
+/// The sum of the even lanes (the real parts) and of the odd lanes (the imaginary parts) of a
+/// vector of interleaved complex values, in the order of `unzip_low`/`unzip_high` with zero
+/// followed by `reduce_sum` (the same bits) without the two lane permutations and the second
+/// reduction: at AVX2 nine instructions instead of fifteen per call.
+trait PairSum: Copy {
+    fn pair_sum(self) -> (f32, f32);
+}
+
+impl<S: SimdToken> PairSum for f32x4<S> {
+    #[inline(always)]
+    fn pair_sum(self) -> (f32, f32) {
+        match *self.as_slice() {
+            [r0, i0, r1, i1] => (r0 + r1, i0 + i1),
+            _ => (0.0, 0.0),
+        }
+    }
+}
+
+impl<S: SimdToken> PairSum for f32x8<S> {
+    #[inline(always)]
+    fn pair_sum(self) -> (f32, f32) {
+        let (lo, hi) = self.split();
+        let ((r0, i0), (r1, i1)) = (lo.pair_sum(), hi.pair_sum());
+        (r0 + r1, i0 + i1)
+    }
+}
+
+/// `reduce_sum` of 16 lanes adds the halves first: the same as the 8-lane form of their sum.
+impl<S: SimdToken> PairSum for f32x16<S> {
+    #[inline(always)]
+    fn pair_sum(self) -> (f32, f32) {
+        let (lo, hi) = self.split();
+        (lo + hi).pair_sum()
+    }
+}
+
 /// `sum x[i] * taps[i]` of interleaved complex samples `x` (`2 n` floats) with `n` real taps,
 /// with [`ACC`] accumulators of the vector type `V`: one vector of taps covers two vectors of
 /// samples.
 #[inline(always)]
-fn dot_c32_v<S: SimdToken, V: SimdFloat<S, Element = f32>, const FMA: bool, const ACC: usize>(
+fn dot_c32_v<
+    S: SimdToken,
+    V: SimdFloat<S, Element = f32> + PairSum,
+    const FMA: bool,
+    const ACC: usize,
+>(
     simd: S,
     x: &[f32],
     taps: &[f32],
@@ -146,9 +187,7 @@ fn dot_c32_v<S: SimdToken, V: SimdFloat<S, Element = f32>, const FMA: bool, cons
         r0 = madd::<S, V, FMA>(V::from_slice(simd, x0), t.zip_low(t), r0);
         r1 = madd::<S, V, FMA>(V::from_slice(simd, x1), t.zip_high(t), r1);
     }
-    let sum = tree(acc, zero) + (r0 + r1);
-    let mut re = sum.unzip_low(zero).reduce_sum();
-    let mut im = sum.unzip_high(zero).reduce_sum();
+    let (mut re, mut im) = (tree(acc, zero) + (r0 + r1)).pair_sum();
     for (s, &h) in xs.chunks_exact(2).zip(ts) {
         if let [sr, si] = *s {
             re += sr * h;
@@ -805,4 +844,50 @@ mod wasm {
             p
         }
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::level::dispatch;
+
+    /// `PairSum` of `N`-lane vectors against `unzip_low`/`unzip_high` with zero and
+    /// `reduce_sum`, the form it replaces, bit for bit.
+    #[inline(always)]
+    fn check<S: SimdToken, V: SimdFloat<S, Element = f32> + PairSum>(simd: S, values: &[f32]) {
+        let zero = V::splat(simd, 0.0);
+        for w in values.windows(V::LEN).step_by(3) {
+            let v = V::from_slice(simd, w);
+            let (re, im) = v.pair_sum();
+            let want = (
+                v.unzip_low(zero).reduce_sum(),
+                v.unzip_high(zero).reduce_sum(),
+            );
+            assert_eq!(
+                (re.to_bits(), im.to_bits()),
+                (want.0.to_bits(), want.1.to_bits())
+            );
+        }
+    }
+
+    #[inline(always)]
+    fn check_all<S: SimdToken>(simd: S, values: &[f32]) {
+        check::<S, f32x4<S>>(simd, values);
+        check::<S, f32x8<S>>(simd, values);
+        check::<S, f32x16<S>>(simd, values);
+    }
+
+    #[test]
+    fn pair_sum_has_the_bits_of_unzip_and_reduce_sum() {
+        let mut state = 0x2545_f491_u32;
+        let scales = [1.0, -1e-3, 1e4, -7.5];
+        let values: [f32; 400] = core::array::from_fn(|i| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            // Mixed magnitudes, so that the order of the additions shows in the bits.
+            f32::from_bits(0x3f80_0000 | (state >> 9)) * scales.get(i % 4).copied().unwrap_or(1.0)
+        });
+        dispatch!(simd => check_all(simd, &values));
+    }
 }

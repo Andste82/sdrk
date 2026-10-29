@@ -80,8 +80,8 @@ fn facade_reports_length_mismatch() {
 
 #[test]
 fn backend_table() {
-    assert_eq!(backend_for("scale", SampleType::C32), "fallback");
-    assert_eq!(backend_for("scale", SampleType::CQ15), "fallback");
+    assert_eq!(backend_for("scale", SampleType::C32), ACCEL);
+    assert_eq!(backend_for("scale", SampleType::CQ15), ACCEL);
     assert_eq!(backend_for("scale", SampleType::F32), "none");
     assert_eq!(backend_for("scale", SampleType::Q15), "none");
     assert_eq!(backend_for("unknown", SampleType::C32), "none");
@@ -413,7 +413,7 @@ fn m06_kernels_agree_with_the_fallback() -> Result<()> {
 }
 
 #[test]
-fn m09_dot_kernels_delegate_to_the_fallback() -> Result<()> {
+fn m09_dot_kernels_delegate_to_the_accelerated_backend() -> Result<()> {
     use sdrk::kernels::dot::{Dot, DotReal};
     for (kernel, ty) in [
         ("dot", SampleType::C32),
@@ -421,10 +421,11 @@ fn m09_dot_kernels_delegate_to_the_fallback() -> Result<()> {
         ("dot_real", SampleType::F32),
         ("dot_real", SampleType::Q15),
     ] {
-        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+        assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
     assert_eq!(backend_for("dot", SampleType::F32), "none");
     assert_eq!(backend_for("dot_real", SampleType::C32), "none");
+    // Exact sums: the accelerated `C32` sum (another order) gives the same bits.
     let x = [C32::new(1.0, 2.0), C32::new(3.0, -1.0)];
     let taps = [0.5f32, 2.0];
     assert_eq!(Sdrk.dot(&x, &taps)?, Fallback.dot(&x, &taps)?);
@@ -453,6 +454,8 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
         "mag_sq",
         "quad_demod",
         "fm_mod",
+        "dot",
+        "scale",
         "fft",
     ];
     // `simd` unless the feature is off, the build forces the fallback (`--cfg
@@ -473,9 +476,9 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
     }
     // Everything else stays with the fallback or the chained fused kernels.
     for (kernel, ty) in [
-        ("scale", SampleType::C32),
         ("deemphasis", SampleType::F32),
-        ("dot", SampleType::C32),
+        ("dc_block", SampleType::C32),
+        ("squelch", SampleType::C32),
     ] {
         assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
     }
@@ -483,6 +486,8 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
     // The real FFTs run on the backend of the complex FFT.
     assert_eq!(backend_for("rfft", SampleType::F32), expected);
     assert_eq!(backend_for("irfft", SampleType::F32), expected);
+    assert_eq!(backend_for("dot_real", SampleType::F32), expected);
+    assert_eq!(backend_for("dot_real", SampleType::Q15), expected);
 }
 
 #[test]

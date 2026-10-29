@@ -73,9 +73,14 @@ pub(super) fn dot_c32_vs_reference(arena: &mut Arena<'_>) -> Result<(), Failure>
             flat(got),
             120.0,
         )?;
-        ensure(bit_exact(got, fast).is_none(), || {
-            Failure::new(CASE, "facade differs from the fallback")
-        })?;
+        // The SIMD backend sums in another order (a tolerance kernel, `docs/backends.md`).
+        min_snr(
+            CASE,
+            "facade differs from the reference",
+            flat(want),
+            flat(fast),
+            120.0,
+        )?;
     }
     Ok(())
 }

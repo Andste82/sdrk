@@ -3,7 +3,6 @@
 use crate::error::Result;
 use crate::kernels::basic::Scale;
 use crate::map_kernel;
-use crate::num::q15_mul;
 use crate::types::{C32, CQ15, Q15};
 
 /// The portable implementation of every kernel.
@@ -18,9 +17,14 @@ impl Scale<C32> for Fallback {
 
 impl Scale<CQ15> for Fallback {
     fn scale(&self, input: &[CQ15], output: &mut [CQ15], gain: Q15) -> Result<()> {
+        // `q15_mul` in `i32`: the product is at most 2^30 in magnitude, so the rounding cannot
+        // overflow, and the result is at least -32768, so only 32768 (-1 * -1) needs the
+        // saturation. The same values as `q15_mul`, in a form the compiler vectorizes.
+        let g = i32::from(gain.0);
+        let mul = |x: Q15| Q15(((i32::from(x.0) * g + (1 << 14)) >> 15).min(32767) as i16);
         map_kernel!(input, output, |x: CQ15| CQ15 {
-            re: q15_mul(x.re, gain),
-            im: q15_mul(x.im, gain),
+            re: mul(x.re),
+            im: mul(x.im),
         })
     }
 }

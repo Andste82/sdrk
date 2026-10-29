@@ -13,6 +13,7 @@ use cref_sys::{
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use sdrk::kernels::agc::{Agc, AgcState};
+use sdrk::kernels::basic::Scale;
 use sdrk::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState};
 use sdrk::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
 use sdrk::kernels::decim::{
@@ -22,6 +23,7 @@ use sdrk::kernels::demod::{
     DcBlock, DcBlockReal, DcBlockRealState, DcBlockState, Deemphasis, DeemphasisState, QuadDemod,
     QuadDemodState,
 };
+use sdrk::kernels::dot::{Dot, DotReal};
 use sdrk::kernels::fft::{Direction, Fft, FftPlan, RealFft, RealFftPlan, Scaling};
 use sdrk::kernels::filter::{Fir, FirState};
 use sdrk::kernels::interp::{
@@ -302,7 +304,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 59] = [
+pub const KERNELS: [&str; 65] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -362,6 +364,12 @@ pub const KERNELS: [&str; 59] = [
     "convert_real_rs16",
     "convert_cq15_cs8",
     "convert_cq15_cu8",
+    "dot",
+    "dot_cq15",
+    "dot_real",
+    "dot_real_q15",
+    "scale",
+    "scale_cq15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -449,6 +457,12 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "biquad_cq15_fallback" => Box::new(BiquadK::new(rng, layout, fallback, cq15)),
         "biquad_real_fallback" => Box::new(BiquadRealK::<f32>::new(rng, layout, fallback)),
         "biquad_real_q15_fallback" => Box::new(BiquadRealK::<Q15>::new(rng, layout, fallback)),
+        "dot" => Box::new(DotC32K::new(rng, layout)),
+        "dot_cq15" => Box::new(DotCq15K::new(rng, layout)),
+        "dot_real" => Box::new(DotF32K::new(rng, layout)),
+        "dot_real_q15" => Box::new(DotQ15K::new(rng, layout)),
+        "scale" => Box::new(ScaleK::new(rng, layout)),
+        "scale_cq15" => Box::new(ScaleCq15K::new(rng, layout)),
         "fft_64" => Box::new(FftK::new(rng, 64)),
         "fft_1024" => Box::new(FftK::new(rng, 1024)),
         "fft_4096" => Box::new(FftK::new(rng, 4096)),
@@ -4399,6 +4413,475 @@ impl Kernel for BiquadRealK<Q15> {
         match which {
             Impl::Fallback => "sdrk fallback",
             Impl::Cmsis => describe_cmsis("arm_biquad_cascade_df1_q15 (postShift 1, truncating)"),
+            _ => "sdrk",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// dot, dot_real and scale (issue #20, group C)
+
+/// Windows of the accuracy runs of the dot products: `DOT_WINDOWS` dot products of `n / 2`
+/// samples each, at offsets `w * n / 32`, so that one rounding error does not decide the SNR.
+const DOT_WINDOWS: usize = 16;
+
+/// The windows `(start, len)` of the accuracy runs for a buffer of `n` samples.
+fn dot_windows(n: usize) -> impl Iterator<Item = (usize, usize)> {
+    let len = (n / 2).max(1).min(n);
+    (0..DOT_WINDOWS).map(move |w| ((w * n / 32).min(n - len), len))
+}
+
+#[inline(never)]
+fn dot_c32<B: Dot<C32>>(backend: &B, x: &[C32], taps: &[f32]) -> C32 {
+    black_box(backend.dot(black_box(x), black_box(taps))).unwrap_or_default()
+}
+
+#[inline(never)]
+fn dot_cq15<B: Dot<CQ15>>(backend: &B, x: &[CQ15], taps: &[Q15]) -> CQ15 {
+    black_box(backend.dot(black_box(x), black_box(taps))).unwrap_or_default()
+}
+
+#[inline(never)]
+fn dot_f32<B: DotReal<f32>>(backend: &B, x: &[f32], taps: &[f32]) -> f32 {
+    black_box(backend.dot_real(black_box(x), black_box(taps))).unwrap_or_default()
+}
+
+#[inline(never)]
+fn dot_q15<B: DotReal<Q15>>(backend: &B, x: &[Q15], taps: &[Q15]) -> Q15 {
+    black_box(backend.dot_real(black_box(x), black_box(taps))).unwrap_or_default()
+}
+
+/// `dot` of `n` C32 samples with `n` real taps, one call per run (VOLK:
+/// `volk_32fc_32f_dot_prod_32fc` through its dispatcher, which checks the alignment).
+struct DotC32K {
+    x: Aligned<C32>,
+    taps: Aligned<f32>,
+    result: Aligned<C32>,
+}
+
+impl DotC32K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let x = noise_c32(rng, layout.n, 0.9, layout.skew(8));
+        let mut t = Aligned::<f32>::skewed(layout.n, layout.skew(4));
+        t.copy_from_slice(&taps(rng, layout.n));
+        DotC32K {
+            x,
+            taps: t,
+            result: Aligned::new(1),
+        }
+    }
+
+    fn call(&mut self, which: Impl, start: usize, len: usize) -> C32 {
+        let (x, t) = (&self.x[start..start + len], &self.taps[start..start + len]);
+        match which {
+            Impl::Ours => dot_c32(&Sdrk, x, t),
+            Impl::Fallback => dot_c32(&Fallback, x, t),
+            // SAFETY: `x` and `t` hold `len` elements, `result` one.
+            Impl::Volk => unsafe {
+                volk_sys::volk_32fc_32f_dot_prod_32fc(
+                    self.result.as_mut_ptr().cast(),
+                    x.as_ptr().cast(),
+                    t.as_ptr(),
+                    len as u32,
+                );
+                self.result[0]
+            },
+            other => unreachable!("dot has no {other:?}"),
+        }
+    }
+}
+
+impl Kernel for DotC32K {
+    fn run(&mut self, which: Impl, k: usize) {
+        let n = self.x.len();
+        for _ in 0..k {
+            black_box(self.call(which, 0, n));
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        let (mut want, mut got) = (Vec::new(), Vec::new());
+        for (s, len) in dot_windows(self.x.len()) {
+            let y = self.call(which, s, len);
+            let (mut re, mut im) = (0.0f64, 0.0f64);
+            for (v, &h) in self.x[s..s + len].iter().zip(&self.taps[s..s + len]) {
+                re += f64::from(v.re) * f64::from(h);
+                im += f64::from(v.im) * f64::from(h);
+            }
+            want.extend([re, im]);
+            got.extend([f64::from(y.re), f64::from(y.im)]);
+        }
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::AVAILABLE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => "volk_32fc_32f_dot_prod_32fc",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        &["volk_32fc_32f_dot_prod_32fc"]
+    }
+}
+
+/// `dot_real` of `n` f32 samples with `n` taps, one call per run (VOLK:
+/// `volk_32f_x2_dot_prod_32f`, which VOLK's wasm32 build does not have).
+struct DotF32K {
+    x: Aligned<f32>,
+    taps: Aligned<f32>,
+    result: Aligned<f32>,
+}
+
+impl DotF32K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut x = Aligned::<f32>::skewed(layout.n, layout.skew(4));
+        for v in x.iter_mut() {
+            *v = rng.unit() * 0.9;
+        }
+        let mut t = Aligned::<f32>::skewed(layout.n, layout.skew(4));
+        t.copy_from_slice(&taps(rng, layout.n));
+        DotF32K {
+            x,
+            taps: t,
+            result: Aligned::new(1),
+        }
+    }
+
+    fn call(&mut self, which: Impl, start: usize, len: usize) -> f32 {
+        let (x, t) = (&self.x[start..start + len], &self.taps[start..start + len]);
+        match which {
+            Impl::Ours => dot_f32(&Sdrk, x, t),
+            Impl::Fallback => dot_f32(&Fallback, x, t),
+            // SAFETY: `x` and `t` hold `len` elements, `result` one.
+            Impl::Volk => unsafe {
+                volk_sys::volk_32f_x2_dot_prod_32f(
+                    self.result.as_mut_ptr(),
+                    x.as_ptr(),
+                    t.as_ptr(),
+                    len as u32,
+                );
+                self.result[0]
+            },
+            other => unreachable!("dot_real has no {other:?}"),
+        }
+    }
+}
+
+impl Kernel for DotF32K {
+    fn run(&mut self, which: Impl, k: usize) {
+        let n = self.x.len();
+        for _ in 0..k {
+            black_box(self.call(which, 0, n));
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        let (mut want, mut got) = (Vec::new(), Vec::new());
+        for (s, len) in dot_windows(self.x.len()) {
+            let y = self.call(which, s, len);
+            let w: f64 = self.x[s..s + len]
+                .iter()
+                .zip(&self.taps[s..s + len])
+                .map(|(&v, &h)| f64::from(v) * f64::from(h))
+                .sum();
+            want.push(w);
+            got.push(f64::from(y));
+        }
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::NATIVE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => "volk_32f_x2_dot_prod_32f",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        if volk_sys::NATIVE {
+            &["volk_32f_x2_dot_prod_32f"]
+        } else {
+            &[]
+        }
+    }
+}
+
+/// Q15 taps whose dot product with `n` samples of amplitude 23000 stays far from saturation.
+fn taps_q15(rng: &mut Pcg32, n: usize, skew: usize) -> Aligned<Q15> {
+    let amp = 16384.0 / (n as f32).sqrt();
+    let mut t = Aligned::<Q15>::skewed(n, skew);
+    for v in t.iter_mut() {
+        *v = Q15((rng.unit() * amp) as i16);
+    }
+    t
+}
+
+/// `dot` of `n` CQ15 samples with `n` Q15 taps, one call per run. VOLK's 16-bit dot products
+/// do other work (`volk_16ic_x2_dot_prod_16ic`: complex taps, saturating 16-bit sums), so the
+/// comparison is our fallback.
+struct DotCq15K {
+    x: Aligned<CQ15>,
+    taps: Aligned<Q15>,
+}
+
+impl DotCq15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let x = noise_cq15(rng, layout.n, 23_000.0, layout.skew(4));
+        DotCq15K {
+            x,
+            taps: taps_q15(rng, layout.n, layout.skew(2)),
+        }
+    }
+
+    fn call(&self, which: Impl, start: usize, len: usize) -> CQ15 {
+        let (x, t) = (&self.x[start..start + len], &self.taps[start..start + len]);
+        match which {
+            Impl::Ours => dot_cq15(&Sdrk, x, t),
+            Impl::Fallback => dot_cq15(&Fallback, x, t),
+            other => unreachable!("dot_cq15 has no {other:?}"),
+        }
+    }
+}
+
+impl Kernel for DotCq15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        let n = self.x.len();
+        for _ in 0..k {
+            black_box(self.call(which, 0, n));
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        let (mut want, mut got) = (Vec::new(), Vec::new());
+        for (s, len) in dot_windows(self.x.len()) {
+            let y = self.call(which, s, len);
+            let (mut re, mut im) = (0.0f64, 0.0f64);
+            for (v, h) in self.x[s..s + len].iter().zip(&self.taps[s..s + len]) {
+                re += f64::from(v.re.0) * f64::from(h.0);
+                im += f64::from(v.im.0) * f64::from(h.0);
+            }
+            want.extend([re / 32768.0, im / 32768.0]);
+            got.extend([f64::from(y.re.0), f64::from(y.im.0)]);
+        }
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// `dot_real` of `n` Q15 samples with `n` Q15 taps, one call per run (VOLK has no 16-bit real
+/// dot product: compared with our fallback).
+struct DotQ15K {
+    x: Aligned<Q15>,
+    taps: Aligned<Q15>,
+}
+
+impl DotQ15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let mut x = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
+        for v in x.iter_mut() {
+            *v = Q15((rng.unit() * 23_000.0) as i16);
+        }
+        DotQ15K {
+            x,
+            taps: taps_q15(rng, layout.n, layout.skew(2)),
+        }
+    }
+
+    fn call(&self, which: Impl, start: usize, len: usize) -> Q15 {
+        let (x, t) = (&self.x[start..start + len], &self.taps[start..start + len]);
+        match which {
+            Impl::Ours => dot_q15(&Sdrk, x, t),
+            Impl::Fallback => dot_q15(&Fallback, x, t),
+            other => unreachable!("dot_real_q15 has no {other:?}"),
+        }
+    }
+}
+
+impl Kernel for DotQ15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        let n = self.x.len();
+        for _ in 0..k {
+            black_box(self.call(which, 0, n));
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        let (mut want, mut got) = (Vec::new(), Vec::new());
+        for (s, len) in dot_windows(self.x.len()) {
+            let y = self.call(which, s, len);
+            let w: f64 = self.x[s..s + len]
+                .iter()
+                .zip(&self.taps[s..s + len])
+                .map(|(v, h)| f64::from(v.0) * f64::from(h.0))
+                .sum();
+            want.push(w / 32768.0);
+            got.push(f64::from(y.0));
+        }
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+#[inline(never)]
+fn scale<T: ComplexSample, B: Scale<T>>(backend: &B, input: &[T], out: &mut [T], gain: T::Real) {
+    let _ = black_box(backend.scale(black_box(input), out, gain));
+}
+
+/// The gain of the `scale` measurements.
+const SCALE_GAIN: f32 = 0.734_375;
+
+/// `scale` of `n` C32 samples by a real gain. VOLK: `volk_32f_s32f_multiply_32f` on the `2n`
+/// floats, the same work (VOLK's wasm32 build does not have it).
+struct ScaleK {
+    input: Aligned<C32>,
+    out: Aligned<C32>,
+}
+
+impl ScaleK {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        ScaleK {
+            input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
+            out: Aligned::skewed(layout.n, layout.skew(8)),
+        }
+    }
+}
+
+impl Kernel for ScaleK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => scale(&Sdrk, &self.input, &mut self.out, SCALE_GAIN),
+                Impl::Fallback => scale(&Fallback, &self.input, &mut self.out, SCALE_GAIN),
+                // SAFETY: input and output hold `n` complex samples, `2n` floats.
+                Impl::Volk => unsafe {
+                    volk_sys::native::volk_32f_s32f_multiply_32f(
+                        self.out.as_mut_ptr().cast(),
+                        self.input.as_ptr().cast(),
+                        SCALE_GAIN,
+                        2 * self.input.len() as u32,
+                    );
+                },
+                other => unreachable!("scale has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let g = f64::from(SCALE_GAIN);
+        let want: Vec<f64> = c32s(&self.input).iter().map(|v| v * g).collect();
+        snr_db(&want, &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::Volk => volk_sys::NATIVE,
+            _ => false,
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Volk => "volk_32f_s32f_multiply_32f",
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+
+    fn volk_functions(&self) -> &'static [&'static str] {
+        if volk_sys::NATIVE {
+            &["volk_32f_s32f_multiply_32f"]
+        } else {
+            &[]
+        }
+    }
+}
+
+/// `scale` of `n` CQ15 samples by a Q15 gain (`q15_mul`, rounded and saturated; VOLK has no
+/// 16-bit scaling with this rounding: compared with our fallback).
+struct ScaleCq15K {
+    input: Aligned<CQ15>,
+    out: Aligned<CQ15>,
+}
+
+impl ScaleCq15K {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        ScaleCq15K {
+            input: noise_cq15(rng, layout.n, 32_767.0, layout.skew(4)),
+            out: Aligned::skewed(layout.n, layout.skew(4)),
+        }
+    }
+}
+
+impl Kernel for ScaleCq15K {
+    fn run(&mut self, which: Impl, k: usize) {
+        let gain = Q15::from_f32(SCALE_GAIN);
+        for _ in 0..k {
+            match which {
+                Impl::Ours => scale(&Sdrk, &self.input, &mut self.out, gain),
+                Impl::Fallback => scale(&Fallback, &self.input, &mut self.out, gain),
+                other => unreachable!("scale_cq15 has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let g = f64::from(Q15::from_f32(SCALE_GAIN).0) / 32768.0;
+        let want: Vec<f64> = cq15s(&self.input, 1.0).iter().map(|v| v * g).collect();
+        snr_db(&want, &cq15s(&self.out, 1.0))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }

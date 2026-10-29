@@ -1343,5 +1343,155 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "dot": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "dot_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx2-runtime": {
+      "status": "dev"
+    }
+  },
+  "dot_real": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "VOLK's wasm32 build (`benches/refs/volk-wasm.c`, the `generic` protokernels, D12) has no `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only"
+    },
+    "avx2-runtime": {
+      "status": "dev"
+    }
+  },
+  "dot_real_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    }
+  },
+  "scale": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "VOLK's wasm32 build (`benches/refs/volk-wasm.c`, the `generic` protokernels, D12) has no `volk_32f_s32f_multiply_32f`; the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only"
+    }
+  },
+  "scale_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
+    },
+    "avx2-runtime": {
+      "status": "dev"
+    }
   }
 }

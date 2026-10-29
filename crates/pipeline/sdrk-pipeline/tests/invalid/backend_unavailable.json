@@ -9,10 +9,7 @@
   },
   "nodes": {
     "g": {
-      "kind": "scale",
-      "params": {
-        "gain_db": -6
-      },
+      "kind": "squelch",
       "backend": {
         "require": "simd"
       }

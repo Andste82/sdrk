@@ -1252,7 +1252,7 @@ fn contiguous_real<S: SimdToken>(
     let x86 = cfg!(target_arch = "x86_64");
     match S::f32s::LEN {
         16 if step == 1 => {
-            contiguous::<S, f32x16<S>, f32, [f32; 16], 16, 1, true, 14, 16, 1, 8, 8, 1, true>(
+            contiguous::<S, f32x16<S>, f32, [f32; 16], 16, 1, true, 12, 16, 1, 8, 8, 1, true>(
                 simd, taps, tstride, hist, input, out, first, step, ostride,
             );
         }

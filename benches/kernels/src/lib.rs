@@ -40,6 +40,10 @@ use sdrk_core::Reference;
 use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, formats};
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
+mod fir_family;
+
+use fir_family::{Entry, FirFamK, Mode};
+
 /// Samples per call unless overridden.
 pub const N: usize = 4096;
 
@@ -310,7 +314,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 96] = [
+pub const KERNELS: [&str; 112] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -407,6 +411,22 @@ pub const KERNELS: [&str; 96] = [
     "rotate_cq15_fallback",
     "fm_mod_fallback",
     "fm_mod_cq15_fallback",
+    "fir_cq15",
+    "fir_decimate_cq15",
+    "fir_interpolate_cq15",
+    "resample_cq15",
+    "fir_fallback",
+    "fir_cq15_fallback",
+    "fir_decimate_fallback",
+    "fir_decimate_cq15_fallback",
+    "fir_interpolate_fallback",
+    "fir_interpolate_cq15_fallback",
+    "resample_fallback",
+    "resample_cq15_fallback",
+    "fir_interpolate_real_fallback",
+    "fir_interpolate_real_q15_fallback",
+    "resample_real_fallback",
+    "resample_real_q15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -548,6 +568,92 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "dot_real_q15_fallback" => Box::new(DotQ15K::new(rng, layout, fallback)),
         "scale_fallback" => Box::new(ScaleK::new(rng, layout, fallback)),
         "scale_cq15_fallback" => Box::new(ScaleCq15K::new(rng, layout, fallback)),
+        "fir_cq15" => Box::new(FirFamK::<CQ15>::new(rng, layout, Mode::Fir, Entry::Simd)),
+        "fir_decimate_cq15" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Decimate,
+            Entry::Simd,
+        )),
+        "fir_interpolate_cq15" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Interpolate,
+            Entry::Simd,
+        )),
+        "resample_cq15" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Resample,
+            Entry::Simd,
+        )),
+        "fir_fallback" => Box::new(FirFamK::<C32>::new(rng, layout, Mode::Fir, Entry::Fallback)),
+        "fir_cq15_fallback" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Fir,
+            Entry::Fallback,
+        )),
+        "fir_decimate_fallback" => Box::new(FirFamK::<C32>::new(
+            rng,
+            layout,
+            Mode::Decimate,
+            Entry::Fallback,
+        )),
+        "fir_decimate_cq15_fallback" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Decimate,
+            Entry::Fallback,
+        )),
+        "fir_interpolate_fallback" => Box::new(FirFamK::<C32>::new(
+            rng,
+            layout,
+            Mode::Interpolate,
+            Entry::Fallback,
+        )),
+        "fir_interpolate_cq15_fallback" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Interpolate,
+            Entry::Fallback,
+        )),
+        "resample_fallback" => Box::new(FirFamK::<C32>::new(
+            rng,
+            layout,
+            Mode::Resample,
+            Entry::Fallback,
+        )),
+        "resample_cq15_fallback" => Box::new(FirFamK::<CQ15>::new(
+            rng,
+            layout,
+            Mode::Resample,
+            Entry::Fallback,
+        )),
+        "fir_interpolate_real_fallback" => Box::new(FirFamK::<f32>::new(
+            rng,
+            layout,
+            Mode::Interpolate,
+            Entry::Fallback,
+        )),
+        "fir_interpolate_real_q15_fallback" => Box::new(FirFamK::<Q15>::new(
+            rng,
+            layout,
+            Mode::Interpolate,
+            Entry::Fallback,
+        )),
+        "resample_real_fallback" => Box::new(FirFamK::<f32>::new(
+            rng,
+            layout,
+            Mode::Resample,
+            Entry::Fallback,
+        )),
+        "resample_real_q15_fallback" => Box::new(FirFamK::<Q15>::new(
+            rng,
+            layout,
+            Mode::Resample,
+            Entry::Fallback,
+        )),
         "fft_cq15_1024_full_scale" => Box::new(FftQ15K::new(rng, 1024, Scaling::Default, 32767.0)),
         _ => return None,
     })
@@ -1689,11 +1795,11 @@ impl FirK {
 }
 
 #[inline(never)]
-fn fir<B: Fir<C32>>(
+fn fir<T: ComplexSample, B: Fir<T>>(
     backend: &B,
-    state: &mut FirState<C32, Vec<f32>, Vec<C32>>,
-    input: &[C32],
-    out: &mut [C32],
+    state: &mut FirState<T, Vec<T::Real>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
 ) {
     let _ = black_box(backend.fir(state, black_box(input), out));
 }
@@ -1782,11 +1888,11 @@ impl DecimateK {
 }
 
 #[inline(never)]
-fn fir_decimate<B: FirDecimate<C32>>(
+fn fir_decimate<T: ComplexSample, B: FirDecimate<T>>(
     backend: &B,
-    state: &mut FirDecimState<C32, Vec<f32>, Vec<C32>>,
-    input: &[C32],
-    out: &mut [C32],
+    state: &mut FirDecimState<T, Vec<T::Real>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
 ) {
     let _ = black_box(backend.fir_decimate(state, black_box(input), out));
 }
@@ -1915,21 +2021,21 @@ impl PolyK {
 }
 
 #[inline(never)]
-fn resample<B: Resample<C32>>(
+fn resample<T: ComplexSample, B: Resample<T>>(
     backend: &B,
-    state: &mut ResampleState<C32, Vec<f32>, Vec<C32>>,
-    input: &[C32],
-    out: &mut [C32],
+    state: &mut ResampleState<T, Vec<T::Real>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
 ) {
     let _ = black_box(backend.resample(state, black_box(input), out));
 }
 
 #[inline(never)]
-fn fir_interpolate<B: FirInterpolate<C32>>(
+fn fir_interpolate<T: ComplexSample, B: FirInterpolate<T>>(
     backend: &B,
-    state: &mut FirInterpState<C32, Vec<f32>, Vec<C32>>,
-    input: &[C32],
-    out: &mut [C32],
+    state: &mut FirInterpState<T, Vec<T::Real>, Vec<T>>,
+    input: &[T],
+    out: &mut [T],
 ) {
     let _ = black_box(backend.fir_interpolate(state, black_box(input), out));
 }
@@ -2249,7 +2355,7 @@ where
     fn supports(&self, which: Impl) -> bool {
         match which {
             Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => self.gr.is_some() && volk_sys::AVAILABLE_REAL_DOT,
+            Impl::Volk => self.gr.is_some() && volk_sys::FULL,
             _ => false,
         }
     }

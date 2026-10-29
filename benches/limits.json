@@ -964,22 +964,28 @@
   },
   "quad_demod_cq15": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     }
   },
   "fm_mod": {
@@ -2143,6 +2149,75 @@
     },
     "avx2-runtime": {
       "status": "dev"
+    }
+  },
+  "quad_demod_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+    }
+  },
+  "quad_demod_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "agc_fallback": {
+    "sse2": {
+      "status": "dev",
+      "waiver": "GNU Radio's `agc_cc` loop does less work than the `agc` contract (an additive update without the lower gain limit, the silence rule and the bounded attack and release), so the plain scalar fallback needs more instructions at the levels without AVX (no three-operand forms) and on AArch64 (GCC fuses the GNU Radio loop into `fmadd`); in simulated cycles the fallback is below the GNU Radio loop on every model (0.45 / 0.46 at `sse2` per block, 0.81 / 0.72 at `neon`); open item: the scalar `agc` C32 fallback against GNU Radio at `sse2`, `sse4.2` and `neon` (round 2, unit demod)"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "GNU Radio's `agc_cc` loop does less work than the `agc` contract (an additive update without the lower gain limit, the silence rule and the bounded attack and release), so the plain scalar fallback needs more instructions at the levels without AVX (no three-operand forms) and on AArch64 (GCC fuses the GNU Radio loop into `fmadd`); in simulated cycles the fallback is below the GNU Radio loop on every model (0.45 / 0.46 at `sse2` per block, 0.81 / 0.72 at `neon`); open item: the scalar `agc` C32 fallback against GNU Radio at `sse2`, `sse4.2` and `neon` (round 2, unit demod)"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev",
+      "waiver": "GNU Radio's `agc_cc` loop does less work than the `agc` contract (an additive update without the lower gain limit, the silence rule and the bounded attack and release), so the plain scalar fallback needs more instructions at the levels without AVX (no three-operand forms) and on AArch64 (GCC fuses the GNU Radio loop into `fmadd`); in simulated cycles the fallback is below the GNU Radio loop on every model (0.45 / 0.46 at `sse2` per block, 0.81 / 0.72 at `neon`); open item: the scalar `agc` C32 fallback against GNU Radio at `sse2`, `sse4.2` and `neon` (round 2, unit demod)"
+    },
+    "simd128": {
+      "status": "release"
     }
   },
   "dc_block_real_fallback": {

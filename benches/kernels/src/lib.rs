@@ -10,7 +10,8 @@ use std::sync::Arc;
 use cref_sys::cmsis_dsp::{CmsisCfftF32, CmsisCfftQ15, CmsisRfftFastF32};
 use cref_sys::{
     CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrFmDeemph, GrFrequencyModulatorFc, GrPwrSquelchCc,
-    GrRotator, KfrBiquad, KissFft16, LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16, cmsis_dsp,
+    GrQuadratureDemodCf, GrRotator, KfrBiquad, KissFft16, LiquidDcBlocker, LiquidDcBlockerCrcf,
+    Ne10Int16, cmsis_dsp,
 };
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -314,7 +315,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 120] = [
+pub const KERNELS: [&str; 123] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -435,6 +436,9 @@ pub const KERNELS: [&str; 120] = [
     "window_cq15_fallback",
     "power_db_fallback",
     "power_db_q15_fallback",
+    "quad_demod_fallback",
+    "quad_demod_cq15_fallback",
+    "agc_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -523,8 +527,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "mag_sq_q15" => Box::new(MagSqQ15K::new(rng, layout, simd)),
         "mag_sq_fallback" => Box::new(MagSqK::new(rng, layout, fallback)),
         "mag_sq_q15_fallback" => Box::new(MagSqQ15K::new(rng, layout, fallback)),
-        "quad_demod" => Box::new(QuadK::new(rng, layout)),
-        "quad_demod_cq15" => Box::new(QuadQ15K::new(rng, layout)),
+        "quad_demod" => Box::new(QuadK::new(rng, layout, false)),
+        "quad_demod_cq15" => Box::new(QuadQ15K::new(rng, layout, false)),
+        "quad_demod_fallback" => Box::new(QuadK::new(rng, layout, true)),
+        "quad_demod_cq15_fallback" => Box::new(QuadQ15K::new(rng, layout, true)),
         "fm_mod" => Box::new(FmModK::new(rng, layout, simd)),
         "fm_mod_cq15" => Box::new(FmModQ15K::new(rng, layout, simd)),
         "fm_mod_fallback" => Box::new(FmModK::new(rng, layout, fallback)),
@@ -543,8 +549,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "window_cq15_fallback" => Box::new(WindowQ15K::new(rng, layout, fallback)),
         "power_db_fallback" => Box::new(PowerDbK::new(rng, layout, fallback)),
         "power_db_q15_fallback" => Box::new(PowerDbQ15K::new(rng, layout, fallback)),
-        "agc" => Box::new(AgcK::<C32>::new(rng, layout)),
-        "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
+        "agc" => Box::new(AgcK::<C32>::new(rng, layout, false)),
+        "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout, false)),
+        "agc_fallback" => Box::new(AgcK::<C32>::new(rng, layout, true)),
         "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout, simd)),
         "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout, simd)),
         "dc_block_real_fallback" => Box::new(DcBlockRealK::<f32>::new(rng, layout, fallback)),
@@ -2551,15 +2558,48 @@ impl Kernel for MagSqQ15K {
     }
 }
 
+/// `quad_demod` `C32`. Two entries on the same input: `quad_demod` (our kernel against VOLK) and
+/// `quad_demod_fallback` (our fallback against the scalar loop of GNU Radio's
+/// `quadrature_demod_cf`, CMSIS-DSP's generic C as information).
 struct QuadK {
     /// One sample more than the output: VOLK conjugate-multiplies `input[i + 1]` by `input[i]`.
     input: Aligned<C32>,
     tmp: Aligned<C32>,
+    /// The conjugates of CMSIS-DSP's chain.
+    conj: Aligned<C32>,
     out: Aligned<f32>,
+    /// The entry: `quad_demod_fallback`.
+    fallback_entry: bool,
+}
+
+/// The gain of the `quad_demod` measurements.
+const QUAD_GAIN: f32 = 1.0;
+
+/// CMSIS-DSP's chain for `quad_demod` `C32`: `arm_cmplx_conj_f32` of the previous samples,
+/// `arm_cmplx_mult_cmplx_f32` with the new ones, `arm_atan2_f32` of every product and
+/// `arm_scale_f32` with the gain (in place), the raw functions without the length checks of
+/// the wrappers. `input` holds the previous sample and then the `out.len()` new ones.
+fn cmsis_quad_demod_c32(input: &[C32], conj: &mut [C32], prod: &mut [C32], out: &mut [f32]) {
+    let n = out.len();
+    assert!(input.len() == n + 1 && conj.len() == n && prod.len() == n);
+    let len = u32::try_from(n).expect("block");
+    // SAFETY: every buffer holds `n` samples (the input `n + 1`); the scale runs in place,
+    // which CMSIS-DSP allows.
+    unsafe {
+        cmsis_dsp::ffi::arm_cmplx_conj_f32(input.as_ptr().cast(), conj.as_mut_ptr().cast(), len);
+        cmsis_dsp::ffi::arm_cmplx_mult_cmplx_f32(
+            input.as_ptr().add(1).cast(),
+            conj.as_ptr().cast(),
+            prod.as_mut_ptr().cast(),
+            len,
+        );
+        cmsis_dsp::ffi::sdrk_cmsis_atan2_f32_n(prod.as_ptr().cast(), out.as_mut_ptr(), len);
+        cmsis_dsp::ffi::arm_scale_f32(out.as_ptr(), QUAD_GAIN, out.as_mut_ptr(), len);
+    }
 }
 
 impl QuadK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, fallback_entry: bool) -> Self {
         // A frequency-modulated carrier, so that the arguments cover the whole range.
         let mut phase = 0.0f64;
         let mut input = Aligned::<C32>::skewed(layout.n + 1, layout.skew_before(8, 1));
@@ -2570,7 +2610,9 @@ impl QuadK {
         QuadK {
             input,
             tmp: Aligned::skewed(layout.n, layout.skew(8)),
+            conj: Aligned::skewed(layout.n, layout.skew(8)),
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            fallback_entry,
         }
     }
 }
@@ -2582,13 +2624,14 @@ fn quad_demod<B: QuadDemod<C32>>(
     input: &[C32],
     out: &mut [f32],
 ) {
-    let _ = black_box(backend.quad_demod(state, black_box(input), out, 1.0));
+    let _ = black_box(backend.quad_demod(state, black_box(input), out, QUAD_GAIN));
 }
 
 impl Kernel for QuadK {
     fn run(&mut self, which: Impl, k: usize) {
         let n = self.out.len();
         let mut state = QuadDemodState::<C32>::new();
+        let mut gr = GrQuadratureDemodCf::new(QUAD_GAIN);
         for _ in 0..k {
             match which {
                 Impl::Ours => quad_demod(&Sdrk, &mut state, &self.input[1..], &mut self.out),
@@ -2610,6 +2653,13 @@ impl Kernel for QuadK {
                         n as u32,
                     );
                 },
+                Impl::GnuRadio => gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .work(c32_pairs_ref(&self.input), &mut self.out),
+                Impl::Cmsis => {
+                    cmsis_quad_demod_c32(&self.input, &mut self.conj, &mut self.tmp, &mut self.out);
+                }
                 other => unreachable!("quad_demod has no {other:?}"),
             }
             black_box(&self.out);
@@ -2632,9 +2682,11 @@ impl Kernel for QuadK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
+        match (self.fallback_entry, which) {
+            (false, Impl::Ours) | (_, Impl::Fallback) => true,
+            (false, Impl::Volk) => volk_sys::AVAILABLE,
+            (true, Impl::GnuRadio) => GrQuadratureDemodCf::new(QUAD_GAIN).is_some(),
+            (true, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
             _ => false,
         }
     }
@@ -2642,12 +2694,21 @@ impl Kernel for QuadK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
+            Impl::GnuRadio => {
+                "GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags)"
+            }
+            Impl::Cmsis => {
+                "CMSIS-DSP arm_cmplx_conj_f32 + arm_cmplx_mult_cmplx_f32 + arm_atan2_f32 + arm_scale_f32 (generic C)"
+            }
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
+        if self.fallback_entry {
+            return &[];
+        }
         &[
             "volk_32fc_x2_multiply_conjugate_32fc",
             "volk_32fc_s32f_atan2_32f",
@@ -2655,16 +2716,50 @@ impl Kernel for QuadK {
     }
 }
 
-/// `quad_demod` of CQ15 samples into Q15 (no established library: compared with our fallback).
-/// The input is the carrier of [`QuadK`] at the same amplitude, quantised to Q15; the gain is
-/// 1, so the output is the argument divided by pi.
+/// `quad_demod` of CQ15 samples into Q15. The input is the carrier of [`QuadK`] at the same
+/// amplitude, quantised to Q15; the gain is 1, so the output is the argument divided by pi. Two
+/// entries: `quad_demod_cq15` (our kernel; no established SIMD library has it, so our fallback
+/// is the comparison, as information) and `quad_demod_cq15_fallback` (our fallback against
+/// CMSIS-DSP's generic C).
 struct QuadQ15K {
     input: Aligned<CQ15>,
     out: Aligned<Q15>,
+    /// The conjugated previous samples and the products of CMSIS-DSP's chain.
+    conj: Aligned<CQ15>,
+    prod: Aligned<CQ15>,
+    /// The entry: `quad_demod_cq15_fallback`.
+    fallback_entry: bool,
+}
+
+/// CMSIS-DSP's chain for `quad_demod` `CQ15` with the gain `Q15::MAX` of the measurement: the
+/// conjugates of the previous samples (`arm_cmplx_conj_q15` with its saturating negation, not
+/// in the build, so a plain loop here; the sample before the first is zero, as in the state of
+/// a new kernel), `arm_cmplx_mult_cmplx_q15` (Q3.13), `arm_atan2_q15` (Q2.13 radians) and
+/// `arm_scale_q15` in place with `4 / pi` times the gain (`20860 * 2^-15`, shift 1) into the
+/// unit of the kernel (phase / pi in Q15).
+fn cmsis_quad_demod_cq15(input: &[CQ15], conj: &mut [CQ15], prod: &mut [CQ15], out: &mut [Q15]) {
+    let n = out.len();
+    assert!(input.len() == n && conj.len() == n && prod.len() == n && n > 0);
+    conj[0] = CQ15::default();
+    for (c, x) in conj[1..].iter_mut().zip(input) {
+        *c = CQ15::new(x.re, Q15(x.im.0.saturating_neg()));
+    }
+    let len = u32::try_from(n).expect("block");
+    // SAFETY: every buffer holds `n` samples; the scale runs in place, which CMSIS-DSP allows.
+    unsafe {
+        cmsis_dsp::ffi::arm_cmplx_mult_cmplx_q15(
+            input.as_ptr().cast(),
+            conj.as_ptr().cast(),
+            prod.as_mut_ptr().cast(),
+            len,
+        );
+        cmsis_dsp::ffi::sdrk_cmsis_atan2_q15_n(prod.as_ptr().cast(), out.as_mut_ptr().cast(), len);
+        cmsis_dsp::ffi::arm_scale_q15(out.as_ptr().cast(), 20860, 1, out.as_mut_ptr().cast(), len);
+    }
 }
 
 impl QuadQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, fallback_entry: bool) -> Self {
         let mut phase = 0.0f64;
         let mut input = Aligned::<CQ15>::skewed(layout.n, layout.skew(4));
         for s in input.iter_mut() {
@@ -2675,6 +2770,9 @@ impl QuadQ15K {
         QuadQ15K {
             input,
             out: Aligned::skewed(layout.n, layout.skew(2)),
+            conj: Aligned::skewed(layout.n, layout.skew(4)),
+            prod: Aligned::skewed(layout.n, layout.skew(4)),
+            fallback_entry,
         }
     }
 }
@@ -2698,6 +2796,12 @@ impl Kernel for QuadQ15K {
                 Impl::Fallback => {
                     quad_demod_q15(&Fallback, &mut state, &self.input, &mut self.out);
                 }
+                Impl::Cmsis => cmsis_quad_demod_cq15(
+                    &self.input,
+                    &mut self.conj,
+                    &mut self.prod,
+                    &mut self.out,
+                ),
                 other => unreachable!("quad_demod_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -2725,11 +2829,18 @@ impl Kernel for QuadQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match (self.fallback_entry, which) {
+            (false, Impl::Ours) | (_, Impl::Fallback) => true,
+            (true, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Cmsis => {
+                "CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop"
+            }
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -3982,9 +4093,7 @@ impl Kernel for PowerDbK {
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
-            Impl::Volk => {
-                "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f"
-            }
+            Impl::Volk => "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
             Impl::Cmsis => describe_cmsis("arm_vlog_f32 + arm_scale_f32 (+ offset loop)"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
@@ -4076,16 +4185,20 @@ impl Kernel for PowerDbQ15K {
 // ---------------------------------------------------------------------------------------------
 // agc and dc_block_real (M20)
 
-/// `agc` (no established library: compared with our fallback; not accelerated, so the entries
-/// are `info`). The input is noise whose amplitude steps from 0.01 to 0.3 to 0.003 in thirds,
-/// so the gain moves in both directions within a call.
+/// `agc`: `C32` against the `agc_cc` loop of GNU Radio, our kernel (`agc`) and our fallback
+/// (`agc_fallback`, the same input); `CQ15` has no established library and is compared with
+/// our fallback (not accelerated, so the entries are `info`). The input is noise whose
+/// amplitude steps from 0.01 to 0.3 to 0.003 in thirds, so the gain moves in both directions
+/// within a call.
 struct AgcK<T: ComplexSample> {
     input: Aligned<T>,
     out: Aligned<T>,
+    /// The entry: `agc_fallback`.
+    fallback_entry: bool,
 }
 
 impl<T: SquelchSample> AgcK<T> {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, fallback_entry: bool) -> Self {
         let n = layout.n;
         let mut input = Aligned::<T>::skewed(n, layout.skew(core::mem::size_of::<T>()));
         for (i, s) in input.iter_mut().enumerate() {
@@ -4095,6 +4208,7 @@ impl<T: SquelchSample> AgcK<T> {
         AgcK {
             input,
             out: Aligned::skewed(n, layout.skew(core::mem::size_of::<T>())),
+            fallback_entry,
         }
     }
 
@@ -4181,7 +4295,8 @@ impl Kernel for AgcK<C32> {
 
     fn supports(&self, which: Impl) -> bool {
         match which {
-            Impl::Ours | Impl::Fallback => true,
+            Impl::Ours => !self.fallback_entry,
+            Impl::Fallback => true,
             Impl::GnuRadio => gr_agc().is_some(),
             _ => false,
         }
@@ -5986,6 +6101,12 @@ mod biquad_tests {
             "fm_mod_cq15",
             "fm_mod_fallback",
             "fm_mod_cq15_fallback",
+            "quad_demod",
+            "quad_demod_cq15",
+            "quad_demod_fallback",
+            "quad_demod_cq15_fallback",
+            "agc",
+            "agc_fallback",
         ] {
             let mut kernel = prepare(
                 name,

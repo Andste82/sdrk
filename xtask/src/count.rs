@@ -643,7 +643,9 @@ pub enum Family {
     FallbackVsCmsis,
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is the scalar loop of a GNU
     /// Radio block (`rotate`: `gr::blocks::rotator`, `fm_mod`: `frequency_modulator_fc`,
-    /// `deemphasis_fallback`: the IIR loop of `fm_deemph`).
+    /// `deemphasis_fallback`: the IIR loop of `fm_deemph`, `agc`: `agc_cc`, `quad_demod`:
+    /// `quadrature_demod_cf`), compiled with the generic flags of GNU Radio's own build;
+    /// CMSIS-DSP's generic C as information where the entry has it.
     FallbackVsGnuRadio,
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
     /// (`dc_block_fallback`, `dc_block_real_fallback`).
@@ -740,7 +742,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 120] = [
+pub static KERNELS: [KernelSpec; 123] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -797,6 +799,8 @@ pub static KERNELS: [KernelSpec; 120] = [
     spec("mag_sq_q15", Family::Own, false),
     spec("quad_demod", Family::Volk, false),
     spec("quad_demod_cq15", Family::Own, false),
+    spec("quad_demod_fallback", Family::FallbackVsGnuRadio, false),
+    spec("quad_demod_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("fm_mod", Family::GnuRadio, false),
     spec("fm_mod_cq15", Family::Q15Own, false),
     spec("fm_mod_fallback", Family::FallbackVsGnuRadio, false),
@@ -819,6 +823,7 @@ pub static KERNELS: [KernelSpec; 120] = [
     spec("power_db_q15_fallback", Family::FallbackVsCmsis, false),
     spec("agc", Family::GnuRadio, false),
     spec("agc_cq15", Family::Own, false),
+    spec("agc_fallback", Family::FallbackVsGnuRadio, false),
     spec("dc_block_real", Family::Own, false),
     spec("dc_block_real_q15", Family::Own, false),
     spec("deemphasis", Family::Own, false),
@@ -1157,7 +1162,7 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
         }
         Family::FftCq15FallbackVsCmsis => (Reference::Cmsis, vec![Reference::KissFft]),
         Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
-        Family::FallbackVsGnuRadio => (Reference::GnuRadio, Vec::new()),
+        Family::FallbackVsGnuRadio => (Reference::GnuRadio, vec![Reference::Cmsis]),
         Family::FallbackVsLiquid => (Reference::Liquid, Vec::new()),
     }
 }
@@ -3451,7 +3456,7 @@ mod tests {
                 assert_eq!(kernel(k).family.measured(), "fallback");
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
-                    (Reference::GnuRadio, Vec::new())
+                    (Reference::GnuRadio, vec![Reference::Cmsis])
                 );
             }
         }
@@ -3508,7 +3513,7 @@ mod tests {
             }
             assert_eq!(
                 comparisons(plan(level), kernel("deemphasis_fallback")),
-                (Reference::GnuRadio, Vec::new())
+                (Reference::GnuRadio, vec![Reference::Cmsis])
             );
             assert_eq!(
                 comparisons(plan(level), kernel("deemphasis")),

@@ -1,36 +1,54 @@
 //! Simulated cycles per sample (level 2 of the measurement policy, D33 in
 //! `docs/decisions-log.md`, `docs/performance.md#measurement-policy`).
 //!
-//! The input is the execution count of every instruction of the counted calls, taken by
-//! callgrind with the differential method of `cargo xtask count` (a run with `K` calls minus a
-//! run with none, [`difference`]). The instructions are grouped into basic blocks: runs of
-//! consecutive instructions with the same count, cut after every control transfer
-//! ([`blocks`]). The hot blocks (from the most executed instructions down, until
-//! [`COVERAGE`] of the executed instructions are covered) are disassembled with `objdump` and
-//! simulated by `llvm-mca` as a loop on a core model: the cycles per iteration and the port
-//! bound (`Block RThroughput`). Weighted by their execution counts and scaled to all executed
-//! instructions, they give the cycles per sample and the port bound per sample; the efficiency
-//! is their ratio.
+//! The input is the execution count of every instruction of the counted calls and the count of
+//! every taken jump, taken by callgrind with the differential method of `cargo xtask count` (a
+//! run with `K` calls minus a run with none, [`difference`]). The hot code is disassembled with
+//! `objdump` and simulated by `llvm-mca` on a core model: the cycles per iteration and the port
+//! bound (`Block RThroughput`) of every simulated unit. Weighted by their execution counts and
+//! scaled to all executed instructions, they give the cycles per sample and the port bound per
+//! sample; the efficiency is their ratio.
 //!
-//! Every block is simulated as if it repeated back to back with itself. That is the steady state
+//! Two modes cut the code into simulated units ([`CycleMode`]):
+//!
+//! - **Whole loop** (the default): the control-flow graph of the basic blocks is rebuilt from the
+//!   instruction and jump counts ([`cfg()`]); its loops are found as strongly connected components
+//!   (nested loops inside them, [`find_loops`]); every loop body is simulated as one region per
+//!   frequent path from its header back to the header ([`loop_paths`]: the blocks of one
+//!   iteration in execution order, each path weighted by the product of its branch frequencies).
+//!   A dependency chain that runs through several blocks of one iteration is simulated as it
+//!   runs. On `znver3`/`znver4`, whose `llvm-mca` 23.1.1 models mishandle eliminated register
+//!   moves, a path is also simulated with its moves written as `lea` and the form as compiled is
+//!   only trusted within the bound the `lea` form gives ([`simulate_region`]). The blocks outside
+//!   every loop are simulated as in the per-block mode.
+//! - **Per block** (the method of D35): every basic block, or run of blocks with the same count
+//!   that only cold code separates ([`regions`]), is simulated as a loop of its own.
+//!
+//! Every unit is simulated as if it repeated back to back with itself. That is the steady state
 //! of a loop body; for a block executed once per call it is an approximation, which the coverage
 //! by loop bodies keeps small for the counted kernels. The blind spots of the method (caches,
 //! memory dependencies, branch prediction, gathers, divisions and square roots) are listed in
 //! `docs/performance.md`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, anyhow, bail};
 
-/// Execution counts per instruction: `(object file, address in the file) -> executions`.
-pub type Counts = BTreeMap<(String, u64), u64>;
+/// The execution counts of a profile.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Counts {
+    /// `(object file, address in the file) -> executions` of every instruction.
+    pub instructions: BTreeMap<(String, u64), u64>,
+    /// `(object file, address of the jump, address of the target) -> times taken`.
+    pub jumps: BTreeMap<(String, u64, u64), u64>,
+}
 
-/// The share of the executed instructions that the simulated blocks must cover.
+/// The share of the executed instructions that the simulated units must cover.
 pub const COVERAGE: f64 = 0.99;
-/// At most this many blocks are simulated per profile.
+/// At most this many units are simulated per profile.
 pub const MAX_BLOCKS: usize = 64;
 /// Iterations of every `llvm-mca` run.
 pub const ITERATIONS: u32 = 200;
@@ -40,6 +58,47 @@ const CLUSTER_GAP: u64 = 4096;
 /// never ran, is at most this many bytes (the cold paths of a loop body: a saturation, an
 /// error branch).
 pub const REGION_GAP: u64 = 256;
+/// The paths of one loop body are enumerated until they cover this share of its iterations.
+pub const PATH_COVERAGE: f64 = 0.99;
+/// At most this many paths are simulated per loop body.
+pub const MAX_PATHS: usize = 8;
+/// Paths less frequent than this share of the iterations of their loop are not simulated.
+pub const MIN_PATH_SHARE: f64 = 0.005;
+/// A loop body whose simulated paths cover less than this share of its iterations is simulated
+/// block by block instead.
+pub const MIN_LOOP_COVERAGE: f64 = 0.5;
+/// A bound on the work of the path search of one loop (partial paths taken from the queue).
+const MAX_EXPANSIONS: usize = 100_000;
+
+/// How the hot code is cut into the units that `llvm-mca` simulates.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CycleMode {
+    /// One region per frequent path through each loop body (the default).
+    #[default]
+    WholeLoop,
+    /// One region per basic block or run of same-count blocks (the method of D35).
+    PerBlock,
+}
+
+impl CycleMode {
+    /// Both modes, the default first.
+    pub const ALL: [CycleMode; 2] = [CycleMode::WholeLoop, CycleMode::PerBlock];
+
+    /// The name in the command line and the JSON (`cycle_mode`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            CycleMode::WholeLoop => "whole-loop",
+            CycleMode::PerBlock => "per-block",
+        }
+    }
+
+    /// The mode called `name`.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<CycleMode> {
+        Self::ALL.into_iter().find(|m| m.name() == name)
+    }
+}
 
 /// The core models of an instruction-set level (D33): the reference model, on which a branch is
 /// judged, and the counter-model of another vendor or core generation.
@@ -111,44 +170,86 @@ pub fn llvm_mca() -> PathBuf {
     )
 }
 
-/// Parses a callgrind output file written with `--dump-instr=yes --compress-pos=no
-/// --compress-strings=no` into execution counts per instruction. The cost line after a
-/// `calls=` line is the inclusive cost of the call and is skipped.
+/// Parses a callgrind output file written with `--dump-instr=yes --collect-jumps=yes
+/// --compress-pos=no --compress-strings=no` into execution counts per instruction and per
+/// taken jump. The cost line after a `calls=` line is the inclusive cost of the call and is
+/// skipped; the position line after a `jump=` (unconditional: `jump=<taken> <target>`) or
+/// `jcnd=` line (conditional: `jcnd=<taken>/<executed> <target>`) is the address of the jump.
 #[must_use]
 pub fn parse_callgrind(text: &str) -> Counts {
-    let mut counts = Counts::new();
+    let mut counts = Counts::default();
     let mut object = String::new();
     let mut call_cost = false;
+    let mut jump: Option<(u64, u64)> = None;
+    let hex = |s: &str| {
+        s.strip_prefix("0x")
+            .and_then(|a| u64::from_str_radix(a, 16).ok())
+    };
     for line in text.lines() {
         if let Some(ob) = line.strip_prefix("ob=") {
             object = ob.trim().to_string();
         } else if line.starts_with("calls=") {
             call_cost = true;
-        } else if let Some(hex) = line.strip_prefix("0x") {
+        } else if let Some(rest) = line
+            .strip_prefix("jump=")
+            .or_else(|| line.strip_prefix("jcnd="))
+        {
+            let mut parts = rest.split_whitespace();
+            let taken = parts
+                .next()
+                .and_then(|n| n.split('/').next())
+                .and_then(|n| n.parse::<u64>().ok());
+            let target = parts.next().and_then(hex);
+            jump = taken.zip(target);
+        } else if line.starts_with("0x") {
+            let mut parts = line.split_whitespace();
+            let address = parts.next().and_then(hex);
+            if let Some((taken, target)) = jump.take() {
+                if let Some(address) = address
+                    && taken > 0
+                {
+                    *counts
+                        .jumps
+                        .entry((object.clone(), address, target))
+                        .or_default() += taken;
+                }
+                continue;
+            }
             if std::mem::take(&mut call_cost) {
                 continue;
             }
-            let mut parts = hex.split_whitespace();
-            let address = parts.next().and_then(|a| u64::from_str_radix(a, 16).ok());
             let ir = parts.nth(1).and_then(|n| n.parse::<u64>().ok());
             if let (Some(address), Some(ir)) = (address, ir) {
-                *counts.entry((object.clone(), address)).or_default() += ir;
+                *counts
+                    .instructions
+                    .entry((object.clone(), address))
+                    .or_default() += ir;
             }
         }
     }
     counts
 }
 
-/// `full - empty` per instruction; instructions whose difference is not positive are left out.
+/// `full - empty` per instruction and per jump; entries whose difference is not positive are
+/// left out.
 #[must_use]
 pub fn difference(full: &Counts, empty: &Counts) -> Counts {
-    full.iter()
-        .filter_map(|(key, &n)| {
-            let d = n.saturating_sub(empty.get(key).copied().unwrap_or(0));
-            (d > 0).then(|| (key.clone(), d))
-        })
-        .collect()
+    fn minus<K: Ord + Clone>(a: &BTreeMap<K, u64>, b: &BTreeMap<K, u64>) -> BTreeMap<K, u64> {
+        a.iter()
+            .filter_map(|(key, &n)| {
+                let d = n.saturating_sub(b.get(key).copied().unwrap_or(0));
+                (d > 0).then(|| (key.clone(), d))
+            })
+            .collect()
+    }
+    Counts {
+        instructions: minus(&full.instructions, &empty.instructions),
+        jumps: minus(&full.jumps, &empty.jumps),
+    }
 }
+
+/// The taken jumps of one object: `(address of the jump, target) -> times taken`.
+pub type Jumps = BTreeMap<(u64, u64), u64>;
 
 /// One instruction of a disassembly: address and the text for `llvm-mca`.
 pub type Instruction = (u64, String);
@@ -195,6 +296,18 @@ pub fn is_transfer(mnemonic: &str) -> bool {
             m,
             "b" | "bl" | "br" | "blr" | "cbz" | "cbnz" | "tbz" | "tbnz"
         )
+}
+
+/// Whether a block ending in `mnemonic` never continues with the next instruction (an
+/// unconditional jump or a return; a call returns to the next instruction).
+#[must_use]
+pub fn ends_flow(mnemonic: &str) -> bool {
+    let m = mnemonic.trim_start_matches("notrack").trim();
+    m.starts_with("jmp") || m.starts_with("ret") || matches!(m, "b" | "br" | "ud2")
+}
+
+fn mnemonic(text: &str) -> &str {
+    text.split_whitespace().next().unwrap_or_default()
 }
 
 /// Disassembles `[lo, hi]` of `object` with `objdump`.
@@ -266,8 +379,7 @@ pub fn blocks(object: &str, code: &[Instruction], counts: &BTreeMap<u64, u64>) -
         });
         block.end = *address;
         block.text.push(text.clone());
-        let mnemonic = text.split_whitespace().next().unwrap_or_default();
-        if is_transfer(mnemonic) {
+        if is_transfer(mnemonic(text)) {
             out.extend(current.take());
         }
     }
@@ -300,20 +412,629 @@ pub fn regions(blocks: Vec<Block>) -> Vec<Block> {
     out
 }
 
-/// The loop bodies of a profile ([`blocks`] joined by [`regions`]), the most executed
-/// instructions first.
+/// A node of the control-flow graph: a basic block that ran.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Node {
+    /// Address of the first instruction.
+    pub address: u64,
+    /// Address of the last instruction.
+    pub end: u64,
+    /// Executions.
+    pub count: u64,
+    /// The instructions for `llvm-mca`.
+    pub text: Vec<String>,
+}
+
+impl Node {
+    fn block(&self, object: &str) -> Block {
+        Block {
+            object: object.to_string(),
+            address: self.address,
+            end: self.end,
+            count: self.count,
+            text: self.text.clone(),
+        }
+    }
+}
+
+/// An edge of the control-flow graph and how often it was followed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Edge {
+    /// Index of the source node.
+    pub from: usize,
+    /// Index of the target node.
+    pub to: usize,
+    /// Times followed.
+    pub count: u64,
+}
+
+/// The control-flow graph of the executed code of one object.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Cfg {
+    /// The basic blocks in address order.
+    pub nodes: Vec<Node>,
+    /// The edges with a positive count.
+    pub edges: Vec<Edge>,
+}
+
+/// The successors of every node with the counts of the edges.
+type Successors = BTreeMap<usize, Vec<(usize, u64)>>;
+
+/// The node of an index that is not in the graph.
+static NO_NODE: Node = Node {
+    address: 0,
+    end: 0,
+    count: 0,
+    text: Vec::new(),
+};
+
+impl Cfg {
+    fn successors(&self) -> Successors {
+        let mut out = Successors::new();
+        for e in &self.edges {
+            out.entry(e.from).or_default().push((e.to, e.count));
+        }
+        out
+    }
+
+    /// Node `v` (an empty node if there is none).
+    #[must_use]
+    pub fn node(&self, v: usize) -> &Node {
+        self.nodes.get(v).unwrap_or(&NO_NODE)
+    }
+}
+
+/// The successors of `v`.
+fn next_of(succ: &Successors, v: usize) -> &[(usize, u64)] {
+    succ.get(&v).map_or(&[], Vec::as_slice)
+}
+
+/// Rebuilds the control-flow graph of the executed instructions of one object: `code` is its
+/// disassembly in address order (clusters may be concatenated: an instruction that never ran
+/// separates them), `counts` the executions per address and `jumps` the taken jumps
+/// `(address of the jump, target) -> count`. A block starts at a jump target, after a control
+/// transfer, after an instruction that never ran and where the count changes. A taken jump is an
+/// edge to its target; the remaining executions of a block that can fall through (also over a
+/// call, which returns there) are an edge to the next block. Calls are not edges: a called
+/// function is a graph of its own.
+#[must_use]
+pub fn cfg(code: &[Instruction], counts: &BTreeMap<u64, u64>, jumps: &Jumps) -> Cfg {
+    let targets: BTreeSet<u64> = jumps.keys().map(|&(_, to)| to).collect();
+    let mut nodes: Vec<Node> = Vec::new();
+    // For every node: whether the instruction after its last one in `code` starts the next node.
+    let mut adjacent: Vec<bool> = Vec::new();
+    // Whether the previous instruction of `code` ran, and whether it was a control transfer.
+    let (mut previous_ran, mut previous_transfer) = (false, false);
+    for (address, text) in code {
+        let count = counts.get(address).copied().unwrap_or(0);
+        if count == 0 {
+            previous_ran = false;
+            continue;
+        }
+        let continues = previous_ran && !previous_transfer && !targets.contains(address);
+        if let Some(n) = nodes.last_mut().filter(|n| continues && n.count == count) {
+            n.end = *address;
+            n.text.push(text.clone());
+        } else {
+            if let Some(a) = adjacent.last_mut() {
+                *a = previous_ran;
+            }
+            nodes.push(Node {
+                address: *address,
+                end: *address,
+                count,
+                text: vec![text.clone()],
+            });
+            adjacent.push(false);
+        }
+        previous_ran = true;
+        previous_transfer = is_transfer(mnemonic(text));
+    }
+    let start: BTreeMap<u64, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.address, i))
+        .collect();
+    let mut edges = Vec::new();
+    for (i, (n, &adjacent)) in nodes.iter().zip(&adjacent).enumerate() {
+        let mut taken = 0;
+        for (&(_, to), &c) in jumps.range((n.end, 0)..=(n.end, u64::MAX)) {
+            taken += c;
+            if let Some(&j) = start.get(&to) {
+                edges.push(Edge {
+                    from: i,
+                    to: j,
+                    count: c,
+                });
+            }
+        }
+        let last = n.text.last().map_or("", |t| mnemonic(t));
+        let fall = n.count.saturating_sub(taken);
+        if adjacent && !ends_flow(last) && fall > 0 {
+            edges.push(Edge {
+                from: i,
+                to: i + 1,
+                count: fall,
+            });
+        }
+    }
+    Cfg { nodes, edges }
+}
+
+/// A loop of the control-flow graph.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Loop {
+    /// The node where an iteration starts: the node entered most often from outside the loop.
+    pub header: usize,
+    /// All nodes of the loop, those of the inner loops included.
+    pub nodes: BTreeSet<usize>,
+    /// The loops nested inside (found after the edges back to the header are removed).
+    pub inner: Vec<Loop>,
+}
+
+/// The strongly connected components of the subgraph of `succ` induced by `set` (Tarjan).
+fn components(set: &BTreeSet<usize>, succ: &Successors) -> Vec<Vec<usize>> {
+    struct State<'a> {
+        set: &'a BTreeSet<usize>,
+        succ: &'a Successors,
+        index: BTreeMap<usize, usize>,
+        low: BTreeMap<usize, usize>,
+        stack: Vec<usize>,
+        on_stack: BTreeSet<usize>,
+        out: Vec<Vec<usize>>,
+    }
+    fn visit(s: &mut State<'_>, v: usize) {
+        let i = s.index.len();
+        s.index.insert(v, i);
+        s.low.insert(v, i);
+        s.stack.push(v);
+        s.on_stack.insert(v);
+        for &(w, _) in next_of(s.succ, v) {
+            if !s.set.contains(&w) {
+                continue;
+            }
+            let reached = if s.index.contains_key(&w) {
+                if !s.on_stack.contains(&w) {
+                    continue;
+                }
+                s.index.get(&w).copied()
+            } else {
+                visit(s, w);
+                s.low.get(&w).copied()
+            };
+            if let (Some(r), Some(lv)) = (reached, s.low.get_mut(&v)) {
+                *lv = (*lv).min(r);
+            }
+        }
+        if s.low.get(&v) == s.index.get(&v) {
+            let mut c = Vec::new();
+            while let Some(w) = s.stack.pop() {
+                s.on_stack.remove(&w);
+                c.push(w);
+                if w == v {
+                    break;
+                }
+            }
+            c.sort_unstable();
+            s.out.push(c);
+        }
+    }
+    let mut s = State {
+        set,
+        succ,
+        index: BTreeMap::new(),
+        low: BTreeMap::new(),
+        stack: Vec::new(),
+        on_stack: BTreeSet::new(),
+        out: Vec::new(),
+    };
+    for &v in set {
+        if !s.index.contains_key(&v) {
+            visit(&mut s, v);
+        }
+    }
+    s.out
+}
+
+/// The loops of the subgraph of `g` induced by `set`, nested loops inside them: every strongly
+/// connected component with a cycle is a loop; its header is the node entered most often from
+/// outside the component (its executions minus the edges from inside; then the most executed,
+/// then the lowest address); the inner loops are
+/// the loops of the component without its header.
+#[must_use]
+pub fn find_loops(g: &Cfg, set: &BTreeSet<usize>) -> Vec<Loop> {
+    let succ = g.successors();
+    loops_in(g, &succ, set)
+}
+
+fn loops_in(g: &Cfg, succ: &Successors, set: &BTreeSet<usize>) -> Vec<Loop> {
+    let mut out = Vec::new();
+    for c in components(set, succ) {
+        let nodes: BTreeSet<usize> = c.iter().copied().collect();
+        let self_loop = |&v: &usize| next_of(succ, v).iter().any(|&(w, _)| w == v);
+        let cyclic = c.len() > 1 || c.first().is_some_and(self_loop);
+        if !cyclic {
+            continue;
+        }
+        // The entries of a node: its executions not explained by edges from inside the
+        // component (jumps from outside, and calls, which are not edges: a loop at the start
+        // of a function is entered by its calls).
+        let entries = |v: usize| -> u64 {
+            let inside: u64 = g
+                .edges
+                .iter()
+                .filter(|e| e.to == v && nodes.contains(&e.from))
+                .map(|e| e.count)
+                .sum();
+            g.node(v).count.saturating_sub(inside)
+        };
+        let Some(header) = c.iter().copied().max_by(|&a, &b| {
+            entries(a)
+                .cmp(&entries(b))
+                .then(g.node(a).count.cmp(&g.node(b).count))
+                .then(g.node(b).address.cmp(&g.node(a).address))
+        }) else {
+            continue;
+        };
+        let mut rest = nodes.clone();
+        rest.remove(&header);
+        let inner = loops_in(g, succ, &rest);
+        out.push(Loop {
+            header,
+            nodes,
+            inner,
+        });
+    }
+    out.sort_by_key(|l| g.node(l.header).address);
+    out
+}
+
+/// One path through a loop body: its own nodes in execution order (the nodes of inner loops are
+/// left out; they are simulated with their own loop) and its share of the iterations.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LoopPath {
+    /// The nodes in execution order, the header first.
+    pub nodes: Vec<usize>,
+    /// The share of the iterations (starts at the header) that take this path.
+    pub share: f64,
+}
+
+/// A step of a path through a loop body: `Ok(node)` for a node of the body itself, `Err(k)` for
+/// its inner loop `k`.
+type Step = Result<usize, usize>;
+
+/// A partial path of the search in [`loop_paths`], ordered by its share.
+#[derive(Debug)]
+struct Partial {
+    share: f64,
+    /// The next step; `None`: the path is complete.
+    at: Option<Step>,
+    nodes: Vec<usize>,
+}
+
+impl PartialEq for Partial {
+    fn eq(&self, other: &Self) -> bool {
+        self.share.total_cmp(&other.share).is_eq()
+    }
+}
+impl Eq for Partial {}
+impl PartialOrd for Partial {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Partial {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.share.total_cmp(&other.share)
+    }
+}
+
+/// The most frequent paths of one iteration of `l`, most frequent first: from the header along
+/// the edges of the loop until an edge back to the header or out of the loop. An inner loop is
+/// passed as one step whose exits are weighted by their counts. The share of a path is the
+/// product of the frequencies of its branches (each edge count over the counts of all edges
+/// leaving its node), which reproduces the execution count of every node of the body when the
+/// branches are independent. The search stops at [`PATH_COVERAGE`] of the iterations or after
+/// [`MAX_PATHS`] paths; paths below [`MIN_PATH_SHARE`] are not returned.
+#[must_use]
+pub fn loop_paths(g: &Cfg, l: &Loop) -> Vec<LoopPath> {
+    // The inner loop of every node that belongs to one (the outermost inner loop).
+    let mut inner_of: BTreeMap<usize, usize> = BTreeMap::new();
+    for (k, inner) in l.inner.iter().enumerate() {
+        for &v in &inner.nodes {
+            inner_of.insert(v, k);
+        }
+    }
+    // The steps of a path: `Ok(node)` for an own node, `Err(k)` for the inner loop `k`; an
+    // edge to `None` ends the path (back to the header or out of the loop).
+    let step = |v: usize| -> Step { inner_of.get(&v).map_or(Ok(v), |&k| Err(k)) };
+    let mut out_edges: BTreeMap<Step, BTreeMap<Option<Step>, u64>> = BTreeMap::new();
+    for e in &g.edges {
+        if !l.nodes.contains(&e.from) {
+            continue;
+        }
+        let from = step(e.from);
+        let to = (e.to != l.header && l.nodes.contains(&e.to)).then(|| step(e.to));
+        if from.is_err() && to == Some(from) {
+            // An edge inside an inner loop.
+            continue;
+        }
+        *out_edges.entry(from).or_default().entry(to).or_default() += e.count;
+    }
+    let mut queue = BinaryHeap::new();
+    queue.push(Partial {
+        share: 1.0,
+        at: Some(Ok(l.header)),
+        nodes: Vec::new(),
+    });
+    let mut paths = Vec::new();
+    let mut found = 0.0;
+    let mut expansions = 0;
+    while let Some(p) = queue.pop() {
+        // The queue gives the most frequent partial path first: every later one is rarer.
+        if p.share < MIN_PATH_SHARE || expansions > MAX_EXPANSIONS {
+            break;
+        }
+        let Some(at) = p.at else {
+            found += p.share;
+            paths.push(LoopPath {
+                nodes: p.nodes,
+                share: p.share,
+            });
+            if found >= PATH_COVERAGE || paths.len() >= MAX_PATHS {
+                break;
+            }
+            continue;
+        };
+        expansions += 1;
+        let mut nodes = p.nodes;
+        if let Ok(v) = at {
+            nodes.push(v);
+        }
+        let Some(next) = out_edges.get(&at) else {
+            // No edge leaves: the path ends here (a return, or a jump the profile lost).
+            queue.push(Partial {
+                share: p.share,
+                at: None,
+                nodes,
+            });
+            continue;
+        };
+        let sum: u64 = next.values().sum();
+        for (&to, &c) in next {
+            queue.push(Partial {
+                share: p.share * c as f64 / sum as f64,
+                at: to,
+                nodes: nodes.clone(),
+            });
+        }
+    }
+    paths
+}
+
+/// The models whose register-move elimination is not trusted in loop regions: the `znver3`
+/// and `znver4` models of `llvm-mca` 23.1.1 lose the dependency of later instructions on an
+/// eliminated `mov r32, r32` (the release path of the `agc` `CQ15` fallback: 24.7 instead of
+/// 79.0 cycles on `znver3`), and an eliminated 64-bit move on a loop-carried chain can also
+/// lengthen it (the same path with only the 32-bit move rewritten: 89.0). See
+/// [`simulate_region`].
+pub const MOVE_CHECK_MODELS: [&str; 2] = ["znver3", "znver4"];
+
+/// Rewrites the register-to-register moves of general registers (`mov %eax,%ecx`,
+/// `mov %rax,%rcx`) as `lea (%rax),%ecx` / `lea (%rax),%rcx`: the same result, but no move that
+/// the renamer eliminates, so the model keeps every dependency through it. Each `lea` costs one
+/// cycle of latency and one ALU slot, which hardware with move elimination does not pay. Other
+/// instructions are kept. Returns the text and the number of rewritten moves.
+#[must_use]
+pub fn keep_move_dependencies(text: &[String]) -> (Vec<String>, usize) {
+    let mut moves = 0;
+    let out = text
+        .iter()
+        .map(|t| {
+            move_as_lea(t).map_or_else(
+                || t.clone(),
+                |lea| {
+                    moves += 1;
+                    lea
+                },
+            )
+        })
+        .collect();
+    (out, moves)
+}
+
+/// `lea` for a move between two general registers of the same width (32 or 64 bits).
+fn move_as_lea(text: &str) -> Option<String> {
+    let (m, operands) = text.split_once(' ')?;
+    if !matches!(m, "mov" | "movl" | "movq") {
+        return None;
+    }
+    let (src, dst) = operands.split_once(',')?;
+    let (src, dst) = (src.trim().strip_prefix('%')?, dst.trim().strip_prefix('%')?);
+    let base = gpr64(src)?;
+    gpr64(dst)?;
+    (gpr32(src) == gpr32(dst)).then(|| format!("lea (%{base}),%{dst}"))
+}
+
+/// The 64-bit name of a 32- or 64-bit general register.
+fn gpr64(r: &str) -> Option<String> {
+    const LEGACY: [&str; 8] = ["ax", "bx", "cx", "dx", "si", "di", "bp", "sp"];
+    if let Some(base) = r.strip_prefix('r').or_else(|| r.strip_prefix('e'))
+        && LEGACY.contains(&base)
+    {
+        return Some(format!("r{base}"));
+    }
+    let n = r.strip_prefix('r')?;
+    let digits = n.strip_suffix('d').unwrap_or(n);
+    let v: u32 = digits.parse().ok()?;
+    (8..=15).contains(&v).then(|| format!("r{v}"))
+}
+
+/// Whether a general register name (as accepted by [`gpr64`]) is a 32-bit one.
+fn gpr32(r: &str) -> bool {
+    r.starts_with('e') || (r.starts_with('r') && r.ends_with('d'))
+}
+
+/// A unit that `llvm-mca` simulates: a region of instructions and how often it runs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Unit {
+    /// The object file.
+    pub object: String,
+    /// Address of the first instruction.
+    pub address: u64,
+    /// Address of the last instruction.
+    pub end: u64,
+    /// How often the region runs (a path of a loop: the iterations that take it).
+    pub weight: f64,
+    /// The instructions for `llvm-mca`.
+    pub text: Vec<String>,
+    /// What the unit is (`block`, `loop 0x.. path 1/2 (73.0 %)`), for `SDRK_MCA_DEBUG`.
+    pub label: String,
+    /// Whether the unit is a path of a loop body (whole-loop mode), whose register moves are
+    /// checked on [`MOVE_CHECK_MODELS`] ([`simulate_region`]).
+    pub loop_path: bool,
+}
+
+impl Unit {
+    /// Executed instructions of the unit.
+    #[must_use]
+    pub fn executed(&self) -> f64 {
+        self.weight * self.text.len() as f64
+    }
+
+    fn of_block(b: Block) -> Unit {
+        Unit {
+            object: b.object,
+            address: b.address,
+            end: b.end,
+            weight: b.count as f64,
+            text: b.text,
+            label: "block".to_string(),
+            loop_path: false,
+        }
+    }
+}
+
+/// The units of a profile in one mode.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Profile {
+    /// The mode.
+    pub mode: CycleMode,
+    /// The units, the most executed instructions first.
+    pub units: Vec<Unit>,
+    /// All executed instructions of the profile (in the objects that exist).
+    pub total: f64,
+    /// Loop bodies simulated as regions (whole-loop mode; 0 in per-block mode).
+    pub loops: usize,
+}
+
+/// The units of the loops of `g` (inner loops first) and of the blocks outside every loop.
+fn loop_units(object: &str, g: &Cfg) -> (Vec<Unit>, usize) {
+    fn walk(object: &str, g: &Cfg, l: &Loop, out: &mut Vec<Unit>, loops: &mut usize) {
+        for inner in &l.inner {
+            walk(object, g, inner, out, loops);
+        }
+        let paths = loop_paths(g, l);
+        if paths.iter().map(|p| p.share).sum::<f64>() < MIN_LOOP_COVERAGE {
+            // No few paths stand for the body (many independent branches): its own blocks
+            // are simulated one by one, as in the per-block mode.
+            let nested: BTreeSet<usize> = l
+                .inner
+                .iter()
+                .flat_map(|i| i.nodes.iter().copied())
+                .collect();
+            let own: Vec<usize> = l
+                .nodes
+                .iter()
+                .copied()
+                .filter(|v| !nested.contains(v))
+                .collect();
+            out.extend(blocks_apart(object, g, &own));
+            return;
+        }
+        *loops += 1;
+        let n = paths.len();
+        let iterations = g.node(l.header).count as f64;
+        for (k, p) in paths.into_iter().enumerate() {
+            let text: Vec<String> = p
+                .nodes
+                .iter()
+                .flat_map(|&v| g.node(v).text.iter().cloned())
+                .collect();
+            let end = p.nodes.iter().map(|&v| g.node(v).end).max().unwrap_or(0);
+            out.push(Unit {
+                object: object.to_string(),
+                address: g.node(l.header).address,
+                end,
+                weight: iterations * p.share,
+                text,
+                loop_path: true,
+                label: format!(
+                    "loop {:#x} path {}/{n} ({:.1} %, blocks {})",
+                    g.node(l.header).address,
+                    k + 1,
+                    100.0 * p.share,
+                    p.nodes
+                        .iter()
+                        .map(|&v| format!("{:#x}", g.node(v).address))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ),
+            });
+        }
+    }
+    let all: BTreeSet<usize> = (0..g.nodes.len()).collect();
+    let loops = find_loops(g, &all);
+    let mut out = Vec::new();
+    let mut count = 0;
+    for l in &loops {
+        walk(object, g, l, &mut out, &mut count);
+    }
+    let in_loop: BTreeSet<usize> = loops.iter().flat_map(|l| l.nodes.iter().copied()).collect();
+    let rest: Vec<usize> = (0..g.nodes.len())
+        .filter(|i| !in_loop.contains(i))
+        .collect();
+    out.extend(blocks_apart(object, g, &rest));
+    (out, count)
+}
+
+/// The nodes `nodes` (indices in address order) as units of the per-block mode: runs of
+/// consecutive nodes are joined by [`regions`], but never across a node left out (a loop
+/// between the code before and after it).
+fn blocks_apart(object: &str, g: &Cfg, nodes: &[usize]) -> Vec<Unit> {
+    let mut out = Vec::new();
+    let mut run: Vec<Block> = Vec::new();
+    let mut last: Option<usize> = None;
+    for &v in nodes {
+        if last.is_some_and(|l| l + 1 != v) {
+            out.extend(
+                regions(std::mem::take(&mut run))
+                    .into_iter()
+                    .map(Unit::of_block),
+            );
+        }
+        run.push(g.node(v).block(object));
+        last = Some(v);
+    }
+    out.extend(regions(run).into_iter().map(Unit::of_block));
+    out
+}
+
+/// The units of a profile in `mode`, the most executed instructions first.
 ///
 /// # Errors
 /// `objdump` cannot run.
-pub fn profile_blocks(counts: &Counts) -> anyhow::Result<Vec<Block>> {
+pub fn profile(counts: &Counts, mode: CycleMode) -> anyhow::Result<Profile> {
     let mut per_object: BTreeMap<&str, BTreeMap<u64, u64>> = BTreeMap::new();
-    for ((object, address), &n) in counts {
+    for ((object, address), &n) in &counts.instructions {
         per_object
             .entry(object.as_str())
             .or_default()
             .insert(*address, n);
     }
-    let mut out = Vec::new();
+    let mut units = Vec::new();
+    let mut total = 0.0;
+    let mut loops = 0;
     for (object, addresses) in per_object {
         if object == "???" || !Path::new(object).exists() {
             continue;
@@ -331,17 +1052,44 @@ pub fn profile_blocks(counts: &Counts) -> anyhow::Result<Vec<Block>> {
             };
         }
         ranges.extend(cluster);
+        let mut code = Vec::new();
         for (lo, hi) in ranges {
-            let code = disassemble(object, lo, hi)?;
-            out.extend(regions(blocks(object, &code, &addresses)));
+            let part = disassemble(object, lo, hi)?;
+            total += blocks(object, &part, &addresses)
+                .iter()
+                .map(|b| b.executed() as f64)
+                .sum::<f64>();
+            match mode {
+                CycleMode::PerBlock => units.extend(
+                    regions(blocks(object, &part, &addresses))
+                        .into_iter()
+                        .map(Unit::of_block),
+                ),
+                CycleMode::WholeLoop => code.extend(part),
+            }
+        }
+        if mode == CycleMode::WholeLoop {
+            let jumps: Jumps = counts
+                .jumps
+                .range((object.to_string(), 0, 0)..=(object.to_string(), u64::MAX, u64::MAX))
+                .map(|((_, from, to), &c)| ((*from, *to), c))
+                .collect();
+            let (u, l) = loop_units(object, &cfg(&code, &addresses, &jumps));
+            units.extend(u);
+            loops += l;
         }
     }
-    out.sort_by(|a, b| {
+    units.sort_by(|a, b| {
         b.executed()
-            .cmp(&a.executed())
+            .total_cmp(&a.executed())
             .then(a.address.cmp(&b.address))
     });
-    Ok(out)
+    Ok(Profile {
+        mode,
+        units,
+        total,
+        loops,
+    })
 }
 
 /// What `llvm-mca` says about one block on one model.
@@ -408,6 +1156,51 @@ pub fn simulate_block(text: &[String], triple: &str, cpu: &str) -> anyhow::Resul
         .ok_or_else(|| anyhow!("no summary in the output of llvm-mca"))
 }
 
+/// Simulates a loop path on `cpu`. On the models of [`MOVE_CHECK_MODELS`] a path with register
+/// moves is simulated twice: as compiled and with the moves written as `lea`
+/// ([`keep_move_dependencies`]). The `lea` form keeps every dependency and is at most one cycle
+/// per rewritten move slower than real move elimination, so the true cycles lie in
+/// `[lea - moves, lea]`. The form as compiled is taken when it lies in that range (the model
+/// handled the moves); otherwise the model mishandled an eliminated move and the `lea` form is
+/// taken. Returns the timing and whether the `lea` form was taken.
+///
+/// # Errors
+/// `llvm-mca` cannot run or rejects the path.
+pub fn simulate_region(
+    text: &[String],
+    triple: &str,
+    cpu: &str,
+) -> anyhow::Result<(BlockTiming, bool)> {
+    let compiled = simulate_block(text, triple, cpu)?;
+    if !MOVE_CHECK_MODELS.contains(&cpu) {
+        return Ok((compiled, false));
+    }
+    let (rewritten, moves) = keep_move_dependencies(text);
+    if moves == 0 {
+        return Ok((compiled, false));
+    }
+    let lea = simulate_block(&rewritten, triple, cpu)?;
+    Ok(choose_move_form(compiled, lea, moves))
+}
+
+/// The choice of [`simulate_region`]: the form as compiled if its cycles lie within
+/// `[lea - moves, lea]` (a small tolerance for the rounding of the simulation), else the `lea`
+/// form (`true`).
+#[must_use]
+pub fn choose_move_form(
+    compiled: BlockTiming,
+    lea: BlockTiming,
+    moves: usize,
+) -> (BlockTiming, bool) {
+    let tolerance = 0.05;
+    let low = lea.cycles - moves as f64 - tolerance;
+    if compiled.cycles >= low && compiled.cycles <= lea.cycles + tolerance {
+        (compiled, false)
+    } else {
+        (lea, true)
+    }
+}
+
 /// The bottleneck class of a simulated profile (`docs/performance.md`).
 #[must_use]
 pub fn bottleneck(efficiency: f64) -> &'static str {
@@ -423,6 +1216,8 @@ pub fn bottleneck(efficiency: f64) -> &'static str {
 pub struct Simulation {
     /// The model (`-mcpu`).
     pub cpu: String,
+    /// The mode the units were cut in.
+    pub mode: CycleMode,
     /// Executed instructions per sample (the count of `cargo xtask count`).
     pub instructions_per_sample: f64,
     /// Simulated cycles per sample.
@@ -431,74 +1226,102 @@ pub struct Simulation {
     pub port_bound_per_sample: f64,
     /// `port bound / cycles`.
     pub efficiency: f64,
-    /// Share of the executed instructions in the simulated blocks.
+    /// Share of the executed instructions in the simulated units.
     pub coverage: f64,
-    /// Number of simulated blocks.
+    /// Number of simulated units (blocks, or loop paths and blocks).
     pub blocks: usize,
-    /// Blocks `llvm-mca` rejected (address: reason); their instructions count as uncovered.
+    /// Loop bodies simulated as regions (whole-loop mode).
+    pub loops: usize,
+    /// Loop paths simulated with their register moves written as `lea` ([`simulate_region`]).
+    pub moves_as_lea: usize,
+    /// Units `llvm-mca` rejected (address: reason); their instructions count as uncovered.
     pub rejected: Vec<String>,
 }
 
-/// Simulates the hot blocks of a profile on `cpu` and weights them by their executions.
+/// Simulates the hot units of a profile on `cpu` and weights them by their executions.
 ///
 /// # Errors
-/// `llvm-mca` cannot run, or no block could be simulated.
+/// `llvm-mca` cannot run, or no unit could be simulated.
 pub fn simulate(
-    blocks: &[Block],
+    profile: &Profile,
     samples: u64,
     triple: &str,
     cpu: &str,
 ) -> anyhow::Result<Simulation> {
-    let total: u64 = blocks.iter().map(Block::executed).sum();
-    if total == 0 || samples == 0 {
+    let total = profile.total;
+    if total <= 0.0 || samples == 0 {
         bail!("the profile is empty");
     }
-    let (mut covered, mut seen, mut cycles, mut port, mut simulated) = (0u64, 0u64, 0.0, 0.0, 0);
+    let (mut covered, mut seen, mut cycles, mut port, mut simulated) = (0.0, 0.0, 0.0, 0.0, 0);
+    let mut moves_as_lea = 0;
     let mut rejected = Vec::new();
-    for b in blocks.iter().take(MAX_BLOCKS) {
-        if seen as f64 >= COVERAGE * total as f64 {
+    for u in profile.units.iter().take(MAX_BLOCKS) {
+        if seen >= COVERAGE * total {
             break;
         }
-        seen += b.executed();
-        let timing = simulate_block(&b.text, triple, cpu);
+        seen += u.executed();
+        let timing = if u.loop_path {
+            simulate_region(&u.text, triple, cpu)
+        } else {
+            simulate_block(&u.text, triple, cpu).map(|t| (t, false))
+        };
         if std::env::var_os("SDRK_MCA_DEBUG").is_some() {
             eprintln!(
-                "mca {cpu}: {:#x}..{:#x} {} instructions x {} -> {:?}",
-                b.address,
-                b.end,
-                b.text.len(),
-                b.count,
-                timing.as_ref().map_err(ToString::to_string)
+                "mca {cpu} {}: {:#x}..{:#x} {} ({} instructions x {:.1}) -> {:?}",
+                profile.mode.name(),
+                u.address,
+                u.end,
+                u.label,
+                u.text.len(),
+                u.weight,
+                timing
+                    .as_ref()
+                    .map(|(t, lea)| format!(
+                        "{:.2} cycles, port bound {:.2}{}",
+                        t.cycles,
+                        t.port_bound,
+                        if *lea { ", moves as lea" } else { "" }
+                    ))
+                    .map_err(ToString::to_string)
             );
+            if std::env::var_os("SDRK_MCA_DEBUG").is_some_and(|v| v == "2") {
+                for t in &u.text {
+                    eprintln!("    {t}");
+                }
+            }
         }
         match timing {
-            Ok(t) => {
-                covered += b.executed();
-                cycles += b.count as f64 * t.cycles;
-                port += b.count as f64 * t.port_bound;
+            Ok((t, lea)) => {
+                moves_as_lea += usize::from(lea);
+                covered += u.executed();
+                cycles += u.weight * t.cycles;
+                port += u.weight * t.port_bound;
                 simulated += 1;
             }
-            Err(e) => rejected.push(format!("{:#x}: {e:#}", b.address)),
+            Err(e) => rejected.push(format!("{:#x}: {e:#}", u.address)),
         }
     }
-    if covered == 0 {
+    if covered <= 0.0 {
         bail!(
             "llvm-mca could not simulate any block: {}",
             rejected.join("; ")
         );
     }
-    // The instructions outside the simulated blocks get the cycles per instruction of the
+    // The instructions outside the simulated units get the cycles per instruction of the
     // simulated ones.
-    let scale = total as f64 / covered as f64;
+    let scale = total / covered;
     let samples = samples as f64;
     Ok(Simulation {
         cpu: cpu.to_string(),
-        instructions_per_sample: total as f64 / samples,
+        mode: profile.mode,
+        instructions_per_sample: total / samples,
         cycles_per_sample: cycles * scale / samples,
         port_bound_per_sample: port * scale / samples,
         efficiency: port / cycles,
-        coverage: covered as f64 / total as f64,
+        coverage: (covered / total).min(1.0),
         blocks: simulated,
+        loops: profile.loops,
+        moves_as_lea,
         rejected,
     })
 }
@@ -518,6 +1341,11 @@ cfn=g
 calls=5 0x40 0
 0x14 0 999
 0x18 0 5
+jcnd=3/5 0x10 0
+0x18 0
+jump=2 0x30 0
+0x1c 0
+0x1c 0 2
 ob=/lib/b.so
 fn=h
 0x20 0 3
@@ -526,14 +1354,20 @@ fn=h
     #[test]
     fn callgrind_counts_skip_the_inclusive_cost_of_calls() {
         let c = parse_callgrind(CALLGRIND);
-        assert_eq!(c.get(&("/bin/a".to_string(), 0x14)), Some(&5));
-        assert_eq!(c.get(&("/bin/a".to_string(), 0x18)), Some(&5));
-        assert_eq!(c.get(&("/lib/b.so".to_string(), 0x20)), Some(&3));
-        let mut empty = Counts::new();
-        empty.insert(("/bin/a".to_string(), 0x10), 5);
+        let i = &c.instructions;
+        assert_eq!(i.get(&("/bin/a".to_string(), 0x14)), Some(&5));
+        assert_eq!(i.get(&("/bin/a".to_string(), 0x18)), Some(&5));
+        assert_eq!(i.get(&("/bin/a".to_string(), 0x1c)), Some(&2));
+        assert_eq!(i.get(&("/lib/b.so".to_string(), 0x20)), Some(&3));
+        assert_eq!(c.jumps.get(&("/bin/a".to_string(), 0x18, 0x10)), Some(&3));
+        assert_eq!(c.jumps.get(&("/bin/a".to_string(), 0x1c, 0x30)), Some(&2));
+        let mut empty = Counts::default();
+        empty.instructions.insert(("/bin/a".to_string(), 0x10), 5);
+        empty.jumps.insert(("/bin/a".to_string(), 0x18, 0x10), 1);
         let d = difference(&c, &empty);
-        assert!(!d.contains_key(&("/bin/a".to_string(), 0x10)));
-        assert_eq!(d.len(), 3);
+        assert!(!d.instructions.contains_key(&("/bin/a".to_string(), 0x10)));
+        assert_eq!(d.instructions.len(), 4);
+        assert_eq!(d.jumps.get(&("/bin/a".to_string(), 0x18, 0x10)), Some(&2));
     }
 
     #[test]
@@ -548,6 +1382,7 @@ fn=h
         );
         assert_eq!(parse_objdump_line("000000000038a560 <f>:"), None);
         assert!(is_transfer("ret") && is_transfer("b.ne") && !is_transfer("bic"));
+        assert!(ends_flow("jmp") && ends_flow("ret") && !ends_flow("jne") && !ends_flow("call"));
     }
 
     #[test]
@@ -594,6 +1429,275 @@ fn=h
         assert_eq!(r[0].text.len(), 2);
     }
 
+    fn code(lines: &[(u64, &str)]) -> Vec<Instruction> {
+        lines.iter().map(|(a, t)| (*a, (*t).to_string())).collect()
+    }
+
+    /// A rotated loop with a branch inside (the code of `gcc -O2` for
+    /// `for (...) if (x & 1) s += 3 x; else s ^= x;`), 100 iterations, 48 odd values.
+    fn diamond() -> (Vec<Instruction>, BTreeMap<u64, u64>, Jumps) {
+        let c = code(&[
+            (0x00, "test %esi,%esi"),
+            (0x02, "jle 0x48"),
+            (0x04, "xor %edx,%edx"),
+            (0x06, "jmp 0x2e"),
+            (0x08, "nop"),
+            (0x20, "lea (%rax,%rax,2),%eax"),
+            (0x23, "add $0x4,%rdi"),
+            (0x27, "add %eax,%edx"),
+            (0x29, "cmp %rcx,%rdi"),
+            (0x2c, "je 0x3f"),
+            (0x2e, "mov (%rdi),%eax"),
+            (0x30, "test $0x1,%al"),
+            (0x32, "jne 0x20"),
+            (0x34, "add $0x4,%rdi"),
+            (0x38, "xor %eax,%edx"),
+            (0x3a, "cmp %rcx,%rdi"),
+            (0x3d, "jne 0x2e"),
+            (0x3f, "mov %edx,%eax"),
+            (0x41, "ret"),
+            (0x48, "xor %edx,%edx"),
+        ]);
+        let mut counts: BTreeMap<u64, u64> = BTreeMap::new();
+        for (a, n) in [
+            (0x00, 1),
+            (0x02, 1),
+            (0x04, 1),
+            (0x06, 1),
+            (0x20, 48),
+            (0x23, 48),
+            (0x27, 48),
+            (0x29, 48),
+            (0x2c, 48),
+            (0x2e, 100),
+            (0x30, 100),
+            (0x32, 100),
+            (0x34, 52),
+            (0x38, 52),
+            (0x3a, 52),
+            (0x3d, 52),
+            (0x3f, 1),
+            (0x41, 1),
+        ] {
+            counts.insert(a, n);
+        }
+        let jumps: Jumps = [
+            ((0x06, 0x2e), 1),
+            ((0x2c, 0x3f), 1),
+            ((0x32, 0x20), 48),
+            ((0x3d, 0x2e), 52),
+        ]
+        .into();
+        (c, counts, jumps)
+    }
+
+    #[test]
+    fn the_control_flow_graph_follows_the_jumps() {
+        let (c, counts, jumps) = diamond();
+        let g = cfg(&c, &counts, &jumps);
+        let starts: Vec<u64> = g.nodes.iter().map(|n| n.address).collect();
+        assert_eq!(starts, [0x00, 0x04, 0x20, 0x2e, 0x34, 0x3f]);
+        let edge = |from: u64, to: u64| {
+            let f = starts.iter().position(|&a| a == from).unwrap();
+            let t = starts.iter().position(|&a| a == to).unwrap();
+            g.edges
+                .iter()
+                .find(|e| e.from == f && e.to == t)
+                .map(|e| e.count)
+        };
+        assert_eq!(edge(0x00, 0x04), Some(1));
+        assert_eq!(edge(0x04, 0x2e), Some(1));
+        // The unconditional jump does not fall through, the never-taken `jle` does.
+        assert_eq!(edge(0x04, 0x20), None);
+        assert_eq!(edge(0x20, 0x2e), Some(47));
+        assert_eq!(edge(0x20, 0x3f), Some(1));
+        assert_eq!(edge(0x2e, 0x20), Some(48));
+        assert_eq!(edge(0x2e, 0x34), Some(52));
+        assert_eq!(edge(0x34, 0x2e), Some(52));
+        assert_eq!(edge(0x34, 0x3f), None);
+    }
+
+    #[test]
+    fn a_loop_with_a_branch_is_one_body_with_weighted_paths() {
+        let (c, counts, jumps) = diamond();
+        let g = cfg(&c, &counts, &jumps);
+        let all: BTreeSet<usize> = (0..g.nodes.len()).collect();
+        let loops = find_loops(&g, &all);
+        assert_eq!(loops.len(), 1);
+        let l = &loops[0];
+        // The rotated loop is entered at 0x2e (the jump of the prologue), not at 0x20.
+        assert_eq!(g.node(l.header).address, 0x2e);
+        assert_eq!(l.nodes.len(), 3);
+        assert_eq!(l.inner, []);
+        let paths = loop_paths(&g, l);
+        assert_eq!(paths.len(), 2);
+        let addresses =
+            |p: &LoopPath| -> Vec<u64> { p.nodes.iter().map(|&v| g.node(v).address).collect() };
+        assert_eq!(addresses(&paths[0]), [0x2e, 0x34]);
+        assert!((paths[0].share - 0.52).abs() < 1e-12);
+        assert_eq!(addresses(&paths[1]), [0x2e, 0x20]);
+        // 48 of 100 iterations take the odd side (one of them leaves the loop at its end: the
+        // same instructions, so the same path).
+        assert!((paths[1].share - 0.48).abs() < 1e-12);
+        // Weighted by the iterations of the header the paths give the count of every block.
+        let executed = |a: u64| -> f64 {
+            paths
+                .iter()
+                .filter(|p| addresses(p).contains(&a))
+                .map(|p| 100.0 * p.share)
+                .sum()
+        };
+        assert!((executed(0x34) - 52.0).abs() < 1e-9);
+        assert!((executed(0x20) - 48.0).abs() < 1e-9);
+        let (units, n) = loop_units("o", &g);
+        assert_eq!(n, 1);
+        // Two paths, the prologue (two blocks with the same count joined as in the per-block
+        // mode) and the epilogue (not joined to the prologue across the loop).
+        assert_eq!(units.len(), 4);
+        assert_eq!(
+            units[0].text,
+            [
+                "mov (%rdi),%eax",
+                "test $0x1,%al",
+                "jne 0x20",
+                "add $0x4,%rdi",
+                "xor %eax,%edx",
+                "cmp %rcx,%rdi",
+                "jne 0x2e"
+            ]
+        );
+        assert!((units[0].weight - 52.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn nested_loops_are_simulated_inner_first_and_apart() {
+        // for i in 0..10 { a; for j in 0..20 { b } c }, the inner loop a self-loop at 0x10.
+        let c = code(&[
+            (0x00, "a0"),
+            (0x01, "a1"),
+            (0x10, "b0"),
+            (0x11, "jne 0x10"),
+            (0x20, "c0"),
+            (0x21, "jne 0x00"),
+            (0x22, "ret"),
+        ]);
+        let counts: BTreeMap<u64, u64> = [
+            (0x00, 10),
+            (0x01, 10),
+            (0x10, 200),
+            (0x11, 200),
+            (0x20, 10),
+            (0x21, 10),
+            (0x22, 1),
+        ]
+        .into();
+        let jumps: Jumps = [((0x11, 0x10), 190), ((0x21, 0x00), 9)].into();
+        let g = cfg(&c, &counts, &jumps);
+        let all: BTreeSet<usize> = (0..g.nodes.len()).collect();
+        let loops = find_loops(&g, &all);
+        assert_eq!(loops.len(), 1);
+        let outer = &loops[0];
+        assert_eq!(g.node(outer.header).address, 0x00);
+        assert_eq!(outer.inner.len(), 1);
+        let inner = &outer.inner[0];
+        assert_eq!(g.node(inner.header).address, 0x10);
+        assert_eq!(inner.nodes.len(), 1);
+        // The outer path passes the inner loop as one step: a, then c.
+        let paths = loop_paths(&g, outer);
+        assert_eq!(paths.len(), 1);
+        let a: Vec<u64> = paths[0].nodes.iter().map(|&v| g.node(v).address).collect();
+        assert_eq!(a, [0x00, 0x20]);
+        assert!((paths[0].share - 1.0).abs() < 1e-12);
+        let ip = loop_paths(&g, inner);
+        assert_eq!(ip.len(), 1);
+        let (units, n) = loop_units("o", &g);
+        assert_eq!(n, 2);
+        let weights: Vec<(u64, f64)> = units.iter().map(|u| (u.address, u.weight)).collect();
+        assert_eq!(weights[0], (0x10, 200.0));
+        assert_eq!(weights[1], (0x00, 10.0));
+        assert_eq!(units[1].text, ["a0", "a1", "c0", "jne 0x00"]);
+    }
+
+    #[test]
+    fn rare_paths_are_left_out_and_the_search_is_bounded() {
+        // Ten independent branches taken in half the iterations: 1024 paths of 1/1024 each.
+        let mut lines = Vec::new();
+        let mut counts = BTreeMap::new();
+        let mut jumps = BTreeMap::new();
+        for k in 0..10u64 {
+            let a = 0x100 * k;
+            lines.push((a, format!("jne {:#x}", a + 0x10)));
+            lines.push((a + 1, "x".to_string()));
+            lines.push((a + 0x10, "y".to_string()));
+            counts.insert(a, 64);
+            counts.insert(a + 1, 32);
+            counts.insert(a + 0x10, 64);
+            jumps.insert((a, a + 0x10), 32);
+        }
+        lines.push((0xa00, "jne 0x0".to_string()));
+        counts.insert(0xa00, 64);
+        jumps.insert((0xa00, 0), 63);
+        let c: Vec<Instruction> = lines.into_iter().collect();
+        let g = cfg(&c, &counts, &jumps);
+        let all: BTreeSet<usize> = (0..g.nodes.len()).collect();
+        let loops = find_loops(&g, &all);
+        assert_eq!(loops.len(), 1);
+        let paths = loop_paths(&g, &loops[0]);
+        assert_eq!(paths, [], "every path is below MIN_PATH_SHARE");
+        // The body is simulated block by block then.
+        let (units, n) = loop_units("o", &g);
+        assert_eq!(n, 0);
+        assert!(units.iter().all(|u| u.label == "block"));
+        let executed: f64 = units.iter().map(Unit::executed).sum();
+        assert!((executed - (10.0 * (64.0 + 32.0 + 64.0) + 64.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn register_moves_become_lea() {
+        let t: Vec<String> = [
+            "mov %eax,%ecx",
+            "mov %r8,%rdx",
+            "mov %r9d,%esi",
+            "mov %eax,%r10d",
+            "mov (%rdi),%eax",
+            "mov %eax,%rcx",
+            "movaps %xmm0,%xmm1",
+            "mov $0x1,%eax",
+        ]
+        .map(ToString::to_string)
+        .to_vec();
+        let (rewritten, moves) = keep_move_dependencies(&t);
+        assert_eq!(moves, 4);
+        assert_eq!(
+            rewritten,
+            [
+                "lea (%rax),%ecx",
+                "lea (%r8),%rdx",
+                "lea (%r9),%esi",
+                "lea (%rax),%r10d",
+                "mov (%rdi),%eax",
+                "mov %eax,%rcx",
+                "movaps %xmm0,%xmm1",
+                "mov $0x1,%eax",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_move_form_is_trusted_within_the_bound_of_the_lea_form() {
+        let t = |cycles: f64| BlockTiming {
+            cycles,
+            port_bound: 1.0,
+        };
+        // A lost dependency: far below the lea form.
+        assert_eq!(choose_move_form(t(24.7), t(79.0), 6), (t(79.0), true));
+        // A lengthened chain: above the lea form.
+        assert_eq!(choose_move_form(t(89.0), t(79.0), 6), (t(79.0), true));
+        // Move elimination as on hardware: at most one cycle per move faster.
+        assert_eq!(choose_move_form(t(11.1), t(12.1), 9), (t(11.1), false));
+        assert_eq!(choose_move_form(t(12.1), t(12.1), 1), (t(12.1), false));
+    }
+
     #[test]
     fn the_mca_summary_is_read() {
         let s = "Iterations:        200\nInstructions:      800\nTotal Cycles:      1003\nBlock RThroughput: 4.5\n";
@@ -608,5 +1712,7 @@ fn=h
         assert_eq!(bottleneck(0.3), "latency");
         assert_eq!(models("avx2").map(|m| m.reference), Some("znver3"));
         assert!(models("simd128").is_none());
+        assert_eq!(CycleMode::parse("per-block"), Some(CycleMode::PerBlock));
+        assert_eq!(CycleMode::default().name(), "whole-loop");
     }
 }

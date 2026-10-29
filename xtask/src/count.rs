@@ -1621,6 +1621,7 @@ impl Session {
                     "-q",
                     "--tool=callgrind",
                     "--dump-instr=yes",
+                    "--collect-jumps=yes",
                     "--compress-pos=no",
                     "--compress-strings=no",
                 ])

@@ -749,7 +749,15 @@ mod tests {
                 "biquad_real_q15_fallback"
             ]
         );
-        assert_eq!(count_entries("fir_decimate"), ["fir_decimate"]);
+        assert_eq!(
+            count_entries("fir_decimate"),
+            [
+                "fir_decimate",
+                "fir_decimate_cq15",
+                "fir_decimate_fallback",
+                "fir_decimate_cq15_fallback"
+            ]
+        );
         assert_eq!(count_entries("nothing"), Vec::<String>::new());
     }
 

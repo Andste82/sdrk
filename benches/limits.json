@@ -357,6 +357,36 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
+  "fir_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2-runtime": {
+      "status": "dev",
+      "waiver": "the run-time-detection build of the `CQ15` branch (one output at a time) takes 1.04 times the instructions of the fixed `avx2` build (237.74 against 228.84 per sample, round 2); open with the rework of that branch, which is also slower than the grouped fallback at `avx2`"
+    }
+  },
   "fir_decimate": {
     "sse2": {
       "status": "release"
@@ -376,6 +406,32 @@
     "simd128": {
       "status": "info",
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "fir_decimate_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     }
   },
   "fir_interpolate": {
@@ -399,6 +455,32 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
+  "fir_interpolate_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    }
+  },
   "resample": {
     "sse2": {
       "status": "release"
@@ -420,6 +502,32 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
+  "resample_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    }
+  },
   "fir_interpolate_real": {
     "sse2": {
       "status": "release"
@@ -438,7 +546,7 @@
     },
     "simd128": {
       "status": "info",
-      "waiver": "VOLK for wasm32 is its portable `generic` code (D12), and its wasm32 build (benches/refs/volk-wasm.c) does not hold `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, reported as information"
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code (`volk_32f_x2_dot_prod_32f`, built by benches/refs/volk-wasm.c), not a SIMD128 implementation, so the comparison is information"
     }
   },
   "resample_real": {
@@ -459,7 +567,7 @@
     },
     "simd128": {
       "status": "info",
-      "waiver": "VOLK for wasm32 is its portable `generic` code (D12), and its wasm32 build (benches/refs/volk-wasm.c) does not hold `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, reported as information"
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code (`volk_32f_x2_dot_prod_32f`, built by benches/refs/volk-wasm.c), not a SIMD128 implementation, so the comparison is information"
     }
   },
   "fir_interpolate_real_q15": {
@@ -1426,6 +1534,288 @@
     },
     "simd128": {
       "status": "release"
+    }
+  },
+  "fir_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "fir_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "dev",
+      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item I20-1 in docs/open-items.md (the `simd128` instruction gap of the grouped fallback)"
+    }
+  },
+  "fir_decimate_fallback": {
+    "sse2": {
+      "status": "release",
+      "accuracy_waiver": "133.3 dB against 134.3 dB for CMSIS-DSP's `arm_fir_decimate_f32` on the count input (SNR against the f64 model): the same accuracy class in another summation order. Both sum each output in one `f32` accumulator without FMA (CMSIS-DSP is built with `-ffp-contract=off`); CMSIS-DSP adds the products from the oldest sample on (taps descending in SDRk's order), ours in ascending tap order, which the numeric contract of the `C32` fallback fixes (docs/kernels.md). The difference is the rounding of the other order on this input; the grouped fallback has the bits of the one-at-a-time sum (unit tests), so the fallback before it had the same 133.3 dB; the f64 golden vectors give 143.3 dB (`m10_n63`, optimum 152.1 dB) and 144.3 dB (`m3_n31`, optimum 151.9 dB)"
+    },
+    "sse4.2": {
+      "status": "release",
+      "accuracy_waiver": "133.3 dB against 134.3 dB for CMSIS-DSP's `arm_fir_decimate_f32` on the count input (SNR against the f64 model): the same accuracy class in another summation order. Both sum each output in one `f32` accumulator without FMA (CMSIS-DSP is built with `-ffp-contract=off`); CMSIS-DSP adds the products from the oldest sample on (taps descending in SDRk's order), ours in ascending tap order, which the numeric contract of the `C32` fallback fixes (docs/kernels.md). The difference is the rounding of the other order on this input; the grouped fallback has the bits of the one-at-a-time sum (unit tests), so the fallback before it had the same 133.3 dB; the f64 golden vectors give 143.3 dB (`m10_n63`, optimum 152.1 dB) and 144.3 dB (`m3_n31`, optimum 151.9 dB)"
+    },
+    "avx2": {
+      "status": "release",
+      "accuracy_waiver": "133.3 dB against 134.3 dB for CMSIS-DSP's `arm_fir_decimate_f32` on the count input (SNR against the f64 model): the same accuracy class in another summation order. Both sum each output in one `f32` accumulator without FMA (CMSIS-DSP is built with `-ffp-contract=off`); CMSIS-DSP adds the products from the oldest sample on (taps descending in SDRk's order), ours in ascending tap order, which the numeric contract of the `C32` fallback fixes (docs/kernels.md). The difference is the rounding of the other order on this input; the grouped fallback has the bits of the one-at-a-time sum (unit tests), so the fallback before it had the same 133.3 dB; the f64 golden vectors give 143.3 dB (`m10_n63`, optimum 152.1 dB) and 144.3 dB (`m3_n31`, optimum 151.9 dB)"
+    },
+    "avx512": {
+      "status": "release",
+      "accuracy_waiver": "133.3 dB against 134.3 dB for CMSIS-DSP's `arm_fir_decimate_f32` on the count input (SNR against the f64 model): the same accuracy class in another summation order. Both sum each output in one `f32` accumulator without FMA (CMSIS-DSP is built with `-ffp-contract=off`); CMSIS-DSP adds the products from the oldest sample on (taps descending in SDRk's order), ours in ascending tap order, which the numeric contract of the `C32` fallback fixes (docs/kernels.md). The difference is the rounding of the other order on this input; the grouped fallback has the bits of the one-at-a-time sum (unit tests), so the fallback before it had the same 133.3 dB; the f64 golden vectors give 143.3 dB (`m10_n63`, optimum 152.1 dB) and 144.3 dB (`m3_n31`, optimum 151.9 dB)"
+    },
+    "neon": {
+      "status": "release",
+      "accuracy_waiver": "133.3 dB against 134.3 dB for CMSIS-DSP's `arm_fir_decimate_f32` on the count input (SNR against the f64 model): the same accuracy class in another summation order. Both sum each output in one `f32` accumulator without FMA (CMSIS-DSP is built with `-ffp-contract=off`); CMSIS-DSP adds the products from the oldest sample on (taps descending in SDRk's order), ours in ascending tap order, which the numeric contract of the `C32` fallback fixes (docs/kernels.md). The difference is the rounding of the other order on this input; the grouped fallback has the bits of the one-at-a-time sum (unit tests), so the fallback before it had the same 133.3 dB; the f64 golden vectors give 143.3 dB (`m10_n63`, optimum 152.1 dB) and 144.3 dB (`m3_n31`, optimum 151.9 dB)"
+    },
+    "simd128": {
+      "status": "release",
+      "accuracy_waiver": "133.3 dB against 134.3 dB for CMSIS-DSP's `arm_fir_decimate_f32` on the count input (SNR against the f64 model): the same accuracy class in another summation order. Both sum each output in one `f32` accumulator without FMA (CMSIS-DSP is built with `-ffp-contract=off`); CMSIS-DSP adds the products from the oldest sample on (taps descending in SDRk's order), ours in ascending tap order, which the numeric contract of the `C32` fallback fixes (docs/kernels.md). The difference is the rounding of the other order on this input; the grouped fallback has the bits of the one-at-a-time sum (unit tests), so the fallback before it had the same 133.3 dB; the f64 golden vectors give 143.3 dB (`m10_n63`, optimum 152.1 dB) and 144.3 dB (`m3_n31`, optimum 151.9 dB)"
+    }
+  },
+  "fir_decimate_cq15_fallback": {
+    "sse2": {
+      "status": "dev",
+      "waiver": "1.36 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, widening to 64 bits, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "1.58 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, `pmovsxdq`, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+    },
+    "avx2": {
+      "status": "dev",
+      "waiver": "1.34 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. Its whole-loop `avx2` cycles are 20.13 / 17.45 against 42.02 / 17.53 for CMSIS-DSP (`znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev",
+      "waiver": "2.40 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening NEON multiply-adds into 64-bit lanes); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 83.33 to 92.54 instructions per sample (more instructions here, but fewer simulated cycles: 39.50 / 35.40 to 37.85 / 34.16 per sample on `cortex-a72` / `cortex-a76`, per block). Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "fir_interpolate_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "fir_interpolate_cq15_fallback": {
+    "sse2": {
+      "status": "dev",
+      "waiver": "1.52 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "1.52 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev",
+      "waiver": "1.54 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`ldrsh` and `smaddl` per multiply-add). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "resample_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.73 instructions per sample"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.73 instructions per sample"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.87 instructions per sample"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.85 instructions per sample"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.88 instructions per sample"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.32 instructions per sample"
+    }
+  },
+  "resample_cq15_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.28 instructions per sample"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.28 instructions per sample"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.74 instructions per sample"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.59 instructions per sample"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.94 instructions per sample"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.91 instructions per sample"
+    }
+  },
+  "fir_interpolate_real_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "dev",
+      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item I20-1 in docs/open-items.md (the `simd128` instruction gap of the grouped fallback)"
+    }
+  },
+  "fir_interpolate_real_q15_fallback": {
+    "sse2": {
+      "status": "dev",
+      "waiver": "1.62 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+    },
+    "sse4.2": {
+      "status": "dev",
+      "waiver": "1.62 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev",
+      "waiver": "1.69 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`ldrsh` and `smaddl` per multiply-add). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "resample_real_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.44 instructions per sample"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.23 instructions per sample"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.64 instructions per sample"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 0.95 instructions per sample"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.28 instructions per sample"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 2.33 instructions per sample"
+    }
+  },
+  "resample_real_q15_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.70 instructions per sample"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.70 instructions per sample"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.47 instructions per sample"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.30 instructions per sample"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 2.35 instructions per sample"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.48 instructions per sample"
     }
   },
   "dot": {

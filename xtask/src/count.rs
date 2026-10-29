@@ -740,7 +740,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 96] = [
+pub static KERNELS: [KernelSpec; 112] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -785,10 +785,14 @@ pub const KERNELS: [KernelSpec; 96] = [
     spec("fir_decimate", Family::Volk, false),
     spec("fir_interpolate", Family::Volk, false),
     spec("resample", Family::Volk, false),
-    spec("fir_interpolate_real", Family::VolkNative, false),
-    spec("resample_real", Family::VolkNative, false),
+    spec("fir_interpolate_real", Family::Volk, false),
+    spec("resample_real", Family::Volk, false),
     spec("fir_interpolate_real_q15", Family::Own, false),
     spec("resample_real_q15", Family::Own, false),
+    spec("fir_cq15", Family::Own, false),
+    spec("fir_decimate_cq15", Family::Own, false),
+    spec("fir_interpolate_cq15", Family::Own, false),
+    spec("resample_cq15", Family::Own, false),
     spec("mag_sq", Family::Volk, false),
     spec("mag_sq_q15", Family::Own, false),
     spec("quad_demod", Family::Volk, false),
@@ -824,6 +828,30 @@ pub const KERNELS: [KernelSpec; 96] = [
     spec("biquad_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("biquad_real_fallback", Family::FallbackVsCmsis, false),
     spec("biquad_real_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("fir_fallback", Family::FallbackVsCmsis, false),
+    spec("fir_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("fir_decimate_fallback", Family::FallbackVsCmsis, false),
+    spec("fir_decimate_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("fir_interpolate_fallback", Family::FallbackVsCmsis, false),
+    spec(
+        "fir_interpolate_cq15_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec("resample_fallback", Family::FallbackVsCmsis, false),
+    spec("resample_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec(
+        "fir_interpolate_real_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec(
+        "fir_interpolate_real_q15_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec("resample_real_fallback", Family::FallbackVsCmsis, false),
+    spec("resample_real_q15_fallback", Family::FallbackVsCmsis, false),
     spec("dot", Family::Volk, true),
     spec("dot_cq15", Family::Own, true),
     spec("dot_real", Family::VolkNative, true),

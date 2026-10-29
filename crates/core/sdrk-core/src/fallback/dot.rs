@@ -10,6 +10,11 @@
 //! magnitude, so a run sum stays below `2^61` and never overflows, and the result equals the
 //! sample-by-sample `Acc64` sum for every input whose partial sums stay inside `i64` (fewer
 //! than `2^33` samples, so every slice that fits into memory).
+//!
+//! The run sums use `wrapping_add`, which is exact because they never overflow. A checked
+//! `i64` addition (`+` with `overflow-checks = true`) is miscompiled for `thumbv7em` when
+//! LLVM fuses it into `smlalbb`: the overflow test only looks at the low 32 bits and panics
+//! once they pass `2^31`.
 
 use crate::Fallback;
 use crate::error::Result;
@@ -40,8 +45,8 @@ fn run_cq15(x: &[CQ15], taps: &[Q15]) -> (i64, i64) {
     let (mut re, mut im) = (0i64, 0i64);
     for (s, h) in x.iter().zip(taps) {
         let h = i32::from(h.0);
-        re += i64::from(i32::from(s.re.0) * h);
-        im += i64::from(i32::from(s.im.0) * h);
+        re = re.wrapping_add(i64::from(i32::from(s.re.0) * h));
+        im = im.wrapping_add(i64::from(i32::from(s.im.0) * h));
     }
     (re, im)
 }
@@ -49,10 +54,9 @@ fn run_cq15(x: &[CQ15], taps: &[Q15]) -> (i64, i64) {
 /// The exact sum `sum x * h` of one run.
 #[inline]
 fn run_q15(x: &[Q15], taps: &[Q15]) -> i64 {
-    x.iter()
-        .zip(taps)
-        .map(|(s, h)| i64::from(i32::from(s.0) * i32::from(h.0)))
-        .sum()
+    x.iter().zip(taps).fold(0i64, |acc, (s, h)| {
+        acc.wrapping_add(i64::from(i32::from(s.0) * i32::from(h.0)))
+    })
 }
 
 impl Dot<CQ15> for Fallback {

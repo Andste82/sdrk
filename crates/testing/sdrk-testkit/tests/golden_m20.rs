@@ -2,7 +2,10 @@
 //! `Sdrk`.
 //!
 //! Every case is run in one piece and in chunks of random size (the plan seed is the case
-//! seed); both runs must match the golden file and each other bit for bit.
+//! seed); both runs must match the golden file and each other bit for bit. The exception is
+//! `dc_block_real` `f32`, a tolerance kernel of the SIMD backend whose bits may depend on the
+//! split (maintainer decision of 2026-10-29): there every split must reach the regression guard
+//! of the case (the fallback-only builds of the facade check the fallback).
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -51,6 +54,34 @@ fn check<I: Sample, O: Sample, S>(
         case.case
     );
     golden::assert_matches(case, want, &chunked).unwrap();
+}
+
+/// Runs `step` over `input` in one piece and split by chunk plans of several largest sizes
+/// (down to single samples); every run must reach the tolerance of the golden case, its
+/// regression guard included. The bits may differ between the runs.
+fn check_guarded<I: Sample, O: Sample, S>(
+    case: &GoldenCase,
+    input: &[I],
+    want: &Array,
+    new: impl Fn() -> S,
+    step: impl Fn(&mut S, &[I], &mut [O]),
+) {
+    let mut whole = vec![O::ZERO; input.len()];
+    step(&mut new(), input, &mut whole);
+    golden::assert_matches(case, want, &whole).unwrap();
+    for max in [1, 7, 40, 700] {
+        let mut chunked = vec![O::ZERO; input.len()];
+        let mut state = new();
+        let mut sizes = ChunkPlan::new(case.seed + max as u64, max).sizes();
+        let mut pos = 0;
+        while pos < input.len() {
+            let n = sizes.next().unwrap().min(input.len() - pos);
+            step(&mut state, &input[pos..pos + n], &mut chunked[pos..pos + n]);
+            pos += n;
+        }
+        golden::assert_matches(case, want, &chunked)
+            .unwrap_or_else(|e| panic!("{}: chunks of at most {max}: {e}", case.case));
+    }
 }
 
 fn agc_state<T: ComplexSample>(case: &GoldenCase) -> AgcState<T> {
@@ -114,7 +145,7 @@ fn dc_block_real_golden() {
         panic!("expected f32");
     };
     let r = case.param_f64("r").unwrap() as f32;
-    check(
+    check_guarded(
         &case,
         x,
         case.array("expected").unwrap(),

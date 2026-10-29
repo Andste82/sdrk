@@ -75,7 +75,7 @@ pub mod virtual_tx;
 mod cases;
 
 pub use arena::{Arena, Carver};
-pub use invariance::{ChunkPlan, InvarianceReport, check_block_invariance};
+pub use invariance::{ChunkPlan, InvarianceReport, check_block_invariance, check_block_tolerance};
 pub use metrics::{Comparison, bit_exact, compare_complex, compare_real};
 pub use rng::Pcg32;
 #[cfg(feature = "std")]

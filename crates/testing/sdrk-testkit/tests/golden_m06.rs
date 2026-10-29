@@ -2,7 +2,10 @@
 //!
 //! Every stateful case is run in one piece and in chunks of random size (with a small
 //! output buffer, so the `Progress` handling is exercised too); both runs must match the
-//! golden file and each other bit for bit.
+//! golden file and each other bit for bit. The exceptions are `deemphasis` `f32` and
+//! `dc_block` `C32`, tolerance kernels of the SIMD backend whose bits may depend on the split
+//! (maintainer decision of 2026-10-29): there every split must reach the regression guard of
+//! the case (`check_guarded`; the fallback-only builds of the facade check the fallback).
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -110,6 +113,27 @@ fn check_both<T: Sample>(case: &GoldenCase, want: &Array, whole: &[T], chunked: 
         case.case
     );
     golden::assert_matches(case, want, chunked).unwrap();
+}
+
+/// Runs `step` over `input` in one piece and split by chunk plans of several largest sizes
+/// (down to single samples); every run must reach the tolerance of the golden case, its
+/// regression guard included. The bits may differ between the runs.
+fn check_guarded<T: Sample, S>(
+    case: &GoldenCase,
+    want: &Array,
+    input: &[T],
+    new: impl Fn() -> S,
+    mut step: impl FnMut(&mut S, &[T], &mut [T]),
+) {
+    let mut whole = vec![T::ZERO; input.len()];
+    step(&mut new(), input, &mut whole);
+    golden::assert_matches(case, want, &whole).unwrap();
+    for max in [1, 7, 40, 500] {
+        let plan = ChunkPlan::new(case.seed + max as u64, max);
+        let chunked = run_same_rate_chunked(&mut new(), input, plan, &mut step);
+        golden::assert_matches(case, want, &chunked)
+            .unwrap_or_else(|e| panic!("{}: chunks of at most {max}: {e}", case.case));
+    }
 }
 
 fn usize_param(case: &GoldenCase, name: &str) -> usize {
@@ -336,13 +360,9 @@ fn deemphasis_golden() {
                 assert!(
                     (f64::from(new().alpha()) - case.param_f64("alpha").unwrap()).abs() < 1e-15
                 );
-                let mut step = |s: &mut DeemphasisState<f32>, i: &[f32], o: &mut [f32]| {
+                check_guarded(&case, want, x, new, |s, i, o| {
                     Deemphasis::<f32>::deemphasis(&Sdrk, s, i, o).unwrap();
-                };
-                let mut whole = vec![0f32; x.len()];
-                step(&mut new(), x, &mut whole);
-                let chunked = run_same_rate_chunked(&mut new(), x, plan, &mut step);
-                check_both(&case, want, &whole, &chunked);
+                });
             }
             Array::I16(raw) => {
                 let x: Vec<Q15> = raw.iter().map(|&r| Q15(r)).collect();
@@ -375,13 +395,9 @@ fn dc_block_golden() {
                 let r = case.param_f64("r").unwrap() as f32;
                 assert!((f64::from(r) - case.param_f64("r").unwrap()).abs() < 1e-15);
                 let new = || DcBlockState::<C32>::new(r).unwrap();
-                let mut step = |s: &mut DcBlockState<C32>, i: &[C32], o: &mut [C32]| {
+                check_guarded(&case, want, x, new, |s, i, o| {
                     DcBlock::<C32>::dc_block(&Sdrk, s, i, o).unwrap();
-                };
-                let mut whole = vec![C32::ZERO; x.len()];
-                step(&mut new(), x, &mut whole);
-                let chunked = run_same_rate_chunked(&mut new(), x, plan, &mut step);
-                check_both(&case, want, &whole, &chunked);
+                });
             }
             Array::CI16(x) => {
                 let r = Q15(i16::try_from(case.param_u64("r_raw").unwrap()).unwrap());

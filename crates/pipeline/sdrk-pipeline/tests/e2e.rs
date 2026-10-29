@@ -34,7 +34,8 @@ use sdrk_testkit::ChunkPlan;
 use serde_json::json;
 
 use common::{
-    HandChain, bits, build, cu8_recording, cu8_stations, flow, run_fm, run_fm_with, tone_power,
+    HandChain, bits, build, cu8_recording, cu8_stations, flow, run_fm, run_fm_with, same_audio,
+    tone_power,
 };
 
 /// Half a second of the E2E-RX signal at 2.4 MHz.
@@ -53,7 +54,9 @@ fn pipeline_equals_the_hand_wired_chain() {
     }
     assert_eq!(audio.len(), expected.len(), "number of audio samples");
     assert!(audio.len() > 20_000, "half a second at 48 kHz");
-    assert_eq!(bits(&audio), bits(&expected), "audio is bit-identical");
+    // Bit-identical where the chain splits the input as the pipeline does; the `f32`
+    // `deemphasis` of the SIMD backend depends on the split within its tolerance.
+    assert!(same_audio(&expected, &audio), "audio is the chain's");
     assert!(!frames.is_empty());
 
     // The audio carries the 1 kHz tone of the station (after the filters have settled).
@@ -74,7 +77,7 @@ fn chunking_does_not_change_the_output() {
         let mut pipeline = build(&flow("fm_receiver"));
         let plan = ChunkPlan::new(seed, 8192);
         let (a, f) = run_fm_with(&mut pipeline, &bytes, plan.sizes(), |_, _| {});
-        assert_eq!(bits(&a), bits(&audio), "audio, seed {seed}");
+        assert!(same_audio(&audio, &a), "audio, seed {seed}");
         assert_eq!(f.len(), frames.len(), "frame count, seed {seed}");
         for (k, ((fa, ma), (fb, mb))) in f.iter().zip(&frames).enumerate() {
             assert_eq!(bits(fa), bits(fb), "frame {k}, seed {seed}");

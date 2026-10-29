@@ -32,7 +32,7 @@ use crate::e2e_am::{
     AM_QUICK_SAMPLES, measure_am,
 };
 use crate::r#gen::extreme;
-use crate::invariance::{ChunkPlan, check_block_invariance};
+use crate::invariance::{ChunkPlan, check_block_invariance, check_block_tolerance};
 use crate::metrics::bit_exact;
 use crate::rng::Pcg32;
 use crate::suite::Failure;
@@ -153,6 +153,12 @@ pub(super) fn mag_cq15(arena: &mut Arena<'_>) -> Result<(), Failure> {
 // dc_block_real
 // ---------------------------------------------------------------------------------------
 
+/// The guard of the facade's `f32` DC blocker and de-emphasis against `Reference` (which rounds
+/// its state to `f32` per sample) in the suite cases.
+pub(super) const FACADE_GUARD_DB: f64 = 120.0;
+/// The guard of a chunked run of those kernels against the whole run.
+pub(super) const CHUNK_GUARD_DB: f64 = 120.0;
+
 pub(super) fn dc_block_real_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
     const CASE: &str = "dc_block_real_f32";
     const N: usize = 1024;
@@ -169,8 +175,11 @@ pub(super) fn dc_block_real_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
     DcBlockReal::<f32>::dc_block_real(&Reference, &mut b, x, rf)?;
     DcBlockReal::<f32>::dc_block_real(&Sdrk, &mut d, x, fac)?;
     min_snr(CASE, "fallback below 100 dB", rf, fb, 100.0)?;
-    ensure(bit_exact(fb, fac).is_none() && a == d, || {
-        Failure::new(CASE, "facade differs")
+    // The facade runs the f64 block scan of the SIMD backend where it has one (a tolerance
+    // kernel, maintainer decision of 2026-10-29): its guard against the reference.
+    min_snr(CASE, "facade below its guard", rf, fac, FACADE_GUARD_DB)?;
+    ensure(a.x_prev() == d.x_prev(), || {
+        Failure::new(CASE, "facade state differs")
     })?;
     // The constant offset decays.
     ensure(fb.last().is_some_and(|v| v.abs() < 0.8), || {
@@ -178,7 +187,7 @@ pub(super) fn dc_block_real_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
     })?;
     let (input, whole, chunked) = (&*x, c.take::<f32>(N)?, c.take::<f32>(N)?);
     for seed in 0..PLANS {
-        check_block_invariance(
+        check_block_tolerance(
             input,
             whole,
             chunked,
@@ -190,6 +199,7 @@ pub(super) fn dc_block_real_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
                 }),
                 Err(e) => Err(e.clone()),
             },
+            CHUNK_GUARD_DB,
         )?;
     }
     Ok(())
@@ -460,7 +470,8 @@ pub(super) fn extremes_m20(arena: &mut Arena<'_>) -> Result<(), Failure> {
                 && a.gain_db() == d.gain_db(),
             || fail("agc: facade differs"),
         )?;
-        // dc_block_real on the real parts: no panic, the facade equals the fallback.
+        // dc_block_real on the real parts: no panic, the facade (a tolerance kernel of the
+        // SIMD backend) agrees with the fallback on NaN and within 1e-4 elsewhere.
         let real = c.take::<f32>(M)?;
         let (r_fb, r_fac) = (c.take::<f32>(M)?, c.take::<f32>(M)?);
         for (r, s) in real.iter_mut().zip(x.iter()) {
@@ -471,7 +482,12 @@ pub(super) fn extremes_m20(arena: &mut Arena<'_>) -> Result<(), Failure> {
         DcBlockReal::<f32>::dc_block_real(&Fallback, &mut s1, real, r_fb)?;
         DcBlockReal::<f32>::dc_block_real(&Sdrk, &mut s2, real, r_fac)?;
         ensure(
-            r_fb.iter().zip(r_fac.iter()).all(|(p, r)| same_f32(*p, *r)),
+            r_fb.iter().zip(r_fac.iter()).all(|(p, r)| {
+                same_f32(*p, *r)
+                    || (p.is_finite()
+                        && r.is_finite()
+                        && f64::from(*p - *r).abs() <= 1e-4 * f64::from(p.abs()).max(1e-3))
+            }),
             || fail("dc_block_real: facade differs"),
         )?;
     }

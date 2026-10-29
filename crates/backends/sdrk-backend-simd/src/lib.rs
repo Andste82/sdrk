@@ -61,6 +61,7 @@ mod fir;
 mod level;
 mod mix;
 mod modulate;
+mod recursion;
 mod scale;
 mod spectrum;
 mod table;

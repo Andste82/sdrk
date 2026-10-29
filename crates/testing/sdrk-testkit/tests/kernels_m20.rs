@@ -18,7 +18,7 @@ use sdrk_core::kernels::agc::{Agc, AgcState};
 use sdrk_core::kernels::demod::{DcBlockReal, DcBlockRealState};
 use sdrk_core::kernels::spectrum::Mag;
 use sdrk_core::{C32, CQ15, Fallback, Progress, Q15, Rate, Reference, Sample};
-use sdrk_testkit::{ChunkPlan, Pcg32, bit_exact, check_block_invariance};
+use sdrk_testkit::{ChunkPlan, Pcg32, bit_exact, check_block_invariance, check_block_tolerance};
 
 const FS: u64 = 48_000;
 const N: usize = 6000;
@@ -92,17 +92,19 @@ fn dc_block_real_is_block_size_invariant() {
     let qs: Vec<Q15> = (0..N).map(|_| q(rng.normal() * 0.2 + 0.3)).collect();
     for seed in 0..20u64 {
         let plan = ChunkPlan::new(seed, 1 + (seed as usize * 37) % 500);
+        // `f32` is a tolerance kernel of the SIMD backend whose bits may depend on the split
+        // (maintainer decision of 2026-10-29): every call boundary rounds the state to `f32`.
         let (mut a, mut b) = (vec![0.0f32; N], vec![0.0f32; N]);
-        let r = check_block_invariance(
+        check_block_tolerance(
             &f,
             &mut a,
             &mut b,
             plan,
             || DcBlockRealState::<f32>::new(0.995).unwrap(),
             |st, i, o| same_rate(i, o, |i, o| Sdrk.dc_block_real(st, i, o)),
+            120.0,
         )
         .unwrap();
-        assert_eq!(r.outputs, N);
         let (mut a, mut b) = (vec![Q15(0); N], vec![Q15(0); N]);
         check_block_invariance(
             &qs,
@@ -184,6 +186,15 @@ fn fallback_reference_and_facade_agree() {
         (n + f64::from(*y).powi(2), d + f64::from(x - y).powi(2))
     });
     assert!(10.0 * (num / den.max(1e-300)).log10() > 100.0);
+    // The facade (the f64 block scan of the SIMD backend, or the fallback) by SNR as well.
+    let (mut sc, mut c) = (new32(), vec![0.0f32; N]);
+    Sdrk.dc_block_real(&mut sc, &rf, &mut c).unwrap();
+    let (num, den) = c.iter().zip(&b).fold((0.0f64, 0.0f64), |(n, d), (x, y)| {
+        (n + f64::from(*y).powi(2), d + f64::from(x - y).powi(2))
+    });
+    assert!(10.0 * (num / den.max(1e-300)).log10() > 100.0);
+    assert_eq!(sc.x_prev(), sa.x_prev());
+    assert!((sc.y_prev() - sa.y_prev()).abs() <= 1e-4 * sa.y_prev().abs().max(1e-3));
 
     // mag: CQ15 bit-exact, C32 by SNR.
     let (mut a, mut b) = (vec![Q15(0); N], vec![Q15(0); N]);

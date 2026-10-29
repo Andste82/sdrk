@@ -8,7 +8,8 @@ use std::hint::black_box;
 use std::sync::Arc;
 
 use cref_sys::{
-    CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrPwrSquelchCc, KfrBiquad, KissFft16, Ne10Int16,
+    CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrFmDeemph, GrPwrSquelchCc, KfrBiquad, KissFft16,
+    LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16,
 };
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -67,6 +68,8 @@ pub enum Impl {
     Kfr,
     /// CMSIS-DSP's biquad cascades in generic C, compiled for the level of the build.
     Cmsis,
+    /// liquid-dsp's DC blocker (`iirfilt_rrrf`/`iirfilt_crcf` `create_dc_blocker`, portable C).
+    Liquid,
     /// Only the copy that restores the input of an in-place transform before every call. Its
     /// count is the baseline that xtask subtracts from every FFT comparison.
     Restore,
@@ -74,7 +77,7 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 12] = [
+    pub const ALL: [Impl; 13] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
@@ -86,6 +89,7 @@ impl Impl {
         Impl::Ne10,
         Impl::Kfr,
         Impl::Cmsis,
+        Impl::Liquid,
         Impl::Restore,
     ];
 
@@ -103,6 +107,7 @@ impl Impl {
             Impl::Ne10 => "ne10",
             Impl::Kfr => "kfr",
             Impl::Cmsis => "cmsis",
+            Impl::Liquid => "liquid",
             Impl::Restore => "restore",
         }
     }
@@ -304,7 +309,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 65] = [
+pub const KERNELS: [&str; 68] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -370,6 +375,9 @@ pub const KERNELS: [&str; 65] = [
     "dot_real_q15",
     "scale",
     "scale_cq15",
+    "dc_block_real_fallback",
+    "deemphasis_fallback",
+    "dc_block_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -443,12 +451,15 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "power_db_q15" => Box::new(PowerDbQ15K::new(rng, layout)),
         "agc" => Box::new(AgcK::<C32>::new(rng, layout)),
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout)),
-        "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout)),
-        "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout)),
-        "deemphasis" => Box::new(DeemphasisK::<f32>::new(rng, layout)),
-        "deemphasis_q15" => Box::new(DeemphasisK::<Q15>::new(rng, layout)),
-        "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout)),
-        "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout)),
+        "dc_block_real" => Box::new(DcBlockRealK::<f32>::new(rng, layout, simd)),
+        "dc_block_real_q15" => Box::new(DcBlockRealK::<Q15>::new(rng, layout, simd)),
+        "dc_block_real_fallback" => Box::new(DcBlockRealK::<f32>::new(rng, layout, fallback)),
+        "deemphasis" => Box::new(DeemphasisK::<f32>::new(rng, layout, simd)),
+        "deemphasis_q15" => Box::new(DeemphasisK::<Q15>::new(rng, layout, simd)),
+        "deemphasis_fallback" => Box::new(DeemphasisK::<f32>::new(rng, layout, fallback)),
+        "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
+        "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
+        "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),
         "biquad" => Box::new(BiquadK::new(rng, layout, simd, c32)),
         "biquad_cq15" => Box::new(BiquadK::new(rng, layout, simd, cq15)),
         "biquad_real" => Box::new(BiquadRealK::<f32>::new(rng, layout, simd)),
@@ -2409,7 +2420,11 @@ impl Kernel for FmModQ15K {
         self.run(which, 1);
         // `q / 32768` is exact in f32, so the C32 reference has the same phases; its unit
         // vector is scaled to the CQ15 amplitude `1 - 2^-15` in Q15 units.
-        let input: Vec<f32> = self.input.iter().map(|q| f32::from(q.0) / 32768.0).collect();
+        let input: Vec<f32> = self
+            .input
+            .iter()
+            .map(|q| f32::from(q.0) / 32768.0)
+            .collect();
         let mut want = vec![C32::default(); input.len()];
         let _ = Reference.fm_mod(&mut FmModK::state(), &input, &mut want);
         let want: Vec<f64> = c32s(&want).iter().map(|v| v * 32767.0).collect();
@@ -3385,9 +3400,7 @@ impl Kernel for PowerDbK {
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
-            Impl::Volk => {
-                "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f"
-            }
+            Impl::Volk => "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -3673,15 +3686,61 @@ impl RealNoise for Q15 {
     }
 }
 
-/// `dc_block_real` (a first-order recursion, as `dc_block`: not accelerated, so the entries are
-/// `info` against our fallback).
+/// `dc_block_real` (`f32`: the `f64` block scan of the SIMD backend, for which no SIMD library
+/// has an equivalent, so the entry is `info` against our fallback), `dc_block_real_q15` (the
+/// fallback through the facade, `info`) and `dc_block_real_fallback` (our fallback against
+/// liquid-dsp's DC blocker, the same pole and zero in direct form II, on the same input).
 struct DcBlockRealK<T: RealNoise> {
     input: Aligned<T>,
     out: Aligned<T>,
+    entry: BiquadEntry,
+}
+
+/// liquid-dsp's real DC blocker with SDRk's pole `r` (`alpha = 1 - r` is exact in `f32` for
+/// `0.5 <= r < 1`) and gain 1.
+fn liquid_dc_real(r: f32) -> Option<LiquidDcBlocker> {
+    let mut q = LiquidDcBlocker::new(1.0 - r)?;
+    q.set_scale(1.0);
+    Some(q)
+}
+
+/// The complex variant of [`liquid_dc_real`].
+fn liquid_dc_complex(r: f32) -> Option<LiquidDcBlockerCrcf> {
+    let mut q = LiquidDcBlockerCrcf::new(1.0 - r)?;
+    q.set_scale(1.0);
+    Some(q)
+}
+
+/// The DC blocker `y[n] = x[n] - x[n-1] + r y[n-1]` in `f64` from rest (`stride` interleaved
+/// components): the accuracy model of every `f32`/`C32` implementation of the `dc_block`
+/// entries, as the golden of the accuracy policy.
+fn dc_block_model(r: f32, x: &[f32], stride: usize) -> Vec<f64> {
+    let r = f64::from(r);
+    let mut y = vec![0.0f64; x.len()];
+    for c in 0..stride {
+        let (mut xp, mut yp) = (0.0f64, 0.0f64);
+        for i in (c..x.len()).step_by(stride) {
+            let v = f64::from(x[i]) - xp + r * yp;
+            y[i] = v;
+            xp = f64::from(x[i]);
+            yp = v;
+        }
+    }
+    y
+}
+
+/// The implementations of the `dc_block`/`deemphasis` entries: our kernel and fallback for the
+/// facade entries, our fallback and `reference` (where this build has it) for a fallback entry.
+fn recursion_supports(entry: BiquadEntry, which: Impl, reference: Impl, has: bool) -> bool {
+    match (entry, which) {
+        (BiquadEntry::Simd, Impl::Ours) | (_, Impl::Fallback) => true,
+        (BiquadEntry::Fallback, w) if w == reference => has,
+        _ => false,
+    }
 }
 
 impl<T: RealNoise> DcBlockRealK<T> {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
         for s in input.iter_mut() {
             *s = T::noise(rng, 0.2, 0.3);
@@ -3689,6 +3748,7 @@ impl<T: RealNoise> DcBlockRealK<T> {
         DcBlockRealK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+            entry,
         }
     }
 
@@ -3715,10 +3775,21 @@ where
 {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let mut liquid = T::as_f32(&[T::pole()])
+            .filter(|_| which == Impl::Liquid)
+            .and_then(|r| liquid_dc_real(r[0]));
         for _ in 0..k {
             match which {
                 Impl::Ours => dc_block_real(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => dc_block_real(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Liquid => {
+                    let input = T::as_f32(&self.input).expect("f32");
+                    let out = T::as_f32_mut(&mut self.out).expect("f32");
+                    liquid
+                        .as_mut()
+                        .expect("liquid")
+                        .execute_block(black_box(input), out);
+                }
                 other => unreachable!("dc_block_real has no {other:?}"),
             }
             black_box(&self.out);
@@ -3727,35 +3798,85 @@ where
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        if let (Some(x), Some(r)) = (T::as_f32(&self.input), T::as_f32(&[T::pole()])) {
+            return snr_db(&dc_block_model(r[0], x, 1), &got);
+        }
         let mut want = vec![self.out[0]; self.out.len()];
         let _ = Reference.dc_block_real(&mut Self::state(), &self.input, &mut want);
         let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
-        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
         snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        let has = T::as_f32(&[T::pole()]).is_some_and(|r| liquid_dc_real(r[0]).is_some());
+        recursion_supports(self.entry, which, Impl::Liquid, has)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3)"
+            }
             _ => "sdrk",
         }
     }
 }
 
-/// `deemphasis` (a first-order recursion on the previous output: not accelerated, so the entries
-/// are `info` against our fallback). The input is noise of 0.5, the time constant 75 us at
-/// 48 kHz (`alpha` about 0.24).
+/// `deemphasis` (`f32`: the `f64` block scan of the SIMD backend, `info` against our fallback;
+/// `Q15`: the fallback through the facade, `info`) and `deemphasis_fallback` (our fallback
+/// against the IIR loop of GNU Radio's `fm_deemph` with the same time constant: a first-order
+/// filter with one more tap, the zero of the bilinear transform, so the work per sample is
+/// comparable but the filter is not the same). The input is noise of 0.5, the time constant
+/// 75 us at 48 kHz (`alpha` about 0.24).
 struct DeemphasisK<T: RealNoise> {
     input: Aligned<T>,
     out: Aligned<T>,
+    entry: BiquadEntry,
+}
+
+/// The sample rate and time constant of the `deemphasis` entries.
+const DEEMPH_FS: f64 = 48_000.0;
+/// See [`DEEMPH_FS`].
+const DEEMPH_TAU: f64 = 75e-6;
+
+/// GNU Radio's `fm_deemph` for the entries.
+fn gr_deemph() -> Option<GrFmDeemph> {
+    GrFmDeemph::new(DEEMPH_FS, DEEMPH_TAU)
+}
+
+/// The one-pole `y = y + alpha (x - y)` in `f64` from rest with the `f32` `alpha` of the state:
+/// the accuracy model of our `f32` implementations.
+fn deemphasis_model(alpha: f32, x: &[f32]) -> Vec<f64> {
+    let a = f64::from(alpha);
+    let mut y = 0.0f64;
+    x.iter()
+        .map(|&v| {
+            y += a * (f64::from(v) - y);
+            y
+        })
+        .collect()
+}
+
+/// GNU Radio's filter `y = b0 x + b1 x1 + a1 y1` in `f64` from rest with its own (double) taps:
+/// the accuracy model of [`Impl::GnuRadio`].
+fn gr_deemph_model(taps: [f64; 3], x: &[f32]) -> Vec<f64> {
+    let [b0, b1, a1] = taps;
+    let (mut x1, mut y1) = (0.0f64, 0.0f64);
+    x.iter()
+        .map(|&v| {
+            let v = f64::from(v);
+            let y = b0 * v + b1 * x1 + a1 * y1;
+            x1 = v;
+            y1 = y;
+            y
+        })
+        .collect()
 }
 
 impl<T: RealNoise> DeemphasisK<T> {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
         for s in input.iter_mut() {
             *s = T::noise(rng, 0.5, 0.0);
@@ -3763,11 +3884,13 @@ impl<T: RealNoise> DeemphasisK<T> {
         DeemphasisK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+            entry,
         }
     }
 
     fn state() -> DeemphasisState<T> {
-        DeemphasisState::new(75e-6, Rate::hz(48_000).expect("rate")).expect("deemphasis")
+        DeemphasisState::new(DEEMPH_TAU, Rate::hz(DEEMPH_FS as u64).expect("rate"))
+            .expect("deemphasis")
     }
 }
 
@@ -3789,10 +3912,16 @@ where
 {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let mut gr = (which == Impl::GnuRadio).then(gr_deemph).flatten();
         for _ in 0..k {
             match which {
                 Impl::Ours => deemphasis(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => deemphasis(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::GnuRadio => {
+                    let input = T::as_f32(&self.input).expect("f32");
+                    let out = T::as_f32_mut(&mut self.out).expect("f32");
+                    gr.as_mut().expect("gnuradio").work(black_box(input), out);
+                }
                 other => unreachable!("deemphasis has no {other:?}"),
             }
             black_box(&self.out);
@@ -3801,20 +3930,36 @@ where
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        if let Some(x) = T::as_f32(&self.input) {
+            let want = if which == Impl::GnuRadio {
+                gr_deemph_model(gr_deemph().expect("gnuradio").taps(), x)
+            } else {
+                let alpha = Self::state().alpha();
+                deemphasis_model(
+                    *T::as_f32(&[alpha]).expect("f32").first().expect("alpha"),
+                    x,
+                )
+            };
+            return snr_db(&want, &got);
+        }
         let mut want = vec![self.out[0]; self.out.len()];
         let _ = Reference.deemphasis(&mut Self::state(), &self.input, &mut want);
         let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
-        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
         snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        let has = T::as_f32(&self.input).is_some() && gr_deemph().is_some();
+        recursion_supports(self.entry, which, Impl::GnuRadio, has)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => {
+                "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)"
+            }
             _ => "sdrk",
         }
     }
@@ -3828,6 +3973,12 @@ trait DcNoise: ComplexSample {
     fn pole() -> Self::Real;
     /// The components as f64.
     fn flat(x: &[Self]) -> Vec<f64>;
+    /// The pole as `f32` (the value of [`DcNoise::pole`] for `C32`; unused for `CQ15`).
+    fn pole_f32() -> f32;
+    /// `x` as interleaved `f32` pairs if `Self` is `C32`.
+    fn as_f32(x: &[Self]) -> Option<&[[f32; 2]]>;
+    /// `x` as interleaved `f32` pairs if `Self` is `C32`.
+    fn as_f32_mut(x: &mut [Self]) -> Option<&mut [[f32; 2]]>;
 }
 
 impl DcNoise for C32 {
@@ -3841,6 +3992,18 @@ impl DcNoise for C32 {
 
     fn flat(x: &[Self]) -> Vec<f64> {
         c32s(x)
+    }
+
+    fn pole_f32() -> f32 {
+        0.999
+    }
+
+    fn as_f32(x: &[Self]) -> Option<&[[f32; 2]]> {
+        Some(c32_pairs_ref(x))
+    }
+
+    fn as_f32_mut(x: &mut [Self]) -> Option<&mut [[f32; 2]]> {
+        Some(c32_pairs(x))
     }
 }
 
@@ -3859,17 +4022,31 @@ impl DcNoise for CQ15 {
     fn flat(x: &[Self]) -> Vec<f64> {
         cq15s(x, 1.0)
     }
+
+    fn pole_f32() -> f32 {
+        0.999
+    }
+
+    fn as_f32(_: &[Self]) -> Option<&[[f32; 2]]> {
+        None
+    }
+
+    fn as_f32_mut(_: &mut [Self]) -> Option<&mut [[f32; 2]]> {
+        None
+    }
 }
 
-/// `dc_block` (a first-order recursion per component, as `dc_block_real`: not accelerated, so the
-/// entries are `info` against our fallback).
+/// `dc_block` (`C32`: the `f64` block scan of the SIMD backend, `info` against our fallback;
+/// `CQ15`: the fallback through the facade, `info`) and `dc_block_fallback` (our fallback
+/// against liquid-dsp's complex DC blocker on the same input).
 struct DcBlockK<T: DcNoise> {
     input: Aligned<T>,
     out: Aligned<T>,
+    entry: BiquadEntry,
 }
 
 impl<T: DcNoise> DcBlockK<T> {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<T>::skewed(layout.n, layout.skew(core::mem::size_of::<T>()));
         for s in input.iter_mut() {
             *s = T::noise(rng, 0.2);
@@ -3877,6 +4054,7 @@ impl<T: DcNoise> DcBlockK<T> {
         DcBlockK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
+            entry,
         }
     }
 
@@ -3903,10 +4081,21 @@ where
 {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let mut liquid = T::as_f32(&self.input)
+            .filter(|_| which == Impl::Liquid)
+            .and_then(|_| liquid_dc_complex(T::pole_f32()));
         for _ in 0..k {
             match which {
                 Impl::Ours => dc_block(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => dc_block(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Liquid => {
+                    let input = T::as_f32(&self.input).expect("cf32");
+                    let out = T::as_f32_mut(&mut self.out).expect("cf32");
+                    liquid
+                        .as_mut()
+                        .expect("liquid")
+                        .execute_block(black_box(input), out);
+                }
                 other => unreachable!("dc_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -3915,18 +4104,26 @@ where
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
+        if let Some(x) = T::as_f32(&self.input) {
+            let x: &[f32] = x.as_flattened();
+            return snr_db(&dc_block_model(T::pole_f32(), x, 2), &T::flat(&self.out));
+        }
         let mut want = vec![self.out[0]; self.out.len()];
         let _ = Reference.dc_block(&mut Self::state(), &self.input, &mut want);
         snr_db(&T::flat(&want), &T::flat(&self.out))
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        let has = T::as_f32(&self.input).is_some() && liquid_dc_complex(T::pole_f32()).is_some();
+        recursion_supports(self.entry, which, Impl::Liquid, has)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3)"
+            }
             _ => "sdrk",
         }
     }
@@ -5020,6 +5217,12 @@ mod biquad_tests {
             "biquad_cq15_fallback",
             "biquad_real_fallback",
             "biquad_real_q15_fallback",
+            "dc_block",
+            "dc_block_real",
+            "deemphasis",
+            "dc_block_fallback",
+            "dc_block_real_fallback",
+            "deemphasis_fallback",
         ] {
             let mut kernel = prepare(
                 name,

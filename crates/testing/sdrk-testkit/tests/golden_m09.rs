@@ -257,18 +257,40 @@ fn check_stream<B: Block>(case: &GoldenCase, input: &[B::In], make: impl Fn() ->
 where
     B::Out: Default + Sample,
 {
+    check_stream_with(case, input, make, true);
+}
+
+/// [`check_stream`] for the blocks with an `f32` `deemphasis` or `dc_block_real` inside (`C32`
+/// `fm_demod` and `am_demod`): those kernels are tolerance kernels of the SIMD backend whose
+/// bits may depend on the split (maintainer decision of 2026-10-29), so a chunked run has to
+/// match the golden file instead of the bits of the whole run.
+fn check_stream_tolerant<B: Block>(case: &GoldenCase, input: &[B::In], make: impl Fn() -> B)
+where
+    B::Out: Default + Sample,
+{
+    check_stream_with(case, input, make, false);
+}
+
+fn check_stream_with<B: Block>(case: &GoldenCase, input: &[B::In], make: impl Fn() -> B, bits: bool)
+where
+    B::Out: Default + Sample,
+{
     let expected = case.array("expected").unwrap();
     let whole = run_block(&mut make(), input, None);
     golden::assert_matches(case, expected, &whole).unwrap();
     for plan in chunk_plans(case.seed) {
         let chunked = run_block(&mut make(), input, Some(plan));
         assert_eq!(chunked.len(), whole.len(), "{}: output count", case.case);
-        assert_eq!(
-            bit_exact(&whole, &chunked),
-            None,
-            "{}: chunking changed the output",
-            case.case
-        );
+        if bits {
+            assert_eq!(
+                bit_exact(&whole, &chunked),
+                None,
+                "{}: chunking changed the output",
+                case.case
+            );
+        } else {
+            golden::assert_matches(case, expected, &chunked).unwrap();
+        }
     }
 }
 
@@ -340,7 +362,7 @@ fn fm_demod_block_matches_python_chain() {
         audio_decimation: usize_param(&case, "audio_decimation"),
     };
     let rate = Rate::hz(case.param_f64("rate_hz").unwrap() as u64).unwrap();
-    check_stream(&case, input, || {
+    check_stream_tolerant(&case, input, || {
         FmDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
@@ -362,7 +384,7 @@ fn am_demod_block_matches_python_chain_c32() {
         panic!()
     };
     let (cfg, rate) = am_demod_config(&case);
-    check_stream(&case, input, || {
+    check_stream_tolerant(&case, input, || {
         AmDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
@@ -390,7 +412,7 @@ fn am_demod_block_with_audio_filter_matches_python_chain_c32() {
     let (cfg, rate) = am_demod_config(&case);
     assert_eq!(cfg.audio_decimation, 4);
     assert_eq!(cfg.audio_taps(rate).unwrap(), usize_param(&case, "taps"));
-    check_stream(&case, input, || {
+    check_stream_tolerant(&case, input, || {
         AmDemodBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }

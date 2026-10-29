@@ -40,7 +40,7 @@ macro_rules! delegate {
         ///
         /// ```
         /// use sdrk::{backend_for, SampleType};
-        /// assert_eq!(backend_for("deemphasis", SampleType::F32), "fallback");
+        /// assert_eq!(backend_for("deemphasis", SampleType::Q15), "fallback");
         /// assert_eq!(backend_for("nope", SampleType::C32), "none");
         /// ```
         pub fn backend_for(kernel: &'static str, ty: $crate::SampleType) -> &'static str {

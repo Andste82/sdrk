@@ -20,9 +20,14 @@ use sdrk_core::kernels::demod::{
     DcBlock, DcBlockState, Deemphasis, DeemphasisState, QuadDemod, QuadDemodState,
 };
 use sdrk_core::{C32, CQ15, Fallback, Progress, Q15, Rate, Reference, Sample};
-use sdrk_testkit::{ChunkPlan, Pcg32, bit_exact, check_block_invariance};
+use sdrk_testkit::{ChunkPlan, Pcg32, bit_exact, check_block_invariance, check_block_tolerance};
 
 const N: usize = 2500;
+
+/// The SNR of a chunked run of the `f32`/`C32` recursions against the whole run: their state
+/// is the `f32` output, so every call boundary rounds the `f64` recursion of the SIMD backend
+/// once.
+const RECURSION_CHUNK_SNR_DB: f64 = 120.0;
 
 fn same_rate<I: Copy, O>(
     input: &[I],
@@ -228,14 +233,17 @@ fn quad_demod_deemphasis_and_dc_block_are_block_size_invariant() {
         )
         .unwrap();
 
+        // `f32`/`C32` `deemphasis` and `dc_block` are tolerance kernels of the SIMD backend whose
+        // bits may depend on the split (maintainer decision of 2026-10-29).
         let (mut a, mut b) = (vec![0f32; N], vec![0f32; N]);
-        check_block_invariance(
+        check_block_tolerance(
             &audio,
             &mut a,
             &mut b,
             plan(seed + 200, 47),
             || DeemphasisState::<f32>::new(tau, rate).unwrap(),
             |st, i, o| same_rate(i, o, |i, o| Deemphasis::<f32>::deemphasis(&Sdrk, st, i, o)),
+            RECURSION_CHUNK_SNR_DB,
         )
         .unwrap();
         let (mut a, mut b) = (vec![Q15(0); N], vec![Q15(0); N]);
@@ -250,13 +258,14 @@ fn quad_demod_deemphasis_and_dc_block_are_block_size_invariant() {
         .unwrap();
 
         let (mut a, mut b) = (vec![C32::ZERO; N], vec![C32::ZERO; N]);
-        check_block_invariance(
+        check_block_tolerance(
             &c32,
             &mut a,
             &mut b,
             plan(seed + 400, 59),
             || DcBlockState::<C32>::new(r).unwrap(),
             |st, i, o| same_rate(i, o, |i, o| DcBlock::<C32>::dc_block(&Sdrk, st, i, o)),
+            RECURSION_CHUNK_SNR_DB,
         )
         .unwrap();
         let (mut a, mut b) = (vec![CQ15::ZERO; N], vec![CQ15::ZERO; N]);

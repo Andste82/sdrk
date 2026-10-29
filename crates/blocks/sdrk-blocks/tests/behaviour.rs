@@ -48,9 +48,55 @@ fn same_bits<T: bytemuck::Pod>(a: &[T], b: &[T]) -> bool {
     bytemuck::cast_slice::<T, u8>(a) == bytemuck::cast_slice::<T, u8>(b)
 }
 
+/// Identical bits, or, for `f32` and `C32` outputs only, an SNR of at least 120 dB of `b`
+/// against `a`: the blocks with the `f32`/`C32` `dc_block`, `dc_block_real` or `deemphasis`
+/// inside, whose SIMD kernels are tolerance kernels whose bits may depend on the split
+/// (maintainer decision of 2026-10-29). Every other sample type (`Q15`, `CQ15`) must keep
+/// identical bits.
+fn same_or_close<T: bytemuck::Pod>(a: &[T], b: &[T]) -> bool {
+    use core::any::TypeId;
+    if same_bits(a, b) {
+        return true;
+    }
+    let float =
+        TypeId::of::<T>() == TypeId::of::<f32>() || TypeId::of::<T>() == TypeId::of::<C32>();
+    if !float || a.len() != b.len() {
+        return false;
+    }
+    let (a, b) = (
+        bytemuck::cast_slice::<T, f32>(a),
+        bytemuck::cast_slice::<T, f32>(b),
+    );
+    let (mut sig, mut err) = (0.0f64, 0.0f64);
+    for (&x, &y) in a.iter().zip(b) {
+        sig += f64::from(x) * f64::from(x);
+        err += (f64::from(x) - f64::from(y)).powi(2);
+    }
+    10.0 * (sig / err).log10() >= 120.0
+}
+
 /// Runs a fresh block whole and in several chunkings and requires identical output.
 fn invariant<B: Block>(name: &str, input: &[B::In], make: impl Fn() -> B)
 where
+    B::Out: Default + bytemuck::Pod,
+{
+    invariant_with(name, input, make, same_bits);
+}
+
+/// [`invariant`] with [`same_or_close`].
+fn invariant_close<B: Block>(name: &str, input: &[B::In], make: impl Fn() -> B)
+where
+    B::Out: Default + bytemuck::Pod,
+{
+    invariant_with(name, input, make, same_or_close);
+}
+
+fn invariant_with<B: Block>(
+    name: &str,
+    input: &[B::In],
+    make: impl Fn() -> B,
+    same: fn(&[B::Out], &[B::Out]) -> bool,
+) where
     B::Out: Default + bytemuck::Pod,
 {
     let whole = run_block(&mut make(), input, None);
@@ -62,7 +108,7 @@ where
             whole.len(),
             "{name}: output count with {plan:?}"
         );
-        assert!(same_bits(&whole, &chunked), "{name}: output with {plan:?}");
+        assert!(same(&whole, &chunked), "{name}: output with {plan:?}");
     }
 }
 
@@ -104,7 +150,7 @@ where
 
     let cfg = DcBlockConfig { cutoff_hz: 50.0 };
     let make = || DcBlockBlock::<T, _>::new(&cfg, r, &mut VecStorage).unwrap();
-    invariant("dc_block", &x, make);
+    invariant_close("dc_block", &x, make);
     resets("dc_block", &x, make);
 
     let cfg = FirConfig {
@@ -172,7 +218,7 @@ where
         };
         let make = || FmDemodBlock::<T, _>::new(&cfg, r240, &mut VecStorage).unwrap();
         let x = signal::<T>(3000, seed, 0.01);
-        invariant("fm_demod", &x, make);
+        invariant_close("fm_demod", &x, make);
         resets("fm_demod", &x, make);
     }
 
@@ -588,6 +634,15 @@ fn small_output_buffers_never_lose_samples() {
     where
         B::Out: Default + bytemuck::Pod,
     {
+        small_with(input, make, same_bits);
+    }
+    fn small_with<B: Block>(
+        input: &[B::In],
+        make: impl Fn() -> B,
+        same: fn(&[B::Out], &[B::Out]) -> bool,
+    ) where
+        B::Out: Default + bytemuck::Pod,
+    {
         let want = run_block(&mut make(), input, None);
         let mut block = make();
         let mut got = Vec::new();
@@ -604,7 +659,7 @@ fn small_output_buffers_never_lose_samples() {
         }
         assert!(pending.is_empty(), "the block stalled");
         assert_eq!(got.len(), want.len());
-        assert!(same_bits(&want, &got));
+        assert!(same(&want, &got));
     }
     let r = rate(48_000);
     let x = signal::<C32>(1500, 4, 0.04);
@@ -636,9 +691,11 @@ fn small_output_buffers_never_lose_samples() {
         audio_decimation: 5,
         ..FmDemodConfig::default()
     };
-    small(&x, || {
-        FmDemodBlock::<C32, _>::new(&cfg, rate(240_000), &mut VecStorage).unwrap()
-    });
+    small_with(
+        &x,
+        || FmDemodBlock::<C32, _>::new(&cfg, rate(240_000), &mut VecStorage).unwrap(),
+        same_or_close,
+    );
     let cfg = FirConfig {
         cutoff_hz: 5_000.0,
         transition_hz: 2_000.0,
@@ -676,4 +733,32 @@ fn empty_input_and_empty_output_make_no_progress_and_no_panic() {
     assert_eq!(rs.process(&[], &mut out).unwrap().produced, 0);
     let p = rs.process(&[C32::default(); 3], &mut []).unwrap();
     assert_eq!(p.produced, 0);
+}
+
+#[test]
+fn the_tolerance_check_is_bit_exact_for_fixed_point() {
+    // A 1-LSB error must fail for Q15/CQ15 even where their bytes would cast to `f32`.
+    let a = vec![
+        CQ15 {
+            re: Q15(1000),
+            im: Q15(-2000)
+        };
+        64
+    ];
+    let mut b = a.clone();
+    b[3] = CQ15 {
+        re: Q15(1001),
+        im: Q15(-2000),
+    };
+    assert!(same_or_close(&a, &a));
+    assert!(!same_or_close(&a, &b));
+    let qa = vec![Q15(1000); 64];
+    let mut qb = qa.clone();
+    qb[5] = Q15(1001);
+    assert!(!same_or_close(&qa, &qb));
+    // `f32` within 120 dB still passes.
+    let fa = vec![C32::new(0.5, -0.25); 64];
+    let mut fb = fa.clone();
+    fb[7] = C32::new(0.5 + 1e-7, -0.25);
+    assert!(same_or_close(&fa, &fb));
 }

@@ -238,3 +238,21 @@ pub fn tone_power(x: &[f32], f: f64, fs: f64) -> f64 {
 pub fn bits(x: &[f32]) -> Vec<u32> {
     x.iter().map(|v| v.to_bits()).collect()
 }
+
+/// Whether `got` has the length of `want` and equals it bit for bit or within 120 dB: the audio
+/// of flows with the `f32` `deemphasis` or `dc_block_real` inside, tolerance kernels of the SIMD
+/// backend whose bits may depend on how the input is split (maintainer decision of 2026-10-29).
+pub fn same_audio(want: &[f32], got: &[f32]) -> bool {
+    if want.len() != got.len() {
+        return false;
+    }
+    if bits(want) == bits(got) {
+        return true;
+    }
+    let (mut sig, mut err) = (0.0f64, 0.0f64);
+    for (&w, &g) in want.iter().zip(got) {
+        sig += f64::from(w) * f64::from(w);
+        err += (f64::from(w) - f64::from(g)).powi(2);
+    }
+    10.0 * (sig / err).log10() >= 120.0
+}

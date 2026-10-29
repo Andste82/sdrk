@@ -125,6 +125,9 @@ pub enum Tolerance {
         skip: usize,
         /// Optional limit of the largest absolute error.
         max_abs_err: Option<f64>,
+        /// Optional regression guard in dB (JSON `snr_db_guard`, accuracy policy step 3): the
+        /// lowest SNR measured over the levels and builds minus 1 dB, checked like `min_db`.
+        guard_db: Option<f64>,
     },
     /// Largest absolute error over samples `skip..`, optionally only where the
     /// reference is at or above a level.
@@ -327,6 +330,7 @@ struct RawArray {
 struct RawTolerance {
     class: String,
     snr_db_min: Option<f64>,
+    snr_db_guard: Option<f64>,
     skip: Option<usize>,
     max_abs_err: Option<f64>,
     min_ref_db: Option<f64>,
@@ -416,6 +420,7 @@ fn parse_tolerance(raw: &RawTolerance) -> Result<Tolerance> {
             min_db: need(raw.snr_db_min, "snr_db_min")?,
             skip: raw.skip.unwrap_or(0),
             max_abs_err: raw.max_abs_err,
+            guard_db: raw.snr_db_guard,
         }),
         "max_abs_err" => {
             let min_ref = match raw.min_ref_db {
@@ -645,7 +650,7 @@ pub const REPORT_ENV: &str = "SDRK_GOLDEN_REPORT";
 ///
 /// - `case`: `kernel/case`; `type`: the sample type of the actual data;
 /// - `class`: `bit_exact`, `tolerance` or `max_abs_err`; `snr_db_min`: the floor of a
-///   `tolerance` case;
+///   `tolerance` case; `snr_db_guard`: its regression guard (`null` without one);
 /// - `snr_db`: the achieved SNR (`null` when it is not finite; then `exact` tells
 ///   whether the error was zero);
 /// - `optimum_db`: for a `tolerance` case, the achievable optimum of the accuracy policy
@@ -659,10 +664,15 @@ pub fn report_line<T: Sample>(
     result: &Result<Comparison>,
 ) -> String {
     let finite = |x: f64| if x.is_finite() { Some(x) } else { None };
-    let (class, snr_db_min, skip) = match case.tolerance {
-        Tolerance::BitExact => ("bit_exact", None, None),
-        Tolerance::Snr { min_db, skip, .. } => ("tolerance", Some(min_db), Some(skip)),
-        Tolerance::MaxAbsErr { .. } => ("max_abs_err", None, None),
+    let (class, snr_db_min, snr_db_guard, skip) = match case.tolerance {
+        Tolerance::BitExact => ("bit_exact", None, None, None),
+        Tolerance::Snr {
+            min_db,
+            skip,
+            guard_db,
+            ..
+        } => ("tolerance", Some(min_db), guard_db, Some(skip)),
+        Tolerance::MaxAbsErr { .. } => ("max_abs_err", None, None, None),
     };
     let snr_db = match result {
         Ok(c) => c.snr_db,
@@ -677,6 +687,7 @@ pub fn report_line<T: Sample>(
         "type": format!("{:?}", T::TYPE),
         "class": class,
         "snr_db_min": snr_db_min,
+        "snr_db_guard": snr_db_guard,
         "snr_db": finite(snr_db),
         "exact": snr_db == f64::INFINITY,
         "optimum_db": optimum_db,
@@ -784,10 +795,19 @@ fn compare_case<T: Sample>(
             min_db,
             skip,
             max_abs_err,
+            guard_db,
         } => {
             let c = compare_views(&expected_view(expected)?, &actual_view(actual)?, skip);
             if c.snr_db.is_nan() || c.snr_db < min_db {
                 return Err(fail(&c, format!("snr below the minimum of {min_db} db")));
+            }
+            if let Some(guard) = guard_db
+                && c.snr_db < guard
+            {
+                return Err(fail(
+                    &c,
+                    format!("snr below the regression guard of {guard} db"),
+                ));
             }
             if let Some(limit) = max_abs_err
                 && (c.max_abs_err.is_nan() || c.max_abs_err > limit)

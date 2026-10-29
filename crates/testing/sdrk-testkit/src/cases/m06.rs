@@ -22,9 +22,10 @@ use sdrk_core::{C32, CQ15, Fallback, Progress, Q15, Rate, Reference, Sample, Tim
 
 use super::ensure;
 use super::m05::{random_c32, random_cq15};
+use super::m20::{CHUNK_GUARD_DB, FACADE_GUARD_DB};
 use crate::arena::Arena;
 use crate::r#gen;
-use crate::invariance::{ChunkPlan, check_block_invariance};
+use crate::invariance::{ChunkPlan, check_block_invariance, check_block_tolerance};
 use crate::metrics::bit_exact;
 use crate::rng::Pcg32;
 use crate::suite::Failure;
@@ -830,8 +831,11 @@ pub(super) fn deemphasis_f32_vs_reference(arena: &mut Arena<'_>) -> Result<(), F
     Deemphasis::<f32>::deemphasis(&Reference, &mut b, input, rf)?;
     Deemphasis::<f32>::deemphasis(&Sdrk, &mut d, input, fac)?;
     min_snr(CASE, "fallback below 100 dB", rf, fb, 100.0)?;
-    ensure(bit_exact(fb, fac).is_none() && a == d, || {
-        Failure::new(CASE, "facade differs")
+    // A tolerance kernel of the SIMD backend (maintainer decision of 2026-10-29): the facade
+    // against its guard instead of the bits of the fallback.
+    min_snr(CASE, "facade below its guard", rf, fac, FACADE_GUARD_DB)?;
+    ensure(a.alpha() == d.alpha(), || {
+        Failure::new(CASE, "facade state differs")
     })
 }
 
@@ -876,7 +880,7 @@ pub(super) fn deemphasis_block_invariance(arena: &mut Arena<'_>) -> Result<(), F
         for s in input.iter_mut() {
             *s = (rng.next_f64() * 2.0 - 1.0) as f32;
         }
-        check_block_invariance(
+        check_block_tolerance(
             input,
             whole,
             chunked,
@@ -886,6 +890,7 @@ pub(super) fn deemphasis_block_invariance(arena: &mut Arena<'_>) -> Result<(), F
                 Ok(st) => same_rate(i, o, |i, o| Deemphasis::<f32>::deemphasis(&Sdrk, st, i, o)),
                 Err(e) => Err(e.clone()),
             },
+            CHUNK_GUARD_DB,
         )?;
     }
     let mut c = arena.carver();
@@ -926,8 +931,17 @@ pub(super) fn dc_block_c32_vs_reference(arena: &mut Arena<'_>) -> Result<(), Fai
     DcBlock::<C32>::dc_block(&Reference, &mut b, input, rf)?;
     DcBlock::<C32>::dc_block(&Sdrk, &mut d, input, fac)?;
     min_snr(CASE, "fallback below 100 dB", flat(rf), flat(fb), 100.0)?;
-    ensure(bit_exact(fb, fac).is_none() && a == d, || {
-        Failure::new(CASE, "facade differs")
+    // A tolerance kernel of the SIMD backend (maintainer decision of 2026-10-29): the facade
+    // against its guard instead of the bits of the fallback.
+    min_snr(
+        CASE,
+        "facade below its guard",
+        flat(rf),
+        flat(fac),
+        FACADE_GUARD_DB,
+    )?;
+    ensure(a.x_prev() == d.x_prev(), || {
+        Failure::new(CASE, "facade state differs")
     })
 }
 
@@ -970,7 +984,7 @@ pub(super) fn dc_block_block_invariance(arena: &mut Arena<'_>) -> Result<(), Fai
         for s in input.iter_mut() {
             *s = random_c32(&mut rng, 1.0);
         }
-        check_block_invariance(
+        check_block_tolerance(
             input,
             whole,
             chunked,
@@ -980,6 +994,7 @@ pub(super) fn dc_block_block_invariance(arena: &mut Arena<'_>) -> Result<(), Fai
                 Ok(st) => same_rate(i, o, |i, o| DcBlock::<C32>::dc_block(&Sdrk, st, i, o)),
                 Err(e) => Err(e.clone()),
             },
+            CHUNK_GUARD_DB,
         )?;
     }
     let mut c = arena.carver();

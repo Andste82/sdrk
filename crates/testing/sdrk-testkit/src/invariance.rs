@@ -197,3 +197,105 @@ pub fn check_block_invariance<I: Copy, O: Sample, S>(
         calls_chunked,
     })
 }
+
+/// The relaxed form of [`check_block_invariance`] for the kernels whose bits may depend on the
+/// split (the `f32`/`C32` `deemphasis`, `dc_block` and `dc_block_real` of the SIMD backend,
+/// maintainer decision of 2026-10-29): both runs as there, but the chunked output only has to
+/// reach `min_snr_db` against the whole one. For `f32` and `C32` outputs (their components as
+/// `f32`); the SNR is `10 log10(sum whole^2 / sum (whole - chunked)^2)`, `+inf` when equal.
+/// Returns the SNR.
+///
+/// # Errors
+/// A [`Failure`] if `step` fails or stalls, if the output counts differ, if the output type
+/// is not made of `f32`, or if the SNR is below `min_snr_db` (or NaN).
+///
+/// ```
+/// use sdrk_core::Progress;
+/// use sdrk_testkit::{check_block_tolerance, ChunkPlan};
+/// let input: Vec<f32> = (0..100).map(|i| i as f32).collect();
+/// let (mut a, mut b) = (vec![0f32; 100], vec![0f32; 100]);
+/// let snr = check_block_tolerance(
+///     &input, &mut a, &mut b, ChunkPlan::new(1, 9),
+///     || (),
+///     |_, i, o| {
+///         let n = i.len().min(o.len());
+///         o[..n].copy_from_slice(&i[..n]);
+///         Ok(Progress { consumed: n, produced: n })
+///     },
+///     120.0,
+/// )?;
+/// assert_eq!(snr, f64::INFINITY);
+/// # Ok::<(), sdrk_testkit::Failure>(())
+/// ```
+pub fn check_block_tolerance<I: Copy, O: Sample, S>(
+    input: &[I],
+    out_whole: &mut [O],
+    out_chunked: &mut [O],
+    plan: ChunkPlan,
+    mut make_state: impl FnMut() -> S,
+    mut step: impl FnMut(&mut S, &[I], &mut [O]) -> Result<Progress, sdrk_core::Error>,
+    min_snr_db: f64,
+) -> Result<f64, Failure> {
+    let mut state = make_state();
+    let (n_whole, _) = run_pass(input, out_whole, None, &mut state, &mut step)?;
+    let mut state = make_state();
+    let (n_chunked, _) = run_pass(
+        input,
+        out_chunked,
+        Some(plan.sizes()),
+        &mut state,
+        &mut step,
+    )?;
+    tolerance_verdict(
+        out_whole.get(..n_whole).unwrap_or_default(),
+        out_chunked.get(..n_chunked).unwrap_or_default(),
+        min_snr_db,
+    )
+}
+
+/// The verdict of [`check_block_tolerance`] on the outputs of both runs.
+fn tolerance_verdict<O: Sample>(
+    whole: &[O],
+    chunked: &[O],
+    min_snr_db: f64,
+) -> Result<f64, Failure> {
+    if whole.len() != chunked.len() {
+        return Err(
+            Failure::new(CASE, "output counts differ").detail(format_args!(
+                "whole {}, chunked {}",
+                whole.len(),
+                chunked.len()
+            )),
+        );
+    }
+    // By sample type, not by a cast: a `CQ15` or `Q15` slice can cast to `f32` too.
+    if !matches!(
+        O::TYPE,
+        sdrk_core::SampleType::F32 | sdrk_core::SampleType::C32
+    ) {
+        return Err(Failure::new(CASE, "the output type is not made of f32"));
+    }
+    let not_f32 = |_| Failure::new(CASE, "the output type is not made of f32");
+    let whole: &[f32] = bytemuck::try_cast_slice(whole).map_err(not_f32)?;
+    let chunked: &[f32] = bytemuck::try_cast_slice(chunked).map_err(not_f32)?;
+    let (mut sig, mut err) = (0.0f64, 0.0f64);
+    for (&w, &c) in whole.iter().zip(chunked) {
+        let (w, c) = (f64::from(w), f64::from(c));
+        sig += w * w;
+        err += (w - c) * (w - c);
+    }
+    let snr = if err == 0.0 {
+        f64::INFINITY
+    } else {
+        10.0 * libm::log10(sig / err)
+    };
+    if snr >= min_snr_db {
+        Ok(snr)
+    } else {
+        Err(
+            Failure::new(CASE, "the block size changed the output too much").detail(format_args!(
+                "{snr} dB against the whole run, need {min_snr_db}"
+            )),
+        )
+    }
+}

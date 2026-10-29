@@ -28,6 +28,7 @@
   "tolerance": {
     "class": "tolerance",
     "skip": 0,
+    "snr_db_guard": 118.3,
     "snr_db_min": 100.0
   }
 }

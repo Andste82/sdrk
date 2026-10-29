@@ -104,8 +104,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "the wasm32 build of VOLK (`benches/refs/volk-wasm.c`) has no `volk_8i_convert_16i`; compared with our fallback, so the comparison is information"
+      "status": "release"
     }
   },
   "convert_cq15_cu8": {
@@ -125,8 +124,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "the wasm32 build of VOLK (`benches/refs/volk-wasm.c`) has no `volk_8i_convert_16i`; compared with our fallback, so the comparison is information"
+      "status": "release"
     }
   },
   "convert_out_cs16": {
@@ -1690,6 +1688,283 @@
     "simd128": {
       "status": "info",
       "waiver": "CMSIS-DSP's `arm_rfft_fast_f32` uses a radix-8 and radix-4 complex FFT, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+    }
+  },
+  "convert_cs8_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_cs16_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_cu8_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_real_rs16_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_cq15_cs8_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_cq15_cu8_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "dev",
+      "waiver": "CMSIS-DSP has no unsigned 8-bit input; `arm_q7_to_q15` on the flipped bytes is the CU8 conversion without its offset of 128 (`(u - 128) << 8` against `(2u - 255) << 7`), one vector operation per 8 values less than ours; on NEON that is 0.92 against 0.76 instructions per sample (1.20), at every other level the entry is within 1.01"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "convert_out_cs16_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    }
+  },
+  "convert_out_real_rs16_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    }
+  },
+  "convert_out_cs8_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    }
+  },
+  "convert_out_real_rs8_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+    }
+  },
+  "convert_out_cu8_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    }
+  },
+  "convert_out_real_ru8_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
     }
   }
 }

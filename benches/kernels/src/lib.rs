@@ -310,7 +310,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 74] = [
+pub const KERNELS: [&str; 86] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -385,6 +385,18 @@ pub const KERNELS: [&str; 74] = [
     "fft_cq15_1024_fallback",
     "fft_cq15_1024_default_fallback",
     "rfft_1024_fallback",
+    "convert_cs8_fallback",
+    "convert_cs16_fallback",
+    "convert_cu8_fallback",
+    "convert_real_rs16_fallback",
+    "convert_cq15_cs8_fallback",
+    "convert_cq15_cu8_fallback",
+    "convert_out_cs16_fallback",
+    "convert_out_cs8_fallback",
+    "convert_out_cu8_fallback",
+    "convert_out_real_rs16_fallback",
+    "convert_out_real_rs8_fallback",
+    "convert_out_real_ru8_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -393,23 +405,48 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
     let seed_of = name.strip_suffix("_fallback").unwrap_or(name);
     let idx = KERNELS.iter().position(|k| *k == seed_of)? as u64;
     let (simd, fallback) = (BiquadEntry::Simd, BiquadEntry::Fallback);
+    let entry = if name.ends_with("_fallback") {
+        fallback
+    } else {
+        simd
+    };
     let c32 = |c: C32| (c.re, c.im);
     let cq15 = |c: CQ15| (c.re.0, c.im.0);
     let mut rng = Pcg32::new(1000 + idx);
     let rng = &mut rng;
     Some(match name {
-        "convert_cs8" => Box::new(ConvertIn::new(rng, layout, InFormat::Cs8)),
-        "convert_cs16" => Box::new(ConvertIn::new(rng, layout, InFormat::Cs16)),
-        "convert_cu8" => Box::new(ConvertIn::new(rng, layout, InFormat::Cu8)),
-        "convert_real_rs16" => Box::new(ConvertIn::new(rng, layout, InFormat::Rs16)),
-        "convert_cq15_cs8" => Box::new(ConvertQ15In::new(rng, layout, InFormat::Cs8)),
-        "convert_cq15_cu8" => Box::new(ConvertQ15In::new(rng, layout, InFormat::Cu8)),
-        "convert_out_cs16" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cs16)),
-        "convert_out_cs8" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cs8)),
-        "convert_out_cu8" => Box::new(ConvertOutK::new(rng, layout, OutFormat::Cu8)),
-        "convert_out_real_rs16" => Box::new(ConvertOutK::real(rng, layout, OutFormat::Cs16)),
-        "convert_out_real_rs8" => Box::new(ConvertOutK::real(rng, layout, OutFormat::Cs8)),
-        "convert_out_real_ru8" => Box::new(ConvertOutK::real(rng, layout, OutFormat::Cu8)),
+        "convert_cs8"
+        | "convert_cs16"
+        | "convert_cu8"
+        | "convert_real_rs16"
+        | "convert_cs8_fallback"
+        | "convert_cs16_fallback"
+        | "convert_cu8_fallback"
+        | "convert_real_rs16_fallback" => {
+            Box::new(ConvertIn::new(rng, layout, in_format(seed_of), entry))
+        }
+        "convert_cq15_cs8"
+        | "convert_cq15_cu8"
+        | "convert_cq15_cs8_fallback"
+        | "convert_cq15_cu8_fallback" => {
+            Box::new(ConvertQ15In::new(rng, layout, in_format(seed_of), entry))
+        }
+        "convert_out_cs16"
+        | "convert_out_cs8"
+        | "convert_out_cu8"
+        | "convert_out_cs16_fallback"
+        | "convert_out_cs8_fallback"
+        | "convert_out_cu8_fallback" => {
+            Box::new(ConvertOutK::new(rng, layout, out_format(seed_of), entry))
+        }
+        "convert_out_real_rs16"
+        | "convert_out_real_rs8"
+        | "convert_out_real_ru8"
+        | "convert_out_real_rs16_fallback"
+        | "convert_out_real_rs8_fallback"
+        | "convert_out_real_ru8_fallback" => {
+            Box::new(ConvertOutK::real(rng, layout, out_format(seed_of), entry))
+        }
         "rotate" => Box::new(RotateK::new(rng, layout)),
         "rotate_cq15" => Box::new(RotateQ15K::new(rng, layout)),
         "fir" => Box::new(FirK::new(rng, layout)),
@@ -583,9 +620,44 @@ impl InFormat {
     }
 }
 
+/// The input format of a `convert` entry (its name without `_fallback`).
+fn in_format(name: &str) -> InFormat {
+    match name {
+        "convert_cs8" | "convert_cq15_cs8" => InFormat::Cs8,
+        "convert_cs16" => InFormat::Cs16,
+        "convert_cu8" | "convert_cq15_cu8" => InFormat::Cu8,
+        "convert_real_rs16" => InFormat::Rs16,
+        other => unreachable!("no convert entry {other}"),
+    }
+}
+
+/// The text of [`Kernel::describe`] for a CMSIS-DSP conversion of a fallback entry.
+fn describe_cmsis_convert(function: &str, format: InFormat) -> &'static str {
+    describe_cmsis(&if format == InFormat::Cu8 {
+        format!(
+            "{function} on the bytes with the sign bit flipped (the CU8 conversion without its offset)"
+        )
+    } else {
+        function.to_string()
+    })
+}
+
+/// The implementations a `convert` or `convert_out` entry runs: the SIMD entry ours, our
+/// fallback and VOLK (if `volk`); the fallback entry (D16) our fallback and CMSIS-DSP.
+fn convert_supports(entry: BiquadEntry, which: Impl, volk: bool) -> bool {
+    match (entry, which) {
+        (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
+        (BiquadEntry::Simd, Impl::Volk) => volk,
+        (BiquadEntry::Fallback, Impl::Cmsis) => cref_sys::cmsis_dsp::AVAILABLE,
+        _ => false,
+    }
+}
+
 /// `convert` from a raw interleaved format to C32, or `convert_real` from a raw real format to
-/// f32 (in the first `n` floats of `out`).
+/// f32 (in the first `n` floats of `out`). The entry `<name>_fallback` (D16) measures our
+/// fallback against CMSIS-DSP's generic C.
 struct ConvertIn {
+    entry: BiquadEntry,
     format: InFormat,
     raw: Aligned<u8>,
     /// CU8 only: the bytes with the sign bit flipped (`u - 128` as `i8`), the input of the VOLK
@@ -596,9 +668,10 @@ struct ConvertIn {
 }
 
 impl ConvertIn {
-    fn new(rng: &mut Pcg32, layout: Layout, format: InFormat) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, format: InFormat, entry: BiquadEntry) -> Self {
         let (raw, signed) = convert_input(rng, layout, format);
         ConvertIn {
+            entry,
             format,
             raw,
             signed,
@@ -731,6 +804,35 @@ impl Kernel for ConvertIn {
                         },
                     }
                 }
+                Impl::Cmsis => {
+                    let out = self.out.as_mut_ptr().cast::<f32>();
+                    match self.format {
+                        // `(u - 128) / 128` from the flipped bytes for CU8, as for VOLK.
+                        // SAFETY: `raw` and `signed` hold `values` bytes, `out` at least
+                        // `values` floats.
+                        InFormat::Cs8 | InFormat::Cu8 => unsafe {
+                            let input = if self.format == InFormat::Cu8 {
+                                &self.signed
+                            } else {
+                                &self.raw
+                            };
+                            cref_sys::cmsis_dsp::ffi::arm_q7_to_float(
+                                input.as_ptr().cast(),
+                                out,
+                                values,
+                            );
+                        },
+                        // SAFETY: `raw` holds `values` little-endian `i16` values (2-byte
+                        // aligned by the even skew), `out` at least `values` floats.
+                        InFormat::Cs16 | InFormat::Rs16 => unsafe {
+                            cref_sys::cmsis_dsp::ffi::arm_q15_to_float(
+                                self.raw.as_ptr().cast(),
+                                out,
+                                values,
+                            );
+                        },
+                    }
+                }
                 other => unreachable!("convert has no {other:?}"),
             }
             black_box(&self.out);
@@ -739,7 +841,7 @@ impl Kernel for ConvertIn {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        if which == Impl::Volk && self.format == InFormat::Cu8 {
+        if matches!(which, Impl::Volk | Impl::Cmsis) && self.format == InFormat::Cu8 {
             for v in self.out.iter_mut() {
                 *v = C32::new(v.re + 0.5 / 128.0, v.im + 0.5 / 128.0);
             }
@@ -752,15 +854,15 @@ impl Kernel for ConvertIn {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
-            _ => false,
-        }
+        convert_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.format) {
+            (Impl::Cmsis, InFormat::Cs8 | InFormat::Cu8) => {
+                describe_cmsis_convert("arm_q7_to_float", self.format)
+            }
+            (Impl::Cmsis, _) => describe_cmsis_convert("arm_q15_to_float", self.format),
             (Impl::Volk, InFormat::Cs8) => "volk_8i_s32f_convert_32f",
             (Impl::Volk, InFormat::Cu8) => {
                 "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)"
@@ -781,6 +883,7 @@ impl Kernel for ConvertIn {
 
 /// `convert` from a raw interleaved 8-bit format to CQ15.
 struct ConvertQ15In {
+    entry: BiquadEntry,
     format: InFormat,
     raw: Aligned<u8>,
     /// CU8 only: the bytes with the sign bit flipped, the input of the VOLK comparison.
@@ -790,9 +893,10 @@ struct ConvertQ15In {
 }
 
 impl ConvertQ15In {
-    fn new(rng: &mut Pcg32, layout: Layout, format: InFormat) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, format: InFormat, entry: BiquadEntry) -> Self {
         let (raw, signed) = convert_input(rng, layout, format);
         ConvertQ15In {
+            entry,
             format,
             raw,
             signed,
@@ -828,6 +932,22 @@ impl Kernel for ConvertQ15In {
                         );
                     }
                 }
+                Impl::Cmsis => {
+                    // `(u - 128) << 8` from the flipped bytes for CU8, as for VOLK.
+                    let input = if self.format == InFormat::Cu8 {
+                        &self.signed
+                    } else {
+                        &self.raw
+                    };
+                    // SAFETY: `input` holds `2 n` bytes, `out` `2 n` `i16` values.
+                    unsafe {
+                        cref_sys::cmsis_dsp::ffi::arm_q7_to_q15(
+                            input.as_ptr().cast(),
+                            self.out.as_mut_ptr().cast(),
+                            values,
+                        );
+                    }
+                }
                 other => unreachable!("convert has no {other:?}"),
             }
             black_box(&self.out);
@@ -836,7 +956,7 @@ impl Kernel for ConvertQ15In {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        if which == Impl::Volk && self.format == InFormat::Cu8 {
+        if matches!(which, Impl::Volk | Impl::Cmsis) && self.format == InFormat::Cu8 {
             for v in self.out.iter_mut() {
                 *v = CQ15 {
                     re: Q15(v.re.0 + 128),
@@ -851,15 +971,12 @@ impl Kernel for ConvertQ15In {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::HAS_8I_CONVERT_16I,
-            _ => false,
-        }
+        convert_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.format) {
+            (Impl::Cmsis, _) => describe_cmsis_convert("arm_q7_to_q15", self.format),
             (Impl::Volk, InFormat::Cu8) => {
                 "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)"
             }
@@ -938,9 +1055,21 @@ impl OutFormat {
     }
 }
 
+/// The output format of a `convert_out` entry (its name without `_fallback`).
+fn out_format(name: &str) -> OutFormat {
+    match name {
+        "convert_out_cs16" | "convert_out_real_rs16" => OutFormat::Cs16,
+        "convert_out_cs8" | "convert_out_real_rs8" => OutFormat::Cs8,
+        "convert_out_cu8" | "convert_out_real_ru8" => OutFormat::Cu8,
+        other => unreachable!("no convert_out entry {other}"),
+    }
+}
+
 /// `convert_out` from C32 to a raw interleaved format, or `convert_out_real` from f32 to the
-/// real format of the same encoding (`real`; VOLK converts the same values either way).
+/// real format of the same encoding (`real`; VOLK converts the same values either way). The
+/// entry `<name>_fallback` (D16) measures our fallback against CMSIS-DSP's generic C.
 struct ConvertOutK {
+    entry: BiquadEntry,
     format: OutFormat,
     real: bool,
     input: Aligned<C32>,
@@ -950,9 +1079,10 @@ struct ConvertOutK {
 }
 
 impl ConvertOutK {
-    fn new(rng: &mut Pcg32, layout: Layout, format: OutFormat) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, format: OutFormat, entry: BiquadEntry) -> Self {
         let bytes = 2 * layout.n * format.component_bytes();
         ConvertOutK {
+            entry,
             format,
             real: false,
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
@@ -962,12 +1092,13 @@ impl ConvertOutK {
         }
     }
 
-    fn real(rng: &mut Pcg32, layout: Layout, format: OutFormat) -> Self {
+    fn real(rng: &mut Pcg32, layout: Layout, format: OutFormat, entry: BiquadEntry) -> Self {
         let mut real_input = Aligned::<f32>::skewed(layout.n, layout.skew(4));
         for v in real_input.iter_mut() {
             *v = rng.unit() * 0.9;
         }
         ConvertOutK {
+            entry,
             format,
             real: true,
             input: Aligned::new(0),
@@ -1074,6 +1205,30 @@ impl Kernel for ConvertOutK {
                         },
                     }
                 }
+                Impl::Cmsis => {
+                    let input = self.input_ptr();
+                    match self.format {
+                        // SAFETY: the input holds `values` floats, the output `values` `i16`
+                        // values (kept 2-byte aligned by the even skew).
+                        OutFormat::Cs16 => unsafe {
+                            cref_sys::cmsis_dsp::ffi::arm_float_to_q15(
+                                input,
+                                self.out.as_mut_ptr().cast(),
+                                values,
+                            );
+                        },
+                        // CMSIS-DSP has no offset binary output: CU8 is the Q7 conversion
+                        // without its offset (`accuracy` reads the bytes as signed).
+                        // SAFETY: the input holds `values` floats, the output `values` bytes.
+                        OutFormat::Cs8 | OutFormat::Cu8 => unsafe {
+                            cref_sys::cmsis_dsp::ffi::arm_float_to_q7(
+                                input,
+                                self.out.as_mut_ptr().cast(),
+                                values,
+                            );
+                        },
+                    }
+                }
                 other => unreachable!("convert_out has no {other:?}"),
             }
             black_box(&self.out);
@@ -1086,22 +1241,31 @@ impl Kernel for ConvertOutK {
         // offset of CU8 is removed from both, so that it does not count as signal).
         let (scale, offset) = self.format.scale_offset();
         let want: Vec<f64> = self.floats().iter().map(|x| x * scale).collect();
-        let got: Vec<f64> = (0..self.values())
-            .map(|i| self.format.value(&self.out, i) - offset)
-            .collect();
+        let got: Vec<f64> = if which == Impl::Cmsis && self.format == OutFormat::Cu8 {
+            (0..self.values())
+                .map(|i| OutFormat::Cs8.value(&self.out, i))
+                .collect()
+        } else {
+            (0..self.values())
+                .map(|i| self.format.value(&self.out, i) - offset)
+                .collect()
+        };
         snr_db(&want, &got)
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
-            _ => false,
-        }
+        convert_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Cmsis => describe_cmsis(match self.format {
+                OutFormat::Cs16 => "arm_float_to_q15 (truncating, saturating)",
+                OutFormat::Cs8 => "arm_float_to_q7 (truncating, saturating)",
+                OutFormat::Cu8 => {
+                    "arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset)"
+                }
+            }),
             Impl::Volk => self.volk_functions()[0],
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",

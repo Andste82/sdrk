@@ -821,7 +821,15 @@ fn q15_blocks<S: SimdToken>(
     }
     let n = S::u8s::LEN;
     let h = S::i16s::LEN;
-    let blocks = bytes.len().min(out.len()) / (4 * n) * 4 * n;
+    // Both to the common length: the remainders of the two chunk iterators below then start at
+    // the same value (with unequal lengths the longer one would also lose the whole chunk that
+    // `zip` takes from it before it sees the shorter one end).
+    let len = bytes.len().min(out.len());
+    let (bytes, out) = (
+        bytes.get(..len).unwrap_or_default(),
+        out.get_mut(..len).unwrap_or_default(),
+    );
+    let blocks = len / (4 * n) * 4 * n;
     let mut ic = bytes.chunks_exact(4 * n);
     let mut oc = out.chunks_exact_mut(4 * n);
     for (b, o) in (&mut ic).zip(&mut oc) {
@@ -984,5 +992,46 @@ impl ConvertReal<Q15> for Simd {
         output: &mut [Q15],
     ) -> Result<usize> {
         real_in::<CQ15>(format, input, output)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::cast_possible_truncation, clippy::indexing_slicing)]
+mod tests {
+    extern crate std;
+
+    use super::{i8_q15_run, u8_q15_run};
+
+    /// A Q15 run and the scalar formula of one value.
+    type Run = fn(&[u8], &mut [i16]);
+    type Want = fn(u8) -> i16;
+
+    /// The Q15 runs with input and output slices of unequal lengths (the trait calls give equal
+    /// ones): every value of the common length is converted at its own index, and nothing else
+    /// is written. Before `q15_blocks` cut both slices to the common length, a longer output
+    /// left values after the main loop unwritten and a longer input shifted them.
+    #[test]
+    fn q15_runs_with_unequal_lengths() {
+        let bytes: std::vec::Vec<u8> = (0..600u32).map(|k| (k * 37 + 11) as u8).collect();
+        let runs: [(Run, Want); 2] = [
+            (i8_q15_run, |b| i16::from(b as i8) << 8),
+            (u8_q15_run, |b| (2 * i16::from(b) - 255) << 7),
+        ];
+        // Around the blocks of four vectors and the single vectors after them, for vectors of
+        // 16, 32 and 64 bytes.
+        let lengths = [
+            0, 3, 17, 64, 100, 129, 140, 170, 200, 256, 300, 330, 420, 600,
+        ];
+        for (bl, ol) in lengths.into_iter().flat_map(|b| lengths.map(|o| (b, o))) {
+            for (run, want) in runs {
+                let mut out = std::vec![0x5A5Ai16; ol];
+                run(&bytes[..bl], &mut out);
+                let n = bl.min(ol);
+                for (k, &o) in out.iter().enumerate() {
+                    let expected = if k < n { want(bytes[k]) } else { 0x5A5A };
+                    assert_eq!(o, expected, "bytes {bl}, out {ol}, index {k}");
+                }
+            }
+        }
     }
 }

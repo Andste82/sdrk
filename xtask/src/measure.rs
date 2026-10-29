@@ -32,7 +32,7 @@ use serde_json::{Value, json};
 
 use crate::count::{KERNELS, PLANS};
 
-const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-count] [--no-golden] [--no-cycles] [--json]";
+const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-count] [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--json]";
 
 /// The command line of `cargo xtask measure`.
 #[allow(
@@ -53,6 +53,9 @@ pub struct Options {
     pub golden: bool,
     /// Not `--no-cycles`.
     pub cycles: bool,
+    /// `--cycle-mode`: the mode of the simulated cycles in the table and in the top-level
+    /// fields of the JSON (the other mode is reported beside it).
+    pub cycle_mode: crate::mca::CycleMode,
     /// `--json`: print the JSON document instead of the tables.
     pub json: bool,
 }
@@ -82,6 +85,11 @@ impl Options {
                 "--no-count" => o.count = false,
                 "--no-golden" => o.golden = false,
                 "--no-cycles" => o.cycles = false,
+                "--cycle-mode" => {
+                    let v = value()?;
+                    o.cycle_mode = crate::mca::CycleMode::parse(&v)
+                        .ok_or_else(|| anyhow::anyhow!("unknown cycle mode `{v}`; {USAGE}"))?;
+                }
                 "--json" => o.json = true,
                 other if other.starts_with("--") => bail!("unknown option `{other}`; {USAGE}"),
                 name if o.kernel.is_empty() => o.kernel = name.to_string(),
@@ -438,22 +446,24 @@ fn selected_levels(o: &Options, platform: &str) -> Vec<&'static str> {
         .collect()
 }
 
-/// The simulation of one side of an entry on both models of the level.
+/// The simulation of one side of an entry on both models of the level, in `mode`.
 fn simulate_side(
     counts: &crate::mca::Counts,
     samples: u64,
     models: &crate::mca::Models,
+    mode: crate::mca::CycleMode,
 ) -> anyhow::Result<[crate::mca::Simulation; 2]> {
-    let blocks = crate::mca::profile_blocks(counts)?;
+    let profile = crate::mca::profile(counts, mode)?;
     Ok([
-        crate::mca::simulate(&blocks, samples, models.triple, models.reference)?,
-        crate::mca::simulate(&blocks, samples, models.triple, models.counter)?,
+        crate::mca::simulate(&profile, samples, models.triple, models.reference)?,
+        crate::mca::simulate(&profile, samples, models.triple, models.counter)?,
     ])
 }
 
 fn simulation_json(s: &crate::mca::Simulation) -> Value {
     json!({
         "cpu": s.cpu,
+        "cycle_mode": s.mode.name(),
         "instructions_per_sample": s.instructions_per_sample,
         "cycles_per_sample": s.cycles_per_sample,
         "port_bound_per_sample": s.port_bound_per_sample,
@@ -461,6 +471,8 @@ fn simulation_json(s: &crate::mca::Simulation) -> Value {
         "bottleneck": crate::mca::bottleneck(s.efficiency),
         "coverage": s.coverage,
         "blocks": s.blocks,
+        "loops": s.loops,
+        "moves_as_lea": s.moves_as_lea,
         "rejected_blocks": s.rejected,
     })
 }
@@ -507,12 +519,14 @@ fn measure_cycles(root: &Path, o: &Options, entries: &[String]) -> Part {
                 levels_doc.insert(level.to_string(), json!({ "note": note }));
                 continue;
             }
-            match cycles_of_level(root, platform, level, models, entries) {
+            match cycles_of_level(root, platform, level, models, entries, o.cycle_mode) {
                 Ok((table, value)) => {
                     let _ = writeln!(
                         part.table,
-                        "\ncycles, {platform} {level} (llvm-mca; reference model {}, counter-model {}):",
-                        models.reference, models.counter
+                        "\ncycles, {platform} {level} (llvm-mca; reference model {}, counter-model {}; judged in the mode {}):",
+                        models.reference,
+                        models.counter,
+                        o.cycle_mode.name()
                     );
                     part.table.push_str(&table);
                     levels_doc.insert(level.to_string(), value);
@@ -542,7 +556,8 @@ fn model_json(ours: &crate::mca::Simulation, other: &crate::mca::Simulation) -> 
     })
 }
 
-/// The cycles table and JSON of one level.
+/// The cycles table and JSON of one level: per entry both cycle modes, `mode` first (the
+/// top-level fields of the entry), the other one under `other_cycle_mode`.
 #[allow(
     clippy::large_stack_frames,
     reason = "std::process::Command and serde_json values are large; xtask is a host tool"
@@ -553,49 +568,68 @@ fn cycles_of_level(
     level: &str,
     models: &crate::mca::Models,
     entries: &[String],
+    mode: crate::mca::CycleMode,
 ) -> anyhow::Result<(String, Value)> {
     let mut table = String::new();
     let _ = writeln!(
         table,
-        "{:<26} {:<23} {:>9} {:>9} {:>6} {:>6} {:<10} {:>8}  comparison",
-        "entry", "model", "ours", "other", "ratio", "eff.", "bottleneck", "coverage"
+        "{:<26} {:<10} {:<23} {:>9} {:>9} {:>6} {:>6} {:<10} {:>8}  comparison",
+        "entry", "mode", "model", "ours", "other", "ratio", "eff.", "bottleneck", "coverage"
     );
+    let both: Vec<crate::mca::CycleMode> = std::iter::once(mode)
+        .chain(
+            crate::mca::CycleMode::ALL
+                .into_iter()
+                .filter(|&m| m != mode),
+        )
+        .collect();
     let mut value = serde_json::Map::new();
     for e in crate::count::profiles(root, platform, level, entries)? {
-        let [ours_ref, ours_counter] = simulate_side(&e.ours, e.samples, models)?;
-        let [other_ref, other_counter] = simulate_side(&e.other, e.samples, models)?;
-        let rows = [
-            ("reference", &ours_ref, &other_ref),
-            ("counter", &ours_counter, &other_counter),
-        ];
-        for (n, (role, ours, other)) in rows.iter().enumerate() {
-            let first = n == 0;
-            let _ = writeln!(
-                table,
-                "{:<26} {:<23} {:>9.2} {:>9.2} {:>6.2} {:>6.2} {:<10} {:>7.1}%  {}",
-                if first { e.kernel.as_str() } else { "" },
-                format!("{} ({role})", ours.cpu),
-                ours.cycles_per_sample,
-                other.cycles_per_sample,
-                ours.cycles_per_sample / other.cycles_per_sample,
-                ours.efficiency,
-                crate::mca::bottleneck(ours.efficiency),
-                100.0 * ours.coverage.min(other.coverage),
-                if first { e.compared_with.as_str() } else { "" },
-            );
-        }
-        let ratio_ref = ours_ref.cycles_per_sample / other_ref.cycles_per_sample;
-        let ratio_counter = ours_counter.cycles_per_sample / other_counter.cycles_per_sample;
-        value.insert(
-            e.kernel.clone(),
-            json!({
-                "compared_with": e.compared_with,
-                "samples": e.samples,
+        let mut per_mode = Vec::new();
+        for (k, &m) in both.iter().enumerate() {
+            let [ours_ref, ours_counter] = simulate_side(&e.ours, e.samples, models, m)?;
+            let [other_ref, other_counter] = simulate_side(&e.other, e.samples, models, m)?;
+            let rows = [
+                ("reference", &ours_ref, &other_ref),
+                ("counter", &ours_counter, &other_counter),
+            ];
+            for (n, (role, ours, other)) in rows.iter().enumerate() {
+                let first = k == 0 && n == 0;
+                let _ = writeln!(
+                    table,
+                    "{:<26} {:<10} {:<23} {:>9.2} {:>9.2} {:>6.2} {:>6.2} {:<10} {:>7.1}%  {}",
+                    if first { e.kernel.as_str() } else { "" },
+                    if n == 0 { m.name() } else { "" },
+                    format!("{} ({role})", ours.cpu),
+                    ours.cycles_per_sample,
+                    other.cycles_per_sample,
+                    ours.cycles_per_sample / other.cycles_per_sample,
+                    ours.efficiency,
+                    crate::mca::bottleneck(ours.efficiency),
+                    100.0 * ours.coverage.min(other.coverage),
+                    if first { e.compared_with.as_str() } else { "" },
+                );
+            }
+            let ratio_ref = ours_ref.cycles_per_sample / other_ref.cycles_per_sample;
+            let ratio_counter = ours_counter.cycles_per_sample / other_counter.cycles_per_sample;
+            per_mode.push(json!({
+                "cycle_mode": m.name(),
                 "reference_model": model_json(&ours_ref, &other_ref),
                 "counter_model": model_json(&ours_counter, &other_counter),
                 "counter_vs_reference": ratio_counter / ratio_ref,
-            }),
-        );
+            }));
+        }
+        let mut entry = serde_json::Map::new();
+        entry.insert("compared_with".into(), json!(e.compared_with));
+        entry.insert("samples".into(), json!(e.samples));
+        let mut per_mode = per_mode.into_iter();
+        if let Some(Value::Object(primary)) = per_mode.next() {
+            entry.extend(primary);
+        }
+        if let Some(other) = per_mode.next() {
+            entry.insert("other_cycle_mode".into(), other);
+        }
+        value.insert(e.kernel.clone(), Value::Object(entry));
     }
     Ok((table, Value::Object(value)))
 }
@@ -728,6 +762,10 @@ mod tests {
         assert_eq!(o.kernel, "fir");
         assert_eq!(o.levels, ["avx2"]);
         assert!(o.count && !o.golden && o.json);
+        assert_eq!(o.cycle_mode, crate::mca::CycleMode::WholeLoop);
+        let o = Options::parse(&["fir", "--cycle-mode", "per-block"]).unwrap();
+        assert_eq!(o.cycle_mode, crate::mca::CycleMode::PerBlock);
+        assert!(Options::parse(&["fir", "--cycle-mode", "both"]).is_err());
     }
 
     #[test]

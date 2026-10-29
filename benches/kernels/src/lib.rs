@@ -7,6 +7,7 @@
 use std::hint::black_box;
 use std::sync::Arc;
 
+use cref_sys::cmsis_dsp::{CmsisCfftF32, CmsisCfftQ15, CmsisRfftFastF32};
 use cref_sys::{
     CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrFmDeemph, GrPwrSquelchCc, KfrBiquad, KissFft16,
     LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16,
@@ -309,7 +310,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 68] = [
+pub const KERNELS: [&str; 74] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -378,6 +379,12 @@ pub const KERNELS: [&str; 68] = [
     "dc_block_real_fallback",
     "deemphasis_fallback",
     "dc_block_fallback",
+    "fft_64_fallback",
+    "fft_1024_fallback",
+    "fft_4096_fallback",
+    "fft_cq15_1024_fallback",
+    "fft_cq15_1024_default_fallback",
+    "rfft_1024_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -474,12 +481,16 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "dot_real_q15" => Box::new(DotQ15K::new(rng, layout)),
         "scale" => Box::new(ScaleK::new(rng, layout)),
         "scale_cq15" => Box::new(ScaleCq15K::new(rng, layout)),
-        "fft_64" => Box::new(FftK::new(rng, 64)),
-        "fft_1024" => Box::new(FftK::new(rng, 1024)),
-        "fft_4096" => Box::new(FftK::new(rng, 4096)),
-        "fft_cq15_1024" => Box::new(FftQ15K::new(rng, 1024, Scaling::BlockFloat, 8000.0)),
-        "fft_cq15_1024_default" => Box::new(FftQ15K::new(rng, 1024, Scaling::Default, 8000.0)),
-        "rfft_1024" => Box::new(RfftK::new(rng, 1024)),
+        "fft_64" | "fft_64_fallback" => Box::new(FftK::new(rng, 64)),
+        "fft_1024" | "fft_1024_fallback" => Box::new(FftK::new(rng, 1024)),
+        "fft_4096" | "fft_4096_fallback" => Box::new(FftK::new(rng, 4096)),
+        "fft_cq15_1024" | "fft_cq15_1024_fallback" => {
+            Box::new(FftQ15K::new(rng, 1024, Scaling::BlockFloat, 8000.0))
+        }
+        "fft_cq15_1024_default" | "fft_cq15_1024_default_fallback" => {
+            Box::new(FftQ15K::new(rng, 1024, Scaling::Default, 8000.0))
+        }
+        "rfft_1024" | "rfft_1024_fallback" => Box::new(RfftK::new(rng, 1024)),
         "fft_cq15_1024_full_scale" => Box::new(FftQ15K::new(rng, 1024, Scaling::Default, 32767.0)),
         _ => return None,
     })
@@ -2672,6 +2683,8 @@ struct FftK {
     rustfft: Arc<dyn rustfft::Fft<f32>>,
     fftw: Option<Fftw>,
     fftw_in_place: Option<Fftw>,
+    /// CMSIS-DSP's `arm_cfft_f32` (generic C), the scalar reference of the fallback entries.
+    cmsis: Option<CmsisCfftF32>,
 }
 
 impl FftK {
@@ -2694,6 +2707,7 @@ impl FftK {
             rustfft,
             fftw,
             fftw_in_place,
+            cmsis: CmsisCfftF32::new(n),
         }
     }
 }
@@ -2724,6 +2738,11 @@ impl Kernel for FftK {
                         unsafe { fftw.forward(c32_pairs(&mut self.data)) };
                     }
                 }
+                Impl::Cmsis => {
+                    if let Some(cmsis) = &self.cmsis {
+                        cmsis.forward(c32_pairs(&mut self.data));
+                    }
+                }
                 other => unreachable!("fft has no {other:?}"),
             }
             black_box(&self.data);
@@ -2748,6 +2767,7 @@ impl Kernel for FftK {
             Impl::Ours | Impl::Fallback | Impl::RustFft | Impl::Restore => true,
             Impl::Fftw => self.fftw.is_some(),
             Impl::FftwInPlace => self.fftw_in_place.is_some(),
+            Impl::Cmsis => self.cmsis.is_some(),
             _ => false,
         }
     }
@@ -2757,6 +2777,7 @@ impl Kernel for FftK {
             Impl::RustFft => "rustfft (FftPlanner, forward, in place)",
             Impl::Fftw => "FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place)",
             Impl::FftwInPlace => "FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, in place)",
+            Impl::Cmsis => describe_cmsis("arm_cfft_f32 (forward, in place, bit reversal)"),
             Impl::Restore => "restore of the input",
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
@@ -2778,6 +2799,9 @@ struct RfftK {
     realfft_out: Vec<Complex32>,
     realfft_scratch: Vec<Complex32>,
     fftw: Option<FftwR2c>,
+    /// CMSIS-DSP's `arm_rfft_fast_f32` (generic C) and its packed output.
+    cmsis: Option<CmsisRfftFastF32>,
+    cmsis_out: Vec<f32>,
 }
 
 impl RfftK {
@@ -2802,6 +2826,8 @@ impl RfftK {
             realfft_scratch: realfft.make_scratch_vec(),
             realfft,
             fftw,
+            cmsis: CmsisRfftFastF32::new(n),
+            cmsis_out: vec![0.0; n],
         }
     }
 }
@@ -2850,11 +2876,17 @@ impl Kernel for RfftK {
                         unsafe { fftw.forward(&mut self.data, c32_pairs(&mut self.out)) };
                     }
                 }
+                Impl::Cmsis => {
+                    if let Some(cmsis) = &mut self.cmsis {
+                        cmsis.forward(&mut self.data, &mut self.cmsis_out);
+                    }
+                }
                 other => unreachable!("rfft has no {other:?}"),
             }
             black_box(&self.data);
             black_box(&self.out);
             black_box(&self.realfft_out);
+            black_box(&self.cmsis_out);
         }
     }
 
@@ -2868,6 +2900,14 @@ impl Kernel for RfftK {
                 .iter()
                 .map(|v| C32::new(v.re, v.im))
                 .collect()
+        } else if which == Impl::Cmsis {
+            // CMSIS-DSP packs X[0] and X[N/2] (both real) into the first pair.
+            let p = &self.cmsis_out;
+            let mut bins = vec![C32::new(p[0], 0.0)];
+            let (pairs, _) = p[2..].as_chunks::<2>();
+            bins.extend(pairs.iter().map(|c| C32::new(c[0], c[1])));
+            bins.push(C32::new(p[1], 0.0));
+            bins
         } else {
             self.out.to_vec()
         };
@@ -2878,6 +2918,7 @@ impl Kernel for RfftK {
         match which {
             Impl::Ours | Impl::Fallback | Impl::RustFft | Impl::Restore => true,
             Impl::Fftw => self.fftw.is_some(),
+            Impl::Cmsis => self.cmsis.is_some(),
             _ => false,
         }
     }
@@ -2885,6 +2926,7 @@ impl Kernel for RfftK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::RustFft => "realfft on rustfft (RealFftPlanner, forward, out of place)",
+            Impl::Cmsis => describe_cmsis("arm_rfft_fast_f32 (forward, packed output)"),
             Impl::Fftw => "FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place)",
             Impl::Restore => "restore of the input",
             Impl::Fallback => "sdrk fallback",
@@ -2904,6 +2946,8 @@ struct FftQ15K {
     plan: FftPlan<CQ15, Vec<CQ15>>,
     kiss: Option<KissFft16>,
     ne10: Option<Ne10Int16>,
+    /// CMSIS-DSP's `arm_cfft_q15` (generic C): fixed `1/N` scaling with truncating shifts.
+    cmsis: Option<CmsisCfftQ15>,
 }
 
 impl FftQ15K {
@@ -2929,6 +2973,7 @@ impl FftQ15K {
             plan: FftPlan::new(n, vec![CQ15::default(); n / 2]).expect("plan"),
             kiss: KissFft16::new(n),
             ne10: Ne10Int16::new(n),
+            cmsis: CmsisCfftQ15::new(n),
         }
     }
 
@@ -2954,6 +2999,10 @@ impl FftQ15K {
             Impl::KissFft | Impl::Ne10 => {
                 self.run(which, 1);
                 cq15s(&self.out, n)
+            }
+            Impl::Cmsis => {
+                self.run(which, 1);
+                cq15s(&self.data, n)
             }
             other => unreachable!("fft_cq15 has no {other:?}"),
         }
@@ -2981,6 +3030,11 @@ impl Kernel for FftQ15K {
                         );
                     }
                 }
+                Impl::Cmsis => {
+                    if let Some(cmsis) = &self.cmsis {
+                        cmsis.forward(cq15_pairs_mut(&mut self.data));
+                    }
+                }
                 other => unreachable!("fft_cq15 has no {other:?}"),
             }
             black_box(&self.data);
@@ -3003,6 +3057,7 @@ impl Kernel for FftQ15K {
             Impl::Ours | Impl::Fallback | Impl::Restore => true,
             Impl::KissFft => self.kiss.is_some(),
             Impl::Ne10 => self.ne10.is_some(),
+            Impl::Cmsis => self.cmsis.is_some(),
             _ => false,
         }
     }
@@ -3011,6 +3066,9 @@ impl Kernel for FftQ15K {
         match which {
             Impl::KissFft => "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
             Impl::Ne10 => "Ne10 ne10_fft_c2c_1d_int16_neon (1/N scaling, out of place)",
+            Impl::Cmsis => describe_cmsis(
+                "arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts)",
+            ),
             Impl::Restore => "restore of the input",
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",

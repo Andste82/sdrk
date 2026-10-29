@@ -372,3 +372,73 @@ impl ConvertReal<Q15> for Fallback {
         run_real(format, input, output, samples, |e| map.map(e))
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use sdrk_device::formats;
+
+    /// The direct loops give the values of the general mappings for every byte and for 16-bit
+    /// words around zero and the extremes.
+    #[test]
+    fn direct_loops_match_the_general_mappings() {
+        let bytes: std::vec::Vec<u8> = (0..=255).collect();
+        for (format, direct) in [(formats::CU8, Direct::U8), (formats::CS8, Direct::I8)] {
+            let (q, f) = (ToQ15::new(&format), ToF32::new(&format));
+            let mut out_q = std::vec![0i16; 256];
+            let mut out_f = std::vec![0f32; 256];
+            direct.to_q15(&bytes, &mut out_q);
+            direct.to_f32(&bytes, &mut out_f);
+            for (k, &b) in bytes.iter().enumerate() {
+                let e = value(&format, &bytes, k).unwrap();
+                assert_eq!(out_q[k], q.map(e).0, "{format:?}, byte {b}");
+                assert_eq!(
+                    out_f[k].to_bits(),
+                    f.map(e).to_bits(),
+                    "{format:?}, byte {b}"
+                );
+            }
+        }
+        let words: std::vec::Vec<i16> = (-300..300)
+            .chain([i16::MIN, i16::MIN + 1, i16::MAX - 1, i16::MAX])
+            .collect();
+        for (format, direct, big) in [
+            (formats::CS16, Direct::I16Le, false),
+            (
+                SampleFormat::new(
+                    Container::I16,
+                    16,
+                    true,
+                    Layout::Interleaved,
+                    Align::Lsb,
+                    Endian::Big,
+                )
+                .unwrap(),
+                Direct::I16Be,
+                true,
+            ),
+        ] {
+            let bytes: std::vec::Vec<u8> = words
+                .iter()
+                .flat_map(|w| {
+                    if big {
+                        w.to_be_bytes()
+                    } else {
+                        w.to_le_bytes()
+                    }
+                })
+                .collect();
+            let (q, f) = (ToQ15::new(&format), ToF32::new(&format));
+            let mut out_q = std::vec![0i16; words.len()];
+            let mut out_f = std::vec![0f32; words.len()];
+            direct.to_q15(&bytes, &mut out_q);
+            direct.to_f32(&bytes, &mut out_f);
+            for k in 0..words.len() {
+                let e = value(&format, &bytes, k).unwrap();
+                assert_eq!(out_q[k], q.map(e).0, "{format:?}, word {}", words[k]);
+                assert_eq!(out_f[k].to_bits(), f.map(e).to_bits(), "{format:?}");
+            }
+        }
+    }
+}

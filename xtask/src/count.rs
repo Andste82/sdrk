@@ -737,7 +737,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 74] = [
+pub const KERNELS: [KernelSpec; 86] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -750,6 +750,30 @@ pub const KERNELS: [KernelSpec; 74] = [
     spec("convert_out_real_rs16", Family::Volk, true),
     spec("convert_out_real_rs8", Family::Volk, true),
     spec("convert_out_real_ru8", Family::Volk, true),
+    spec("convert_cs8_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_cs16_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_cu8_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_real_rs16_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_cq15_cs8_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_cq15_cu8_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_out_cs16_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_out_cs8_fallback", Family::FallbackVsCmsis, false),
+    spec("convert_out_cu8_fallback", Family::FallbackVsCmsis, false),
+    spec(
+        "convert_out_real_rs16_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec(
+        "convert_out_real_rs8_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec(
+        "convert_out_real_ru8_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
     spec("rotate", Family::Volk, false),
     spec("rotate_cq15", Family::Own, false),
     spec("fir", Family::Volk, false),
@@ -1054,18 +1078,11 @@ pub const PLANS: [LevelPlan; 7] = [
     },
 ];
 
-/// The VOLK entries whose VOLK function is not in the wasm32 build of the generic protokernels
-/// (`benches/refs/volk-wasm.c`): at `simd128` they are compared with our fallback (`info`).
-const NOT_IN_VOLK_WASM: [&str; 2] = ["convert_cq15_cs8", "convert_cq15_cu8"];
-
 /// The judged comparison of a kernel on a level and the informational ones.
 #[must_use]
 pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     if let Some(level) = plan.baseline {
         return (Reference::OwnLevel(level), Vec::new());
-    }
-    if plan.level == "simd128" && NOT_IN_VOLK_WASM.contains(&spec.name) {
-        return (Reference::Fallback, Vec::new());
     }
     match spec.family {
         Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),

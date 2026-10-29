@@ -23,14 +23,23 @@ const MAGIC_RANGE: f64 = 2_251_799_813_685_248.0;
 /// magnitudes, the infinities and NaN take that formula.
 #[inline]
 pub(crate) fn phase_step(x: f64, k: f64) -> u32 {
-    let v = x * k + 0.5;
-    if libm::fabs(v) < MAGIC_RANGE {
-        let m = v + MAGIC;
-        let up = u32::from(m - MAGIC > v);
-        (m.to_bits() as u32).wrapping_sub(up)
-    } else {
-        phase_step_wide(v)
+    match phase_step_fast(x, k) {
+        (step, true) => step,
+        (_, false) => phase_step_wide(x * k + 0.5),
     }
+}
+
+/// The fast path of [`phase_step`] without a branch: the step and whether `|x k + 0.5|` lies in
+/// its range (`false` for NaN); outside the range the step is meaningless.
+#[inline]
+fn phase_step_fast(x: f64, k: f64) -> (u32, bool) {
+    let v = x * k + 0.5;
+    let m = v + MAGIC;
+    let up = u32::from(m - MAGIC > v);
+    (
+        (m.to_bits() as u32).wrapping_sub(up),
+        libm::fabs(v) < MAGIC_RANGE,
+    )
 }
 
 /// [`phase_step`] of `v = x * k + 0.5` outside the range of the fast path.
@@ -43,10 +52,13 @@ fn phase_step_wide(v: f64) -> u32 {
 /// Samples per run of [`modulate`].
 const RUN: usize = 64;
 
-/// The modulator in runs of [`RUN`] samples: first the running phases of the run, then the
-/// oscillator values `osc(phase)`. The phases are the only chain from sample to sample; with
-/// the lookups in a loop of their own, an out-of-order core overlaps them freely instead of
-/// waiting on the long chain of one sample (step, phase, table, interpolation).
+/// The modulator in runs of [`RUN`] samples: first the phase steps of the run, then the running
+/// phases, then the oscillator values `osc(phase)`. The steps take the fast path of
+/// [`phase_step`] for the whole run without a branch, so the compiler vectorizes them; only a
+/// run with a value outside its range (NaN, infinite or huge input) computes them again with
+/// [`phase_step`]. The phase sum is the only chain from sample to sample; with the steps and the
+/// lookups in loops of their own, an out-of-order core overlaps them freely instead of waiting
+/// on the long chain of one sample (step, phase, table, interpolation).
 #[inline]
 fn modulate<X: RealSample, Y>(
     k: f64,
@@ -58,8 +70,19 @@ fn modulate<X: RealSample, Y>(
     let mut p = *phase;
     let mut phases = [0u32; RUN];
     for (xr, yr) in input.chunks(RUN).zip(output.chunks_mut(RUN)) {
+        let mut fast = true;
         for (q, &x) in phases.iter_mut().zip(xr) {
-            p = p.wrapping_add(phase_step(x.to_f64(), k));
+            let (step, ok) = phase_step_fast(x.to_f64(), k);
+            *q = step;
+            fast &= ok;
+        }
+        if !fast {
+            for (q, &x) in phases.iter_mut().zip(xr) {
+                *q = phase_step(x.to_f64(), k);
+            }
+        }
+        for q in phases.iter_mut().take(xr.len()) {
+            p = p.wrapping_add(*q);
             *q = p;
         }
         for (y, &q) in yr.iter_mut().zip(&phases) {

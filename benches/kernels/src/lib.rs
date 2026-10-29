@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use cref_sys::cmsis_dsp::{CmsisCfftF32, CmsisCfftQ15, CmsisRfftFastF32};
 use cref_sys::{
-    CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrFmDeemph, GrPwrSquelchCc, KfrBiquad, KissFft16,
-    LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16, cmsis_dsp,
+    CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrFmDeemph, GrFrequencyModulatorFc, GrPwrSquelchCc,
+    GrRotator, KfrBiquad, KissFft16, LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16, cmsis_dsp,
 };
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -310,7 +310,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 92] = [
+pub const KERNELS: [&str; 96] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -403,6 +403,10 @@ pub const KERNELS: [&str; 92] = [
     "dot_real_q15_fallback",
     "scale_fallback",
     "scale_cq15_fallback",
+    "rotate_fallback",
+    "rotate_cq15_fallback",
+    "fm_mod_fallback",
+    "fm_mod_cq15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -453,8 +457,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         | "convert_out_real_ru8_fallback" => {
             Box::new(ConvertOutK::real(rng, layout, out_format(seed_of), entry))
         }
-        "rotate" => Box::new(RotateK::new(rng, layout)),
-        "rotate_cq15" => Box::new(RotateQ15K::new(rng, layout)),
+        "rotate" => Box::new(RotateK::new(rng, layout, simd)),
+        "rotate_cq15" => Box::new(RotateQ15K::new(rng, layout, simd)),
+        "rotate_fallback" => Box::new(RotateK::new(rng, layout, fallback)),
+        "rotate_cq15_fallback" => Box::new(RotateQ15K::new(rng, layout, fallback)),
         "fir" => Box::new(FirK::new(rng, layout)),
         "fir_decimate" => Box::new(DecimateK::new(rng, layout)),
         "fir_interpolate" => Box::new(PolyK::new(rng, layout, INTERP_TAPS, INTERP, 1)),
@@ -489,8 +495,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "mag_sq_q15" => Box::new(MagSqQ15K::new(rng, layout)),
         "quad_demod" => Box::new(QuadK::new(rng, layout)),
         "quad_demod_cq15" => Box::new(QuadQ15K::new(rng, layout)),
-        "fm_mod" => Box::new(FmModK::new(rng, layout)),
-        "fm_mod_cq15" => Box::new(FmModQ15K::new(rng, layout)),
+        "fm_mod" => Box::new(FmModK::new(rng, layout, simd)),
+        "fm_mod_cq15" => Box::new(FmModQ15K::new(rng, layout, simd)),
+        "fm_mod_fallback" => Box::new(FmModK::new(rng, layout, fallback)),
+        "fm_mod_cq15_fallback" => Box::new(FmModQ15K::new(rng, layout, fallback)),
         "squelch" => Box::new(SquelchK::<C32>::new(rng, layout)),
         "squelch_cq15" => Box::new(SquelchK::<CQ15>::new(rng, layout)),
         "mag" => Box::new(MagK::new(rng, layout)),
@@ -1299,17 +1307,32 @@ impl Kernel for ConvertOutK {
 /// The phase increment of the `rotate` measurements (about 0.0045 cycles per sample).
 const NCO_INCREMENT: u32 = 0x0123_4567;
 
+/// `rotate` (`C32`): our kernel against VOLK's `rotator2`; the entry `rotate_fallback` runs our
+/// fallback against GNU Radio's scalar `gr::blocks::rotator`.
 struct RotateK {
     input: Aligned<C32>,
     out: Aligned<C32>,
+    entry: BiquadEntry,
 }
 
 impl RotateK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         RotateK {
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
             out: Aligned::skewed(layout.n, layout.skew(8)),
+            entry,
         }
+    }
+
+    /// `e^{j theta}` of the phase increment, the step of VOLK's and GNU Radio's rotators.
+    fn increment() -> [f32; 2] {
+        let theta = 2.0 * std::f64::consts::PI * f64::from(NCO_INCREMENT) / 4_294_967_296.0;
+        [theta.cos() as f32, theta.sin() as f32]
+    }
+
+    /// GNU Radio's rotator from the phase 0 with the increment of the measurement.
+    fn gr() -> Option<GrRotator> {
+        GrRotator::new([1.0, 0.0], Self::increment())
     }
 }
 
@@ -1321,15 +1344,17 @@ fn rotate<T: ComplexSample, B: Rotate<T>>(backend: &B, nco: &mut Nco, input: &[T
 impl Kernel for RotateK {
     fn run(&mut self, which: Impl, k: usize) {
         let mut nco = Nco::from_increment(NCO_INCREMENT);
-        let theta = 2.0 * std::f64::consts::PI * f64::from(NCO_INCREMENT) / 4_294_967_296.0;
-        let inc = lv_32fc_t {
-            re: theta.cos() as f32,
-            im: theta.sin() as f32,
-        };
+        let [re, im] = Self::increment();
+        let inc = lv_32fc_t { re, im };
         let mut phase = lv_32fc_t { re: 1.0, im: 0.0 };
+        let mut gr = (which == Impl::GnuRadio).then(Self::gr).flatten();
         for _ in 0..k {
             match which {
                 Impl::Ours => rotate(&Sdrk, &mut nco, &self.input, &mut self.out),
+                Impl::GnuRadio => gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .rotate_n(c32_pairs_ref(&self.input), c32_pairs(&mut self.out)),
                 Impl::Fallback => rotate(&Fallback, &mut nco, &self.input, &mut self.out),
                 // SAFETY: input and output hold `n` samples.
                 Impl::Volk => unsafe {
@@ -1356,9 +1381,10 @@ impl Kernel for RotateK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
+        match (self.entry, which) {
+            (BiquadEntry::Simd, Impl::Ours) | (_, Impl::Fallback) => true,
+            (BiquadEntry::Simd, Impl::Volk) => volk_sys::AVAILABLE,
+            (BiquadEntry::Fallback, Impl::GnuRadio) => Self::gr().is_some(),
             _ => false,
         }
     }
@@ -1366,6 +1392,9 @@ impl Kernel for RotateK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32fc_s32fc_x2_rotator2_32fc",
+            Impl::GnuRadio => {
+                "GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags)"
+            }
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
@@ -1376,29 +1405,83 @@ impl Kernel for RotateK {
     }
 }
 
-/// `rotate` of CQ15 samples (no library has a 16-bit complex oscillator: compared with our
-/// fallback).
+/// `rotate` of CQ15 samples. No library has a 16-bit complex oscillator: the SIMD entry is
+/// compared with our fallback (information), CMSIS-DSP's building blocks as information too;
+/// the entry `rotate_cq15_fallback` runs our fallback against those building blocks
+/// ([`cmsis_rotate_q15`]).
 struct RotateQ15K {
     input: Aligned<CQ15>,
     out: Aligned<CQ15>,
+    entry: BiquadEntry,
 }
 
 impl RotateQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         RotateQ15K {
             input: noise_cq15(rng, layout.n, 23_000.0, layout.skew(4)),
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
+    }
+}
+
+/// Samples per run of the CMSIS-DSP compositions [`cmsis_rotate_q15`] and [`cmsis_fm_mod_q15`].
+const CMSIS_RUN: usize = 64;
+
+/// The oscillator of CMSIS-DSP at the 32-bit phase `p`: `(arm_cos_q15, arm_sin_q15)` of the
+/// angle `p >> 17` (`Q15` of a full turn; 512-entry table, linear interpolation).
+#[inline(always)]
+fn cmsis_osc_q15(p: u32) -> [i16; 2] {
+    let x = (p >> 17) as i16;
+    // SAFETY: plain scalar functions of CMSIS-DSP; the callers check `cmsis_dsp::AVAILABLE`.
+    unsafe {
+        [
+            cmsis_dsp::ffi::arm_cos_q15(x),
+            cmsis_dsp::ffi::arm_sin_q15(x),
+        ]
+    }
+}
+
+/// `arm_shift_q15(.., 2)` in place: the `Q3.13` products of `arm_cmplx_mult_cmplx_q15` back to
+/// `Q15`, saturating.
+#[inline(always)]
+fn cmsis_shift_q15_by_2(v: &mut [[i16; 2]]) {
+    for s in v.iter_mut().flatten() {
+        *s = (i32::from(*s) << 2).clamp(-32768, 32767) as i16;
+    }
+}
+
+/// The `CQ15` rotation as a CMSIS-DSP user composes it (CMSIS-DSP has no NCO): per run of
+/// [`CMSIS_RUN`] samples the oscillator from `arm_cos_q15`/`arm_sin_q15` of the running phase,
+/// `arm_cmplx_mult_cmplx_q15` (`Q3.13`, truncating) and the shift back to `Q15`.
+#[inline(never)]
+fn cmsis_rotate_q15(phase: &mut u32, inc: u32, x: &[[i16; 2]], y: &mut [[i16; 2]]) {
+    let mut osc = [[0i16; 2]; CMSIS_RUN];
+    for (xr, yr) in x.chunks(CMSIS_RUN).zip(y.chunks_mut(CMSIS_RUN)) {
+        let osc = &mut osc[..xr.len()];
+        for o in osc.iter_mut() {
+            *o = cmsis_osc_q15(*phase);
+            *phase = phase.wrapping_add(inc);
+        }
+        cmsis_dsp::cmplx_mult_cmplx_q15(xr, osc, yr);
+        cmsis_shift_q15_by_2(yr);
     }
 }
 
 impl Kernel for RotateQ15K {
     fn run(&mut self, which: Impl, k: usize) {
         let mut nco = Nco::from_increment(NCO_INCREMENT);
+        let mut phase = 0u32;
         for _ in 0..k {
             match which {
                 Impl::Ours => rotate(&Sdrk, &mut nco, &self.input, &mut self.out),
                 Impl::Fallback => rotate(&Fallback, &mut nco, &self.input, &mut self.out),
+                Impl::Cmsis => cmsis_rotate_q15(
+                    &mut phase,
+                    NCO_INCREMENT,
+                    cq15_pairs(&self.input),
+                    cq15_pairs_mut(&mut self.out),
+                ),
                 other => unreachable!("rotate_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -1416,12 +1499,15 @@ impl Kernel for RotateQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        self.entry.supports(which, false, cmsis_dsp::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis(
+                "arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples",
+            ),
             _ => "sdrk",
         }
     }
@@ -2500,14 +2586,21 @@ impl Kernel for QuadQ15K {
     }
 }
 
-/// `fm_mod` (no established library: compared with our fallback).
+/// `fm_mod` (`C32`): no SIMD library has an FM modulator, so the SIMD entry is information
+/// against GNU Radio's scalar `frequency_modulator_fc` and our fallback; the entry
+/// `fm_mod_fallback` runs our fallback against GNU Radio's block.
 struct FmModK {
     input: Aligned<f32>,
     out: Aligned<C32>,
+    entry: BiquadEntry,
 }
 
+/// The deviation and the rate of the `fm_mod` measurements.
+const FM_DEVIATION_HZ: f64 = 75_000.0;
+const FM_RATE_HZ: u64 = 240_000;
+
 impl FmModK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<f32>::skewed(layout.n, layout.skew(4));
         for s in input.iter_mut() {
             *s = rng.unit();
@@ -2515,11 +2608,19 @@ impl FmModK {
         FmModK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(8)),
+            entry,
         }
     }
 
     fn state() -> FmModState {
-        FmModState::new(75_000.0, Rate::hz(240_000).expect("rate")).expect("deviation")
+        FmModState::new(FM_DEVIATION_HZ, Rate::hz(FM_RATE_HZ).expect("rate")).expect("deviation")
+    }
+
+    /// GNU Radio's `frequency_modulator_fc` with the same deviation: the sensitivity
+    /// `2 pi deviation / rate` in radians per sample per unit input.
+    fn gr() -> Option<GrFrequencyModulatorFc> {
+        let sensitivity = 2.0 * std::f64::consts::PI * FM_DEVIATION_HZ / FM_RATE_HZ as f64;
+        GrFrequencyModulatorFc::new(sensitivity as f32)
     }
 }
 
@@ -2531,10 +2632,15 @@ fn fm_mod<B: FmMod<C32>>(backend: &B, state: &mut FmModState, input: &[f32], out
 impl Kernel for FmModK {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
+        let mut gr = (which == Impl::GnuRadio).then(Self::gr).flatten();
         for _ in 0..k {
             match which {
                 Impl::Ours => fm_mod(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => fm_mod(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::GnuRadio => gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .work(&self.input, c32_pairs(&mut self.out)),
                 other => unreachable!("fm_mod has no {other:?}"),
             }
             black_box(&self.out);
@@ -2549,26 +2655,35 @@ impl Kernel for FmModK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::GnuRadio => Self::gr().is_some(),
+            _ => self.entry.supports(which, false, false),
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => {
+                "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)"
+            }
             _ => "sdrk",
         }
     }
 }
 
-/// `fm_mod` of Q15 input to CQ15 (no established library has a fixed-point FM modulator:
-/// compared with our fallback, so the entry is information).
+/// `fm_mod` of Q15 input to CQ15. No established library has a fixed-point FM modulator: the
+/// SIMD entry is compared with our fallback (information), CMSIS-DSP's building blocks as
+/// information too; the entry `fm_mod_cq15_fallback` runs our fallback against those building
+/// blocks ([`cmsis_fm_mod_q15`]).
 struct FmModQ15K {
     input: Aligned<Q15>,
     out: Aligned<CQ15>,
+    entry: BiquadEntry,
 }
 
 impl FmModQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut input = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
         for s in input.iter_mut() {
             *s = Q15((rng.unit() * 32767.0) as i16);
@@ -2576,7 +2691,25 @@ impl FmModQ15K {
         FmModQ15K {
             input,
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
+    }
+
+    /// The phase step per `Q15` unit of input, `deviation / rate * 2^32 / 2^15` (an integer for
+    /// the measured deviation and rate: 40960).
+    fn step_per_unit() -> i32 {
+        (FmModK::state().scale() / 32768.0).round() as i32
+    }
+}
+
+/// The `CQ15` FM modulator as a CMSIS-DSP user composes it (CMSIS-DSP has no NCO): per sample
+/// the 32-bit phase advances by `x k` in integers and the oscillator is
+/// `(arm_cos_q15, arm_sin_q15)` of its top 15 bits.
+#[inline(never)]
+fn cmsis_fm_mod_q15(phase: &mut u32, k: i32, x: &[i16], y: &mut [[i16; 2]]) {
+    for (y, &x) in y.iter_mut().zip(x) {
+        *phase = phase.wrapping_add(i32::from(x).wrapping_mul(k) as u32);
+        *y = cmsis_osc_q15(*phase);
     }
 }
 
@@ -2593,10 +2726,17 @@ fn fm_mod_cq15<B: FmMod<CQ15>>(
 impl Kernel for FmModQ15K {
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = FmModK::state();
+        let (mut phase, step) = (0u32, Self::step_per_unit());
         for _ in 0..k {
             match which {
                 Impl::Ours => fm_mod_cq15(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => fm_mod_cq15(&Fallback, &mut state, &self.input, &mut self.out),
+                Impl::Cmsis => cmsis_fm_mod_q15(
+                    &mut phase,
+                    step,
+                    q15_raw(&self.input),
+                    cq15_pairs_mut(&mut self.out),
+                ),
                 other => unreachable!("fm_mod_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -2619,12 +2759,15 @@ impl Kernel for FmModQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        self.entry.supports(which, false, cmsis_dsp::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis(
+                "arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator",
+            ),
             _ => "sdrk",
         }
     }
@@ -4497,8 +4640,8 @@ fn biquad_real<T: sdrk_core::RealSample + BiquadSample, B: BiquadReal<T>>(
     let _ = black_box(backend.biquad_real(state, black_box(input), out));
 }
 
-/// Which of the two entries of a kernel with a fallback entry a measurement is (D15, D16; the
-/// biquads, `dot`, `dot_real` and `scale`).
+/// Which of the two entries of a kernel with a `<kernel>_fallback` entry a measurement is (the
+/// biquads of D15 and D16, `dot`, `dot_real`, `scale`, `rotate`, `fm_mod`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BiquadEntry {
     /// `biquad`, `biquad_cq15`, `biquad_real`, `biquad_real_q15`: our kernel through the facade
@@ -5612,6 +5755,14 @@ mod biquad_tests {
             "dot_real_q15_fallback",
             "scale_fallback",
             "scale_cq15_fallback",
+            "rotate",
+            "rotate_cq15",
+            "rotate_fallback",
+            "rotate_cq15_fallback",
+            "fm_mod",
+            "fm_mod_cq15",
+            "fm_mod_fallback",
+            "fm_mod_cq15_fallback",
         ] {
             let mut kernel = prepare(
                 name,

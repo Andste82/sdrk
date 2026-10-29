@@ -616,8 +616,9 @@ pub enum Family {
     /// A VOLK kernel does the same work up to a constant offset (`convert_cu8`: VOLK converts
     /// signed bytes only): it is the gate, and our fallback is reported as information.
     VolkAndOwn,
-    /// A loop of GNU Radio that is no VOLK kernel (`agc_cc`, `pwr_squelch_cc`): it is the gate,
-    /// and our fallback is reported as information.
+    /// A loop of GNU Radio that is no VOLK kernel (`agc_cc`, `pwr_squelch_cc`,
+    /// `frequency_modulator_fc`): it is the gate (where `limits.json` judges it), and our fallback
+    /// is reported as information.
     GnuRadio,
     /// The C32 FFT.
     FftC32,
@@ -632,15 +633,17 @@ pub enum Family {
     /// (`LevelPlan::kfr`), CMSIS-DSP's generic C as information; at a level without KFR,
     /// CMSIS-DSP is the gate.
     Kfr,
-    /// The Q15 and CQ15 biquads (D15): no SIMD library has a Q15 biquad on our levels, so our
-    /// fallback is the gate; CMSIS-DSP's generic C as information.
+    /// The Q15 and CQ15 biquads (D15), `rotate` and `fm_mod` of `CQ15`: no SIMD library has
+    /// them on our levels, so our fallback is the comparison; CMSIS-DSP's generic C (for
+    /// `rotate` and `fm_mod` composed of its building blocks) as information.
     Q15Own,
     /// A fallback entry (D16, `<kernel>_fallback`): the measured side is our fallback, compiled
     /// for the level, and the gate is CMSIS-DSP's generic C. Not measured at a level with
     /// run-time detection, whose fallback is the baseline build.
     FallbackVsCmsis,
-    /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is a loop of GNU Radio
-    /// (`deemphasis_fallback`: the IIR loop of `fm_deemph`).
+    /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is the scalar loop of a GNU
+    /// Radio block (`rotate`: `gr::blocks::rotator`, `fm_mod`: `frequency_modulator_fc`,
+    /// `deemphasis_fallback`: the IIR loop of `fm_deemph`).
     FallbackVsGnuRadio,
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
     /// (`dc_block_fallback`, `dc_block_real_fallback`).
@@ -737,7 +740,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 92] = [
+pub const KERNELS: [KernelSpec; 96] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -775,7 +778,9 @@ pub const KERNELS: [KernelSpec; 92] = [
         false,
     ),
     spec("rotate", Family::Volk, false),
-    spec("rotate_cq15", Family::Own, false),
+    spec("rotate_cq15", Family::Q15Own, false),
+    spec("rotate_fallback", Family::FallbackVsGnuRadio, false),
+    spec("rotate_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("fir", Family::Volk, false),
     spec("fir_decimate", Family::Volk, false),
     spec("fir_interpolate", Family::Volk, false),
@@ -788,8 +793,10 @@ pub const KERNELS: [KernelSpec; 92] = [
     spec("mag_sq_q15", Family::Own, false),
     spec("quad_demod", Family::Volk, false),
     spec("quad_demod_cq15", Family::Own, false),
-    spec("fm_mod", Family::Own, false),
-    spec("fm_mod_cq15", Family::Own, false),
+    spec("fm_mod", Family::GnuRadio, false),
+    spec("fm_mod_cq15", Family::Q15Own, false),
+    spec("fm_mod_fallback", Family::FallbackVsGnuRadio, false),
+    spec("fm_mod_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("squelch", Family::GnuRadio, false),
     spec("squelch_cq15", Family::Own, false),
     spec("mag", Family::Volk, false),
@@ -3361,8 +3368,8 @@ mod tests {
             (Reference::KissFft, vec![Reference::Ne10])
         );
         assert_eq!(
-            comparisons(plan("avx2"), kernel("fm_mod")).0,
-            Reference::Fallback
+            comparisons(plan("avx2"), kernel("fm_mod")),
+            (Reference::GnuRadio, vec![Reference::Fallback])
         );
         assert_eq!(
             comparisons(plan("avx2-runtime"), kernel("fir")).0,
@@ -3383,6 +3390,39 @@ mod tests {
         assert_eq!(
             comparisons(plan("simd128"), kernel("dot")).0,
             Reference::Volk
+        );
+    }
+
+    #[test]
+    fn the_oscillators_have_scalar_references_for_their_fallbacks() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "neon", "simd128"] {
+            for k in ["rotate_cq15", "fm_mod_cq15"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, vec![Reference::Cmsis]),
+                    "{k} at {level}"
+                );
+                let fallback = kernel(&format!("{k}_fallback"));
+                assert_eq!(fallback.family.measured(), "fallback");
+                assert_eq!(
+                    comparisons(plan(level), fallback),
+                    (Reference::Cmsis, Vec::new())
+                );
+            }
+            for k in ["rotate_fallback", "fm_mod_fallback"] {
+                assert_eq!(kernel(k).family.measured(), "fallback");
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::GnuRadio, Vec::new())
+                );
+            }
+        }
+        assert!(
+            !kernel("rotate_fallback")
+                .family
+                .measured_at(plan("avx2-runtime"))
         );
     }
 

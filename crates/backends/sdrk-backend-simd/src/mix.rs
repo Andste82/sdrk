@@ -5,14 +5,15 @@
 //! a block, the *anchor*, is computed in `f64` and rounded once; vector `j = CHAIN k + r` of the
 //! block is the anchor times the table entry `W^k`, `W = e^{j 2 pi CHAIN h inc / 2^32}`
 //! (`h` samples per vector; a short table that every call computes in `f64`, only the entries
-//! it uses), times `r` steps of `E = e^{j 2 pi h inc / 2^32}`. So a vector of samples costs two
-//! complex multiplications, and the error does not grow along the block (the chains are
+//! it uses), times the power `E^r` of `E = e^{j 2 pi h inc / 2^32}` (in `f64`, rounded
+//! once). So a vector of samples costs at most two complex multiplications, neither of them on a
+//! chain from vector to vector, and the error does not grow along the block (the chains are
 //! [`CHAIN`] vectors long). The position of a sample within its block is not stored anywhere: it
 //! follows from the phase and the increment (see [`Blocks`]), so the output is a function of
 //! `(phase_n, inc)` and does not depend on how the input is split into calls. Every quantity a
-//! call computes once (the lane offsets of the anchors, the table, `E`) is a function of `inc`
-//! alone, and the polynomials run on whole vectors of lanes, so the cost per call is a few
-//! hundred instructions. The result meets the contract of the kernel (120 dB against the exact
+//! call computes once (the lane offsets of the anchors, the table, the powers of `E`) is a
+//! function of `inc` alone, and the polynomials run on whole vectors of lanes, so the cost per
+//! call is a few hundred instructions. The result meets the contract of the kernel (120 dB against the exact
 //! rotation; this reaches about 142 dB, 134 dB in the worst single call) but is not
 //! bit-identical with the fallback. FMA is used where the level has it. The samples are
 //! processed deinterleaved, one vector of oscillator values per vector of real parts.
@@ -396,17 +397,26 @@ impl Table {
     }
 }
 
+/// Whether the vectors of a chain follow one another by steps of `E` (AArch64) instead of the
+/// powers `E^r`: the powers shorten the dependency chain of the loop, which was the bound on
+/// `znver3` (0.69 to 0.67 cycles per sample, `sse2` 2.30 / 2.27 to 2.09 / 1.97), but simulated
+/// slower on the Cortex-A76 (1.97 to 2.12).
+const STEPPED: bool = cfg!(target_arch = "aarch64");
+
 /// The oscillator vectors of one block: vector `j = CHAIN k + r` of the block is
-/// `A W^k E^r`, the anchor `A` times the table entry `W^k = E^(CHAIN k)` times `r` steps of
-/// `E = e^{j 2 pi h inc / 2^32}`, always multiplied in this order.
+/// `(A W^k) E^r`, the anchor `A` times the table entry `W^k = E^(CHAIN k)`, times the power
+/// `E^r` of `E = e^{j 2 pi h inc / 2^32}` (`f64`, rounded once; none for `r = 0`), always
+/// multiplied in this order. Every vector of a chain is one multiplication away from `A W^k`,
+/// so the chain is no dependency chain. On AArch64 ([`STEPPED`]) vector `r` is `E` times vector
+/// `r - 1` instead.
 #[derive(Clone, Copy)]
 struct Osc<'a, S: SimdToken, L: Split<S>> {
     simd: S,
     split: L,
     /// The anchor `A`.
     a: (S::f32s, S::f32s),
-    /// The step `E`.
-    e: (S::f32s, S::f32s),
+    /// The powers `E^1, ..., E^(CHAIN - 1)`.
+    e: [(S::f32s, S::f32s); CHAIN - 1],
     /// The table of the block.
     table: &'a [f32],
 }
@@ -419,20 +429,27 @@ impl<S: SimdToken, L: Split<S>> Osc<'_, S, L> {
         cmul::<S>(self.a.0, self.a.1, tr, ti)
     }
 
-    /// `E v`.
+    /// `E^r v` (`v` for `r = 0`).
     #[inline(always)]
-    fn step(&self, v: (S::f32s, S::f32s)) -> (S::f32s, S::f32s) {
-        cmul::<S>(self.e.0, self.e.1, v.0, v.1)
+    fn power(&self, r: usize, v: (S::f32s, S::f32s)) -> (S::f32s, S::f32s) {
+        match r.checked_sub(1).and_then(|i| self.e.get(i)) {
+            Some(e) => cmul::<S>(e.0, e.1, v.0, v.1),
+            None => v,
+        }
     }
 
     /// The oscillator vector `j` of the block.
     #[inline(always)]
     fn vector(&self, j: usize) -> (S::f32s, S::f32s) {
         let mut v = self.entry(j / CHAIN);
-        for _ in 0..j % CHAIN {
-            v = self.step(v);
+        if STEPPED {
+            for _ in 0..j % CHAIN {
+                v = self.power(1, v);
+            }
+            v
+        } else {
+            self.power(j % CHAIN, v)
         }
-        v
     }
 
     /// Rotates the samples `x` of the block from the position `first` on (at most to the end
@@ -488,15 +505,18 @@ impl<S: SimdToken, L: Split<S>> Osc<'_, S, L> {
         let (simd, split) = (self.simd, self.split);
         let h = S::f32s::LEN;
         let (tr, ti) = splat_pair(simd, e);
-        let mut v = cmul::<S>(self.a.0, self.a.1, tr, ti);
+        let base = cmul::<S>(self.a.0, self.a.1, tr, ti);
+        let mut v = base;
         for (r, (xv, yv)) in x
             .chunks_exact(2 * h)
             .zip(y.chunks_exact_mut(2 * h))
             .enumerate()
         {
-            if r > 0 {
-                v = self.step(v);
-            }
+            v = match (r, STEPPED) {
+                (0, _) => base,
+                (_, true) => self.power(1, v),
+                (_, false) => self.power(r, base),
+            };
             apply(simd, split, xv, yv, v.0, v.1);
         }
     }
@@ -567,17 +587,24 @@ fn rotate_split<S: SimdToken, L: Split<S>>(
     }
     // The anchor of the phase `a` is `e^{j 2 pi a / 2^32}` times these lane offsets in `f64`.
     let offsets = Wide::powers(simd, inc, sample_of::<S, L>);
-    // `E = (e^{j 2 pi (h/2) inc / 2^32})^2` from the lane that holds sample `h/2`.
+    // `E = (e^{j 2 pi (h/2) inc / 2^32})^2` from the lane that holds sample `h/2`, and its
+    // powers, in `f64`.
     let half = (0..h).find(|&l| sample_of::<S, L>(l) == h / 2).unwrap_or(0);
-    let (er, ei) = offsets.lane_squared(half);
+    let e1 = offsets.lane_squared(half);
+    let mut e = [(S::f32s::splat(simd, 1.0), S::f32s::splat(simd, 0.0)); CHAIN - 1];
+    let mut p = e1;
+    for v in &mut e {
+        *v = (
+            S::f32s::splat(simd, p.0 as f32),
+            S::f32s::splat(simd, p.1 as f32),
+        );
+        p = (p.0 * e1.0 - p.1 * e1.1, p.0 * e1.1 + p.1 * e1.0);
+    }
     let mut osc = Osc {
         simd,
         split,
         a: offsets.at(simd, blocks.anchor),
-        e: (
-            S::f32s::splat(simd, er as f32),
-            S::f32s::splat(simd, ei as f32),
-        ),
+        e,
         table: &table.0,
     };
     let step = (blocks.len as u32).wrapping_mul(inc);

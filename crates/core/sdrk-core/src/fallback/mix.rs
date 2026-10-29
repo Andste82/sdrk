@@ -3,7 +3,6 @@
 use crate::Fallback;
 use crate::error::{Error, Result};
 use crate::kernels::mix::{Nco, Rotate};
-use crate::num::{round_shift, sat16};
 use crate::tables::{COS_F32, COS_Q15};
 use crate::types::{C32, CQ15, Q15};
 
@@ -28,21 +27,32 @@ pub(super) fn cos_sin_f32(phase: u32) -> Result<(f32, f32)> {
     Ok((c, s))
 }
 
-/// `(cos, sin)` of the phase as Q15 with linear interpolation in i64.
+/// The cosine of the phase `p` from `COS_Q15`, `sat16(a + round_shift((b - a) f15, 15))` of the
+/// contract, in `i32`: the product cannot overflow (`|b - a| < 2^16`, `f15 < 2^15`), and the
+/// result lies between `a` and `b`, so the saturation never acts. This avoids the 64-bit
+/// multiplications on 32-bit targets and the sign extensions and the two comparisons of the
+/// saturation (data-dependent branches on x86-64) on 64-bit targets.
+#[inline]
+fn interp_q15(p: u32) -> Option<i32> {
+    let idx = (p >> 20) as usize;
+    let f15 = ((p >> 5) & 0x7FFF) as i32;
+    match COS_Q15.get(idx..idx + 2) {
+        Some(&[a, b]) => {
+            let (a, b) = (i32::from(a), i32::from(b));
+            Some(a + (((b - a) * f15 + (1 << 14)) >> 15))
+        }
+        _ => None,
+    }
+}
+
+/// `(cos, sin)` of the phase as Q15 with linear interpolation (see [`interp_q15`]).
 #[inline]
 pub(super) fn cos_sin_q15(phase: u32) -> Result<CQ15> {
-    let interp = |p: u32| -> Option<i16> {
-        let idx = (p >> 20) as usize;
-        let f15 = i64::from((p >> 5) & 0x7FFF);
-        let a = i64::from(*COS_Q15.get(idx)?);
-        let b = i64::from(*COS_Q15.get(idx + 1)?);
-        Some(sat16(a + round_shift((b - a) * f15, 15)))
-    };
-    let c = interp(phase).ok_or_else(table_error)?;
-    let s = interp(phase.wrapping_sub(QUARTER)).ok_or_else(table_error)?;
+    let c = interp_q15(phase).ok_or_else(table_error)?;
+    let s = interp_q15(phase.wrapping_sub(QUARTER)).ok_or_else(table_error)?;
     Ok(CQ15 {
-        re: Q15(c),
-        im: Q15(s),
+        re: Q15(c as i16),
+        im: Q15(s as i16),
     })
 }
 
@@ -74,28 +84,15 @@ impl Rotate<C32> for Fallback {
 
 /// `x` rotated by the phase: `cq15_mul(x, cos_sin_q15(phase))` in `i32`, bit for bit.
 ///
-/// The interpolation `a + round_shift((b - a) f15, 15)` cannot overflow `i32` (`|b - a| < 2^16`,
-/// `f15 < 2^15`) and lies between `a` and `b`, so the saturation of `cos_sin_q15` never acts.
-/// The products `xr c - xi s` and `xr s + xi c` are below `|x| |(c, s)| <= 2^15 sqrt(2) (2^15 + 1)`
+/// The interpolation is that of [`interp_q15`]. The products `xr c - xi s` and `xr s + xi c` are below `|x| |(c, s)| <= 2^15 sqrt(2) (2^15 + 1)`
 /// in magnitude, about `1.52e9`, so they and the rounding term are exact in `i32` as well; the
 /// arithmetic shift and the clamp are `round_shift` and `sat16`. On 32-bit targets this avoids
 /// the 64-bit multiplications of the generic helpers, on 64-bit targets the sign extensions and
 /// the saturating addition.
 #[inline]
 fn rotate_q15(x: CQ15, phase: u32) -> Result<CQ15> {
-    let interp = |p: u32| -> Option<i32> {
-        let idx = (p >> 20) as usize;
-        let f15 = ((p >> 5) & 0x7FFF) as i32;
-        match COS_Q15.get(idx..idx + 2) {
-            Some(&[a, b]) => {
-                let (a, b) = (i32::from(a), i32::from(b));
-                Some(a + (((b - a) * f15 + (1 << 14)) >> 15))
-            }
-            _ => None,
-        }
-    };
-    let c = interp(phase).ok_or_else(table_error)?;
-    let s = interp(phase.wrapping_sub(QUARTER)).ok_or_else(table_error)?;
+    let c = interp_q15(phase).ok_or_else(table_error)?;
+    let s = interp_q15(phase.wrapping_sub(QUARTER)).ok_or_else(table_error)?;
     let (xr, xi) = (i32::from(x.re.0), i32::from(x.im.0));
     let narrow = |v: i32| ((v + (1 << 14)) >> 15).clamp(-32768, 32767) as i16;
     Ok(CQ15 {
@@ -121,19 +118,64 @@ impl Rotate<CQ15> for Fallback {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    //! The `i32` rotation of the `CQ15` kernel against the `i64` helpers that define it.
+    //! The `i32` interpolation and rotation of the `CQ15` kernels against the `i64` formulas of
+    //! the contract that define them.
 
-    use super::{cos_sin_q15, rotate_q15};
-    use crate::num::cq15_mul;
+    use super::{QUARTER, cos_sin_q15, rotate_q15};
+    use crate::num::{cq15_mul, round_shift, sat16};
+    use crate::tables::COS_Q15;
     use crate::types::{CQ15, Q15};
 
+    /// `(cos, sin)` with the formula of the contract: `sat16(a + round_shift((b - a) f15, 15))`
+    /// in `i64`.
+    fn contract_cos_sin_q15(phase: u32) -> CQ15 {
+        let interp = |p: u32| {
+            let idx = (p >> 20) as usize;
+            let f15 = i64::from((p >> 5) & 0x7FFF);
+            let a = i64::from(COS_Q15[idx]);
+            let b = i64::from(COS_Q15[idx + 1]);
+            sat16(a + round_shift((b - a) * f15, 15))
+        };
+        CQ15 {
+            re: Q15(interp(phase)),
+            im: Q15(interp(phase.wrapping_sub(QUARTER))),
+        }
+    }
+
     fn check(x: CQ15, phase: u32) {
-        let want = cq15_mul(x, cos_sin_q15(phase).unwrap());
+        let want = cq15_mul(x, contract_cos_sin_q15(phase));
         assert_eq!(
             rotate_q15(x, phase).unwrap(),
             want,
             "x={x:?} phase={phase:#x}"
         );
+    }
+
+    #[test]
+    fn the_i32_interpolation_equals_the_formula_of_the_contract() {
+        // Every table index with every 29th fraction and the ends of the fraction range (the
+        // value depends on the index and `f15` only), then random phases.
+        let fractions = (0..0x8000u32).step_by(29).chain([0x7FFE, 0x7FFF]);
+        for f15 in fractions {
+            for idx in 0..4096u32 {
+                for low in [0u32, 0x1F] {
+                    let phase = idx << 20 | f15 << 5 | low;
+                    assert_eq!(
+                        cos_sin_q15(phase).unwrap(),
+                        contract_cos_sin_q15(phase),
+                        "phase={phase:#x}"
+                    );
+                }
+            }
+        }
+        let mut s = 0x0123_4567_89AB_CDEFu64;
+        for _ in 0..200_000 {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            let phase = (s >> 32) as u32;
+            assert_eq!(cos_sin_q15(phase).unwrap(), contract_cos_sin_q15(phase));
+        }
     }
 
     #[test]

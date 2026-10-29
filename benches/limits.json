@@ -273,27 +273,67 @@
   "rotate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
     },
     "neon": {
       "status": "info",
-      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound) and must stay clearly faster than the fallback"
+      "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
+    }
+  },
+  "rotate_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "rotate_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
     }
   },
   "fir": {
@@ -659,6 +699,58 @@
   },
   "fm_mod": {
     "sse2": {
+      "status": "info",
+      "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
+    }
+  },
+  "fm_mod_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
+    }
+  },
+  "fm_mod_fallback": {
+    "sse2": {
       "status": "release"
     },
     "sse4.2": {
@@ -677,30 +769,24 @@
       "status": "release"
     }
   },
-  "fm_mod_cq15": {
+  "fm_mod_cq15_fallback": {
     "sse2": {
-      "status": "info",
-      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "info",
-      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+      "status": "release"
     },
     "avx2": {
-      "status": "info",
-      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+      "status": "release"
     },
     "avx512": {
-      "status": "info",
-      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+      "status": "release"
     },
     "neon": {
-      "status": "info",
-      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32) and the branch is judged by its efficiency"
+      "status": "release"
     }
   },
   "fft_64": {

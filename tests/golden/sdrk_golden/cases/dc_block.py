@@ -18,7 +18,14 @@ def r0p999_c32(rng):
     return dict(
         params={"r": r},
         arrays={"input": Array("cf32", x), "expected": Array("cf64", expected)},
-        tolerance={"class": "tolerance", "snr_db_min": 100.0, "skip": 0},
+        # The regression guard (accuracy policy step 3): the golden SNR of the f32 fallback
+        # minus 1 dB.
+        tolerance={
+            "class": "tolerance",
+            "snr_db_min": 100.0,
+            "snr_db_guard": 118.3,
+            "skip": 0,
+        },
         notes="y[n] = x[n] - x[n-1] + r y[n-1] per component, r cast to f32, DC offset 0.3 + 0.2j",
     )
 
@@ -60,7 +67,14 @@ def real_r0p999_f32(rng):
     return dict(
         params={"r": r},
         arrays={"input": Array("f32", x), "expected": Array("f64", expected)},
-        tolerance={"class": "tolerance", "snr_db_min": 100.0, "skip": 0},
+        # The regression guard (accuracy policy step 3): the golden SNR of the f32 fallback
+        # minus 1 dB.
+        tolerance={
+            "class": "tolerance",
+            "snr_db_min": 100.0,
+            "snr_db_guard": 122.5,
+            "skip": 0,
+        },
         notes="y[n] = x[n] - x[n-1] + r y[n-1], r cast to f32, real noise sigma 0.2 plus DC 0.3",
     )
 

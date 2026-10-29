@@ -97,6 +97,23 @@ where
     out
 }
 
+/// Identical bits, or for `f32` audio an SNR of at least 120 dB of `got` against `want`: the
+/// `f32` `dc_block_real` of the SIMD backend is a tolerance kernel whose bits depend on the
+/// split (maintainer decision of 2026-10-29), and the block calls it in pieces of its own.
+fn same_or_close<R: RealSample + PartialEq>(want: &[R], got: &[R]) -> bool {
+    if want == got {
+        return true;
+    }
+    let (mut sig, mut err) = (0.0f64, 0.0f64);
+    for (w, g) in want.iter().zip(got) {
+        sig += w.to_f64() * w.to_f64();
+        err += (w.to_f64() - g.to_f64()).powi(2);
+    }
+    R::TYPE == sdrk::SampleType::F32
+        && want.len() == got.len()
+        && 10.0 * (sig / err).log10() >= 120.0
+}
+
 fn matches_the_chain<T: BlockSample>()
 where
     Sdrk: Mag<T> + DcBlockReal<T::Real> + ResampleReal<T::Real> + 'static,
@@ -111,7 +128,7 @@ where
         let want = chain::<T>(&cfg, &input);
         let got = run_block(&mut new_block::<T>(&cfg), &input, None);
         assert_eq!(got.len(), want.len(), "dc {dc}, decimation {dec}");
-        assert_eq!(got, want, "dc {dc}, decimation {dec}");
+        assert!(same_or_close(&want, &got), "dc {dc}, decimation {dec}");
     }
 }
 
@@ -168,7 +185,10 @@ where
         let whole = run_block(&mut new_block::<T>(&cfg), &input, None);
         for plan in twenty_plans() {
             let chunked = run_block(&mut new_block::<T>(&cfg), &input, Some(plan));
-            assert_eq!(chunked, whole, "dc {dc}, decimation {dec}, {plan:?}");
+            assert!(
+                same_or_close(&whole, &chunked),
+                "dc {dc}, decimation {dec}, {plan:?}"
+            );
         }
         // After reset the block behaves like a new one.
         let mut block = new_block::<T>(&cfg);
@@ -330,10 +350,10 @@ fn a_gap_clears_the_dc_blocker_and_the_carrier_starts_afresh() {
     input.extend(signal.clone());
     let fresh = run_block(&mut new_block::<C32>(&config(30.0, 1)), &signal, None);
     let whole = run_block(&mut new_block::<C32>(&config(30.0, 1)), &input, None);
-    assert_eq!(&whole[2077..], &fresh[..]);
+    assert!(same_or_close(&fresh[..], &whole[2077..]));
     for plan in twenty_plans() {
         let chunked = run_block(&mut new_block::<C32>(&config(30.0, 1)), &input, Some(plan));
-        assert_eq!(chunked, whole);
+        assert!(same_or_close(&whole, &chunked));
     }
 }
 

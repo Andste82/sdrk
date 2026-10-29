@@ -58,7 +58,8 @@ header. Dtypes: `u8`, `i8`, `i16`, `i32`, `f32`, `f64`, `ci16` (interleaved re, 
 counts elements (a complex sample counts once). Tolerance classes:
 
 - `{"class": "bit_exact"}`: raw bits are equal.
-- `{"class": "tolerance", "snr_db_min": x, "skip": n}` with optional `"max_abs_err"`.
+- `{"class": "tolerance", "snr_db_min": x, "skip": n}` with optional `"max_abs_err"` and optional `"snr_db_guard"`, the
+  regression guard of the accuracy policy (the lowest measured SNR minus 1 dB), checked like `snr_db_min`.
 - `{"class": "max_abs_err", "max_abs_err": x, "skip": n}` with optional `"min_ref_db"` and then required
   `"ref_unit": "db" | "linear"`; only samples whose reference is at or above the level are checked.
 

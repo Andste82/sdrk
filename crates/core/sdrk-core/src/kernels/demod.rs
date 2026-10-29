@@ -146,6 +146,12 @@ impl<T: RealSample> DeemphasisState<T> {
         self.y
     }
 
+    /// Stores the last output sample; used by kernel implementations in backend crates (an
+    /// `f32` value is stored as given, the caller flushes it).
+    pub fn set_last(&mut self, y: T) {
+        self.y = y;
+    }
+
     pub(crate) fn parts_mut(&mut self) -> (T, &mut T) {
         (self.alpha, &mut self.y)
     }
@@ -236,6 +242,13 @@ impl<T: ComplexSample> DcBlockState<T> {
         self.y_prev
     }
 
+    /// Stores the previous input and output samples; used by kernel implementations in backend
+    /// crates (an `f32` output is stored as given, the caller flushes it).
+    pub fn set_prev(&mut self, x_prev: T, y_prev: T) {
+        self.x_prev = x_prev;
+        self.y_prev = y_prev;
+    }
+
     pub(crate) fn parts_mut(&mut self) -> (T::Real, &mut T, &mut T) {
         (self.r, &mut self.x_prev, &mut self.y_prev)
     }
@@ -321,6 +334,13 @@ impl<T: RealSample> DcBlockRealState<T> {
     /// The previous output sample (flushed for `f32`).
     pub fn y_prev(&self) -> T {
         self.y_prev
+    }
+
+    /// Stores the previous input and output samples; used by kernel implementations in backend
+    /// crates (an `f32` output is stored as given, the caller flushes it).
+    pub fn set_prev(&mut self, x_prev: T, y_prev: T) {
+        self.x_prev = x_prev;
+        self.y_prev = y_prev;
     }
 
     pub(crate) fn parts_mut(&mut self) -> (T, &mut T, &mut T) {

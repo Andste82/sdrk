@@ -208,17 +208,17 @@ fn backend_table_lists_the_m06_kernels() {
         ("power_db", SampleType::Q15),
         ("resample_real", SampleType::F32),
         ("resample_real", SampleType::Q15),
+        ("deemphasis", SampleType::F32),
+        ("dc_block", SampleType::C32),
+        ("dc_block_real", SampleType::F32),
     ] {
         assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
     }
     for (kernel, ty) in [
-        ("deemphasis", SampleType::F32),
         ("deemphasis", SampleType::Q15),
-        ("dc_block", SampleType::C32),
         ("dc_block", SampleType::CQ15),
         ("squelch", SampleType::C32),
         ("squelch", SampleType::CQ15),
-        ("dc_block_real", SampleType::F32),
         ("dc_block_real", SampleType::Q15),
         ("agc", SampleType::CQ15),
     ] {
@@ -354,10 +354,13 @@ fn m06_kernels_agree_with_the_fallback() -> Result<()> {
         DeemphasisState::<f32>::new(50e-6, rate)?,
         DeemphasisState::<f32>::new(50e-6, rate)?,
     );
+    // `f32`/`C32` `deemphasis` and `dc_block` are tolerance kernels of the SIMD backend
+    // (maintainer decision of 2026-10-29): close to the fallback, not its bits.
     let (mut a, mut b) = (vec![0f32; 200], vec![0f32; 200]);
     Sdrk.deemphasis(&mut sa, &xr, &mut a)?;
     Fallback.deemphasis(&mut sb, &xr, &mut b)?;
-    assert_eq!((a, sa), (b, sb));
+    assert_close(&b, &a);
+    assert_close(&[sb.last()], &[sa.last()]);
     let (mut sa, mut sb) = (
         DeemphasisState::<Q15>::new(50e-6, rate)?,
         DeemphasisState::<Q15>::new(50e-6, rate)?,
@@ -374,7 +377,9 @@ fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     let (mut a, mut b) = (vec![C32::default(); 200], vec![C32::default(); 200]);
     Sdrk.dc_block(&mut sa, &c32, &mut a)?;
     Fallback.dc_block(&mut sb, &c32, &mut b)?;
-    assert_eq!((a, sa), (b, sb));
+    assert_close(&flat(&b), &flat(&a));
+    assert_eq!(sa.x_prev(), sb.x_prev());
+    assert_close(&flat(&[sb.y_prev()]), &flat(&[sa.y_prev()]));
     let (mut sa, mut sb) = (
         DcBlockState::<CQ15>::new(Q15(32000))?,
         DcBlockState::<CQ15>::new(Q15(32000))?,
@@ -476,8 +481,8 @@ fn m13_every_accelerated_kernel_reports_the_simd_backend() {
     }
     // Everything else stays with the fallback or the chained fused kernels.
     for (kernel, ty) in [
-        ("deemphasis", SampleType::F32),
-        ("dc_block", SampleType::C32),
+        ("deemphasis", SampleType::Q15),
+        ("dc_block", SampleType::CQ15),
         ("squelch", SampleType::C32),
     ] {
         assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
@@ -542,10 +547,13 @@ fn m20_kernels_agree_with_the_fallback() -> Result<()> {
         DcBlockRealState::<f32>::new(0.99)?,
         DcBlockRealState::<f32>::new(0.99)?,
     );
+    // A tolerance kernel of the SIMD backend for `f32`: close to the fallback.
     let (mut a, mut b) = (vec![0.0f32; 300], vec![0.0f32; 300]);
     Sdrk.dc_block_real(&mut sa, &re, &mut a)?;
     Fallback.dc_block_real(&mut sb, &re, &mut b)?;
-    assert_eq!((a, sa), (b, sb));
+    assert_close(&b, &a);
+    assert_eq!(sa.x_prev(), sb.x_prev());
+    assert_close(&[sb.y_prev()], &[sa.y_prev()]);
     let (mut sa, mut sb) = (
         DcBlockRealState::<Q15>::new(Q15(32000))?,
         DcBlockRealState::<Q15>::new(Q15(32000))?,

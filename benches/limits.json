@@ -995,31 +995,31 @@
   "dc_block_real": {
     "sse2": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx2": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx512": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "neon": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "simd128": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "`dc_block_real` `f32`: the run-time-detection build dispatches to the same generic code of the `f64` block scan as the `avx2` build; the fixed cost of the dispatch per call and the code generation of the scalar remainder differ; reported as information"
     }
   },
   "dc_block_real_q15": {
@@ -1055,31 +1055,31 @@
   "deemphasis": {
     "sse2": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx2": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx512": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "neon": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "simd128": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
+      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "`deemphasis` `f32`: the run-time-detection build dispatches to the same generic code of the `f64` block scan as the `avx2` build; the fixed cost of the dispatch per call and the code generation of the scalar remainder differ; reported as information"
     }
   },
   "deemphasis_q15": {
@@ -1115,31 +1115,31 @@
   "dc_block": {
     "sse2": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block` `C32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block` `C32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx2": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block` `C32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "avx512": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block` `C32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "neon": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block` `C32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     },
     "simd128": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
+      "waiver": "`dc_block` `C32` runs the fallback at `simd128`: the `f64` block scan of the SIMD backend took more instructions there (36.56 against 26.53 per sample), the measure of wasm32 (D33); the comparison is our own fallback, reported as information"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "`dc_block` `C32`: the run-time-detection build dispatches to the same generic code of the `f64` block scan as the `avx2` build; the fixed cost of the dispatch per call and the code generation of the scalar remainder differ; reported as information"
     }
   },
   "dc_block_cq15": {
@@ -1492,6 +1492,72 @@
     },
     "avx2-runtime": {
       "status": "dev"
+    }
+  },
+  "dc_block_real_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "deemphasis_fallback": {
+    "sse2": {
+      "status": "release",
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+    },
+    "sse4.2": {
+      "status": "release",
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+    },
+    "avx2": {
+      "status": "release",
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+    },
+    "avx512": {
+      "status": "release",
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+    },
+    "neon": {
+      "status": "release",
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+    },
+    "simd128": {
+      "status": "release",
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+    }
+  },
+  "dc_block_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
     }
   }
 }

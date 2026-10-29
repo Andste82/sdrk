@@ -575,6 +575,8 @@ pub enum Reference {
     Kfr,
     /// CMSIS-DSP's biquad cascades in generic C, compiled for the level (D15, D16).
     Cmsis,
+    /// liquid-dsp's DC blocker (`iirfilt_*_create_dc_blocker`), portable C.
+    Liquid,
     /// Our own fallback, where no established library exists.
     Fallback,
     /// Our own numbers of another level (run-time detection against that fixed level).
@@ -595,6 +597,7 @@ impl Reference {
             Reference::Ne10 => "ne10",
             Reference::Kfr => "kfr",
             Reference::Cmsis => "cmsis",
+            Reference::Liquid => "liquid",
             Reference::Fallback => "fallback",
             Reference::OwnLevel(_) => "ours",
         }
@@ -636,6 +639,12 @@ pub enum Family {
     /// for the level, and the gate is CMSIS-DSP's generic C. Not measured at a level with
     /// run-time detection, whose fallback is the baseline build.
     FallbackVsCmsis,
+    /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is a loop of GNU Radio
+    /// (`deemphasis_fallback`: the IIR loop of `fm_deemph`).
+    FallbackVsGnuRadio,
+    /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
+    /// (`dc_block_fallback`, `dc_block_real_fallback`).
+    FallbackVsLiquid,
 }
 
 impl Family {
@@ -646,11 +655,20 @@ impl Family {
         matches!(self, Family::FftC32 | Family::FftCq15 | Family::RealFft)
     }
 
+    /// Whether this is a fallback entry (`<kernel>_fallback`).
+    #[must_use]
+    pub fn is_fallback_entry(self) -> bool {
+        matches!(
+            self,
+            Family::FallbackVsCmsis | Family::FallbackVsGnuRadio | Family::FallbackVsLiquid
+        )
+    }
+
     /// The implementation that is measured: our fallback for a fallback entry, our kernel
     /// through the facade otherwise.
     #[must_use]
     pub fn measured(self) -> &'static str {
-        if self == Family::FallbackVsCmsis {
+        if self.is_fallback_entry() {
             "fallback"
         } else {
             "ours"
@@ -660,7 +678,7 @@ impl Family {
     /// Whether the kernel has an entry at `plan`'s level.
     #[must_use]
     pub fn measured_at(self, plan: &LevelPlan) -> bool {
-        !(self == Family::FallbackVsCmsis && plan.baseline.is_some())
+        !(self.is_fallback_entry() && plan.baseline.is_some())
     }
 }
 
@@ -700,7 +718,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub const KERNELS: [KernelSpec; 65] = [
+pub const KERNELS: [KernelSpec; 68] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -745,6 +763,9 @@ pub const KERNELS: [KernelSpec; 65] = [
     spec("deemphasis_q15", Family::Own, false),
     spec("dc_block", Family::Own, false),
     spec("dc_block_cq15", Family::Own, false),
+    spec("dc_block_real_fallback", Family::FallbackVsLiquid, false),
+    spec("deemphasis_fallback", Family::FallbackVsGnuRadio, false),
+    spec("dc_block_fallback", Family::FallbackVsLiquid, false),
     spec("biquad", Family::Kfr, true),
     spec("biquad_cq15", Family::Q15Own, true),
     spec("biquad_real", Family::Kfr, true),
@@ -1034,6 +1055,8 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
         // Without KFR at the level, CMSIS-DSP gates, as it does for a fallback entry.
         Family::Kfr | Family::FallbackVsCmsis => (Reference::Cmsis, Vec::new()),
         Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
+        Family::FallbackVsGnuRadio => (Reference::GnuRadio, Vec::new()),
+        Family::FallbackVsLiquid => (Reference::Liquid, Vec::new()),
     }
 }
 
@@ -3328,6 +3351,34 @@ mod tests {
         assert!(!fallback.family.measured_at(plan("avx2-runtime")));
         assert!(
             kernel("biquad_real")
+                .family
+                .measured_at(plan("avx2-runtime"))
+        );
+    }
+
+    #[test]
+    fn the_recursion_fallbacks_are_judged_against_liquid_and_gnu_radio() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "avx2", "avx512", "neon", "simd128"] {
+            for k in ["dc_block_fallback", "dc_block_real_fallback"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Liquid, Vec::new())
+                );
+            }
+            assert_eq!(
+                comparisons(plan(level), kernel("deemphasis_fallback")),
+                (Reference::GnuRadio, Vec::new())
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("deemphasis")),
+                (Reference::Fallback, Vec::new())
+            );
+        }
+        assert_eq!(kernel("deemphasis_fallback").family.measured(), "fallback");
+        assert!(
+            !kernel("dc_block_fallback")
                 .family
                 .measured_at(plan("avx2-runtime"))
         );

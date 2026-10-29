@@ -259,7 +259,9 @@ fn chunking_does_not_change_the_output() {
         let bytes = recording(samples, burst);
         let whole = run(&mut receiver(name), &bytes, 8192);
         let other = run(&mut receiver(name), &bytes, 4097);
-        assert_eq!(common::bits(&whole), common::bits(&other), "{name}");
+        // Bit-identical up to the `f32` `dc_block_real` of the SIMD backend, a tolerance kernel
+        // whose bits depend on the split.
+        assert!(common::same_audio(&whole, &other), "{name}");
     }
 }
 

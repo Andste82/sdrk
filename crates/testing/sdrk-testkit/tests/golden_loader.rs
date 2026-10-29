@@ -298,7 +298,8 @@ fn snr_tolerance_applies_skip_and_limit() {
         Tolerance::Snr {
             min_db: 40.0,
             skip: 1,
-            max_abs_err: None
+            max_abs_err: None,
+            guard_db: None
         }
     );
     let exp = case.array("expected").unwrap();

@@ -812,6 +812,7 @@ fn fm_demod_equals_chain_for<T>(
     case: &'static str,
     seed: u64,
     gain: T::Real,
+    whole_chain: bool,
 ) -> Result<(), Failure>
 where
     T: ComplexSample,
@@ -838,14 +839,41 @@ where
     let (mut qa, mut qb) = (QuadDemodState::<T>::new(), QuadDemodState::<T>::new());
     let mut da = DeemphasisState::<T::Real>::new(50e-6, rate)?;
     let mut db = da;
-    QuadDemod::<T>::quad_demod(&Sdrk, &mut qa, input, tmp, gain)?;
-    Deemphasis::<T::Real>::deemphasis(&Sdrk, &mut da, tmp, want)?;
+    if whole_chain {
+        // Bit-exact kernels (Q15): the chain over the whole input, so the fused kernel's
+        // chunk invariance is covered too.
+        QuadDemod::<T>::quad_demod(&Sdrk, &mut qa, input, tmp, gain)?;
+        Deemphasis::<T::Real>::deemphasis(&Sdrk, &mut da, tmp, want)?;
+    }
     let mut pos = 0usize;
     for size in ChunkPlan::new(seed + 1, 150).sizes() {
         if pos >= N {
             break;
         }
         let end = (pos + size).min(N);
+        // `f32`: the chain of the single kernels in the pieces of the fused kernel (the call
+        // and then the scratch): the `f32` `deemphasis` of the SIMD backend is a tolerance
+        // kernel whose bits depend on the split (maintainer decision of 2026-10-29), and the
+        // fused kernel stays bit-identical to the chain with the same pieces.
+        let mut at = if whole_chain { end } else { pos };
+        while at < end {
+            let next = (at + scratch.len()).min(end);
+            let t = tmp.get_mut(at..next).unwrap_or_default();
+            QuadDemod::<T>::quad_demod(
+                &Sdrk,
+                &mut qa,
+                input.get(at..next).unwrap_or_default(),
+                t,
+                gain,
+            )?;
+            Deemphasis::<T::Real>::deemphasis(
+                &Sdrk,
+                &mut da,
+                t,
+                want.get_mut(at..next).unwrap_or_default(),
+            )?;
+            at = next;
+        }
         FmDemod::<T>::fm_demod(
             &Sdrk,
             &mut qb,
@@ -864,8 +892,8 @@ where
 }
 
 pub(super) fn fm_demod_equals_chain(arena: &mut Arena<'_>) -> Result<(), Failure> {
-    fm_demod_equals_chain_for::<C32>(arena, "fm_demod_equals_chain", 840, 2.0)?;
-    fm_demod_equals_chain_for::<CQ15>(arena, "fm_demod_equals_chain", 841, Q15(32767))
+    fm_demod_equals_chain_for::<C32>(arena, "fm_demod_equals_chain", 840, 2.0, false)?;
+    fm_demod_equals_chain_for::<CQ15>(arena, "fm_demod_equals_chain", 841, Q15(32767), true)
 }
 
 fn partial_output_for<T>(

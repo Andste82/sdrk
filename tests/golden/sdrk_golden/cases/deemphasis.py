@@ -22,7 +22,14 @@ def tau50us_f32(rng):
     return dict(
         params={"tau_s": TAU, "rate_hz": FS, "alpha": a},
         arrays={"input": Array("f32", x), "expected": Array("f64", expected)},
-        tolerance={"class": "tolerance", "snr_db_min": 100.0, "skip": 0},
+        # The regression guard (accuracy policy step 3): the golden SNR of the f32 fallback
+        # minus 1 dB.
+        tolerance={
+            "class": "tolerance",
+            "snr_db_min": 100.0,
+            "snr_db_guard": 144.4,
+            "skip": 0,
+        },
         notes="alpha = 1 - exp(-1 / (fs tau)) cast to f32; y[n] = y[n-1] + alpha (x[n] - y[n-1])",
     )
 

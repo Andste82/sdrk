@@ -69,11 +69,11 @@ crate::delegate! {
     ResampleReal<Q15>::resample_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut ResampleRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fast;
     QuadDemod<C32>::quad_demod(&self, state: &mut QuadDemodState<C32>, input: &[C32], output: &mut [f32], gain: f32) -> Result<()> => Fast;
     QuadDemod<CQ15>::quad_demod(&self, state: &mut QuadDemodState<CQ15>, input: &[CQ15], output: &mut [Q15], gain: Q15) -> Result<()> => Fast;
-    Deemphasis<f32>::deemphasis(&self, state: &mut DeemphasisState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
+    Deemphasis<f32>::deemphasis(&self, state: &mut DeemphasisState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fast;
     Deemphasis<Q15>::deemphasis(&self, state: &mut DeemphasisState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
-    DcBlock<C32>::dc_block(&self, state: &mut DcBlockState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
+    DcBlock<C32>::dc_block(&self, state: &mut DcBlockState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fast;
     DcBlock<CQ15>::dc_block(&self, state: &mut DcBlockState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
-    DcBlockReal<f32>::dc_block_real(&self, state: &mut DcBlockRealState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
+    DcBlockReal<f32>::dc_block_real(&self, state: &mut DcBlockRealState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fast;
     DcBlockReal<Q15>::dc_block_real(&self, state: &mut DcBlockRealState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
     Agc<C32>::agc(&self, s: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fast;
     Agc<CQ15>::agc(&self, s: &mut AgcState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;

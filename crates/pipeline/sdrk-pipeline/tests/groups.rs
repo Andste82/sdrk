@@ -165,14 +165,24 @@ fn the_simd_backend_is_available_unless_the_build_forces_the_fallback() {
         assert_eq!(report.errors.len(), 1, "{}", report.to_json());
         assert_eq!(report.errors[0].code, DiagCode::BackendUnavailable);
     }
-    // A node that calls a kernel without a SIMD variant cannot require it.
-    v["nodes"]["demod"]["backend"] = json!({ "require": "simd" });
+    // A node that calls a kernel without a SIMD variant cannot require it: a squelch between
+    // the tuner and the demodulator (`fm_demod` is accelerated as a whole since the `f32`
+    // `deemphasis` runs in the SIMD backend).
+    v["nodes"]["gate"] =
+        json!({ "kind": "squelch", "group": "audio", "backend": { "require": "simd" } });
+    let edges = v["edges"].as_array_mut().unwrap();
+    for e in edges.iter_mut() {
+        if e["from"] == "tune" && e["to"] == "demod" {
+            e["to"] = json!("gate");
+        }
+    }
+    edges.push(json!({ "from": "gate", "to": "demod" }));
     let report = validate(&v);
     assert!(
         report
             .errors
             .iter()
-            .any(|d| d.path == "nodes.demod.backend.require"),
+            .any(|d| d.path == "nodes.gate.backend.require"),
         "{}",
         report.to_json()
     );

@@ -1,8 +1,9 @@
 //! M20: `mag` is accelerated and counted against VOLK, the `C32` `agc` is counted against the
-//! `agc_cc` loop of GNU Radio, and `agc_cq15` and `dc_block_real` are not accelerated and
-//! counted as information on every platform. The committed result files and
-//! `benches/limits.json` must carry the entries at every level, and the Cortex-M4 report (no
-//! limits) counts all four kernels of the fallback.
+//! `agc_cc` loop of GNU Radio, and `agc_cq15` and `dc_block_real` are counted as information on
+//! every platform (`agc_cq15` and `dc_block_real` `Q15` are not accelerated; `dc_block_real`
+//! `f32` runs the block scan of the SIMD backend, which no SIMD library has). The committed
+//! result files and `benches/limits.json` must carry the entries at every level, and the
+//! Cortex-M4 report (no limits) counts all four kernels of the fallback.
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -125,7 +126,7 @@ fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
 }
 
 #[test]
-fn the_limits_file_lists_the_unaccelerated_kernels_as_information_at_every_level() {
+fn the_limits_file_lists_the_kernels_without_a_reference_as_information_at_every_level() {
     let limits = bench_file("limits.json");
     for kernel in INFO_KERNELS {
         for level in LEVELS {
@@ -134,7 +135,7 @@ fn the_limits_file_lists_the_unaccelerated_kernels_as_information_at_every_level
             assert!(
                 limits[kernel][level]["waiver"]
                     .as_str()
-                    .is_some_and(|w| w.contains("not accelerated")),
+                    .is_some_and(|w| w.contains("not accelerated") || w.contains("block scan")),
                 "{kernel}/{level} has no waiver text"
             );
         }

@@ -15,8 +15,9 @@
 //!    block `rev_q(c) T + rev(t)` (`T` tiles, `rev` reverses `b - 2 q` bits), which is row
 //!    `rev_q(c)` of tile `rev(t)`. So a tile is loaded row by row, transformed across its rows,
 //!    transposed, and stored in place of its mirror tile `rev(t)` (and the mirror in its place).
-//! 2. radix-4 passes ([`pass4`]) with three complex products per butterfly, after one radix-2 pass
-//!    ([`pass2`]) if the number of remaining stages is odd. A pass of span `S` multiplies the lane
+//! 2. radix-4 passes ([`pass4`]) with three complex products per butterfly. If the number of
+//!    remaining stages is odd, the first of them also does the radix-2 stage before it
+//!    ([`pass2_4`]): one pass over the data instead of two. A pass of span `S` multiplies the lane
 //!    `k` of its four quarters by `1`, `W_S^2k`, `W_S^k` and `W_S^3k`. Where the vectors of the
 //!    eight inputs of a radix-8 butterfly and its twiddles fit the registers (NEON with 32
 //!    registers of 4 lanes, wasm32), radix-8 passes ([`pass8`]) take the stages that remain
@@ -1287,8 +1288,9 @@ fn first_pass<S: SimdToken, P: Lanes<S>, const INV: bool>(
 
 /// One radix-2 stage of span `2 m` on split blocks (`mb = m / L` blocks per half). With the halves
 /// as the rows of a grid of `mb` columns, the butterflies of the lane group `j` in every span are
-/// the pairs of rows of the column `j`.
-#[cfg_attr(not(debug_assertions), inline(always))]
+/// the pairs of rows of the column `j`. The transform takes this stage in [`pass2_4`]; this pass
+/// is its reference in the tests.
+#[cfg(test)]
 fn pass2<S: SimdToken, P: Lanes<S>, const INV: bool>(
     simd: S,
     blocks: &mut [P::Block],
@@ -1320,7 +1322,7 @@ fn pass2<S: SimdToken, P: Lanes<S>, const INV: bool>(
 
 /// The butterflies of [`pass2`] of one lane group in every span (the column `col`), with the
 /// twiddles `w`.
-#[cfg_attr(not(debug_assertions), inline(always))]
+#[cfg(test)]
 fn radix2_lanes<S: SimdToken, P: Lanes<S>, const INV: bool>(
     simd: S,
     col: &mut Column<'_, P::Block>,
@@ -1331,6 +1333,102 @@ fn radix2_lanes<S: SimdToken, P: Lanes<S>, const INV: bool>(
         let t = cmul::<S, P::V, INV>(w, P::load(simd, b1));
         P::store(cadd::<S, P::V>(a, t), b0);
         P::store(csub::<S, P::V>(a, t), b1);
+    }
+}
+
+/// The twiddles of the lane group 0 of the radix-2 pass `tw` ([`pass2`]).
+#[cfg_attr(not(debug_assertions), inline(always))]
+fn radix2_twiddles<S: SimdToken, P: Lanes<S>>(simd: S, tw: PassTwiddles<'_>) -> Cv<P::V> {
+    match tw.lanes::<S, P>(1) {
+        LaneTwiddles::Table([(re, im), ..]) => {
+            if let (Some(re), Some(im)) = (re.first(), im.first()) {
+                (P::lanes(simd, re), P::lanes(simd, im))
+            } else {
+                let zero = P::V::splat(simd, 0.0);
+                (zero, zero)
+            }
+        }
+        LaneTwiddles::Plan { tw, s } => gather::<S, P>(simd, plan_view::<[f32; 2]>(tw), 0, s),
+    }
+}
+
+/// The twiddles `[W^k, W^2k, W^3k]` of the lane group `j` of the radix-4 pass `tw` ([`pass4`]),
+/// from the same source as there.
+#[cfg_attr(not(debug_assertions), inline(always))]
+fn radix4_twiddles<S: SimdToken, P: Lanes<S>>(
+    simd: S,
+    tw: PassTwiddles<'_>,
+    j: usize,
+) -> [Cv<P::V>; 3] {
+    let zero = P::V::splat(simd, 0.0);
+    let none = [(zero, zero); 3];
+    match tw.lanes::<S, P>(j + 1) {
+        LaneTwiddles::Table([w1, w2, w3]) => pairs(w1)
+            .zip(pairs(w2))
+            .zip(pairs(w3))
+            .nth(j)
+            .map_or(none, |item| {
+                <FromTables as Twiddle<S, P, _, 3>>::twiddles(&FromTables, simd, item)
+            }),
+        LaneTwiddles::Plan { tw, s: 1 } => {
+            let table = plan_view::<P::Block>(tw);
+            match (table.get(j), table.get(2 * j..2 * j + 2)) {
+                (Some(w1), Some(w2)) => plan_contiguous::<S, P>(simd, w1, w2),
+                _ => none,
+            }
+        }
+        LaneTwiddles::Plan { tw, s } => {
+            let from = Gathered {
+                tw: plan_view(tw),
+                s,
+            };
+            <Gathered<'_> as Twiddle<S, P, usize, 3>>::twiddles(&from, simd, j)
+        }
+    }
+}
+
+/// The radix-2 pass of span `2 L` ([`pass2`] with one block per half) and the radix-4 pass of
+/// span `8 L` after it ([`pass4`] with two blocks per quarter) in one pass over groups of eight
+/// blocks: the same operations in the same order as the two passes, without storing and loading
+/// the data in between. The twiddles of both are the same for every group. The last pass
+/// (`LAST`) stores interleaved samples scaled by `scale` (inverse only).
+#[cfg_attr(not(debug_assertions), inline(always))]
+fn pass2_4<S: SimdToken, P: Lanes<S>, const INV: bool, const LAST: bool>(
+    simd: S,
+    blocks: &mut [P::Block],
+    tw2: PassTwiddles<'_>,
+    tw4: PassTwiddles<'_>,
+    scale: f32,
+) {
+    let g = P::V::splat(simd, scale);
+    let w = radix2_twiddles::<S, P>(simd, tw2);
+    let (u, v) = (
+        radix4_twiddles::<S, P>(simd, tw4, 0),
+        radix4_twiddles::<S, P>(simd, tw4, 1),
+    );
+    for group in blocks.chunks_exact_mut(8) {
+        let [b0, b1, b2, b3, b4, b5, b6, b7] = group else {
+            continue;
+        };
+        let pair = |b0: &P::Block, b1: &P::Block| {
+            let a = P::load(simd, b0);
+            let t = cmul::<S, P::V, INV>(w, P::load(simd, b1));
+            (cadd::<S, P::V>(a, t), csub::<S, P::V>(a, t))
+        };
+        let (x0, x1) = pair(b0, b1);
+        let (x2, x3) = pair(b2, b3);
+        let (x4, x5) = pair(b4, b5);
+        let (x6, x7) = pair(b6, b7);
+        let [y0, y2, y4, y6] = radix4_values::<S, P::V, INV>(u, [x0, x2, x4, x6]);
+        store_result::<S, P, INV, LAST>(y0, b0, g);
+        store_result::<S, P, INV, LAST>(y2, b2, g);
+        store_result::<S, P, INV, LAST>(y4, b4, g);
+        store_result::<S, P, INV, LAST>(y6, b6, g);
+        let [y1, y3, y5, y7] = radix4_values::<S, P::V, INV>(v, [x1, x3, x5, x7]);
+        store_result::<S, P, INV, LAST>(y1, b1, g);
+        store_result::<S, P, INV, LAST>(y3, b3, g);
+        store_result::<S, P, INV, LAST>(y5, b5, g);
+        store_result::<S, P, INV, LAST>(y7, b7, g);
     }
 }
 
@@ -1359,17 +1457,32 @@ fn butterfly4<S: SimdToken, P: Lanes<S>, const INV: bool, const LAST: bool>(
     [b0, b1, b2, b3]: [&mut P::Block; 4],
     g: P::V,
 ) {
-    let x0 = P::load(simd, b0);
-    let t1 = cmul::<S, P::V, INV>(w2, P::load(simd, b1));
-    let t2 = cmul::<S, P::V, INV>(w1, P::load(simd, b2));
-    let t3 = cmul::<S, P::V, INV>(w3, P::load(simd, b3));
-    let (a, b) = (cadd::<S, P::V>(x0, t1), csub::<S, P::V>(x0, t1));
-    let (c, d) = (cadd::<S, P::V>(t2, t3), csub::<S, P::V>(t2, t3));
-    let (y1, y3) = rot_pair::<S, P::V, INV>(b, d);
-    store_result::<S, P, INV, LAST>(cadd::<S, P::V>(a, c), b0, g);
+    let x = [
+        P::load(simd, b0),
+        P::load(simd, b1),
+        P::load(simd, b2),
+        P::load(simd, b3),
+    ];
+    let [y0, y1, y2, y3] = radix4_values::<S, P::V, INV>([w1, w2, w3], x);
+    store_result::<S, P, INV, LAST>(y0, b0, g);
     store_result::<S, P, INV, LAST>(y1, b1, g);
-    store_result::<S, P, INV, LAST>(csub::<S, P::V>(a, c), b2, g);
+    store_result::<S, P, INV, LAST>(y2, b2, g);
     store_result::<S, P, INV, LAST>(y3, b3, g);
+}
+
+/// The radix-4 butterfly of [`butterfly4`] on the values `x` of the four quarters.
+#[cfg_attr(not(debug_assertions), inline(always))]
+fn radix4_values<S: SimdToken, V: SimdFloat<S, Element = f32>, const INV: bool>(
+    [w1, w2, w3]: [Cv<V>; 3],
+    [x0, x1, x2, x3]: [Cv<V>; 4],
+) -> [Cv<V>; 4] {
+    let t1 = cmul::<S, V, INV>(w2, x1);
+    let t2 = cmul::<S, V, INV>(w1, x2);
+    let t3 = cmul::<S, V, INV>(w3, x3);
+    let (a, b) = (cadd::<S, V>(x0, t1), csub::<S, V>(x0, t1));
+    let (c, d) = (cadd::<S, V>(t2, t3), csub::<S, V>(t2, t3));
+    let (y1, y3) = rot_pair::<S, V, INV>(b, d);
+    [cadd::<S, V>(a, c), y1, csub::<S, V>(a, c), y3]
 }
 
 /// One radix-4 pass of span `4 m` on split blocks (`mb = m / L` blocks per quarter). The last pass
@@ -1778,8 +1891,13 @@ fn run<S: SimdToken, P: Lanes<S>, const INV: bool, const RADIX8: bool>(
         return;
     }
     if (n / l).trailing_zeros() % 2 == 1 {
-        pass2::<S, P, INV>(simd, blocks, m / l, tw.radix2(2 * m));
-        m *= 2;
+        // The radix-2 pass and the first radix-4 pass in one (`m = L`).
+        if 8 * m == n {
+            pass2_4::<S, P, INV, true>(simd, blocks, tw.radix2(2 * m), tw.radix4(8 * m), g);
+            return;
+        }
+        pass2_4::<S, P, INV, false>(simd, blocks, tw.radix2(2 * m), tw.radix4(8 * m), 1.0);
+        m *= 8;
     }
     while 4 * m < n {
         pass4::<S, P, INV, false>(simd, blocks, m / l, tw.radix4(4 * m), 1.0);
@@ -1803,6 +1921,9 @@ fn transform<S: SimdToken, const INV: bool>(simd: S, data: &mut [f32], tw: Twidd
     if let Some(avx2) = x86::avx2_only(simd.level())
         && n >= 64
     {
+        // Radix-4 passes: radix-8 passes simulate no faster here (N = 1024: 2.76 / 2.57 cycles
+        // per sample on znver3 / alderlake against 2.74 / 2.48) and their products `W^5k`,
+        // `W^7k` cost accuracy (golden N = 4096: 138.0 against 138.3 dB).
         run::<_, x86::InLane, INV, false>(avx2, data, tw);
         return;
     }
@@ -2117,5 +2238,87 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The fused radix-2 and radix-4 pass against the two passes, bit for bit, at the widths of
+    /// the level (and with the data movement of AVX2), for the three sources of twiddles (span
+    /// tables, the plan's table with stride 1, gathered from a strided table), both directions,
+    /// as the last pass and as an inner one.
+    #[test]
+    fn the_fused_radix_2_and_4_pass_is_the_two_passes() {
+        use fearless_simd::{f32x4, f32x8, f32x16, f64x2, f64x4, f64x8};
+
+        use super::{Lanes, Portable, Twiddles, pass2, pass2_4, pass4};
+
+        fn one<S: fearless_simd::Simd, P: Lanes<S>, const INV: bool, const LAST: bool>(
+            simd: S,
+            n: usize,
+            tw: Twiddles<'_>,
+        ) {
+            let l = <P::V as fearless_simd::SimdBase<S>>::LEN;
+            let x = noise(n as u32 + 7, 2 * n);
+            let (mut want, mut got) = (x.clone(), x);
+            let scale = if INV { 1.0 / n as f32 } else { 1.0 };
+            {
+                let blocks: &mut [P::Block] = bytemuck::cast_slice_mut(&mut want);
+                pass2::<S, P, INV>(simd, blocks, 1, tw.radix2(2 * l));
+                pass4::<S, P, INV, LAST>(simd, blocks, 2, tw.radix4(8 * l), scale);
+            }
+            {
+                let blocks: &mut [P::Block] = bytemuck::cast_slice_mut(&mut got);
+                pass2_4::<S, P, INV, LAST>(simd, blocks, tw.radix2(2 * l), tw.radix4(8 * l), scale);
+            }
+            let (want, got): (Vec<u32>, Vec<u32>) = (
+                want.iter().map(|v| v.to_bits()).collect(),
+                got.iter().map(|v| v.to_bits()).collect(),
+            );
+            assert!(
+                want == got,
+                "L={l} n={n} inverse {INV} last {LAST} tables {} stride {}",
+                tw.tables,
+                tw.stride
+            );
+        }
+
+        fn width<S: fearless_simd::Simd, P: Lanes<S>>(simd: S, big: &[f32]) {
+            let l = <P::V as fearless_simd::SimdBase<S>>::LEN;
+            for groups in [1, 4, 16] {
+                let n = 8 * l * groups;
+                let own = FftPlan::<C32, _>::new(n, std::vec![C32::default(); n / 2]).unwrap();
+                let own: &[f32] = bytemuck::cast_slice(own.twiddles());
+                for (plan, stride) in [(own, 1), (big, 4096 / n)] {
+                    for tables in [false, true] {
+                        let tw = Twiddles {
+                            plan,
+                            stride,
+                            n,
+                            tables: tables && cfg!(feature = "fft-tables"),
+                        };
+                        one::<S, P, false, false>(simd, n, tw);
+                        one::<S, P, false, true>(simd, n, tw);
+                        one::<S, P, true, false>(simd, n, tw);
+                        one::<S, P, true, true>(simd, n, tw);
+                    }
+                }
+            }
+        }
+
+        fn widths<S: fearless_simd::Simd>(simd: S) {
+            let big = FftPlan::<C32, _>::new(4096, std::vec![C32::default(); 2048]).unwrap();
+            let big: &[f32] = bytemuck::cast_slice(big.twiddles());
+            width::<S, Portable<f32x4<S>, f64x2<S>>>(simd, big);
+            width::<S, Portable<f32x8<S>, f64x4<S>>>(simd, big);
+            width::<S, Portable<f32x16<S>, f64x8<S>>>(simd, big);
+            #[cfg(target_arch = "x86_64")]
+            if let Some(avx2) = super::x86::avx2_only(simd.level()) {
+                width::<_, super::x86::InLane>(avx2, big);
+            }
+            #[cfg(target_arch = "aarch64")]
+            if let Some(neon) = simd.level().as_neon() {
+                width::<_, super::neon::Ld2>(neon, big);
+            }
+        }
+
+        dispatch!(simd => widths(simd));
     }
 }

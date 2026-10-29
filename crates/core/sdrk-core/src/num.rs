@@ -229,8 +229,10 @@ pub fn isqrt_u64(x: u64) -> u64 {
 }
 
 /// The square root of `s >= 0` rounded to the nearest integer (a tie is impossible for
-/// integers): `r = isqrt(s)`, then `r + 1` when `s - r^2 > r`. Not saturated.
-#[inline]
+/// integers): `r = isqrt(s)`, then `r + 1` when `s - r^2 > r`. Not saturated. The rule of
+/// `mag` `CQ15` as written in the contract; the kernels compute it in faster forms with the same
+/// results, and their tests compare them with it.
+#[cfg(test)]
 pub(crate) fn round_sqrt(s: i64) -> i64 {
     let s = s.max(0) as u64;
     let r = isqrt_u64(s);

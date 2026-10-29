@@ -644,22 +644,28 @@
   },
   "mag_sq_q15": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     }
   },
   "window": {
@@ -680,33 +686,33 @@
     },
     "simd128": {
       "status": "info",
-      "waiver": "VOLK's `volk_32fc_32f_multiply_32fc` exists only in VOLK's own build; the generic wasm32 library of `benches/refs/volk-wasm.c` does not have it (extending it would rebuild the references of every platform), so our fallback is the comparison, which is information under D32"
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
   "window_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `sse2` it needs 3.36 instructions per sample against the fallback's 7.77 (2.3 times fewer)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `sse4.2` it needs 2.11 instructions per sample against the fallback's 5.27 (2.5 times fewer)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `avx2` it needs 0.76 instructions per sample against the fallback's 2.08 (2.7 times fewer)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `avx512` it needs 0.39 instructions per sample against the fallback's 1.27 (3.3 times fewer)"
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `neon` it needs 0.95 instructions per sample against the fallback's 2.89 (3.0 times fewer)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; it is 4 to 22 times faster than the fallback in the simulated cycles of every core model of its level"
+      "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `simd128` it needs 3.95 instructions per sample against the fallback's 9.91 (2.5 times fewer)"
     },
     "avx2-runtime": {
       "status": "info",
@@ -733,33 +739,204 @@
     },
     "simd128": {
       "status": "info",
-      "waiver": "VOLK's `volk_32f_log2_32f` exists only in VOLK's own build; the generic wasm32 library of `benches/refs/volk-wasm.c` does not have it (extending it would rebuild the references of every platform), so our fallback is the comparison, which is information under D32"
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
   "power_db_q15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback and faster in the simulated cycles of both models (avx2: 3.09 and 2.46 against 4.10 and 3.44 cycles per sample on znver3 and alderlake); its efficiency is low (0.41 and 0.55, latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+    }
+  },
+  "mag_sq_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mag_sq_q15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mag_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mag_q15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "window_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "window_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "power_db_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "power_db_q15_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no library converts Q15 powers to decibels; the comparison is CMSIS-DSP's `arm_q15_to_float`, `arm_vlog_f32` (a polynomial of another accuracy class: 144.0 dB against 149.9 dB of ours, which is bit-exact with `libm::log10f`) and `arm_scale_f32`, as information. Our fallback is 3 to 7 times faster than it in instructions at every level; at `avx2` it needs 3.05 and 2.46 cycles per sample on znver3 and alderlake (whole-loop) against 53.39 and 43.34, efficiency 0.41 and 0.53 (latency: the division in the middle of the `log10f` steps)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no library converts Q15 powers to decibels; the comparison is CMSIS-DSP's `arm_q15_to_float`, `arm_vlog_f32` (a polynomial of another accuracy class: 144.0 dB against 149.9 dB of ours, which is bit-exact with `libm::log10f`) and `arm_scale_f32`, as information. Our fallback is 3 to 7 times faster than it in instructions at every level; at `avx2` it needs 3.05 and 2.46 cycles per sample on znver3 and alderlake (whole-loop) against 53.39 and 43.34, efficiency 0.41 and 0.53 (latency: the division in the middle of the `log10f` steps)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no library converts Q15 powers to decibels; the comparison is CMSIS-DSP's `arm_q15_to_float`, `arm_vlog_f32` (a polynomial of another accuracy class: 144.0 dB against 149.9 dB of ours, which is bit-exact with `libm::log10f`) and `arm_scale_f32`, as information. Our fallback is 3 to 7 times faster than it in instructions at every level; at `avx2` it needs 3.05 and 2.46 cycles per sample on znver3 and alderlake (whole-loop) against 53.39 and 43.34, efficiency 0.41 and 0.53 (latency: the division in the middle of the `log10f` steps)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no library converts Q15 powers to decibels; the comparison is CMSIS-DSP's `arm_q15_to_float`, `arm_vlog_f32` (a polynomial of another accuracy class: 144.0 dB against 149.9 dB of ours, which is bit-exact with `libm::log10f`) and `arm_scale_f32`, as information. Our fallback is 3 to 7 times faster than it in instructions at every level; at `avx2` it needs 3.05 and 2.46 cycles per sample on znver3 and alderlake (whole-loop) against 53.39 and 43.34, efficiency 0.41 and 0.53 (latency: the division in the middle of the `log10f` steps)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no library converts Q15 powers to decibels; the comparison is CMSIS-DSP's `arm_q15_to_float`, `arm_vlog_f32` (a polynomial of another accuracy class: 144.0 dB against 149.9 dB of ours, which is bit-exact with `libm::log10f`) and `arm_scale_f32`, as information. Our fallback is 3 to 7 times faster than it in instructions at every level; at `avx2` it needs 3.05 and 2.46 cycles per sample on znver3 and alderlake (whole-loop) against 53.39 and 43.34, efficiency 0.41 and 0.53 (latency: the division in the middle of the `log10f` steps)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no library converts Q15 powers to decibels; the comparison is CMSIS-DSP's `arm_q15_to_float`, `arm_vlog_f32` (a polynomial of another accuracy class: 144.0 dB against 149.9 dB of ours, which is bit-exact with `libm::log10f`) and `arm_scale_f32`, as information. Our fallback is 3 to 7 times faster than it in instructions at every level; at `avx2` it needs 3.05 and 2.46 cycles per sample on znver3 and alderlake (whole-loop) against 53.39 and 43.34, efficiency 0.41 and 0.53 (latency: the division in the middle of the `log10f` steps)"
     }
   },
   "quad_demod": {

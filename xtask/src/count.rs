@@ -740,7 +740,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 112] = [
+pub static KERNELS: [KernelSpec; 120] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -805,10 +805,18 @@ pub static KERNELS: [KernelSpec; 112] = [
     spec("squelch_cq15", Family::Own, false),
     spec("mag", Family::Volk, false),
     spec("mag_q15", Family::Volk, false),
-    spec("window", Family::VolkNative, false),
+    spec("window", Family::Volk, false),
     spec("window_cq15", Family::Own, false),
-    spec("power_db", Family::VolkNative, false),
+    spec("power_db", Family::Volk, false),
     spec("power_db_q15", Family::Own, false),
+    spec("mag_sq_fallback", Family::FallbackVsCmsis, false),
+    spec("mag_sq_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("mag_fallback", Family::FallbackVsCmsis, false),
+    spec("mag_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("window_fallback", Family::FallbackVsCmsis, false),
+    spec("window_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("power_db_fallback", Family::FallbackVsCmsis, false),
+    spec("power_db_q15_fallback", Family::FallbackVsCmsis, false),
     spec("agc", Family::GnuRadio, false),
     spec("agc_cq15", Family::Own, false),
     spec("dc_block_real", Family::Own, false),

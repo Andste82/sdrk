@@ -13,7 +13,9 @@
 //! each as `n` real parts followed by `n` imaginary parts, so that the lanes `k .. k + L` of any
 //! vector width `L` are two contiguous loads. Plus the twiddles of the in-register transforms of
 //! 16 and 64 points (`W_N^(c k)`, `c = 1 .. L - 1`, `k < L`, `L = sqrt N`), for 64 points also in
-//! the lane order of the AVX2 shuffles.
+//! the lane order of the AVX2 shuffles. For x86-64 also a second copy of the tables of the spans
+//! 16 to 4096 in that lane order (`*_IN_LANE`, 40 832 bytes), which the AVX2 passes read because
+//! their blocks keep that order.
 //!
 //! The values are computed in f64 with the pure-Rust `libm` and the same expression as
 //! `sdrk_core::kernels::fft::twiddle_f64`, then rounded to f32. For power-of-two sizes
@@ -53,6 +55,58 @@ fn emit(src: &mut String, doc: &str, name: &str, len: usize, w: impl Fn(usize) -
         }
     }
     src.push_str("];\n\n");
+}
+
+/// The lane order of the in-lane shuffles of AVX2 (`IN_LANE` of `fft::c32`).
+const IN_LANE: [usize; 8] = [0, 1, 4, 5, 2, 3, 6, 7];
+
+/// The 8-lane passes of AVX2 (x86-64 only) keep their blocks with the lanes in the order
+/// `IN_LANE`, so that they need no shuffles to restore the natural order. Their twiddles come
+/// from a second copy of the tables `A_S` (`S = 16 .. 4096`) and `B_S` (`S = 32 .. 4096`) with
+/// every group of 8 entries in that order: entry `8 g + l` holds `W^(8 g + IN_LANE[l])`. `B_16`
+/// (4 entries) has no 8-lane group and is never read by 8 lanes, so the original serves.
+fn in_lane_tables(src: &mut String) {
+    let permuted = |k: usize| k - k % 8 + IN_LANE[k % 8];
+    let mut arms = String::new();
+    let mut span = 16;
+    while span <= MAX_SPAN {
+        let a_len = if span == MAX_SPAN { span / 4 } else { span / 2 };
+        emit(
+            src,
+            &format!("`A_{span}` with the lanes of each group of 8 in the order `IN_LANE`."),
+            &format!("A_{span}_IN_LANE"),
+            a_len,
+            |k| twiddle(permuted(k), span),
+        );
+        let b = if span == 16 {
+            "B_16".to_string()
+        } else {
+            emit(
+                src,
+                &format!("`B_{span}` with the lanes of each group of 8 in the order `IN_LANE`."),
+                &format!("B_{span}_IN_LANE"),
+                span / 4,
+                |k| twiddle(3 * permuted(k), span),
+            );
+            format!("B_{span}_IN_LANE")
+        };
+        writeln!(
+            arms,
+            "        {} => Some((&A_{span}_IN_LANE, &{b})),",
+            span.trailing_zeros()
+        )
+        .unwrap();
+        span *= 2;
+    }
+    src.push_str(
+        "/// The tables `(A, B)` of the span `2^log2` (16 to 4096) in the lane order `IN_LANE`.\n",
+    );
+    src.push_str(
+        "pub(super) fn span_in_lane(log2: u32) -> Option<(&'static [f32], &'static [f32])> {\n",
+    );
+    src.push_str("    match log2 {\n");
+    src.push_str(&arms);
+    src.push_str("        _ => None,\n    }\n}\n");
 }
 
 fn main() {
@@ -124,6 +178,9 @@ fn main() {
         src.push_str("    match log2 {\n");
         src.push_str(&arms);
         src.push_str("        _ => None,\n    }\n}\n");
+        if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86_64") {
+            in_lane_tables(&mut src);
+        }
     }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("fft_tables.rs");
     std::fs::write(out, src).unwrap();

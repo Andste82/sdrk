@@ -49,7 +49,11 @@
 //!
 //! - AVX2 (`x86::InLane`): the rows of a tile are deinterleaved with one `vshufps` per vector
 //!   into the lane order [`IN_LANE`] and the tile is transposed with in-lane shuffles (24 per
-//!   8 x 8 matrix instead of 48); the 8 x 8 codelet keeps that lane order up to its store.
+//!   8 x 8 matrix instead of 48). The blocks keep that lane order through all passes up to the
+//!   interleaved store, which is then two unpacks per block instead of four shuffles; the
+//!   twiddles come in the same order (on x86-64 a second copy of the span tables in that order,
+//!   the plan's twiddles deinterleaved with `vshufps`). The result is bit for bit that of the
+//!   natural lane order.
 //! - NEON (`neon::Ld2`): interleaved rows and results move with `ld2`/`st2`.
 //! - AVX-512 uses the portable operations (its two-source permutations are single instructions)
 //!   with 16 lanes from 256 points, 8 lanes below.
@@ -150,23 +154,19 @@ trait Lanes<S: SimdToken>: Copy {
     /// Stores split vectors as `L` interleaved complex numbers.
     fn store_interleaved(v: Cv<Self::V>, b: &mut Self::Block);
 
-    /// Whether the codelet (`N = L^2`) keeps its 8 lanes in the order [`IN_LANE`] between its
-    /// transposition and its store, with [`Lanes::codelet_transpose`] and
-    /// [`Lanes::codelet_store`]; otherwise they are in natural order.
-    const CODELET_IN_LANE: bool = false;
-
-    /// [`Lanes::transpose`] for the codelet: as `transpose`, but with the lanes `j` of the result
-    /// in the order of the codelet.
+    /// The `L` interleaved complex numbers `a` (the first `L / 2`) and `b` as split vectors in
+    /// the lane order of the blocks (the twiddles from the plan's table).
     #[cfg_attr(not(debug_assertions), inline(always))]
-    fn codelet_transpose(simd: S, rows: &mut [Self::V; 16]) {
-        Self::transpose(simd, rows);
+    fn split(_simd: S, a: Self::V, b: Self::V) -> Cv<Self::V> {
+        a.deinterleave(b)
     }
 
-    /// [`Lanes::store_interleaved`] for split vectors in the lane order of the codelet.
-    #[cfg_attr(not(debug_assertions), inline(always))]
-    fn codelet_store(v: Cv<Self::V>, b: &mut Self::Block) {
-        Self::store_interleaved(v, b);
-    }
+    /// Whether the blocks between the passes hold their 8 lanes in the order [`IN_LANE`]
+    /// ([`Lanes::transpose`] leaves them so, [`Lanes::store_interleaved`] takes them so, and
+    /// [`Lanes::split`] gives the plan's twiddles so); the passes then read the static span
+    /// tables in that order ([`span_table_in_lane`]) and the codelet (`N = L^2`) its twiddles
+    /// (`CODELET_64_IN_LANE`).
+    const BLOCKS_IN_LANE: bool = false;
 }
 
 /// The order of the 8 lanes that the in-lane shuffles of AVX2 give: one `vshufps` deinterleaves
@@ -315,9 +315,13 @@ mod x86 {
     }
 
     /// [`Lanes`] of AVX2: a row is deinterleaved with one `vshufps` per vector into the lane order
-    /// `PI` of [`deinterleave`]; the tile is transposed with in-lane shuffles, which also restore
-    /// the natural order (24 shuffles per 8 x 8 matrix and 2 per row, against 48 and 4 with the
-    /// portable operations).
+    /// `PI` of [`deinterleave`]; the tile is transposed with in-lane shuffles (24 shuffles per
+    /// 8 x 8 matrix and 2 per row, against 48 and 4 with the portable operations). The blocks
+    /// between the passes keep their lanes in the order `PI` (`BLOCKS_IN_LANE`), with the
+    /// twiddles in the same order (the span tables `*_IN_LANE` of `build.rs`, the plan's
+    /// twiddles deinterleaved by [`deinterleave`]), so that the last pass stores with
+    /// `vunpcklps`/`vunpckhps` only, without the two lane permutations per block of the natural
+    /// order.
     #[derive(Clone, Copy)]
     pub(super) struct InLane;
 
@@ -348,13 +352,14 @@ mod x86 {
             deinterleave(simd, a, b)
         }
 
-        /// With `rows[r]` lane `l` = element `(r, PI[l])`: the transposition of the rows in
-        /// bit-reversed order gives in vector `l` lane `j` the element `(rev j, PI[l])`, which is
-        /// the result for `k = rev(PI[l])`.
+        /// With `rows[r]` lane `l` = element `(r, PI[l])`: the transposition of the rows in the
+        /// order `rev(PI[r])` gives in vector `l` lane `j` the element `(rev(PI[j]), PI[l])`,
+        /// which is lane `PI[j]` of the result for `k = rev(PI[l])`: the block in the lane order
+        /// `PI`.
         #[cfg_attr(not(debug_assertions), inline(always))]
         fn transpose(simd: Avx2, rows: &mut [f32x8<Avx2>; 16]) {
             let mut t = [
-                rows[0], rows[4], rows[2], rows[6], rows[1], rows[5], rows[3], rows[7],
+                rows[0], rows[4], rows[1], rows[5], rows[2], rows[6], rows[3], rows[7],
             ];
             transpose8(simd, &mut t);
             // `out[k] = t[PI[rev k]]` (`PI` is its own inverse).
@@ -362,31 +367,19 @@ mod x86 {
             [rows[4], rows[5], rows[6], rows[7]] = [t[1], t[3], t[5], t[7]];
         }
 
-        #[cfg_attr(not(debug_assertions), inline(always))]
-        fn store_interleaved(v: Cv<f32x8<Avx2>>, b: &mut Self::Block) {
-            <Portable<f32x8<Avx2>, f64x4<Avx2>> as Lanes<Avx2>>::store_interleaved(v, b);
-        }
-
-        const CODELET_IN_LANE: bool = true;
-
-        /// As [`InLane::transpose`] with the rows taken in the order `rev(PI[r])`, which puts
-        /// the element of row `rev(PI[j])` into lane `j`.
-        #[cfg_attr(not(debug_assertions), inline(always))]
-        fn codelet_transpose(simd: Avx2, rows: &mut [f32x8<Avx2>; 16]) {
-            let mut t = [
-                rows[0], rows[4], rows[1], rows[5], rows[2], rows[6], rows[3], rows[7],
-            ];
-            transpose8(simd, &mut t);
-            [rows[0], rows[1], rows[2], rows[3]] = [t[0], t[2], t[4], t[6]];
-            [rows[4], rows[5], rows[6], rows[7]] = [t[1], t[3], t[5], t[7]];
-        }
-
         /// `vunpcklps` and `vunpckhps` give the numbers `0 .. 4` and `4 .. 8` from lanes in the
         /// order `PI`.
         #[cfg_attr(not(debug_assertions), inline(always))]
-        fn codelet_store(v: Cv<f32x8<Avx2>>, b: &mut Self::Block) {
+        fn store_interleaved(v: Cv<f32x8<Avx2>>, b: &mut Self::Block) {
             Self::store(unpack(v.0.token(), v.0, v.1), b);
         }
+
+        #[cfg_attr(not(debug_assertions), inline(always))]
+        fn split(simd: Avx2, a: f32x8<Avx2>, b: f32x8<Avx2>) -> Cv<f32x8<Avx2>> {
+            deinterleave(simd, a, b)
+        }
+
+        const BLOCKS_IN_LANE: bool = true;
     }
 }
 
@@ -570,6 +563,9 @@ struct Twiddles<'a> {
     n: usize,
     /// Whether the static span tables are used (feature `fft-tables`).
     tables: bool,
+    /// Whether the passes read the span tables in the lane order [`IN_LANE`]
+    /// ([`Lanes::BLOCKS_IN_LANE`]; set by [`run`]).
+    in_lane: bool,
 }
 
 /// `(re, im)` of the plan's complex number at `idx` (zero outside the table).
@@ -599,6 +595,21 @@ fn span_table(log2: u32) -> Option<[(&'static [f32], &'static [f32]); 2]> {
 #[cfg(not(feature = "fft-tables"))]
 #[cfg_attr(not(debug_assertions), inline(always))]
 fn span_table(_log2: u32) -> Option<[(&'static [f32], &'static [f32]); 2]> {
+    None
+}
+
+/// [`span_table`] with every group of 8 lanes in the order [`IN_LANE`] (spans 16 to 4096; only
+/// on x86-64, for the AVX2 passes).
+#[cfg(all(feature = "fft-tables", target_arch = "x86_64"))]
+#[cfg_attr(not(debug_assertions), inline(always))]
+fn span_table_in_lane(log2: u32) -> Option<[(&'static [f32], &'static [f32]); 2]> {
+    let (a, b) = tables::span_in_lane(log2)?;
+    Some([a.split_at(a.len() / 2), b.split_at(b.len() / 2)])
+}
+
+#[cfg(not(all(feature = "fft-tables", target_arch = "x86_64")))]
+#[cfg_attr(not(debug_assertions), inline(always))]
+fn span_table_in_lane(_log2: u32) -> Option<[(&'static [f32], &'static [f32]); 2]> {
     None
 }
 
@@ -634,13 +645,23 @@ enum Radix8Twiddles<'a> {
 }
 
 impl<'a> Twiddles<'a> {
+    /// The static tables of the span `2^log2` in the lane order of the passes.
+    #[cfg_attr(not(debug_assertions), inline(always))]
+    fn span(&self, log2: u32) -> Option<[(&'static [f32], &'static [f32]); 2]> {
+        if self.in_lane {
+            span_table_in_lane(log2)
+        } else {
+            span_table(log2)
+        }
+    }
+
     /// The twiddles of the radix-4 pass of span `span`.
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn radix4(&self, span: usize) -> PassTwiddles<'a> {
         if self.tables {
             let log2 = span.trailing_zeros();
             if let (Some([(a_re, a_im), (b_re, b_im)]), Some([half, _])) =
-                (span_table(log2), span_table(log2 - 1))
+                (self.span(log2), self.span(log2 - 1))
             {
                 return PassTwiddles::Table([(a_re, a_im), half, (b_re, b_im)]);
             }
@@ -658,7 +679,7 @@ impl<'a> Twiddles<'a> {
         if self.tables {
             let log2 = span.trailing_zeros();
             if let (Some([a, b]), Some([a2, b2]), Some([a4, _])) =
-                (span_table(log2), span_table(log2 - 1), span_table(log2 - 2))
+                (self.span(log2), self.span(log2 - 1), self.span(log2 - 2))
             {
                 return Radix8Twiddles::Table([a, a2, b, a4, b2]);
             }
@@ -673,7 +694,7 @@ impl<'a> Twiddles<'a> {
     #[cfg_attr(not(debug_assertions), inline(always))]
     fn radix2(&self, span: usize) -> PassTwiddles<'a> {
         if self.tables
-            && let Some([a, b]) = span_table(span.trailing_zeros())
+            && let Some([a, b]) = self.span(span.trailing_zeros())
         {
             return PassTwiddles::Table([a, a, b]);
         }
@@ -762,7 +783,7 @@ fn gather<S: SimdToken, P: Lanes<S>>(simd: S, tw: &[[f32; 2]], k0: usize, s: usi
     let h = P::D::LEN;
     let lo = P::D::from_fn(simd, |i| entry_bits(tw, (k0 + i) * s));
     let hi = P::D::from_fn(simd, |i| entry_bits(tw, (k0 + h + i) * s));
-    lo.bitcast::<P::V>().deinterleave(hi.bitcast::<P::V>())
+    P::split(simd, lo.bitcast::<P::V>(), hi.bitcast::<P::V>())
 }
 
 /// The longest prefix of `tw` that is a whole number of `T`, as values of `T`.
@@ -844,8 +865,8 @@ fn plan_contiguous<S: SimdToken, P: Lanes<S>>(
     w2: &[P::Block],
 ) -> [Cv<P::V>; 3] {
     let (a, b) = P::load(simd, w1);
-    let w1 = a.deinterleave(b);
-    let w2 = even::<S, P>(simd, w2, 0).deinterleave(even::<S, P>(simd, w2, 1));
+    let w1 = P::split(simd, a, b);
+    let w2 = P::split(simd, even::<S, P>(simd, w2, 0), even::<S, P>(simd, w2, 1));
     [w1, w2, cmul::<S, P::V, false>(w1, w2)]
 }
 
@@ -1188,8 +1209,8 @@ mod grid {
 use grid::{Column, Grid};
 
 /// Loads a tile (row `a` is `col[a]`), transforms it across the rows and transposes it: on exit
-/// `x.0[k]`, `x.1[k]` are the block of row `k` of the mirror tile (with the lanes in the order of
-/// the codelet for `CODELET`).
+/// `x.0[k]`, `x.1[k]` are the block of row `k` of the mirror tile, with the lanes in the order of
+/// the blocks (`CODELET` only changes the order of the work).
 #[cfg_attr(not(debug_assertions), inline(always))]
 fn tile<S: SimdToken, P: Lanes<S>, const INV: bool, const CODELET: bool>(
     simd: S,
@@ -1211,8 +1232,8 @@ fn tile<S: SimdToken, P: Lanes<S>, const INV: bool, const CODELET: bool>(
     if CODELET {
         // The imaginary parts first: the register allocation of the codelet then spills less
         // (AVX2, N = 64: 5.84 instead of 5.89 instructions per sample).
-        P::codelet_transpose(simd, &mut x.1);
-        P::codelet_transpose(simd, &mut x.0);
+        P::transpose(simd, &mut x.1);
+        P::transpose(simd, &mut x.0);
     } else {
         P::transpose(simd, &mut x.0);
         P::transpose(simd, &mut x.1);
@@ -1622,8 +1643,8 @@ fn plan_contiguous8<S: SimdToken, P: Lanes<S>>(
     j: usize,
 ) -> [Cv<P::V>; 7] {
     let (a, b) = P::load(simd, w1);
-    let w1 = a.deinterleave(b);
-    let w2 = even::<S, P>(simd, w2, 0).deinterleave(even::<S, P>(simd, w2, 1));
+    let w1 = P::split(simd, a, b);
+    let w2 = P::split(simd, even::<S, P>(simd, w2, 0), even::<S, P>(simd, w2, 1));
     // Every fourth number: every other number of the even numbers.
     let q0 = even::<S, P>(simd, w4, 0)
         .bitcast::<P::D>()
@@ -1631,7 +1652,7 @@ fn plan_contiguous8<S: SimdToken, P: Lanes<S>>(
     let q1 = even::<S, P>(simd, w4, 2)
         .bitcast::<P::D>()
         .unzip_low(even::<S, P>(simd, w4, 3).bitcast::<P::D>());
-    let w4 = q0.bitcast::<P::V>().deinterleave(q1.bitcast::<P::V>());
+    let w4 = P::split(simd, q0.bitcast::<P::V>(), q1.bitcast::<P::V>());
     let w3 = gather::<S, P>(simd, complex, j * P::V::LEN, 3);
     [
         w1,
@@ -1729,7 +1750,7 @@ fn radix8<S, P, const INV: bool, const LAST: bool, I, C>(
 }
 
 /// The twiddles `W_N^(c k)` of the rows `c = 1 .. L` of the codelet (`N = L^2`, `L <= 8`) for the
-/// columns `k < L` in the lane order of the codelet, row `c` at index `c - 1`.
+/// columns `k < L` in the lane order of the blocks, row `c` at index `c - 1`.
 #[cfg_attr(not(debug_assertions), inline(always))]
 fn codelet_twiddles<S: SimdToken, P: Lanes<S>>(simd: S, tw: &Twiddles<'_>) -> [Cv<P::V>; 7] {
     type V<S, P> = <P as Lanes<S>>::V;
@@ -1741,7 +1762,7 @@ fn codelet_twiddles<S: SimdToken, P: Lanes<S>>(simd: S, tw: &Twiddles<'_>) -> [C
         // A row of the table has the layout of a block in split form.
         let table: &[f32] = if l == 4 {
             &tables::CODELET_16
-        } else if P::CODELET_IN_LANE {
+        } else if P::BLOCKS_IN_LANE {
             &tables::CODELET_64_IN_LANE
         } else {
             &tables::CODELET_64
@@ -1769,7 +1790,7 @@ fn codelet_entry<S: SimdToken, P: Lanes<S>>(
     lane: usize,
 ) -> (f32, f32) {
     let k = match IN_LANE.get(lane) {
-        Some(&k) if P::CODELET_IN_LANE => k,
+        Some(&k) if P::BLOCKS_IN_LANE => k,
         _ => lane,
     };
     let half = tw.n / 2;
@@ -1848,7 +1869,7 @@ fn codelet_store<S: SimdToken, P: Lanes<S>, const INV: bool>(
     let bits = P::V::LEN.trailing_zeros();
     if let (Some(&re), Some(&im), Some(b)) = (x.0.get(r), x.1.get(r), blocks.get_mut(rev(r, bits)))
     {
-        P::codelet_store(if INV { (re * g, im * g) } else { (re, im) }, b);
+        P::store_interleaved(if INV { (re * g, im * g) } else { (re, im) }, b);
     }
 }
 
@@ -1861,6 +1882,10 @@ fn run<S: SimdToken, P: Lanes<S>, const INV: bool, const RADIX8: bool>(
 ) {
     let n = tw.n;
     let l = P::V::LEN;
+    let tw = Twiddles {
+        in_lane: P::BLOCKS_IN_LANE,
+        ..tw
+    };
     let Ok(blocks) = bytemuck::try_cast_slice_mut::<f32, P::Block>(data) else {
         return;
     };
@@ -1963,6 +1988,7 @@ fn fft_c32_of<S: SimdToken, const N: usize>(
         stride,
         n,
         tables: tables && cfg!(feature = "fft-tables"),
+        in_lane: false,
     };
     if inverse {
         transform::<S, true>(simd, data, tw);
@@ -2095,8 +2121,8 @@ mod tests {
     }
 
     /// The data movement of AVX2 against the portable operations, bit for bit: the rows of a tile
-    /// (load and transposition), the transposition of the codelet (lanes in the order `IN_LANE`)
-    /// and its interleaved store.
+    /// (load and transposition, the lanes of the result in the order `IN_LANE`), the
+    /// interleaved store from that order, and the plan's twiddles split into that order.
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn the_avx2_lanes_match_the_portable_lanes() {
@@ -2109,6 +2135,10 @@ mod tests {
             return;
         };
         let lanes = |v: f32x8<Avx2>| -> [f32; 8] { *v };
+        let permuted = |v: f32x8<Avx2>| -> [f32; 8] {
+            let natural = lanes(v);
+            core::array::from_fn(|j| natural[IN_LANE[j]])
+        };
         for seed in 0..8 {
             let data = noise(seed, 128);
             let mut rows = [[[0.0f32; 8]; 2]; 8];
@@ -2122,23 +2152,100 @@ mod tests {
                 (p.0[r], p.1[r]) = InLane::load_row(avx2, row);
                 (q.0[r], q.1[r]) = Q::load_row(avx2, row);
             }
-            let mut c = p;
             InLane::transpose(avx2, &mut p.0);
             InLane::transpose(avx2, &mut p.1);
-            InLane::codelet_transpose(avx2, &mut c.0);
-            InLane::codelet_transpose(avx2, &mut c.1);
             Q::transpose(avx2, &mut q.0);
             Q::transpose(avx2, &mut q.1);
             for k in 0..8 {
-                assert_eq!(lanes(p.0[k]), lanes(q.0[k]), "seed {seed} row {k}");
-                assert_eq!(lanes(p.1[k]), lanes(q.1[k]), "seed {seed} row {k}");
-                let natural = lanes(q.0[k]);
-                let permuted: [f32; 8] = core::array::from_fn(|j| natural[IN_LANE[j]]);
-                assert_eq!(lanes(c.0[k]), permuted, "seed {seed} codelet row {k}");
+                assert_eq!(lanes(p.0[k]), permuted(q.0[k]), "seed {seed} row {k}");
+                assert_eq!(lanes(p.1[k]), permuted(q.1[k]), "seed {seed} row {k}");
                 let (mut stored, mut want) = ([[0.0f32; 8]; 2], [[0.0f32; 8]; 2]);
-                InLane::codelet_store((c.0[k], c.1[k]), &mut stored);
+                InLane::store_interleaved((p.0[k], p.1[k]), &mut stored);
                 Q::store_interleaved((q.0[k], q.1[k]), &mut want);
-                assert_eq!(stored, want, "seed {seed} codelet store {k}");
+                assert_eq!(stored, want, "seed {seed} store {k}");
+            }
+            let (a, b) = (
+                f32x8::from_slice(avx2, &data[..8]),
+                f32x8::from_slice(avx2, &data[8..16]),
+            );
+            let (s, t) = (InLane::split(avx2, a, b), Q::split(avx2, a, b));
+            assert_eq!(lanes(s.0), permuted(t.0), "seed {seed} split");
+            assert_eq!(lanes(s.1), permuted(t.1), "seed {seed} split");
+        }
+    }
+
+    /// The in-lane span tables are the span tables with every group of 8 entries in the order
+    /// `IN_LANE`, bit for bit.
+    #[cfg(all(target_arch = "x86_64", feature = "fft-tables"))]
+    #[test]
+    fn the_in_lane_span_tables_are_the_permuted_span_tables() {
+        use super::{IN_LANE, span_table, span_table_in_lane};
+
+        assert!(span_table_in_lane(3).is_none() && span_table_in_lane(13).is_none());
+        for log2 in 4..=12 {
+            let ([a, b], [ai, bi]) = (span_table(log2).unwrap(), span_table_in_lane(log2).unwrap());
+            for ((nat, perm), name) in [(a, ai), (b, bi)].iter().zip(["A", "B"]) {
+                for (x, y) in [(nat.0, perm.0), (nat.1, perm.1)] {
+                    assert_eq!(x.len(), y.len(), "{name} {log2}");
+                    if x.len() < 8 {
+                        // `B_16`: never read by 8 lanes.
+                        assert_eq!(x, y, "{name} {log2}");
+                        continue;
+                    }
+                    for (k, v) in y.iter().enumerate() {
+                        let want = x[k - k % 8 + IN_LANE[k % 8]];
+                        assert_eq!(v.to_bits(), want.to_bits(), "{name} {log2} k {k}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The AVX2 transform (blocks in the lane order `IN_LANE`) against the portable transform of
+    /// the same width (natural lane order, the same arithmetic), bit for bit: every size from
+    /// 64 to 16 384 points (the passes above 4096 take the plan's twiddles), both directions,
+    /// with and without the span tables, with the plan's own table and with a strided one.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn the_avx2_transform_is_the_portable_transform_bit_for_bit() {
+        use fearless_simd::{Avx2, f32x8, f64x4};
+
+        use super::{Portable, Twiddles, run, x86::InLane};
+
+        type Q = Portable<f32x8<Avx2>, f64x4<Avx2>>;
+        let Some(avx2) = super::x86::avx2_only(crate::level::current()) else {
+            return;
+        };
+        let big = FftPlan::<C32, _>::new(4096, std::vec![C32::default(); 2048]).unwrap();
+        let big: &[f32] = bytemuck::cast_slice(big.twiddles());
+        let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        for log2 in 6..=14 {
+            let n = 1usize << log2;
+            let own = FftPlan::<C32, _>::new(n, std::vec![C32::default(); n / 2]).unwrap();
+            let own: &[f32] = bytemuck::cast_slice(own.twiddles());
+            let mut plans = std::vec![(own, 1)];
+            if n <= 4096 {
+                plans.push((big, 4096 / n));
+            }
+            for (plan, stride) in plans {
+                for tables in [false, true] {
+                    let tw = Twiddles {
+                        plan,
+                        stride,
+                        n,
+                        tables: tables && cfg!(feature = "fft-tables"),
+                        in_lane: false,
+                    };
+                    let x = noise(log2 + 100 * stride as u32, 2 * n);
+                    let (mut want, mut got) = (x.clone(), x.clone());
+                    run::<_, Q, false, false>(avx2, &mut want, tw);
+                    run::<_, InLane, false, false>(avx2, &mut got, tw);
+                    assert!(bits(&want) == bits(&got), "n={n} forward {stride} {tables}");
+                    let (mut want, mut got) = (x.clone(), x);
+                    run::<_, Q, true, false>(avx2, &mut want, tw);
+                    run::<_, InLane, true, false>(avx2, &mut got, tw);
+                    assert!(bits(&want) == bits(&got), "n={n} inverse {stride} {tables}");
+                }
             }
         }
     }
@@ -2293,6 +2400,7 @@ mod tests {
                             stride,
                             n,
                             tables: tables && cfg!(feature = "fft-tables"),
+                            in_lane: P::BLOCKS_IN_LANE,
                         };
                         one::<S, P, false, false>(simd, n, tw);
                         one::<S, P, false, true>(simd, n, tw);

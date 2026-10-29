@@ -183,9 +183,11 @@ What each kernel is compared with:
 | `convert` CS8 to CQ15 | `volk_8i_convert_16i` (`x * 256`) on 2N values |
 | `convert` CU8 to CQ15 | `volk_8i_convert_16i` on the same 2N bytes with the sign bit flipped (`(u - 128) << 8`, the same work apart from the offset of 128 of `(2u - 255) << 7`, which the accuracy check adds outside the counted region); our fallback as information. `convert` CS16 to CQ15 and `convert_real` RS16 to Q15 are copies and have no entry |
 | `convert_out` C32 to CS16 / CS8 / CU8 | `volk_32f_s32f_convert_16i` / `volk_32f_s32f_convert_8i` / `volk_32f_s32f_x2_convert_8u` on 2N values |
+| `convert_out_real` f32 to RS16 / RS8 / RU8 | the same VOLK kernels on N values (the same work per value). `Q15` to the real 8-bit formats has no entry: no established library converts Q15 to 8 bits with ties to even (CMSIS-DSP `arm_q15_to_q7` truncates, VOLK's `16i_convert_8i` takes the high byte); `Q15` to `RS16` is a copy |
 | `rotate` C32 | `volk_32fc_s32fc_x2_rotator2_32fc` |
 | `fir` C32, 64 taps; `fir_decimate` C32, 127 taps, M = 10 | `volk_32fc_32f_dot_prod_32fc` per output, called as GNU Radio's FIR filters call it (aligned entry point, taps pre-shifted, D6) |
 | `fir_interpolate` C32, L = 2, 128 taps; `resample` C32, 3 / 2, 192 taps (64 per branch; per output sample) | the same dot product per output with the taps of the output's branch, as GNU Radio's `interp_fir_filter_ccf` and `rational_resampler_ccf` call it |
+| `fir_interpolate_real` f32, L = 2, 128 taps; `resample_real` f32, 3 / 2, 192 taps | `volk_32f_x2_dot_prod_32f_a` per output with the taps of the output's branch, as GNU Radio's `interp_fir_filter_fff` and `rational_resampler_fff` call it; VOLK's wasm32 build lacks it, so at `simd128` our fallback, as information |
 | `mag_sq` C32 | `volk_32fc_magnitude_squared_32f` |
 | `mag` C32 | `volk_32fc_magnitude_32f` |
 | `mag` CQ15 | `volk_16ic_magnitude_16i` (VOLK scales to float and back and rounds differently from the integer rule; the entries are `release` (they started as `dev`; every ratio is below 1.00, open item M20-3), and the accuracy rule compares the SNR of both against the unrounded magnitude) |
@@ -193,7 +195,7 @@ What each kernel is compared with:
 | `window` C32 (a periodic Hann window) | `volk_32fc_32f_multiply_32fc` (a complex vector times a real one, the same work). Only VOLK's own build has it: at `simd128` (the generic library of `volk-wasm.c`, which is not extended so that the references of the other platforms stay as they are) our fallback, as information |
 | `power_db` f32 (powers over 70 dB, offset -3 dB) | VOLK's base-2 logarithm scaled and offset by VOLK: `volk_32f_log2_32f`, `volk_32f_s32f_multiply_32f` by `10 log10(2)` in place, `volk_32f_s32f_add_32f` in place (the same work without the floor). Not the same accuracy class: VOLK's SIMD `log2` is a polynomial with an SNR of 141.6 dB on the measured input against 152.0 dB of ours, which is bit-exact with `libm::log10f` like the fallback; matching its cost would lose accuracy (D34), so the entries where it is cheaper are `info`. At `simd128` our fallback, as for `window` |
 | `window` CQ15, `power_db` Q15 | our fallback (no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, or a decibel conversion of Q15 powers), as information with the efficiency verdict |
-| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32, `squelch` CQ15, `agc` CQ15, `dc_block_real` f32 and Q15 | our fallback (no established library); `squelch` CQ15, `agc` CQ15 and `dc_block_real` are not accelerated, so their entries are `info` |
+| `rotate` CQ15, `mag_sq` CQ15, `quad_demod` CQ15, `fm_mod` C32 and CQ15, `fir_interpolate_real` and `resample_real` Q15, `squelch` CQ15, `agc` CQ15, `dc_block_real` f32 and Q15, `deemphasis` f32 and Q15, `dc_block` C32 and CQ15 | our fallback (no established library). `mag_sq` CQ15, `quad_demod` CQ15 and `fm_mod` C32 are still `release` against it; `rotate` CQ15, `fm_mod` CQ15 and the Q15 polyphase entries are `info` with the efficiency verdict (D32); `squelch` CQ15, `agc` CQ15, `dc_block_real`, `deemphasis` and `dc_block` are not accelerated, so their entries are `info` (and their `avx2-runtime` entries compare the baseline build of the fallback with its AVX2 build) |
 | `biquad_real` f32, 2 sections | KFR 7.2.0 `kfr::iir` (`iir_state<float, 2>`: the sections in the lanes of one vector, transposed direct form II, the same algorithm class as ours) at every level, `simd128` included (D29); CMSIS-DSP `arm_biquad_cascade_df2T_f32` (generic C) as information (D15) |
 | `biquad` C32, 2 sections | KFR as above on the re and im parts as two real channels: two calls of N real samples (the 2N-values rule of `convert`), the deinterleaving done once outside the counted region (the best case for KFR, which has no complex type); CMSIS-DSP `arm_biquad_cascade_stereo_df2T_f32` on the interleaved buffer (its two channels are our re/im layout) as information (D15) |
 | `biquad` CQ15, `biquad_real` Q15, 2 sections | our fallback, as information only (D21): no library has a SIMD Q15 biquad on our levels (CMSIS-DSP has one for Helium/MVE only; Intel IPP's 16-bit IIR computes in float, another contract); CMSIS-DSP `arm_biquad_cascade_df1_q15` (generic C, `postShift = 1`) as information, for CQ15 two calls on planar re and im (D15) |
@@ -220,7 +222,7 @@ VOLK's dispatcher is pinned per level by a `volk_config` that xtask writes (`ben
 - VOLK has no SSE implementation of `rotator2` and `atan2`; at `sse2` and `sse4.2` the dispatcher takes their scalar `generic` code, so `rotate` and `quad_demod` are `info` at both levels. VOLK has no implementation of `multiply_conjugate`, `8i_s32f_convert_32f` and `8i_convert_16i` below SSE3 and SSE4.1 either, but the `generic` code of the conversions is vectorized with SSE2 by the compiler, so `convert_cs8`, `convert_cu8`, `convert_cq15_cs8` and `convert_cq15_cu8` are judged against it at `sse2`.
 - At `simd128`, see above.
 - `info` entries are reported with their numbers and never judged; the reason is the `waiver` text of the entry.
-- Under the [measurement policy](#what-is-compared-with-what-d32) our own fallback is no fair gate for a SIMD branch. The SIMD entries of `rotate` `CQ15`, `mag_sq` `CQ15`, `quad_demod` `CQ15` and `fm_mod` `C32` are still `release` against it; they get an established reference or become `info` with an efficiency verdict (issue #20, group A). The biquad Q15 entries are already `info` (D21); their efficiency verdict is pending. The `info` entries of `squelch`, `agc` `CQ15` and `dc_block_real` compare the fallback with itself and still need a scalar reference (group B).
+- Under the [measurement policy](#what-is-compared-with-what-d32) our own fallback is no fair gate for a SIMD branch. The SIMD entries of `mag_sq` `CQ15`, `quad_demod` `CQ15` and `fm_mod` `C32` are still `release` against it; they get an established reference or become `info` with an efficiency verdict (issue #20, group A). `rotate` `CQ15` (D45), `fm_mod` `CQ15` (D46), the biquad Q15 entries (D21, D39), `window` `CQ15` and `power_db` `Q15` (D43), the Q15 polyphase entries (D44) and `dot` `CQ15`, `dot_real` `Q15` and `scale` `CQ15` (D48) are `info` and judged by their simulated cycles and efficiency (see the notes below). `squelch` `C32` is gated against GNU Radio's `pwr_squelch_cc` (D41); the `info` entries of `squelch` `CQ15`, `agc` `CQ15`, `dc_block_real`, `deemphasis` and `dc_block` compare the fallback with itself and still need a scalar reference (group B; candidates GNU Radio `fm_deemph` and liquid-dsp `iirfilt`, which need a change of `benches/refs/build.sh`).
 
 ## Limits
 
@@ -237,92 +239,142 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `convert` CS8 to C32 | 0.62 | 0.70 | 0.61 | 0.62 | 0.57 | 0.38 |
 | `convert` CS16 to C32 | 0.43 | 0.56 | 0.61 | 0.62 | 0.48 | 0.43 |
 | `convert` CU8 to C32 | 0.62 | 0.83 | 0.61 | 0.62 | 0.62 | 0.36 |
-| `convert_out` C32 to CS16 | 0.91 | 0.91 | 0.80 | 0.70 | 0.60 | 0.20 |
-| `convert_out` C32 to CS8 | 0.99 | 1.02 | 0.84 | 0.72 | 0.65 | 0.32 |
-| `convert_out` C32 to CU8 | 1.35 dev | 1.05 | 1.06 | 0.69 | 0.96 | 0.52 |
+| `convert_real` RS16 to f32 | 0.44 | 0.58 | 0.64 | 0.69 | 0.50 | 0.44 |
+| `convert` CS8 to CQ15 | 0.65 | 0.70 | 0.64 | 0.34 | 0.51 | 0.64 info |
+| `convert` CU8 to CQ15 | 0.80 | 0.87 | 0.80 | 0.43 | 0.71 | 0.68 info |
+| `convert_out` C32 to CS16 | 0.92 | 0.92 | 0.92 | 0.71 | 0.60 | 0.20 |
+| `convert_out` C32 to CS8 | 0.99 | 1.03 | 0.97 | 0.72 | 0.65 | 0.32 |
+| `convert_out` C32 to CU8 | 1.35 dev | 1.06 | 1.06 | 0.69 | 0.96 | 0.52 |
+| `convert_out_real` f32 to RS16 | 0.92 | 0.92 | 0.93 | 0.74 | 0.61 | 0.20 |
+| `convert_out_real` f32 to RS8 | 1.00 | 1.04 | 0.99 | 0.77 | 0.66 | 0.32 |
+| `convert_out_real` f32 to RU8 | 1.36 dev | 1.06 | 1.08 | 0.71 | 0.97 | 0.52 |
 | `rotate` C32 | 0.16 info | 0.18 info | 0.45 | 0.25 | 0.60 | 0.20 info |
-| `rotate` CQ15 | 0.43 | 0.23 | 0.28 | 0.22 | 0.22 | 0.53 |
+| `rotate` CQ15 | 0.26 info | 0.24 info | 0.36 info | 0.20 info | 0.18 info | 0.72 info |
 | `fir` C32, 64 taps | 0.49 | 0.48 | 0.13 | 0.06 | 0.36 | 0.11 info |
 | `fir_decimate` C32, 127 taps, M = 10 | 0.51 | 0.50 | 0.21 | 0.18 | 0.52 | 0.14 info |
-| `fir_interpolate` C32, L = 2, 128 taps | 0.51 | 0.51 | 0.20 | 0.13 | 0.40 | 0.12 info |
-| `resample` C32, 3 / 2, 192 taps | 0.52 | 0.51 | 0.26 | 0.20 | 0.50 | 0.16 info |
+| `fir_interpolate` C32, L = 2, 128 taps | 0.50 | 0.50 | 0.19 | 0.12 | 0.38 | 0.12 info |
+| `resample` C32, 3 / 2, 192 taps | 0.51 | 0.50 | 0.24 | 0.19 | 0.49 | 0.15 info |
+| `fir_interpolate_real` f32, L = 2, 128 taps | 0.43 | 0.41 | 0.17 | 0.17 | 0.34 | 0.06 info |
+| `resample_real` f32, 3 / 2, 192 taps | 0.50 | 0.47 | 0.26 | 0.24 | 0.39 | 0.07 info |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | 0.35 info | 0.23 info | 0.16 info | 0.14 info | 0.18 info | 0.18 info |
+| `resample_real` Q15, 3 / 2, 192 taps | 0.35 info | 0.23 info | 0.16 info | 0.14 info | 0.18 info | 0.18 info |
 | `mag_sq` C32 | 0.71 | 0.62 | 0.61 | 0.39 | 0.52 | 0.60 |
 | `mag_sq` CQ15 | 0.11 | 0.15 | 0.18 | 0.18 | 0.31 | 0.13 |
 | `quad_demod` C32 | 0.13 info | 0.14 info | 0.68 | 0.50 | 0.62 | 0.18 info |
-| `quad_demod` CQ15 | 0.22 | 0.16 | 0.07 | 0.02 | 0.10 | 0.13 |
-| `fm_mod` C32 | 0.27 | 0.22 | 0.13 | 0.06 | 0.27 | 0.32 |
-| `squelch` C32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `quad_demod` CQ15 | 0.19 | 0.14 | 0.07 | 0.02 | 0.10 | 0.12 |
+| `fm_mod` C32 | 0.36 | 0.30 | 0.27 | 0.15 | 0.29 | 0.47 |
+| `fm_mod` CQ15 | 0.32 info | 0.20 info | 0.21 info | 0.09 info | 0.19 info | 0.47 info |
+| `squelch` C32 | 0.41 | 0.42 | 0.38 | 0.37 | 0.41 | 0.64 |
 | `squelch` CQ15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `mag` C32 | 0.73 | 0.66 | 0.64 | 0.52 | 0.72 | 0.80 |
 | `mag` CQ15 | 0.24 | 0.46 | 0.85 | 0.46 | 0.72 | 0.49 |
+| `window` C32 | 0.90 | 0.90 | 0.65 | 0.37 | 0.82 | 0.72 info |
+| `window` CQ15 | 0.19 info | 0.12 info | 0.12 info | 0.16 info | 0.16 info | 0.15 info |
+| `power_db` f32 | 0.26 | 1.09 | 1.59 info | 0.97 | 1.14 info | 0.88 info |
+| `power_db` Q15 | 0.89 info | 0.91 info | 0.84 info | 0.43 info | 0.81 info | 0.92 info |
 | `agc` C32 | 0.99 | 0.96 | 0.72 | 0.67 | 1.03 | 1.01 |
 | `agc` CQ15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `dc_block_real` f32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `dc_block_real` Q15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `deemphasis` f32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `deemphasis` Q15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `dc_block` C32 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `dc_block` CQ15 | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `biquad` C32, 2 sections (KFR) | 0.21 | 0.23 | 0.25 | 0.18 | 0.27 | 0.44 |
-| `biquad` CQ15, 2 sections (fallback) | 0.52 info | 0.47 info | 0.19 info | 0.21 info | 0.59 info | 0.35 info |
+| `biquad` CQ15, 2 sections (fallback) | 0.52 info | 0.51 info | 0.18 info | 0.18 info | 0.43 info | 0.35 info |
 | `biquad_real` f32, 2 sections (KFR) | 0.36 | 0.37 | 0.49 | 0.33 | 0.55 | 0.83 |
-| `biquad_real` Q15, 2 sections (fallback) | 0.60 info | 0.52 info | 0.41 info | 0.40 info | 0.68 info | 0.43 info |
+| `biquad_real` Q15, 2 sections (fallback) | 1.00 info | 0.46 info | 0.40 info | 0.40 info | 0.46 info | 0.43 info |
 | `biquad_fallback` C32 (CMSIS-DSP) | 0.56 | 0.56 | 0.53 | 0.53 | 0.52 | 0.58 |
 | `biquad_cq15_fallback` (CMSIS-DSP) | 0.66 | 0.66 | 0.72 | 0.71 | 0.58 | 0.75 |
 | `biquad_real_fallback` f32 (CMSIS-DSP) | 0.99 | 0.98 | 0.95 | 0.89 | 0.97 | 0.88 |
 | `biquad_real_q15_fallback` (CMSIS-DSP) | 0.61 | 0.61 | 0.64 | 0.64 | 0.52 | 0.71 |
-| `fft` C32, N = 64 | 0.80 | 0.60 | 0.99 | 0.95 | 0.58 | 0.56 |
-| `fft` C32, N = 1024 | 0.98 | 0.74 | 0.91 | 0.50 | 0.59 | 0.64 |
-| `fft` C32, N = 4096 | 0.93 | 0.73 | 0.86 | 0.50 | 0.56 | 0.64 |
+| `dot` C32, 4096 samples | 1.07 | 1.07 | 0.65 | 0.92 | 1.04 | 0.24 info |
+| `dot` CQ15, 4096 samples | 0.35 info | 0.44 info | 0.55 info | 0.28 info | 1.00 info | 0.38 info |
+| `dot_real` f32, 4096 samples | 1.08 | 0.87 | 0.49 | 0.58 | 0.68 | 0.24 info |
+| `dot_real` Q15, 4096 samples | 0.29 info | 0.50 info | 0.57 info | 0.52 info | 0.63 info | 0.28 info |
+| `scale` C32 | 0.56 | 0.56 | 0.48 | 0.23 | 0.62 | 0.87 info |
+| `scale` CQ15 | 1.00 info | 0.23 info | 0.17 info | 0.17 info | 0.23 info | 0.34 info |
+| `fft` C32, N = 64 | 0.79 | 0.59 | 0.99 | 0.95 | 0.57 | 0.56 |
+| `fft` C32, N = 1024 | 0.98 | 0.74 | 0.87 | 0.50 | 0.59 | 0.64 |
+| `fft` C32, N = 4096 | 0.93 | 0.73 | 0.83 | 0.50 | 0.56 | 0.64 |
 | `fft` CQ15, N = 1024, block float | 0.12 | 0.10 | 0.04 | 0.02 | 0.09 | 0.11 |
-| `fft` CQ15, N = 1024, fixed scaling | 0.11 | 0.08 | 0.04 | 0.02 | 0.07 | 0.09 |
+| `fft` CQ15, N = 1024, fixed scaling | 0.11 | 0.09 | 0.04 | 0.02 | 0.07 | 0.09 |
 | `fft` CQ15, N = 1024, fixed scaling, full scale | 0.12 | 0.09 | 0.04 | 0.02 | 0.08 | 0.10 |
-| `rfft` f32, N = 1024 | 1.09 | 1.09 | 0.61 | 0.43 | 0.56 | 0.71 |
+| `rfft` f32, N = 1024 | 1.07 | 1.07 | 0.61 | 0.40 | 0.56 | 0.71 |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
 | Kernel | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `convert` CS8 to C32 | 2.50 / 4.02 | 2.12 / 3.02 | 1.08 / 1.77 | 1.09 | 0.56 / 0.89 | 1.40 / 2.46 | 4.22 / 11.03 |
-| `convert` CS16 to C32 | 2.38 / 5.52 | 2.12 / 3.77 | 1.08 / 1.77 | 1.09 | 0.55 / 0.89 | 1.46 / 3.02 | 4.34 / 10.03 |
+| `convert` CS8 to C32 | 2.50 / 4.02 | 2.12 / 3.02 | 1.08 / 1.77 | 1.08 | 0.56 / 0.90 | 1.40 / 2.46 | 4.22 / 11.03 |
+| `convert` CS16 to C32 | 2.38 / 5.52 | 2.12 / 3.77 | 1.08 / 1.77 | 1.08 | 0.55 / 0.89 | 1.46 / 3.02 | 4.34 / 10.03 |
 | `convert` CU8 to C32 | 2.50 / 4.02 | 2.50 / 3.02 | 1.08 / 1.77 | 1.09 | 0.56 / 0.90 | 1.53 / 2.46 | 3.96 / 11.03 |
-| `convert_out` C32 to CS16 | 3.67 / 4.02 | 3.67 / 4.02 | 1.71 / 2.14 | 1.72 | 0.72 / 1.02 | 2.03 / 3.39 | 5.67 / 29.03 |
-| `convert_out` C32 to CS8 | 3.61 / 3.65 | 3.61 / 3.52 | 1.65 / 1.96 | 1.66 | 0.73 / 1.02 | 2.16 / 3.33 | 9.17 / 29.03 |
-| `convert_out` C32 to CU8 | 5.42 / 4.02 | 5.30 / 5.02 | 2.34 / 2.21 | 2.35 | 1.52 / 2.21 | 3.97 / 4.14 | 15.17 / 29.03 |
+| `convert_real` RS16 to f32 | 1.23 / 2.77 | 1.10 / 1.89 | 0.58 / 0.89 | 0.59 | 0.31 / 0.46 | 0.76 / 1.52 | 2.23 / 5.03 |
+| `convert` CS8 to CQ15 | 1.07 / 1.65 | 1.07 / 1.52 | 0.49 / 0.77 | 0.49 | 0.26 / 0.77 | 0.65 / 1.27 | 3.06 / 4.81 |
+| `convert` CU8 to CQ15 | 1.32 / 1.65 | 1.32 / 1.52 | 0.62 / 0.77 | 0.62 | 0.33 / 0.77 | 0.90 / 1.27 | 3.59 / 5.31 |
+| `convert_out` C32 to CS16 | 3.68 / 4.02 | 3.68 / 4.02 | 1.96 / 2.15 | 1.98 | 0.72 / 1.02 | 2.04 / 3.39 | 5.67 / 29.03 |
+| `convert_out` C32 to CS8 | 3.62 / 3.65 | 3.62 / 3.52 | 1.90 / 1.96 | 1.91 | 0.74 / 1.02 | 2.17 / 3.33 | 9.17 / 29.03 |
+| `convert_out` C32 to CU8 | 5.43 / 4.02 | 5.31 / 5.02 | 2.34 / 2.21 | 2.35 | 1.52 / 2.21 | 3.98 / 4.15 | 15.17 / 29.03 |
+| `convert_out_real` f32 to RS16 | 1.87 / 2.02 | 1.87 / 2.02 | 1.01 / 1.08 | 1.02 | 0.39 / 0.52 | 1.04 / 1.71 | 2.88 / 14.53 |
+| `convert_out_real` f32 to RS8 | 1.84 / 1.83 | 1.84 / 1.77 | 0.98 / 0.99 | 0.99 | 0.40 / 0.52 | 1.10 / 1.68 | 4.62 / 14.53 |
+| `convert_out_real` f32 to RU8 | 2.75 / 2.02 | 2.69 / 2.52 | 1.20 / 1.12 | 1.21 | 0.79 / 1.12 | 2.01 / 2.08 | 7.62 / 14.53 |
 | `rotate` C32 | 7.26 / 46.11 | 7.26 / 41.11 | 2.37 / 5.28 | 2.39 | 1.23 / 4.99 | 3.57 / 5.99 | 15.94 / 79.23 |
-| `rotate` CQ15 | 24.53 / 57.02 | 13.27 / 57.02 | 7.53 / 26.53 | 7.54 | 2.78 / 12.52 | 10.77 / 50.01 | 45.04 / 84.29 |
+| `rotate` CQ15 | 12.78 / 49.01 | 10.02 / 41.01 | 5.78 / 15.85 | 5.79 | 2.06 / 10.27 | 7.02 / 40.01 | 28.29 / 39.16 |
 | `fir` C32, 64 taps | 118.50 / 244.02 | 117.97 / 247.02 | 24.92 / 193.77 | 24.94 | 11.16 / 197.52 | 55.59 / 153.02 | 209.41 / 1980.03 |
-| `fir_decimate` C32, 127 taps, M = 10 | 23.59 / 46.47 | 23.59 / 47.27 | 6.87 / 32.55 | 6.82 | 4.47 / 25.03 | 14.08 / 26.84 | 55.44 / 383.41 |
-| `fir_interpolate` C32, L = 2, 128 taps | 133.77 / 262.02 | 134.57 / 265.02 | 41.88 / 211.77 | 41.70 | 28.01 / 215.52 | 68.54 / 172.51 | 245.10 / 2024.03 |
-| `resample` C32, 3 / 2, 192 taps | 137.53 / 266.35 | 137.72 / 269.35 | 55.19 / 215.52 | 55.80 | 43.78 / 218.42 | 86.61 / 174.35 | 317.99 / 2026.03 |
+| `fir_decimate` C32, 127 taps, M = 10 | 23.53 / 46.47 | 23.55 / 47.27 | 6.84 / 32.55 | 6.88 | 4.45 / 25.03 | 14.06 / 26.84 | 55.44 / 383.41 |
+| `fir_interpolate` C32, L = 2, 128 taps | 131.97 / 262.02 | 131.67 / 265.02 | 39.60 / 211.77 | 39.67 | 25.24 / 215.52 | 65.59 / 172.51 | 236.37 / 2024.03 |
+| `resample` C32, 3 / 2, 192 taps | 135.42 / 266.35 | 134.82 / 269.35 | 52.57 / 215.52 | 53.09 | 42.35 / 218.42 | 84.58 / 174.35 | 309.31 / 2026.03 |
+| `fir_interpolate_real` f32, L = 2, 128 taps | 70.60 / 164.02 | 70.26 / 171.02 | 26.25 / 153.27 | 24.99 | 27.45 / 165.15 | 45.67 / 134.77 | 147.91 / 2438.74 |
+| `resample_real` f32, 3 / 2, 192 taps | 82.87 / 166.19 | 82.23 / 173.19 | 40.99 / 155.85 | 39.79 | 40.39 / 167.33 | 53.45 / 136.68 | 179.99 / 2443.29 |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | 491.00 / 1384.12 | 315.00 / 1384.12 | 221.62 / 1384.12 | 225.71 | 188.61 / 1384.12 | 194.37 / 1054.61 | 602.40 / 3403.71 |
+| `resample_real` Q15, 3 / 2, 192 taps | 489.14 / 1385.26 | 313.14 / 1385.26 | 220.33 / 1385.26 | 224.45 | 187.81 / 1385.26 | 192.59 / 1055.58 | 598.41 / 3408.26 |
 | `mag_sq` C32 | 2.32 / 3.27 | 1.57 / 2.52 | 0.92 / 1.52 | 0.93 | 0.60 / 1.52 | 1.18 / 2.27 | 4.96 / 8.28 |
 | `mag_sq` CQ15 | 1.31 / 11.51 | 1.31 / 8.51 | 0.73 / 4.08 | 0.75 | 0.36 / 1.95 | 1.02 / 3.26 | 3.02 / 23.90 |
 | `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.43 / 10.92 | 7.44 | 3.36 / 6.73 | 12.30 / 19.79 | 36.15 / 201.21 |
-| `quad_demod` CQ15 | 38.15 / 170.85 | 26.77 / 171.16 | 11.27 / 162.72 | 11.29 | 4.03 / 163.66 | 17.78 / 173.61 | 42.91 / 332.25 |
-| `fm_mod` C32 | 16.51 / 61.91 | 13.74 / 61.91 | 7.51 / 58.92 | 7.65 | 3.40 / 55.92 | 11.22 / 41.95 | 34.78 / 109.89 |
-| `squelch` C32 | 27.35 / 27.35 | 26.35 / 26.35 | 21.84 / 21.84 | 27.35 | 21.80 / 21.80 | 23.73 / 23.73 | 67.06 / 67.06 |
-| `squelch` CQ15 | 28.03 / 28.03 | 28.03 / 28.03 | 28.03 / 28.03 | 28.03 | 28.53 / 28.53 | 21.02 / 21.02 | 71.05 / 71.05 |
+| `quad_demod` CQ15 | 33.15 / 170.85 | 24.65 / 171.16 | 10.65 / 162.72 | 10.60 | 4.03 / 163.66 | 16.65 / 173.61 | 40.79 / 332.25 |
+| `fm_mod` C32 | 16.52 / 46.37 | 14.00 / 46.37 | 8.77 / 32.49 | 8.91 | 3.41 / 23.23 | 11.23 / 38.32 | 34.85 / 73.86 |
+| `fm_mod` CQ15 | 18.72 / 58.38 | 11.47 / 58.38 | 8.98 / 42.54 | 9.12 | 2.94 / 31.49 | 9.58 / 49.32 | 48.23 / 101.61 |
+| `squelch` C32 | 22.81 / 55.39 | 23.25 / 55.39 | 21.25 / 55.39 | 22.80 | 20.25 / 55.39 | 18.25 / 44.21 | 63.60 / 98.71 |
+| `squelch` CQ15 | 27.03 / 27.03 | 27.03 / 27.03 | 25.53 / 25.53 | 27.03 | 25.53 / 25.53 | 21.02 / 21.02 | 67.05 / 67.05 |
 | `mag` C32 | 2.57 / 3.52 | 1.82 / 2.77 | 1.04 / 1.64 | 1.06 | 0.66 / 1.27 | 1.45 / 2.02 | 6.86 / 8.53 |
 | `mag` CQ15 | 5.09 / 21.27 | 5.09 / 11.02 | 2.25 / 2.64 | 2.26 | 1.22 / 2.64 | 3.26 / 4.52 | 9.03 / 18.28 |
+| `window` C32 | 2.71 / 3.02 | 2.71 / 3.02 | 0.99 / 1.52 | 1.01 | 0.57 / 1.52 | 1.77 / 2.15 | 7.73 / 10.79 |
+| `window` CQ15 | 3.36 / 18.01 | 2.11 / 18.01 | 0.76 / 6.45 | 0.78 | 0.39 / 2.45 | 0.95 / 5.89 | 3.95 / 27.16 |
+| `power_db` f32 | 15.27 / 59.05 | 14.77 / 13.56 | 7.64 / 4.81 | 7.65 | 2.96 / 3.05 | 11.78 / 10.30 | 29.03 / 33.03 |
+| `power_db` Q15 | 18.52 / 20.76 | 17.39 / 19.01 | 7.64 / 9.14 | 7.66 | 2.99 / 6.89 | 12.65 / 15.65 | 31.03 / 33.78 |
 | `agc` C32 | 23.79 / 24.03 | 23.04 / 24.03 | 17.39 / 24.03 | 17.41 | 16.12 / 24.03 | 17.61 / 17.03 | 64.61 / 64.05 |
-| `agc` CQ15 | 72.86 / 72.86 | 72.86 / 72.86 | 69.40 / 69.40 | 72.86 | 70.31 / 70.31 | 54.77 / 54.77 | 141.14 / 141.14 |
-| `dc_block_real` f32 | 11.51 / 11.51 | 11.51 / 11.51 | 8.76 / 8.76 | 11.51 | 8.76 / 8.76 | 16.01 / 16.01 | 28.53 / 28.53 |
-| `dc_block_real` Q15 | 16.01 / 16.01 | 16.01 / 16.01 | 14.01 / 14.01 | 16.01 | 13.01 / 13.01 | 12.01 / 12.01 | 49.03 / 49.03 |
-| `biquad` C32, 2 sections (vs KFR) | 17.43 / 81.59 | 17.37 / 76.59 | 13.17 / 53.61 | 13.18 | 13.23 / 72.00 | 12.61 / 46.63 | 43.04 / 96.77 |
+| `agc` CQ15 | 70.53 / 70.53 | 70.53 / 70.53 | 67.11 / 67.11 | 70.53 | 67.06 / 67.06 | 53.50 / 53.50 | 137.07 / 137.07 |
+| `dc_block_real` f32 | 11.51 / 11.51 | 11.51 / 11.51 | 8.76 / 8.76 | 11.51 | 8.76 / 8.76 | 16.01 / 16.01 | 27.54 / 27.54 |
+| `dc_block_real` Q15 | 20.01 / 20.01 | 20.01 / 20.01 | 16.01 / 16.01 | 20.01 | 15.01 / 15.01 | 12.01 / 12.01 | 49.03 / 49.03 |
+| `deemphasis` f32 | 22.01 / 22.01 | 20.01 / 20.01 | 13.01 / 13.01 | 22.01 | 14.76 / 14.76 | 14.01 / 14.01 | 27.53 / 27.53 |
+| `deemphasis` Q15 | 12.51 / 12.51 | 12.51 / 12.51 | 13.52 / 13.52 | 12.51 | 12.77 / 12.77 | 11.01 / 11.01 | 42.03 / 42.03 |
+| `dc_block` C32 | 14.01 / 14.01 | 11.51 / 11.51 | 8.77 / 8.77 | 14.01 | 7.76 / 7.76 | 11.01 / 11.01 | 26.53 / 26.53 |
+| `dc_block` CQ15 | 29.01 / 29.01 | 29.01 / 29.01 | 37.01 / 37.01 | 29.01 | 26.02 / 26.02 | 23.01 / 23.01 | 53.03 / 53.03 |
+| `biquad` C32, 2 sections (vs KFR) | 17.43 / 81.59 | 17.37 / 76.59 | 13.17 / 53.61 | 13.18 | 13.23 / 72.00 | 12.61 / 46.63 | 43.04 / 96.78 |
 | `biquad` C32: CMSIS-DSP stereo (information) | 57.54 | 57.54 | 45.04 |  | 45.04 | 41.53 | 118.83 |
-| `biquad` CQ15, 2 sections (vs fallback) | 51.81 / 100.07 | 47.05 / 100.07 | 20.24 / 104.07 | 20.24 | 20.34 / 99.08 | 34.11 / 58.06 | 70.53 / 203.11 |
+| `biquad` CQ15, 2 sections (vs fallback) | 51.81 / 100.07 | 50.56 / 100.07 | 18.30 / 104.07 | 18.06 | 17.73 / 99.08 | 25.16 / 58.06 | 70.53 / 203.11 |
 | `biquad` CQ15: CMSIS-DSP `df1_q15` on re and im (information) | 152.09 | 152.09 | 144.09 |  | 140.09 | 100.06 | 272.13 |
 | `biquad_real` f32, 2 sections (vs KFR) | 14.69 / 40.80 | 14.26 / 38.30 | 13.24 / 26.81 | 13.25 | 11.87 / 36.00 | 12.75 / 23.32 | 40.09 / 48.39 |
 | `biquad_real` f32: CMSIS-DSP `df2T_f32` (information) | 29.04 | 29.04 | 22.54 |  | 22.54 | 22.53 | 57.94 |
-| `biquad_real` Q15, 2 sections (vs fallback) | 27.81 / 46.05 | 23.88 / 46.05 | 18.74 / 46.05 | 18.75 | 18.07 / 45.05 | 17.76 / 26.05 | 41.21 / 96.08 |
+| `biquad_real` Q15, 2 sections (vs fallback) | 46.05 / 46.05 | 21.25 / 46.05 | 18.56 / 46.05 | 17.88 | 17.87 / 45.05 | 11.87 / 26.05 | 41.21 / 96.08 |
 | `biquad_real` Q15: CMSIS-DSP `df1_q15` (information) | 76.04 | 76.04 | 72.04 |  | 70.04 | 50.03 | 136.07 |
 | `biquad_fallback` C32, our fallback / CMSIS-DSP | 31.97 / 57.54 | 32.10 / 57.54 | 23.91 / 45.04 |  | 23.78 / 45.04 | 21.71 / 41.53 | 68.47 / 118.83 |
 | `biquad_cq15_fallback`, our fallback / CMSIS-DSP | 100.07 / 152.09 | 100.07 / 152.09 | 104.07 / 144.09 |  | 99.08 / 140.09 | 58.06 / 100.06 | 203.11 / 272.13 |
 | `biquad_real_fallback` f32, our fallback / CMSIS-DSP | 28.78 / 29.04 | 28.33 / 29.04 | 21.38 / 22.54 |  | 19.95 / 22.54 | 21.76 / 22.53 | 50.79 / 57.94 |
 | `biquad_real_q15_fallback`, our fallback / CMSIS-DSP | 46.05 / 76.04 | 46.05 / 76.04 | 46.05 / 72.04 |  | 45.05 / 70.04 | 26.05 / 50.03 | 96.08 / 136.07 |
-| `fft` C32, N = 64 | 15.06 / 18.88 | 15.06 / 25.30 | 5.84 / 5.88 | 6.28 | 5.28 / 5.53 | 10.52 / 18.28 | 35.50 / 63.23 |
-| `fft` C32, N = 1024 | 25.16 / 25.56 | 25.16 / 33.81 | 10.33 / 11.33 | 10.37 | 5.57 / 11.07 | 15.14 / 25.85 | 58.57 / 91.17 |
-| `fft` C32, N = 4096 | 28.93 / 31.17 | 28.93 / 39.44 | 11.45 / 13.27 | 11.49 | 5.92 / 11.81 | 17.37 / 30.85 | 67.64 / 105.58 |
-| `fft` CQ15, N = 1024, block float | 28.51 / 233.83 | 22.26 / 233.83 | 10.19 / 233.83 | 10.24 | 5.80 / 233.83 | 15.79 / 179.33 | 48.92 / 460.87 |
-| `fft` CQ15, N = 1024, fixed scaling | 25.27 / 233.83 | 19.87 / 233.83 | 9.11 / 233.83 | 9.18 | 5.29 / 233.83 | 12.79 / 179.33 | 43.57 / 460.87 |
-| `fft` CQ15, N = 1024, fixed scaling, full scale | 27.07 / 233.83 | 20.81 / 233.83 | 9.61 / 233.83 | 9.65 | 5.44 / 233.83 | 13.83 / 179.33 | 46.16 / 460.87 |
-| `rfft` f32, N = 1024 | 16.72 / 15.32 | 16.72 / 15.32 | 8.24 / 13.54 | 8.30 | 5.51 / 12.82 | 10.43 / 18.75 | 41.91 / 59.40 |
+| `dot` C32, 4096 samples | 2.72 / 2.54 | 2.72 / 2.54 | 0.75 / 1.17 | 0.77 | 0.56 / 0.61 | 1.59 / 1.53 | 7.21 / 29.55 |
+| `dot` CQ15, 4096 samples | 3.24 / 9.29 | 2.96 / 6.79 | 1.59 / 2.92 | 1.62 | 0.78 / 2.80 | 2.04 / 2.04 | 6.74 / 17.56 |
+| `dot_real` f32, 4096 samples | 1.12 / 1.03 | 1.12 / 1.28 | 0.33 / 0.66 | 0.34 | 0.20 / 0.35 | 0.62 / 0.90 | 3.35 / 13.80 |
+| `dot_real` Q15, 4096 samples | 1.40 / 4.79 | 1.39 / 2.79 | 0.70 / 1.23 | 0.71 | 0.64 / 1.23 | 0.72 / 1.16 | 3.23 / 11.55 |
+| `scale` C32 | 1.70 / 3.02 | 1.70 / 3.02 | 0.61 / 1.27 | 0.62 | 0.29 / 1.27 | 1.26 / 2.02 | 5.65 / 6.53 |
+| `scale` CQ15 | 9.51 / 9.51 | 0.86 / 3.76 | 0.31 / 1.83 | 0.33 | 0.16 / 0.95 | 0.64 / 2.76 | 2.81 / 8.16 |
+| `fft` C32, N = 64 | 14.95 / 18.88 | 14.95 / 25.30 | 5.84 / 5.88 | 6.28 | 5.28 / 5.53 | 10.42 / 18.28 | 35.50 / 63.23 |
+| `fft` C32, N = 1024 | 25.15 / 25.56 | 25.15 / 33.81 | 9.82 / 11.33 | 9.86 | 5.56 / 11.07 | 15.14 / 25.85 | 58.57 / 91.17 |
+| `fft` C32, N = 4096 | 28.93 / 31.17 | 28.93 / 39.44 | 11.06 / 13.27 | 11.11 | 5.91 / 11.81 | 17.37 / 30.85 | 67.64 / 105.58 |
+| `fft` CQ15, N = 1024, block float | 28.60 / 233.83 | 22.43 / 233.83 | 10.19 / 233.83 | 10.24 | 5.80 / 233.83 | 15.79 / 179.33 | 48.92 / 460.87 |
+| `fft` CQ15, N = 1024, fixed scaling | 25.29 / 233.83 | 19.92 / 233.83 | 9.11 / 233.83 | 9.18 | 5.29 / 233.83 | 12.79 / 179.33 | 43.57 / 460.87 |
+| `fft` CQ15, N = 1024, fixed scaling, full scale | 26.99 / 233.83 | 21.04 / 233.83 | 9.61 / 233.83 | 9.65 | 5.44 / 233.83 | 13.83 / 179.33 | 46.17 / 460.87 |
+| `rfft` f32, N = 1024 | 16.40 / 15.32 | 16.40 / 15.32 | 8.23 / 13.54 | 8.33 | 5.09 / 12.82 | 10.43 / 18.75 | 41.91 / 59.40 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -331,33 +383,58 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `convert` CS8 to C32 | exact | exact | exact | exact | exact | exact |
 | `convert` CS16 to C32 | exact | exact | exact | exact | exact | exact |
 | `convert` CU8 to C32 | exact | exact | exact | exact | exact | exact |
+| `convert_real` RS16 to f32 | exact | exact | exact | exact | exact | exact |
+| `convert` CS8 to CQ15 | exact | exact | exact | exact | exact | exact |
+| `convert` CU8 to CQ15 | exact | exact | exact | exact | exact | exact |
 | `convert_out` C32 to CS16 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 |
 | `convert_out` C32 to CS8 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 |
 | `convert_out` C32 to CU8 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 | 47.3 / 47.3 |
+| `convert_out_real` f32 to RS16 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 | 95.5 / 95.5 |
+| `convert_out_real` f32 to RS8 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 |
+| `convert_out_real` f32 to RU8 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 | 47.2 / 47.2 |
 | `rotate` C32 | 142.8 / 107.8 | 142.8 / 107.8 | 142.7 / 115.0 | 142.7 / 114.5 | 143.9 / 115.2 | 142.8 / 107.8 |
 | `rotate` CQ15 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 | 91.2 / 91.2 |
 | `fir` C32, 64 taps | 141.7 / 141.7 | 141.7 / 141.7 | 142.1 / 142.3 | 142.1 / 141.9 | 142.1 / 141.0 | 141.3 / 136.4 |
 | `fir_decimate` C32, 127 taps, M = 10 | 141.0 / 139.0 | 141.0 / 139.0 | 142.0 / 141.2 | 141.9 / 141.1 | 141.8 / 138.5 | 141.0 / 134.3 |
 | `fir_interpolate` C32, L = 2, 128 taps | 141.9 / 141.5 | 141.9 / 141.5 | 141.8 / 142.4 | 141.8 / 141.9 | 141.8 / 141.2 | 141.2 / 136.5 |
 | `resample` C32, 3 / 2, 192 taps | 141.6 / 141.4 | 141.6 / 141.4 | 142.2 / 142.2 | 142.3 / 141.9 | 142.2 / 140.8 | 141.6 / 136.3 |
+| `fir_interpolate_real` f32, L = 2, 128 taps | 141.8 / 141.4 | 141.8 / 141.5 | 141.8 / 140.7 | 141.8 / 139.4 | 141.8 / 142.3 | 141.4 / 136.5 |
+| `resample_real` f32, 3 / 2, 192 taps | 141.8 / 141.3 | 141.8 / 141.4 | 142.3 / 140.6 | 142.3 / 139.6 | 142.3 / 142.1 | 141.8 / 136.5 |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | exact | exact | exact | exact | exact | exact |
+| `resample_real` Q15, 3 / 2, 192 taps | exact | exact | exact | exact | exact | exact |
 | `mag_sq` C32 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 |
 | `mag_sq` CQ15 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 |
 | `quad_demod` C32 | 143.5 / 144.2 | 143.5 / 144.2 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 143.6 |
 | `quad_demod` CQ15 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 |
 | `fm_mod` C32 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 | 133.2 / 133.2 |
+| `fm_mod` CQ15 | 89.4 / 89.4 | 89.4 / 89.4 | 89.4 / 89.4 | 89.4 / 89.4 | 89.4 / 89.4 | 89.4 / 89.4 |
 | `squelch` C32 | exact | exact | exact | exact | exact | exact |
 | `squelch` CQ15 | exact | exact | exact | exact | exact | exact |
 | `mag` C32 | 150.5 / 150.5 | 150.5 / 150.5 | 150.5 / 150.5 | 150.5 / 150.9 | 150.5 / 150.9 | 150.5 / 150.5 |
 | `mag` CQ15 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 | 96.2 / 96.2 |
-| `agc` C32 | 119.9 / 118.9 | 119.9 / 118.9 | 119.9 / 118.9 | 119.9 / 118.9 | 119.9 / 118.9 | 119.9 / 118.9 |
+| `window` C32 | 151.9 / 151.9 | 151.9 / 151.9 | 151.9 / 151.9 | 151.9 / 151.9 | 151.9 / 151.9 | 151.9 / 151.9 |
+| `window` CQ15 | 89.0 / 89.0 | 89.0 / 89.0 | 89.0 / 89.0 | 89.0 / 89.0 | 89.0 / 89.0 | 89.0 / 89.0 |
+| `power_db` f32 | 151.9 / 143.0 | 151.9 / 141.5 | 151.9 / 141.6 | 151.9 / 141.6 | 151.9 / 141.6 | 151.9 / 151.9 |
+| `power_db` Q15 | 149.9 / 149.9 | 149.9 / 149.9 | 149.9 / 149.9 | 149.9 / 149.9 | 149.9 / 149.9 | 149.9 / 149.9 |
+| `agc` C32 | 119.8 / 118.9 | 119.8 / 118.9 | 119.8 / 118.9 | 119.8 / 118.9 | 119.8 / 118.9 | 119.8 / 118.9 |
 | `agc` CQ15 | exact | exact | exact | exact | exact | exact |
 | `dc_block_real` f32 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 | 124.8 / 124.8 |
 | `dc_block_real` Q15 | exact | exact | exact | exact | exact | exact |
+| `deemphasis` f32 | 144.3 / 144.3 | 144.3 / 144.3 | 144.3 / 144.3 | 144.3 / 144.3 | 144.3 / 144.3 | 144.3 / 144.3 |
+| `deemphasis` Q15 | exact | exact | exact | exact | exact | exact |
+| `dc_block` C32 | 121.0 / 121.0 | 121.0 / 121.0 | 121.0 / 121.0 | 121.0 / 121.0 | 121.0 / 121.0 | 121.0 / 121.0 |
+| `dc_block` CQ15 | exact | exact | exact | exact | exact | exact |
 | `biquad` C32, 2 sections (f64 model; KFR) | 136.1 / 136.1 | 136.1 / 136.1 | 136.1 / 136.1 | 136.1 / 136.1 | 136.1 / 136.1 | 136.1 / 136.1 |
 | `biquad` CQ15, 2 sections (f64 model; fallback) | 71.6 / 71.6 | 71.6 / 71.6 | 71.6 / 71.6 | 71.6 / 71.6 | 71.6 / 71.6 | 71.6 / 71.6 |
 | `biquad_real` f32, 2 sections (f64 model; KFR) | 136.7 / 136.7 | 136.7 / 136.7 | 136.7 / 136.7 | 136.7 / 136.7 | 136.7 / 136.7 | 136.7 / 136.7 |
 | `biquad_real` Q15, 2 sections (f64 model; fallback) | 71.5 / 71.5 | 71.5 / 71.5 | 71.5 / 71.5 | 71.5 / 71.5 | 71.5 / 71.5 | 71.5 / 71.5 |
 | biquad fallback entries (f64 model; CMSIS-DSP): C32, CQ15, f32, Q15 | 136.1 / 134.9, 71.6 / 56.7, 136.7 / 136.7, 71.5 / 56.6 | the same | the same | the same | the same | the same |
+| `dot` C32, 4096 samples | 132.8 / 130.1 | 132.8 / 130.1 | 137.2 / 134.6 | 138.7 / 134.2 | 134.3 / 127.9 | 132.8 / 122.6 |
+| `dot` CQ15, 4096 samples | 82.2 / 82.2 | 82.2 / 82.2 | 82.2 / 82.2 | 82.2 / 82.2 | 82.2 / 82.2 | 82.2 / 82.2 |
+| `dot_real` f32, 4096 samples | 129.8 / 129.8 | 129.8 / 122.5 | 131.4 / 126.4 | 135.0 / 127.6 | 129.1 / 127.3 | 129.8 / 123.1 |
+| `dot_real` Q15, 4096 samples | 88.8 / 88.8 | 88.8 / 88.8 | 88.8 / 88.8 | 88.8 / 88.8 | 88.8 / 88.8 | 88.8 / 88.8 |
+| `scale` C32 | 151.5 / 151.5 | 151.5 / 151.5 | 151.5 / 151.5 | 151.5 / 151.5 | 151.5 / 151.5 | 151.5 / 151.5 |
+| `scale` CQ15 | 93.7 / 93.7 | 93.7 / 93.7 | 93.7 / 93.7 | 93.7 / 93.7 | 93.7 / 93.7 | 93.7 / 93.7 |
 | `fft` C32, N = 64 | 142.1 / 140.2 | 142.1 / 142.1 | 140.7 / 141.4 | 140.7 / 141.4 | 141.7 / 142.3 | 142.5 / 141.6 |
 | `fft` C32, N = 1024 | 138.7 / 137.9 | 138.7 / 138.7 | 139.1 / 139.1 | 139.1 / 139.1 | 138.8 / 139.1 | 138.2 / 138.9 |
 | `fft` C32, N = 4096 | 137.8 / 137.2 | 137.8 / 137.8 | 138.2 / 137.9 | 138.2 / 137.9 | 138.0 / 138.3 | 137.4 / 137.7 |
@@ -369,14 +446,14 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 Notes.
 
 - **Comparisons per level.** The `sse2` FFT is judged against FFTW out of place (D3). In place, FFTW needs 31.5 / 35.1 / 40.7 instructions per sample at N = 64 / 1024 / 4096 (ours 0.48 / 0.72 / 0.71 of that), and rustfft, which has no planner below SSE4.1, is scalar there (56.8 / 93.1 / 112.2). On `neon` FFTW (`--enable-neon`, out of place) is information: 15.9 / 26.8 / 39.7. The `CQ15` FFT is judged against KissFFT, whose fixed-point code is scalar on every platform; Ne10 int16 on `neon` needs 19.8 instructions per sample at 44.6 dB (ours 0.80 with block float, 0.65 with fixed scaling). The cheapest VOLK implementation on `neon` is the default dispatch for every kernel but `convert_cs16` (`neon`, 2.52), `fir`, `fir_decimate`, `fir_interpolate` and `resample` (`neon_unroll`, 150.0, 26.7, 169.5 and 171.4), `mag_sq` (`neon`, 1.52), `quad_demod` (19.3) and `convert_out` to `CU8` (`neon`, 4.02); ours is below all of them (`convert_out` to `CU8` 0.99 of the cheapest).
-- **Run-time detection** (`avx2-runtime`) costs at most 0.02 times the instructions of the fixed `avx2` build for every accelerated kernel but `fft` C32 at N = 64 (1.07, 6.28 against 5.84 instructions per sample: about 28 instructions more per call, 18 of them in `level::dispatch_fn!`); that entry is `dev` (open item M13-9). Against rustfft it is 1.07 as well (5.88). The kernels that stay with the fallback run its baseline code in the run-time build and the AVX2 build of the same code at `avx2` (`info`: `squelch` C32 1.07 and CQ15 1.06, `agc` CQ15 1.05, `dc_block_real` f32 1.31 and Q15 1.14).
+- **Run-time detection** (`avx2-runtime`) costs at most 0.02 times the instructions of the fixed `avx2` build for every accelerated kernel but `fft` C32 at N = 64 (1.07, 6.28 against 5.84 instructions per sample: about 28 instructions more per call, 18 of them in `level::dispatch_fn!`; `dev`, open item M13-9; against rustfft it is 1.07 as well, 5.88) and the short kernels of issue #20 with a fixed dispatch cost of a few dozen instructions per call: `dot_real` f32 1.03, `dot` CQ15 1.02 and `scale` CQ15 1.04 (`dev`), `window` CQ15 1.04 (`info`, 0.78 against 0.76). The kernels that stay with the fallback run its baseline code in the run-time build and the AVX2 build of the same code at `avx2` (`info`): `squelch` C32 1.07 and CQ15 1.06, `agc` CQ15 1.05, `dc_block_real` f32 1.31 and Q15 1.25, `deemphasis` f32 1.69 and Q15 0.93, `dc_block` C32 1.60 and CQ15 0.78 (the short forms of the recursions of D40 are selected per target feature, so the baseline build may run the other form).
 - **`convert` to `CQ15` and `convert_real`.** `CS8`/`CU8` to `CQ15` widen and shift in the generic code, four vectors per iteration (two before: 0.72 / 0.84 instructions per sample at `avx2`, 0.49 / 0.62 now); `convert_real` of `RS16` (and of real `U8`/`I8` formats) converts the values in pairs through `convert` to `C32`/`CQ15`. VOLK has no unsigned 8-bit input, so `convert_cq15_cu8` is compared with `volk_8i_convert_16i` on the flipped bytes, and the wasm32 build of VOLK has no `8i_convert_16i` at all, so both `CQ15` entries are `info` against our fallback at `simd128`. The fallback's direct loops for the byte and 16-bit formats (see [kernels.md](kernels.md#convert-and-convert_real)) replace the value-by-value decoder for these formats: `CU8` to `C32` at `avx2` from 88.04 to 1.47 instructions per sample.
 - **`convert_out`.** Rounds to nearest even like VOLK (decision D7) and keeps NaN as zero; that costs one compare and one AND per vector at SSE/AVX2 (VOLK does not look at NaN), and nothing on NEON and SIMD128. The `U8` encoding reproduces the f64 rounding exactly, which costs one byte bound per value more than VOLK at `sse2`, `sse4.2`, `avx2` and `neon` (a pack and two minimums on x86, a compare and a narrowing on NEON) and a floor and a compare at `avx512`. At `sse2` that is 1.35 times VOLK (open item M13-8; the same 1.36 for `convert_out_real` to real `U8`, also `dev`); at `sse4.2` and `avx2` 1.05 and 1.06, within the release limit. At `avx2` the `I16` and `I8` paths compare the input with itself for NaN beside the product and mask the converted integers, and cap with `vminps(scale, v)`, which keeps NaN: one load more per vector than the form that clears NaN from the product first (instructions 0.80 / 0.84 to 0.92 / 0.97 of VOLK), but the compare leaves the dependency chain, and the simulated cycles per sample fall from 0.53 to 0.45 (`CS16`) and from 0.52 to 0.43 (`CS8`) on `znver3`, from 0.57 to 0.55 and 0.56 on `alderlake` (ratios to VOLK 1.16 / 1.07 to 0.99 / 1.04 and 1.04 / 1.10 to 0.87 / 1.07). `convert_out_real` (`f32` and `Q15` to `RS16` and the real 8-bit formats) runs the same vector code as `convert_out`; its entries compare with the same VOLK kernels on N values. The fallback writes each container and layout in its own loop and rounds by adding `1.5 * 2^52` after the clamp: at `avx2` it vectorises and needs 9.9 / 9.1 / 9.0 instructions per sample for `CS16` / `CS8` / `CU8` (142.0 / 134.1 / 134.0 before) and 3.35 / 3.03 / 3.03 simulated cycles on `znver3` (40.9 / 37.5 / 26.4 before), 3.89 / 3.20 / 3.20 on `alderlake` (43.1 / 41.6 / 29.1).
 - **`rotate`.** The block oscillator needs 2.37 instructions per sample at `avx2` against 5.28 for VOLK 3.3 (and 3.07 for the VOLK 3.1 of Ubuntu 24.04) and is more accurate (142.7 dB against 115.0 dB). Its per-call cost (about 450 instructions at `avx2`) shows in short calls: 9.1 instructions per sample at n = 64 and 32.6 at n = 16.
 - **`rotate` `CQ15`.** No established library has a fixed-point rotator (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so every level is `info` against our fallback and judged by its efficiency (D32). Each level has its own path (with `nco-tables`; SIMD128 also without): the complex product with `pmaddwd` (`i32x4.dot_i16x8_s`, NEON `smull`/`smlsl`/`smlal` with `sqrshrn`) instead of four 32-bit multiplications and the clamp, and at `sse2`, `sse4.2` and `avx2` the entry offsets through one store and scalar loads instead of `movd`/`pextrd` (on Zen two micro-ops each on the ports of the vector loads, the bound of the loop). Simulated cycles per sample, ours / fallback: `avx2` 1.12 / 6.96 (`znver3`) and 1.20 / 4.78 (`alderlake`), efficiency 0.87 / 0.89; `sse2` 3.81 / 12.10 (`skylake`) and 3.89 / 12.38 (`znver2`); `sse4.2` 2.78 / 9.56 and 2.54 / 10.38; `avx512` 0.75 / 7.59 (`znver4`) and 3.22 / 4.23 (`sapphirerapids`); `neon` 4.50 / 14.12 (`cortex-a72`) and 3.66 / 15.09 (`cortex-a76`). At `avx512` the entries still come from two 64-bit gathers: the 4096-entry table does not fit in registers, and the gather-free form (two AVX2 lookups) takes 1.17 instead of 3.22 cycles on `sapphirerapids` but 1.41 instead of 0.75 on `znver4`, the reference model. The fallback computes the interpolation and the complex product in `i32` (exact, see `fallback/mix.rs`): 15.85 instead of 26.53 instructions per sample at `avx2`.
 - **`fir_interpolate`, `resample`.** Every branch of the polyphase filter runs as a contiguous filter in the forms of `fir` (`M = 1`) and `fir_decimate`, with its outputs written at the stride `L`; the comparison makes one VOLK dot product per output with the taps of its branch, as GNU Radio does. The counts are per output sample.
 - **`fir_interpolate_real`, `resample_real`.** The same polyphase code as the complex kernels with one component per sample (the `f32` forms hold twice as many samples per vector; AVX-512 runs the chunk form of `resample_real` on 8-lane vectors). The measurements use the taps and ratios of the complex entries (L = 2 with 128 taps; 3 / 2 with 192 taps). `f32` is compared with `volk_32f_x2_dot_prod_32f_a` per output as GNU Radio's `interp_fir_filter_fff` and `rational_resampler_fff` call it; on `simd128` the wasm32 build of VOLK does not hold that kernel, so the comparison there is our fallback (`info`). `Q15` has no established library (VOLK has no 16-bit real dot product): the comparison is our fallback at every level (`info`), and the branch computes one output at a time with exact `i64` sums, bit-exact with the fallback.
-- **`rfft`.** The inner complex FFT of `N / 2` points is the backend's. The post-processing forms 4 bins and their mirrors per vector at `sse2`, `sse4.2`, `neon` and `simd128`; at `avx2` and `avx512` the fallback's loop, compiled at the level, is cheaper. At `sse2` and `sse4.2` the comparison is FFTW's real-input transform (15.32 instructions per sample at both levels): ours is 1.09 times that, within the release limit (the fallback's loop was 1.22 times). rustfft's real planner needs 50.96 at `sse2` (scalar) and 24.54 at `sse4.2`.
+- **`rfft`.** The inner complex FFT of `N / 2` points is the backend's. The post-processing forms 4 bins and their mirrors per vector at `sse2`, `sse4.2`, `neon` and `simd128`; at `avx2` and `avx512` the fallback's loop, compiled at the level, is cheaper. At `sse2` and `sse4.2` the comparison is FFTW's real-input transform (15.32 instructions per sample at both levels): ours is 1.07 times that (1.09 before the fused radix-2 pass of D49), within the release limit (the fallback's loop was 1.22 times). rustfft's real planner needs 50.96 at `sse2` (scalar) and 24.54 at `sse4.2`.
 - **`fir`, `fir_decimate`.** The comparison is GNU Radio's `fir_filter_ccf` (one aligned VOLK dot product per output, D6). Ours is at most 0.2 dB below the comparison (`fir` at `avx2`, 142.1 against 142.3 dB) and above it elsewhere, within the 1 dB rule.
 - **`quad_demod`.** At `sse2` and `sse4.2` VOLK has no SSE `atan2`; the comparison is the correctly rounded `generic` code (144.2 dB), 0.7 dB above ours, which is within the rule (decision D9). `CQ15` has no established reference (the entries compare with our fallback); since issue #20 it uses the single-division `atan2` of `C32` on every level but AVX-512 (`avx2` 4.89 / 4.73 to 4.40 / 4.01 cycles per sample on `znver3` / `alderlake`, the same golden SNR of 77.9 dB, 0.25 dB below the optimum).
 - **FFT.** `C32` reads its twiddles from static per-span tables on x86-64 and AArch64 (feature `fft-tables`, [backends.md](backends.md)); wasm32 is measured without them (with them: 31.0 / 53.1 / 61.8 fuel per sample). The accuracy of the single-vector transform at N = 64 scatters by about 1.9 dB between levels (140.7 to 142.5 dB), with the comparisons between 140.2 and 142.3 dB. `CQ15`: the radix-4 transform is not bit-identical with the fallback (decision D10); on the bench input it is far more accurate than KissFFT (which rounds every stage of its fixed-point code). Where a radix-2 stage is left over (AVX2 at N = 256, 1024, 4096, the 512 points inside `rfft` 1024 at SSE and AVX-512), it runs in one pass with the first radix-4 stage, bit for bit as the two passes (AVX2 simulated cycles per sample on znver3 / alderlake: N = 1024 2.86 / 2.61 to 2.74 / 2.48, N = 4096 3.04 / 2.80 to 2.97 / 2.73). The fallback checks its twiddle table once per stage instead of once per butterfly and runs the `CQ15` stages with the output shift as a constant and a branch-free clamp, with the same results (simulated at `avx2`: `C32` N = 1024 34.7 / 36.3 to 31.4 / 32.6 cycles per sample; `CQ15` block float 148.4 / 167.3 to 103.0 / 91.3 and fixed scaling 112.1 / 111.5 to 104.7 / 88.1, against 50.5 for KissFFT, the scalar reference of the fallback).

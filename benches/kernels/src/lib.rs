@@ -10,7 +10,7 @@ use std::sync::Arc;
 use cref_sys::cmsis_dsp::{CmsisCfftF32, CmsisCfftQ15, CmsisRfftFastF32};
 use cref_sys::{
     CmsisBiquad, Fftw, FftwR2c, GrAgcCc, GrFmDeemph, GrPwrSquelchCc, KfrBiquad, KissFft16,
-    LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16,
+    LiquidDcBlocker, LiquidDcBlockerCrcf, Ne10Int16, cmsis_dsp,
 };
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -310,7 +310,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 86] = [
+pub const KERNELS: [&str; 92] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -397,6 +397,12 @@ pub const KERNELS: [&str; 86] = [
     "convert_out_real_rs16_fallback",
     "convert_out_real_rs8_fallback",
     "convert_out_real_ru8_fallback",
+    "dot_fallback",
+    "dot_cq15_fallback",
+    "dot_real_fallback",
+    "dot_real_q15_fallback",
+    "scale_fallback",
+    "scale_cq15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -512,12 +518,6 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "biquad_cq15_fallback" => Box::new(BiquadK::new(rng, layout, fallback, cq15)),
         "biquad_real_fallback" => Box::new(BiquadRealK::<f32>::new(rng, layout, fallback)),
         "biquad_real_q15_fallback" => Box::new(BiquadRealK::<Q15>::new(rng, layout, fallback)),
-        "dot" => Box::new(DotC32K::new(rng, layout)),
-        "dot_cq15" => Box::new(DotCq15K::new(rng, layout)),
-        "dot_real" => Box::new(DotF32K::new(rng, layout)),
-        "dot_real_q15" => Box::new(DotQ15K::new(rng, layout)),
-        "scale" => Box::new(ScaleK::new(rng, layout)),
-        "scale_cq15" => Box::new(ScaleCq15K::new(rng, layout)),
         "fft_64" | "fft_64_fallback" => Box::new(FftK::new(rng, 64)),
         "fft_1024" | "fft_1024_fallback" => Box::new(FftK::new(rng, 1024)),
         "fft_4096" | "fft_4096_fallback" => Box::new(FftK::new(rng, 4096)),
@@ -528,6 +528,18 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             Box::new(FftQ15K::new(rng, 1024, Scaling::Default, 8000.0))
         }
         "rfft_1024" | "rfft_1024_fallback" => Box::new(RfftK::new(rng, 1024)),
+        "dot" => Box::new(DotC32K::new(rng, layout, simd)),
+        "dot_cq15" => Box::new(DotCq15K::new(rng, layout, simd)),
+        "dot_real" => Box::new(DotF32K::new(rng, layout, simd)),
+        "dot_real_q15" => Box::new(DotQ15K::new(rng, layout, simd)),
+        "scale" => Box::new(ScaleK::new(rng, layout, simd)),
+        "scale_cq15" => Box::new(ScaleCq15K::new(rng, layout, simd)),
+        "dot_fallback" => Box::new(DotC32K::new(rng, layout, fallback)),
+        "dot_cq15_fallback" => Box::new(DotCq15K::new(rng, layout, fallback)),
+        "dot_real_fallback" => Box::new(DotF32K::new(rng, layout, fallback)),
+        "dot_real_q15_fallback" => Box::new(DotQ15K::new(rng, layout, fallback)),
+        "scale_fallback" => Box::new(ScaleK::new(rng, layout, fallback)),
+        "scale_cq15_fallback" => Box::new(ScaleCq15K::new(rng, layout, fallback)),
         "fft_cq15_1024_full_scale" => Box::new(FftQ15K::new(rng, 1024, Scaling::Default, 32767.0)),
         _ => return None,
     })
@@ -4485,7 +4497,8 @@ fn biquad_real<T: sdrk_core::RealSample + BiquadSample, B: BiquadReal<T>>(
     let _ = black_box(backend.biquad_real(state, black_box(input), out));
 }
 
-/// Which of the two entries of a biquad kernel a measurement is (D15, D16).
+/// Which of the two entries of a kernel with a fallback entry a measurement is (D15, D16; the
+/// biquads, `dot`, `dot_real` and `scale`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BiquadEntry {
     /// `biquad`, `biquad_cq15`, `biquad_real`, `biquad_real_q15`: our kernel through the facade
@@ -4840,6 +4853,39 @@ impl Kernel for BiquadRealK<Q15> {
 // ---------------------------------------------------------------------------------------------
 // dot, dot_real and scale (issue #20, group C)
 
+/// The supported implementations of the `dot`, `dot_real` and `scale` entries: the kernel
+/// entry runs ours, our fallback and VOLK (where `volk`), the fallback entry our fallback and
+/// CMSIS-DSP's generic C (D16).
+fn dot_scale_supports(entry: BiquadEntry, which: Impl, volk: bool) -> bool {
+    match (entry, which) {
+        (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
+        (BiquadEntry::Simd, Impl::Volk) => volk,
+        (BiquadEntry::Fallback, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
+        _ => false,
+    }
+}
+
+/// The planar copy of the components of `x` for CMSIS-DSP's real functions (made once at
+/// preparation and not counted, the best case for CMSIS-DSP, as `Planar` of the biquads).
+fn planar_of<S: Copy + Default>(
+    n: usize,
+    skew: usize,
+    x: impl Iterator<Item = (S, S)>,
+) -> (Aligned<S>, Aligned<S>) {
+    let (mut re, mut im) = (Aligned::<S>::skewed(n, skew), Aligned::<S>::skewed(n, skew));
+    for ((r, i), (a, b)) in re.iter_mut().zip(im.iter_mut()).zip(x) {
+        *r = a;
+        *i = b;
+    }
+    (re, im)
+}
+
+/// CMSIS-DSP's Q34.30 dot product as Q15, rounded half up and saturated as our kernel does;
+/// for the accuracy only (a caller needs it to get a Q15 result), outside the counted call.
+fn cmsis_q15_of(sum: i64) -> Q15 {
+    Q15(((sum + (1 << 14)) >> 15).clamp(-32768, 32767) as i16)
+}
+
 /// Windows of the accuracy runs of the dot products: `DOT_WINDOWS` dot products of `n / 2`
 /// samples each, at offsets `w * n / 32`, so that one rounding error does not decide the SNR.
 const DOT_WINDOWS: usize = 16;
@@ -4872,21 +4918,31 @@ fn dot_q15<B: DotReal<Q15>>(backend: &B, x: &[Q15], taps: &[Q15]) -> Q15 {
 
 /// `dot` of `n` C32 samples with `n` real taps, one call per run (VOLK:
 /// `volk_32fc_32f_dot_prod_32fc` through its dispatcher, which checks the alignment).
+///
+/// `dot_fallback`: our fallback against CMSIS-DSP's `arm_dot_prod_f32` on the planar real and
+/// imaginary parts (two calls, the same `2 n` products; CMSIS-DSP has no complex dot product
+/// with real taps, and `arm_cmplx_dot_prod_f32` with zero imaginary taps would do twice the
+/// work).
 struct DotC32K {
     x: Aligned<C32>,
     taps: Aligned<f32>,
     result: Aligned<C32>,
+    entry: BiquadEntry,
+    planar: (Aligned<f32>, Aligned<f32>),
 }
 
 impl DotC32K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let x = noise_c32(rng, layout.n, 0.9, layout.skew(8));
         let mut t = Aligned::<f32>::skewed(layout.n, layout.skew(4));
         t.copy_from_slice(&taps(rng, layout.n));
+        let planar = planar_of(layout.n, layout.skew(4), x.iter().map(|v| (v.re, v.im)));
         DotC32K {
             x,
             taps: t,
             result: Aligned::new(1),
+            entry,
+            planar,
         }
     }
 
@@ -4905,6 +4961,18 @@ impl DotC32K {
                 );
                 self.result[0]
             },
+            Impl::Cmsis => {
+                let re = &self.planar.0[start..start + len];
+                let im = &self.planar.1[start..start + len];
+                let (mut r, mut i) = (0.0f32, 0.0f32);
+                // SAFETY: `re`, `im` and `t` hold `len` elements; the results are locals.
+                unsafe {
+                    let n = len as u32;
+                    cmsis_dsp::ffi::arm_dot_prod_f32(re.as_ptr(), t.as_ptr(), n, &raw mut r);
+                    cmsis_dsp::ffi::arm_dot_prod_f32(im.as_ptr(), t.as_ptr(), n, &raw mut i);
+                }
+                black_box(C32::new(r, i))
+            }
             other => unreachable!("dot has no {other:?}"),
         }
     }
@@ -4934,36 +5002,40 @@ impl Kernel for DotC32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::AVAILABLE,
-            _ => false,
-        }
+        dot_scale_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32fc_32f_dot_prod_32fc",
+            Impl::Cmsis => describe_cmsis("arm_dot_prod_f32 twice, on the planar re and im"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        &["volk_32fc_32f_dot_prod_32fc"]
+        if self.entry == BiquadEntry::Simd {
+            &["volk_32fc_32f_dot_prod_32fc"]
+        } else {
+            &[]
+        }
     }
 }
 
 /// `dot_real` of `n` f32 samples with `n` taps, one call per run (VOLK:
 /// `volk_32f_x2_dot_prod_32f`, which VOLK's wasm32 build does not have).
+///
+/// `dot_real_fallback`: our fallback against CMSIS-DSP's `arm_dot_prod_f32`.
 struct DotF32K {
     x: Aligned<f32>,
     taps: Aligned<f32>,
     result: Aligned<f32>,
+    entry: BiquadEntry,
 }
 
 impl DotF32K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut x = Aligned::<f32>::skewed(layout.n, layout.skew(4));
         for v in x.iter_mut() {
             *v = rng.unit() * 0.9;
@@ -4974,6 +5046,7 @@ impl DotF32K {
             x,
             taps: t,
             result: Aligned::new(1),
+            entry,
         }
     }
 
@@ -4992,6 +5065,19 @@ impl DotF32K {
                 );
                 self.result[0]
             },
+            Impl::Cmsis => {
+                let mut r = 0.0f32;
+                // SAFETY: `x` and `t` hold `len` elements; the result is a local.
+                unsafe {
+                    cmsis_dsp::ffi::arm_dot_prod_f32(
+                        x.as_ptr(),
+                        t.as_ptr(),
+                        len as u32,
+                        &raw mut r,
+                    );
+                }
+                black_box(r)
+            }
             other => unreachable!("dot_real has no {other:?}"),
         }
     }
@@ -5021,23 +5107,20 @@ impl Kernel for DotF32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::NATIVE,
-            _ => false,
-        }
+        dot_scale_supports(self.entry, which, volk_sys::NATIVE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32f_x2_dot_prod_32f",
+            Impl::Cmsis => describe_cmsis("arm_dot_prod_f32"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        if volk_sys::NATIVE {
+        if volk_sys::NATIVE && self.entry == BiquadEntry::Simd {
             &["volk_32f_x2_dot_prod_32f"]
         } else {
             &[]
@@ -5058,17 +5141,26 @@ fn taps_q15(rng: &mut Pcg32, n: usize, skew: usize) -> Aligned<Q15> {
 /// `dot` of `n` CQ15 samples with `n` Q15 taps, one call per run. VOLK's 16-bit dot products
 /// do other work (`volk_16ic_x2_dot_prod_16ic`: complex taps, saturating 16-bit sums), so the
 /// comparison is our fallback.
+///
+/// `dot_cq15_fallback`: our fallback against CMSIS-DSP's `arm_dot_prod_q15` on the planar real
+/// and imaginary parts (two calls; its `i64` sums are exact like ours, without the final
+/// rounding and saturation, which the harness applies outside the counted calls).
 struct DotCq15K {
     x: Aligned<CQ15>,
     taps: Aligned<Q15>,
+    entry: BiquadEntry,
+    planar: (Aligned<i16>, Aligned<i16>),
 }
 
 impl DotCq15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let x = noise_cq15(rng, layout.n, 23_000.0, layout.skew(4));
+        let planar = planar_of(layout.n, layout.skew(2), x.iter().map(|v| (v.re.0, v.im.0)));
         DotCq15K {
             x,
             taps: taps_q15(rng, layout.n, layout.skew(2)),
+            entry,
+            planar,
         }
     }
 
@@ -5077,6 +5169,23 @@ impl DotCq15K {
         match which {
             Impl::Ours => dot_cq15(&Sdrk, x, t),
             Impl::Fallback => dot_cq15(&Fallback, x, t),
+            Impl::Cmsis => {
+                let re = &self.planar.0[start..start + len];
+                let im = &self.planar.1[start..start + len];
+                let t = q15_raw(t);
+                let (mut r, mut i) = (0i64, 0i64);
+                // SAFETY: `re`, `im` and `t` hold `len` elements; the results are locals.
+                unsafe {
+                    let n = len as u32;
+                    cmsis_dsp::ffi::arm_dot_prod_q15(re.as_ptr(), t.as_ptr(), n, &raw mut r);
+                    cmsis_dsp::ffi::arm_dot_prod_q15(im.as_ptr(), t.as_ptr(), n, &raw mut i);
+                }
+                let (r, i) = black_box((r, i));
+                CQ15 {
+                    re: cmsis_q15_of(r),
+                    im: cmsis_q15_of(i),
+                }
+            }
             other => unreachable!("dot_cq15 has no {other:?}"),
         }
     }
@@ -5106,12 +5215,13 @@ impl Kernel for DotCq15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        dot_scale_supports(self.entry, which, false)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis("arm_dot_prod_q15 twice, on the planar re and im"),
             _ => "sdrk",
         }
     }
@@ -5119,13 +5229,17 @@ impl Kernel for DotCq15K {
 
 /// `dot_real` of `n` Q15 samples with `n` Q15 taps, one call per run (VOLK has no 16-bit real
 /// dot product: compared with our fallback).
+///
+/// `dot_real_q15_fallback`: our fallback against CMSIS-DSP's `arm_dot_prod_q15` (an exact `i64`
+/// sum, rounded to Q15 outside the counted call).
 struct DotQ15K {
     x: Aligned<Q15>,
     taps: Aligned<Q15>,
+    entry: BiquadEntry,
 }
 
 impl DotQ15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         let mut x = Aligned::<Q15>::skewed(layout.n, layout.skew(2));
         for v in x.iter_mut() {
             *v = Q15((rng.unit() * 23_000.0) as i16);
@@ -5133,6 +5247,7 @@ impl DotQ15K {
         DotQ15K {
             x,
             taps: taps_q15(rng, layout.n, layout.skew(2)),
+            entry,
         }
     }
 
@@ -5141,6 +5256,19 @@ impl DotQ15K {
         match which {
             Impl::Ours => dot_q15(&Sdrk, x, t),
             Impl::Fallback => dot_q15(&Fallback, x, t),
+            Impl::Cmsis => {
+                let mut r = 0i64;
+                // SAFETY: `x` and `t` hold `len` elements; the result is a local.
+                unsafe {
+                    cmsis_dsp::ffi::arm_dot_prod_q15(
+                        q15_raw(x).as_ptr(),
+                        q15_raw(t).as_ptr(),
+                        len as u32,
+                        &raw mut r,
+                    );
+                }
+                cmsis_q15_of(black_box(r))
+            }
             other => unreachable!("dot_real_q15 has no {other:?}"),
         }
     }
@@ -5170,12 +5298,13 @@ impl Kernel for DotQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        dot_scale_supports(self.entry, which, false)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis("arm_dot_prod_q15"),
             _ => "sdrk",
         }
     }
@@ -5191,16 +5320,20 @@ const SCALE_GAIN: f32 = 0.734_375;
 
 /// `scale` of `n` C32 samples by a real gain. VOLK: `volk_32f_s32f_multiply_32f` on the `2n`
 /// floats, the same work (VOLK's wasm32 build does not have it).
+///
+/// `scale_fallback`: our fallback against CMSIS-DSP's `arm_scale_f32` on the `2 n` floats.
 struct ScaleK {
     input: Aligned<C32>,
     out: Aligned<C32>,
+    entry: BiquadEntry,
 }
 
 impl ScaleK {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         ScaleK {
             input: noise_c32(rng, layout.n, 0.9, layout.skew(8)),
             out: Aligned::skewed(layout.n, layout.skew(8)),
+            entry,
         }
     }
 }
@@ -5220,6 +5353,15 @@ impl Kernel for ScaleK {
                         2 * self.input.len() as u32,
                     );
                 },
+                // SAFETY: input and output hold `n` complex samples, `2n` floats.
+                Impl::Cmsis => unsafe {
+                    cmsis_dsp::ffi::arm_scale_f32(
+                        self.input.as_ptr().cast(),
+                        SCALE_GAIN,
+                        self.out.as_mut_ptr().cast(),
+                        2 * self.input.len() as u32,
+                    );
+                },
                 other => unreachable!("scale has no {other:?}"),
             }
             black_box(&self.out);
@@ -5234,23 +5376,20 @@ impl Kernel for ScaleK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        match which {
-            Impl::Ours | Impl::Fallback => true,
-            Impl::Volk => volk_sys::NATIVE,
-            _ => false,
-        }
+        dot_scale_supports(self.entry, which, volk_sys::NATIVE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Volk => "volk_32f_s32f_multiply_32f",
+            Impl::Cmsis => describe_cmsis("arm_scale_f32 on the 2 n floats"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        if volk_sys::NATIVE {
+        if volk_sys::NATIVE && self.entry == BiquadEntry::Simd {
             &["volk_32f_s32f_multiply_32f"]
         } else {
             &[]
@@ -5260,16 +5399,21 @@ impl Kernel for ScaleK {
 
 /// `scale` of `n` CQ15 samples by a Q15 gain (`q15_mul`, rounded and saturated; VOLK has no
 /// 16-bit scaling with this rounding: compared with our fallback).
+///
+/// `scale_cq15_fallback`: our fallback against CMSIS-DSP's `arm_scale_q15` with shift 0 on the
+/// `2 n` values (the same product, truncated instead of rounded: a lower accuracy class).
 struct ScaleCq15K {
     input: Aligned<CQ15>,
     out: Aligned<CQ15>,
+    entry: BiquadEntry,
 }
 
 impl ScaleCq15K {
-    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    fn new(rng: &mut Pcg32, layout: Layout, entry: BiquadEntry) -> Self {
         ScaleCq15K {
             input: noise_cq15(rng, layout.n, 32_767.0, layout.skew(4)),
             out: Aligned::skewed(layout.n, layout.skew(4)),
+            entry,
         }
     }
 }
@@ -5281,6 +5425,16 @@ impl Kernel for ScaleCq15K {
             match which {
                 Impl::Ours => scale(&Sdrk, &self.input, &mut self.out, gain),
                 Impl::Fallback => scale(&Fallback, &self.input, &mut self.out, gain),
+                // SAFETY: input and output hold `n` complex samples, `2n` values.
+                Impl::Cmsis => unsafe {
+                    cmsis_dsp::ffi::arm_scale_q15(
+                        self.input.as_ptr().cast(),
+                        gain.0,
+                        0,
+                        self.out.as_mut_ptr().cast(),
+                        2 * self.input.len() as u32,
+                    );
+                },
                 other => unreachable!("scale_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -5295,12 +5449,13 @@ impl Kernel for ScaleCq15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        dot_scale_supports(self.entry, which, false)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::Cmsis => describe_cmsis("arm_scale_q15 (shift 0, truncating) on the 2 n values"),
             _ => "sdrk",
         }
     }
@@ -5445,6 +5600,18 @@ mod biquad_tests {
             "dc_block_fallback",
             "dc_block_real_fallback",
             "deemphasis_fallback",
+            "dot",
+            "dot_cq15",
+            "dot_real",
+            "dot_real_q15",
+            "scale",
+            "scale_cq15",
+            "dot_fallback",
+            "dot_cq15_fallback",
+            "dot_real_fallback",
+            "dot_real_q15_fallback",
+            "scale_fallback",
+            "scale_cq15_fallback",
         ] {
             let mut kernel = prepare(
                 name,

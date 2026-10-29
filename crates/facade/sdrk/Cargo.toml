@@ -16,7 +16,7 @@ sdrk-device = { path = "../../core/sdrk-device" }
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32"))'.dependencies]
 sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true }
 
-# The static twiddle tables of the C32 FFT (41 KiB) and the static NCO interpolation tables
+# The static twiddle tables of the C32 FFT (41 KiB, 81 KiB on x86-64) and the static NCO tables
 # (96 KiB) on x86-64 and AArch64, where memory is not scarce; on wasm32 both are opt-in (features
 # `fft-tables` and `nco-tables`).
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]

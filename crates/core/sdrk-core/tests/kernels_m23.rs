@@ -224,7 +224,7 @@ fn hand_computed_values() {
 }
 
 /// `fir_decimate` by 2 of `x` with the halfband taps `t`, summed as the halfband fallback does:
-/// the even taps in ascending order, the centre tap last (D88). Two dense filters give exactly
+/// the even taps in ascending order, the centre tap last (D93). Two dense filters give exactly
 /// that: the even taps alone, then the centre tap alone, added as `f32` (the omitted zero taps
 /// change no bit of a finite sum).
 fn fir_decimate_centre_last(t: &[f32], x: &[C32]) -> Vec<C32> {

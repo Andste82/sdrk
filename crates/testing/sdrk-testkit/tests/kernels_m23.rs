@@ -258,7 +258,7 @@ fn halfband_decimate_equals_fir_decimate_with_the_expanded_taps() {
     for n in [11usize, 23, 63] {
         let (hf, hq) = design(n);
         let x = noise_c32(&mut rng, 4001);
-        // The fallback sums the even taps and then the centre tap (D88): the same as two dense
+        // The fallback sums the even taps and then the centre tap (D93): the same as two dense
         // filters, the even taps alone and the centre tap alone, added in `f32`.
         let m = (n - 1) / 2;
         let mut even = hf.clone();

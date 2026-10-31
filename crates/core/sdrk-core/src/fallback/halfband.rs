@@ -1,6 +1,6 @@
 //! Fallback implementations of `halfband_decimate`, `halfband_decimate_real` and
 //! `real_to_complex`: only the non-zero taps (the even indices and the centre), in ascending
-//! tap order (the centre tap last, D88), one accumulator per output, no FMA.
+//! tap order (the centre tap last, D93), one accumulator per output, no FMA.
 
 use super::decim::FbMac;
 use crate::Fallback;
@@ -24,7 +24,7 @@ const GROUP: usize = 8;
 const GROUP: usize = 16;
 
 /// The non-zero taps of a halfband filter with their index: the even indices ascending, then
-/// the centre `m` (D88: the large centre tap enters the sum last, as in liquid-dsp's `resamp2`).
+/// the centre `m` (D93: the large centre tap enters the sum last, as in liquid-dsp's `resamp2`).
 #[inline]
 fn nonzero<P: Copy>(taps: &[P]) -> impl Iterator<Item = (usize, P)> + '_ {
     let m = taps.len().saturating_sub(1) / 2;

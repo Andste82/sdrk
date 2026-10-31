@@ -110,7 +110,7 @@ def corner_input(h, rng, n=2048):
     return x
 
 
-@case(kernel="halfband_decimate", name="n23_cq15_corners_2048", seed=438)
+@case(kernel="halfband_decimate", name="n23_cq15_corners_2048", seed=452)
 def n23_cq15_corners(rng):
     h = taps_q15()
     xr, xi = corner_input(h, rng), corner_input(h, rng)
@@ -133,7 +133,7 @@ def n23_cq15_corners(rng):
     )
 
 
-@case(kernel="halfband_decimate_real", name="n23_q15_corners_2048", seed=439)
+@case(kernel="halfband_decimate_real", name="n23_q15_corners_2048", seed=453)
 def n23_q15_corners(rng):
     h = taps_q15()
     x = corner_input(h, rng)

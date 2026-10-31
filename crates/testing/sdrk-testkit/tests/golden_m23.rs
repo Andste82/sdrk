@@ -141,8 +141,8 @@ fn all_cases_are_present() {
     ] {
         assert_eq!(golden::list(kernel).unwrap(), cases, "{kernel}");
         for (name, seed) in cases.iter().zip(match kernel {
-            "halfband_decimate" => [430, 431, 438].as_slice(),
-            "halfband_decimate_real" => [432, 433, 439].as_slice(),
+            "halfband_decimate" => [430, 431, 452].as_slice(),
+            "halfband_decimate_real" => [432, 433, 453].as_slice(),
             _ => [434, 435].as_slice(),
         }) {
             assert_eq!(golden::load(kernel, name).unwrap().seed, *seed);

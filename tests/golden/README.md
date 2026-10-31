@@ -16,7 +16,8 @@ golden for those kernels.
 **Report.** When the environment variable `SDRK_GOLDEN_REPORT` names a file, every comparison of
 `sdrk_testkit::golden::assert_matches` appends one JSON line to it: the case, the sample type, the class,
 the floor, the achieved SNR, the achievable optimum (the expected values rounded once to the sample type) and
-whether it passed. `cargo measure <kernel>` uses it (`docs/performance.md`).
+whether it passed. `assert_matches_block_float` does the same for a block-floating-point `CQ15` output; its
+optimum is the expected values rounded to a Q15 mantissa with the block exponent they need. `cargo measure <kernel>` uses it (`docs/performance.md`).
 
 ## Setup
 

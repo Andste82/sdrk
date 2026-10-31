@@ -22,6 +22,11 @@ default = []
 reference = []
 # Emits the 4096-point twiddle tables (16 KiB C32, 8 KiB CQ15 of flash) for `FftPlan::from_static_4096`.
 static-twiddles = []
+# The square roots of `num::sqrt_f32` / `sqrt_f64` (`mag`, `agc`) from `f32::sqrt` / `f64::sqrt`
+# of the standard library instead of `libm`: the same bits, but LLVM's own instruction, which
+# the compiler vectorizes. Nothing else may use `std` (D67, enforced by `cargo xtask check`; any
+# other use needs a maintainer decision); the crate stays heap-free.
+std = []
 
 [lints]
 workspace = true

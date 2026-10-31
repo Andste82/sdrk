@@ -18,7 +18,9 @@
     clippy::indexing_slicing
 )]
 
-#[cfg(test)]
+#[cfg(feature = "std")]
+extern crate std;
+#[cfg(all(test, not(feature = "std")))]
 extern crate std;
 
 mod error;

@@ -2453,26 +2453,26 @@
         },
         "mag_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 3.01,
               "other_snr_db": null,
-              "ours_instr_per_sample": 7.01,
-              "ratio": 2.33
+              "ours_instr_per_sample": 2.01,
+              "ratio": 0.67
             }
           ],
           "other_instr_per_sample": 3.01,
-          "ours_instr_per_sample": 7.01,
-          "ratio": 2.33,
+          "ours_instr_per_sample": 2.01,
+          "ratio": 0.67,
           "snr_db": {
             "other": 150.54,
             "ours": 150.54
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "mag_q15": {
           "compared_with": "volk_16ic_magnitude_16i",
@@ -2514,13 +2514,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 77.46,
               "other_snr_db": null,
-              "ours_instr_per_sample": 28.01,
-              "ratio": 0.36
+              "ours_instr_per_sample": 4.64,
+              "ratio": 0.06
             }
           ],
           "other_instr_per_sample": 77.46,
-          "ours_instr_per_sample": 28.01,
-          "ratio": 0.36,
+          "ours_instr_per_sample": 4.64,
+          "ratio": 0.06,
           "snr_db": {
             "other": 84.3,
             "ours": 96.22

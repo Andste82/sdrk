@@ -175,7 +175,20 @@ pub(crate) fn is_sse2_baseline<S: fearless_simd::Simd>(simd: S) -> bool {
 
 /// Name of the current level.
 pub(crate) fn name() -> &'static str {
-    let level = current();
+    name_of(current())
+}
+
+/// Name of the current level if the crate is compiled for it (the level fixed at compile time,
+/// or the level detected at run time when it is the one the build targets), `None` otherwise.
+/// Code outside the dispatched kernels, such as the fallback, is compiled for the level of the
+/// build: only then is it the code that the counts of that level measure.
+pub(crate) fn compiled_for() -> Option<&'static str> {
+    let level = name();
+    (name_of(Level::baseline()) == level).then_some(level)
+}
+
+/// Name of a level: `sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128` or `scalar`.
+fn name_of(level: Level) -> &'static str {
     #[cfg(target_arch = "x86_64")]
     {
         if level.as_avx512().is_some() {

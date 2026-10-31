@@ -6,7 +6,7 @@ use std::path::{Component, Path};
 use anyhow::Context;
 use cargo_metadata::{DependencyKind, MetadataCommand, Package};
 
-use crate::scan::{Finding, Scan, StdPolicy, scan_crate};
+use crate::scan::{Finding, Scan, StdPolicy, scan_core_std_crate, scan_crate};
 
 /// Layer of a workspace crate; the folder of the crate decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -61,12 +61,15 @@ impl Layer {
         )
     }
 
-    /// Policy for `std` inside `#[cfg(feature = "std")]` items of this layer.
+    /// Policy for `std` inside `#[cfg(feature = "std")]` items of this layer. The core may link
+    /// `std` like a backend: the `std` feature of `sdrk-core` takes the square roots from
+    /// `f32::sqrt` / `f64::sqrt`, which need no `std::` path. That is the only use (D67): the
+    /// stricter `scan_core_std` rejects every other one in the core layer.
     #[must_use]
     pub fn std_policy(self) -> StdPolicy {
         match self {
             Layer::Testing => StdPolicy::Full,
-            Layer::Backend => StdPolicy::ArchOnly,
+            Layer::Core | Layer::Backend => StdPolicy::ArchOnly,
             _ => StdPolicy::Forbidden,
         }
     }
@@ -244,6 +247,12 @@ pub fn check_heap(root: &Path) -> anyhow::Result<Vec<Finding>> {
             .join("src");
         if src.is_dir() {
             findings.extend(scan_crate(&src, Scan::Heap(m.layer.std_policy()))?);
+            if m.layer == Layer::Core {
+                findings.extend(scan_core_std_crate(
+                    &src,
+                    m.package.name.as_str() == "sdrk-core",
+                )?);
+            }
         }
     }
     Ok(findings)
@@ -299,6 +308,16 @@ mod tests {
         assert_eq!(l("xtask", "xtask"), Layer::App);
         assert_eq!(l("examples/fm-receiver", "fm-receiver"), Layer::App);
         assert_eq!(l("tests/system", "sdrk-system-tests"), Layer::App);
+    }
+
+    #[test]
+    fn std_policies() {
+        assert_eq!(Layer::Testing.std_policy(), StdPolicy::Full);
+        assert_eq!(Layer::Core.std_policy(), StdPolicy::ArchOnly);
+        assert_eq!(Layer::Backend.std_policy(), StdPolicy::ArchOnly);
+        assert_eq!(Layer::Device.std_policy(), StdPolicy::Forbidden);
+        assert_eq!(Layer::Facade.std_policy(), StdPolicy::Forbidden);
+        assert_eq!(Layer::Blocks.std_policy(), StdPolicy::Forbidden);
     }
 
     #[test]

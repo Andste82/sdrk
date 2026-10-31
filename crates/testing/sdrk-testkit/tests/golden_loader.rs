@@ -389,3 +389,28 @@ fn error_display_and_kinds() {
     assert!(text.contains("k/c") && text.contains("12.50") && text.contains("index 3"));
     assert_eq!(e.kind(), ErrorKind::Validation);
 }
+
+#[test]
+fn block_float_optimum_rounds_to_the_mantissa_of_the_needed_exponent() {
+    use num_complex::Complex64;
+    // Exactly representable with the exponent 1 (1.5 = 0.75 * 2): no rounding error at all.
+    let exact = Array::CF64(vec![Complex64::new(1.5, -0.25), Complex64::new(0.5, 0.0)]);
+    assert_eq!(
+        golden::block_float_optimum_db(&exact, 0),
+        Some(f64::INFINITY)
+    );
+    // The peak 3.1 needs the exponent 2 (the exponent 1 would saturate); the step is then 2^-13.
+    let x = [3.1, 0.1];
+    let expected = Array::CF64(x.iter().map(|&v| Complex64::new(v, 0.0)).collect());
+    let round = |v: f64| (v * 8192.0 + 0.5).floor() / 8192.0;
+    let err: f64 = x.iter().map(|&v| (v - round(v)).powi(2)).sum();
+    let sig: f64 = x.iter().map(|&v| v * v).sum();
+    let want = 10.0 * (sig / err).log10();
+    let got = golden::block_float_optimum_db(&expected, 0).unwrap();
+    assert!((got - want).abs() < 1e-9, "{got} {want}");
+    // A real array has no block-float rule.
+    assert_eq!(
+        golden::block_float_optimum_db(&Array::F64(vec![0.5]), 0),
+        None
+    );
+}

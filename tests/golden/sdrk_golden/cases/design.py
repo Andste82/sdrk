@@ -134,3 +134,47 @@ for _tag, _resp, _order, _cut in (
     ("hp6", "highpass", 6, 0.2),
 ):
     _register_butterworth(_tag, _resp, _order, _cut)
+
+
+# Halfband design (M23)
+
+
+def _register_halfband(n):
+    @case(kernel="design", name=f"halfband_n{n}", seed=0)
+    def _case(rng):
+        beta = float(scipy.signal.kaiser_beta(60.0))
+        taps = sdrk_design.halfband_taps(n, beta)
+        return dict(
+            params={"num_taps": n, "attenuation_db": 60.0, "beta": beta, "fs_hz": 1.0},
+            arrays={"expected": Array("f64", taps)},
+            tolerance={"class": "max_abs_err", "max_abs_err": 1e-12, "skip": 0},
+            notes=(
+                "scipy.signal.firwin(N, 0.25, window=('kaiser', beta), fs=1) with beta = kaiser_beta(60), "
+                "every tap at an even offset from the centre set to exactly 0, then scaled to sum 1"
+            ),
+        )
+
+
+for _n in (11, 23, 63):
+    _register_halfband(_n)
+
+
+@case(kernel="design", name="halfband_len_table", seed=0)
+def halfband_len_table(rng):
+    attenuation = np.linspace(40.0, 100.0, 10)
+    transition = scalar_math.geomspace(0.02, 0.2, 10)
+    lens = np.array([sdrk_design.halfband_len(t, a, 1.0) for a, t in zip(attenuation, transition)], dtype=np.int32)
+    assert all(int(n) % 4 == 3 for n in lens)
+    return dict(
+        params={"pairs": 10, "fs_hz": 1.0},
+        arrays={
+            "attenuation_db": Array("f64", attenuation),
+            "transition_hz": Array("f64", transition),
+            "expected": Array("i32", lens),
+        },
+        tolerance={"class": "bit_exact"},
+        notes=(
+            "scipy.signal.kaiserord(attenuation, 2 transition / fs), the tap count rounded up to the next "
+            "N with N mod 4 == 3; attenuation 40 to 100 dB (linspace), transition 0.02 to 0.2 (geomspace)"
+        ),
+    )

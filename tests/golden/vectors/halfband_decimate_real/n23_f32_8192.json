@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "n23_f32_8192.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "n23_f32_8192.input.bin",
+      "len": 8192
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "n23_f32_8192.taps.bin",
+      "len": 23
+    }
+  },
+  "case": "n23_f32_8192",
+  "format_version": 1,
+  "kernel": "halfband_decimate_real",
+  "notes": "halfband_taps(23, kaiser_beta(60)) rounded to f32; y[m] = lfilter(h, 1, x)[2 m] in float64, zero history; real noise sigma 0.3",
+  "params": {
+    "attenuation_db": 60.0,
+    "beta": 5.65326,
+    "taps": 23
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 432,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_guard": 142.1,
+    "snr_db_min": 110.0
+  }
+}

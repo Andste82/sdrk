@@ -109,6 +109,7 @@ mod dot;
 mod fft;
 mod filter;
 mod fused;
+mod halfband;
 mod interp;
 mod mix;
 mod modulate;

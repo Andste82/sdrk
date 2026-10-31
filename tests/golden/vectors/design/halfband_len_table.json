@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "attenuation_db": {
+      "dtype": "f64",
+      "file": "halfband_len_table.attenuation_db.bin",
+      "len": 10
+    },
+    "expected": {
+      "dtype": "i32",
+      "file": "halfband_len_table.expected.bin",
+      "len": 10
+    },
+    "transition_hz": {
+      "dtype": "f64",
+      "file": "halfband_len_table.transition_hz.bin",
+      "len": 10
+    }
+  },
+  "case": "halfband_len_table",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "scipy.signal.kaiserord(attenuation, 2 transition / fs), the tap count rounded up to the next N with N mod 4 == 3; attenuation 40 to 100 dB (linspace), transition 0.02 to 0.2 (geomspace)",
+  "params": {
+    "fs_hz": 1.0,
+    "pairs": 10
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

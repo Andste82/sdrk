@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "n63_c32_16384.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "n63_c32_16384.input.bin",
+      "len": 16384
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "n63_c32_16384.taps.bin",
+      "len": 63
+    }
+  },
+  "case": "n63_c32_16384",
+  "format_version": 1,
+  "kernel": "real_to_complex",
+  "notes": "u = x (-j)^n in float64, y[m] = lfilter(h, 1, u)[2 m] with the f32 taps of halfband_taps(63, kaiser_beta(60)); real noise sigma 0.2 plus tones at 0.11 fs and 0.37 fs with amplitude 0.3",
+  "params": {
+    "attenuation_db": 60.0,
+    "beta": 5.65326,
+    "taps": 63
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 434,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_guard": 141.1,
+    "snr_db_min": 110.0
+  }
+}

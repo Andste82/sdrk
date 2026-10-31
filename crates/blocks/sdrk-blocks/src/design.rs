@@ -248,6 +248,79 @@ pub fn kaiserord(ripple_db: f64, transition_hz: f64, fs_hz: f64) -> Result<(usiz
     Ok((n, kaiser_beta(a)))
 }
 
+/// Tap count of a halfband filter: `kaiserord(attenuation_db, transition_hz, fs_hz)` rounded up
+/// to the next `N` with `N mod 4 == 3` (so `N >= 3`).
+///
+/// ```
+/// use sdrk_blocks::design::halfband_len;
+/// let n = halfband_len(0.1, 60.0, 1.0)?;
+/// assert_eq!(n % 4, 3);
+/// assert!(halfband_len(0.1, 60.0, 1.0)? <= halfband_len(0.05, 60.0, 1.0)?);
+/// assert!(halfband_len(0.1, 3.0, 1.0).is_err()); // below the 8 dB limit of kaiserord
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+pub fn halfband_len(transition_hz: f64, attenuation_db: f64, fs_hz: f64) -> Result<usize> {
+    let (n, _) = kaiserord(attenuation_db, transition_hz, fs_hz)?;
+    // `kaiserord` returns an odd count: 4 k + 1 becomes 4 k + 3.
+    Ok(if n % 4 == 1 { n + 2 } else { n })
+}
+
+/// Halfband taps of the length `taps.len()` (`N mod 4 == 3`, `N >= 3`) with a Kaiser window of
+/// the given `beta`, exactly symmetric, with the sum 1.
+///
+/// With `m = (N - 1) / 2` (odd): `h = firwin_lowpass(fs / 4, fs, Kaiser { beta })` for
+/// `fs = 1`, then `h[m ± 2 i] = 0.0` exactly for `i >= 1` (they are about 1e-17 from
+/// `sin(k pi)`), the right half is set to the mirror of the left one (the window and the sinc
+/// are symmetric only up to rounding), and `h` is scaled so that `sum h = 1`. About half of the taps are zero, the
+/// outermost taps (even index) are not, and the centre tap is close to 0.5. The usable band
+/// after a decimation by 2 is `±(fs / 4 - transition_hz / 2)` of the input rate.
+///
+/// ```
+/// use sdrk_blocks::design::{halfband_taps, kaiser_beta};
+/// let mut h = [0.0f64; 23];
+/// halfband_taps(kaiser_beta(60.0), &mut h)?;
+/// assert_eq!(h[11 - 2], 0.0); // zero at the even offsets from the centre
+/// assert_eq!(h[1], 0.0);
+/// assert!(h[0] != 0.0 && h[22] == h[0]);
+/// assert!((h.iter().sum::<f64>() - 1.0).abs() < 1e-14);
+/// assert!(halfband_taps(5.0, &mut [0.0; 21]).is_err()); // 21 mod 4 == 1
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+pub fn halfband_taps(beta: f64, taps: &mut [f64]) -> Result<()> {
+    let n = taps.len();
+    if n < 3 || n % 4 != 3 {
+        return Err(Error::InvalidParameter {
+            name: "taps",
+            reason: "a halfband filter needs 4 k + 3 taps",
+        });
+    }
+    firwin_lowpass(0.25, 1.0, DesignWindow::Kaiser { beta }, taps)?;
+    let m = (n - 1) / 2;
+    for (k, t) in taps.iter_mut().enumerate() {
+        if k != m && k.abs_diff(m) % 2 == 0 {
+            *t = 0.0;
+        }
+    }
+    // The window and the sinc are symmetric only up to rounding (a few units in the last place):
+    // the right half becomes the exact mirror of the left one, so that the taps are exactly
+    // symmetric (a pre-add of the two samples of a tap pair in an accelerated path is then exact).
+    let (left, right) = taps.split_at_mut(m + 1);
+    for (r, l) in right.iter_mut().zip(left.iter().rev().skip(1)) {
+        *r = *l;
+    }
+    let sum: f64 = taps.iter().sum();
+    if !(sum.is_finite() && sum != 0.0) {
+        return Err(Error::InvalidParameter {
+            name: "beta",
+            reason: "the halfband taps do not have a usable sum",
+        });
+    }
+    for t in taps.iter_mut() {
+        *t /= sum;
+    }
+    Ok(())
+}
+
 /// Converts taps to `f32`.
 ///
 /// ```

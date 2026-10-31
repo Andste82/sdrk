@@ -13,6 +13,11 @@ num-complex.workspace = true
 bytemuck.workspace = true
 libm.workspace = true
 
+# `v128` as a plain-old-data type: the `simd128` path of the halfband fallback loads vectors with
+# `bytemuck::cast` instead of lane by lane.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bytemuck = { workspace = true, features = ["wasm_simd"] }
+
 [build-dependencies]
 libm.workspace = true
 

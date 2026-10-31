@@ -223,21 +223,39 @@ fn hand_computed_values() {
     assert_eq!(y, [0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
+/// `fir_decimate` by 2 of `x` with the halfband taps `t`, summed as the halfband fallback does:
+/// the even taps in ascending order, the centre tap last (D88). Two dense filters give exactly
+/// that: the even taps alone, then the centre tap alone, added as `f32` (the omitted zero taps
+/// change no bit of a finite sum).
+fn fir_decimate_centre_last(t: &[f32], x: &[C32]) -> Vec<C32> {
+    let n = t.len();
+    let m = (n - 1) / 2;
+    let mut even = t.to_vec();
+    even[m] = 0.0;
+    let mut centre = vec![0.0f32; n];
+    centre[m] = t[m];
+    let mut a = FirDecimState::<C32, _, _>::new(even, vec![C32::default(); n - 1], 2).unwrap();
+    let mut b = FirDecimState::<C32, _, _>::new(centre, vec![C32::default(); n - 1], 2).unwrap();
+    let ya = whole(x, |i, o| Fallback.fir_decimate(&mut a, i, o).unwrap());
+    let yb = whole(x, |i, o| Fallback.fir_decimate(&mut b, i, o).unwrap());
+    ya.iter()
+        .zip(&yb)
+        .map(|(p, q)| C32::new(p.re + q.re, p.im + q.im))
+        .collect()
+}
+
 #[test]
 fn halfband_equals_fir_decimate_by_two() {
     let mut rng = Lcg(23);
     for n in LENS {
         let x = rand_c32(&mut rng, 777, 1.0);
         let t = taps_f32(n);
-        let mut a =
-            FirDecimState::<C32, _, _>::new(t.clone(), vec![C32::default(); n - 1], 2).unwrap();
         let mut b =
             HalfbandState::<C32, _, _>::new(t.clone(), vec![C32::default(); n - 1]).unwrap();
-        let want = whole(&x, |i, o| Fallback.fir_decimate(&mut a, i, o).unwrap());
+        let want = fir_decimate_centre_last(&t, &x);
         let got = whole(&x, |i, o| Fallback.halfband_decimate(&mut b, i, o).unwrap());
         // Finite inputs: the omitted zero taps change no bit (a zero result compares equal).
         assert_eq!(want, got, "n {n}");
-        assert_eq!(a.history(), b.history());
         // Real input as the real part of a complex stream.
         let xr: Vec<f32> = x.iter().map(|s| s.re).collect();
         let mut r = HalfbandRealState::<f32, _, _>::new(t.clone(), vec![0.0; n - 1]).unwrap();
@@ -264,6 +282,109 @@ fn halfband_equals_fir_decimate_by_two() {
             Fallback.halfband_decimate_real(&mut r, i, o).unwrap()
         });
         assert_eq!(yr, want.iter().map(|s| s.re).collect::<Vec<_>>());
+    }
+}
+
+/// A halfband tap vector of `n` taps whose non-zero taps (the even offsets and the centre) have
+/// the absolute values `mags` in order, with alternating signs, the rest zero.
+fn taps_with_abs_sum(n: usize, total: i32) -> Vec<Q15> {
+    let m = (n - 1) / 2;
+    let idx: Vec<usize> = (0..n).filter(|k| k % 2 == 0 || *k == m).collect();
+    let mut taps = vec![Q15(0); n];
+    let each = total / idx.len() as i32;
+    let extra = total - each * idx.len() as i32;
+    for (j, k) in idx.iter().enumerate() {
+        let mag = each + i32::from((j as i32) < extra);
+        taps[*k] = Q15(if j % 2 == 0 { mag } else { -mag } as i16);
+    }
+    taps
+}
+
+#[test]
+fn q15_sums_are_exact_at_the_edge_of_the_narrow_accumulator() {
+    // The fallback sums a group in `i32` while the absolute tap sum is at most 65535 and in `i64`
+    // above; both must equal the `i64` sums of `fir_decimate` (checked with extreme samples).
+    let mut rng = Lcg(2331);
+    for n in [11usize, 23, 47, 63] {
+        for total in [30000, 65534, 65535, 65536, 65537, 90000] {
+            let taps = taps_with_abs_sum(n, total);
+            for pattern in 0..4 {
+                let x: Vec<CQ15> = (0..500)
+                    .map(|i| {
+                        let v = |r: &mut Lcg| match pattern {
+                            0 => Q15(i16::MIN),
+                            1 => Q15(i16::MAX),
+                            2 => Q15(if (i / 3) % 2 == 0 { i16::MIN } else { i16::MAX }),
+                            _ => Q15(if r.next() & 1 == 0 {
+                                i16::MIN
+                            } else {
+                                i16::MAX
+                            }),
+                        };
+                        CQ15 {
+                            re: v(&mut rng),
+                            im: v(&mut rng),
+                        }
+                    })
+                    .collect();
+                let mut a =
+                    FirDecimState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); n - 1], 2)
+                        .unwrap();
+                let mut b =
+                    HalfbandState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); n - 1])
+                        .unwrap();
+                let want = whole(&x, |i, o| Fallback.fir_decimate(&mut a, i, o).unwrap());
+                let got = whole(&x, |i, o| Fallback.halfband_decimate(&mut b, i, o).unwrap());
+                assert_eq!(want, got, "n {n} total {total} pattern {pattern}");
+                let xr: Vec<Q15> = x.iter().map(|s| s.re).collect();
+                let mut r =
+                    HalfbandRealState::<Q15, _, _>::new(taps.clone(), vec![Q15(0); n - 1]).unwrap();
+                let yr = whole(&xr, |i, o| {
+                    Fallback.halfband_decimate_real(&mut r, i, o).unwrap()
+                });
+                assert_eq!(yr, want.iter().map(|s| s.re).collect::<Vec<_>>());
+                // real_to_complex: the explicit shift followed by the halfband decimator.
+                let mut c = RealToComplexState::<CQ15, _, _>::new(
+                    taps.clone(),
+                    vec![CQ15::default(); n - 1],
+                )
+                .unwrap();
+                let mut d =
+                    HalfbandState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); n - 1])
+                        .unwrap();
+                let got = whole(&xr, |i, o| Fallback.real_to_complex(&mut c, i, o).unwrap());
+                let shifted = shift_cq15(&xr, 0);
+                let want = whole(&shifted, |i, o| {
+                    Fallback.halfband_decimate(&mut d, i, o).unwrap()
+                });
+                assert_eq!(want, got, "r2c n {n} total {total} pattern {pattern}");
+            }
+        }
+    }
+}
+
+#[test]
+fn filters_longer_than_the_group_limit_are_computed_per_output() {
+    // Above 511 taps the fallback does not group; the result is the same as `fir_decimate`.
+    let mut rng = Lcg(515);
+    for n in [511usize, 515, 1023] {
+        let x = rand_c32(&mut rng, 2300, 1.0);
+        let t = taps_f32(n);
+        let mut b =
+            HalfbandState::<C32, _, _>::new(t.clone(), vec![C32::default(); n - 1]).unwrap();
+        let want = fir_decimate_centre_last(&t, &x);
+        let got = whole(&x, |i, o| Fallback.halfband_decimate(&mut b, i, o).unwrap());
+        assert_eq!(want, got, "n {n}");
+        let xq = rand_cq15(&mut rng, 2300);
+        let tq = taps_q15(n);
+        let mut a =
+            FirDecimState::<CQ15, _, _>::new(tq.clone(), vec![CQ15::default(); n - 1], 2).unwrap();
+        let mut b = HalfbandState::<CQ15, _, _>::new(tq, vec![CQ15::default(); n - 1]).unwrap();
+        let want = whole(&xq, |i, o| Fallback.fir_decimate(&mut a, i, o).unwrap());
+        let got = whole(&xq, |i, o| {
+            Fallback.halfband_decimate(&mut b, i, o).unwrap()
+        });
+        assert_eq!(want, got, "n {n}");
     }
 }
 

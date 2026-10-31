@@ -602,17 +602,22 @@ fn cycles_of_level(
                 .filter(|&m| m != mode),
         )
         .collect();
+    // Every value of the level is an entry (existing readers iterate them); the counter is
+    // named in each.
+    let counts = profiler.describe(plan);
     let mut value = serde_json::Map::new();
-    value.insert("block_counts".into(), json!(profiler.describe(plan)));
     for (kernel, e) in crate::count::profiles(root, plan.platform, plan.level, entries, profiler)? {
         match e.and_then(|e| entry_cycles(&e, models, &both, &mut table)) {
-            Ok(v) => {
+            Ok(mut v) => {
+                if let Value::Object(m) = &mut v {
+                    m.insert("block_counts".into(), json!(counts));
+                }
                 value.insert(kernel, v);
             }
             Err(err) => {
                 let note = format!("not simulated: {err:#}");
                 let _ = writeln!(table, "{kernel:<26} {note}");
-                value.insert(kernel, json!({ "note": note }));
+                value.insert(kernel, json!({ "note": note, "block_counts": counts }));
             }
         }
     }

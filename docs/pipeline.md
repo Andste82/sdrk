@@ -363,7 +363,7 @@ Errors are only created on the error path; the hot path never builds a string.
 
 ## Examples
 
-Eight flows in `examples/flows`, each with a YAML twin (`.yaml`, with comments), all valid against the schema and covered by the tests:
+Ten flows in `examples/flows`, each with a YAML twin (`.yaml`, with comments), all valid against the schema and covered by the tests:
 
 - `fm_receiver.json`: RTL-SDR IQ (`cu8`, 2.4 MHz) to a DDC, an FM demodulator and 48 kHz audio, plus an averaged spectrum frame output fed from the same input buffer.
 - `spectrum_only.json`: `cu8` IQ through a DC blocker into a Blackman-Harris spectrum with 8 averages.

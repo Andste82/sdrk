@@ -103,7 +103,7 @@ The IIR designs for the block `biquad` (all in `f64`, section coefficients `[b0,
 
 ## Descriptions
 
-Every block has a `BlockDescription` (kind, summary, details, ports, parameters, required parameters) as `static` data; `all_descriptions()` lists all fifteen. A `ParamDesc` has a name that ends in its unit (`_hz`, `_db`, `_us`), a `Unit`, a `ParamKind` with absolute limits and a default, a `typical` text, `Mutability::Build` or `Runtime`, and a description. Rules, all enforced by `crates/blocks/sdrk-blocks/tests/describe.rs`:
+Every block has a `BlockDescription` (kind, summary, details, ports, parameters, required parameters) as `static` data; `all_descriptions()` lists all eighteen. A `ParamDesc` has a name that ends in its unit (`_hz`, `_db`, `_us`), a `Unit`, a `ParamKind` with absolute limits and a default, a `typical` text, `Mutability::Build` or `Runtime`, and a description. Rules, all enforced by `crates/blocks/sdrk-blocks/tests/describe.rs`:
 
 - every text is non-empty and has no leading or trailing whitespace; a summary is one sentence of at most 120 characters that ends with a period;
 - block kinds and parameter names are `snake_case` and unique; a unit suffix in the name matches the `Unit`;

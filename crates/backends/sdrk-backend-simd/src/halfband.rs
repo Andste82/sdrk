@@ -50,36 +50,28 @@ use crate::util::internal;
 /// The longest filter of this backend (`m <= 511`); longer ones run on the fallback.
 const MAX_N: usize = 1023;
 const MAX_M: usize = (MAX_N - 1) / 2;
+/// The longest filter of the small class of scratch (`m <= 63`): its stack arrays are a quarter
+/// of the size, which a short call pays for in clearing them (the cycles of a call of a few
+/// hundred samples fall by a third at `CQ15`).
+const SMALL_N: usize = 127;
+const SMALL_M: usize = (SMALL_N - 1) / 2;
 /// Outputs per block.
 const BLK: usize = 64;
-/// Extra scratch elements after a block (vector loads past the last output).
-const PAD: usize = 16;
-/// Length of the even-stream scratch.
-const SLEN: usize = MAX_M + BLK + PAD;
+/// Length of the even-stream scratch (values, two per sample) for filters up to `m`.
+const fn slen(m: usize) -> usize {
+    2 * (m + BLK)
+}
 /// Largest `sum |h|` (raw `Q15` units) for which the `i32` sums cannot overflow:
 /// `32768 * 65535 + 2^14 < 2^31`.
 const MAX_ABS_SUM: i64 = 65535;
 
 /// Taps prepared for a block kernel.
-struct Prep<P> {
+struct Prep<'a, P> {
     /// `f32`: the pair coefficients `h[2 p]` for `p < (m + 1) / 2`; `Q15`: `h[2 i]`, `i <= m`.
-    c: [P; MAX_M + 1],
-    /// Number of valid entries of `c`.
-    nc: usize,
+    c: &'a [P],
     /// The centre tap.
     hc: P,
     m: usize,
-}
-
-impl<P: Plane> Prep<P> {
-    fn new() -> Self {
-        Self {
-            c: [P::ZERO; MAX_M + 1],
-            nc: 0,
-            hc: P::ZERO,
-            m: 0,
-        }
-    }
 }
 
 /// A plane of one component of the samples (`f32` or the raw `i16` of `Q15`).
@@ -88,20 +80,23 @@ trait Plane: Copy + Default {
     fn neg(self) -> Self;
     /// The zero sample.
     const ZERO: Self;
-    /// The prepared taps, or `None` if the filter runs on the fallback.
-    fn prepare(taps: &[Self], prep: &mut Prep<Self>) -> Option<()>;
-    /// `out[t]` for `t < nb` (more may be written, up to the next multiple of 16): the even
-    /// stream part, plus the centre tap with `o` if `CENTRE`.
-    fn compute<S: SimdToken, const CENTRE: bool>(
+    /// The prepared taps (in `buf`), or `None` if the filter runs on the fallback (also if `buf`
+    /// is too short for it).
+    fn prepare<'a>(taps: &[Self], buf: &'a mut [Self]) -> Option<Prep<'a, Self>>;
+    /// `out[u]` for `u < nf` (more may be written, up to the next multiple of 16): the even
+    /// stream part, plus the centre tap with `o` if `CENTRE`. The streams hold `C` components
+    /// per sample (interleaved), so `u` runs over `nf = C nb` values and the sample `p` places
+    /// on is `C p` values on.
+    fn compute<S: SimdToken, const CENTRE: bool, const C: usize>(
         simd: S,
-        prep: &Prep<Self>,
+        prep: &Prep<'_, Self>,
         s: &[Self],
         o: &[Self],
-        out: &mut [Self; BLK],
-        nb: usize,
+        out: &mut [Self],
+        nf: usize,
     );
     /// `out[t]` is the centre tap times `o[t]` alone.
-    fn centre(prep: &Prep<Self>, o: &[Self], out: &mut [Self; BLK], nb: usize);
+    fn centre(prep: &Prep<'_, Self>, o: &[Self], out: &mut [Self], nb: usize);
 }
 
 /// Whether the level has fused multiply-add for the float sums (decision D5).
@@ -136,18 +131,19 @@ fn f32_vectors<
     V: SimdFloat<S, Element = f32>,
     const FMA: bool,
     const CENTRE: bool,
+    const C: usize,
     const NV: usize,
 >(
     simd: S,
-    prep: &Prep<f32>,
+    prep: &Prep<'_, f32>,
     s: &[f32],
     o: &[f32],
-    out: &mut [f32; BLK],
+    out: &mut [f32],
     t: usize,
 ) {
     let l = V::LEN;
     let m = prep.m;
-    let cp = prep.c.get(..prep.nc).unwrap_or(&[]);
+    let cp = prep.c;
     let zero = V::splat(simd, 0.0);
     let hc = V::splat(simd, prep.hc);
     let mut acc = [zero; NV];
@@ -158,14 +154,25 @@ fn f32_vectors<
             }
         }
     }
-    let windows: [&[f32]; NV] =
-        core::array::from_fn(|v| s.get(t + v * l..t + v * l + m + l).unwrap_or(&[]));
-    let mut its = windows.map(|w| w.windows(l).zip(w.windows(l).rev()));
-    for &c in cp {
-        let cv = V::splat(simd, c);
-        for (a, it) in acc.iter_mut().zip(its.iter_mut()) {
-            if let Some((b, e)) = it.next() {
-                *a = madd::<S, V, FMA>(cv, V::from_slice(simd, e) + V::from_slice(simd, b), *a);
+    // Pair `p` adds the samples `p` after and `p` before the end of the window of `m + NV l / C`
+    // samples (`C` values each); each pair is two slices of `NV l` values, cut once.
+    let span = NV * l;
+    if let Some(w) = s.get(t..t + span + C * m) {
+        // `p <= m` is what lets the compiler see that both slices are inside `w`.
+        for (p, &c) in cp.iter().enumerate().take(m + 1) {
+            let cv = V::splat(simd, c);
+            let (Some(fwd), Some(bwd)) = (
+                w.get(C * p..C * p + span),
+                w.get(C * (m - p)..C * (m - p) + span),
+            ) else {
+                break;
+            };
+            for ((a, f), b) in acc
+                .iter_mut()
+                .zip(fwd.chunks_exact(l))
+                .zip(bwd.chunks_exact(l))
+            {
+                *a = madd::<S, V, FMA>(cv, V::from_slice(simd, f) + V::from_slice(simd, b), *a);
             }
         }
     }
@@ -178,22 +185,32 @@ fn f32_vectors<
 
 /// All outputs of a block with vectors of type `V`: four vectors at a time, then one.
 #[inline(always)]
-fn f32_block<S: SimdToken, V: SimdFloat<S, Element = f32>, const FMA: bool, const CENTRE: bool>(
+fn f32_block<
+    S: SimdToken,
+    V: SimdFloat<S, Element = f32>,
+    const FMA: bool,
+    const CENTRE: bool,
+    const C: usize,
+>(
     simd: S,
-    prep: &Prep<f32>,
+    prep: &Prep<'_, f32>,
     s: &[f32],
     o: &[f32],
-    out: &mut [f32; BLK],
-    nb: usize,
+    out: &mut [f32],
+    nf: usize,
 ) {
     let l = V::LEN;
     let mut t = 0;
-    while t + 4 * l <= nb {
-        f32_vectors::<S, V, FMA, CENTRE, 4>(simd, prep, s, o, out, t);
+    while t + 8 * l <= nf {
+        f32_vectors::<S, V, FMA, CENTRE, C, 8>(simd, prep, s, o, out, t);
+        t += 8 * l;
+    }
+    while t + 4 * l <= nf {
+        f32_vectors::<S, V, FMA, CENTRE, C, 4>(simd, prep, s, o, out, t);
         t += 4 * l;
     }
-    while t < nb {
-        f32_vectors::<S, V, FMA, CENTRE, 1>(simd, prep, s, o, out, t);
+    while t < nf {
+        f32_vectors::<S, V, FMA, CENTRE, C, 1>(simd, prep, s, o, out, t);
         t += l;
     }
 }
@@ -206,7 +223,7 @@ impl Plane for f32 {
         -self
     }
 
-    fn prepare(taps: &[f32], prep: &mut Prep<f32>) -> Option<()> {
+    fn prepare<'a>(taps: &[f32], buf: &'a mut [f32]) -> Option<Prep<'a, f32>> {
         let n = taps.len();
         if !(3..=MAX_N).contains(&n) {
             return None;
@@ -217,35 +234,37 @@ impl Plane for f32 {
         }
         let m = (n - 1) / 2;
         let nc = m.div_ceil(2);
-        for (d, h) in prep.c.iter_mut().zip(taps.iter().step_by(2)).take(nc) {
+        let c = buf.get_mut(..nc)?;
+        for (d, h) in c.iter_mut().zip(taps.iter().step_by(2)) {
             *d = *h;
         }
-        prep.nc = nc;
-        prep.hc = *taps.get(m)?;
-        prep.m = m;
-        Some(())
+        Some(Prep {
+            c,
+            hc: *taps.get(m)?,
+            m,
+        })
     }
 
     #[inline(always)]
-    fn compute<S: SimdToken, const CENTRE: bool>(
+    fn compute<S: SimdToken, const CENTRE: bool, const C: usize>(
         simd: S,
-        prep: &Prep<f32>,
+        prep: &Prep<'_, f32>,
         s: &[f32],
         o: &[f32],
-        out: &mut [f32; BLK],
-        nb: usize,
+        out: &mut [f32],
+        nf: usize,
     ) {
         let fma = has_fma(simd);
         match S::f32s::LEN {
-            16 => f32_block::<S, f32x16<S>, true, CENTRE>(simd, prep, s, o, out, nb),
-            8 => f32_block::<S, f32x8<S>, true, CENTRE>(simd, prep, s, o, out, nb),
-            _ if fma => f32_block::<S, f32x4<S>, true, CENTRE>(simd, prep, s, o, out, nb),
-            _ => f32_block::<S, f32x4<S>, false, CENTRE>(simd, prep, s, o, out, nb),
+            16 => f32_block::<S, f32x16<S>, true, CENTRE, C>(simd, prep, s, o, out, nf),
+            8 => f32_block::<S, f32x8<S>, true, CENTRE, C>(simd, prep, s, o, out, nf),
+            _ if fma => f32_block::<S, f32x4<S>, true, CENTRE, C>(simd, prep, s, o, out, nf),
+            _ => f32_block::<S, f32x4<S>, false, CENTRE, C>(simd, prep, s, o, out, nf),
         }
     }
 
     #[inline(always)]
-    fn centre(prep: &Prep<f32>, o: &[f32], out: &mut [f32; BLK], nb: usize) {
+    fn centre(prep: &Prep<'_, f32>, o: &[f32], out: &mut [f32], nb: usize) {
         for (d, x) in out.iter_mut().zip(o).take(nb) {
             *d = prep.hc * x;
         }
@@ -263,7 +282,7 @@ impl Plane for i16 {
         self.saturating_neg()
     }
 
-    fn prepare(taps: &[i16], prep: &mut Prep<i16>) -> Option<()> {
+    fn prepare<'a>(taps: &[i16], buf: &'a mut [i16]) -> Option<Prep<'a, i16>> {
         let n = taps.len();
         if !(3..=MAX_N).contains(&n) {
             return None;
@@ -273,39 +292,47 @@ impl Plane for i16 {
             return None;
         }
         let m = (n - 1) / 2;
-        for (d, h) in prep.c.iter_mut().zip(taps.iter().step_by(2)) {
+        let c = buf.get_mut(..=m)?;
+        for (d, h) in c.iter_mut().zip(taps.iter().step_by(2)) {
             *d = *h;
         }
-        prep.nc = m + 1;
-        prep.hc = *taps.get(m)?;
-        prep.m = m;
-        Some(())
+        Some(Prep {
+            c,
+            hc: *taps.get(m)?,
+            m,
+        })
     }
 
     #[inline(always)]
-    fn compute<S: SimdToken, const CENTRE: bool>(
+    fn compute<S: SimdToken, const CENTRE: bool, const C: usize>(
         _simd: S,
-        prep: &Prep<i16>,
+        prep: &Prep<'_, i16>,
         s: &[i16],
         o: &[i16],
-        out: &mut [i16; BLK],
-        nb: usize,
+        out: &mut [i16],
+        nf: usize,
     ) {
         let m = prep.m;
-        let cs = prep.c.get(..prep.nc).unwrap_or(&[]);
+        let cs = prep.c;
         let mut t = 0;
-        while t < nb {
+        while t < nf {
             let mut acc = [0i32; GROUP];
             if CENTRE && let Some(ov) = o.get(t..t + GROUP) {
                 for (a, &x) in acc.iter_mut().zip(ov) {
                     *a = i32::from(prep.hc) * i32::from(x);
                 }
             }
-            // Sample `s[t + m - i + g]` pairs with tap `h[2 i]`.
-            let w = s.get(t..t + m + GROUP).unwrap_or(&[]);
-            for (win, &c) in w.windows(GROUP).rev().zip(cs) {
-                for (a, &x) in acc.iter_mut().zip(win) {
-                    *a += i32::from(c) * i32::from(x);
+            // The value `s[t + C (m - i) + g]` pairs with tap `h[2 i]`.
+            if let Some(w) = s.get(t..t + C * m + GROUP) {
+                // Taken from the last: the window of the tap `h[2 (m - k)]` starts `C k` on, and
+                // `k <= m` lets the compiler see that it is inside `w`.
+                for (k, &c) in cs.iter().rev().take(m + 1).enumerate() {
+                    let at = C * k;
+                    if let Some(Ok(win)) = w.get(at..at + GROUP).map(<&[i16; GROUP]>::try_from) {
+                        for (a, &x) in acc.iter_mut().zip(win) {
+                            *a += i32::from(c) * i32::from(x);
+                        }
+                    }
                 }
             }
             if let Some(dst) = out.get_mut(t..t + GROUP) {
@@ -319,7 +346,7 @@ impl Plane for i16 {
     }
 
     #[inline(always)]
-    fn centre(prep: &Prep<i16>, o: &[i16], out: &mut [i16; BLK], nb: usize) {
+    fn centre(prep: &Prep<'_, i16>, o: &[i16], out: &mut [i16], nb: usize) {
         for (d, &x) in out.iter_mut().zip(o).take(nb) {
             let a = i32::from(prep.hc) * i32::from(x);
             *d = ((a + (1 << 14)) >> 15).clamp(-32768, 32767) as i16;
@@ -356,28 +383,30 @@ fn plan(countdown: usize, input_len: usize, output_len: usize) -> Plan {
     }
 }
 
-/// The scratch of a block: the even and odd streams of up to two planes.
-struct Scratch<P> {
-    s: [[P; SLEN]; 2],
-    o: [[P; BLK + PAD]; 2],
-    res: [[P; BLK]; 2],
+/// The scratch of a block: the even and odd streams and the results, `C <= 2` values per
+/// sample, interleaved; `SL` is the length of the even stream ([`slen`]).
+struct Scratch<P, const SL: usize> {
+    s: [P; SL],
+    o: [P; 2 * BLK],
+    res: [P; 2 * BLK],
 }
 
-impl<P: Plane> Scratch<P> {
+impl<P: Plane, const SL: usize> Scratch<P, SL> {
     fn new() -> Self {
         Self {
-            s: [[P::ZERO; SLEN]; 2],
-            o: [[P::ZERO; BLK + PAD]; 2],
-            res: [[P::ZERO; BLK]; 2],
+            s: [P::ZERO; SL],
+            o: [P::ZERO; 2 * BLK],
+            res: [P::ZERO; 2 * BLK],
         }
     }
 }
 
 /// Copies `count` samples `start, start + 2, ...` of the virtual stream `hist ++ input` to `dst`
-/// (mapped by `fh` for the history, `fi` for the input; `fi` also gets the index in `dst`).
-/// `hist` has `CH` components per sample and `input` `CX`; `hk` and `xk` select the component.
+/// (`W` values per sample, mapped by `fh` for the history, `fi` for the input; `fi` also gets the
+/// index of the sample in `dst`). `hist` has `CH` values per sample and `input` `CX`; `hk` and
+/// `xk` are the offset of the first value taken from a sample.
 #[inline(always)]
-fn gather<P: Copy, X: Copy, Q: Copy, const CH: usize, const CX: usize>(
+fn gather<P: Copy, X: Copy, Q: Copy, const W: usize, const CH: usize, const CX: usize>(
     hist: &[P],
     hk: usize,
     input: &[X],
@@ -395,22 +424,47 @@ fn gather<P: Copy, X: Copy, Q: Copy, const CH: usize, const CX: usize>(
         0
     };
     let hsrc = hist.get(CH * start + hk..).unwrap_or(&[]);
-    if let Some(d) = dst.get_mut(..nh) {
-        for (d, x) in d.iter_mut().zip(hsrc.iter().step_by(2 * CH)) {
-            *d = fh(*x);
+    if let Some(d) = dst.get_mut(..W * nh) {
+        for (j, d) in d.chunks_exact_mut(W).enumerate() {
+            if let Some(src) = hsrc.get(2 * CH * j..2 * CH * j + W) {
+                for (d, x) in d.iter_mut().zip(src) {
+                    *d = fh(*x);
+                }
+            }
         }
     }
     let first = (start + 2 * nh).saturating_sub(h);
     let isrc = input.get(CX * first + xk..).unwrap_or(&[]);
-    if let Some(d) = dst.get_mut(nh..count) {
-        for (j, (d, x)) in d.iter_mut().zip(isrc.iter().step_by(2 * CX)).enumerate() {
-            *d = fi(nh + j, *x);
+    if let Some(d) = dst.get_mut(W * nh..W * count) {
+        // Every second sample: whole pairs of samples first, then the last sample if the input
+        // ends after it.
+        let pairs = isrc.chunks_exact(2 * CX);
+        let tail = pairs.remainder();
+        let mut done = 0;
+        for (j, (d, x)) in d.chunks_exact_mut(W).zip(pairs).enumerate() {
+            if let (Some((x, _)), Some((d, _))) =
+                (x.split_first_chunk::<W>(), d.split_first_chunk_mut::<W>())
+            {
+                for (d, x) in d.iter_mut().zip(x) {
+                    *d = fi(nh + j, *x);
+                }
+            }
+            done = j + 1;
+        }
+        if let (Some((x, _)), Some((d, _))) = (
+            tail.split_first_chunk::<W>(),
+            d.get_mut(W * done..)
+                .and_then(|d| d.split_first_chunk_mut::<W>()),
+        ) {
+            for (d, x) in d.iter_mut().zip(x) {
+                *d = fi(nh + done, *x);
+            }
         }
     }
 }
 
-/// `halfband_decimate` and `halfband_decimate_real` for `C` components per sample. `None`
-/// if the filter runs on the fallback (nothing has been touched then).
+/// `halfband_decimate` and `halfband_decimate_real` for `C` values per sample. `None` if the
+/// filter runs on the fallback (nothing has been touched then).
 #[inline(always)]
 fn decimate<S: SimdToken, P: Plane, const C: usize>(
     simd: S,
@@ -420,55 +474,63 @@ fn decimate<S: SimdToken, P: Plane, const C: usize>(
     input: &[P],
     output: &mut [P],
 ) -> Result<Option<Progress>> {
-    let mut prep = Prep::<P>::new();
-    if P::prepare(taps, &mut prep).is_none() {
-        return Ok(None);
+    if taps.len() <= SMALL_N {
+        decimate_in::<S, P, C, { SMALL_M + 1 }, { slen(SMALL_M) }>(
+            simd, taps, hist, countdown, input, output,
+        )
+    } else {
+        decimate_in::<S, P, C, { MAX_M + 1 }, { slen(MAX_M) }>(
+            simd, taps, hist, countdown, input, output,
+        )
     }
+}
+
+/// [`decimate`] with the scratch of a class of filters (`NC` taps, `SL` values of even stream).
+#[inline(always)]
+fn decimate_in<S: SimdToken, P: Plane, const C: usize, const NC: usize, const SL: usize>(
+    simd: S,
+    taps: &[P],
+    hist: &mut [P],
+    countdown: &mut usize,
+    input: &[P],
+    output: &mut [P],
+) -> Result<Option<Progress>> {
+    let mut cbuf = [P::ZERO; NC];
+    let Some(prep) = P::prepare(taps, &mut cbuf) else {
+        return Ok(None);
+    };
     let m = prep.m;
     let p = plan(*countdown, input.len() / C, output.len() / C);
-    let mut sc = Scratch::<P>::new();
+    let mut sc = Scratch::<P, SL>::new();
     let mut t0 = 0;
     while t0 < p.produced {
         let nb = BLK.min(p.produced - t0);
-        for (k, ((s, o), r)) in
-            sc.s.iter_mut()
-                .zip(sc.o.iter_mut())
-                .zip(sc.res.iter_mut())
-                .take(C)
-                .enumerate()
-        {
-            gather::<P, P, P, C, C>(
-                hist,
-                k,
-                input,
-                k,
-                p.first + 2 * t0,
-                m + nb,
-                s,
-                |x| x,
-                |_, x| x,
-            );
-            gather::<P, P, P, C, C>(
-                hist,
-                k,
-                input,
-                k,
-                p.first + m + 2 * t0,
-                nb,
-                o,
-                |x| x,
-                |_, x| x,
-            );
-            P::compute::<S, true>(simd, &prep, s, o, r, nb);
-            for (d, &x) in output
-                .iter_mut()
-                .skip(C * t0 + k)
-                .step_by(C)
-                .zip(r.iter())
-                .take(nb)
-            {
-                *d = x;
-            }
+        let nf = C * nb;
+        gather::<P, P, P, C, C, C>(
+            hist,
+            0,
+            input,
+            0,
+            p.first + 2 * t0,
+            m + nb,
+            &mut sc.s,
+            |x| x,
+            |_, x| x,
+        );
+        gather::<P, P, P, C, C, C>(
+            hist,
+            0,
+            input,
+            0,
+            p.first + m + 2 * t0,
+            nb,
+            &mut sc.o,
+            |x| x,
+            |_, x| x,
+        );
+        P::compute::<S, true, C>(simd, &prep, &sc.s, &sc.o, &mut sc.res, nf);
+        if let (Some(out), Some(res)) = (output.get_mut(C * t0..C * t0 + nf), sc.res.get(..nf)) {
+            out.copy_from_slice(res);
         }
         t0 += nb;
     }
@@ -505,14 +567,35 @@ fn real_to_complex<S: SimdToken, P: Plane>(
     input: &[P],
     output: &mut [P],
 ) -> Result<Option<Progress>> {
-    let mut prep = Prep::<P>::new();
-    if P::prepare(taps, &mut prep).is_none() {
-        return Ok(None);
+    if taps.len() <= SMALL_N {
+        real_to_complex_in::<S, P, { SMALL_M + 1 }, { slen(SMALL_M) }>(
+            simd, taps, hist, n4, input, output,
+        )
+    } else {
+        real_to_complex_in::<S, P, { MAX_M + 1 }, { slen(MAX_M) }>(
+            simd, taps, hist, n4, input, output,
+        )
     }
+}
+
+/// [`real_to_complex`] with the scratch of a class of filters.
+#[inline(always)]
+fn real_to_complex_in<S: SimdToken, P: Plane, const NC: usize, const SL: usize>(
+    simd: S,
+    taps: &[P],
+    hist: &mut [P],
+    n4: &mut usize,
+    input: &[P],
+    output: &mut [P],
+) -> Result<Option<Progress>> {
+    let mut cbuf = [P::ZERO; NC];
+    let Some(prep) = P::prepare(taps, &mut cbuf) else {
+        return Ok(None);
+    };
     let m = prep.m;
     let h = hist.len() / 2;
     let p = plan(*n4 & 1, input.len(), output.len() / 2);
-    let mut sc = Scratch::<P>::new();
+    let mut sc = Scratch::<P, SL>::new();
     let mut t0 = 0;
     while t0 < p.produced {
         let nb = BLK.min(p.produced - t0);
@@ -520,33 +603,31 @@ fn real_to_complex<S: SimdToken, P: Plane>(
         let base = (*n4 + p.first + 2 * t0) & 3;
         let b = (base + 4 - (h & 3)) & 3;
         let c0 = (base + 4 - (m & 3)) & 3;
-        let [s, _] = &mut sc.s;
-        let [o, _] = &mut sc.o;
-        let [r0, r1] = &mut sc.res;
-        gather::<P, P, P, 2, 1>(
+        let (r0, r1) = sc.res.split_at_mut(BLK);
+        gather::<P, P, P, 1, 2, 1>(
             hist,
             0,
             input,
             0,
             p.first + 2 * t0,
             m + nb,
-            s,
+            &mut sc.s,
             |x| x,
             |j, x| if (b + 2 * j) & 3 == 2 { x.neg() } else { x },
         );
-        gather::<P, P, P, 2, 1>(
+        gather::<P, P, P, 1, 2, 1>(
             hist,
             1,
             input,
             0,
             p.first + m + 2 * t0,
             nb,
-            o,
+            &mut sc.o,
             |x| x,
             |t, x| if (c0 + 2 * t) & 3 == 1 { x.neg() } else { x },
         );
-        P::compute::<S, false>(simd, &prep, s, o, r0, nb);
-        P::centre(&prep, o, r1, nb);
+        P::compute::<S, false, 1>(simd, &prep, &sc.s, &sc.o, r0, nb);
+        P::centre(&prep, &sc.o, r1, nb);
         for ((d, &re), &im) in output
             .chunks_exact_mut(2)
             .skip(t0)

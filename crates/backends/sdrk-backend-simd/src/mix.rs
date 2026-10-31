@@ -903,7 +903,10 @@ fn rotate_q15<S: SimdToken>(simd: S, phase: u32, inc: u32, input: &[i16], out: &
 
 /// The phases `phase + l inc` of the lanes `l < N`.
 #[cfg(any(
-    feature = "nco-tables",
+    all(
+        feature = "nco-tables",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ),
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 #[inline(always)]

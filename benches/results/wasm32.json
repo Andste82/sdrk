@@ -2064,20 +2064,20 @@
         },
         "fir_interpolate_real_q15": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 584.57,
               "other_snr_db": null,
-              "ours_instr_per_sample": 602.4,
-              "ratio": 1.03
+              "ours_instr_per_sample": 584.57,
+              "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 584.57,
-          "ours_instr_per_sample": 602.4,
-          "ratio": 1.03,
+          "ours_instr_per_sample": 584.57,
+          "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0

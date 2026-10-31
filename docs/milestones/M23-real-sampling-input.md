@@ -311,6 +311,12 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Design functions `halfband_len`, `halfband_taps`
 - [x] Real formats in the `convert` block and the automatic conversion
 - [x] Blocks `halfband`, `real_to_complex`, pipeline kinds, regenerated schema; flow `real_input_fm_receiver` with YAML twin
-- [ ] SIMD paths for the three kernels on every level, `Reference::OwnKernel` and the per-entry `limit` in `xtask count`, counts and limits
+- [x] SIMD paths for the three kernels on every level, `Reference::OwnKernel` and the per-entry `limit` in `xtask count`, counts and limits (all `release` entries pass at all levels; the `CQ15` `real_to_complex` entries are provisionally `info`, I23-1)
 - [x] Golden cases (seeds 430–435 and the design cases), suite, invariance, extremes, E2E-REAL
-- [ ] (done: `docs/kernels.md`, `docs/timing.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log; open: `docs/backends.md`, `docs/performance.md`) `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log
+- [x] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log
+
+## Status (2026-10-31)
+
+Complete: all deliverables above, the tests 1 to 10, and the acceptance commands (fmt, clippy `-D warnings`, `cargo test --workspace --all-features`, `cargo xtask check`, `cargo xtask bare-metal`, the wasm tests, the golden check, `cargo xtask schema --check`, the quick profiles of the Cortex-M4 emulator; the counts at `x86_64`, `x86_64-avx512`, `aarch64` and `wasm32`, with `cargo measure` at `avx2`). Every gated count entry (kernels and fallbacks) is within its limit at every level and every accuracy rule holds (D81 to D94, `docs/performance.md`).
+
+Provisional / open (see `docs/open-items.md`): I23-1 (status of the `CQ15` `real_to_complex` entries against libairspy: `info` until the maintainer decides; the measured numbers are there), I23-2 (confirmation of D88: the `f32` fallback adds the centre tap last), I23-3 (the work-saving evidence of 0.60 is missed on `neon` and `simd128`; no `neon`/`simd128` specific path). Not run in this environment: the ESP32-P4 and ESP32-S3 emulator targets.

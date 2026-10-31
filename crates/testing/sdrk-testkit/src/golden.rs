@@ -641,6 +641,41 @@ pub fn assert_matches<T: Sample>(
     result
 }
 
+/// [`assert_matches`] for the output of a block-floating-point `CQ15` kernel: the
+/// mantissas `mantissas` with the block exponent `exponent` that the kernel returned.
+///
+/// The comparison is that of the values `m * 2^(exponent - 15)` as `C32` (exact in `f32`
+/// for every mantissa and every exponent of the kernels), against the expected values of
+/// the case. The report line carries the type `CQ15` and the optimum of the block-float
+/// format ([`block_float_optimum_db`]) instead of that of `C32`, which a 16-bit mantissa
+/// cannot reach.
+pub fn assert_matches_block_float(
+    case: &GoldenCase,
+    expected: &Array,
+    mantissas: &[CQ15],
+    exponent: i32,
+) -> Result<Comparison> {
+    let actual = scaled_block_float(mantissas, exponent);
+    let result = compare_case(case, expected, &actual);
+    if let Some(path) = std::env::var_os(REPORT_ENV) {
+        let optimum = |skip| block_float_optimum_db(expected, skip);
+        let line = report_line_as(case, SampleType::CQ15, optimum, &result);
+        // A report that cannot be written must not hide the outcome of the comparison.
+        let _ = append_line(Path::new(&path), &line);
+    }
+    result
+}
+
+/// The values `m * 2^(exponent - 15)` of block-floating-point `CQ15` mantissas, as `C32`.
+#[must_use]
+pub fn scaled_block_float(mantissas: &[CQ15], exponent: i32) -> Vec<C32> {
+    let g = libm::ldexpf(1.0, exponent - 15);
+    mantissas
+        .iter()
+        .map(|v| C32::new(f32::from(v.re.0) * g, f32::from(v.im.0) * g))
+        .collect()
+}
+
 /// The environment variable that turns on the report of [`assert_matches`]: the
 /// path of a file to which one JSON line per comparison is appended.
 pub const REPORT_ENV: &str = "SDRK_GOLDEN_REPORT";
@@ -655,12 +690,31 @@ pub const REPORT_ENV: &str = "SDRK_GOLDEN_REPORT";
 ///   whether the error was zero);
 /// - `optimum_db`: for a `tolerance` case, the achievable optimum of the accuracy policy
 ///   (`docs/kernels.md`): the SNR that the expected values reach when they are rounded
-///   once to the sample type (f32, or Q15 with round half up and saturation);
+///   once to the output format (f32, or Q15 with round half up and saturation; for a
+///   block-floating-point output of [`assert_matches_block_float`], whose `type` is
+///   `CQ15`, a Q15 mantissa with the block exponent the expected values need, see
+///   [`block_float_optimum_db`]);
 /// - `passed`, and `detail` for a failure.
 #[must_use]
 pub fn report_line<T: Sample>(
     case: &GoldenCase,
     expected: &Array,
+    result: &Result<Comparison>,
+) -> String {
+    report_line_as(
+        case,
+        T::TYPE,
+        |skip| optimum_db(T::TYPE, expected, skip),
+        result,
+    )
+}
+
+/// [`report_line`] with the reported sample type and the optimum (a function of `skip`)
+/// given explicitly.
+fn report_line_as(
+    case: &GoldenCase,
+    sample_type: SampleType,
+    optimum: impl FnOnce(usize) -> Option<f64>,
     result: &Result<Comparison>,
 ) -> String {
     let finite = |x: f64| if x.is_finite() { Some(x) } else { None };
@@ -679,12 +733,10 @@ pub fn report_line<T: Sample>(
         Err(GoldenError::Mismatch { snr_db, .. }) => *snr_db,
         Err(_) => f64::NAN,
     };
-    let optimum_db = skip
-        .and_then(|skip| optimum_db(T::TYPE, expected, skip))
-        .and_then(finite);
+    let optimum_db = skip.and_then(optimum).and_then(finite);
     let value = serde_json::json!({
         "case": format!("{}/{}", case.kernel, case.case),
-        "type": format!("{:?}", T::TYPE),
+        "type": format!("{sample_type:?}"),
         "class": class,
         "snr_db_min": snr_db_min,
         "snr_db_guard": snr_db_guard,
@@ -716,6 +768,35 @@ fn optimum_db(sample_type: SampleType, expected: &Array, skip: usize) -> Option<
             skip,
         ),
     };
+    Some(c.snr_db)
+}
+
+/// The achievable optimum of a block-floating-point `CQ15` output: the SNR that the
+/// expected values reach when they are rounded once to a Q15 mantissa (round half up)
+/// with the smallest block exponent `e >= 0` at which no mantissa saturates, that is
+/// `round_q15(x / 2^e) * 2^e`; `None` where no rounding rule applies.
+///
+/// The smallest such exponent keeps the most bits of the largest values; a larger one
+/// loses one bit per step, a smaller one clips. The kernels return exponents `>= 0`.
+#[must_use]
+pub fn block_float_optimum_db(expected: &Array, skip: usize) -> Option<f64> {
+    let View::Complex(e) = expected_view(expected).ok()? else {
+        return None;
+    };
+    let peak = e
+        .iter()
+        .map(|c| libm::fabs(c.re).max(libm::fabs(c.im)))
+        .fold(0.0, f64::max);
+    // The rounded mantissa of the largest component must stay at or below 32767 (and
+    // at or above -32768, which a negative peak of the same magnitude also meets).
+    let fits = |exp: i32| libm::floor(peak * libm::ldexp(32768.0, -exp) + 0.5) <= 32767.0;
+    let exp = (0..=1024).find(|&exp| fits(exp))?;
+    let round = |x: f64| libm::ldexp(round_q15(libm::ldexp(x, -exp)), exp);
+    let c = compare_complex(
+        &e,
+        e.iter().map(|c| Complex64::new(round(c.re), round(c.im))),
+        skip,
+    );
     Some(c.snr_db)
 }
 

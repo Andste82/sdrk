@@ -13,7 +13,9 @@
 //! - **Golden cases:** the golden tests of `sdrk-testkit` run with the report of
 //!   `sdrk_testkit::golden::assert_matches`; per case the contract floor, the measured SNR (the
 //!   lowest of all comparisons of the case), the achievable optimum (the expected values rounded
-//!   once to the sample type) and the distance to it (`docs/kernels.md#accuracy-policy`).
+//!   once to the output format: the sample type, or for a block-floating-point `CQ15` output a
+//!   Q15 mantissa with the block exponent the expected values need) and the distance to it
+//!   (`docs/kernels.md#accuracy-policy`).
 //! - **Simulated cycles (level 2):** for the levels counted with callgrind, the execution counts
 //!   per instruction of ours and of the judged comparison, simulated by `llvm-mca` on the
 //!   reference model and the counter-model of the level ([`crate::mca`]): cycles per sample,
@@ -639,7 +641,7 @@ fn measure_golden(root: &Path, report: &Path, golden: &[String]) -> anyhow::Resu
     let report = run_golden(root, report)?;
     let cases = summarise_golden(&report, golden)?;
     let mut table = String::from(
-        "\ngolden cases (dB; distance = optimum - measured; the optimum is the expected value rounded once to the type):\n",
+        "\ngolden cases (dB; distance = optimum - measured; the optimum is the expected value rounded once to the output format, for block-float CQ15 a Q15 mantissa with the block exponent it needs):\n",
     );
     table.push_str(&golden_table(&cases));
     let doc = json!({

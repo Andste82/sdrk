@@ -40,14 +40,14 @@ use crate::suite::Failure;
 const LENGTHS: [usize; 8] = [0, 1, 3, 15, 16, 17, 255, 4096];
 
 /// The lengths that fit an arena with `bytes_per_sample` bytes of buffers per sample.
-fn lengths(remaining: usize, bytes_per_sample: usize) -> impl Iterator<Item = usize> {
+pub(super) fn lengths(remaining: usize, bytes_per_sample: usize) -> impl Iterator<Item = usize> {
     let room = remaining.saturating_sub(4096);
     LENGTHS
         .into_iter()
         .filter(move |&n| n.saturating_mul(bytes_per_sample) <= room)
 }
 
-fn fail(case: &'static str, msg: &'static str, n: usize) -> Failure {
+pub(super) fn fail(case: &'static str, msg: &'static str, n: usize) -> Failure {
     Failure::new(case, msg).detail(format_args!("n={n}"))
 }
 

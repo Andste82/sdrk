@@ -236,6 +236,26 @@ fn backend_table_lists_the_m06_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m23_kernels() {
+    for (kernel, ty) in [
+        ("halfband_decimate", SampleType::C32),
+        ("halfband_decimate", SampleType::CQ15),
+        ("halfband_decimate_real", SampleType::F32),
+        ("halfband_decimate_real", SampleType::Q15),
+        ("real_to_complex", SampleType::C32),
+        ("real_to_complex", SampleType::CQ15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("halfband_decimate", SampleType::F32), "none");
+    assert_eq!(
+        backend_for("halfband_decimate_real", SampleType::C32),
+        "none"
+    );
+    assert_eq!(backend_for("real_to_complex", SampleType::F32), "none");
+}
+
+#[test]
 fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     use sdrk::Rate;
     use sdrk::kernels::decim::{

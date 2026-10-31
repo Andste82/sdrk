@@ -1524,7 +1524,7 @@ fn drive_polyphase<S: SimdToken, const C: usize>(
 // Bookkeeping shared by both sample types
 
 /// `hist` becomes the last `hist.len()` samples of `hist ++ input`.
-fn update_history<T: Copy>(hist: &mut [T], input: &[T]) -> Result<()> {
+pub(crate) fn update_history<T: Copy>(hist: &mut [T], input: &[T]) -> Result<()> {
     let keep = hist.len();
     if input.len() >= keep {
         let tail = input
@@ -1543,7 +1543,7 @@ fn update_history<T: Copy>(hist: &mut [T], input: &[T]) -> Result<()> {
 
 /// Moves the `consumed` samples of `input` into the history and reports the progress of a
 /// call; `what` names the window in the error of a violated invariant.
-fn commit<T: Copy>(
+pub(crate) fn commit<T: Copy>(
     hist: &mut [T],
     input: &[T],
     consumed: usize,

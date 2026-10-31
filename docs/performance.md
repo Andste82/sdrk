@@ -824,18 +824,6 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `fft_64` | 4.46 | 5.86 | 0.76 | 3.91 | 5.51 | 0.71 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
 | `fft_64_fallback` | 22.92 | 15.15 | 1.51 | 22.25 | 17.64 | 1.26 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_cq15_1024` | 8.77 | 52.83 | 0.17 | 9.73 | 62.25 | 0.16 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `halfband_decimate` C32 (liquid-dsp `resamp2_crcf`) | whole-loop | 3.78 | 2.99 | 279.44 | 37.53 | 0.01 | 0.08 | 3.50 | 3.01 |
-| `halfband_decimate_real` f32 (liquid-dsp `resamp2_rrrf`) | whole-loop | 2.39 | 1.40 | 235.40 | 35.37 | 0.01 | 0.04 | 2.10 | 1.42 |
-| `real_to_complex` C32 (liquid-dsp `firhilbf`) | whole-loop | 2.50 | 2.29 | 260.97 | 38.33 | 0.01 | 0.06 | 2.66 | 2.58 |
-| `halfband_decimate` CQ15 (our fallback) | whole-loop | 7.60 | 7.14 | 13.07 | 13.27 | 0.58 | 0.54 | 7.21 | 7.14 |
-| `halfband_decimate_real` Q15 (our fallback) | whole-loop | 4.41 | 3.85 | 11.33 | 10.14 | 0.39 | 0.38 | 4.11 | 3.84 |
-| `real_to_complex` CQ15 (libairspy `iqconverter_int16`, provisional) | whole-loop | 4.74 | 4.87 | 7.27 | 8.83 | 0.65 | 0.55 | 4.81 | 5.16 |
-| `halfband_decimate_fallback` C32 (liquid-dsp portable) | whole-loop | 61.28 | 13.95 | 215.04 | 64.87 | 0.28 | 0.21 | 64.85 | 17.54 |
-| `halfband_decimate_real_fallback` f32 (liquid-dsp portable) | whole-loop | 9.13 | 8.76 | 228.74 | 53.34 | 0.04 | 0.16 | 12.80 | 12.46 |
-| `real_to_complex_fallback` C32 (liquid-dsp portable) | whole-loop | 12.67 | 13.29 | 254.30 | 56.35 | 0.05 | 0.24 | 14.45 | 15.33 |
-| `halfband_decimate_cq15_fallback` (CMSIS-DSP composition) | whole-loop | 13.07 | 13.27 | 31.18 | 33.35 | 0.42 | 0.40 | 16.42 | 16.95 |
-| `halfband_decimate_real_q15_fallback` (CMSIS-DSP composition) | whole-loop | 11.33 | 10.14 | 15.59 | 16.67 | 0.73 | 0.61 | 15.70 | 15.18 |
-| `real_to_complex_cq15_fallback` (libairspy `iqconverter_int16`, provisional) | whole-loop | 14.91 | 14.62 | 7.27 | 8.83 | 2.05 | 1.66 | 19.48 | 18.14 |
 | `fft_cq15_1024_default` | 7.36 | 52.83 | 0.14 | 7.73 | 62.25 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default_fallback` | 62.64 | 44.75 | 1.40 | 79.41 | 56.09 | 1.42 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_cq15_1024_fallback` | 83.15 | 44.75 | 1.86 | 92.42 | 56.09 | 1.65 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |

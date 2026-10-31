@@ -245,8 +245,9 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>> Ti
 pub trait HalfbandDecimate<T: ComplexSample> {
     /// Computes `y[m] = y_full[2 m]` (see [`HalfbandState`]) over the non-zero taps only and
     /// returns how many input samples were consumed and how many outputs were produced.
-    /// Accumulation: `C32` in ascending tap index without FMA (the zero taps are omitted, which
-    /// changes no bit of a finite result), `CQ15` in `i64` with one rounding and saturation per
+    /// Accumulation: `C32` without FMA, the even taps in ascending tap index and the centre
+    /// tap last (the zero taps are omitted; the bits are therefore not those of `fir_decimate`
+    /// with factor 2, whose centre tap comes in its own position), `CQ15` in `i64` with one rounding and saturation per
     /// component, bit-exact with `fir_decimate` with factor 2.
     fn halfband_decimate<Taps, Hist>(
         &self,
@@ -331,7 +332,8 @@ impl<T: RealSample, Taps: AsRef<[T]>, Hist: AsRef<[T]> + AsMut<[T]>> Timing
 /// Real FIR with halfband taps followed by decimation by 2.
 pub trait HalfbandDecimateReal<T: RealSample> {
     /// Computes `y[m] = y_full[2 m]` (see [`HalfbandState`]) over the non-zero taps only.
-    /// Accumulation: `f32` in ascending tap index without FMA, `Q15` in `i64` with one rounding
+    /// Accumulation: `f32` without FMA, the even taps in ascending tap index and the centre
+    /// tap last, `Q15` in `i64` with one rounding
     /// and saturation, bit-exact with the integer model of `fir_decimate` with factor 2.
     fn halfband_decimate_real<Taps, Hist>(
         &self,
@@ -439,8 +441,8 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>> Ti
 pub trait RealToComplex<T: ComplexSample> {
     /// Computes the outputs defined at [`RealToComplexState`]. Every `u[n]` has one zero
     /// component, so the kernel evaluates the real part over the taps at even indices and the
-    /// imaginary part over the centre tap only. Accumulation: `C32` in ascending tap index
-    /// without FMA, `CQ15` in `i64` with one rounding and saturation per component (bit-exact
+    /// imaginary part over the centre tap only. Accumulation: `C32` without FMA, the even taps
+    /// in ascending tap index and the centre tap last, `CQ15` in `i64` with one rounding and saturation per component (bit-exact
     /// with the definition).
     fn real_to_complex<Taps, Hist>(
         &self,

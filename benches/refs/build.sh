@@ -483,7 +483,7 @@ build_kfr_biquad() {
 # pinned, so the method is fixed by the level. The SSE loop of `dotprod_rrrf` (`resamp2_rrrf`
 # and `firhilbf`) needs SSE3 for its horizontal add (HAVE_SSE3, which liquid's autotools build
 # defines where the compiler has SSE3): it is the reference from sse4.2 (compiled with
-# -DHAVE_SSE3=1) and at sse2 the portable loop is (maintainer decision of 2026-10-31, D68).
+# -DHAVE_SSE3=1) and at sse2 the portable loop is (maintainer decision of 2026-10-31, D69).
 # `liquid_simd <level> <crcf|rrrf>` is the method of the wrapper's SIMD choice.
 liquid_simd() {
     case $1 in

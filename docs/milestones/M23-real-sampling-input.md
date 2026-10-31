@@ -145,7 +145,7 @@ Additional rules:
 
 **Out:** halfband interpolation, CIC, device drivers (Airspy and others live in their own repos), packed 12-bit real formats beyond what M01 defines, fs/4 shifts in the other direction (`+fs/4`; a mirrored spectrum is handled by the `ddc` frequency sign).
 
-> **Amendment 2026-10-31 (maintainer decisions, D68 to D70):** external C references for the three kernels are **in** scope: liquid-dsp 1.8.3 (already fetched by `benches/refs/build.sh`) and libairspy v1.0.10 (MIT licence; its `iqconverter_float` and `iqconverter_int16`, conversion only, without `remove_dc`; later libairspy versions are under a restrictive licence and must not be used) are built by `benches/refs/build.sh` under its pinning and licence conventions and linked into the measurement binary. The sentence 'external C references for `real_to_complex` (libairspy; backlog)' is removed from *Out*. Section 7 is amended below.
+> **Amendment 2026-10-31 (maintainer decisions, D69 to D71):** external C references for the three kernels are **in** scope: liquid-dsp 1.8.3 (already fetched by `benches/refs/build.sh`) and libairspy v1.0.10 (MIT licence; its `iqconverter_float` and `iqconverter_int16`, conversion only, without `remove_dc`; later libairspy versions are under a restrictive licence and must not be used) are built by `benches/refs/build.sh` under its pinning and licence conventions and linked into the measurement binary. The sentence 'external C references for `real_to_complex` (libairspy; backlog)' is removed from *Out*. Section 7 is amended below.
 
 ## Specification
 
@@ -231,7 +231,7 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | `halfband_decimate_real` (f32, Q15) | yes | as above for real lanes | against our `halfband_decimate` per value, `info` (no real `fir_decimate` path exists in the backend) |
 | `real_to_complex` (C32, CQ15) | yes | the shift is a sign pattern on lanes and the filter is the halfband | against our `halfband_decimate` on the shifted samples at the same level (`Reference::OwnKernel`, `release` with the default limit 1.10) |
 
-**Note 2026-10-28 (D32):** a comparison with one of our own kernels is not an established reference and no fair gate. The maintainer decided on 2026-10-31 (D68): all `Reference::OwnKernel` comparisons are `info` and the gates are external; see the *Amendment 2026-10-31* below. The `Accelerated`/`Count` columns of the table above are replaced by the amendment.
+**Note 2026-10-28 (D32):** a comparison with one of our own kernels is not an established reference and no fair gate. The maintainer decided on 2026-10-31 (D69): all `Reference::OwnKernel` comparisons are `info` and the gates are external; see the *Amendment 2026-10-31* below. The `Accelerated`/`Count` columns of the table above are replaced by the amendment.
 
 **Comparison with an own kernel (extension of `xtask count`, normative):**
 
@@ -240,7 +240,7 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 - `benches/results/<platform>.json`: `compared_with` is `"ours:<kernel>"`; the verdict and the limit used are written as for the other entries.
 - Unit tests of `xtask` for the parser (an entry with and without `limit`, a wrong type) and for the verdict with a per-entry limit; `docs/performance.md` documents the new reference kind and the field.
 
-> **Amendment 2026-10-31 (maintainer decisions, D68 to D70; replaces the `Count` column of the table above, the per-entry `limit` 0.60 and the release status of the `Reference::OwnKernel` entries):**
+> **Amendment 2026-10-31 (maintainer decisions, D69 to D71; replaces the `Count` column of the table above, the per-entry `limit` 0.60 and the release status of the `Reference::OwnKernel` entries):**
 >
 > 1. **Count references are external.** `Reference::OwnKernel` comparisons are kept as work-saving evidence only, with status `info` (for example `halfband_decimate` <= 0.60 of `fir_decimate` with factor 2 and the expanded taps; `real_to_complex` against `halfband_decimate` on the shifted samples). They are no gate. The gates are:
 >
@@ -283,7 +283,7 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | halfband_decimate | `n23_c32_8192` | 430 | `halfband_taps` N 23, β = `kaiser_beta(60)` → f32; noise σ 0.3 | `lfilter(h, 1, x)[::2]` | SNR ≥ 110 |
 | halfband_decimate | `n23_cq15_8192` | 431 | taps and input quantized (the zero taps stay 0) | integer model of `fir_decimate` with factor 2 | bit-exact |
 | halfband_decimate_real | `n23_f32_8192` / `n23_q15_8192` | 432 / 433 | real noise | as above | SNR ≥ 110 / bit-exact |
-| halfband_decimate / halfband_decimate_real | `n23_cq15_corners_2048` / `n23_q15_corners_2048` | 452 / 453 | added in review (D102): full-scale windows aligned with the tap signs, runs of −32768 and +32767, full-scale alternations | integer model, both saturation limits occur | bit-exact |
+| halfband_decimate / halfband_decimate_real | `n23_cq15_corners_2048` / `n23_q15_corners_2048` | 452 / 453 | added in review (D103): full-scale windows aligned with the tap signs, runs of −32768 and +32767, full-scale alternations | integer model, both saturation limits occur | bit-exact |
 | real_to_complex | `n63_c32_16384` | 434 | real noise σ 0.2 plus two real tones at 0.11·fs and 0.37·fs (amplitude 0.3); taps N 63 | f64: `u = x·(−j)^n`, `lfilter(h, 1, u)[::2]` | SNR ≥ 110 |
 | real_to_complex | `n63_cq15_16384` | 435 | quantized (input includes −32768 to exercise the saturated negation) | integer model of §3 | bit-exact |
 
@@ -312,7 +312,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Design functions `halfband_len`, `halfband_taps`
 - [x] Real formats in the `convert` block and the automatic conversion
 - [x] Blocks `halfband`, `real_to_complex`, pipeline kinds, regenerated schema; flow `real_input_fm_receiver` with YAML twin
-- [x] SIMD paths for the three kernels on every level, `Reference::OwnKernel`, the efficiency target `own_target` (instead of the per-entry `limit`, D101) and the second `sse2` gate `real_to_complex_airspy` (D100) in `xtask count`, counts and limits (all `release` entries pass at all levels; the `CQ15` `real_to_complex` entries are provisionally `info`, I23-1)
+- [x] SIMD paths for the three kernels on every level, `Reference::OwnKernel`, the efficiency target `own_target` (instead of the per-entry `limit`, D102) and the second `sse2` gate `real_to_complex_airspy` (D101) in `xtask count`, counts and limits (all `release` entries pass at all levels; the `CQ15` `real_to_complex` entries are provisionally `info`, I23-1)
 - [x] Golden cases (seeds 430–435, 452 and 453 (saturation corners of the `Q15` halfband kernels) and the design cases), suite, invariance, extremes, E2E-REAL
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log
 
@@ -320,17 +320,17 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 Complete:
 
-- Kernels `halfband_decimate` (`C32`, `CQ15`), `halfband_decimate_real` (`f32`, `Q15`) and `real_to_complex` (`C32`, `CQ15`) with states, `Fallback`, `Reference` and facade delegation; the design functions `halfband_len` and `halfband_taps` (exactly symmetric taps, D71). The `f32`/`C32` fallback sums the even-index taps in ascending order and adds the centre tap last (D93, confirmation open: I23-2); `CQ15`/`Q15` are bit-exact with `fir_decimate` by 2.
+- Kernels `halfband_decimate` (`C32`, `CQ15`), `halfband_decimate_real` (`f32`, `Q15`) and `real_to_complex` (`C32`, `CQ15`) with states, `Fallback`, `Reference` and facade delegation; the design functions `halfband_len` and `halfband_taps` (exactly symmetric taps, D72). The `f32`/`C32` fallback sums the even-index taps in ascending order and adds the centre tap last (D94, confirmation open: I23-2); `CQ15`/`Q15` are bit-exact with `fir_decimate` by 2.
 - Real formats in the `convert` block (`ConvertRealBlock`) and the automatic conversion of a real raw input; blocks `halfband` and `real_to_complex`, their pipeline kinds (cost `(N + 3) / 4`), the regenerated schema (`cargo xtask schema --check` passes), the flow `real_input_fm_receiver` (JSON and YAML).
-- SIMD paths for the three kernels at every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`), bit-exact for `CQ15`/`Q15`, within the 110 dB contract for `C32`/`f32` (pre-add allowed, D70). Counts: the external references are liquid-dsp 1.8.3, libairspy v1.0.10 (D69, second `sse2` gate of `real_to_complex` C32, D100) and a CMSIS-DSP composition for the `Q15` fallbacks (D68); the own-kernel comparisons are `info` with the efficiency target `own_target` (D101). Every gated entry is within its limit at every level and every accuracy rule holds (`benches/results/`, `docs/performance.md`; D86 to D99).
-- Golden cases (seeds 430 to 435, 452 and 453 and the design cases), suite cases, invariance (20 plans), extremes, the block cases and E2E-REAL (`e2e_real_fm_rx_f32` and `_q15`, thresholds 40 and 35 dB, D105). No specified check is `#[ignore]`d.
-- Documentation (`docs/kernels.md`, `timing.md`, `backends.md`, `performance.md`, `blocks.md`, `pipeline.md`, `device.md`, `examples/README.md`), `CHANGELOG.md` and the decisions log (D68 to D105).
+- SIMD paths for the three kernels at every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`), bit-exact for `CQ15`/`Q15`, within the 110 dB contract for `C32`/`f32` (pre-add allowed, D71). Counts: the external references are liquid-dsp 1.8.3, libairspy v1.0.10 (D70, second `sse2` gate of `real_to_complex` C32, D101) and a CMSIS-DSP composition for the `Q15` fallbacks (D69); the own-kernel comparisons are `info` with the efficiency target `own_target` (D102). Every gated entry is within its limit at every level and every accuracy rule holds (`benches/results/`, `docs/performance.md`; D87 to D100).
+- Golden cases (seeds 430 to 435, 452 and 453 and the design cases), suite cases, invariance (20 plans), extremes, the block cases and E2E-REAL (`e2e_real_fm_rx_f32` and `_q15`, thresholds 40 and 35 dB, D106). No specified check is `#[ignore]`d.
+- Documentation (`docs/kernels.md`, `timing.md`, `backends.md`, `performance.md`, `blocks.md`, `pipeline.md`, `device.md`, `examples/README.md`), `CHANGELOG.md` and the decisions log (D69 to D106).
 - Acceptance commands, run on the final state: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features`, `cargo xtask check`, `cargo xtask bare-metal`, the wasm tests, `python tests/golden/generate.py --check`, `cargo xtask schema --check`, the quick profile of `qemu-cortex-m4`, and `cargo xtask count` at `x86_64`, `x86_64-avx512`, `aarch64` and `wasm32`.
 
 Open (see `docs/open-items.md`; none blocks the milestone):
 
 - I23-1: status of the `CQ15` `real_to_complex` entries against libairspy `iqconverter_int16` (provisionally `info`; the measured numbers are in the item; maintainer decision 4 of 2026-10-31 is pending).
-- I23-2: confirmation of D93 (centre tap last in the `f32` fallback).
+- I23-2: confirmation of D94 (centre tap last in the `f32` fallback).
 - I23-3: the work-saving evidence of 0.60 against the dense FIR is missed on `neon` (0.70) and `simd128` (0.91); a `neon`/`simd128` specific path is not written.
 - I20-1 (existing) is the risk of the `Q15` fallback gates against CMSIS-DSP.
 

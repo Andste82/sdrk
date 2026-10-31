@@ -33,14 +33,6 @@ fn log2(n: usize) -> i32 {
     i32::try_from(n.trailing_zeros()).unwrap()
 }
 
-/// Multiplies a `CQ15` result by `2^exponent` into `C32` (exact: 16-bit raw value times a power of two).
-fn scaled(x: &[CQ15], exponent: i32) -> Vec<C32> {
-    let g = libm::ldexpf(1.0, exponent - 15);
-    x.iter()
-        .map(|v| C32::new(f32::from(v.re.0) * g, f32::from(v.im.0) * g))
-        .collect()
-}
-
 #[test]
 fn all_cases_are_present() {
     let expect = [
@@ -184,8 +176,14 @@ fn cq15_block_float_golden() {
         )
         .unwrap();
         assert!((0..=2 * log2(n)).contains(&scale.exponent), "{name}");
-        let out = scaled(&data, scale.exponent);
-        golden::assert_matches(&case, case.array("expected").unwrap(), &out).unwrap();
+        let out = golden::scaled_block_float(&data, scale.exponent);
+        golden::assert_matches_block_float(
+            &case,
+            case.array("expected").unwrap(),
+            &data,
+            scale.exponent,
+        )
+        .unwrap();
 
         if name == "cq15_bfp_weak_tone_1024" {
             // The tone bin must stand at least `min_margin_db` above the median of all other bins.

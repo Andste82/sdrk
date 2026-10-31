@@ -92,7 +92,7 @@ fn full_output<T: RefMac>(taps: &[T::Tap], hist: &[T], input: &[T], n: usize) ->
     Ok(T::finish(acc))
 }
 
-fn decimate<T: RefMac>(
+pub(super) fn decimate<T: RefMac>(
     taps: &[T::Tap],
     hist: &mut [T],
     factor: usize,

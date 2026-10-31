@@ -10,6 +10,7 @@ pub mod dot;
 pub mod fft;
 pub mod filter;
 pub mod fused;
+pub mod halfband;
 pub mod interp;
 pub mod mix;
 pub mod modulate;

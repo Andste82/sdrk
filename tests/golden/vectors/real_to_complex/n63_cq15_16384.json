@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "n63_cq15_16384.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "n63_cq15_16384.input.bin",
+      "len": 16384
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "n63_cq15_16384.taps.bin",
+      "len": 63
+    }
+  },
+  "case": "n63_cq15_16384",
+  "format_version": 1,
+  "kernel": "real_to_complex",
+  "notes": "integer model: u = (x, 0), (0, -x), (-x, 0), (0, x) for n mod 4 = 0..3 with the saturating negation (-(-32768) = 32767), int64 convolution with the Q15 halfband taps, every second output, one rounding and saturation per component; the input holds runs of -32768 at 200, 1001 and 5000 (every phase of n mod 4)",
+  "params": {
+    "attenuation_db": 60.0,
+    "beta": 5.65326,
+    "taps": 63
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 435,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

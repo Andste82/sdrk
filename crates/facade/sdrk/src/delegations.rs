@@ -17,6 +17,10 @@ use sdrk_core::kernels::dot::{Dot, DotReal};
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::fused::{Ddc, Duc, FmDemod};
+use sdrk_core::kernels::halfband::{
+    HalfbandDecimate, HalfbandDecimateReal, HalfbandRealState, HalfbandState, RealToComplex,
+    RealToComplexState,
+};
 use sdrk_core::kernels::interp::{
     FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
 };
@@ -63,6 +67,12 @@ crate::delegate! {
     Fir<CQ15>::fir[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut FirState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fast;
     FirDecimate<C32>::fir_decimate[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut FirDecimState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
     FirDecimate<CQ15>::fir_decimate[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut FirDecimState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fast;
+    HalfbandDecimate<C32>::halfband_decimate[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut HalfbandState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fallback;
+    HalfbandDecimate<CQ15>::halfband_decimate[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut HalfbandState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fallback;
+    HalfbandDecimateReal<f32>::halfband_decimate_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut HalfbandRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fallback;
+    HalfbandDecimateReal<Q15>::halfband_decimate_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut HalfbandRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fallback;
+    RealToComplex<C32>::real_to_complex[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut RealToComplexState<C32, Taps, Hist>, input: &[f32], output: &mut [C32]) -> Result<Progress> => Fallback;
+    RealToComplex<CQ15>::real_to_complex[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut RealToComplexState<CQ15, Taps, Hist>, input: &[Q15], output: &mut [CQ15]) -> Result<Progress> => Fallback;
     Resample<C32>::resample[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>](&self, state: &mut ResampleState<C32, Taps, Hist>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
     Resample<CQ15>::resample[Taps: AsRef<[Q15]>, Hist: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, state: &mut ResampleState<CQ15, Taps, Hist>, input: &[CQ15], output: &mut [CQ15]) -> Result<Progress> => Fast;
     ResampleReal<f32>::resample_real[Taps: AsRef<[f32]>, Hist: AsRef<[f32]> + AsMut<[f32]>](&self, state: &mut ResampleRealState<f32, Taps, Hist>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fast;

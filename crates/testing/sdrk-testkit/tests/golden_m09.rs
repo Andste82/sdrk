@@ -63,10 +63,14 @@ fn design_cases_are_present() {
         assert!(names.contains(&format!("firwin_kaiser_{tag}")));
     }
     assert!(names.contains(&"kaiserord_table".to_string()));
-    // The biquad design cases (M22) have their own test file.
+    // The biquad design cases (M22) and the halfband design cases (M23) have their own test files.
     let m09 = names
         .iter()
-        .filter(|n| !n.starts_with("biquad_") && !n.starts_with("butterworth_"))
+        .filter(|n| {
+            !n.starts_with("biquad_")
+                && !n.starts_with("butterworth_")
+                && !n.starts_with("halfband_")
+        })
         .count();
     assert_eq!(m09, 10);
 }

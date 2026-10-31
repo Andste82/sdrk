@@ -110,3 +110,27 @@ def q14(x):
     if not -32768 <= v <= 32767:
         raise ValueError(f"{x} does not fit Q2.14")
     return v
+
+
+# Halfband design (M23): ``sdrk_blocks::design::halfband_len`` and ``halfband_taps``.
+
+
+def halfband_len(transition_hz, attenuation_db, fs_hz):
+    """``kaiserord(attenuation, 2 * transition / fs)`` rounded up to the next ``N`` with ``N mod 4 == 3``."""
+    n, _ = scipy.signal.kaiserord(attenuation_db, 2.0 * transition_hz / fs_hz)
+    n = int(n)
+    while n % 4 != 3:
+        n += 1
+    return n
+
+
+def halfband_taps(n, beta):
+    """Halfband taps of odd length ``n`` with ``n mod 4 == 3``: ``firwin(n, 0.25, kaiser(beta), fs=1)``,
+    every even offset from the centre set to exactly 0, scaled so that the sum is 1 (float64)."""
+    assert n >= 3 and n % 4 == 3
+    h = scipy.signal.firwin(n, 0.25, window=("kaiser", beta), fs=1.0)
+    m = (n - 1) // 2
+    for i in range(1, m // 2 + 1):
+        h[m - 2 * i] = 0.0
+        h[m + 2 * i] = 0.0
+    return h / np.sum(h)

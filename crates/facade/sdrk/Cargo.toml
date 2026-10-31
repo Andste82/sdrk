@@ -26,8 +26,9 @@ sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", optional = true
 default = ["simd"]
 # The SIMD backend for the accelerated kernels (compile-time level selection).
 simd = ["dep:sdrk-backend-simd"]
-# Runtime CPU-feature detection in the SIMD backend.
-std = ["sdrk-backend-simd?/std"]
+# Runtime CPU-feature detection in the SIMD backend, and the square roots of the fallback from
+# the standard library (`sdrk-core/std`).
+std = ["sdrk-core/std", "sdrk-backend-simd?/std"]
 # Relaxed SIMD multiply-add in the C32 kernels on wasm32 with the target feature
 # `relaxed-simd`; a no-op elsewhere.
 relaxed-simd = ["sdrk-backend-simd?/relaxed-simd"]

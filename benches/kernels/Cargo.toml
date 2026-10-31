@@ -16,7 +16,10 @@ path = "src/bin/count.rs"
 # at run time (the level `avx2-runtime`); without it the level is fixed at compile time by
 # `-C target-cpu`.
 sdrk = { path = "../../crates/facade/sdrk" }
-sdrk-core = { path = "../../crates/core/sdrk-core", features = ["reference"] }
+# `std` on every level: the binary links the standard library, so the fallback takes its square
+# roots from it as on every host build with `std` (`sdrk_core::num::sqrt_f32`); the `no_std`
+# form (`libm`) is counted by the embedded suites.
+sdrk-core = { path = "../../crates/core/sdrk-core", features = ["reference", "std"] }
 sdrk-device = { path = "../../crates/core/sdrk-device" }
 sdrk-backend-simd = { path = "../../crates/backends/sdrk-backend-simd" }
 rustfft = "6.4"

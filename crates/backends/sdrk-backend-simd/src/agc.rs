@@ -81,10 +81,29 @@ fn magnitudes<S: SimdToken>(simd: S, x: &[f32], mag: &mut [f32]) -> bool {
         if let [re, im] = *x {
             let sum = re * re + im * im;
             positive &= sum > 0.0;
-            *m = sdrk_core::num::sqrt_f32(sum);
+            *m = tail_sqrt(sum);
         }
     }
     positive
+}
+
+/// The root of the scalar tail of [`magnitudes`], the same bits as `sdrk_core::num::sqrt_f32`.
+/// Outside wasm32 it is `libm::sqrtf` (inline assembly on x86-64 and AArch64), which the
+/// compiler does not vectorize: with the vectorizable `f32::sqrt` of `sqrt_f32` (feature `std`
+/// of `sdrk-core`) it turns the tail of fewer than two vectors into a vector loop of its own,
+/// whose registers cost spills in the recursion inlined into the same function (`avx2`,
+/// `znver3` / `alderlake`, whole-loop: 14.22 / 16.24 instead of 13.18 / 14.47 cycles per
+/// sample). On wasm32 `libm` is software, and `sqrt_f32` was vectorizable there before.
+#[inline(always)]
+fn tail_sqrt(x: f32) -> f32 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        sdrk_core::num::sqrt_f32(x)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        libm::sqrtf(x)
+    }
 }
 
 /// `out = gains * x` per sample (`x` and `out` interleaved), in the loop form of

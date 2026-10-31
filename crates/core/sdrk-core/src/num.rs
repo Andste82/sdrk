@@ -161,43 +161,72 @@ impl Acc64 {
 }
 
 /// The correctly rounded square root of `x` in single precision (the same value as
-/// `libm::sqrtf`).
+/// `libm::sqrtf`: IEEE 754 rounds the square root correctly, so every conforming instruction or
+/// library gives the same bits; a negative or NaN `x` gives a NaN).
 ///
-/// `libm` computes it in software on wasm32 (the hardware instruction of `core` is unstable
-/// there, 189 fuel per `agc` sample instead of 25); with `simd128` the vector instruction does
-/// it in hardware, and the scalar result is its first lane. Elsewhere `libm` already compiles to
-/// the hardware instruction.
+/// With the feature `std` it is `f32::sqrt`, LLVM's own square root (`llvm.sqrt.f32`): the
+/// compiler vectorizes loops over it (`vsqrtps`, `fsqrt .4s`, `f32x4.sqrt`) and emits the
+/// scalar instruction on every target that has one. Without `std` there is no stable safe way
+/// to it in `core` (`core::f32::math::sqrt` is unstable, the `core::arch` intrinsics of x86 and
+/// AArch64 need `unsafe` outside a `#[target_feature]` function): there `libm` computes it,
+/// which is inline assembly on x86-64 (`sqrtss`) and AArch64 (`fsqrt`) that the compiler
+/// cannot vectorize, and software on wasm32 (189 fuel per `agc` sample instead of 25) and the
+/// Cortex-M and RISC-V targets. On wasm32 with `simd128` the vector instruction does it
+/// without `std` as well, and the scalar result is its first lane.
 ///
 /// ```
 /// assert_eq!(sdrk_core::num::sqrt_f32(2.25), 1.5);
 /// ```
 #[inline]
 pub fn sqrt_f32(x: f32) -> f32 {
-    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    #[cfg(feature = "std")]
+    {
+        x.sqrt()
+    }
+    #[cfg(all(
+        not(feature = "std"),
+        target_arch = "wasm32",
+        target_feature = "simd128"
+    ))]
     {
         use core::arch::wasm32::{f32x4_extract_lane, f32x4_splat, f32x4_sqrt};
         f32x4_extract_lane::<0>(f32x4_sqrt(f32x4_splat(x)))
     }
-    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    #[cfg(not(any(
+        feature = "std",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         libm::sqrtf(x)
     }
 }
 
 /// The correctly rounded square root of `x` in double precision (the same value as
-/// `libm::sqrt`, in hardware on wasm32 with `simd128`, see [`sqrt_f32`]).
+/// `libm::sqrt`; `f64::sqrt` with the feature `std`, in hardware on wasm32 with `simd128`, see
+/// [`sqrt_f32`]).
 ///
 /// ```
 /// assert_eq!(sdrk_core::num::sqrt_f64(2.25), 1.5);
 /// ```
 #[inline]
 pub fn sqrt_f64(x: f64) -> f64 {
-    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    #[cfg(feature = "std")]
+    {
+        x.sqrt()
+    }
+    #[cfg(all(
+        not(feature = "std"),
+        target_arch = "wasm32",
+        target_feature = "simd128"
+    ))]
     {
         use core::arch::wasm32::{f64x2_extract_lane, f64x2_splat, f64x2_sqrt};
         f64x2_extract_lane::<0>(f64x2_sqrt(f64x2_splat(x)))
     }
-    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    #[cfg(not(any(
+        feature = "std",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         libm::sqrt(x)
     }
@@ -254,4 +283,100 @@ pub fn flush_denormal(x: f32) -> f32 {
 #[inline]
 pub fn flush_denormal_f64(x: f64) -> f64 {
     if libm::fabs(x) < 1e-30 { 0.0 } else { x }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::indexing_slicing)]
+
+    use super::{sqrt_f32, sqrt_f64};
+    use std::vec::Vec;
+
+    /// The roots of `x` through a loop over a slice (the form that vectorizes, as in `mag`), each
+    /// compared with `libm` and with the standard library: the same bits, or a NaN for all.
+    fn check_f32(x: &[f32]) {
+        let mut r = [0.0f32; 256];
+        for chunk in x.chunks(r.len()) {
+            for (o, &v) in r.iter_mut().zip(chunk) {
+                *o = sqrt_f32(v);
+            }
+            for (&v, &o) in chunk.iter().zip(&r) {
+                for want in [libm::sqrtf(v), v.sqrt()] {
+                    assert!(
+                        o.to_bits() == want.to_bits() || (o.is_nan() && want.is_nan()),
+                        "sqrt_f32({v:e} = {:#010x}) = {o:e}, expected {want:e}",
+                        v.to_bits()
+                    );
+                }
+            }
+        }
+    }
+
+    /// [`check_f32`] for [`sqrt_f64`].
+    fn check_f64(x: &[f64]) {
+        let mut r = [0.0f64; 256];
+        for chunk in x.chunks(r.len()) {
+            for (o, &v) in r.iter_mut().zip(chunk) {
+                *o = sqrt_f64(v);
+            }
+            for (&v, &o) in chunk.iter().zip(&r) {
+                for want in [libm::sqrt(v), v.sqrt()] {
+                    assert!(
+                        o.to_bits() == want.to_bits() || (o.is_nan() && want.is_nan()),
+                        "sqrt_f64({v:e} = {:#018x}) = {o:e}, expected {want:e}",
+                        v.to_bits()
+                    );
+                }
+            }
+        }
+    }
+
+    const SPECIAL_F32: [f32; 12] = [
+        0.0,
+        -0.0,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NAN,
+        -f32::NAN,
+        f32::MIN_POSITIVE,
+        f32::MAX,
+        f32::EPSILON,
+        -1.0,
+        -f32::MIN_POSITIVE,
+        -1.0e-45,
+    ];
+
+    #[test]
+    fn sqrt_f32_is_bit_identical_to_libm() {
+        check_f32(&SPECIAL_F32);
+        // Every 7th subnormal and every 251st finite positive pattern up to the infinity, a
+        // sample of the NaN payloads and of the negative patterns.
+        let mut x = Vec::new();
+        for (from, to, step) in [
+            (0, 0x007f_ffff, 7),
+            (0x0080_0000, 0x7f80_0000, 251),
+            (0x7f80_0001, 0x7fff_ffff, 65_521),
+            (0x8000_0000, 0xffff_ffff, 65_521),
+        ] {
+            x.extend((from..=to).step_by(step).map(f32::from_bits));
+        }
+        check_f32(&x);
+    }
+
+    #[test]
+    fn sqrt_f64_is_bit_identical_to_libm() {
+        check_f64(&SPECIAL_F32.map(f64::from));
+        check_f64(&[f64::MIN_POSITIVE, f64::MAX, 5.0e-324, -5.0e-324, 1.8e19]);
+        // A walk over all bit patterns (Weyl sequence), the subnormals and the integers below
+        // 2^53 (the estimates of `isqrt_u64`).
+        let mut x = Vec::new();
+        let mut b = 0u64;
+        for _ in 0..1 << 20 {
+            b = b.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            x.push(f64::from_bits(b));
+            x.push(f64::from_bits(b >> 12));
+            x.push((b >> 11) as f64);
+        }
+        check_f64(&x);
+    }
 }

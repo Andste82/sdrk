@@ -1,6 +1,6 @@
 [package]
 name = "kernels"
-description = "Instruction-count measurements of the SDRk kernels against VOLK, rustfft, FFTW, KissFFT, Ne10, GNU Radio, KFR and CMSIS-DSP."
+description = "Instruction-count measurements of the SDRk kernels against VOLK, rustfft, FFTW, KissFFT, Ne10, GNU Radio, KFR, CMSIS-DSP, liquid-dsp and libairspy."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,6 +21,8 @@ sdrk = { path = "../../crates/facade/sdrk" }
 # form (`libm`) is counted by the embedded suites.
 sdrk-core = { path = "../../crates/core/sdrk-core", features = ["reference", "std"] }
 sdrk-device = { path = "../../crates/core/sdrk-device" }
+# The halfband taps of the M23 workloads (`halfband_taps`).
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
 sdrk-backend-simd = { path = "../../crates/backends/sdrk-backend-simd" }
 rustfft = "6.4"
 # The real-input FFT on top of rustfft (its author's `RealFftPlanner`), the reference of `rfft`.

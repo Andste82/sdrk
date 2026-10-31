@@ -87,6 +87,7 @@ dependencies = [
  "rustfft",
  "sdrk",
  "sdrk-backend-simd",
+ "sdrk-blocks",
  "sdrk-core",
  "sdrk-device",
  "serde_json",

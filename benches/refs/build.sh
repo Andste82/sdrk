@@ -20,6 +20,8 @@
 # | GNU Radio `quadrature_demod_cf` | main at ec1bf15 (quadrature_demod_cf_impl.cc of gr-analog, `fast_atan2f` of gnuradio-runtime, VOLK's generic `multiply_conjugate`), see gr-quad-demod.c and gr-fast-atan2f.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, two object files) | the scalar reference of `quad_demod` |
 # | GNU Radio `fm_deemph` | main at ec1bf15 (fm_emph.py of gr-analog, `iir_filter_ffd` of gr-filter), see gr-deemph.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `deemphasis` |
 # | liquid-dsp `iirfilt` DC blocker | 1.8.3 (iirfilt.proto.c and dotprod.proto.c, portable dot products), see liquid-dcblock.c and liquid-dotprod.c | MIT | x86_64, aarch64, wasm32 (static, two object files) | the scalar reference of `dc_block` and `dc_block_real` |
+# | liquid-dsp halfband decimators | 1.8.3 (the release tarball: `resamp2.proto.c`, `firhilb.proto.c`, the dot products `dotprod_crcf.c` and `dotprod_rrrf.c` with their SSE, AVX, AVX-512F and NEON loops, the window buffers and the support files), see liquid-halfband.c | MIT | x86_64, aarch64, wasm32 (static, one library per level, built from the unpacked release) | the reference of `halfband_decimate` (`resamp2_crcf`), `halfband_decimate_real` (`resamp2_rrrf`) and `real_to_complex` (`firhilbf`) with the SIMD dot product of the level (the portable loop at `simd128`), and the scalar reference of their fallbacks (the portable dot product) |
+# | libairspy | 1.0.10 (iqconverter_float.c and iqconverter_int16.c; the last release under the MIT licence, later ones are under a restrictive licence and must not be used) | MIT | x86_64, aarch64, wasm32 (static, one library per level), see airspy-iqconv.c | the SSE2 reference of the `C32` `real_to_complex` and information next to the fallback; the `CQ15` `real_to_complex` (`iqconverter_int16`, a lower accuracy class), conversion only, without `remove_dc` |
 # | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++), wasm32 (clang++, KFR's Emscripten configuration: `sse41` over the SSE headers of Emscripten); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
 # | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU (biquads only); see cmsis-biquad.c and cmsis-dsp.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27); the scalar references of the fallback round (conversions, products, magnitudes, sine and arc tangent, logarithm, FIR filters, FFTs: libcmsisdsp-<level>.a) |
 # | wasi-sdk sysroot | 34.0 | Apache-2.0 WITH LLVM-exception (libc++), the licenses of wasi-libc | wasm32 (headers only: libc++ and wasi-libc for the KFR shim, which needs no C++ run-time library) | KFR needs a C++ standard library |
@@ -86,6 +88,14 @@ WASISYSROOT_SHA256=9d813544eeebe38b7b8f2244ed591de46b6db812c6dd1a257ff9f0d2a905a
 EMSCRIPTEN_VERSION=6.0.12
 EMSCRIPTEN_URL=https://github.com/emscripten-core/emscripten/archive/refs/tags/$EMSCRIPTEN_VERSION.tar.gz
 EMSCRIPTEN_SHA256=795ef929e4dee52bf03de3742c4252bb121e742afac896378d969b5da2db86eb
+# liquid-dsp (the halfband decimators; the DC blocker below is vendored from the same release).
+LIQUID_VERSION=1.8.3
+LIQUID_URL=https://github.com/jgaeddert/liquid-dsp/archive/refs/tags/v$LIQUID_VERSION.tar.gz
+LIQUID_SHA256=18fa83b73db8bb6fe6ea0376e4b5aecf8645970f4604d10d9dadbf609f3f95e2
+# libairspy: the last release under the MIT licence.
+AIRSPY_VERSION=1.0.10
+AIRSPY_URL=https://github.com/airspy/airspyone_host/archive/refs/tags/v$AIRSPY_VERSION.tar.gz
+AIRSPY_SHA256=fcca23911c9a9da71cebeffeba708c59d1d6401eec6eb2dd73cae35b8ea3c613
 
 # The optimisation flags of the libraries built here without their own build system or with a
 # build system that would tune for the build machine (FFTW adds -mtune=native otherwise).
@@ -136,7 +146,7 @@ fi
 stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" \
-    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/airspy-iqconv.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -277,7 +287,6 @@ build_gr_fallback() {
 # liquid-dsp's DC blocker (iirfilt with its portable dot products, liquid-dcblock.c and
 # liquid-dotprod.c), with liquid's own optimisation level (-O3 in its CMakeLists.txt), the
 # generic flags of the GNU Radio references.
-LIQUID_VERSION=1.8.3
 build_liquid_dcblock() {
     $cc $GR_AGC_FLAGS -c "$here/liquid-dotprod.c" -o "$work/liquid-dotprod.o"
     $cc $GR_AGC_FLAGS -c "$here/liquid-dcblock.c" -o "$work/liquid-dcblock.o"
@@ -360,7 +369,7 @@ CMSISDSP_FALLBACK_SOURCES="SupportFunctions/arm_q7_to_float SupportFunctions/arm
     SupportFunctions/arm_float_to_q15 SupportFunctions/arm_float_to_q7 SupportFunctions/arm_q15_to_q7
     BasicMathFunctions/arm_dot_prod_f32 BasicMathFunctions/arm_dot_prod_q15 BasicMathFunctions/arm_scale_f32
     BasicMathFunctions/arm_scale_q15 BasicMathFunctions/arm_mult_f32 BasicMathFunctions/arm_mult_q15
-    BasicMathFunctions/arm_abs_q15
+    BasicMathFunctions/arm_abs_q15 BasicMathFunctions/arm_add_q15
     ComplexMathFunctions/arm_cmplx_dot_prod_f32 ComplexMathFunctions/arm_cmplx_dot_prod_q15
     ComplexMathFunctions/arm_cmplx_mult_real_f32 ComplexMathFunctions/arm_cmplx_mult_real_q15
     ComplexMathFunctions/arm_cmplx_mult_cmplx_f32 ComplexMathFunctions/arm_cmplx_mult_cmplx_q15
@@ -463,6 +472,120 @@ build_kfr_biquad() {
     done
 }
 
+# liquid-dsp's halfband decimators (liquid-halfband.c) from the unpacked release, one library per
+# level: libliquidhb-<level>.a. The level selects the dot product that the wrapper's `method` 1
+# runs (SSE for sse2 and sse4.2, AVX for avx2, AVX-512F for avx512, NEON for neon; liquid has no
+# SIMD loop for wasm32, there the portable loop compiled with -msimd128 is the reference) and
+# the instruction set the library is compiled for. The portable method (the reference of the
+# fallback entries) is compiled for the same level, with the same flags as the SIMD loops, and
+# without contraction into FMA (BIQUAD_OPT: D5 forbids it on our side, so neither side fuses).
+# liquid's own build selects the dot product at run time from the CPU; the measured CPUs are
+# pinned, so the method is fixed by the level. The SSE loop of `dotprod_rrrf` (`resamp2_rrrf`
+# and `firhilbf`) needs SSE3 for its horizontal add (HAVE_SSE3, which liquid's autotools build
+# defines where the compiler has SSE3): it is the reference from sse4.2 (compiled with
+# -DHAVE_SSE3=1) and at sse2 the portable loop is (maintainer decision of 2026-10-31, D63).
+# `liquid_simd <level> <crcf|rrrf>` is the method of the wrapper's SIMD choice.
+liquid_simd() {
+    case $1 in
+        sse2) if [ "$2" = rrrf ]; then echo LIQUID_RUNTIME_PORT; else echo LIQUID_RUNTIME_SSE; fi ;;
+        sse4.2) echo LIQUID_RUNTIME_SSE ;;
+        avx2) echo LIQUID_RUNTIME_AVX ;;
+        avx512) echo LIQUID_RUNTIME_AVX512 ;;
+        neon) echo LIQUID_RUNTIME_NEON ;;
+        *) echo LIQUID_RUNTIME_PORT ;;
+    esac
+}
+
+# The vendored portable dot products of the DC blocker (liquid-dotprod.c) define the functions
+# below under liquid's names; the halfband library renames its own (the macros apply to the
+# whole translation unit, definitions and uses alike) so that both link into one binary.
+LIQUID_HB_RENAME=""
+for _f in crcf rrrf; do
+    for _g in create destroy execute; do
+        LIQUID_HB_RENAME+=" -Ddotprod_${_f}_${_g}=sdrk_hb_dotprod_${_f}_${_g}"
+    done
+done
+
+build_liquid_halfband() {
+    fetch "$LIQUID_URL" "$LIQUID_SHA256" "liquid-dsp-$LIQUID_VERSION.tar.gz"
+    unpack "liquid-dsp-$LIQUID_VERSION.tar.gz" liquid
+    local src="$work/liquid" entry level march dir objects f simd build sse3
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        march=${march//,/ }
+        dir="$work/liquidhb-$level"
+        mkdir -p "$dir/cfg"
+        build=""
+        case $platform in
+            x86_64) build="BUILD_SSE BUILD_AVX BUILD_AVX512" ;;
+            aarch64) build="BUILD_NEON" ;;
+        esac
+        cp "$src/scripts/liquid.config.h" "$dir/cfg/liquid.config.h"
+        for f in $build; do
+            sed -i "s/^#define $f  *0/#define $f 1/" "$dir/cfg/liquid.config.h"
+        done
+        sse3=""
+        if [ "$level" != sse2 ] && [ "$platform" = x86_64 ]; then
+            sse3="-DHAVE_SSE3=1"
+        fi
+        local inc=(-I "$dir/cfg" -I "$src/include")
+        objects=()
+        for f in dotprod/src/dotprod_crcf dotprod/src/dotprod_rrrf buffer/src/buffercf buffer/src/bufferf \
+            utility/src/msb_index utility/src/memory core/src/error core/src/logging core/src/runtime; do
+            $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/buffer/src" -I "$src/src/dotprod/src" \
+                -Wno-unused-result $LIQUID_HB_RENAME $([ "$f" = dotprod/src/dotprod_rrrf ] && echo "$sse3") \
+                -c "$src/src/$f.c" -o "$dir/${f##*/}.o"
+            objects+=("$dir/${f##*/}.o")
+        done
+        $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src" -c "$src/src/libliquid.c" -o "$dir/libliquid.o"
+        objects+=("$dir/libliquid.o")
+        for f in 1 2 3; do
+            if [ "$f" = 1 ]; then
+                simd=$(liquid_simd "$level" crcf)
+            else
+                simd=$(liquid_simd "$level" rrrf)
+            fi
+            $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/filter/src" -DSDRK_LIQUID_KIND=$f \
+                -DSDRK_LIQUID_SIMD=$simd $LIQUID_HB_RENAME -c "$here/liquid-halfband.c" -o "$dir/halfband$f.o"
+            objects+=("$dir/halfband$f.o")
+        done
+        $ar rcs "$prefix/lib/libliquidhb-$level.a" "${objects[@]}"
+    done
+}
+
+# libairspy's real-to-complex converters (airspy-iqconv.c) from the unpacked release, one
+# library per level: libairspy-<level>.a with the generic float converter, the SSE2 float
+# converter (x86_64 only) and the int16 converter, compiled for the level.
+build_airspy() {
+    fetch "$AIRSPY_URL" "$AIRSPY_SHA256" "airspy-$AIRSPY_VERSION.tar.gz"
+    mkdir -p "$work/airspy"
+    tar -xzf "$downloads/airspy-$AIRSPY_VERSION.tar.gz" -C "$work/airspy" --strip-components=3 \
+        "airspyone_host-$AIRSPY_VERSION/libairspy/src/iqconverter_float.c" \
+        "airspyone_host-$AIRSPY_VERSION/libairspy/src/iqconverter_float.h" \
+        "airspyone_host-$AIRSPY_VERSION/libairspy/src/iqconverter_int16.c" \
+        "airspyone_host-$AIRSPY_VERSION/libairspy/src/iqconverter_int16.h"
+    local entry level march dir kinds kind objects
+    kinds="1 3"
+    if [ "$platform" = x86_64 ]; then
+        kinds="1 2 3"
+    fi
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        march=${march//,/ }
+        dir="$work/airspy-$level"
+        mkdir -p "$dir"
+        objects=()
+        for kind in $kinds; do
+            $cc $BIQUAD_OPT $march -I "$work/airspy" -DSDRK_AIRSPY_KIND=$kind \
+                -c "$here/airspy-iqconv.c" -o "$dir/iqconv$kind.o"
+            objects+=("$dir/iqconv$kind.o")
+        done
+        $ar rcs "$prefix/lib/libairspy-$level.a" "${objects[@]}"
+    done
+}
+
 KISSFFT_FLAGS=""
 GR_AGC_FLAGS=""
 libraries=()
@@ -478,7 +601,9 @@ case $platform in
         build_kfr_biquad
         build_cmsis_biquad
         build_cmsis_dsp
-        libraries=(volk fftw kissfft gragc grsquelch grfallback liquiddc kfr cmsisdsp)
+        build_liquid_halfband
+        build_airspy
+        libraries=(volk fftw kissfft gragc grsquelch grfallback liquiddc kfr cmsisdsp liquidhb airspy)
         ;;
     aarch64)
         build_volk
@@ -492,7 +617,9 @@ case $platform in
         build_kfr_biquad
         build_cmsis_biquad
         build_cmsis_dsp
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback liquiddc kfr cmsisdsp)
+        build_liquid_halfband
+        build_airspy
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback liquiddc kfr cmsisdsp liquidhb airspy)
         ;;
     wasm32)
         build_volk_wasm
@@ -504,7 +631,9 @@ case $platform in
         build_kfr_biquad
         build_cmsis_biquad
         build_cmsis_dsp
-        libraries=(volk kissfft gragc grsquelch grfallback liquiddc kfr wasisysroot emscripten cmsisdsp)
+        build_liquid_halfband
+        build_airspy
+        libraries=(volk kissfft gragc grsquelch grfallback liquiddc kfr wasisysroot emscripten cmsisdsp liquidhb airspy)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -530,6 +659,8 @@ esac
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
             liquiddc) entry="\"liquid_dsp_dc_blocker\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(cat "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"liquid-dotprod.c liquid-dcblock.c (portable dot products): $GR_AGC_FLAGS\" }" ;;
+            liquidhb) entry="\"liquid_dsp_halfband\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$LIQUID_SHA256\", \"build\": \"liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release: $BIQUAD_OPT, per level $(biquad_levels | tr , ' '), dot products (crcf / rrrf) $(for e in $(biquad_levels); do printf '%s=%s/%s ' "${e%%:*}" "$(liquid_simd "${e%%:*}" crcf)" "$(liquid_simd "${e%%:*}" rrrf)"; done)\" }" ;;
+            airspy) entry="\"libairspy\": { \"version\": \"$AIRSPY_VERSION\", \"sha256\": \"$AIRSPY_SHA256\", \"build\": \"airspy-iqconv.c over iqconverter_float.c and iqconverter_int16.c (conversion without remove_dc; the SSE2 converter with the FreeBSD branch, x86_64 only): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
             wasisysroot) entry="\"wasi_sysroot\": { \"version\": \"$WASISYSROOT_VERSION\", \"sha256\": \"$WASISYSROOT_SHA256\", \"build\": \"headers of libc++ and wasi-libc for KFR\" }" ;;
             emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;

@@ -42,8 +42,13 @@ use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, 
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod fir_family;
+mod halfband_family;
 
 use fir_family::{Entry, FirFamK, Mode};
+use halfband_family::{
+    DecimateK as HalfbandK, DecimateRealK as HalfbandRealK, FirDecimateX2K, RealToComplexK,
+    ShiftedK,
+};
 
 /// Samples per call unless overridden.
 pub const N: usize = 4096;
@@ -74,8 +79,12 @@ pub enum Impl {
     Kfr,
     /// CMSIS-DSP's biquad cascades in generic C, compiled for the level of the build.
     Cmsis,
-    /// liquid-dsp's DC blocker (`iirfilt_rrrf`/`iirfilt_crcf` `create_dc_blocker`, portable C).
+    /// liquid-dsp: the DC blocker (`iirfilt_rrrf`/`iirfilt_crcf` `create_dc_blocker`, portable C)
+    /// and the halfband decimators (`resamp2`, `firhilbf`; the SIMD dot product of the level for
+    /// the SIMD entries, the portable one for the fallback entries).
     Liquid,
+    /// libairspy 1.0.10's real-to-complex converters (`iqconverter_float`, `iqconverter_int16`).
+    Airspy,
     /// Only the copy that restores the input of an in-place transform before every call. Its
     /// count is the baseline that xtask subtracts from every FFT comparison.
     Restore,
@@ -83,7 +92,7 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 13] = [
+    pub const ALL: [Impl; 14] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
@@ -96,6 +105,7 @@ impl Impl {
         Impl::Kfr,
         Impl::Cmsis,
         Impl::Liquid,
+        Impl::Airspy,
         Impl::Restore,
     ];
 
@@ -114,6 +124,7 @@ impl Impl {
             Impl::Kfr => "kfr",
             Impl::Cmsis => "cmsis",
             Impl::Liquid => "liquid",
+            Impl::Airspy => "airspy",
             Impl::Restore => "restore",
         }
     }
@@ -315,7 +326,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
 /// filter the same input.
-pub const KERNELS: [&str; 123] = [
+pub const KERNELS: [&str; 139] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -439,6 +450,22 @@ pub const KERNELS: [&str; 123] = [
     "quad_demod_fallback",
     "quad_demod_cq15_fallback",
     "agc_fallback",
+    "halfband_decimate",
+    "halfband_decimate_cq15",
+    "halfband_decimate_real",
+    "halfband_decimate_real_q15",
+    "real_to_complex",
+    "real_to_complex_cq15",
+    "halfband_decimate_fallback",
+    "halfband_decimate_cq15_fallback",
+    "halfband_decimate_real_fallback",
+    "halfband_decimate_real_q15_fallback",
+    "real_to_complex_fallback",
+    "real_to_complex_cq15_fallback",
+    "halfband_ref_fir_decimate",
+    "halfband_ref_fir_decimate_cq15",
+    "halfband_ref_shifted",
+    "halfband_ref_shifted_cq15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -549,6 +576,28 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "window_cq15_fallback" => Box::new(WindowQ15K::new(rng, layout, fallback)),
         "power_db_fallback" => Box::new(PowerDbK::new(rng, layout, fallback)),
         "power_db_q15_fallback" => Box::new(PowerDbQ15K::new(rng, layout, fallback)),
+        "halfband_decimate" | "halfband_decimate_fallback" => {
+            Box::new(HalfbandK::<C32>::new(rng, layout, entry))
+        }
+        "halfband_decimate_cq15" | "halfband_decimate_cq15_fallback" => {
+            Box::new(HalfbandK::<CQ15>::new(rng, layout, entry))
+        }
+        "halfband_decimate_real" | "halfband_decimate_real_fallback" => {
+            Box::new(HalfbandRealK::<f32>::new(rng, layout, entry))
+        }
+        "halfband_decimate_real_q15" | "halfband_decimate_real_q15_fallback" => {
+            Box::new(HalfbandRealK::<Q15>::new(rng, layout, entry))
+        }
+        "real_to_complex" | "real_to_complex_fallback" => {
+            Box::new(RealToComplexK::<C32>::new(rng, layout, entry))
+        }
+        "real_to_complex_cq15" | "real_to_complex_cq15_fallback" => {
+            Box::new(RealToComplexK::<CQ15>::new(rng, layout, entry))
+        }
+        "halfband_ref_fir_decimate" => Box::new(FirDecimateX2K::<C32>::new(rng, layout)),
+        "halfband_ref_fir_decimate_cq15" => Box::new(FirDecimateX2K::<CQ15>::new(rng, layout)),
+        "halfband_ref_shifted" => Box::new(ShiftedK::<C32>::new(rng, layout)),
+        "halfband_ref_shifted_cq15" => Box::new(ShiftedK::<CQ15>::new(rng, layout)),
         "agc" => Box::new(AgcK::<C32>::new(rng, layout, false)),
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout, false)),
         "agc_fallback" => Box::new(AgcK::<C32>::new(rng, layout, true)),

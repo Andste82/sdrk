@@ -818,24 +818,19 @@
   },
   "mag_fallback": {
     "sse2": {
-      "status": "info",
-      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "info",
-      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+      "status": "release"
     },
     "avx2": {
-      "status": "info",
-      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+      "status": "release"
     },
     "avx512": {
-      "status": "info",
-      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+      "status": "release"
     },
     "neon": {
-      "status": "info",
-      "waiver": "the fallback takes the square root from `sdrk_core::num::sqrt_f32`, which is `libm::sqrtf`; on x86-64 and AArch64 that is an inline-assembly `sqrtss` / `fsqrt` that the compiler cannot vectorize, and `sdrk-core` (`no_std`, `forbid(unsafe_code)`) has no other way to the instruction on stable Rust (`core::f32::math::sqrt` is unstable, feature `core_float_math`), while GCC vectorizes CMSIS-DSP's `sqrtf`. Same results (both correctly rounded); the SIMD branch `mag` is the fast path on these levels. Open: a vector square root for the fallback once `core_float_math` is stable (at `simd128`, where `sqrt_f32` is the `f32x4.sqrt` instruction, the entry is `release`)"
+      "status": "release"
     },
     "simd128": {
       "status": "release"

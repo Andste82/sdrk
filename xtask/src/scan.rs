@@ -33,11 +33,12 @@ impl std::fmt::Display for Finding {
 /// How `std` may be used in a heap-free crate inside `#[cfg(feature = "std")]` items.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StdPolicy {
-    /// Never (core, facade, blocks).
+    /// Never (device, facade, blocks).
     Forbidden,
     /// Anything (the testkit's `std` feature).
     Full,
-    /// Only `std::arch` (runtime CPU detection in backends).
+    /// `extern crate std` and no path but `std::arch` (runtime CPU detection in backends, the
+    /// inherent `f32::sqrt` of the core).
     ArchOnly,
 }
 
@@ -550,6 +551,165 @@ pub fn scan_global_state(source: &str, inherited: Exempt) -> ScanResult {
     result
 }
 
+/// The functions of `sdrk-core` whose bodies may use `std` (decision D67): the square roots of
+/// `num.rs`, with the feature `std` `f32::sqrt` / `f64::sqrt`.
+const CORE_STD_FUNCTIONS: [&str; 2] = ["fn sqrt_f32(", "fn sqrt_f64("];
+
+/// The line numbers of the bodies (signature to closing brace) of [`CORE_STD_FUNCTIONS`].
+fn core_std_function_lines(lines: &[Line]) -> Vec<usize> {
+    let mut allowed = Vec::new();
+    let mut depth: Option<usize> = None;
+    for line in lines {
+        let code = &line.code;
+        if depth.is_none()
+            && CORE_STD_FUNCTIONS.iter().any(|f| {
+                code.match_indices(f)
+                    .any(|(pos, _)| boundary_before(code, pos, &[]))
+            })
+        {
+            depth = Some(0);
+        }
+        let Some(mut d) = depth else { continue };
+        allowed.push(line.number);
+        let mut opened = d > 0;
+        for ch in code.chars() {
+            match ch {
+                '{' => {
+                    d += 1;
+                    opened = true;
+                }
+                '}' => d = d.saturating_sub(1),
+                _ => {}
+            }
+        }
+        depth = if opened && d == 0 { None } else { Some(d) };
+    }
+    allowed
+}
+
+/// The uses of `std` in one non-test line of `sdrk-core`: a `std` path or crate, the feature
+/// `std` in a `cfg`, and the inherent `sqrt` of `f32` / `f64`, which only `std` has.
+fn core_std_tokens(raw: &str, code: &str) -> Vec<&'static str> {
+    let mut found = Vec::new();
+    for (pos, _) in code.match_indices("std") {
+        if boundary_before(code, pos, &[]) && boundary_after(code, pos + 3) {
+            found.push("`std`");
+        }
+    }
+    let compact_raw: String = raw.chars().filter(|c| !c.is_whitespace()).collect();
+    let compact_code: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+    if compact_code.contains("feature=") && compact_raw.contains("feature=\"std\"") {
+        found.push("`feature = \"std\"`");
+    }
+    for (pos, _) in code.match_indices("sqrt(") {
+        let before = code.get(..pos).unwrap_or("");
+        if before.ends_with('.') || (before.ends_with("::") && !before.ends_with("libm::")) {
+            found.push("`sqrt` of `std`");
+        }
+    }
+    found
+}
+
+/// Scans one file of a core-layer crate for `std` (decision D67, a narrow exception). `file` is
+/// the path relative to `src`. Allowed are only, in `sdrk-core` (`exception`), the bodies of
+/// `num::sqrt_f32` / `num::sqrt_f64` and `extern crate std` under `#[cfg(feature = "std")]` in
+/// `lib.rs`; tests are exempt.
+#[must_use]
+pub fn scan_core_std(
+    file: &str,
+    source: &str,
+    inherited: Exempt,
+    exception: bool,
+) -> Vec<(usize, String)> {
+    let ann = annotate(source, StdPolicy::Forbidden);
+    let allowed = if exception && file == "num.rs" {
+        core_std_function_lines(&ann.lines)
+    } else {
+        Vec::new()
+    };
+    let raw: Vec<&str> = source.lines().collect();
+    let mut findings = Vec::new();
+    for (k, line) in ann.lines.iter().enumerate() {
+        if inherited == Exempt::Test || line.exempt == Exempt::Test {
+            continue;
+        }
+        if allowed.contains(&line.number) {
+            continue;
+        }
+        let raw_line = raw.get(k).copied().unwrap_or("");
+        let compact = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        if exception && file == "lib.rs" {
+            let next = raw.get(k + 1).map_or(String::new(), |s| compact(s));
+            let prev = k
+                .checked_sub(1)
+                .and_then(|i| raw.get(i))
+                .map_or(String::new(), |s| compact(s));
+            let this = compact(raw_line);
+            if (this == "#[cfg(feature=\"std\")]" && next == "externcratestd;")
+                || (this == "externcratestd;" && prev == "#[cfg(feature=\"std\")]")
+            {
+                continue;
+            }
+        }
+        for token in core_std_tokens(raw_line, &line.code) {
+            findings.push((
+                line.number,
+                format!(
+                    "{token} in the core layer outside `sdrk_core::num::sqrt_f32` / `sqrt_f64` \
+                     (D67): a new std use in the core layer needs a maintainer decision"
+                ),
+            ));
+        }
+    }
+    findings
+}
+
+/// [`scan_core_std`] over every `.rs` file under `src_dir` (the `src` of a core-layer crate;
+/// `exception` for `sdrk-core`), with the test exemption of out-of-line modules.
+///
+/// # Errors
+/// Fails if a file cannot be read.
+pub fn scan_core_std_crate(src_dir: &Path, exception: bool) -> anyhow::Result<Vec<Finding>> {
+    let mut findings = Vec::new();
+    let mut test_files: Vec<PathBuf> = Vec::new();
+    let mut files: Vec<(PathBuf, String)> = Vec::new();
+    for entry in WalkDir::new(src_dir).sort_by_file_name() {
+        let entry = entry?;
+        if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "rs") {
+            let path = entry.path().to_path_buf();
+            let source = std::fs::read_to_string(&path)?;
+            for (name, kind) in annotate(&source, StdPolicy::Forbidden).mods {
+                if kind == Exempt::Test {
+                    let dir = module_dir(&path);
+                    test_files.push(dir.join(format!("{name}.rs")));
+                    test_files.push(dir.join(&name).join("mod.rs"));
+                }
+            }
+            files.push((path, source));
+        }
+    }
+    for (path, source) in &files {
+        let inherited = if test_files.iter().any(|t| t == path) {
+            Exempt::Test
+        } else {
+            Exempt::No
+        };
+        let rel = path
+            .strip_prefix(src_dir)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        for (line, message) in scan_core_std(&rel, source, inherited, exception) {
+            findings.push(Finding {
+                path: path.clone(),
+                line,
+                message,
+            });
+        }
+    }
+    Ok(findings)
+}
+
 /// Kind of scan to run over a crate.
 #[derive(Clone, Copy)]
 pub enum Scan {
@@ -794,5 +954,75 @@ mod tests {
         assert_eq!(s.lines().count(), 2);
         assert!(s.contains("'a"));
         assert!(!s.contains("// c"));
+    }
+
+    const CORE_NUM: &str = "/// With the feature `std` it is `f32::sqrt`.\n#[inline]\npub fn sqrt_f32(x: f32) -> f32 {\n    #[cfg(feature = \"std\")]\n    {\n        x.sqrt()\n    }\n    #[cfg(not(feature = \"std\"))]\n    {\n        libm::sqrtf(x)\n    }\n}\n\npub fn sqrt_f64(x: f64) -> f64 {\n    #[cfg(feature = \"std\")]\n    {\n        f64::sqrt(x)\n    }\n    #[cfg(not(feature = \"std\"))]\n    {\n        libm::sqrt(x)\n    }\n}\n#[cfg(test)]\nmod tests {\n    use std::vec::Vec;\n    fn t() { let _ = 2f32.sqrt(); }\n}\n";
+    const CORE_LIB: &str = "#![no_std]\n#[cfg(feature = \"std\")]\nextern crate std;\n#[cfg(all(test, not(feature = \"std\")))]\nextern crate std;\nmod num;\n";
+
+    fn core_std(file: &str, src: &str) -> Vec<usize> {
+        scan_core_std(file, src, Exempt::No, true)
+            .into_iter()
+            .map(|(l, _)| l)
+            .collect()
+    }
+
+    #[test]
+    fn core_std_allows_only_the_two_square_roots() {
+        assert_eq!(core_std("num.rs", CORE_NUM), Vec::<usize>::new());
+        assert_eq!(core_std("lib.rs", CORE_LIB), Vec::<usize>::new());
+        // The same code anywhere else, or in another core crate, is a finding.
+        assert_ne!(core_std("fallback/mag.rs", CORE_NUM), Vec::<usize>::new());
+        assert_ne!(
+            scan_core_std("num.rs", CORE_NUM, Exempt::No, false),
+            Vec::new()
+        );
+        assert_ne!(
+            scan_core_std("lib.rs", CORE_LIB, Exempt::No, false),
+            Vec::new()
+        );
+        assert_eq!(
+            scan_core_std("x.rs", CORE_NUM, Exempt::Test, false),
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn core_std_rejects_a_second_use() {
+        // A third function in num.rs with the inherent square root behind the feature.
+        let third = format!(
+            "{CORE_NUM}pub fn hypot(x: f32, y: f32) -> f32 {{\n    #[cfg(feature = \"std\")]\n    {{\n        (x * x + y * y).sqrt()\n    }}\n}}\n"
+        );
+        let n = CORE_NUM.lines().count();
+        assert_eq!(core_std("num.rs", &third), vec![n + 2, n + 4]);
+        let msg = &scan_core_std("num.rs", &third, Exempt::No, true)[0].1;
+        assert!(msg.contains("needs a maintainer decision"), "{msg}");
+        // A std path, a second `extern crate std` and a cfg on the feature elsewhere.
+        assert_eq!(
+            core_std("lib.rs", "#![no_std]\nextern crate std;\nmod num;\n"),
+            vec![2]
+        );
+        assert_eq!(
+            core_std("fir.rs", "fn f() -> u32 { std::process::id() }\n"),
+            vec![1]
+        );
+        assert_eq!(
+            core_std(
+                "fir.rs",
+                "#[cfg(any(feature = \"std\", feature = \"x\"))]\nfn f() {}\n"
+            ),
+            vec![1]
+        );
+        assert_eq!(
+            core_std("agc.rs", "fn f(x: f32) -> f32 { f32::sqrt(x) }\n"),
+            vec![1]
+        );
+        // Comments, strings, `no_std` and libm are not uses.
+        assert_eq!(
+            core_std(
+                "agc.rs",
+                "// std::fs and feature = \"std\"\nconst S: &str = \"std\";\nfn f(x: f32) -> f32 { libm::sqrtf(x) + libm::sqrt(1.0) as f32 }\n"
+            ),
+            Vec::<usize>::new()
+        );
     }
 }

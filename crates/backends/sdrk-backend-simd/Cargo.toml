@@ -24,7 +24,8 @@ sdrk-core = { path = "../../core/sdrk-core", features = ["reference", "static-tw
 default = []
 # Runtime CPU-feature detection at every kernel entry (x86-64: SSE2, AVX2 + FMA, AVX-512).
 # Without it the SIMD level is fixed at compile time by `-C target-cpu` / `target-feature`.
-std = ["fearless_simd/std"]
+# Also the square roots of `sdrk-core` from the standard library (`sdrk-core/std`).
+std = ["fearless_simd/std", "sdrk-core/std"]
 # On wasm32 built with the target feature `relaxed-simd`: the C32 variants of `fir`,
 # `fir_decimate` and `fir_interpolate` use relaxed multiply-add (M14). Not bit-exact; a no-op on
 # every other target.

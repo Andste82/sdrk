@@ -38,10 +38,10 @@ const UNROLL: usize = 4;
 ///
 /// Plain scalar code for every target: no target-specific path in the loop and no hint to the
 /// compiler. One exception lies in a shared helper: [`sqrt_f32`] is one correctly rounded IEEE
-/// operation everywhere, but on wasm32 with `simd128` it reaches the hardware instruction
-/// through lane 0 of `f32x4_sqrt` (`libm` has only software code there: about 189 instead of
-/// 62 fuel per sample; the count of commit c45da86 already included it); it gives the same
-/// bits as on every other target.
+/// operation everywhere, but with the feature `std` it is `f32::sqrt`, and without it on wasm32
+/// with `simd128` it reaches the hardware instruction through lane 0 of `f32x4_sqrt` (`libm`
+/// has only software code there: about 189 instead of 62 fuel per sample; the count of commit
+/// c45da86 already included it); it gives the same bits as on every other target.
 ///
 /// The minimum and maximum are a compare and a select (the operands are never NaN and never two
 /// zeros: the level is above the reference where it is limited, and the gain is positive and

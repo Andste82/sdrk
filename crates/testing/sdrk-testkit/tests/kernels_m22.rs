@@ -17,11 +17,11 @@ use sdrk::Sdrk;
 use sdrk_blocks::design::{BiquadResponse, butterworth_sos, to_q14};
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
 use sdrk_core::{CQ15, Progress, Q15, Reference};
-use sdrk_testkit::{
-    Arena, ChunkPlan, Pcg32, StdReporter, Tier, all_cases, bit_exact, check_block_invariance,
-    run_suite,
-};
+#[cfg(feature = "std")]
+use sdrk_testkit::{Arena, StdReporter, Tier, all_cases, run_suite};
+use sdrk_testkit::{ChunkPlan, Pcg32, bit_exact, check_block_invariance};
 
+#[cfg(feature = "std")]
 #[test]
 fn the_m22_suite_cases_pass_one_by_one() {
     let names = [

@@ -2216,6 +2216,314 @@
           "status": "release",
           "verdict": "pass"
         },
+        "halfband_decimate": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "ours:halfband_ref_fir_decimate",
+              "label": "information: ours:halfband_ref_fir_decimate",
+              "other_instr_per_sample": 24.87,
+              "other_snr_db": 145.11,
+              "ours_instr_per_sample": 12.77,
+              "ratio": 0.51
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 104.69,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 12.77,
+              "ratio": 0.12
+            }
+          ],
+          "other_instr_per_sample": 104.7,
+          "ours_instr_per_sample": 12.77,
+          "ratio": 0.12,
+          "snr_db": {
+            "other": 143.95,
+            "ours": 142.99
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 174.69,
+              "other_snr_db": 82.54,
+              "ours_instr_per_sample": 34.73,
+              "ratio": 0.2
+            },
+            {
+              "compared_with": "ours:halfband_ref_fir_decimate_cq15",
+              "label": "information: ours:halfband_ref_fir_decimate_cq15",
+              "other_instr_per_sample": 148.82,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 34.73,
+              "ratio": 0.23
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 57.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 34.73,
+              "ratio": 0.61
+            }
+          ],
+          "other_instr_per_sample": 57.31,
+          "ours_instr_per_sample": 34.73,
+          "ratio": 0.61,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_decimate_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 174.69,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 57.31,
+              "ratio": 0.33
+            }
+          ],
+          "other_instr_per_sample": 174.69,
+          "ours_instr_per_sample": 57.31,
+          "ratio": 0.33,
+          "snr_db": {
+            "other": 82.54,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 209.19,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 45.14,
+              "ratio": 0.22
+            }
+          ],
+          "other_instr_per_sample": 209.19,
+          "ours_instr_per_sample": 45.14,
+          "ratio": 0.22,
+          "snr_db": {
+            "other": 142.14,
+            "ours": 142.12
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 80.56,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.21,
+              "ratio": 0.08
+            }
+          ],
+          "other_instr_per_sample": 80.56,
+          "ours_instr_per_sample": 6.21,
+          "ratio": 0.08,
+          "snr_db": {
+            "other": 143.76,
+            "ours": 142.81
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 80.56,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 41.87,
+              "ratio": 0.52
+            }
+          ],
+          "other_instr_per_sample": 80.56,
+          "ours_instr_per_sample": 41.87,
+          "ratio": 0.52,
+          "snr_db": {
+            "other": 141.96,
+            "ours": 142.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 87.33,
+              "other_snr_db": 82.64,
+              "ours_instr_per_sample": 13.98,
+              "ratio": 0.16
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 51.16,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.98,
+              "ratio": 0.27
+            }
+          ],
+          "other_instr_per_sample": 51.16,
+          "ours_instr_per_sample": 13.98,
+          "ratio": 0.27,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_decimate_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 87.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 51.16,
+              "ratio": 0.59
+            }
+          ],
+          "other_instr_per_sample": 87.33,
+          "ours_instr_per_sample": 51.16,
+          "ratio": 0.59,
+          "snr_db": {
+            "other": 82.64,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_ref_fir_decimate": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 111.16,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 24.87,
+              "ratio": 0.22
+            }
+          ],
+          "other_instr_per_sample": 111.16,
+          "ours_instr_per_sample": 24.87,
+          "ratio": 0.22,
+          "snr_db": {
+            "other": 139.91,
+            "ours": 145.11
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_fir_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 125.62,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 148.82,
+              "ratio": 1.18
+            }
+          ],
+          "other_instr_per_sample": 125.62,
+          "ours_instr_per_sample": 148.82,
+          "ratio": 1.18,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_shifted": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 59.15,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 26.78,
+              "ratio": 0.45
+            }
+          ],
+          "other_instr_per_sample": 59.15,
+          "ours_instr_per_sample": 26.78,
+          "ratio": 0.45,
+          "snr_db": {
+            "other": 142.93,
+            "ours": 150.01
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_shifted_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 73.82,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 51.24,
+              "ratio": 0.69
+            }
+          ],
+          "other_instr_per_sample": 73.82,
+          "ours_instr_per_sample": 51.24,
+          "ratio": 0.69,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
           "goal": true,
@@ -2591,6 +2899,130 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "real_to_complex": {
+          "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "ours:halfband_ref_shifted",
+              "label": "information: ours:halfband_ref_shifted",
+              "other_instr_per_sample": 26.78,
+              "other_snr_db": 150.01,
+              "ours_instr_per_sample": 10.82,
+              "ratio": 0.4
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 84.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.82,
+              "ratio": 0.13
+            }
+          ],
+          "other_instr_per_sample": 84.33,
+          "ours_instr_per_sample": 10.82,
+          "ratio": 0.13,
+          "snr_db": {
+            "other": 145.53,
+            "ours": 150.28
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "real_to_complex_cq15": {
+          "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 68.31,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 18.64,
+              "ratio": 0.27
+            },
+            {
+              "compared_with": "ours:halfband_ref_shifted_cq15",
+              "label": "information: ours:halfband_ref_shifted_cq15",
+              "other_instr_per_sample": 51.24,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 18.64,
+              "ratio": 0.36
+            },
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 34.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 18.64,
+              "ratio": 0.54
+            }
+          ],
+          "other_instr_per_sample": 34.31,
+          "ours_instr_per_sample": 18.64,
+          "ratio": 0.54,
+          "snr_db": {
+            "other": 81.49,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "real_to_complex_cq15_fallback": {
+          "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 34.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 68.31,
+              "ratio": 1.99
+            }
+          ],
+          "other_instr_per_sample": 34.31,
+          "ours_instr_per_sample": 68.31,
+          "ratio": 1.99,
+          "snr_db": {
+            "other": 81.49,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "real_to_complex_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (generic code) (-O3 -ffp-contract=off, avx2)",
+              "label": "information: airspy",
+              "other_instr_per_sample": 39.82,
+              "other_snr_db": 148.65,
+              "ours_instr_per_sample": 64.02,
+              "ratio": 1.61
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 84.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 64.02,
+              "ratio": 0.76
+            }
+          ],
+          "other_instr_per_sample": 84.33,
+          "ours_instr_per_sample": 64.02,
+          "ratio": 0.76,
+          "snr_db": {
+            "other": 143.17,
+            "ours": 143.51
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "resample": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it",
@@ -3752,6 +4184,58 @@
           "status": "release",
           "verdict": "pass"
         },
+        "halfband_decimate": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 12.77,
+          "ours_instr_per_sample": 12.74,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 142.99,
+            "ours": 142.99
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_cq15": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 34.73,
+          "ours_instr_per_sample": 34.73,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 6.21,
+          "ours_instr_per_sample": 6.15,
+          "ratio": 0.99,
+          "snr_db": {
+            "other": 142.81,
+            "ours": 142.81
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_q15": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 13.98,
+          "ours_instr_per_sample": 13.99,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "mag": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -3852,6 +4336,32 @@
           "snr_db": {
             "other": 81.23,
             "ours": 81.23
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "real_to_complex": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 10.82,
+          "ours_instr_per_sample": 10.95,
+          "ratio": 1.01,
+          "snr_db": {
+            "other": 150.28,
+            "ours": 150.28
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "real_to_complex_cq15": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 18.64,
+          "ours_instr_per_sample": 18.67,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
           },
           "status": "release",
           "verdict": "pass"
@@ -6320,6 +6830,314 @@
           "status": "release",
           "verdict": "pass"
         },
+        "halfband_decimate": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "ours:halfband_ref_fir_decimate",
+              "label": "information: ours:halfband_ref_fir_decimate",
+              "other_instr_per_sample": 47.96,
+              "other_snr_db": 143.95,
+              "ours_instr_per_sample": 28.2,
+              "ratio": 0.59
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 121.57,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 28.2,
+              "ratio": 0.23
+            }
+          ],
+          "other_instr_per_sample": 121.57,
+          "ours_instr_per_sample": 28.2,
+          "ratio": 0.23,
+          "snr_db": {
+            "other": 143.15,
+            "ours": 142.56
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 185.99,
+              "other_snr_db": 82.54,
+              "ours_instr_per_sample": 59.1,
+              "ratio": 0.32
+            },
+            {
+              "compared_with": "ours:halfband_ref_fir_decimate_cq15",
+              "label": "information: ours:halfband_ref_fir_decimate_cq15",
+              "other_instr_per_sample": 348.83,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 59.1,
+              "ratio": 0.17
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 174.36,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 59.1,
+              "ratio": 0.34
+            }
+          ],
+          "other_instr_per_sample": 174.36,
+          "ours_instr_per_sample": 59.1,
+          "ratio": 0.34,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_decimate_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 185.99,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 174.36,
+              "ratio": 0.94
+            }
+          ],
+          "other_instr_per_sample": 185.99,
+          "ours_instr_per_sample": 174.36,
+          "ratio": 0.94,
+          "snr_db": {
+            "other": 82.54,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 209.57,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 65.41,
+              "ratio": 0.31
+            }
+          ],
+          "other_instr_per_sample": 209.57,
+          "ours_instr_per_sample": 65.41,
+          "ratio": 0.31,
+          "snr_db": {
+            "other": 142.14,
+            "ours": 142.12
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 94.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.53,
+              "ratio": 0.14
+            }
+          ],
+          "other_instr_per_sample": 94.91,
+          "ours_instr_per_sample": 13.53,
+          "ratio": 0.14,
+          "snr_db": {
+            "other": 141.96,
+            "ours": 142.4
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 94.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 50.32,
+              "ratio": 0.53
+            }
+          ],
+          "other_instr_per_sample": 94.91,
+          "ours_instr_per_sample": 50.32,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 141.96,
+            "ours": 142.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 92.92,
+              "other_snr_db": 82.64,
+              "ours_instr_per_sample": 23.79,
+              "ratio": 0.26
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 94.62,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 23.79,
+              "ratio": 0.25
+            }
+          ],
+          "other_instr_per_sample": 94.62,
+          "ours_instr_per_sample": 23.79,
+          "ratio": 0.25,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_decimate_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 92.92,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 94.62,
+              "ratio": 1.02
+            }
+          ],
+          "other_instr_per_sample": 92.92,
+          "ours_instr_per_sample": 94.62,
+          "ratio": 1.02,
+          "snr_db": {
+            "other": 82.64,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_ref_fir_decimate": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 111.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 47.96,
+              "ratio": 0.43
+            }
+          ],
+          "other_instr_per_sample": 111.91,
+          "ours_instr_per_sample": 47.96,
+          "ratio": 0.43,
+          "snr_db": {
+            "other": 139.91,
+            "ours": 143.95
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_fir_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 223.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 348.83,
+              "ratio": 1.56
+            }
+          ],
+          "other_instr_per_sample": 223.91,
+          "ours_instr_per_sample": 348.83,
+          "ratio": 1.56,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_shifted": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 79.42,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 42.21,
+              "ratio": 0.53
+            }
+          ],
+          "other_instr_per_sample": 79.42,
+          "ours_instr_per_sample": 42.21,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 142.93,
+            "ours": 148.46
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_shifted_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 190.87,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 75.61,
+              "ratio": 0.4
+            }
+          ],
+          "other_instr_per_sample": 190.87,
+          "ours_instr_per_sample": 75.61,
+          "ratio": 0.4,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
           "goal": true,
@@ -6695,6 +7513,138 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "real_to_complex": {
+          "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2)",
+              "label": "information: airspy",
+              "other_instr_per_sample": 36.15,
+              "other_snr_db": 148.65,
+              "ours_instr_per_sample": 21.63,
+              "ratio": 0.6
+            },
+            {
+              "compared_with": "ours:halfband_ref_shifted",
+              "label": "information: ours:halfband_ref_shifted",
+              "other_instr_per_sample": 42.21,
+              "other_snr_db": 148.46,
+              "ours_instr_per_sample": 21.63,
+              "ratio": 0.51
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 99.08,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 21.63,
+              "ratio": 0.22
+            }
+          ],
+          "other_instr_per_sample": 99.08,
+          "ours_instr_per_sample": 21.63,
+          "ratio": 0.22,
+          "snr_db": {
+            "other": 143.17,
+            "ours": 148.65
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "real_to_complex_cq15": {
+          "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 117.31,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 34.13,
+              "ratio": 0.29
+            },
+            {
+              "compared_with": "ours:halfband_ref_shifted_cq15",
+              "label": "information: ours:halfband_ref_shifted_cq15",
+              "other_instr_per_sample": 75.61,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 34.13,
+              "ratio": 0.45
+            },
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 67.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 34.13,
+              "ratio": 0.51
+            }
+          ],
+          "other_instr_per_sample": 67.33,
+          "ours_instr_per_sample": 34.13,
+          "ratio": 0.51,
+          "snr_db": {
+            "other": 81.49,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "real_to_complex_cq15_fallback": {
+          "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 67.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 117.31,
+              "ratio": 1.74
+            }
+          ],
+          "other_instr_per_sample": 67.33,
+          "ours_instr_per_sample": 117.31,
+          "ratio": 1.74,
+          "snr_db": {
+            "other": 81.49,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "real_to_complex_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (generic code) (-O3 -ffp-contract=off, sse2)",
+              "label": "information: airspy",
+              "other_instr_per_sample": 36.72,
+              "other_snr_db": 148.65,
+              "ours_instr_per_sample": 77.74,
+              "ratio": 2.12
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 99.08,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 77.74,
+              "ratio": 0.78
+            }
+          ],
+          "other_instr_per_sample": 99.08,
+          "ours_instr_per_sample": 77.74,
+          "ratio": 0.78,
+          "snr_db": {
+            "other": 143.17,
+            "ours": 143.51
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "resample": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it",
@@ -9503,6 +10453,314 @@
           "status": "release",
           "verdict": "pass"
         },
+        "halfband_decimate": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "ours:halfband_ref_fir_decimate",
+              "label": "information: ours:halfband_ref_fir_decimate",
+              "other_instr_per_sample": 47.89,
+              "other_snr_db": 143.95,
+              "ours_instr_per_sample": 28.57,
+              "ratio": 0.6
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 122.07,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 28.57,
+              "ratio": 0.23
+            }
+          ],
+          "other_instr_per_sample": 122.07,
+          "ours_instr_per_sample": 28.57,
+          "ratio": 0.23,
+          "snr_db": {
+            "other": 143.15,
+            "ours": 142.56
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 178.05,
+              "other_snr_db": 82.54,
+              "ours_instr_per_sample": 47.29,
+              "ratio": 0.27
+            },
+            {
+              "compared_with": "ours:halfband_ref_fir_decimate_cq15",
+              "label": "information: ours:halfband_ref_fir_decimate_cq15",
+              "other_instr_per_sample": 216.33,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 47.29,
+              "ratio": 0.22
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 78.11,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 47.29,
+              "ratio": 0.61
+            }
+          ],
+          "other_instr_per_sample": 78.11,
+          "ours_instr_per_sample": 47.29,
+          "ratio": 0.61,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_decimate_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 178.05,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 78.11,
+              "ratio": 0.44
+            }
+          ],
+          "other_instr_per_sample": 178.05,
+          "ours_instr_per_sample": 78.11,
+          "ratio": 0.44,
+          "snr_db": {
+            "other": 82.54,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 209.57,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 66.31,
+              "ratio": 0.32
+            }
+          ],
+          "other_instr_per_sample": 209.57,
+          "ours_instr_per_sample": 66.31,
+          "ratio": 0.32,
+          "snr_db": {
+            "other": 142.14,
+            "ours": 142.12
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 111.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.53,
+              "ratio": 0.12
+            }
+          ],
+          "other_instr_per_sample": 111.91,
+          "ours_instr_per_sample": 13.53,
+          "ratio": 0.12,
+          "snr_db": {
+            "other": 141.96,
+            "ours": 142.4
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 94.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 50.32,
+              "ratio": 0.53
+            }
+          ],
+          "other_instr_per_sample": 94.91,
+          "ours_instr_per_sample": 50.32,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 141.96,
+            "ours": 142.54
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_decimate_real_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 88.98,
+              "other_snr_db": 82.64,
+              "ours_instr_per_sample": 19.18,
+              "ratio": 0.22
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 61.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 19.18,
+              "ratio": 0.31
+            }
+          ],
+          "other_instr_per_sample": 61.31,
+          "ours_instr_per_sample": 19.18,
+          "ratio": 0.31,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_decimate_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 88.98,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 61.31,
+              "ratio": 0.69
+            }
+          ],
+          "other_instr_per_sample": 88.98,
+          "ours_instr_per_sample": 61.31,
+          "ratio": 0.69,
+          "snr_db": {
+            "other": 82.64,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "halfband_ref_fir_decimate": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 111.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 47.89,
+              "ratio": 0.43
+            }
+          ],
+          "other_instr_per_sample": 111.91,
+          "ours_instr_per_sample": 47.89,
+          "ratio": 0.43,
+          "snr_db": {
+            "other": 139.91,
+            "ours": 143.95
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_fir_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 223.91,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 216.33,
+              "ratio": 0.97
+            }
+          ],
+          "other_instr_per_sample": 223.91,
+          "ours_instr_per_sample": 216.33,
+          "ratio": 0.97,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_shifted": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 80.32,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 42.57,
+              "ratio": 0.53
+            }
+          ],
+          "other_instr_per_sample": 80.32,
+          "ours_instr_per_sample": 42.57,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 142.93,
+            "ours": 148.46
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "halfband_ref_shifted_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 94.62,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 63.8,
+              "ratio": 0.67
+            }
+          ],
+          "other_instr_per_sample": 94.62,
+          "ours_instr_per_sample": 63.8,
+          "ratio": 0.67,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
           "goal": true,
@@ -9878,6 +11136,130 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "real_to_complex": {
+          "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "ours:halfband_ref_shifted",
+              "label": "information: ours:halfband_ref_shifted",
+              "other_instr_per_sample": 42.57,
+              "other_snr_db": 148.46,
+              "ours_instr_per_sample": 21.37,
+              "ratio": 0.5
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 115.58,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 21.37,
+              "ratio": 0.18
+            }
+          ],
+          "other_instr_per_sample": 115.58,
+          "ours_instr_per_sample": 21.37,
+          "ratio": 0.18,
+          "snr_db": {
+            "other": 143.39,
+            "ours": 148.65
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "real_to_complex_cq15": {
+          "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 80.36,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 27.14,
+              "ratio": 0.34
+            },
+            {
+              "compared_with": "ours:halfband_ref_shifted_cq15",
+              "label": "information: ours:halfband_ref_shifted_cq15",
+              "other_instr_per_sample": 63.8,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 27.14,
+              "ratio": 0.43
+            },
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 45.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.14,
+              "ratio": 0.6
+            }
+          ],
+          "other_instr_per_sample": 45.51,
+          "ours_instr_per_sample": 27.14,
+          "ratio": 0.6,
+          "snr_db": {
+            "other": 81.49,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "real_to_complex_cq15_fallback": {
+          "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 45.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 80.36,
+              "ratio": 1.77
+            }
+          ],
+          "other_instr_per_sample": 45.51,
+          "ours_instr_per_sample": 80.36,
+          "ratio": 1.77,
+          "snr_db": {
+            "other": 81.49,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "real_to_complex_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (generic code) (-O3 -ffp-contract=off, sse4.2)",
+              "label": "information: airspy",
+              "other_instr_per_sample": 36.4,
+              "other_snr_db": 148.65,
+              "ours_instr_per_sample": 72.68,
+              "ratio": 2.0
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 98.58,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 72.68,
+              "ratio": 0.74
+            }
+          ],
+          "other_instr_per_sample": 98.58,
+          "ours_instr_per_sample": 72.68,
+          "ratio": 0.74,
+          "snr_db": {
+            "other": 143.17,
+            "ours": 143.51
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "resample": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it",
@@ -10525,9 +11907,19 @@
         "sha256": "76c1aac87ddb7258f34b08a13f0eebf9e53afa299857568346aa5c82bcafaf1a",
         "version": "131.1.0"
       },
+      "libairspy": {
+        "build": "airspy-iqconv.c over iqconverter_float.c and iqconverter_int16.c (conversion without remove_dc; the SSE2 converter with the FreeBSD branch, x86_64 only): -O3 -ffp-contract=off, per level sse2:-march=x86-64 sse4.2:-march=x86-64-v2 avx2:-march=x86-64-v3 avx512:-march=sapphirerapids",
+        "sha256": "fcca23911c9a9da71cebeffeba708c59d1d6401eec6eb2dd73cae35b8ea3c613",
+        "version": "1.0.10"
+      },
       "liquid_dsp_dc_blocker": {
         "build": "liquid-dotprod.c liquid-dcblock.c (portable dot products): -O3",
         "sha256": "aa568f7ab417fbd8dd0204b1d0f667f4bf521f09f1e46a98554342f7006e0d0a",
+        "version": "1.8.3"
+      },
+      "liquid_dsp_halfband": {
+        "build": "liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release: -O3 -ffp-contract=off, per level sse2:-march=x86-64 sse4.2:-march=x86-64-v2 avx2:-march=x86-64-v3 avx512:-march=sapphirerapids, dot products (crcf / rrrf) sse2=LIQUID_RUNTIME_SSE/LIQUID_RUNTIME_PORT sse4.2=LIQUID_RUNTIME_SSE/LIQUID_RUNTIME_SSE avx2=LIQUID_RUNTIME_AVX/LIQUID_RUNTIME_AVX avx512=LIQUID_RUNTIME_AVX512/LIQUID_RUNTIME_AVX512 ",
+        "sha256": "18fa83b73db8bb6fe6ea0376e4b5aecf8645970f4604d10d9dadbf609f3f95e2",
         "version": "1.8.3"
       },
       "volk": {

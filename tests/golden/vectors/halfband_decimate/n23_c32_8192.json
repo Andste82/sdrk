@@ -19,7 +19,7 @@
   "case": "n23_c32_8192",
   "format_version": 1,
   "kernel": "halfband_decimate",
-  "notes": "halfband_taps(23, kaiser_beta(60)) rounded to f32; y[m] = lfilter(h, 1, x)[2 m] in float64, zero history; complex noise sigma 0.3",
+  "notes": "halfband_taps(23, kaiser_beta(60)) rounded to f32; y[m] = sum_k h[k] x[2 m - k] with the exact (correctly rounded) sums of scalar_math.fir_exact, zero history; complex noise sigma 0.3",
   "params": {
     "attenuation_db": 60.0,
     "beta": 5.65326,

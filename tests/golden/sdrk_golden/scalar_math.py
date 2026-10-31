@@ -24,6 +24,10 @@ def sin(x):
     return _map(math.sin, x)
 
 
+def cos(x):
+    return _map(math.cos, x)
+
+
 def expj(theta):
     """``exp(1j * theta)`` as ``cos(theta) + 1j * sin(theta)``."""
     t = np.asarray(theta, dtype=np.float64)
@@ -71,3 +75,25 @@ def dot(a, b):
     if np.iscomplexobj(a):
         return complex(dot(a.real, b), dot(a.imag, b))
     return math.fsum((a.astype(np.float64) * b).tolist())
+
+
+def fir_exact(h, x, decimation=1):
+    """``y[m] = sum_k h[k] x[decimation m - k]`` (zero history) with every sum correctly rounded.
+
+    ``scipy.signal.lfilter`` and ``np.convolve`` add the products through BLAS kernels whose summation
+    order depends on the CPU, so their last bit differs from machine to machine. Here ``h`` and ``x``
+    hold float32 values (or integers below 2**24 times a sign), so every product is exact in float64 and
+    ``math.fsum`` returns the correctly rounded sum whatever the order. A complex ``x`` is filtered per
+    component. Zero taps are skipped (they add exact zeros)."""
+    h = np.asarray(h, dtype=np.float64)
+    x = np.asarray(x)
+    if np.iscomplexobj(x):
+        return fir_exact(h, x.real, decimation) + 1j * fir_exact(h, x.imag, decimation)
+    taps = [(k, float(c)) for k, c in enumerate(h) if c != 0.0]
+    xs = x.astype(np.float64).tolist()
+    count = (len(xs) + decimation - 1) // decimation
+    out = np.empty(count, dtype=np.float64)
+    for m in range(count):
+        n = decimation * m
+        out[m] = math.fsum(c * xs[n - k] for k, c in taps if n - k >= 0)
+    return out

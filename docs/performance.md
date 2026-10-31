@@ -252,7 +252,7 @@ An entry may carry a `"waiver"` (ratio) or an `"accuracy_waiver"` text that name
 
 ## Results
 
-Instructions per sample of our kernel divided by those of the comparison (lower is better), from the committed `benches/results/*.json`; `dev` marks an entry whose status is `dev`, `info` one that is reported but not judged, `waived` one whose ratio exceeds its limit under a waiver, `(accuracy waiver)` a `release` entry within its limit whose comparison is more accurate under an accuracy waiver, and `-` a level without the entry (the `<kernel>_fallback` entries are not measured at `avx2-runtime`, whose fallback is the baseline build). All other entries are `release`, and every entry at or below 1.00 reaches the goal. Measured with VOLK 3.3.0, FFTW 3.3.10, KissFFT 131.1.0 and rustfft 6.4 as built by `benches/refs/build.sh` on the development machine (the counts are deterministic: two complete runs gave identical lines on every platform). The fallback round (D51 to D62) added the `<kernel>_fallback` entries against CMSIS-DSP 1.18.0 generic C, GNU Radio `ec1bf15` and liquid-dsp 1.8.3 compiled for the same level, and the `CQ15` FIR entries; the tables were counted on the integrated tree on 2026-10-31 (123 entries, all four platforms, every entry within its limit).
+Instructions per sample of our kernel divided by those of the comparison (lower is better), from the committed `benches/results/*.json`; `dev` marks an entry whose status is `dev`, `info` one that is reported but not judged, `waived` one whose ratio exceeds its limit under a waiver, `(accuracy waiver)` a `release` entry within its limit whose comparison is more accurate under an accuracy waiver, and `-` a level without the entry (the `<kernel>_fallback` entries are not measured at `avx2-runtime`, whose fallback is the baseline build). All other entries are `release`, and every entry at or below 1.00 reaches the goal. Measured with VOLK 3.3.0, FFTW 3.3.10, KissFFT 131.1.0 and rustfft 6.4 as built by `benches/refs/build.sh` on the development machine (the counts are deterministic: two complete runs gave identical lines on every platform). The fallback round (D51 to D62) added the `<kernel>_fallback` entries against CMSIS-DSP 1.18.0 generic C, GNU Radio `ec1bf15` and liquid-dsp 1.8.3 compiled for the same level, and the `CQ15` FIR entries; the tables were counted on the integrated tree on 2026-10-31 (123 entries, all four platforms, every entry within its limit). The round-2 follow-ups (D63 to D67: the block-float `CQ15` optimum, the CET markers simulated as `nop`, the grouped fallback where the `Q15`/`CQ15` FIR SIMD branch was slower, and the vectorizable square root of `mag_fallback`) were counted again on all four platforms and measured with `cargo measure --level avx2` on 2026-10-31 (123 entries, every entry within its limit).
 
 | Kernel | sse2 | sse4.2 | avx2 | avx512 | neon | simd128 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -290,12 +290,12 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `resample` C32, 3 / 2, 192 taps | 0.51 | 0.50 | 0.24 | 0.19 | 0.49 | 0.15 info |
 | `fir_interpolate_real` f32, L = 2, 128 taps | 0.43 | 0.41 | 0.17 | 0.12 | 0.34 | 0.16 info |
 | `resample_real` f32, 3 / 2, 192 taps | 0.50 | 0.47 | 0.26 | 0.24 | 0.39 | 0.19 info |
-| `fir_interpolate_real` Q15, L = 2, 128 taps | 1.21 info | 0.78 info | 1.36 info | 1.42 info | 0.90 info | 1.03 info |
-| `resample_real` Q15, 3 / 2, 192 taps | 1.15 info | 0.74 info | 0.59 info | 0.57 info | 0.65 info | 0.68 info |
-| `fir` CQ15, 64 taps (fallback) | 1.45 info | 0.79 info | 1.07 info | 1.01 info | 1.08 info | 0.90 info |
-| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 1.34 info | 0.74 info | 0.72 info | 0.63 info | 0.54 info | 0.91 info |
-| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 1.14 info | 0.67 info | 1.18 info | 1.16 info | 0.76 info | 0.95 info |
-| `resample` CQ15, 3 / 2, 192 taps (fallback) | 1.36 info | 0.80 info | 0.84 info | 0.80 info | 0.61 info | 0.91 info |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | 1.00 info | 0.78 info | 1.00 info | 1.00 info | 0.90 info | 1.00 info |
+| `resample_real` Q15, 3 / 2, 192 taps | 1.00 info | 0.74 info | 0.61 info | 0.57 info | 0.65 info | 0.68 info |
+| `fir` CQ15, 64 taps (fallback) | 1.00 info | 0.79 info | 1.00 info | 1.00 info | 1.08 info | 0.90 info |
+| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 1.00 info | 0.74 info | 1.00 info | 0.63 info | 0.54 info | 0.91 info |
+| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 1.00 info | 0.67 info | 1.00 info | 1.00 info | 0.76 info | 0.95 info |
+| `resample` CQ15, 3 / 2, 192 taps (fallback) | 1.00 info | 0.80 info | 1.00 info | 0.80 info | 0.61 info | 0.91 info |
 | `mag_sq` C32 | 0.71 | 0.62 | 0.61 | 0.39 | 0.52 | 0.60 |
 | `mag_sq` CQ15 | 0.37 info | 0.69 info | 0.72 info | 0.82 info | 0.54 info | 0.40 info |
 | `quad_demod` C32 | 0.13 info | 0.14 info | 0.68 | 0.50 | 0.62 | 0.18 info |
@@ -316,8 +316,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `power_db` Q15 | 1.03 info | 1.07 info | 0.88 info | 0.48 info | 1.00 info | 1.04 info |
 | `mag_sq_fallback` C32 (CMSIS-DSP) | 0.81 | 0.81 | 0.67 | 0.67 | 0.78 | 0.86 |
 | `mag_sq_q15_fallback` (CMSIS-DSP) | 0.33 | 0.22 | 0.23 | 0.16 | 0.79 | 0.96 |
-| `mag_fallback` C32 (CMSIS-DSP) | 2.35 info | 2.11 info | 3.76 info | 4.76 info | 2.33 info | 0.76 |
-| `mag_q15_fallback` (CMSIS-DSP) | 0.37 | 0.33 | 0.36 | 0.34 | 0.36 | 0.06 |
+| `mag_fallback` C32 (CMSIS-DSP) | 0.76 | 0.76 | 0.74 | 0.65 | 0.67 | 0.76 |
+| `mag_q15_fallback` (CMSIS-DSP) | 0.09 | 0.06 | 0.04 | 0.02 | 0.06 | 0.06 |
 | `window_fallback` C32 (CMSIS-DSP) | 0.96 | 0.96 | 0.93 | 0.40 | 0.58 | 0.40 |
 | `window_cq15_fallback` (CMSIS-DSP) | 0.91 | 0.95 | 0.75 | 0.59 | 0.82 | 0.66 |
 | `power_db_fallback` f32 (CMSIS-DSP) | 0.30 | 0.29 | 0.17 | 0.14 | 0.28 | 0.36 |
@@ -418,12 +418,12 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `resample` C32, 3 / 2, 192 taps | 135.44 / 266.35 | 134.82 / 269.35 | 52.57 / 215.52 | 53.09 | 42.35 / 218.42 | 84.58 / 174.35 | 309.31 / 2026.03 |
 | `fir_interpolate_real` f32, L = 2, 128 taps | 70.60 / 164.02 | 70.26 / 171.02 | 26.25 / 153.27 | 24.99 | 19.00 / 165.15 | 45.67 / 134.77 | 147.91 / 947.03 |
 | `resample_real` f32, 3 / 2, 192 taps | 82.87 / 166.19 | 82.23 / 173.19 | 40.99 / 155.85 | 39.79 | 40.14 / 167.33 | 53.45 / 136.68 | 179.99 / 949.03 |
-| `fir_interpolate_real` Q15, L = 2, 128 taps | 491.00 / 406.06 | 315.00 / 406.06 | 221.62 / 162.68 | 225.71 | 188.61 / 133.13 | 194.37 / 216.07 | 602.40 / 584.57 |
-| `resample_real` Q15, 3 / 2, 192 taps | 489.14 / 423.58 | 313.14 / 423.58 | 220.33 / 371.06 | 224.45 | 187.81 / 329.03 | 192.59 / 297.56 | 598.41 / 875.74 |
-| `fir` CQ15, 64 taps (fallback) | 771.00 / 530.46 | 417.99 / 530.46 | 228.84 / 214.08 | 237.74 | 155.07 / 153.06 | 227.65 / 211.54 | 841.39 / 934.94 |
-| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 157.98 / 118.11 | 87.46 / 118.11 | 49.16 / 68.42 | 50.14 | 33.82 / 53.59 | 50.04 / 92.54 | 186.45 / 204.82 |
-| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 865.19 / 760.32 | 512.19 / 760.32 | 317.71 / 268.38 | 318.90 | 238.77 / 205.58 | 300.49 / 394.84 | 983.89 / 1035.27 |
-| `resample` CQ15, 3 / 2, 192 taps (fallback) | 861.50 / 635.23 | 508.50 / 635.23 | 315.40 / 373.40 | 316.58 | 237.42 / 295.89 | 296.92 / 490.10 | 977.01 / 1075.61 |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | 406.06 / 406.06 | 315.00 / 406.06 | 162.68 / 162.68 | 225.72 | 133.13 / 133.13 | 194.37 / 216.07 | 584.57 / 584.57 |
+| `resample_real` Q15, 3 / 2, 192 taps | 423.58 / 423.58 | 313.14 / 423.58 | 225.31 / 371.06 | 224.46 | 186.78 / 329.03 | 192.59 / 297.56 | 598.41 / 875.74 |
+| `fir` CQ15, 64 taps (fallback) | 530.46 / 530.46 | 417.99 / 530.46 | 214.08 / 214.08 | 237.75 | 153.06 / 153.06 | 227.65 / 211.54 | 841.39 / 934.94 |
+| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 118.11 / 118.11 | 87.46 / 118.11 | 68.42 / 68.42 | 50.14 | 33.82 / 53.59 | 50.04 / 92.54 | 186.45 / 204.82 |
+| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 760.32 / 760.32 | 510.19 / 760.32 | 268.38 / 268.38 | 318.91 | 205.58 / 205.58 | 300.49 / 394.84 | 983.89 / 1035.27 |
+| `resample` CQ15, 3 / 2, 192 taps (fallback) | 635.23 / 635.23 | 506.50 / 635.23 | 373.40 / 373.40 | 316.59 | 237.44 / 295.89 | 296.92 / 490.10 | 977.01 / 1075.61 |
 | `mag_sq` C32 | 2.32 / 3.27 | 1.57 / 2.52 | 0.92 / 1.52 | 0.93 | 0.60 / 1.52 | 1.18 / 2.27 | 4.96 / 8.28 |
 | `mag_sq` CQ15 | 1.31 / 3.51 | 1.31 / 1.89 | 0.73 / 1.01 | 0.75 | 0.36 / 0.44 | 1.02 / 1.89 | 3.02 / 7.53 |
 | `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.43 / 10.92 | 7.44 | 3.36 / 6.73 | 12.30 / 19.79 | 36.15 / 201.21 |
@@ -444,8 +444,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `power_db` Q15 | 16.27 / 15.77 | 16.14 / 15.02 | 6.65 / 7.52 | 6.66 | 2.86 / 6.02 | 11.78 / 11.77 | 29.41 / 28.28 |
 | `mag_sq_fallback` C32 (CMSIS-DSP) | 2.64 / 3.27 | 2.64 / 3.27 | 1.36 / 2.02 | - | 1.11 / 1.64 | 1.76 / 2.26 | 8.03 / 9.35 |
 | `mag_sq_q15_fallback` (CMSIS-DSP) | 3.51 / 10.64 | 1.89 / 8.39 | 1.01 / 4.33 | - | 0.44 / 2.77 | 1.89 / 2.39 | 7.53 / 7.85 |
-| `mag_fallback` C32 (CMSIS-DSP) | 10.01 / 4.27 | 9.01 / 4.27 | 9.01 / 2.40 | - | 9.01 / 1.89 | 7.01 / 3.01 | 8.28 / 10.91 |
-| `mag_q15_fallback` (CMSIS-DSP) | 39.01 / 104.46 | 34.01 / 104.46 | 35.01 / 97.46 | - | 33.01 / 97.46 | 28.01 / 77.46 | 12.90 / 208.59 |
+| `mag_fallback` C32 (CMSIS-DSP) | 3.26 / 4.27 | 3.26 / 4.27 | 1.76 / 2.40 | - | 1.23 / 1.89 | 2.01 / 3.01 | 8.28 / 10.91 |
+| `mag_q15_fallback` (CMSIS-DSP) | 9.76 / 104.46 | 6.76 / 104.46 | 3.64 / 97.46 | - | 1.83 / 97.46 | 4.64 / 77.46 | 12.90 / 208.59 |
 | `window_fallback` C32 (CMSIS-DSP) | 3.14 / 3.27 | 3.14 / 3.27 | 1.64 / 1.77 | - | 0.70 / 1.77 | 1.76 / 3.02 | 10.79 / 26.79 |
 | `window_cq15_fallback` (CMSIS-DSP) | 7.77 / 8.53 | 5.27 / 5.53 | 2.08 / 2.78 | - | 1.27 / 2.15 | 2.89 / 3.52 | 9.91 / 14.93 |
 | `power_db_fallback` f32 (CMSIS-DSP) | 15.27 / 51.65 | 14.76 / 51.65 | 7.39 / 43.00 | - | 5.89 / 43.00 | 15.02 / 53.39 | 28.28 / 77.68 |
@@ -643,54 +643,54 @@ Simulated cycles per sample at `avx2` (`cargo measure <kernel> --level avx2`, ll
 | `convert` CS8 to C32 | whole-loop | 0.41 | 0.26 | 0.48 | 0.32 | 0.86 | 0.84 | 0.41 | 0.26 |
 | `convert` CS16 to C32 | whole-loop | 0.41 | 0.27 | 0.43 | 0.38 | 0.96 | 0.71 | 0.41 | 0.27 |
 | `convert` CU8 to C32 | whole-loop | 0.44 | 0.27 | 0.48 | 0.32 | 0.91 | 0.84 | 0.44 | 0.27 |
-| `convert_real` RS16 to f32 | whole-loop | 0.22 | 0.14 | 0.23 | 0.19 | 0.96 | 0.75 | 0.22 | 0.14 |
-| `convert` CS8 to CQ15 | whole-loop | 0.28 | 0.14 | 0.30 | 0.18 | 0.95 | 0.76 | 0.28 | 0.14 |
-| `convert` CU8 to CQ15 | whole-loop | 0.26 | 0.14 | 0.30 | 0.18 | 0.88 | 0.80 | 0.26 | 0.14 |
+| `convert_real` RS16 to f32 | whole-loop | 0.22 | 0.14 | 0.22 | 0.19 | 1.00 | 0.75 | 0.22 | 0.14 |
+| `convert` CS8 to CQ15 | whole-loop | 0.28 | 0.14 | 0.29 | 0.18 | 0.99 | 0.76 | 0.28 | 0.14 |
+| `convert` CU8 to CQ15 | whole-loop | 0.26 | 0.14 | 0.29 | 0.18 | 0.92 | 0.80 | 0.26 | 0.14 |
 | `convert_out` C32 to CS16 | whole-loop | 0.45 | 0.55 | 0.46 | 0.53 | 0.99 | 1.04 | 0.45 | 0.55 |
 | `convert_out` C32 to CS8 | whole-loop | 0.43 | 0.56 | 0.50 | 0.52 | 0.87 | 1.07 | 0.43 | 0.56 |
 | `convert_out` C32 to CU8 | whole-loop | 0.53 | 0.67 | 0.54 | 0.60 | 0.99 | 1.11 | 0.53 | 0.67 |
-| `convert_out_real` f32 to RS16 | whole-loop | 0.24 | 0.28 | 0.25 | 0.27 | 0.96 | 1.06 | 0.24 | 0.28 |
-| `convert_out_real` f32 to RS8 | whole-loop | 0.23 | 0.29 | 0.26 | 0.26 | 0.86 | 1.10 | 0.23 | 0.29 |
-| `convert_out_real` f32 to RU8 | whole-loop | 0.28 | 0.34 | 0.29 | 0.30 | 0.96 | 1.13 | 0.28 | 0.34 |
+| `convert_out_real` f32 to RS16 | whole-loop | 0.24 | 0.28 | 0.24 | 0.27 | 1.00 | 1.06 | 0.24 | 0.28 |
+| `convert_out_real` f32 to RS8 | whole-loop | 0.23 | 0.29 | 0.25 | 0.26 | 0.89 | 1.10 | 0.23 | 0.29 |
+| `convert_out_real` f32 to RU8 | whole-loop | 0.28 | 0.34 | 0.28 | 0.30 | 1.00 | 1.13 | 0.28 | 0.34 |
 | `convert_cs8_fallback` (CMSIS-DSP) | whole-loop | 0.42 | 0.29 | 0.58 | 0.58 | 0.72 | 0.50 | 0.42 | 0.29 |
 | `convert_cs16_fallback` (CMSIS-DSP) | whole-loop | 0.42 | 0.29 | 0.39 | 0.40 | 1.06 | 0.72 | 0.42 | 0.29 |
 | `convert_cu8_fallback` (CMSIS-DSP) | whole-loop | 0.51 | 0.37 | 0.58 | 0.58 | 0.88 | 0.64 | 0.51 | 0.37 |
 | `convert_real_rs16_fallback` (CMSIS-DSP) | whole-loop | 0.21 | 0.15 | 0.20 | 0.20 | 1.06 | 0.74 | 0.21 | 0.15 |
-| `convert_cq15_cs8_fallback` (CMSIS-DSP) | whole-loop | 0.28 | 0.14 | 0.27 | 0.20 | 1.04 | 0.68 | 0.28 | 0.14 |
-| `convert_cq15_cu8_fallback` (CMSIS-DSP) | whole-loop | 0.26 | 0.15 | 0.27 | 0.20 | 0.96 | 0.74 | 0.26 | 0.15 |
+| `convert_cq15_cs8_fallback` (CMSIS-DSP) | whole-loop | 0.28 | 0.14 | 0.26 | 0.20 | 1.09 | 0.69 | 0.28 | 0.14 |
+| `convert_cq15_cu8_fallback` (CMSIS-DSP) | whole-loop | 0.26 | 0.15 | 0.26 | 0.20 | 1.01 | 0.74 | 0.26 | 0.15 |
 | `convert_out_cs16_fallback` (CMSIS-DSP) | whole-loop | 0.77 | 0.73 | 0.46 | 0.58 | 1.65 | 1.25 | 0.77 | 0.73 |
 | `convert_out_cs8_fallback` (CMSIS-DSP) | whole-loop | 1.06 | 1.02 | 0.51 | 0.63 | 2.06 | 1.63 | 1.06 | 1.02 |
 | `convert_out_cu8_fallback` (CMSIS-DSP) | whole-loop | 1.67 | 1.82 | 0.51 | 0.63 | 3.24 | 2.90 | 1.67 | 1.82 |
 | `convert_out_real_rs16_fallback` (CMSIS-DSP) | whole-loop | 0.39 | 0.37 | 0.24 | 0.29 | 1.66 | 1.27 | 0.39 | 0.37 |
-| `convert_out_real_rs8_fallback` (CMSIS-DSP) | whole-loop | 0.54 | 0.52 | 0.27 | 0.32 | 1.97 | 1.64 | 0.54 | 0.52 |
-| `convert_out_real_ru8_fallback` (CMSIS-DSP) | whole-loop | 0.84 | 0.92 | 0.27 | 0.32 | 3.08 | 2.90 | 0.84 | 0.92 |
-| `rotate` C32 | whole-loop | 0.66 | 0.57 | 3.57 | 3.06 | 0.19 | 0.19 | 0.68 | 0.58 |
+| `convert_out_real_rs8_fallback` (CMSIS-DSP) | whole-loop | 0.54 | 0.52 | 0.26 | 0.32 | 2.06 | 1.64 | 0.54 | 0.52 |
+| `convert_out_real_ru8_fallback` (CMSIS-DSP) | whole-loop | 0.84 | 0.92 | 0.26 | 0.32 | 3.22 | 2.91 | 0.84 | 0.92 |
+| `rotate` C32 | whole-loop | 0.66 | 0.57 | 3.20 | 3.04 | 0.21 | 0.19 | 0.68 | 0.58 |
 | `rotate` CQ15 | whole-loop | 1.12 | 1.20 | 6.96 | 4.78 | 0.16 | 0.25 | 1.12 | 1.20 |
 | `rotate_fallback` C32 (GNU Radio) | whole-loop | 2.65 | 4.41 | 10.64 | 11.16 | 0.25 | 0.40 | 2.65 | 4.41 |
-| `rotate_cq15_fallback` (CMSIS-DSP composition) | whole-loop | 6.96 | 4.78 | 121.32 | 27.01 | 0.06 | 0.18 | 6.96 | 4.78 |
-| `fir` C32, 64 taps | whole-loop | 9.63 | 9.43 | 106.11 | 75.77 | 0.09 | 0.12 | 9.86 | 9.44 |
-| `fir_decimate` C32, 127 taps, M = 10 | whole-loop | 2.42 | 2.10 | 14.12 | 12.94 | 0.17 | 0.16 | 2.41 | 2.12 |
-| `fir_interpolate` C32, L = 2, 128 taps | whole-loop | 12.35 | 11.91 | 114.89 | 79.82 | 0.11 | 0.15 | 12.85 | 12.17 |
-| `resample` C32, 3 / 2, 192 taps | whole-loop | 14.89 | 14.00 | 116.16 | 81.04 | 0.13 | 0.17 | 15.38 | 14.24 |
-| `fir_interpolate_real` f32, L = 2, 128 taps | whole-loop | 7.35 | 7.06 | 132.73 | 96.90 | 0.06 | 0.07 | 7.76 | 7.29 |
-| `resample_real` f32, 3 / 2, 192 taps | whole-loop | 9.89 | 9.07 | 133.48 | 98.15 | 0.07 | 0.09 | 9.72 | 9.46 |
-| `fir_interpolate_real` Q15, L = 2, 128 taps | whole-loop | 74.68 | 68.85 | 47.63 | 41.86 | 1.57 | 1.64 | 83.20 | 71.36 |
-| `resample_real` Q15, 3 / 2, 192 taps | whole-loop | 74.42 | 68.69 | 112.81 | 91.36 | 0.66 | 0.75 | 82.75 | 70.89 |
-| `fir` CQ15, 64 taps (fallback) | whole-loop | 111.34 | 98.84 | 66.88 | 61.16 | 1.66 | 1.62 | 115.61 | 101.68 |
-| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | whole-loop | 29.34 | 19.93 | 20.13 | 17.45 | 1.46 | 1.14 | 30.93 | 22.10 |
-| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | whole-loop | 127.62 | 116.41 | 79.42 | 73.46 | 1.61 | 1.58 | 137.53 | 120.55 |
-| `resample` CQ15, 3 / 2, 192 taps (fallback) | whole-loop | 127.38 | 116.19 | 109.92 | 91.00 | 1.16 | 1.28 | 136.69 | 119.60 |
+| `rotate_cq15_fallback` (CMSIS-DSP composition) | whole-loop | 6.96 | 4.78 | 29.23 | 26.70 | 0.24 | 0.18 | 6.96 | 4.78 |
+| `fir` C32, 64 taps | whole-loop | 9.63 | 9.43 | 58.05 | 74.35 | 0.17 | 0.13 | 9.86 | 9.44 |
+| `fir_decimate` C32, 127 taps, M = 10 | whole-loop | 2.40 | 2.10 | 9.29 | 12.80 | 0.26 | 0.16 | 2.39 | 2.12 |
+| `fir_interpolate` C32, L = 2, 128 taps | whole-loop | 12.35 | 11.91 | 66.84 | 78.40 | 0.18 | 0.15 | 12.85 | 12.17 |
+| `resample` C32, 3 / 2, 192 taps | whole-loop | 14.89 | 14.00 | 68.15 | 79.63 | 0.22 | 0.18 | 15.38 | 14.24 |
+| `fir_interpolate_real` f32, L = 2, 128 taps | whole-loop | 7.35 | 7.06 | 83.60 | 95.25 | 0.09 | 0.07 | 7.76 | 7.29 |
+| `resample_real` f32, 3 / 2, 192 taps | whole-loop | 9.89 | 9.07 | 84.38 | 96.50 | 0.12 | 0.09 | 9.72 | 9.46 |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | whole-loop | 47.63 | 41.86 | 47.63 | 41.86 | 1.00 | 1.00 | 51.06 | 48.68 |
+| `resample_real` Q15, 3 / 2, 192 taps | whole-loop | 75.87 | 68.68 | 112.81 | 91.36 | 0.67 | 0.75 | 84.52 | 69.90 |
+| `fir` CQ15, 64 taps (fallback) | whole-loop | 66.88 | 61.16 | 66.88 | 61.16 | 1.00 | 1.00 | 67.54 | 62.34 |
+| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | whole-loop | 20.13 | 17.45 | 20.13 | 17.45 | 1.00 | 1.00 | 20.70 | 18.02 |
+| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | whole-loop | 79.42 | 73.46 | 79.42 | 73.46 | 1.00 | 1.00 | 87.61 | 82.62 |
+| `resample` CQ15, 3 / 2, 192 taps (fallback) | whole-loop | 109.92 | 91.00 | 109.92 | 91.00 | 1.00 | 1.00 | 119.46 | 107.03 |
 | `mag_sq` C32 | whole-loop | 0.26 | 0.38 | 0.33 | 0.52 | 0.78 | 0.73 | 0.26 | 0.38 |
 | `mag_sq` CQ15 | whole-loop | 0.14 | 0.18 | 0.20 | 0.23 | 0.70 | 0.80 | 0.14 | 0.18 |
 | `quad_demod` C32 | whole-loop | 3.22 | 2.66 | 3.61 | 3.70 | 0.89 | 0.72 | 3.22 | 2.66 |
 | `quad_demod` CQ15 | whole-loop | 4.40 | 4.01 | 71.20 | 66.50 | 0.06 | 0.06 | 4.40 | 4.01 |
-| `quad_demod_fallback` C32 (GNU Radio) | whole-loop | 39.05 | 32.76 | 902.50 | 131.57 | 0.04 | 0.25 | 35.47 | 32.54 |
-| `quad_demod_cq15_fallback` (CMSIS-DSP) | whole-loop | 71.20 | 66.50 | 275.53 | 66.94 | 0.26 | 0.99 | 68.61 | 77.25 |
+| `quad_demod_fallback` C32 (GNU Radio) | whole-loop | 39.05 | 32.76 | 865.81 | 131.57 | 0.05 | 0.25 | 35.47 | 32.54 |
+| `quad_demod_cq15_fallback` (CMSIS-DSP) | whole-loop | 71.20 | 66.50 | 85.94 | 64.56 | 0.83 | 1.03 | 68.61 | 77.25 |
 | `fm_mod` C32 | whole-loop | 2.06 | 2.13 | 105.76 | 25.53 | 0.02 | 0.08 | 2.07 | 2.15 |
 | `fm_mod` CQ15 | whole-loop | 1.93 | 2.16 | 8.71 | 6.06 | 0.22 | 0.36 | 1.95 | 2.18 |
 | `fm_mod_fallback` C32 (GNU Radio) | whole-loop | 5.34 | 6.42 | 105.76 | 25.53 | 0.05 | 0.25 | 5.41 | 6.50 |
-| `fm_mod_cq15_fallback` (CMSIS-DSP composition) | whole-loop | 8.71 | 6.06 | 112.18 | 20.87 | 0.08 | 0.29 | 8.78 | 6.13 |
-| `squelch` C32 | whole-loop | 9.13 | 10.13 | 118.10 | 16.53 | 0.08 | 0.61 | 10.70 | 11.48 |
+| `fm_mod_cq15_fallback` (CMSIS-DSP composition) | whole-loop | 8.71 | 6.06 | 21.41 | 20.60 | 0.41 | 0.29 | 8.78 | 6.13 |
+| `squelch` C32 | whole-loop | 9.13 | 10.13 | 20.51 | 15.33 | 0.45 | 0.66 | 10.70 | 11.48 |
 | `squelch` CQ15 | whole-loop | 5.56 | 6.95 | 5.56 | 6.95 | 1.00 | 1.00 | 5.56 | 6.95 |
 | `mag` C32 | whole-loop | 0.76 | 0.38 | 0.91 | 0.53 | 0.84 | 0.72 | 0.76 | 0.38 |
 | `mag` CQ15 | whole-loop | 0.97 | 0.81 | 1.06 | 0.91 | 0.92 | 0.89 | 0.97 | 0.82 |
@@ -700,12 +700,12 @@ Simulated cycles per sample at `avx2` (`cargo measure <kernel> --level avx2`, ll
 | `power_db` Q15 | whole-loop | 1.98 | 1.95 | 3.05 | 2.46 | 0.65 | 0.79 | 1.98 | 1.95 |
 | `mag_sq_fallback` C32 (CMSIS-DSP) | whole-loop | 0.29 | 0.32 | 0.52 | 0.53 | 0.55 | 0.61 | 0.29 | 0.32 |
 | `mag_sq_q15_fallback` (CMSIS-DSP) | whole-loop | 0.20 | 0.23 | 2.17 | 1.84 | 0.09 | 0.12 | 0.20 | 0.23 |
-| `mag_fallback` C32 (CMSIS-DSP) | whole-loop | 5.15 | 1.71 | 1.15 | 0.59 | 4.46 | 2.88 | 5.15 | 1.71 |
-| `mag_q15_fallback` (CMSIS-DSP) | whole-loop | 7.93 | 10.05 | 129.29 | 83.53 | 0.06 | 0.12 | 7.93 | 10.05 |
+| `mag_fallback` C32 (CMSIS-DSP) | whole-loop | 0.90 | 0.38 | 1.15 | 0.59 | 0.78 | 0.64 | 0.90 | 0.38 |
+| `mag_q15_fallback` (CMSIS-DSP) | whole-loop | 1.93 | 1.28 | 79.45 | 83.53 | 0.02 | 0.02 | 1.93 | 1.28 |
 | `window_fallback` C32 (CMSIS-DSP) | whole-loop | 0.39 | 0.36 | 0.41 | 0.38 | 0.97 | 0.94 | 0.39 | 0.36 |
-| `window_cq15_fallback` (CMSIS-DSP) | whole-loop | 0.56 | 0.56 | 0.77 | 0.82 | 0.74 | 0.68 | 0.56 | 0.56 |
-| `power_db_fallback` f32 (CMSIS-DSP) | whole-loop | 2.76 | 2.08 | 52.38 | 42.52 | 0.05 | 0.05 | 2.76 | 2.08 |
-| `power_db_q15_fallback` (CMSIS-DSP) | whole-loop | 3.05 | 2.46 | 53.39 | 43.34 | 0.06 | 0.06 | 3.05 | 2.46 |
+| `window_cq15_fallback` (CMSIS-DSP) | whole-loop | 0.56 | 0.56 | 0.75 | 0.82 | 0.75 | 0.68 | 0.56 | 0.56 |
+| `power_db_fallback` f32 (CMSIS-DSP) | whole-loop | 2.76 | 2.08 | 38.52 | 42.52 | 0.07 | 0.05 | 2.76 | 2.08 |
+| `power_db_q15_fallback` (CMSIS-DSP) | whole-loop | 3.05 | 2.46 | 39.25 | 43.33 | 0.08 | 0.06 | 3.05 | 2.46 |
 | `agc` C32 | whole-loop | 13.18 | 14.47 | 36.12 | 39.15 | 0.36 | 0.37 | 13.20 | 14.50 |
 | `agc` CQ15 | whole-loop | 78.32 | 86.42 | 78.32 | 86.42 | 1.00 | 1.00 | 26.82 | 50.81 |
 | `agc_fallback` C32 (GNU Radio) | whole-loop | 17.93 | 18.42 | 36.12 | 39.15 | 0.50 | 0.47 | 17.93 | 18.42 |
@@ -715,9 +715,9 @@ Simulated cycles per sample at `avx2` (`cargo measure <kernel> --level avx2`, ll
 | `deemphasis` Q15 | whole-loop | 5.53 | 5.54 | 5.53 | 5.54 | 1.00 | 1.00 | 5.53 | 5.53 |
 | `dc_block` C32 | whole-loop | 2.95 | 2.76 | 7.03 | 9.04 | 0.42 | 0.31 | 2.95 | 2.76 |
 | `dc_block` CQ15 | whole-loop | 6.30 | 6.13 | 6.30 | 6.13 | 1.00 | 1.00 | 6.30 | 6.12 |
-| `dc_block_real_fallback` f32 (liquid-dsp) | whole-loop | 7.03 | 9.04 | 229.23 | 35.77 | 0.03 | 0.25 | 7.03 | 9.04 |
+| `dc_block_real_fallback` f32 (liquid-dsp) | whole-loop | 7.03 | 9.04 | 36.03 | 34.31 | 0.20 | 0.26 | 7.03 | 9.04 |
 | `deemphasis_fallback` f32 (GNU Radio) | whole-loop | 9.55 | 11.58 | 10.81 | 23.15 | 0.88 | 0.50 | 9.54 | 11.57 |
-| `dc_block_fallback` C32 (liquid-dsp) | whole-loop | 7.03 | 9.04 | 239.99 | 40.68 | 0.03 | 0.22 | 7.03 | 9.04 |
+| `dc_block_fallback` C32 (liquid-dsp) | whole-loop | 7.03 | 9.04 | 46.65 | 39.57 | 0.15 | 0.23 | 7.03 | 9.04 |
 | `biquad` C32, 2 sections (KFR) | whole-loop | 9.37 | 10.57 | 20.59 | 19.12 | 0.46 | 0.55 | 9.37 | 10.57 |
 | `biquad` CQ15, 2 sections (fallback) | whole-loop | 9.16 | 10.57 | 21.19 | 21.26 | 0.43 | 0.50 | 9.16 | 10.57 |
 | `biquad_real` f32, 2 sections (KFR) | whole-loop | 10.38 | 11.65 | 10.30 | 9.56 | 1.01 | 1.22 | 10.38 | 11.65 |
@@ -738,9 +738,9 @@ Simulated cycles per sample at `avx2` (`cargo measure <kernel> --level avx2`, ll
 | `fir_interpolate_real_q15_fallback` (CMSIS-DSP) | whole-loop | 47.63 | 41.86 | 68.93 | 76.47 | 0.69 | 0.55 | 51.06 | 48.68 |
 | `resample_real_fallback` f32 (CMSIS-DSP interpolator) | whole-loop | 61.17 | 74.48 | 50.53 | 50.13 | 1.21 | 1.49 | 69.18 | 85.77 |
 | `resample_real_q15_fallback` (CMSIS-DSP interpolator) | whole-loop | 112.81 | 91.36 | 68.40 | 76.10 | 1.65 | 1.20 | 122.87 | 101.70 |
-| `dot` C32, 4096 samples | whole-loop | 0.26 | 0.26 | 0.28 | 0.52 | 0.93 | 0.50 | 0.26 | 0.26 |
+| `dot` C32, 4096 samples | whole-loop | 0.26 | 0.26 | 0.27 | 0.52 | 0.97 | 0.50 | 0.26 | 0.26 |
 | `dot` CQ15, 4096 samples | whole-loop | 0.30 | 0.39 | 1.04 | 0.77 | 0.29 | 0.51 | 0.30 | 0.40 |
-| `dot_real` f32, 4096 samples | whole-loop | 0.14 | 0.10 | 0.54 | 0.77 | 0.25 | 0.13 | 0.14 | 0.10 |
+| `dot_real` f32, 4096 samples | whole-loop | 0.14 | 0.10 | 0.52 | 0.77 | 0.26 | 0.13 | 0.14 | 0.10 |
 | `dot_real` Q15, 4096 samples | whole-loop | 0.13 | 0.16 | 0.32 | 0.38 | 0.40 | 0.42 | 0.13 | 0.16 |
 | `scale` C32 | whole-loop | 0.26 | 0.19 | 0.27 | 0.29 | 0.94 | 0.68 | 0.26 | 0.19 |
 | `scale` CQ15 | whole-loop | 0.13 | 0.10 | 0.28 | 0.42 | 0.47 | 0.24 | 0.13 | 0.10 |
@@ -757,7 +757,7 @@ Simulated cycles per sample at `avx2` (`cargo measure <kernel> --level avx2`, ll
 | `fft` CQ15, N = 1024, fixed scaling | whole-loop | 2.26 | 2.34 | 50.51 | 50.50 | 0.04 | 0.05 | 2.33 | 2.40 |
 | `fft` CQ15, N = 1024, fixed scaling, full scale | whole-loop | 2.41 | 2.48 | 50.51 | 50.50 | 0.05 | 0.05 | 2.48 | 2.50 |
 | `rfft` f32, N = 1024 | whole-loop | 2.12 | 2.09 | 2.71 | 2.85 | 0.78 | 0.73 | 2.26 | 2.19 |
-| `fft_64_fallback` C32 (CMSIS-DSP) | whole-loop | 14.21 | 14.55 | 14.56 | 16.98 | 0.98 | 0.86 | 14.87 | 14.92 |
+| `fft_64_fallback` C32 (CMSIS-DSP) | whole-loop | 14.21 | 14.55 | 13.27 | 16.94 | 1.07 | 0.86 | 14.87 | 14.92 |
 | `fft_1024_fallback` C32 (CMSIS-DSP) | whole-loop | 20.20 | 20.51 | 20.91 | 26.89 | 0.97 | 0.76 | 20.64 | 20.79 |
 | `fft_4096_fallback` C32 (CMSIS-DSP) | whole-loop | 23.66 | 23.99 | 23.92 | 32.19 | 0.99 | 0.75 | 24.10 | 24.27 |
 | `fft_cq15_1024_fallback` block float (CMSIS-DSP) | whole-loop | 45.67 | 51.80 | 38.91 | 39.38 | 1.17 | 1.32 | 46.62 | 52.25 |

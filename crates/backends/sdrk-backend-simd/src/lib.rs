@@ -58,6 +58,7 @@ mod demod;
 mod dot;
 mod fft;
 mod fir;
+mod halfband;
 mod level;
 mod mix;
 mod modulate;

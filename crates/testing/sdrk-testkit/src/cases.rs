@@ -122,6 +122,8 @@
 //! | `backend_vs_fallback_fm_mod` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_fft` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_biquad` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_halfband` | quick | up to 62 KiB |
+//! | `backend_vs_fallback_real_to_complex` | quick | up to 62 KiB |
 //!
 //! The `backend_vs_fallback_*` cases take the lengths of the matrix (0 to 4096 samples) that
 //! fit the arena they get, so the quick tier runs the shorter ones and the full tier all.
@@ -158,8 +160,9 @@ mod m19;
 mod m20;
 mod m21;
 mod m22;
+mod m23_backend;
 
-pub(crate) static CASES: [TestCase; 123] = [
+pub(crate) static CASES: [TestCase; 125] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -599,6 +602,16 @@ pub(crate) static CASES: [TestCase; 123] = [
         name: "backend_vs_fallback_biquad",
         tier: Tier::Quick,
         run: m13::backend_vs_fallback_biquad,
+    },
+    TestCase {
+        name: "backend_vs_fallback_halfband",
+        tier: Tier::Quick,
+        run: m23_backend::backend_vs_fallback_halfband,
+    },
+    TestCase {
+        name: "backend_vs_fallback_real_to_complex",
+        tier: Tier::Quick,
+        run: m23_backend::backend_vs_fallback_real_to_complex,
     },
     TestCase {
         name: "squelch_c32",

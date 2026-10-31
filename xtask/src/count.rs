@@ -575,12 +575,21 @@ pub enum Reference {
     Kfr,
     /// CMSIS-DSP's biquad cascades in generic C, compiled for the level (D15, D16).
     Cmsis,
-    /// liquid-dsp's DC blocker (`iirfilt_*_create_dc_blocker`), portable C.
+    /// liquid-dsp: the DC blocker (`iirfilt_*_create_dc_blocker`, portable C) and the halfband
+    /// decimators and Hilbert transform decimator (`resamp2`, `firhilbf`) with the SIMD dot
+    /// product of the level (the portable one for a fallback entry).
     Liquid,
+    /// libairspy 1.0.10's real-to-complex converters (`iqconverter_float`, `iqconverter_int16`,
+    /// conversion only).
+    Libairspy,
     /// Our own fallback, where no established library exists.
     Fallback,
     /// Our own numbers of another level (run-time detection against that fixed level).
     OwnLevel(&'static str),
+    /// Our own kernel on another workload of the table (`ours` of the kernel named): the
+    /// work a specialised kernel saves against the general kernel it replaces (D63). It is
+    /// information, never the judged comparison; the results name it `ours:<kernel>`.
+    OwnKernel(&'static str),
 }
 
 impl Reference {
@@ -598,8 +607,9 @@ impl Reference {
             Reference::Kfr => "kfr",
             Reference::Cmsis => "cmsis",
             Reference::Liquid => "liquid",
+            Reference::Libairspy => "airspy",
             Reference::Fallback => "fallback",
-            Reference::OwnLevel(_) => "ours",
+            Reference::OwnLevel(_) | Reference::OwnKernel(_) => "ours",
         }
     }
 }
@@ -648,8 +658,25 @@ pub enum Family {
     /// CMSIS-DSP's generic C as information where the entry has it.
     FallbackVsGnuRadio,
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
-    /// (`dc_block_fallback`, `dc_block_real_fallback`).
+    /// (`dc_block_fallback`, `dc_block_real_fallback`) or its halfband decimator with the
+    /// portable dot product (`halfband_decimate_fallback`, `halfband_decimate_real_fallback`).
     FallbackVsLiquid,
+    /// The halfband decimators of the float types (`halfband_decimate`,
+    /// `halfband_decimate_real`): liquid-dsp's `resamp2` with its SIMD dot product of the level
+    /// (the portable loop at `simd128`, where liquid has no SIMD loop).
+    HalfbandLiquid,
+    /// `real_to_complex` of `C32`: liquid-dsp's `firhilbf` with its SIMD dot product; at `sse2`
+    /// also libairspy's `iqconverter_float` (SSE2) as information.
+    HilbertLiquid,
+    /// `real_to_complex_cq15`: libairspy's `iqconverter_int16`, a lower accuracy class (truncating
+    /// `>> 15`, a 32-bit accumulator, the odd samples halved). Its status is the maintainer's
+    /// open decision (I23-1), `info` until then; our fallback as information.
+    HilbertAirspyQ15,
+    /// `real_to_complex_fallback`: liquid-dsp's `firhilbf` with the portable dot product; libairspy's
+    /// generic C as information.
+    FallbackHilbert,
+    /// `real_to_complex_cq15_fallback`: libairspy's `iqconverter_int16` (generic C).
+    FallbackVsAirspy,
     /// The fallback entry of a `C32` or real-input FFT (`fft_<n>_fallback`,
     /// `rfft_<n>_fallback`): as [`Family::FallbackVsCmsis`] against `arm_cfft_f32` or
     /// `arm_rfft_fast_f32`, with the input restore of the FFTs subtracted.
@@ -683,6 +710,8 @@ impl Family {
             Family::FallbackVsCmsis
                 | Family::FallbackVsGnuRadio
                 | Family::FallbackVsLiquid
+                | Family::FallbackHilbert
+                | Family::FallbackVsAirspy
                 | Family::FftFallbackVsCmsis
                 | Family::FftCq15FallbackVsCmsis
         )
@@ -719,6 +748,9 @@ pub struct KernelSpec {
     pub small_n: bool,
     /// Also measured with misaligned buffers (informational).
     pub misaligned: bool,
+    /// Another kernel of the table whose `ours` is reported next to the comparisons as
+    /// information ([`Reference::OwnKernel`]).
+    pub own: Option<&'static str>,
 }
 
 const fn spec(name: &'static str, family: Family, small_n: bool) -> KernelSpec {
@@ -728,6 +760,19 @@ const fn spec(name: &'static str, family: Family, small_n: bool) -> KernelSpec {
         samples: N,
         small_n,
         misaligned: true,
+        own: None,
+    }
+}
+
+/// A kernel with an own-kernel comparison.
+const fn spec_own(name: &'static str, family: Family, own: &'static str) -> KernelSpec {
+    KernelSpec {
+        name,
+        family,
+        samples: N,
+        small_n: false,
+        misaligned: true,
+        own: Some(own),
     }
 }
 
@@ -738,11 +783,12 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
         samples,
         small_n: false,
         misaligned: false,
+        own: None,
     }
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 123] = [
+pub static KERNELS: [KernelSpec; 139] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -877,6 +923,58 @@ pub static KERNELS: [KernelSpec; 123] = [
     spec("dot_real_q15_fallback", Family::FallbackVsCmsis, false),
     spec("scale_fallback", Family::FallbackVsCmsis, false),
     spec("scale_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec_own(
+        "halfband_decimate",
+        Family::HalfbandLiquid,
+        "halfband_ref_fir_decimate",
+    ),
+    spec_own(
+        "halfband_decimate_cq15",
+        Family::Q15Own,
+        "halfband_ref_fir_decimate_cq15",
+    ),
+    spec("halfband_decimate_real", Family::HalfbandLiquid, false),
+    spec("halfband_decimate_real_q15", Family::Q15Own, false),
+    spec_own(
+        "real_to_complex",
+        Family::HilbertLiquid,
+        "halfband_ref_shifted",
+    ),
+    spec_own(
+        "real_to_complex_cq15",
+        Family::HilbertAirspyQ15,
+        "halfband_ref_shifted_cq15",
+    ),
+    spec(
+        "halfband_decimate_fallback",
+        Family::FallbackVsLiquid,
+        false,
+    ),
+    spec(
+        "halfband_decimate_cq15_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec(
+        "halfband_decimate_real_fallback",
+        Family::FallbackVsLiquid,
+        false,
+    ),
+    spec(
+        "halfband_decimate_real_q15_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec("real_to_complex_fallback", Family::FallbackHilbert, false),
+    spec(
+        "real_to_complex_cq15_fallback",
+        Family::FallbackVsAirspy,
+        false,
+    ),
+    spec("halfband_ref_fir_decimate", Family::Own, false),
+    spec("halfband_ref_fir_decimate_cq15", Family::Own, false),
+    spec("halfband_ref_shifted", Family::Own, false),
+    spec("halfband_ref_shifted_cq15", Family::Own, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -1206,6 +1304,14 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
     if let Some(level) = plan.baseline {
         return (Reference::OwnLevel(level), Vec::new());
     }
+    let (gate, mut extras) = family_comparisons(plan, spec);
+    if let Some(own) = spec.own {
+        extras.push(Reference::OwnKernel(own));
+    }
+    (gate, extras)
+}
+
+fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     match spec.family {
         Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
         Family::Volk | Family::VolkAndOwn | Family::VolkNative => {
@@ -1231,7 +1337,16 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
         Family::FftCq15FallbackVsCmsis => (Reference::Cmsis, vec![Reference::KissFft]),
         Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
         Family::FallbackVsGnuRadio => (Reference::GnuRadio, vec![Reference::Cmsis]),
-        Family::FallbackVsLiquid => (Reference::Liquid, Vec::new()),
+        // libairspy's SSE2 converter is the information at the level it is written for.
+        Family::HilbertLiquid if plan.level == "sse2" => {
+            (Reference::Liquid, vec![Reference::Libairspy])
+        }
+        Family::FallbackVsLiquid | Family::HalfbandLiquid | Family::HilbertLiquid => {
+            (Reference::Liquid, Vec::new())
+        }
+        Family::HilbertAirspyQ15 => (Reference::Libairspy, vec![Reference::Fallback]),
+        Family::FallbackHilbert => (Reference::Liquid, vec![Reference::Libairspy]),
+        Family::FallbackVsAirspy => (Reference::Libairspy, Vec::new()),
     }
 }
 
@@ -2446,6 +2561,11 @@ fn measure_kernel(
             m.extras.push(cheapest_volk(session, spec, ours, &count)?);
             continue;
         }
+        if let Reference::OwnKernel(kernel) = r {
+            m.extras
+                .push(own_kernel_extra(session, kernel, ours, &standard, pinned)?);
+            continue;
+        }
         let Some(name) = describe(r) else {
             println!("    ({} is not in this build)", r.implementation());
             continue;
@@ -2459,21 +2579,7 @@ fn measure_kernel(
         });
     }
     if variants && plan.baseline.is_none() {
-        let mut list = Vec::new();
-        if spec.small_n {
-            list.extend(SMALL_N.map(|n| Variant {
-                samples: n,
-                misaligned: false,
-                explicit_n: true,
-            }));
-        }
-        if spec.misaligned {
-            list.push(Variant {
-                misaligned: true,
-                ..standard.clone()
-            });
-        }
-        for v in list {
+        for v in buffer_variants(spec, &standard) {
             m.extras.push(Extra {
                 label: v.label(),
                 ours: count(measured, &v, pinned)?,
@@ -2484,6 +2590,44 @@ fn measure_kernel(
         }
     }
     Ok(m)
+}
+
+/// The informational variants of the buffers of an entry: the small blocks and the misaligned
+/// buffers, where the entry has them.
+fn buffer_variants(spec: &KernelSpec, standard: &Variant) -> Vec<Variant> {
+    let mut list = Vec::new();
+    if spec.small_n {
+        list.extend(SMALL_N.map(|n| Variant {
+            samples: n,
+            misaligned: false,
+            explicit_n: true,
+        }));
+    }
+    if spec.misaligned {
+        list.push(Variant {
+            misaligned: true,
+            ..standard.clone()
+        });
+    }
+    list
+}
+
+/// Our kernel on the workload of another entry of the table (`ours` of `kernel`, per sample of
+/// its own input), as information next to `ours` of the entry (D63).
+fn own_kernel_extra(
+    session: &Session,
+    kernel: &str,
+    ours: f64,
+    variant: &Variant,
+    config: &Path,
+) -> anyhow::Result<Extra> {
+    Ok(Extra {
+        label: format!("information: ours:{kernel}"),
+        ours,
+        other: session.per_sample(kernel, "ours", variant, config)?,
+        compared_with: format!("ours:{kernel}"),
+        other_snr_db: Some(session.snr(kernel, "ours", config)?),
+    })
 }
 
 /// The cheapest combination of VOLK implementations for a kernel (D11: reported next to the
@@ -3785,6 +3929,99 @@ mod tests {
                 .family
                 .measured_at(plan("avx2-runtime"))
         );
+    }
+
+    #[test]
+    fn the_halfband_entries_are_judged_against_external_references() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            // liquid-dsp's SIMD dot product is the gate of the float kernels.
+            assert_eq!(
+                comparisons(plan(level), kernel("halfband_decimate")),
+                (
+                    Reference::Liquid,
+                    vec![Reference::OwnKernel("halfband_ref_fir_decimate")]
+                ),
+                "{level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("halfband_decimate_real")),
+                (Reference::Liquid, Vec::new())
+            );
+            // libairspy's SSE2 converter is information at `sse2` only.
+            let airspy = if level == "sse2" {
+                vec![Reference::Libairspy]
+            } else {
+                Vec::new()
+            };
+            let mut extras = airspy;
+            extras.push(Reference::OwnKernel("halfband_ref_shifted"));
+            assert_eq!(
+                comparisons(plan(level), kernel("real_to_complex")),
+                (Reference::Liquid, extras)
+            );
+            // No library has a Q15 halfband decimator: our fallback gates, the CMSIS-DSP
+            // composition is information; `real_to_complex_cq15` has libairspy (D64).
+            assert_eq!(
+                comparisons(plan(level), kernel("halfband_decimate_real_q15")),
+                (Reference::Fallback, vec![Reference::Cmsis])
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("real_to_complex_cq15")),
+                (
+                    Reference::Libairspy,
+                    vec![
+                        Reference::Fallback,
+                        Reference::OwnKernel("halfband_ref_shifted_cq15")
+                    ]
+                )
+            );
+            // The fallback entries: liquid-dsp's portable dot product, the CMSIS-DSP
+            // composition, libairspy's generic code.
+            for k in [
+                "halfband_decimate_fallback",
+                "halfband_decimate_real_fallback",
+            ] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Liquid, Vec::new())
+                );
+                assert_eq!(kernel(k).family.measured(), "fallback");
+            }
+            for k in [
+                "halfband_decimate_cq15_fallback",
+                "halfband_decimate_real_q15_fallback",
+            ] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Cmsis, Vec::new())
+                );
+            }
+            assert_eq!(
+                comparisons(plan(level), kernel("real_to_complex_fallback")),
+                (Reference::Liquid, vec![Reference::Libairspy])
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("real_to_complex_cq15_fallback")),
+                (Reference::Libairspy, Vec::new())
+            );
+        }
+        for k in [
+            "halfband_decimate_fallback",
+            "real_to_complex_cq15_fallback",
+        ] {
+            assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        // The own-kernel comparison runs `ours` of the other kernel, and every kernel it names
+        // is in the table.
+        assert_eq!(Reference::OwnKernel("x").implementation(), "ours");
+        assert_eq!(Reference::Libairspy.implementation(), "airspy");
+        for spec in &KERNELS {
+            if let Some(own) = spec.own {
+                assert!(KERNELS.iter().any(|k| k.name == own), "{own}");
+            }
+        }
     }
 
     #[test]

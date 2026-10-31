@@ -2,10 +2,11 @@
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
 //! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_grrotator`,
 //! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_liquiddc`, `has_kfr`, `has_cmsis`,
-//! `has_cmsisdsp`) unset, and its wrapper then reports that the library is not available.
+//! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`) unset, and its wrapper then reports that the library is not available.
 //!
-//! The biquad references (KFR, CMSIS-DSP) and the other CMSIS-DSP references exist once per SIMD
-//! level (`libkfrbq-<level>.a`, `libcmsisbq-<level>.a`, `libcmsisdsp-<level>.a`): the level is the one the target features of this build select, the
+//! The biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
+//! (liquid-dsp, libairspy) exist once per SIMD
+//! level (`libkfrbq-<level>.a`, `libcmsisbq-<level>.a`, `libcmsisdsp-<level>.a`, `libliquidhb-<level>.a`, `libairspy-<level>.a`): the level is the one the target features of this build select, the
 //! same rule as `sdrk-backend-simd` uses for our kernels, so that both sides of a comparison are
 //! compiled for the same instruction set. The level is exported as `SDRK_BIQUAD_REF_LEVEL`.
 
@@ -26,10 +27,12 @@ const LIBRARIES: [(&str, &str, &str); 10] = [
 ];
 
 /// The per-level libraries: cfg name, link name without the level.
-const LEVEL_LIBRARIES: [(&str, &str); 3] = [
+const LEVEL_LIBRARIES: [(&str, &str); 5] = [
     ("has_kfr", "kfrbq"),
     ("has_cmsis", "cmsisbq"),
     ("has_cmsisdsp", "cmsisdsp"),
+    ("has_liquidhb", "liquidhb"),
+    ("has_airspy", "airspy"),
 ];
 
 /// The SIMD level of the target, from the target features cargo passes to build scripts.

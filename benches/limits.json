@@ -2817,5 +2817,373 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "halfband_decimate": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "halfband_decimate_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+    }
+  },
+  "halfband_decimate_real": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "halfband_decimate_real_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D63)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D63)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D63)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D63)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D63)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D63)"
+    }
+  },
+  "real_to_complex": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "real_to_complex_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    }
+  },
+  "halfband_decimate_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "halfband_decimate_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "halfband_decimate_real_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "halfband_decimate_real_q15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "real_to_complex_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "real_to_complex_cq15_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+    }
+  },
+  "halfband_ref_fir_decimate": {
+    "sse2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    }
+  },
+  "halfband_ref_fir_decimate_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate_cq15` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate_cq15` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate_cq15` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate_cq15` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate_cq15` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `halfband_decimate_cq15` (D63): `fir_decimate` by 2 with the 47 taps of the halfband filter, zeros included; not a kernel of the library, never judged"
+    }
+  },
+  "halfband_ref_shifted": {
+    "sse2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    }
+  },
+  "halfband_ref_shifted_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D63): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
+    }
   }
 }

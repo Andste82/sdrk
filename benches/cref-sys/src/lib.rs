@@ -23,6 +23,9 @@
 //! - [`gnuradio`]: the GNU Radio references of the fallback round ([`GrRotator`],
 //!   [`GrFrequencyModulatorFc`], [`GrQuadratureDemodCf`], [`GrFmDeemph`]).
 //! - [`liquid`]: liquid-dsp's DC blocker ([`LiquidDcBlocker`], [`LiquidDcBlockerCrcf`], MIT).
+//! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
+//!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
+//!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
 //!
 //! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
 //! constructor returns `None` when its library is not linked. All of them use the interleaved
@@ -31,10 +34,14 @@
 mod biquad;
 pub mod cmsis_dsp;
 pub mod gnuradio;
+mod halfband;
 pub mod liquid;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use gnuradio::{GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator};
+pub use halfband::{
+    AirspyFloat, AirspyInt16, LiquidFirhilbf, LiquidResamp2Crcf, LiquidResamp2Rrrf,
+};
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place

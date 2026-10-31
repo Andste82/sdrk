@@ -258,12 +258,28 @@ fn halfband_decimate_equals_fir_decimate_with_the_expanded_taps() {
     for n in [11usize, 23, 63] {
         let (hf, hq) = design(n);
         let x = noise_c32(&mut rng, 4001);
-        let mut a = FirDecimState::<C32, _, _>::new(hf.clone(), vec![C32::ZERO; n - 1], 2).unwrap();
+        // The fallback sums the even taps and then the centre tap (D88): the same as two dense
+        // filters, the even taps alone and the centre tap alone, added in `f32`.
+        let m = (n - 1) / 2;
+        let mut even = hf.clone();
+        even[m] = 0.0;
+        let mut centre = vec![0.0f32; n];
+        centre[m] = hf[m];
+        let mut a = FirDecimState::<C32, _, _>::new(even, vec![C32::ZERO; n - 1], 2).unwrap();
+        let mut c = FirDecimState::<C32, _, _>::new(centre, vec![C32::ZERO; n - 1], 2).unwrap();
         let mut b = HalfbandState::<C32, _, _>::new(hf, vec![C32::ZERO; n - 1]).unwrap();
-        let (mut ya, mut yb) = (vec![C32::ZERO; 2001], vec![C32::ZERO; 2001]);
+        let (mut ya, mut yc, mut yb) = (
+            vec![C32::ZERO; 2001],
+            vec![C32::ZERO; 2001],
+            vec![C32::ZERO; 2001],
+        );
         let pa = Fallback.fir_decimate(&mut a, &x, &mut ya).unwrap();
+        Fallback.fir_decimate(&mut c, &x, &mut yc).unwrap();
         let pb = Fallback.halfband_decimate(&mut b, &x, &mut yb).unwrap();
         assert_eq!(pa, pb);
+        for (a, c) in ya.iter_mut().zip(&yc) {
+            *a = C32::new(a.re + c.re, a.im + c.im);
+        }
         assert_eq!(ya, yb);
         let xq: Vec<CQ15> = x
             .iter()

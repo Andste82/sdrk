@@ -316,8 +316,22 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Golden cases (seeds 430–435, 452 and 453 (saturation corners of the `Q15` halfband kernels) and the design cases), suite, invariance, extremes, E2E-REAL
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log
 
-## Status (2026-10-31)
+## Delivery status
 
-Complete: all deliverables above, the tests 1 to 10, and the acceptance commands (fmt, clippy `-D warnings`, `cargo test --workspace --all-features`, `cargo xtask check`, `cargo xtask bare-metal`, the wasm tests, the golden check, `cargo xtask schema --check`, the quick profiles of the Cortex-M4 emulator; the counts at `x86_64`, `x86_64-avx512`, `aarch64` and `wasm32`, with `cargo measure` at `avx2`). Every gated count entry (kernels and fallbacks) is within its limit at every level and every accuracy rule holds (D81 to D94, `docs/performance.md`).
+Complete:
 
-Provisional / open (see `docs/open-items.md`): I23-1 (status of the `CQ15` `real_to_complex` entries against libairspy: `info` until the maintainer decides; the measured numbers are there), I23-2 (confirmation of D88: the `f32` fallback adds the centre tap last), I23-3 (the work-saving evidence of 0.60 is missed on `neon` and `simd128`; no `neon`/`simd128` specific path). Not run in this environment: the ESP32-P4 and ESP32-S3 emulator targets.
+- Kernels `halfband_decimate` (`C32`, `CQ15`), `halfband_decimate_real` (`f32`, `Q15`) and `real_to_complex` (`C32`, `CQ15`) with states, `Fallback`, `Reference` and facade delegation; the design functions `halfband_len` and `halfband_taps` (exactly symmetric taps, D66). The `f32`/`C32` fallback sums the even-index taps in ascending order and adds the centre tap last (D88, confirmation open: I23-2); `CQ15`/`Q15` are bit-exact with `fir_decimate` by 2.
+- Real formats in the `convert` block (`ConvertRealBlock`) and the automatic conversion of a real raw input; blocks `halfband` and `real_to_complex`, their pipeline kinds (cost `(N + 3) / 4`), the regenerated schema (`cargo xtask schema --check` passes), the flow `real_input_fm_receiver` (JSON and YAML).
+- SIMD paths for the three kernels at every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`), bit-exact for `CQ15`/`Q15`, within the 110 dB contract for `C32`/`f32` (pre-add allowed, D65). Counts: the external references are liquid-dsp 1.8.3, libairspy v1.0.10 (D64, second `sse2` gate of `real_to_complex` C32, D95) and a CMSIS-DSP composition for the `Q15` fallbacks (D63); the own-kernel comparisons are `info` with the efficiency target `own_target` (D96). Every gated entry is within its limit at every level and every accuracy rule holds (`benches/results/`, `docs/performance.md`; D81 to D94).
+- Golden cases (seeds 430 to 435, 452 and 453 and the design cases), suite cases, invariance (20 plans), extremes, the block cases and E2E-REAL (`e2e_real_fm_rx_f32` and `_q15`, thresholds 40 and 35 dB, D100). No specified check is `#[ignore]`d.
+- Documentation (`docs/kernels.md`, `timing.md`, `backends.md`, `performance.md`, `blocks.md`, `pipeline.md`, `device.md`, `examples/README.md`), `CHANGELOG.md` and the decisions log (D63 to D100).
+- Acceptance commands, run on the final state: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features`, `cargo xtask check`, `cargo xtask bare-metal`, the wasm tests, `python tests/golden/generate.py --check`, `cargo xtask schema --check`, the quick profile of `qemu-cortex-m4`, and `cargo xtask count` at `x86_64`, `x86_64-avx512`, `aarch64` and `wasm32`.
+
+Open (see `docs/open-items.md`; none blocks the milestone):
+
+- I23-1: status of the `CQ15` `real_to_complex` entries against libairspy `iqconverter_int16` (provisionally `info`; the measured numbers are in the item; maintainer decision 4 of 2026-10-31 is pending).
+- I23-2: confirmation of D88 (centre tap last in the `f32` fallback).
+- I23-3: the work-saving evidence of 0.60 against the dense FIR is missed on `neon` (0.70) and `simd128` (0.91); a `neon`/`simd128` specific path is not written.
+- I20-1 (existing) is the risk of the `Q15` fallback gates against CMSIS-DSP.
+
+Not run in this environment: the ESP32-P4 and ESP32-S3 emulator targets (see M15-2 to M15-4).

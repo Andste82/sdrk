@@ -56,7 +56,9 @@
 //!   natural lane order.
 //! - NEON (`neon::Ld2`): interleaved rows and results move with `ld2`/`st2`.
 //! - AVX-512 uses the portable operations (its two-source permutations are single instructions)
-//!   with 16 lanes from 256 points, 8 lanes below.
+//!   with 16 lanes from 256 points, 8 lanes at 128 points, and the AVX2 codelet of `x86::InLane`
+//!   in the sized transform of 64 points (in-lane `ymm` shuffles instead of cross-lane
+//!   permutations of whole rows; the transform of any size keeps the 8 portable lanes there).
 //!
 //! NEON and wasm32 use radix-8 passes; the sizes 16 to 256 get a transform of their own in which
 //! the size is a constant (see `Fft::fft`).
@@ -241,14 +243,29 @@ mod x86 {
 
     use super::{Cv, Lanes, Portable};
 
-    /// The AVX2 token if the level is AVX2 and not AVX-512 (whose two-source permutations make
-    /// the portable shuffles single instructions).
+    /// The AVX2 token if the transform of `n` points takes [`InLane`]: on AVX2 from 64 points,
+    /// on AVX-512 only at 64 points (the codelet). There the portable operations on 8 lanes
+    /// compile to cross-lane permutations of whole rows (`vpermps` / `vpermt2ps` on `zmm`,
+    /// double-pumped on Zen 4, 3 cycles of latency) where the in-lane shuffles of AVX2 take one
+    /// `ymm` operation each (simulated cycles per sample on znver4 / sapphirerapids: 2.07 / 2.10
+    /// -> 1.65 / 1.63, rustfft 1.82 / 1.82; 5.28 -> 4.80 instructions per sample). The larger
+    /// sizes of AVX-512 keep the portable 16-lane passes. On AVX-512 only the sized transform of
+    /// 64 points (`sized_64`, a constant of the caller) takes it: in the transform of any size
+    /// (the inner transform of `rfft`) the extra branch changed the code of the 16-lane passes
+    /// (`rfft` 1024 at AVX-512: 5.09 -> 5.58 instructions, 1.70 / 1.66 -> 1.88 / 1.79 simulated
+    /// cycles per sample on znver4 / sapphirerapids).
     #[cfg_attr(not(debug_assertions), inline(always))]
-    pub(super) fn avx2_only(level: Level) -> Option<Avx2> {
+    pub(super) fn in_lane(level: Level, n: usize, sized_64: bool) -> Option<Avx2> {
         if level.as_avx512().is_some() {
-            None
-        } else {
+            if sized_64 && n == 64 {
+                level.as_avx2()
+            } else {
+                None
+            }
+        } else if n >= 64 {
             level.as_avx2()
+        } else {
+            None
         }
     }
 
@@ -1939,13 +1956,15 @@ const RADIX8_4_LANES: bool = cfg!(target_arch = "wasm32");
 
 /// Picks the widest vectors with `N >= L^2`.
 #[cfg_attr(not(debug_assertions), inline(always))]
-fn transform<S: SimdToken, const INV: bool>(simd: S, data: &mut [f32], tw: Twiddles<'_>) {
+fn transform<S: SimdToken, const INV: bool, const N: usize>(
+    simd: S,
+    data: &mut [f32],
+    tw: Twiddles<'_>,
+) {
     let n = tw.n;
     let l = S::f32s::LEN;
     #[cfg(target_arch = "x86_64")]
-    if let Some(avx2) = x86::avx2_only(simd.level())
-        && n >= 64
-    {
+    if let Some(avx2) = x86::in_lane(simd.level(), n, N == 64) {
         // Radix-4 passes: radix-8 passes simulate no faster here (N = 1024: 2.76 / 2.57 cycles
         // per sample on znver3 / alderlake against 2.74 / 2.48) and their products `W^5k`,
         // `W^7k` cost accuracy (golden N = 4096: 138.0 against 138.3 dB).
@@ -1991,9 +2010,9 @@ fn fft_c32_of<S: SimdToken, const N: usize>(
         in_lane: false,
     };
     if inverse {
-        transform::<S, true>(simd, data, tw);
+        transform::<S, true, N>(simd, data, tw);
     } else {
-        transform::<S, false>(simd, data, tw);
+        transform::<S, false, N>(simd, data, tw);
     }
 }
 
@@ -2213,7 +2232,7 @@ mod tests {
         use super::{Portable, Twiddles, run, x86::InLane};
 
         type Q = Portable<f32x8<Avx2>, f64x4<Avx2>>;
-        let Some(avx2) = super::x86::avx2_only(crate::level::current()) else {
+        let Some(avx2) = crate::level::current().as_avx2() else {
             return;
         };
         let big = FftPlan::<C32, _>::new(4096, std::vec![C32::default(); 2048]).unwrap();
@@ -2245,6 +2264,64 @@ mod tests {
                     run::<_, Q, true, false>(avx2, &mut want, tw);
                     run::<_, InLane, true, false>(avx2, &mut got, tw);
                     assert!(bits(&want) == bits(&got), "n={n} inverse {stride} {tables}");
+                }
+            }
+        }
+    }
+
+    /// AVX-512 at 64 points takes the AVX2 codelet (`InLane`) in the sized transform: bit for bit
+    /// the portable 8-lane transform of AVX-512 that it replaces, which the transform of any
+    /// size (the inner transform of `rfft`) keeps; both directions, with and without the span
+    /// tables, with the plan's own table and with a strided one.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn the_avx512_transform_of_64_points_is_the_portable_transform_bit_for_bit() {
+        use fearless_simd::{Avx512, f32x8, f64x4};
+
+        use super::{Portable, Twiddles, fft_c32_of, run};
+
+        type Q = Portable<f32x8<Avx512>, f64x4<Avx512>>;
+        let Some(avx512) = crate::level::current().as_avx512() else {
+            return;
+        };
+        let n = 64;
+        let big = FftPlan::<C32, _>::new(4096, std::vec![C32::default(); 2048]).unwrap();
+        let big: &[f32] = bytemuck::cast_slice(big.twiddles());
+        let own = FftPlan::<C32, _>::new(n, std::vec![C32::default(); n / 2]).unwrap();
+        let own: &[f32] = bytemuck::cast_slice(own.twiddles());
+        let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        for (plan, stride) in [(own, 1), (big, 4096 / n)] {
+            for tables in [false, true] {
+                let tw = Twiddles {
+                    plan,
+                    stride,
+                    n,
+                    tables: tables && cfg!(feature = "fft-tables"),
+                    in_lane: false,
+                };
+                for inverse in [false, true] {
+                    let mut x = noise(7 + 100 * stride as u32, 2 * n);
+                    // Extremes beside the noise: the full range of the samples.
+                    x[3] = 1.0e30;
+                    x[70] = -1.0e30;
+                    x[11] = f32::MIN_POSITIVE;
+                    let mut want = x.clone();
+                    if inverse {
+                        run::<_, Q, true, false>(avx512, &mut want, tw);
+                    } else {
+                        run::<_, Q, false, false>(avx512, &mut want, tw);
+                    }
+                    let (mut sized, mut any) = (x.clone(), x);
+                    fft_c32_of::<_, 64>(avx512, &mut sized, plan, stride, inverse, tables);
+                    fft_c32_of::<_, 0>(avx512, &mut any, plan, stride, inverse, tables);
+                    assert!(
+                        bits(&want) == bits(&sized),
+                        "sized: inverse {inverse} stride {stride} tables {tables}"
+                    );
+                    assert!(
+                        bits(&want) == bits(&any),
+                        "any size: inverse {inverse} stride {stride} tables {tables}"
+                    );
                 }
             }
         }
@@ -2418,7 +2495,7 @@ mod tests {
             width::<S, Portable<f32x8<S>, f64x4<S>>>(simd, big);
             width::<S, Portable<f32x16<S>, f64x8<S>>>(simd, big);
             #[cfg(target_arch = "x86_64")]
-            if let Some(avx2) = super::x86::avx2_only(simd.level()) {
+            if let Some(avx2) = simd.level().as_avx2() {
                 width::<_, super::x86::InLane>(avx2, big);
             }
             #[cfg(target_arch = "aarch64")]

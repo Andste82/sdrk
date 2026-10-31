@@ -128,11 +128,11 @@ fn all_cases_are_present() {
     for (kernel, cases) in [
         (
             "halfband_decimate",
-            ["n23_c32_8192", "n23_cq15_8192"].as_slice(),
+            ["n23_c32_8192", "n23_cq15_8192", "n23_cq15_corners_2048"].as_slice(),
         ),
         (
             "halfband_decimate_real",
-            ["n23_f32_8192", "n23_q15_8192"].as_slice(),
+            ["n23_f32_8192", "n23_q15_8192", "n23_q15_corners_2048"].as_slice(),
         ),
         (
             "real_to_complex",
@@ -141,11 +141,11 @@ fn all_cases_are_present() {
     ] {
         assert_eq!(golden::list(kernel).unwrap(), cases, "{kernel}");
         for (name, seed) in cases.iter().zip(match kernel {
-            "halfband_decimate" => [430, 431],
-            "halfband_decimate_real" => [432, 433],
-            _ => [434, 435],
+            "halfband_decimate" => [430, 431, 438].as_slice(),
+            "halfband_decimate_real" => [432, 433, 439].as_slice(),
+            _ => [434, 435].as_slice(),
         }) {
-            assert_eq!(golden::load(kernel, name).unwrap().seed, seed);
+            assert_eq!(golden::load(kernel, name).unwrap().seed, *seed);
         }
     }
     let design = golden::list("design").unwrap();

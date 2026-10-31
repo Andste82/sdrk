@@ -57,7 +57,7 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_sixteen_unique_kinds() {
+fn there_are_eighteen_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
     assert_eq!(kinds.len(), 18);
     assert_eq!(all_descriptions().len(), 18);

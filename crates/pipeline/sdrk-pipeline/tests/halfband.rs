@@ -298,8 +298,9 @@ fn the_real_flow_is_independent_of_the_push_size() {
     let doc = real_flow("q15").to_string();
     // 4096 samples (8192 bytes) is the largest push (`max_chunk`).
     let whole = run_audio::<sdrk::Q15>(&mut build(&doc), &bytes, 8192);
-    // Odd byte counts split the 16-bit samples; the block takes whole samples only.
-    for piece in [2, 1000, 1002, 4098] {
+    // Odd byte counts split the 16-bit samples: the pipeline carries the partial packing group
+    // of the real convert node over to the next push.
+    for piece in [1, 2, 3, 999, 1000, 1002, 4097, 4098, 8191] {
         let got = run_audio::<sdrk::Q15>(&mut build(&doc), &bytes, piece);
         assert_eq!(got, whole, "piece {piece}");
     }

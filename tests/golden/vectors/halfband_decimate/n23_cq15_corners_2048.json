@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "n23_cq15_corners_2048.expected.bin",
+      "len": 1024
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "n23_cq15_corners_2048.input.bin",
+      "len": 2048
+    },
+    "taps": {
+      "dtype": "i16",
+      "file": "n23_cq15_corners_2048.taps.bin",
+      "len": 23
+    }
+  },
+  "case": "n23_cq15_corners_2048",
+  "format_version": 1,
+  "kernel": "halfband_decimate",
+  "notes": "the integer model of fir_decimate with factor 2 (int64 convolution, one rounding and saturation per component); the input holds windows aligned with the signs of the taps (both saturation limits), runs of -32768 and +32767 and full-scale alternations",
+  "params": {
+    "attenuation_db": 60.0,
+    "beta": 5.65326,
+    "taps": 23
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 438,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

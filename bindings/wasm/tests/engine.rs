@@ -225,6 +225,9 @@ fn validate_schema_and_backends() {
         "fm_demod",
         "rfft",
         "scale",
+        "halfband_decimate",
+        "halfband_decimate_real",
+        "real_to_complex",
     ] {
         assert!(names.contains(&kernel), "{kernel}");
     }

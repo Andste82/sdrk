@@ -90,6 +90,8 @@ where
     let ddc_cfg = DdcConfig {
         frequency_hz: REAL_IF_HZ - (REAL_RATE_HZ / 4) as f64,
         decimation: 10,
+        // The cutoff of examples/flows/real_input_fm_receiver.{json,yaml}.
+        cutoff_hz: Some(100_000.0),
         max_chunk: REAL_CHUNK / 2,
         ..DdcConfig::default()
     };

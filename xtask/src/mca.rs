@@ -57,7 +57,7 @@ pub const MAX_BLOCKS: usize = 64;
 /// Iterations of every `llvm-mca` run.
 pub const ITERATIONS: u32 = 200;
 /// Addresses of one object that are further apart than this are disassembled separately.
-const CLUSTER_GAP: u64 = 4096;
+pub const CLUSTER_GAP: u64 = 4096;
 /// Blocks with the same count are joined into one loop body when the code between them, which
 /// never ran, is at most this many bytes (the cold paths of a loop body: a saturation, an
 /// error branch).
@@ -238,18 +238,21 @@ pub fn parse_callgrind(text: &str) -> Counts {
 /// left out.
 #[must_use]
 pub fn difference(full: &Counts, empty: &Counts) -> Counts {
-    fn minus<K: Ord + Clone>(a: &BTreeMap<K, u64>, b: &BTreeMap<K, u64>) -> BTreeMap<K, u64> {
-        a.iter()
-            .filter_map(|(key, &n)| {
-                let d = n.saturating_sub(b.get(key).copied().unwrap_or(0));
-                (d > 0).then(|| (key.clone(), d))
-            })
-            .collect()
-    }
     Counts {
         instructions: minus(&full.instructions, &empty.instructions),
         jumps: minus(&full.jumps, &empty.jumps),
     }
+}
+
+/// `a - b` per key; keys whose difference is not positive are left out.
+#[must_use]
+pub fn minus<K: Ord + Clone>(a: &BTreeMap<K, u64>, b: &BTreeMap<K, u64>) -> BTreeMap<K, u64> {
+    a.iter()
+        .filter_map(|(key, &n)| {
+            let d = n.saturating_sub(b.get(key).copied().unwrap_or(0));
+            (d > 0).then(|| (key.clone(), d))
+        })
+        .collect()
 }
 
 /// The taken jumps of one object: `(address of the jump, target) -> times taken`.
@@ -258,10 +261,47 @@ pub type Jumps = BTreeMap<(u64, u64), u64>;
 /// One instruction of a disassembly: address and the text for `llvm-mca`.
 pub type Instruction = (u64, String);
 
+/// The instruction set of an object, for its disassembly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Arch {
+    /// x86-64 (AT&T syntax of `objdump`).
+    X86,
+    /// AArch64.
+    Aarch64,
+}
+
+impl Arch {
+    /// The instruction set of the object file `path` (x86-64 unless its ELF header says
+    /// AArch64).
+    #[must_use]
+    pub fn of(path: &str) -> Arch {
+        if crate::blockcount::machine(path) == Some(crate::blockcount::EM_AARCH64) {
+            Arch::Aarch64
+        } else {
+            Arch::X86
+        }
+    }
+}
+
+/// The label that every AArch64 branch target and literal address is written as: `llvm-mca`
+/// ignores the control flow, and the assembler of `llvm-mca` takes no absolute address there.
+pub const AARCH64_TARGET: &str = ".Lt";
+
 /// Turns a line of `objdump -d --no-show-raw-insn` into an instruction for `llvm-mca`: the
 /// comment and the symbol of a target are dropped, and an absolute branch target gets its `0x`.
 #[must_use]
 pub fn parse_objdump_line(line: &str) -> Option<Instruction> {
+    parse_objdump_line_for(line, Arch::X86)
+}
+
+/// [`parse_objdump_line`] for the instruction set `arch`. On AArch64 the comment starts with
+/// `//` (`#` marks an immediate), and an address operand (a branch target, the page of an
+/// `adrp`, a literal) becomes [`AARCH64_TARGET`].
+#[must_use]
+pub fn parse_objdump_line_for(line: &str, arch: Arch) -> Option<Instruction> {
+    if arch == Arch::Aarch64 {
+        return parse_aarch64_line(line);
+    }
     let (address, text) = line.split_once(':')?;
     let address = u64::from_str_radix(address.trim(), 16).ok()?;
     let mut text = text.trim();
@@ -284,6 +324,46 @@ pub fn parse_objdump_line(line: &str) -> Option<Instruction> {
         text.split_whitespace().collect::<Vec<_>>().join(" ")
     };
     Some((address, text))
+}
+
+fn parse_aarch64_line(line: &str) -> Option<Instruction> {
+    let (address, text) = line.split_once(':')?;
+    let address = u64::from_str_radix(address.trim(), 16).ok()?;
+    let mut text = text.trim();
+    if let Some(i) = text.find("//") {
+        text = text[..i].trim_end();
+    }
+    let symbol = text.find(" <").or_else(|| text.find("\t<"));
+    if let Some(i) = symbol {
+        text = text[..i].trim_end();
+    }
+    if text.is_empty() || text.starts_with('(') || text.starts_with('.') {
+        return None;
+    }
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mnemonic = mnemonic(&text).to_string();
+    let (head, last) = match text.rsplit_once(',') {
+        Some((head, last)) => (format!("{head}, "), last.trim()),
+        None => match text.split_once(' ') {
+            Some((m, operand)) => (format!("{m} "), operand.trim()),
+            None => return Some((address, text)),
+        },
+    };
+    let is_address = !last.is_empty() && last.chars().all(|c| c.is_ascii_hexdigit());
+    if is_address && (symbol.is_some() || is_transfer(&mnemonic)) {
+        return Some((address, format!("{head}{AARCH64_TARGET}")));
+    }
+    Some((address, text))
+}
+
+/// Whether a mnemonic is a call or a return: control leaves the function, so a transfer from
+/// it is no edge of the control-flow graph of the function.
+#[must_use]
+pub fn is_call_or_return(mnemonic: &str) -> bool {
+    let m = mnemonic.trim_start_matches("notrack").trim();
+    m.starts_with("call")
+        || m.starts_with("ret")
+        || matches!(m, "bl" | "blr" | "blraa" | "blrab" | "blraaz" | "blrabz")
 }
 
 /// Whether a mnemonic ends a basic block.
@@ -319,7 +399,13 @@ fn mnemonic(text: &str) -> &str {
 /// # Errors
 /// `objdump` cannot run.
 pub fn disassemble(object: &str, lo: u64, hi: u64) -> anyhow::Result<Vec<Instruction>> {
-    let out = Command::new(std::env::var_os("SDRK_OBJDUMP").unwrap_or_else(|| "objdump".into()))
+    let arch = Arch::of(object);
+    let tool = match arch {
+        Arch::X86 => std::env::var_os("SDRK_OBJDUMP").unwrap_or_else(|| "objdump".into()),
+        Arch::Aarch64 => std::env::var_os("SDRK_AARCH64_OBJDUMP")
+            .unwrap_or_else(|| "aarch64-linux-gnu-objdump".into()),
+    };
+    let out = Command::new(tool)
         .args(["-d", "--no-show-raw-insn"])
         .arg(format!("--start-address={lo:#x}"))
         .arg(format!("--stop-address={:#x}", hi + 16))
@@ -329,7 +415,7 @@ pub fn disassemble(object: &str, lo: u64, hi: u64) -> anyhow::Result<Vec<Instruc
         .context("cannot run objdump")?;
     Ok(String::from_utf8_lossy(&out.stdout)
         .lines()
-        .filter_map(parse_objdump_line)
+        .filter_map(|l| parse_objdump_line_for(l, arch))
         .collect())
 }
 
@@ -500,9 +586,21 @@ fn next_of(succ: &Successors, v: usize) -> &[(usize, u64)] {
 /// transfer, after an instruction that never ran and where the count changes. A taken jump is an
 /// edge to its target; the remaining executions of a block that can fall through (also over a
 /// call, which returns there) are an edge to the next block. Calls are not edges: a called
-/// function is a graph of its own.
+/// function is a graph of its own, and a transfer from a call or a return (which an emulator
+/// that records every transfer between blocks reports) is left out.
 #[must_use]
 pub fn cfg(code: &[Instruction], counts: &BTreeMap<u64, u64>, jumps: &Jumps) -> Cfg {
+    let calls: BTreeSet<u64> = code
+        .iter()
+        .filter(|(_, t)| is_call_or_return(mnemonic(t)))
+        .map(|&(a, _)| a)
+        .collect();
+    let kept: Jumps = jumps
+        .iter()
+        .filter(|((from, _), _)| !calls.contains(from))
+        .map(|(&k, &c)| (k, c))
+        .collect();
+    let jumps = &kept;
     let targets: BTreeSet<u64> = jumps.keys().map(|&(_, to)| to).collect();
     let mut nodes: Vec<Node> = Vec::new();
     // For every node: whether the instruction after its last one in `code` starts the next node.
@@ -1165,7 +1263,12 @@ pub fn simulate_block(text: &[String], triple: &str, cpu: &str) -> anyhow::Resul
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("cannot run {} (set SDRK_LLVM_MCA)", mca.display()))?;
-    let mut source = text.join("\n");
+    let mut source = if triple.starts_with("aarch64") {
+        format!("{AARCH64_TARGET}:\n")
+    } else {
+        String::new()
+    };
+    source.push_str(&text.join("\n"));
     source.push('\n');
     child
         .stdin
@@ -1413,6 +1516,65 @@ fn=h
         assert_eq!(parse_objdump_line("000000000038a560 <f>:"), None);
         assert!(is_transfer("ret") && is_transfer("b.ne") && !is_transfer("bic"));
         assert!(ends_flow("jmp") && ends_flow("ret") && !ends_flow("jne") && !ends_flow("call"));
+    }
+
+    #[test]
+    fn aarch64_lines_keep_immediates_and_label_their_addresses() {
+        let a = |l: &str| parse_objdump_line_for(l, Arch::Aarch64).map(|(_, t)| t);
+        assert_eq!(
+            a("   40040:\tadd\tsp, sp, #0x3d0"),
+            Some("add sp, sp, #0x3d0".into())
+        );
+        assert_eq!(
+            a("   40054:\tldp\td15, d14, [sp], #80"),
+            Some("ldp d15, d14, [sp], #80".into())
+        );
+        assert_eq!(
+            a("    4a3c:\tb.ne\t4a20 <f+0x10>  // b.any"),
+            Some("b.ne .Lt".into())
+        );
+        assert_eq!(
+            a("    4a40:\tcbz\tw0, 4a20 <f+0x10>"),
+            Some("cbz w0, .Lt".into())
+        );
+        assert_eq!(
+            a("    4a44:\ttbnz\tw1, #3, 4a20 <f+0x10>"),
+            Some("tbnz w1, #3, .Lt".into())
+        );
+        assert_eq!(a("    4a48:\tbl\t9000 <g>"), Some("bl .Lt".into()));
+        assert_eq!(
+            a("    4a4c:\tadrp\tx0, 2ae000 <h>"),
+            Some("adrp x0, .Lt".into())
+        );
+        assert_eq!(a("    4a50:\tfmov\td0, d15"), Some("fmov d0, d15".into()));
+        assert_eq!(a("    4a54:\tret"), Some("ret".into()));
+        assert_eq!(a("0000000000040000 <f>:"), None);
+        assert!(is_call_or_return("bl") && is_call_or_return("callq") && is_call_or_return("ret"));
+        assert!(!is_call_or_return("b") && !is_call_or_return("blsr") && !is_call_or_return("jne"));
+    }
+
+    #[test]
+    fn transfers_from_calls_and_returns_are_no_edges() {
+        // A loop 0x10..0x18 whose body calls; an emulator reports the call as a transfer.
+        let code: Vec<Instruction> = [
+            (0x10, "add x0, x0, #1"),
+            (0x14, "bl .Lt"),
+            (0x18, "b.ne .Lt"),
+            (0x1c, "ret"),
+        ]
+        .iter()
+        .map(|&(a, t)| (a, t.to_string()))
+        .collect();
+        let counts: BTreeMap<u64, u64> = [(0x10, 10), (0x14, 10), (0x18, 10), (0x1c, 1)].into();
+        let jumps: Jumps = [((0x14, 0x100), 10), ((0x18, 0x10), 9), ((0x1c, 0x500), 1)].into();
+        let g = cfg(&code, &counts, &jumps);
+        let all: BTreeSet<usize> = (0..g.nodes.len()).collect();
+        let loops = find_loops(&g, &all);
+        assert_eq!(loops.len(), 1);
+        // The block of the call falls through to the branch back.
+        assert!(g.edges.iter().any(|e| g.node(e.from).address == 0x10
+            && g.node(e.to).address == 0x18
+            && e.count == 10));
     }
 
     #[test]

@@ -159,6 +159,8 @@ pub struct BlockCounts {
     pub blocks: BTreeMap<(String, u64, u64, u64), u64>,
     /// `(object, address of the jump, target) -> times taken`.
     pub jumps: BTreeMap<(String, u64, u64), u64>,
+    /// Instructions a subtraction left negative (see [`Counts::deducted`]).
+    pub deducted: i64,
 }
 
 impl BlockCounts {
@@ -176,9 +178,15 @@ impl BlockCounts {
 /// boundaries: the runs differ in how often the counted calls run, not in the code).
 #[must_use]
 pub fn difference(full: &BlockCounts, empty: &BlockCounts) -> BlockCounts {
+    let lacking: u64 = empty
+        .blocks
+        .iter()
+        .map(|(key, &c)| key.3 * c.saturating_sub(full.blocks.get(key).copied().unwrap_or(0)))
+        .sum();
     BlockCounts {
         blocks: crate::mca::minus(&full.blocks, &empty.blocks),
         jumps: crate::mca::minus(&full.jumps, &empty.jumps),
+        deducted: full.deducted - empty.deducted + i64::try_from(lacking).unwrap_or(i64::MAX),
     }
 }
 
@@ -336,6 +344,7 @@ pub fn expand(blocks: &BlockCounts) -> anyhow::Result<Counts> {
     let mut out = Counts {
         instructions: BTreeMap::new(),
         jumps: blocks.jumps.clone(),
+        deducted: blocks.deducted,
     };
     let mut mismatched = Vec::new();
     for (object, list) in per_object {
@@ -586,7 +595,9 @@ mod tests {
         empty
             .blocks
             .insert(("/bin/a".to_string(), 0x1100, 12, 3), 1);
+        empty.blocks.insert(("/bin/a".to_string(), 0x1200, 2, 1), 3);
         let d = difference(&c, &empty);
+        assert_eq!(d.deducted, 3);
         assert_eq!(
             d.blocks.get(&("/bin/a".to_string(), 0x1100, 12, 3)),
             Some(&4)

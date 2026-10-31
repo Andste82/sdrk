@@ -11,6 +11,8 @@ pub mod duc;
 pub mod fir;
 pub mod fm_demod;
 pub mod fm_mod;
+pub mod halfband;
+pub mod real_to_complex;
 pub mod resampler;
 pub mod scale;
 pub mod spectrum;

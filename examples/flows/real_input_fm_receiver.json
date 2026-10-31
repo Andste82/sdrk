@@ -1,0 +1,66 @@
+{
+  "sdrk": 1,
+  "name": "real-input-fm-receiver",
+  "description": "Receive one FM broadcast station from a real-sampling device (4.8 MS/s, real 16-bit) and output 48 kHz audio.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "rs16",
+      "rate_hz": 4800000,
+      "description": "Real-sampling device, for example an Airspy R2"
+    }
+  },
+  "nodes": {
+    "demod": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_decimation": 5,
+        "deemphasis_us": 50,
+        "deviation_hz": 75000
+      }
+    },
+    "iq": {
+      "kind": "real_to_complex",
+      "params": {
+        "attenuation_db": 60,
+        "transition_hz": 480000
+      }
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 100000,
+        "decimation": 10,
+        "frequency_hz": 600000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "iq"
+    },
+    {
+      "from": "iq",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    }
+  }
+}

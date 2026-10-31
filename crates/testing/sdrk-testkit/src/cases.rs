@@ -160,9 +160,10 @@ mod m19;
 mod m20;
 mod m21;
 mod m22;
+mod m23;
 mod m23_backend;
 
-pub(crate) static CASES: [TestCase; 125] = [
+pub(crate) static CASES: [TestCase; 138] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -787,6 +788,71 @@ pub(crate) static CASES: [TestCase; 125] = [
         name: "e2e_nfm_ctcss_q15",
         tier: Tier::Full,
         run: m22::e2e_nfm_ctcss_q15,
+    },
+    TestCase {
+        name: "halfband_c32",
+        tier: Tier::Quick,
+        run: m23::halfband_c32,
+    },
+    TestCase {
+        name: "halfband_cq15",
+        tier: Tier::Quick,
+        run: m23::halfband_cq15,
+    },
+    TestCase {
+        name: "halfband_real_f32",
+        tier: Tier::Quick,
+        run: m23::halfband_real_f32,
+    },
+    TestCase {
+        name: "halfband_real_q15",
+        tier: Tier::Quick,
+        run: m23::halfband_real_q15,
+    },
+    TestCase {
+        name: "real_to_complex_c32",
+        tier: Tier::Quick,
+        run: m23::real_to_complex_c32,
+    },
+    TestCase {
+        name: "real_to_complex_cq15",
+        tier: Tier::Quick,
+        run: m23::real_to_complex_cq15,
+    },
+    TestCase {
+        name: "extremes_m23",
+        tier: Tier::Full,
+        run: m23::extremes_m23,
+    },
+    TestCase {
+        name: "block_halfband_alias",
+        tier: Tier::Quick,
+        run: m23::block_halfband_alias,
+    },
+    TestCase {
+        name: "block_real_to_complex_tone",
+        tier: Tier::Quick,
+        run: m23::block_real_to_complex_tone,
+    },
+    TestCase {
+        name: "e2e_real_fm_rx_f32",
+        tier: Tier::Quick,
+        run: m23::e2e_real_fm_rx_f32,
+    },
+    TestCase {
+        name: "e2e_real_fm_rx_q15",
+        tier: Tier::Quick,
+        run: m23::e2e_real_fm_rx_q15,
+    },
+    TestCase {
+        name: "e2e_real_fm_rx_f32_1s",
+        tier: Tier::Full,
+        run: m23::e2e_real_fm_rx_f32_1s,
+    },
+    TestCase {
+        name: "e2e_real_fm_rx_q15_1s",
+        tier: Tier::Full,
+        run: m23::e2e_real_fm_rx_q15_1s,
     },
 ];
 

@@ -50,8 +50,10 @@ v1 = (b1 >> 4) | b2 << 4        (both sign-extended from 12 bits)
 | `PACKED10` | Packed10, 10, interleaved | ESP-SDR CAP20-style (bit order to be confirmed by the driver) |
 | `I2S32_MSB` | I32, 24, MSB-aligned | SX1255 mode B over I2S |
 | `CF32` | F32, interleaved | files, SoapySDR CF32 |
-| `RF32` | F32, real | real-valued audio |
-| `RS16` | I16, real | PCM audio |
+| `RF32` | F32, real | real-valued audio, real-sampling front ends |
+| `RS16` | I16, real | PCM audio, real-sampling devices (Airspy R2 and Mini, direct-sampling front ends, sound-card IF receivers) |
+
+**Real inputs.** A device that delivers real samples puts the whole band from 0 to `fs / 2` into one value per sample. The `convert` block and the automatic conversion of a raw pipeline input accept the formats with a real layout and produce `f32` or Q15 (`convert_real`, `ConvertRealBlock`); `Progress` counts bytes and real samples, a packing group is the smallest whole number of samples (`rs16`: one sample in 2 bytes). The block `real_to_complex` then shifts the signal by `fs / 4` and halves the rate; the output centre is the input frequency `fs / 4` and a station at the real frequency `f` is tuned with a `ddc` frequency of `f - fs / 4` (see [blocks.md](blocks.md) and the flow `real_input_fm_receiver`). Planar layouts cannot be streamed; real formats have no `convert_out` variant.
 
 ## Time model
 

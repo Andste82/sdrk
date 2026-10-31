@@ -807,7 +807,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Converts raw device bytes in a sample format to complex samples.",
+            "description": "Converts raw device bytes in a sample format to complex or real samples.",
             "properties": {
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
@@ -1275,6 +1275,108 @@
                     "description": "Frequency deviation in Hz for a full-scale input; at most half the sample rate. Unit: Hz. Typical: 75e3 for FM broadcast, 5e3 for narrow-band voice. Runtime.",
                     "maximum": 1000000000000.0,
                     "minimum": 0.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Halfband low-pass filter and decimation by 2.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "halfband"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 3,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz, centred on a quarter of the input rate. The default is 0.1 * fs; it must be below fs / 2. Unit: Hz. Typical: default 0.1 times the input rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Turns a real signal into a complex one at half the rate (fs/4 shift and halfband).",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "real_to_complex"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 3,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz, centred on a quarter of the input rate. The default is 0.1 * fs; it must be below fs / 2. Unit: Hz. Typical: default 0.1 times the input rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
                     "type": "number"
                   }
                 },

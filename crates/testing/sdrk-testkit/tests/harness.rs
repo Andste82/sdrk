@@ -666,9 +666,10 @@ fn failure_detail_is_truncated_not_panicking() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 125);
+    assert_eq!(cases.len(), 138);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));
@@ -756,6 +757,19 @@ fn registered_cases_have_unique_names_without_spaces() {
         "backend_vs_fallback_real_to_complex",
         "e2e_nfm_ctcss_f32",
         "e2e_nfm_ctcss_q15",
+        "halfband_c32",
+        "halfband_cq15",
+        "halfband_real_f32",
+        "halfband_real_q15",
+        "real_to_complex_c32",
+        "real_to_complex_cq15",
+        "extremes_m23",
+        "block_halfband_alias",
+        "block_real_to_complex_tone",
+        "e2e_real_fm_rx_f32",
+        "e2e_real_fm_rx_q15",
+        "e2e_real_fm_rx_f32_1s",
+        "e2e_real_fm_rx_q15_1s",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

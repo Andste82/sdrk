@@ -515,7 +515,9 @@ fn automatic_conversions_appear_in_the_report_not_in_the_config() {
 
 #[test]
 fn raw_formats_that_cannot_stream_are_rejected_at_the_input() {
-    for format in ["rf32", "rs16", "cs16_planar"] {
+    // Real formats stream since M23 (they get the real automatic conversion); planar ones do not.
+    let format = "cs16_planar";
+    {
         let doc = json!({
             "sdrk": 1, "name": "t",
             "inputs": { "rf": { "format": format, "rate_hz": 48000 } },
@@ -529,6 +531,23 @@ fn raw_formats_that_cannot_stream_are_rejected_at_the_input() {
             "{format}: {}",
             report.to_json()
         );
+    }
+    // A real raw input is accepted, and a complex block behind it is a type error.
+    for format in ["rf32", "rs16"] {
+        let doc = json!({
+            "sdrk": 1, "name": "t",
+            "inputs": { "rf": { "format": format, "rate_hz": 48000 } },
+            "nodes": { "g": { "kind": "scale" } },
+            "edges": [ { "from": "rf", "to": "g" }, { "from": "g", "to": "out" } ],
+            "outputs": { "out": { "type": "stream" } }
+        });
+        let report = validate_value(&doc);
+        assert!(
+            codes(&report).iter().any(|(c, _)| c == "type_mismatch"),
+            "{format}: {}",
+            report.to_json()
+        );
+        assert!(!codes(&report).iter().any(|(_, p)| p == "inputs.rf.format"));
     }
     // A real stream cannot get a raw output format either.
     let doc = json!({

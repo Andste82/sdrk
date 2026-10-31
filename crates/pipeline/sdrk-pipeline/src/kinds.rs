@@ -13,11 +13,13 @@ use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
     AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
     BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock, DucConfig, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ParamValue, PortType,
+    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock,
+    DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
+    HalfbandBlock, HalfbandConfig, HalfbandRealBlock, ParamValue, PortType, RealToComplexBlock,
     ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
     SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
 };
+use sdrk_device::Layout;
 use serde_json::{Map, Value};
 
 use crate::model::Precision;
@@ -321,15 +323,33 @@ impl Kind for ConvertKind {
         if input != PortType::Raw {
             return Err(mismatch("convert needs raw bytes"));
         }
-        let rate_out = ConvertBlock::<C32, VecStorage>::rate_out(cfg, rate)?;
+        let (rate_out, memory_bytes, cost, output) = if cfg.format.layout() == Layout::Real {
+            with_real!(
+                p,
+                R,
+                (
+                    ConvertRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    ConvertRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
+                    1.0,
+                    stream(real_port(p))
+                )
+            )
+        } else {
+            (
+                ConvertBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+                ConvertBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+                2.0,
+                stream(complex_port(p)),
+            )
+        };
         Ok(Figures {
             rate_out,
-            memory_bytes: ConvertBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
-            cost: 2.0,
+            memory_bytes,
+            cost,
             taps: 0,
             delay: Delay::ZERO,
             min_input: packing_group(&cfg.format).1,
-            output: stream(complex_port(p)),
+            output,
         })
     }
     fn build(
@@ -339,13 +359,23 @@ impl Kind for ConvertKind {
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
-        with_complex!(
-            p,
-            T,
-            Ok(Box::new(StreamNode::new(ConvertBlock::<T, _>::new(
-                cfg, rate, st
-            )?)))
-        )
+        if cfg.format.layout() == Layout::Real {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(ConvertRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(ConvertBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 
@@ -807,6 +837,145 @@ impl Kind for BiquadKind {
                 )?)))
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------- halfband
+
+pub(crate) struct HalfbandKind;
+
+impl Kind for HalfbandKind {
+    type Cfg = HalfbandConfig;
+
+    const KIND: &'static str = "halfband";
+    fn kernels() -> &'static [&'static str] {
+        &["halfband_decimate", "halfband_decimate_real"]
+    }
+    fn default_cfg() -> HalfbandConfig {
+        HalfbandConfig::default()
+    }
+    fn set(cfg: &mut HalfbandConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &HalfbandConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        let taps = cfg.num_taps(rate)?;
+        let (rate_out, memory_bytes) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    HalfbandBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    HalfbandBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    HalfbandRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    HalfbandRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            // The (N + 3) / 2 non-zero taps once per two input samples.
+            cost: (taps + 3) as f64 / 4.0,
+            taps,
+            delay: delay_half(taps),
+            min_input: 2,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &HalfbandConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(HalfbandBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(HalfbandRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
+    }
+}
+
+// ------------------------------------------------------------ real_to_complex
+
+pub(crate) struct RealToComplexKind;
+
+impl Kind for RealToComplexKind {
+    type Cfg = HalfbandConfig;
+
+    const KIND: &'static str = "real_to_complex";
+    fn kernels() -> &'static [&'static str] {
+        &["real_to_complex"]
+    }
+    fn default_cfg() -> HalfbandConfig {
+        HalfbandConfig::default()
+    }
+    fn set(cfg: &mut HalfbandConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &HalfbandConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if is_complex(input) {
+            return Err(mismatch("real_to_complex needs real samples"));
+        }
+        let taps = cfg.num_taps(rate)?;
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: RealToComplexBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: RealToComplexBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: (taps + 3) as f64 / 4.0,
+                taps,
+                delay: delay_half(taps),
+                min_input: 2,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &HalfbandConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(RealToComplexBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
     }
 }
 

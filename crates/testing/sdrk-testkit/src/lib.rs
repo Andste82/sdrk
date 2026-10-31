@@ -56,6 +56,7 @@ pub mod design_helpers;
 pub mod e2e;
 pub mod e2e_am;
 pub mod e2e_nfm;
+pub mod e2e_real;
 pub mod e2e_ssb;
 pub mod encode;
 pub mod fm;

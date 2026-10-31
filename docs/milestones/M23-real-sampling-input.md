@@ -307,10 +307,10 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Kernels `halfband_decimate`, `halfband_decimate_real`, `real_to_complex` with states, fallback, reference, delegation
-- [ ] Design functions `halfband_len`, `halfband_taps`
-- [ ] Real formats in the `convert` block and the automatic conversion
-- [ ] Blocks `halfband`, `real_to_complex`, pipeline kinds, regenerated schema; flow `real_input_fm_receiver` with YAML twin
+- [x] Kernels `halfband_decimate`, `halfband_decimate_real`, `real_to_complex` with states, fallback, reference, delegation
+- [x] Design functions `halfband_len`, `halfband_taps`
+- [x] Real formats in the `convert` block and the automatic conversion
+- [x] Blocks `halfband`, `real_to_complex`, pipeline kinds, regenerated schema; flow `real_input_fm_receiver` with YAML twin
 - [ ] SIMD paths for the three kernels on every level, `Reference::OwnKernel` and the per-entry `limit` in `xtask count`, counts and limits
-- [ ] Golden cases (seeds 430–435 and the design cases), suite, invariance, extremes, E2E-REAL
-- [ ] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log
+- [x] Golden cases (seeds 430–435 and the design cases), suite, invariance, extremes, E2E-REAL
+- [ ] (done: `docs/kernels.md`, `docs/timing.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log; open: `docs/backends.md`, `docs/performance.md`) `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log

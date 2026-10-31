@@ -59,6 +59,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "agc_fallback": {
+          "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 17.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 22.42,
+              "ratio": 1.32
+            }
+          ],
+          "other_instr_per_sample": 17.03,
+          "ours_instr_per_sample": 22.42,
+          "ratio": 1.32,
+          "snr_db": {
+            "other": 118.88,
+            "ours": 119.85
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (neon64, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
           "goal": true,
@@ -348,37 +371,60 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 0.77,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 0.65,
-              "ratio": 0.85
+              "ours_instr_per_sample": 0.59,
+              "ratio": 0.77
             },
             {
               "compared_with": "volk_8i_convert_16i",
               "label": "n = 64",
               "other_instr_per_sample": 2.27,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.33,
-              "ratio": 1.03
+              "ours_instr_per_sample": 2.22,
+              "ratio": 0.98
             },
             {
               "compared_with": "volk_8i_convert_16i",
               "label": "n = 100",
               "other_instr_per_sample": 1.9,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.97,
-              "ratio": 1.04
+              "ours_instr_per_sample": 1.88,
+              "ratio": 0.99
             },
             {
               "compared_with": "volk_8i_convert_16i",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.27,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.65,
-              "ratio": 0.51
+              "ours_instr_per_sample": 0.59,
+              "ratio": 0.46
             }
           ],
           "other_instr_per_sample": 1.27,
-          "ours_instr_per_sample": 0.65,
-          "ratio": 0.51,
+          "ours_instr_per_sample": 0.59,
+          "ratio": 0.46,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "convert_cq15_cs8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 0.76,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.67,
+              "ratio": 0.87
+            }
+          ],
+          "other_instr_per_sample": 0.76,
+          "ours_instr_per_sample": 0.67,
+          "ratio": 0.87,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -395,51 +441,74 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 0.77,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 0.9,
-              "ratio": 1.18
+              "ours_instr_per_sample": 0.84,
+              "ratio": 1.09
             },
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
               "other_instr_per_sample": 0.92,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 0.9,
-              "ratio": 0.99
+              "ours_instr_per_sample": 0.84,
+              "ratio": 0.92
             },
             {
               "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
               "label": "n = 64",
               "other_instr_per_sample": 2.27,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.7,
-              "ratio": 1.19
+              "ours_instr_per_sample": 2.59,
+              "ratio": 1.14
             },
             {
               "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
               "label": "n = 100",
               "other_instr_per_sample": 1.9,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.32,
-              "ratio": 1.22
+              "ours_instr_per_sample": 2.23,
+              "ratio": 1.17
             },
             {
               "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.27,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.9,
-              "ratio": 0.71
+              "ours_instr_per_sample": 0.84,
+              "ratio": 0.66
             }
           ],
           "other_instr_per_sample": 1.27,
-          "ours_instr_per_sample": 0.9,
-          "ratio": 0.71,
+          "ours_instr_per_sample": 0.84,
+          "ratio": 0.66,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "convert_cq15_cu8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 0.76,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.92,
+              "ratio": 1.2
+            }
+          ],
+          "other_instr_per_sample": 0.76,
+          "ours_instr_per_sample": 0.92,
+          "ratio": 1.2,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
@@ -488,6 +557,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "convert_cs16_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 4.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.79,
+              "ratio": 0.4
+            }
+          ],
+          "other_instr_per_sample": 4.51,
+          "ours_instr_per_sample": 1.79,
+          "ratio": 0.4,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "convert_cs8": {
           "compared_with": "volk_8i_s32f_convert_32f",
           "goal": true,
@@ -528,6 +620,29 @@
           "other_instr_per_sample": 2.46,
           "ours_instr_per_sample": 1.4,
           "ratio": 0.57,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "convert_cs8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.17,
+              "ratio": 0.86
+            }
+          ],
+          "other_instr_per_sample": 2.51,
+          "ours_instr_per_sample": 2.17,
+          "ratio": 0.86,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -590,6 +705,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "convert_cu8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.17,
+              "ratio": 0.86
+            }
+          ],
+          "other_instr_per_sample": 2.51,
+          "ours_instr_per_sample": 2.17,
+          "ratio": 0.86,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "convert_out_cs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
           "goal": true,
@@ -636,6 +774,29 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "convert_out_cs16_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.76,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.54,
+              "ratio": 2.01
+            }
+          ],
+          "other_instr_per_sample": 2.76,
+          "ours_instr_per_sample": 5.54,
+          "ratio": 2.01,
+          "snr_db": {
+            "other": 89.38,
+            "ours": 95.45
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "convert_out_cs8": {
           "compared_with": "volk_32f_s32f_convert_8i",
@@ -684,6 +845,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "convert_out_cs8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.29,
+              "ratio": 2.38
+            }
+          ],
+          "other_instr_per_sample": 2.64,
+          "ours_instr_per_sample": 6.29,
+          "ratio": 2.38,
+          "snr_db": {
+            "other": 41.26,
+            "ours": 47.31
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_out_cu8": {
           "compared_with": "volk_32f_s32f_x2_convert_8u",
           "goal": true,
@@ -731,6 +915,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "convert_out_cu8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.04,
+              "ratio": 3.8
+            }
+          ],
+          "other_instr_per_sample": 2.64,
+          "ours_instr_per_sample": 10.04,
+          "ratio": 3.8,
+          "snr_db": {
+            "other": 41.22,
+            "ours": 47.27
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_out_real_rs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
           "goal": true,
@@ -748,7 +955,7 @@
               "label": "n = 64",
               "other_instr_per_sample": 2.81,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.49,
+              "ours_instr_per_sample": 3.48,
               "ratio": 1.24
             },
             {
@@ -777,6 +984,29 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "convert_out_real_rs16_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.39,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.79,
+              "ratio": 2.01
+            }
+          ],
+          "other_instr_per_sample": 1.39,
+          "ours_instr_per_sample": 2.79,
+          "ratio": 2.01,
+          "snr_db": {
+            "other": 89.52,
+            "ours": 95.51
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "convert_out_real_rs8": {
           "compared_with": "volk_32f_s32f_convert_8i",
@@ -825,6 +1055,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "convert_out_real_rs8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.17,
+              "ratio": 2.38
+            }
+          ],
+          "other_instr_per_sample": 1.33,
+          "ours_instr_per_sample": 3.17,
+          "ratio": 2.38,
+          "snr_db": {
+            "other": 41.2,
+            "ours": 47.24
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "convert_out_real_ru8": {
           "compared_with": "volk_32f_s32f_x2_convert_8u",
           "goal": true,
@@ -871,6 +1124,29 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "convert_out_real_ru8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.04,
+              "ratio": 3.79
+            }
+          ],
+          "other_instr_per_sample": 1.33,
+          "ours_instr_per_sample": 5.04,
+          "ratio": 3.79,
+          "snr_db": {
+            "other": 41.26,
+            "ours": 47.25
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "convert_real_rs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
@@ -919,6 +1195,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "convert_real_rs16_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.26,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.92,
+              "ratio": 0.41
+            }
+          ],
+          "other_instr_per_sample": 2.26,
+          "ours_instr_per_sample": 0.92,
+          "ratio": 0.41,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "dc_block": {
           "compared_with": "sdrk fallback",
           "goal": false,
@@ -928,23 +1227,23 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 11.01,
               "other_snr_db": null,
-              "ours_instr_per_sample": 11.01,
+              "ours_instr_per_sample": 11.03,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 11.01,
-          "ours_instr_per_sample": 11.01,
+          "ours_instr_per_sample": 11.03,
           "ratio": 1.0,
           "snr_db": {
-            "other": 121.02,
-            "ours": 121.02
+            "other": 120.76,
+            "ours": 151.93
           },
           "status": "info",
           "verdict": "info"
         },
         "dc_block_cq15": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
@@ -965,32 +1264,78 @@
           "status": "info",
           "verdict": "info"
         },
+        "dc_block_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 81.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.01,
+              "ratio": 0.14
+            }
+          ],
+          "other_instr_per_sample": 81.04,
+          "ours_instr_per_sample": 11.01,
+          "ratio": 0.14,
+          "snr_db": {
+            "other": 85.3,
+            "ours": 120.76
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "dc_block_real": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 16.01,
               "other_snr_db": null,
-              "ours_instr_per_sample": 16.01,
-              "ratio": 1.0
+              "ours_instr_per_sample": 7.4,
+              "ratio": 0.46
             }
           ],
           "other_instr_per_sample": 16.01,
-          "ours_instr_per_sample": 16.01,
-          "ratio": 1.0,
+          "ours_instr_per_sample": 7.4,
+          "ratio": 0.46,
           "snr_db": {
-            "other": 124.79,
-            "ours": 124.79
+            "other": 124.94,
+            "ours": 152.12
           },
           "status": "info",
           "verdict": "info"
         },
+        "dc_block_real_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 90.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 16.01,
+              "ratio": 0.18
+            }
+          ],
+          "other_instr_per_sample": 90.04,
+          "ours_instr_per_sample": 16.01,
+          "ratio": 0.18,
+          "snr_db": {
+            "other": 84.12,
+            "ours": 124.94
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "dc_block_real_q15": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
@@ -1013,30 +1358,53 @@
         },
         "deemphasis": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 14.01,
               "other_snr_db": null,
-              "ours_instr_per_sample": 14.01,
-              "ratio": 1.0
+              "ours_instr_per_sample": 6.65,
+              "ratio": 0.47
             }
           ],
           "other_instr_per_sample": 14.01,
-          "ours_instr_per_sample": 14.01,
-          "ratio": 1.0,
+          "ours_instr_per_sample": 6.65,
+          "ratio": 0.47,
           "snr_db": {
-            "other": 144.31,
-            "ours": 144.31
+            "other": 145.36,
+            "ours": 152.1
           },
           "status": "info",
           "verdict": "info"
         },
+        "deemphasis_fallback": {
+          "compared_with": "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 45.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.01,
+              "ratio": 0.31
+            }
+          ],
+          "other_instr_per_sample": 45.03,
+          "ours_instr_per_sample": 14.01,
+          "ratio": 0.31,
+          "snr_db": {
+            "other": 151.98,
+            "ours": 145.36
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
         "deemphasis_q15": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
@@ -1072,18 +1440,18 @@
             {
               "compared_with": "volk_32fc_32f_dot_prod_32fc",
               "label": "n = 64",
-              "other_instr_per_sample": 3.45,
+              "other_instr_per_sample": 3.5,
               "other_snr_db": null,
               "ours_instr_per_sample": 3.38,
-              "ratio": 0.98
+              "ratio": 0.96
             },
             {
               "compared_with": "volk_32fc_32f_dot_prod_32fc",
               "label": "n = 100",
-              "other_instr_per_sample": 2.75,
+              "other_instr_per_sample": 2.78,
               "other_snr_db": null,
               "ours_instr_per_sample": 2.77,
-              "ratio": 1.01
+              "ratio": 1.0
             },
             {
               "compared_with": "volk_32fc_32f_dot_prod_32fc",
@@ -1111,17 +1479,17 @@
             {
               "compared_with": "sdrk fallback",
               "label": "n = 64",
-              "other_instr_per_sample": 4.63,
+              "other_instr_per_sample": 4.72,
               "other_snr_db": null,
-              "ours_instr_per_sample": 4.66,
+              "ours_instr_per_sample": 4.75,
               "ratio": 1.01
             },
             {
               "compared_with": "sdrk fallback",
               "label": "n = 100",
-              "other_instr_per_sample": 3.88,
+              "other_instr_per_sample": 3.94,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.9,
+              "ours_instr_per_sample": 3.96,
               "ratio": 1.01
             },
             {
@@ -1143,6 +1511,52 @@
           "status": "info",
           "verdict": "info"
         },
+        "dot_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.79,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.04,
+              "ratio": 0.73
+            }
+          ],
+          "other_instr_per_sample": 2.79,
+          "ours_instr_per_sample": 2.04,
+          "ratio": 0.73,
+          "snr_db": {
+            "other": 82.2,
+            "ours": 82.2
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "dot_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 6.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.02,
+              "ratio": 0.77
+            }
+          ],
+          "other_instr_per_sample": 6.53,
+          "ours_instr_per_sample": 5.02,
+          "ratio": 0.77,
+          "snr_db": {
+            "other": 122.6,
+            "ours": 122.6
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "dot_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f",
           "goal": true,
@@ -1153,23 +1567,23 @@
               "other_instr_per_sample": 0.9,
               "other_snr_db": 127.28,
               "ours_instr_per_sample": 0.62,
-              "ratio": 0.68
+              "ratio": 0.69
             },
             {
               "compared_with": "volk_32f_x2_dot_prod_32f",
               "label": "n = 64",
-              "other_instr_per_sample": 2.73,
+              "other_instr_per_sample": 2.72,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.22,
-              "ratio": 0.81
+              "ours_instr_per_sample": 2.25,
+              "ratio": 0.83
             },
             {
               "compared_with": "volk_32f_x2_dot_prod_32f",
               "label": "n = 100",
-              "other_instr_per_sample": 2.24,
+              "other_instr_per_sample": 2.23,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.7,
-              "ratio": 0.76
+              "ours_instr_per_sample": 1.72,
+              "ratio": 0.77
             },
             {
               "compared_with": "volk_32f_x2_dot_prod_32f",
@@ -1177,15 +1591,38 @@
               "other_instr_per_sample": 0.9,
               "other_snr_db": null,
               "ours_instr_per_sample": 0.62,
-              "ratio": 0.68
+              "ratio": 0.69
             }
           ],
           "other_instr_per_sample": 0.9,
           "ours_instr_per_sample": 0.62,
-          "ratio": 0.68,
+          "ratio": 0.69,
           "snr_db": {
             "other": 127.28,
             "ours": 129.1
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "dot_real_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.52,
+              "ratio": 0.77
+            }
+          ],
+          "other_instr_per_sample": 3.27,
+          "ours_instr_per_sample": 2.52,
+          "ratio": 0.77,
+          "snr_db": {
+            "other": 123.11,
+            "ours": 123.11
           },
           "status": "release",
           "verdict": "pass"
@@ -1229,6 +1666,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "dot_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.4,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.16,
+              "ratio": 0.83
+            }
+          ],
+          "other_instr_per_sample": 1.4,
+          "ours_instr_per_sample": 1.16,
+          "ratio": 0.83,
+          "snr_db": {
+            "other": 88.76,
+            "ours": 88.76
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
           "goal": true,
@@ -1248,6 +1708,19 @@
           "snr_db": {
             "other": 139.09,
             "ours": 138.8
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fft_1024_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "other_instr_per_sample": 88.38,
+          "ours_instr_per_sample": 95.13,
+          "ratio": 1.08,
+          "snr_db": {
+            "other": 138.73,
+            "ours": 137.96
           },
           "status": "release",
           "verdict": "pass"
@@ -1275,6 +1748,19 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fft_4096_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "other_instr_per_sample": 99.62,
+          "ours_instr_per_sample": 114.61,
+          "ratio": 1.15,
+          "snr_db": {
+            "other": 137.71,
+            "ours": 137.36
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
         "fft_64": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
           "goal": true,
@@ -1282,7 +1768,7 @@
             {
               "compared_with": "FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place)",
               "label": "information: fftw",
-              "other_instr_per_sample": 15.94,
+              "other_instr_per_sample": 15.97,
               "other_snr_db": 141.53,
               "ours_instr_per_sample": 10.42,
               "ratio": 0.65
@@ -1298,6 +1784,19 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fft_64_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "other_instr_per_sample": 54.44,
+          "ours_instr_per_sample": 59.59,
+          "ratio": 1.09,
+          "snr_db": {
+            "other": 140.0,
+            "ours": 141.01
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "fft_cq15_1024": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
@@ -1305,7 +1804,7 @@
             {
               "compared_with": "Ne10 ne10_fft_c2c_1d_int16_neon (1/N scaling, out of place)",
               "label": "information: ne10",
-              "other_instr_per_sample": 19.77,
+              "other_instr_per_sample": 19.76,
               "other_snr_db": 44.79,
               "ours_instr_per_sample": 15.79,
               "ratio": 0.8
@@ -1328,7 +1827,7 @@
             {
               "compared_with": "Ne10 ne10_fft_c2c_1d_int16_neon (1/N scaling, out of place)",
               "label": "information: ne10",
-              "other_instr_per_sample": 19.77,
+              "other_instr_per_sample": 19.76,
               "other_snr_db": 44.64,
               "ours_instr_per_sample": 12.79,
               "ratio": 0.65
@@ -1344,6 +1843,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fft_cq15_1024_default_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
+              "label": "information: kissfft",
+              "other_instr_per_sample": 179.33,
+              "other_snr_db": 43.51,
+              "ours_instr_per_sample": 242.09,
+              "ratio": 1.35
+            }
+          ],
+          "other_instr_per_sample": 140.66,
+          "ours_instr_per_sample": 242.09,
+          "ratio": 1.72,
+          "snr_db": {
+            "other": 41.63,
+            "ours": 46.15
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "fft_cq15_1024_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
+              "label": "information: kissfft",
+              "other_instr_per_sample": 179.33,
+              "other_snr_db": 43.67,
+              "ours_instr_per_sample": 257.49,
+              "ratio": 1.44
+            }
+          ],
+          "other_instr_per_sample": 140.66,
+          "ours_instr_per_sample": 257.49,
+          "ratio": 1.83,
+          "snr_db": {
+            "other": 41.76,
+            "ours": 68.03
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "fft_cq15_1024_full_scale": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
           "goal": true,
@@ -1351,7 +1896,7 @@
             {
               "compared_with": "Ne10 ne10_fft_c2c_1d_int16_neon (1/N scaling, out of place)",
               "label": "information: ne10",
-              "other_instr_per_sample": 19.77,
+              "other_instr_per_sample": 19.76,
               "other_snr_db": 56.9,
               "ours_instr_per_sample": 13.83,
               "ratio": 0.7
@@ -1398,6 +1943,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fir_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 211.54,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 227.65,
+              "ratio": 1.08
+            }
+          ],
+          "other_instr_per_sample": 211.54,
+          "ours_instr_per_sample": 227.65,
+          "ratio": 1.08,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "fir_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 485.63,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 211.54,
+              "ratio": 0.44
+            }
+          ],
+          "other_instr_per_sample": 485.63,
+          "ours_instr_per_sample": 211.54,
+          "ratio": 0.44,
+          "snr_db": {
+            "other": 83.12,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "fir_decimate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it",
           "goal": true,
@@ -1425,6 +2016,98 @@
           "snr_db": {
             "other": 138.54,
             "ours": 141.75
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fir_decimate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 92.54,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 50.04,
+              "ratio": 0.54
+            }
+          ],
+          "other_instr_per_sample": 92.54,
+          "ours_instr_per_sample": 50.04,
+          "ratio": 0.54,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "fir_decimate_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 38.56,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 92.54,
+              "ratio": 2.4
+            }
+          ],
+          "other_instr_per_sample": 38.56,
+          "ours_instr_per_sample": 92.54,
+          "ratio": 2.4,
+          "snr_db": {
+            "other": 82.19,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fir_decimate_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 91.08,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 57.32,
+              "ratio": 0.63
+            }
+          ],
+          "other_instr_per_sample": 91.08,
+          "ours_instr_per_sample": 57.32,
+          "ratio": 0.63,
+          "snr_db": {
+            "other": 134.33,
+            "ours": 133.29
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
+        "fir_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 301.63,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 153.17,
+              "ratio": 0.51
+            }
+          ],
+          "other_instr_per_sample": 301.63,
+          "ours_instr_per_sample": 153.17,
+          "ratio": 0.51,
+          "snr_db": {
+            "other": 136.39,
+            "ours": 136.29
           },
           "status": "release",
           "verdict": "pass"
@@ -1460,6 +2143,75 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fir_interpolate_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 394.84,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 300.49,
+              "ratio": 0.76
+            }
+          ],
+          "other_instr_per_sample": 394.84,
+          "ours_instr_per_sample": 300.49,
+          "ratio": 0.76,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "fir_interpolate_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 256.4,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 394.84,
+              "ratio": 1.54
+            }
+          ],
+          "other_instr_per_sample": 256.4,
+          "ours_instr_per_sample": 394.84,
+          "ratio": 1.54,
+          "snr_db": {
+            "other": 80.09,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
+        "fir_interpolate_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 361.16,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 187.97,
+              "ratio": 0.52
+            }
+          ],
+          "other_instr_per_sample": 361.16,
+          "ours_instr_per_sample": 187.97,
+          "ratio": 0.52,
+          "snr_db": {
+            "other": 136.48,
+            "ours": 136.35
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "fir_interpolate_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it",
           "goal": true,
@@ -1491,6 +2243,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fir_interpolate_real_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 180.58,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 113.76,
+              "ratio": 0.63
+            }
+          ],
+          "other_instr_per_sample": 180.58,
+          "ours_instr_per_sample": 113.76,
+          "ratio": 0.63,
+          "snr_db": {
+            "other": 136.42,
+            "ours": 136.52
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "fir_interpolate_real_q15": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -1498,15 +2273,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 1054.61,
+              "other_instr_per_sample": 216.07,
               "other_snr_db": null,
               "ours_instr_per_sample": 194.37,
-              "ratio": 0.18
+              "ratio": 0.9
             }
           ],
-          "other_instr_per_sample": 1054.61,
+          "other_instr_per_sample": 216.07,
           "ours_instr_per_sample": 194.37,
-          "ratio": 0.18,
+          "ratio": 0.9,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1514,51 +2289,136 @@
           "status": "info",
           "verdict": "info"
         },
+        "fir_interpolate_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 128.2,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 216.07,
+              "ratio": 1.69
+            }
+          ],
+          "other_instr_per_sample": 128.2,
+          "ours_instr_per_sample": 216.07,
+          "ratio": 1.69,
+          "snr_db": {
+            "other": 80.35,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "waived"
+        },
         "fm_mod": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 36.1,
+              "other_snr_db": 133.15,
+              "ours_instr_per_sample": 11.23,
+              "ratio": 0.31
+            },
+            {
+              "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 38.32,
+              "other_instr_per_sample": 60.0,
               "other_snr_db": null,
               "ours_instr_per_sample": 11.23,
-              "ratio": 0.29
+              "ratio": 0.19
             }
           ],
-          "other_instr_per_sample": 38.32,
+          "other_instr_per_sample": 60.0,
           "ours_instr_per_sample": 11.23,
-          "ratio": 0.29,
+          "ratio": 0.19,
           "snr_db": {
-            "other": 133.15,
+            "other": 94.77,
             "ours": 133.15
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "info",
+          "verdict": "info"
         },
         "fm_mod_cq15": {
           "compared_with": "sdrk fallback",
           "goal": true,
           "informational": [
             {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 54.01,
+              "other_snr_db": 77.14,
+              "ours_instr_per_sample": 9.58,
+              "ratio": 0.18
+            },
+            {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 49.32,
+              "other_instr_per_sample": 37.73,
               "other_snr_db": null,
               "ours_instr_per_sample": 9.58,
-              "ratio": 0.19
+              "ratio": 0.25
             }
           ],
-          "other_instr_per_sample": 49.32,
+          "other_instr_per_sample": 37.73,
           "ours_instr_per_sample": 9.58,
-          "ratio": 0.19,
+          "ratio": 0.25,
           "snr_db": {
             "other": 89.37,
             "ours": 89.37
           },
           "status": "info",
           "verdict": "info"
+        },
+        "fm_mod_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 54.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 37.73,
+              "ratio": 0.7
+            }
+          ],
+          "other_instr_per_sample": 54.01,
+          "ours_instr_per_sample": 37.73,
+          "ratio": 0.7,
+          "snr_db": {
+            "other": 77.14,
+            "ours": 89.37
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fm_mod_fallback": {
+          "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 60.0,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 36.1,
+              "ratio": 0.6
+            }
+          ],
+          "other_instr_per_sample": 60.0,
+          "ours_instr_per_sample": 36.1,
+          "ratio": 0.6,
+          "snr_db": {
+            "other": 94.77,
+            "ours": 133.15
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
@@ -1569,7 +2429,7 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 1.77,
               "other_snr_db": 150.92,
-              "ours_instr_per_sample": 1.45,
+              "ours_instr_per_sample": 1.46,
               "ratio": 0.82
             },
             {
@@ -1577,12 +2437,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 2.02,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.45,
+              "ours_instr_per_sample": 1.46,
               "ratio": 0.72
             }
           ],
           "other_instr_per_sample": 2.02,
-          "ours_instr_per_sample": 1.45,
+          "ours_instr_per_sample": 1.46,
           "ratio": 0.72,
           "snr_db": {
             "other": 150.95,
@@ -1590,6 +2450,29 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "mag_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.01,
+              "ratio": 2.33
+            }
+          ],
+          "other_instr_per_sample": 3.01,
+          "ours_instr_per_sample": 7.01,
+          "ratio": 2.33,
+          "snr_db": {
+            "other": 150.54,
+            "ours": 150.54
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "mag_q15": {
           "compared_with": "volk_16ic_magnitude_16i",
@@ -1617,6 +2500,29 @@
           "ratio": 0.72,
           "snr_db": {
             "other": 96.22,
+            "ours": 96.22
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "mag_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 77.46,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 28.01,
+              "ratio": 0.36
+            }
+          ],
+          "other_instr_per_sample": 77.46,
+          "ours_instr_per_sample": 28.01,
+          "ratio": 0.36,
+          "snr_db": {
+            "other": 84.3,
             "ours": 96.22
           },
           "status": "release",
@@ -1653,6 +2559,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "mag_sq_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.26,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.76,
+              "ratio": 0.78
+            }
+          ],
+          "other_instr_per_sample": 2.26,
+          "ours_instr_per_sample": 1.76,
+          "ratio": 0.78,
+          "snr_db": {
+            "other": 149.02,
+            "ours": 149.02
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "mag_sq_q15": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -1660,17 +2589,40 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 3.26,
+              "other_instr_per_sample": 1.89,
               "other_snr_db": null,
               "ours_instr_per_sample": 1.02,
-              "ratio": 0.31
+              "ratio": 0.54
             }
           ],
-          "other_instr_per_sample": 3.26,
+          "other_instr_per_sample": 1.89,
           "ours_instr_per_sample": 1.02,
-          "ratio": 0.31,
+          "ratio": 0.54,
           "snr_db": {
             "other": 92.85,
+            "ours": 92.85
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "mag_sq_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2.39,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.89,
+              "ratio": 0.79
+            }
+          ],
+          "other_instr_per_sample": 2.39,
+          "ours_instr_per_sample": 1.89,
+          "ratio": 0.79,
+          "snr_db": {
+            "other": 74.85,
             "ours": 92.85
           },
           "status": "release",
@@ -1707,24 +2659,70 @@
           "status": "info",
           "verdict": "info"
         },
+        "power_db_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 53.39,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 15.02,
+              "ratio": 0.28
+            }
+          ],
+          "other_instr_per_sample": 53.39,
+          "ours_instr_per_sample": 15.02,
+          "ratio": 0.28,
+          "snr_db": {
+            "other": 143.15,
+            "ours": 151.93
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "power_db_q15": {
           "compared_with": "sdrk fallback",
-          "goal": true,
+          "goal": false,
           "informational": [
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 15.65,
+              "other_instr_per_sample": 11.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 12.65,
-              "ratio": 0.81
+              "ours_instr_per_sample": 11.78,
+              "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 15.65,
-          "ours_instr_per_sample": 12.65,
-          "ratio": 0.81,
+          "other_instr_per_sample": 11.77,
+          "ours_instr_per_sample": 11.78,
+          "ratio": 1.0,
           "snr_db": {
             "other": 149.92,
+            "ours": 149.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "power_db_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 55.65,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.77,
+              "ratio": 0.21
+            }
+          ],
+          "other_instr_per_sample": 55.65,
+          "ours_instr_per_sample": 11.77,
+          "ratio": 0.21,
+          "snr_db": {
+            "other": 143.96,
             "ours": 149.92
           },
           "status": "info",
@@ -1781,8 +2779,62 @@
             "other": 81.23,
             "ours": 81.23
           },
+          "status": "info",
+          "verdict": "info"
+        },
+        "quad_demod_cq15_fallback": {
+          "compared_with": "CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 246.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 173.61,
+              "ratio": 0.7
+            }
+          ],
+          "other_instr_per_sample": 246.64,
+          "ours_instr_per_sample": 173.61,
+          "ratio": 0.7,
+          "snr_db": {
+            "other": 62.33,
+            "ours": 81.23
+          },
           "status": "release",
           "verdict": "pass"
+        },
+        "quad_demod_fallback": {
+          "compared_with": "GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP arm_cmplx_conj_f32 + arm_cmplx_mult_cmplx_f32 + arm_atan2_f32 + arm_scale_f32 (generic C)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 86.29,
+              "other_snr_db": 136.59,
+              "ours_instr_per_sample": 110.52,
+              "ratio": 1.28
+            },
+            {
+              "compared_with": "GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 51.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 110.52,
+              "ratio": 2.14
+            }
+          ],
+          "other_instr_per_sample": 51.64,
+          "ours_instr_per_sample": 110.52,
+          "ratio": 2.14,
+          "snr_db": {
+            "other": 113.99,
+            "ours": 143.56
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "resample": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it",
@@ -1815,6 +2867,75 @@
           "status": "release",
           "verdict": "pass"
         },
+        "resample_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 490.1,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 296.92,
+              "ratio": 0.61
+            }
+          ],
+          "other_instr_per_sample": 490.1,
+          "ours_instr_per_sample": 296.92,
+          "ratio": 0.61,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "resample_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 253.1,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 490.1,
+              "ratio": 1.94
+            }
+          ],
+          "other_instr_per_sample": 253.1,
+          "ours_instr_per_sample": 490.1,
+          "ratio": 1.94,
+          "snr_db": {
+            "other": 78.19,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "resample_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 359.12,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 316.65,
+              "ratio": 0.88
+            }
+          ],
+          "other_instr_per_sample": 359.12,
+          "ours_instr_per_sample": 316.65,
+          "ratio": 0.88,
+          "snr_db": {
+            "other": 136.37,
+            "ours": 136.46
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "resample_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it",
           "goal": true,
@@ -1846,6 +2967,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "resample_real_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 179.57,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 230.41,
+              "ratio": 1.28
+            }
+          ],
+          "other_instr_per_sample": 179.57,
+          "ours_instr_per_sample": 230.41,
+          "ratio": 1.28,
+          "snr_db": {
+            "other": 136.62,
+            "ours": 136.5
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "resample_real_q15": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -1853,17 +2997,40 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 1055.58,
+              "other_instr_per_sample": 297.56,
               "other_snr_db": null,
               "ours_instr_per_sample": 192.59,
-              "ratio": 0.18
+              "ratio": 0.65
             }
           ],
-          "other_instr_per_sample": 1055.58,
+          "other_instr_per_sample": 297.56,
           "ours_instr_per_sample": 192.59,
-          "ratio": 0.18,
+          "ratio": 0.65,
           "snr_db": {
             "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "resample_real_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 126.55,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 297.56,
+              "ratio": 2.35
+            }
+          ],
+          "other_instr_per_sample": 126.55,
+          "ours_instr_per_sample": 297.56,
+          "ratio": 2.35,
+          "snr_db": {
+            "other": 77.96,
             "ours": 999.0
           },
           "status": "info",
@@ -1876,7 +3043,7 @@
             {
               "compared_with": "FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place)",
               "label": "information: fftw",
-              "other_instr_per_sample": 16.99,
+              "other_instr_per_sample": 16.98,
               "other_snr_db": 138.93,
               "ours_instr_per_sample": 10.43,
               "ratio": 0.61
@@ -1884,13 +3051,13 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 58.33,
+              "other_instr_per_sample": 48.71,
               "other_snr_db": 137.86,
               "ours_instr_per_sample": 10.43,
-              "ratio": 0.18
+              "ratio": 0.21
             }
           ],
-          "other_instr_per_sample": 18.75,
+          "other_instr_per_sample": 18.76,
           "ours_instr_per_sample": 10.43,
           "ratio": 0.56,
           "snr_db": {
@@ -1899,6 +3066,19 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "rfft_1024_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": false,
+          "other_instr_per_sample": 41.49,
+          "ours_instr_per_sample": 48.71,
+          "ratio": 1.17,
+          "snr_db": {
+            "other": 138.31,
+            "ours": 137.86
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "rotate": {
           "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
@@ -1909,7 +3089,7 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 5.99,
               "other_snr_db": 115.15,
-              "ours_instr_per_sample": 3.57,
+              "ours_instr_per_sample": 3.58,
               "ratio": 0.6
             },
             {
@@ -1917,12 +3097,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 5.99,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.57,
+              "ours_instr_per_sample": 3.58,
               "ratio": 0.6
             }
           ],
           "other_instr_per_sample": 5.99,
-          "ours_instr_per_sample": 3.57,
+          "ours_instr_per_sample": 3.58,
           "ratio": 0.6,
           "snr_db": {
             "other": 115.15,
@@ -1935,6 +3115,14 @@
           "compared_with": "sdrk fallback",
           "goal": true,
           "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 97.02,
+              "other_snr_db": 70.89,
+              "ours_instr_per_sample": 7.02,
+              "ratio": 0.07
+            },
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
@@ -1953,6 +3141,52 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "rotate_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 97.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 40.01,
+              "ratio": 0.41
+            }
+          ],
+          "other_instr_per_sample": 97.02,
+          "ours_instr_per_sample": 40.01,
+          "ratio": 0.41,
+          "snr_db": {
+            "other": 70.89,
+            "ours": 91.25
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "rotate_fallback": {
+          "compared_with": "GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 28.09,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 26.01,
+              "ratio": 0.93
+            }
+          ],
+          "other_instr_per_sample": 28.09,
+          "ours_instr_per_sample": 26.01,
+          "ratio": 0.93,
+          "snr_db": {
+            "other": 108.84,
+            "ours": 133.0
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "scale": {
           "compared_with": "volk_32f_s32f_multiply_32f",
@@ -2007,6 +3241,52 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "scale_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.51,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.76,
+              "ratio": 0.79
+            }
+          ],
+          "other_instr_per_sample": 3.51,
+          "ours_instr_per_sample": 2.76,
+          "ratio": 0.79,
+          "snr_db": {
+            "other": 87.62,
+            "ours": 93.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scale_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.26,
+              "ratio": 0.42
+            }
+          ],
+          "other_instr_per_sample": 3.01,
+          "ours_instr_per_sample": 1.26,
+          "ratio": 0.42,
+          "snr_db": {
+            "other": 151.5,
+            "ours": 151.5
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
@@ -2100,21 +3380,67 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 5.89,
+              "other_instr_per_sample": 2.89,
               "other_snr_db": null,
               "ours_instr_per_sample": 0.95,
-              "ratio": 0.16
+              "ratio": 0.33
             }
           ],
-          "other_instr_per_sample": 5.89,
+          "other_instr_per_sample": 2.89,
           "ours_instr_per_sample": 0.95,
-          "ratio": 0.16,
+          "ratio": 0.33,
           "snr_db": {
             "other": 89.03,
             "ours": 89.03
           },
           "status": "info",
           "verdict": "info"
+        },
+        "window_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.89,
+              "ratio": 0.82
+            }
+          ],
+          "other_instr_per_sample": 3.52,
+          "ours_instr_per_sample": 2.89,
+          "ratio": 0.82,
+          "snr_db": {
+            "other": 83.11,
+            "ours": 89.03
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "window_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.76,
+              "ratio": 0.58
+            }
+          ],
+          "other_instr_per_sample": 3.02,
+          "ours_instr_per_sample": 1.76,
+          "ratio": 0.58,
+          "snr_db": {
+            "other": 151.95,
+            "ours": 151.95
+          },
+          "status": "release",
+          "verdict": "pass"
         }
       },
       "volk": {
@@ -2162,7 +3488,7 @@
     "kfr_cxx": "Ubuntu clang version 21.1.8 (6ubuntu1)",
     "libraries": {
       "cmsis_dsp": {
-        "build": "generic C with cmsis-biquad.c: -D__GNUC_PYTHON__ -DARM_MATH_LOOPUNROLL -O3 -ffp-contract=off, per level neon:-march=armv8-a",
+        "build": "generic C with cmsis-biquad.c and cmsis-dsp.c: -D__GNUC_PYTHON__ -DARM_MATH_LOOPUNROLL -O3 -ffp-contract=off, per level neon:-march=armv8-a",
         "sha256": "b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56",
         "version": "1.18.0"
       },
@@ -2174,6 +3500,11 @@
       "gnuradio_agc_cc": {
         "build": "-O3",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_fallback_references": {
+        "build": "gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK 3.3.0 generic multiply_conjugate): -O3",
+        "sha256": "9b5144c3705159280b99d36ecd057962c4b60dbd9b2899572edd586a74d74d4c",
         "version": "main at ec1bf15"
       },
       "gnuradio_pwr_squelch_cc": {
@@ -2190,6 +3521,11 @@
         "build": "-O3 -DFIXED_POINT=16",
         "sha256": "76c1aac87ddb7258f34b08a13f0eebf9e53afa299857568346aa5c82bcafaf1a",
         "version": "131.1.0"
+      },
+      "liquid_dsp_dc_blocker": {
+        "build": "liquid-dotprod.c liquid-dcblock.c (portable dot products): -O3",
+        "sha256": "aa568f7ab417fbd8dd0204b1d0f667f4bf521f09f1e46a98554342f7006e0d0a",
+        "version": "1.8.3"
       },
       "ne10": {
         "build": "CMake Release, DSP module",

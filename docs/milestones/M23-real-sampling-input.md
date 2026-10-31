@@ -283,7 +283,7 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | halfband_decimate | `n23_c32_8192` | 430 | `halfband_taps` N 23, β = `kaiser_beta(60)` → f32; noise σ 0.3 | `lfilter(h, 1, x)[::2]` | SNR ≥ 110 |
 | halfband_decimate | `n23_cq15_8192` | 431 | taps and input quantized (the zero taps stay 0) | integer model of `fir_decimate` with factor 2 | bit-exact |
 | halfband_decimate_real | `n23_f32_8192` / `n23_q15_8192` | 432 / 433 | real noise | as above | SNR ≥ 110 / bit-exact |
-| halfband_decimate / halfband_decimate_real | `n23_cq15_corners_2048` / `n23_q15_corners_2048` | 438 / 439 | added in review (D97): full-scale windows aligned with the tap signs, runs of −32768 and +32767, full-scale alternations | integer model, both saturation limits occur | bit-exact |
+| halfband_decimate / halfband_decimate_real | `n23_cq15_corners_2048` / `n23_q15_corners_2048` | 452 / 453 | added in review (D97): full-scale windows aligned with the tap signs, runs of −32768 and +32767, full-scale alternations | integer model, both saturation limits occur | bit-exact |
 | real_to_complex | `n63_c32_16384` | 434 | real noise σ 0.2 plus two real tones at 0.11·fs and 0.37·fs (amplitude 0.3); taps N 63 | f64: `u = x·(−j)^n`, `lfilter(h, 1, u)[::2]` | SNR ≥ 110 |
 | real_to_complex | `n63_cq15_16384` | 435 | quantized (input includes −32768 to exercise the saturated negation) | integer model of §3 | bit-exact |
 
@@ -313,7 +313,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Real formats in the `convert` block and the automatic conversion
 - [x] Blocks `halfband`, `real_to_complex`, pipeline kinds, regenerated schema; flow `real_input_fm_receiver` with YAML twin
 - [x] SIMD paths for the three kernels on every level, `Reference::OwnKernel`, the efficiency target `own_target` (instead of the per-entry `limit`, D96) and the second `sse2` gate `real_to_complex_airspy` (D95) in `xtask count`, counts and limits (all `release` entries pass at all levels; the `CQ15` `real_to_complex` entries are provisionally `info`, I23-1)
-- [x] Golden cases (seeds 430–435, 438 and 439 (saturation corners of the `Q15` halfband kernels) and the design cases), suite, invariance, extremes, E2E-REAL
+- [x] Golden cases (seeds 430–435, 452 and 453 (saturation corners of the `Q15` halfband kernels) and the design cases), suite, invariance, extremes, E2E-REAL
 - [x] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`, `examples/README.md`, CHANGELOG, decisions log
 
 ## Status (2026-10-31)

@@ -639,6 +639,11 @@ pub enum Family {
     RealFft,
     /// No established library: our fallback.
     Own,
+    /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D63): measured as
+    /// [`Family::Own`], but not a kernel of the library, so it has no entry at a level that is
+    /// judged against another build of ours (`avx2-runtime`: the workload runs a kernel whose
+    /// run-time path is judged by its own entry).
+    Workload,
     /// The f32 and C32 biquads (D15): KFR's SIMD cascade where the level has a build of it
     /// (`LevelPlan::kfr`), CMSIS-DSP's generic C as information; at a level without KFR,
     /// CMSIS-DSP is the gate.
@@ -731,7 +736,7 @@ impl Family {
     /// Whether the kernel has an entry at `plan`'s level.
     #[must_use]
     pub fn measured_at(self, plan: &LevelPlan) -> bool {
-        !(self.is_fallback_entry() && plan.baseline.is_some())
+        !((self.is_fallback_entry() || self == Family::Workload) && plan.baseline.is_some())
     }
 }
 
@@ -971,10 +976,10 @@ pub static KERNELS: [KernelSpec; 139] = [
         Family::FallbackVsAirspy,
         false,
     ),
-    spec("halfband_ref_fir_decimate", Family::Own, false),
-    spec("halfband_ref_fir_decimate_cq15", Family::Own, false),
-    spec("halfband_ref_shifted", Family::Own, false),
-    spec("halfband_ref_shifted_cq15", Family::Own, false),
+    spec("halfband_ref_fir_decimate", Family::Workload, false),
+    spec("halfband_ref_fir_decimate_cq15", Family::Workload, false),
+    spec("halfband_ref_shifted", Family::Workload, false),
+    spec("halfband_ref_shifted_cq15", Family::Workload, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -1328,7 +1333,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
-        Family::Own => (Reference::Fallback, Vec::new()),
+        Family::Own | Family::Workload => (Reference::Fallback, Vec::new()),
         Family::Kfr if plan.kfr => (Reference::Kfr, vec![Reference::Cmsis]),
         // Without KFR at the level, CMSIS-DSP gates, as it does for a fallback entry.
         Family::Kfr | Family::FallbackVsCmsis | Family::FftFallbackVsCmsis => {
@@ -4010,8 +4015,11 @@ mod tests {
         for k in [
             "halfband_decimate_fallback",
             "real_to_complex_cq15_fallback",
+            "halfband_ref_fir_decimate",
+            "halfband_ref_shifted_cq15",
         ] {
             assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+            assert!(kernel(k).family.measured_at(plan("avx2")), "{k}");
         }
         // The own-kernel comparison runs `ours` of the other kernel, and every kernel it names
         // is in the table.

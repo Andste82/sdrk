@@ -306,6 +306,7 @@ fn the_real_flow_is_independent_of_the_push_size() {
     }
 }
 
+#[cfg(feature = "yaml")]
 #[test]
 fn the_yaml_twin_describes_the_same_flow() {
     let yaml = std::fs::read_to_string(common::workspace_file(

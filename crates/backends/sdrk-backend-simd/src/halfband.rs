@@ -28,7 +28,7 @@
 //!
 //! # Numerics
 //!
-//! `f32` sums use the symmetry of the taps (`h[2 i] (s[a] + s[b])`, decision D70), FMA on the
+//! `f32` sums use the symmetry of the taps (`h[2 i] (s[a] + s[b])`, decision D71), FMA on the
 //! levels that have it (D5), and several chains per vector; the result is within the 110 dB
 //! contract, not bit-identical with the fallback. A filter with non-symmetric taps runs on the
 //! fallback. `Q15` sums are exact integers in `i32` (the bound on the sum of the absolute taps

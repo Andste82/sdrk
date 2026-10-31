@@ -629,7 +629,7 @@ pub enum Reference {
     /// Our own numbers of another level (run-time detection against that fixed level).
     OwnLevel(&'static str),
     /// Our own kernel on another workload of the table (`ours` of the kernel named): the
-    /// work a specialised kernel saves against the general kernel it replaces (D68). It is
+    /// work a specialised kernel saves against the general kernel it replaces (D69). It is
     /// information, never the judged comparison; the results name it `ours:<kernel>`.
     OwnKernel(&'static str),
 }
@@ -681,7 +681,7 @@ pub enum Family {
     RealFft,
     /// No established library: our fallback.
     Own,
-    /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D68): measured as
+    /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D69): measured as
     /// [`Family::Own`], but not a kernel of the library, so it has no entry at a level that is
     /// judged against another build of ours (`avx2-runtime`: the workload runs a kernel whose
     /// run-time path is judged by its own entry).
@@ -2667,7 +2667,7 @@ fn buffer_variants(spec: &KernelSpec, standard: &Variant) -> Vec<Variant> {
 }
 
 /// Our kernel on the workload of another entry of the table (`ours` of `kernel`, per sample of
-/// its own input), as information next to `ours` of the entry (D68).
+/// its own input), as information next to `ours` of the entry (D69).
 fn own_kernel_extra(
     session: &Session,
     kernel: &str,
@@ -4064,7 +4064,7 @@ mod tests {
                 (Reference::Libairspy, Vec::new())
             );
             // No library has a Q15 halfband decimator: our fallback gates, the CMSIS-DSP
-            // composition is information; `real_to_complex_cq15` has libairspy (D69).
+            // composition is information; `real_to_complex_cq15` has libairspy (D70).
             assert_eq!(
                 comparisons(plan(level), kernel("halfband_decimate_real_q15")),
                 (Reference::Fallback, vec![Reference::Cmsis])

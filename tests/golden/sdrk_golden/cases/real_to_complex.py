@@ -3,7 +3,7 @@
 import numpy as np
 import scipy.signal
 
-from .. import design, q15
+from .. import design, q15, scalar_math
 from ..registry import Array, case
 
 N = 63
@@ -15,8 +15,8 @@ def real_input(rng):
     """Real noise sigma 0.2 plus two tones at 0.11 fs and 0.37 fs with amplitude 0.3 (float64)."""
     n = np.arange(LEN)
     x = rng.standard_normal(LEN) * 0.2
-    x += 0.3 * np.cos(2.0 * np.pi * 0.11 * n + 0.3)
-    x += 0.3 * np.cos(2.0 * np.pi * 0.37 * n + 1.1)
+    x += 0.3 * scalar_math.cos(2.0 * np.pi * 0.11 * n + 0.3)
+    x += 0.3 * scalar_math.cos(2.0 * np.pi * 0.37 * n + 1.1)
     return x
 
 
@@ -47,14 +47,14 @@ def n63_c32(rng):
     h = design.halfband_taps(N, BETA60).astype(np.float32)
     x = real_input(rng).astype(np.float32)
     u = shift_f64(x)
-    full = scipy.signal.lfilter(h.astype(np.float64), [1.0], u)
+    expected = scalar_math.fir_exact(h, u, 2)
     return dict(
         params={"taps": N, "attenuation_db": 60.0, "beta": BETA60},
-        arrays={"input": Array("f32", x), "taps": Array("f32", h), "expected": Array("cf64", full[::2])},
+        arrays={"input": Array("f32", x), "taps": Array("f32", h), "expected": Array("cf64", expected)},
         # The regression guard (accuracy policy step 3): the golden SNR of the f32 fallback
         # (142.1 dB) minus 1 dB.
         tolerance={"class": "tolerance", "snr_db_min": 110.0, "snr_db_guard": 141.1, "skip": 0},
-        notes="u = x (-j)^n in float64, y[m] = lfilter(h, 1, u)[2 m] with the f32 taps of halfband_taps(63, "
+        notes="u = x (-j)^n in float64, y[m] = sum_k h[k] u[2 m - k] (exact sums of scalar_math.fir_exact) with the f32 taps of halfband_taps(63, "
         "kaiser_beta(60)); real noise sigma 0.2 plus tones at 0.11 fs and 0.37 fs with amplitude 0.3",
     )
 

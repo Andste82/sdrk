@@ -28,7 +28,8 @@
 //!   with the same chunk boundaries. The polyphase kernels (`resample`, `fir_interpolate`)
 //!   prepare the taps of all branches at once; a filter that does not fit, and every `CQ15`
 //!   filter with more than [`PREP_TAPS`] taps, runs on the fallback. `Q15` `resample_real` and
-//!   `fir_interpolate_real` do the same with one lane per tap.
+//!   `fir_interpolate_real` do the same with one lane per tap. Where the grouped fallback is
+//!   faster, these kernels run it instead ([`runs_fallback`], a table of kernel and level).
 //!
 //! `C32` and `f32` results are within the contract of `docs/kernels.md` (110 dB) but not
 //! bit-identical with the fallback, because the sums are formed in a different order (and fused on
@@ -55,6 +56,70 @@ const PREP_TAPS: usize = 256;
 /// Complex samples (window positions, whole chunks) in the prepared storage of one call (twice
 /// as many real samples); the prepared branches of a polyphase filter must fit.
 const CAPACITY: usize = 384;
+
+/// The `Q15`/`CQ15` kernels of this file, the rows of [`runs_fallback`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Q15Kernel {
+    /// `fir` `CQ15` (count entry `fir_cq15`).
+    Fir,
+    /// `fir_decimate` `CQ15` (`fir_decimate_cq15`).
+    FirDecimate,
+    /// `fir_interpolate` `CQ15` (`fir_interpolate_cq15`).
+    FirInterpolate,
+    /// `fir_interpolate_real` `Q15` (`fir_interpolate_real_q15`).
+    FirInterpolateReal,
+    /// `resample` `CQ15` (`resample_cq15`).
+    Resample,
+    /// `resample_real` `Q15` (`resample_real_q15`).
+    ResampleReal,
+}
+
+/// Whether `kernel` runs the fallback instead of its SIMD branch at the current level (decision
+/// D65, a hotfix). The branches above compute one output at a time and end every
+/// output in a horizontal reduction, whose latency bounds them; the grouped fallback engine of
+/// `sdrk-core` (D59, outputs in groups of 8 or 16 with independent accumulators) is faster in
+/// simulated cycles per sample on both core models of the levels listed here (SIMD / fallback,
+/// reference model / counter-model; `simd128` by instructions, D33). Both are exact integer
+/// sums, so the outputs are bit-identical either way.
+///
+/// | level     | models                      | kernel                 | SIMD / fallback |
+/// |-----------|-----------------------------|------------------------|-----------------|
+/// | `sse2`    | `skylake` / `znver2`        | `fir`                  | 2.28 / 1.45     |
+/// |           |                             | `fir_decimate`         | 2.24 / 1.27     |
+/// |           |                             | `fir_interpolate`      | 2.09 / 1.30     |
+/// |           |                             | `fir_interpolate_real` | 2.20 / 1.38     |
+/// |           |                             | `resample`             | 2.08 / 1.25     |
+/// |           |                             | `resample_real`        | 1.87 / 1.21     |
+/// | `avx2`    | `znver3` / `alderlake`      | `fir`                  | 1.66 / 1.62     |
+/// |           |                             | `fir_decimate`         | 1.46 / 1.14     |
+/// |           |                             | `fir_interpolate`      | 1.61 / 1.58     |
+/// |           |                             | `fir_interpolate_real` | 1.57 / 1.64     |
+/// |           |                             | `resample`             | 1.16 / 1.28     |
+/// | `avx512`  | `znver4` / `sapphirerapids` | `fir`                  | 1.26 / 1.32     |
+/// |           |                             | `fir_interpolate`      | 1.15 / 1.09     |
+/// |           |                             | `fir_interpolate_real` | 1.33 / 1.17     |
+/// | `simd128` | instructions                | `fir_interpolate_real` | 1.03            |
+///
+/// Every other kernel and level keeps its SIMD branch, which is faster on at least one model
+/// (at `sse4.2` all six on `znver2`, at `neon` all six on `cortex-a76`). The fallback is
+/// outside the dispatched kernels and compiled for the level of the build, so the switch applies
+/// only at that level ([`crate::level::compiled_for`]): in a build that detects a higher level
+/// at run time the fallback would be the code of the lower level (`fir` `CQ15` at `avx2`
+/// detected in an SSE2 build: 530 instead of 214 instructions per sample), and the SIMD branch
+/// stays. An entry is removed when its kernel gets a grouped SIMD branch.
+fn runs_fallback(kernel: Q15Kernel) -> bool {
+    use Q15Kernel::{Fir, FirDecimate, FirInterpolate, FirInterpolateReal, Resample};
+    match crate::level::compiled_for() {
+        Some("sse2") => true,
+        Some("avx2") => matches!(
+            kernel,
+            Fir | FirDecimate | FirInterpolate | FirInterpolateReal | Resample
+        ),
+        Some("avx512") => matches!(kernel, Fir | FirInterpolate | FirInterpolateReal),
+        Some("simd128") => kernel == FirInterpolateReal,
+        _ => false,
+    }
+}
 
 /// The virtual stream `history ++ input`, both as interleaved component slices of `C`
 /// components per sample (2 for complex samples, 1 for real ones).
@@ -1765,7 +1830,7 @@ impl Fir<CQ15> for Simd {
         Taps: AsRef<[Q15]>,
         Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
     {
-        if state.taps().len() > PREP_TAPS {
+        if state.taps().len() > PREP_TAPS || runs_fallback(Q15Kernel::Fir) {
             return Fallback.fir(state, input, output);
         }
         check_len(input.len(), output.len())?;
@@ -1782,7 +1847,7 @@ impl Fir<CQ15> for Simd {
 }
 
 macro_rules! decimate_impl {
-    ($t:ty, $tap:ty, $lane:ty, $run:ident, $limit:expr) => {
+    ($t:ty, $tap:ty, $lane:ty, $run:ident, $limit:expr, $switched:expr) => {
         impl FirDecimate<$t> for Simd {
             fn fir_decimate<Tp, Hist>(
                 &self,
@@ -1794,7 +1859,7 @@ macro_rules! decimate_impl {
                 Tp: AsRef<[$tap]>,
                 Hist: AsRef<[$t]> + AsMut<[$t]>,
             {
-                if state.taps().len() > $limit {
+                if state.taps().len() > $limit || $switched {
                     return Fallback.fir_decimate(state, input, output);
                 }
                 let p = state.parts_mut();
@@ -1815,8 +1880,15 @@ macro_rules! decimate_impl {
     };
 }
 
-decimate_impl!(C32, f32, f32, decimate_c32, usize::MAX);
-decimate_impl!(CQ15, Q15, i16, decimate_cq15, PREP_TAPS);
+decimate_impl!(C32, f32, f32, decimate_c32, usize::MAX, false);
+decimate_impl!(
+    CQ15,
+    Q15,
+    i16,
+    decimate_cq15,
+    PREP_TAPS,
+    runs_fallback(Q15Kernel::FirDecimate)
+);
 
 /// `resample` (complex) and `resample_real` of `f32` taps: `C` floats per sample.
 macro_rules! resample_f32_impl {
@@ -1851,9 +1923,11 @@ macro_rules! resample_f32_impl {
 resample_f32_impl!(Resample, resample, ResampleState, C32, 2);
 resample_f32_impl!(ResampleReal, resample_real, ResampleRealState, f32, 1);
 
-/// `resample` (complex) and `resample_real` of `Q15` taps: `C` `i16` per sample.
+/// `resample` (complex) and `resample_real` of `Q15` taps: `C` `i16` per sample. `$branch` is
+/// the SIMD branch alone, a function of its own, which `fir_interpolate` (`down = 1`) also runs
+/// when its own row of [`runs_fallback`] keeps it.
 macro_rules! resample_q15_impl {
-    ($tr:ident, $method:ident, $state:ident, $t:ty, $c:literal) => {
+    ($tr:ident, $method:ident, $branch:ident, $state:ident, $t:ty, $c:literal, $kernel:ident) => {
         impl $tr<$t> for Simd {
             fn $method<Tp, Hist>(
                 &self,
@@ -1865,34 +1939,67 @@ macro_rules! resample_q15_impl {
                 Tp: AsRef<[Q15]>,
                 Hist: AsRef<[$t]> + AsMut<[$t]>,
             {
-                let p = state.parts_mut();
-                let ran = {
-                    let t: &[i16] = bytemuck::cast_slice(p.taps);
-                    let h: &[i16] = bytemuck::cast_slice(&*p.hist);
-                    let x: &[i16] = bytemuck::cast_slice(input);
-                    let y: &mut [i16] = bytemuck::cast_slice_mut(output);
-                    let (up, down) = (p.up, p.down);
-                    dispatch!(simd => polyphase_q15::<_, $c>(
-                        simd, t, h, x, y, up, down, &mut *p.q
-                    ))?
-                };
-                // A filter whose branches do not fit the prepared storage runs on the fallback;
-                // nothing of the state has been touched then.
-                let Some((consumed, produced)) = ran else {
+                if runs_fallback(Q15Kernel::$kernel) {
                     return Fallback.$method(state, input, output);
-                };
-                commit(p.hist, input, consumed, produced, "resampler window")
+                }
+                $branch(state, input, output)
             }
+        }
+
+        #[inline(never)]
+        fn $branch<Tp, Hist>(
+            state: &mut $state<$t, Tp, Hist>,
+            input: &[$t],
+            output: &mut [$t],
+        ) -> Result<Progress>
+        where
+            Tp: AsRef<[Q15]>,
+            Hist: AsRef<[$t]> + AsMut<[$t]>,
+        {
+            let p = state.parts_mut();
+            let ran = {
+                let t: &[i16] = bytemuck::cast_slice(p.taps);
+                let h: &[i16] = bytemuck::cast_slice(&*p.hist);
+                let x: &[i16] = bytemuck::cast_slice(input);
+                let y: &mut [i16] = bytemuck::cast_slice_mut(output);
+                let (up, down) = (p.up, p.down);
+                dispatch!(simd => polyphase_q15::<_, $c>(
+                    simd, t, h, x, y, up, down, &mut *p.q
+                ))?
+            };
+            // A filter whose branches do not fit the prepared storage runs on the fallback;
+            // nothing of the state has been touched then.
+            let Some((consumed, produced)) = ran else {
+                return Fallback.$method(state, input, output);
+            };
+            commit(p.hist, input, consumed, produced, "resampler window")
         }
     };
 }
 
-resample_q15_impl!(Resample, resample, ResampleState, CQ15, 2);
-resample_q15_impl!(ResampleReal, resample_real, ResampleRealState, Q15, 1);
+resample_q15_impl!(
+    Resample,
+    resample,
+    resample_q15_branch,
+    ResampleState,
+    CQ15,
+    2,
+    Resample
+);
+resample_q15_impl!(
+    ResampleReal,
+    resample_real,
+    resample_real_q15_branch,
+    ResampleRealState,
+    Q15,
+    1,
+    ResampleReal
+);
 
-/// `fir_interpolate` (complex) and `fir_interpolate_real`: the resampler with `down = 1`.
+/// `fir_interpolate` (complex) and `fir_interpolate_real` of `f32` taps: the resampler with
+/// `down = 1`.
 macro_rules! interpolate_impl {
-    ($tr:ident, $method:ident, $state:ident, $resample:ident, $t:ty, $tap:ty) => {
+    ($tr:ident, $method:ident, $state:ident, $resample:ident, $t:ty) => {
         impl $tr<$t> for Simd {
             fn $method<Tp, Hist>(
                 &self,
@@ -1901,7 +2008,7 @@ macro_rules! interpolate_impl {
                 output: &mut [$t],
             ) -> Result<Progress>
             where
-                Tp: AsRef<[$tap]>,
+                Tp: AsRef<[f32]>,
                 Hist: AsRef<[$t]> + AsMut<[$t]>,
             {
                 self.$resample(state.inner_mut(), input, output)
@@ -1915,30 +2022,54 @@ interpolate_impl!(
     fir_interpolate,
     FirInterpState,
     resample,
-    C32,
-    f32
+    C32
 );
 interpolate_impl!(
+    FirInterpolateReal,
+    fir_interpolate_real,
+    FirInterpRealState,
+    resample_real,
+    f32
+);
+
+/// `fir_interpolate` (complex) and `fir_interpolate_real` of `Q15` taps: the SIMD branch of the
+/// resampler with `down = 1`, or the fallback where the row `$kernel` of [`runs_fallback`] says
+/// so.
+macro_rules! interpolate_q15_impl {
+    ($tr:ident, $method:ident, $state:ident, $branch:ident, $t:ty, $kernel:ident) => {
+        impl $tr<$t> for Simd {
+            fn $method<Tp, Hist>(
+                &self,
+                state: &mut $state<$t, Tp, Hist>,
+                input: &[$t],
+                output: &mut [$t],
+            ) -> Result<Progress>
+            where
+                Tp: AsRef<[Q15]>,
+                Hist: AsRef<[$t]> + AsMut<[$t]>,
+            {
+                if runs_fallback(Q15Kernel::$kernel) {
+                    return Fallback.$method(state, input, output);
+                }
+                $branch(state.inner_mut(), input, output)
+            }
+        }
+    };
+}
+
+interpolate_q15_impl!(
     FirInterpolate,
     fir_interpolate,
     FirInterpState,
-    resample,
+    resample_q15_branch,
     CQ15,
-    Q15
+    FirInterpolate
 );
-interpolate_impl!(
+interpolate_q15_impl!(
     FirInterpolateReal,
     fir_interpolate_real,
     FirInterpRealState,
-    resample_real,
-    f32,
-    f32
-);
-interpolate_impl!(
-    FirInterpolateReal,
-    fir_interpolate_real,
-    FirInterpRealState,
-    resample_real,
+    resample_real_q15_branch,
     Q15,
-    Q15
+    FirInterpolateReal
 );

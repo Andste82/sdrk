@@ -937,6 +937,74 @@ impl Counter {
     }
 }
 
+/// What gives the execution counts per instruction for the simulated cycles of a level
+/// (`cargo xtask measure`, D68): the counter of the level, in the same environment as its
+/// count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Profiler {
+    /// callgrind with `--dump-instr=yes --collect-jumps=yes`.
+    Callgrind,
+    /// Intel SDE `-dcfg` on the CPU of the level; on a level counted with callgrind (the
+    /// validation of the SDE path, `--cycle-counter sde`) on SDE's Haswell (`-hsw`, AVX2 and
+    /// FMA).
+    Sde,
+    /// QEMU user mode with the plugin `xtask/plugins/bbcount.c`.
+    Qemu,
+}
+
+impl Profiler {
+    /// The profiler of the counter of `plan`, `None` for wasmtime (no core model, D68).
+    #[must_use]
+    pub fn of(plan: &LevelPlan) -> Option<Profiler> {
+        match plan.counter {
+            Counter::Callgrind => Some(Profiler::Callgrind),
+            Counter::Sde(_) => Some(Profiler::Sde),
+            Counter::Qemu => Some(Profiler::Qemu),
+            Counter::Wasmtime => None,
+        }
+    }
+
+    /// The name in the command line (`--cycle-counter`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Profiler::Callgrind => "callgrind",
+            Profiler::Sde => "sde",
+            Profiler::Qemu => "qemu",
+        }
+    }
+
+    /// The profiler called `name`.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Profiler> {
+        [Profiler::Callgrind, Profiler::Sde, Profiler::Qemu]
+            .into_iter()
+            .find(|p| p.name() == name)
+    }
+
+    /// What it is, for the report and the JSON (`block_counts`).
+    #[must_use]
+    pub fn describe(self, plan: &LevelPlan) -> String {
+        match (self, plan.counter) {
+            (Profiler::Callgrind, _) => {
+                "valgrind callgrind, execution counts per instruction and taken jumps".to_string()
+            }
+            (Profiler::Sde, Counter::Sde(_)) => format!(
+                "Intel SDE -dcfg, block and branch counts ({})",
+                plan.counter.describe()
+            ),
+            (Profiler::Sde, _) => {
+                "Intel SDE -dcfg -hsw, block and branch counts (validation of the SDE path)"
+                    .to_string()
+            }
+            (Profiler::Qemu, _) => {
+                "qemu-aarch64 with the bbcount plugin, translation-block and transfer counts"
+                    .to_string()
+            }
+        }
+    }
+}
+
 /// The `volk_config` of a level: which implementations VOLK's dispatcher takes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VolkPin {
@@ -1474,6 +1542,10 @@ struct Session {
     /// cheapest-VOLK search).
     scratch: PathBuf,
     qemu: Option<(PathBuf, PathBuf, PathBuf)>,
+    /// `target/tools` of the work tree (the QEMU plugins).
+    tools: PathBuf,
+    /// The source of the block-count plugin of QEMU (`xtask/plugins/bbcount.c`).
+    bbcount_source: PathBuf,
     /// SDE: the count of the region with `k = 0`, which holds only the markers and is the
     /// same for every kernel, so it is counted once.
     markers: std::cell::OnceCell<u64>,
@@ -1540,18 +1612,8 @@ impl Session {
                     return Ok((self.binary.clone(), Vec::new()));
                 }
             }
-            Counter::Sde(cpu) => {
-                match (cpu, &self.cpuid) {
-                    (SdeCpu::SapphireRapids, _) => args.push("-spr".into()),
-                    (_, Some(def)) => {
-                        args.push("-cpuid_in".into());
-                        args.push(def.into());
-                        // Any instruction above the CPUID stops the run: no library may use
-                        // code of a higher level than the one it is compared at.
-                        args.extend(["-chip_check_cpuid", "1"].map(Into::into));
-                    }
-                    (_, None) => bail!("no CPUID definition for {cpu:?}"),
-                }
+            Counter::Sde(_) => {
+                args.extend(self.sde_cpu_args()?);
                 if counting {
                     args.extend(SDE_REGION.map(Into::into));
                     args.extend(["-icount", "-icount_file"].map(Into::into));
@@ -1580,6 +1642,30 @@ impl Session {
         };
         args.push(self.binary.clone().into());
         Ok((program, args))
+    }
+
+    /// The CPU options of SDE for this level: `-spr` for `avx512`, the CPUID definition of
+    /// `sse2` and `sse4.2` with its check, and `-hsw` for a level counted with callgrind (the
+    /// validation of the SDE profile).
+    fn sde_cpu_args(&self) -> anyhow::Result<Vec<std::ffi::OsString>> {
+        let mut args: Vec<std::ffi::OsString> = Vec::new();
+        match (self.plan.counter, &self.cpuid) {
+            (Counter::Sde(SdeCpu::SapphireRapids), _) => args.push("-spr".into()),
+            (Counter::Sde(_), Some(def)) => {
+                args.push("-cpuid_in".into());
+                args.push(def.into());
+                // Any instruction above the CPUID stops the run: no library may use
+                // code of a higher level than the one it is compared at.
+                args.extend(["-chip_check_cpuid", "1"].map(Into::into));
+            }
+            (Counter::Sde(cpu), None) => bail!("no CPUID definition for {cpu:?}"),
+            (Counter::Callgrind, _) => args.push("-hsw".into()),
+            (counter, _) => bail!(
+                "the level {} counts with {counter:?}, not on x86",
+                self.plan.level
+            ),
+        }
+        Ok(args)
     }
 
     /// Runs the measurement binary without a counter and returns its standard output.
@@ -1718,23 +1804,164 @@ impl Session {
             .ok_or_else(|| anyhow!("no snr_db in {out}"))
     }
 
-    /// The execution counts per instruction of `which` on `kernel` under callgrind, for level 2
+    /// The execution counts per instruction of `which` on `kernel` from `profiler`, for level 2
     /// of the measurement policy: the counts of a run with `calls` calls minus those of a run
     /// with none, so that only the counted calls remain (the differential method of
-    /// [`Session::per_sample`], per instruction).
+    /// [`Session::per_sample`], per instruction). The runs have the environment of the count
+    /// of the level ([`Session::command`]: the pinned `volk_config`, the references; the CPU of
+    /// SDE, the QEMU options).
     fn profile(
         &self,
         kernel: &str,
         which: &str,
         variant: &Variant,
+        profiler: Profiler,
     ) -> anyhow::Result<crate::mca::Counts> {
-        if self.plan.counter != Counter::Callgrind {
+        let calls = K * (N / variant.samples).max(1);
+        match profiler {
+            Profiler::Callgrind => self.callgrind_profile(kernel, which, variant),
+            Profiler::Sde => {
+                let full = self.sde_blocks(kernel, which, calls, calls, variant)?;
+                let empty = self.sde_blocks(kernel, which, 0, calls, variant)?;
+                crate::blockcount::expand(&crate::blockcount::difference(&full, &empty))
+            }
+            Profiler::Qemu => {
+                let full = self.qemu_blocks(kernel, which, calls, calls, variant)?;
+                let empty = self.qemu_blocks(kernel, which, 0, calls, variant)?;
+                Ok(crate::mca::difference(&full, &empty))
+            }
+        }
+    }
+
+    /// The block counts of one run under SDE `-dcfg` (every image of the process, between the
+    /// SSC markers of the counted calls).
+    fn sde_blocks(
+        &self,
+        kernel: &str,
+        which: &str,
+        k: u64,
+        calls: u64,
+        variant: &Variant,
+    ) -> anyhow::Result<crate::blockcount::BlockCounts> {
+        let base = self.scratch.join(format!("dcfg-{kernel}-{which}-{k}"));
+        let mut file = base.clone().into_os_string();
+        file.push(".dcfg.json");
+        let file = PathBuf::from(file);
+        // SDE would read an existing DCFG of the same name as the basis of the new one.
+        match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                return Err(e).context("cannot remove an old DCFG");
+            }
+            _ => {}
+        }
+        let run = Run {
+            args: run_args(kernel, which, k, calls, variant),
+            volk_config: &self.volk_config,
+        };
+        let out = self
+            .command(sde(), &run)
+            .args(self.sde_cpu_args()?)
+            // Only the region between the SSC markers, as in the count: outside it the
+            // process does work that depends on the number of calls (the check of the
+            // output), which the count leaves out.
+            .args(SDE_REGION)
+            .args(["-dcfg", "-dcfg:out_base_name"])
+            .arg(&base)
+            .args([
+                "-dcfg:dcfg_file_suffix",
+                ".dcfg.json",
+                "-dcfg:read_dcfg_if_avail",
+                "0",
+                "-dcfg:analysis",
+                "0",
+                "-dcfg:source",
+                "0",
+                "-dcfg:symbols",
+                "0",
+                "--",
+            ])
+            .arg(&self.binary)
+            .args(&run.args)
+            .stdout(Stdio::null())
+            .output()
+            .context("cannot run sde64")?;
+        if !out.status.success() {
             bail!(
-                "simulated cycles need the execution counts of callgrind; the level {} counts with {}",
-                self.plan.level,
-                self.plan.counter.describe()
+                "sde64 -dcfg failed for {:?}: {}",
+                run.args,
+                String::from_utf8_lossy(&out.stderr)
             );
         }
+        let text = std::fs::read_to_string(&file)
+            .with_context(|| format!("SDE wrote no DCFG {}", file.display()))?;
+        let blocks = crate::blockcount::parse_dcfg(&text, |object| {
+            crate::blockcount::elf(object).map_or(0, |e| e.link_base())
+        })?;
+        let _ = std::fs::remove_file(&file);
+        Ok(blocks)
+    }
+
+    /// The instruction counts of one run under QEMU with the plugin `bbcount`.
+    fn qemu_blocks(
+        &self,
+        kernel: &str,
+        which: &str,
+        k: u64,
+        calls: u64,
+        variant: &Variant,
+    ) -> anyhow::Result<crate::mca::Counts> {
+        let (qemu, _, sysroot) = self
+            .qemu
+            .clone()
+            .ok_or_else(|| anyhow!("the level {} is not counted under QEMU", self.plan.level))?;
+        let plugin = bbcount_plugin(&self.tools, &self.bbcount_source)?;
+        let log = self
+            .scratch
+            .join(format!("bbcount-{kernel}-{which}-{k}.txt"));
+        let run = Run {
+            args: run_args(kernel, which, k, calls, variant),
+            volk_config: &self.volk_config,
+        };
+        let out = self
+            .command(&qemu, &run)
+            .args(["-R", QEMU_RESERVED_VA, "-L"])
+            .arg(&sysroot)
+            .arg("-E")
+            .arg(format!("LD_LIBRARY_PATH={}", self.refs_lib.display()))
+            .arg("-plugin")
+            .arg(&plugin)
+            .args(["-d", "plugin", "-D"])
+            .arg(&log)
+            .arg(&self.binary)
+            .args(&run.args)
+            .stdout(Stdio::null())
+            .output()
+            .context("cannot run qemu-aarch64")?;
+        if !out.status.success() {
+            bail!(
+                "qemu-aarch64 with bbcount failed for {:?}: {}",
+                run.args,
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+        let text = std::fs::read_to_string(&log)
+            .with_context(|| format!("the bbcount plugin wrote no {}", log.display()))?;
+        let counts = crate::blockcount::parse_bbcount(&text, |object, offset| {
+            crate::blockcount::elf(object)
+                .ok()?
+                .address_of_offset(offset)
+        })?;
+        let _ = std::fs::remove_file(&log);
+        Ok(counts)
+    }
+
+    /// [`Session::profile`] under callgrind.
+    fn callgrind_profile(
+        &self,
+        kernel: &str,
+        which: &str,
+        variant: &Variant,
+    ) -> anyhow::Result<crate::mca::Counts> {
         let calls = K * (N / variant.samples).max(1);
         let mut runs = Vec::new();
         for k in [0, calls] {
@@ -1855,14 +2082,51 @@ fn qemu_tools(root: &Path) -> anyhow::Result<(PathBuf, PathBuf, PathBuf)> {
 /// from the QEMU repository at the tag `SDRK_QEMU_TAG` (default `v10.2.1`). Needs a C compiler
 /// and the glib development files (`libglib2.0-dev`, `pkg-config`).
 pub(crate) fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<()> {
+    let src_dir = qemu_source(
+        tools,
+        &["tests/tcg/plugins/insn.c", "include/qemu/qemu-plugin.h"],
+        true,
+    )?;
+    compile_plugin(&src_dir, &src_dir.join("tests/tcg/plugins/insn.c"), plugin)
+}
+
+/// The block-count plugin of QEMU (`xtask/plugins/bbcount.c`) built into `tools`, against the
+/// `qemu-plugin.h` of the QEMU tree of [`build_insn_plugin`]. It is rebuilt when the source
+/// changes (its SHA-256 is kept next to the library).
+///
+/// # Errors
+/// The source cannot be read, the header cannot be fetched or the compiler fails.
+pub(crate) fn bbcount_plugin(tools: &Path, source: &Path) -> anyhow::Result<PathBuf> {
+    use sha2::Digest as _;
+    let plugin = tools.join("libbbcount.so");
+    let stamp = tools.join("libbbcount.so.sha256");
+    let text =
+        std::fs::read(source).with_context(|| format!("cannot read {}", source.display()))?;
+    let want = format!("{:x}", sha2::Sha256::digest(&text));
+    if plugin.exists() && std::fs::read_to_string(&stamp).is_ok_and(|s| s.trim() == want) {
+        return Ok(plugin);
+    }
+    let src_dir = qemu_source(tools, &["include/qemu/qemu-plugin.h"], false)?;
+    compile_plugin(&src_dir, source, &plugin)?;
+    std::fs::write(&stamp, want)?;
+    Ok(plugin)
+}
+
+/// The QEMU source tree with `files`: `SDRK_QEMU_SRC`, or the files downloaded into
+/// `tools/qemu-src` from the tag `SDRK_QEMU_TAG` (default `v10.2.1`, the QEMU of the
+/// development container); with `refresh` they are downloaded even if present.
+fn qemu_source(tools: &Path, files: &[&str], refresh: bool) -> anyhow::Result<PathBuf> {
     std::fs::create_dir_all(tools)?;
-    let src_dir = if let Some(dir) = std::env::var_os("SDRK_QEMU_SRC") {
-        PathBuf::from(dir)
+    if let Some(dir) = std::env::var_os("SDRK_QEMU_SRC") {
+        Ok(PathBuf::from(dir))
     } else {
         let tag = std::env::var("SDRK_QEMU_TAG").unwrap_or_else(|_| "v10.2.1".to_string());
         let dir = tools.join("qemu-src");
-        for file in ["tests/tcg/plugins/insn.c", "include/qemu/qemu-plugin.h"] {
+        for file in files {
             let dest = dir.join(file);
+            if !refresh && dest.exists() {
+                continue;
+            }
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent)?;
             }
@@ -1876,8 +2140,13 @@ pub(crate) fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<(
                 bail!("cannot download {url}; set SDRK_QEMU_SRC to a QEMU source tree");
             }
         }
-        dir
-    };
+        Ok(dir)
+    }
+}
+
+/// Compiles the QEMU plugin `source` into `plugin` against the headers of `src_dir`. Needs a C
+/// compiler and the glib development files (`libglib2.0-dev`, `pkg-config`).
+fn compile_plugin(src_dir: &Path, source: &Path, plugin: &Path) -> anyhow::Result<()> {
     let glib = Command::new("pkg-config")
         .args(["--cflags", "glib-2.0"])
         .output()
@@ -1889,14 +2158,14 @@ pub(crate) fn build_insn_plugin(tools: &Path, plugin: &Path) -> anyhow::Result<(
     let status = Command::new("gcc")
         .args(["-shared", "-fPIC", "-O2", "-o"])
         .arg(plugin)
-        .arg(src_dir.join("tests/tcg/plugins/insn.c"))
+        .arg(source)
         .arg(format!("-I{}", src_dir.join("include/qemu").display()))
         .arg(format!("-I{}", src_dir.join("include").display()))
         .args(cflags.split_whitespace())
         .status()
         .context("cannot run gcc")?;
     if !status.success() {
-        bail!("building the QEMU insn plugin failed");
+        bail!("building the QEMU plugin {} failed", source.display());
     }
     Ok(())
 }
@@ -2098,6 +2367,8 @@ fn session(root: &Path, plan: &LevelPlan, refs: &Path) -> anyhow::Result<Session
         } else {
             None
         },
+        tools: root.join("target").join("tools"),
+        bbcount_source: root.join("xtask").join("plugins").join("bbcount.c"),
         markers: std::cell::OnceCell::new(),
     };
     Ok(session)
@@ -2608,12 +2879,15 @@ pub struct EntryProfiles {
 
 /// The instruction profiles of `kernels` at `level` of `platform` (level 2 of the measurement
 /// policy): per entry, the execution counts per instruction of the counted calls for our side
-/// and for the judged comparison. Only levels counted with callgrind and judged against a
-/// reference can be profiled; the FFTs have the restore of their input subtracted.
+/// and for the judged comparison, taken by `profiler` in the environment of the count of the
+/// level (D68). Only levels judged against a reference can be profiled; the FFTs have the
+/// restore of their input subtracted. An entry that cannot be profiled (not measured at the
+/// level, a run that fails) is returned with its error, so that the report can name it.
 ///
 /// # Errors
-/// An unknown platform, level or kernel, a level that is not counted with callgrind, or a tool
-/// that is missing or fails.
+/// An unknown platform, level or kernel, a profiler that does not fit the counter of the level
+/// (`sde` fits callgrind levels too, for its validation), or a tool that is missing or fails
+/// before the first entry.
 #[allow(
     clippy::large_stack_frames,
     reason = "std::process::Command and the plan table are large; xtask is a host tool"
@@ -2623,7 +2897,8 @@ pub fn profiles(
     platform: &str,
     level: &str,
     kernels: &[String],
-) -> anyhow::Result<Vec<EntryProfiles>> {
+    profiler: Profiler,
+) -> anyhow::Result<Vec<(String, anyhow::Result<EntryProfiles>)>> {
     let plan = PLANS
         .iter()
         .find(|p| p.platform == platform && p.level == level)
@@ -2631,11 +2906,15 @@ pub fn profiles(
     if plan.baseline.is_some() {
         bail!("the level {level} is judged against our own numbers, not against a reference");
     }
-    if plan.counter != Counter::Callgrind {
-        bail!(
-            "simulated cycles need the execution counts of callgrind; the level {level} counts with {}",
-            plan.counter.describe()
-        );
+    match (profiler, plan.counter) {
+        (Profiler::Callgrind, Counter::Callgrind)
+        | (Profiler::Sde, Counter::Sde(_) | Counter::Callgrind)
+        | (Profiler::Qemu, Counter::Qemu) => {}
+        _ => bail!(
+            "the level {level} counts with {}; its execution counts cannot come from {}",
+            plan.counter.describe(),
+            profiler.name()
+        ),
     }
     let refs = references(root, plan.refs)?;
     let session = session(root, plan, &refs)?;
@@ -2645,40 +2924,48 @@ pub fn profiles(
         .filter(|s| kernels.iter().any(|k| k == s.name))
     {
         if !spec.family.measured_at(plan) {
+            out.push((
+                spec.name.to_string(),
+                Err(anyhow!("not measured at the level {level}")),
+            ));
             continue;
         }
-        let (gate, _) = comparisons(plan, spec);
-        let info = session.query(&["info", spec.name])?;
-        let compared_with = info
-            .get("impls")
-            .and_then(|i| i.get(gate.implementation()))
-            .and_then(Value::as_str)
-            .unwrap_or(gate.implementation())
-            .to_string();
-        println!(
-            "==> {level} {} (instruction profiles, ours vs {compared_with})",
-            spec.name
-        );
-        let standard = Variant::standard(spec);
-        let restore = if spec.family.is_fft() {
-            Some(session.profile(spec.name, "restore", &standard)?)
-        } else {
-            None
-        };
-        let profile = |which: &str| -> anyhow::Result<crate::mca::Counts> {
-            let p = session.profile(spec.name, which, &standard)?;
-            Ok(match &restore {
-                Some(r) => crate::mca::difference(&p, r),
-                None => p,
+        let entry = || -> anyhow::Result<EntryProfiles> {
+            let (gate, _) = comparisons(plan, spec);
+            let info = session.query(&["info", spec.name])?;
+            let compared_with = info
+                .get("impls")
+                .and_then(|i| i.get(gate.implementation()))
+                .and_then(Value::as_str)
+                .unwrap_or(gate.implementation())
+                .to_string();
+            println!(
+                "==> {level} {} (instruction profiles from {}, ours vs {compared_with})",
+                spec.name,
+                profiler.name()
+            );
+            let standard = Variant::standard(spec);
+            let restore = if spec.family.is_fft() {
+                Some(session.profile(spec.name, "restore", &standard, profiler)?)
+            } else {
+                None
+            };
+            let profile = |which: &str| -> anyhow::Result<crate::mca::Counts> {
+                let p = session.profile(spec.name, which, &standard, profiler)?;
+                Ok(match &restore {
+                    Some(r) => crate::mca::difference(&p, r),
+                    None => p,
+                })
+            };
+            Ok(EntryProfiles {
+                kernel: spec.name.to_string(),
+                compared_with,
+                samples: K * (N / standard.samples).max(1) * standard.samples,
+                ours: profile(spec.family.measured())?,
+                other: profile(gate.implementation())?,
             })
         };
-        out.push(EntryProfiles {
-            kernel: spec.name.to_string(),
-            compared_with,
-            samples: K * (N / standard.samples).max(1) * standard.samples,
-            ours: profile(spec.family.measured())?,
-            other: profile(gate.implementation())?,
-        });
+        out.push((spec.name.to_string(), entry()));
     }
     Ok(out)
 }

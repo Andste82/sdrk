@@ -48,6 +48,10 @@ pub struct Counts {
     pub instructions: BTreeMap<(String, u64), u64>,
     /// `(object file, address of the jump, address of the target) -> times taken`.
     pub jumps: BTreeMap<(String, u64, u64), u64>,
+    /// Executions that a subtraction ([`difference`]) left negative: instructions that ran more
+    /// often in the subtracted run (the harness code of the restore-only run of an FFT). The
+    /// count subtracts them, so the total of the profile does too ([`profile`]).
+    pub deducted: i64,
 }
 
 /// The share of the executed instructions that the simulated units must cover.
@@ -235,13 +239,26 @@ pub fn parse_callgrind(text: &str) -> Counts {
 }
 
 /// `full - empty` per instruction and per jump; entries whose difference is not positive are
-/// left out.
+/// left out, and the executions they lack are kept in [`Counts::deducted`], so that the total
+/// is the signed difference of the totals, as in the count.
 #[must_use]
 pub fn difference(full: &Counts, empty: &Counts) -> Counts {
     Counts {
         instructions: minus(&full.instructions, &empty.instructions),
         jumps: minus(&full.jumps, &empty.jumps),
+        deducted: full.deducted - empty.deducted
+            + shortfall(&full.instructions, &empty.instructions),
     }
+}
+
+/// `sum of max(0, b - a)` over the keys of `b`: what `a - b` lacks where it is negative.
+#[must_use]
+pub fn shortfall<K: Ord>(a: &BTreeMap<K, u64>, b: &BTreeMap<K, u64>) -> i64 {
+    b.iter()
+        .map(|(key, &n)| n.saturating_sub(a.get(key).copied().unwrap_or(0)))
+        .sum::<u64>()
+        .try_into()
+        .unwrap_or(i64::MAX)
 }
 
 /// `a - b` per key; keys whose difference is not positive are left out.
@@ -1211,6 +1228,9 @@ pub fn profile(counts: &Counts, mode: CycleMode) -> anyhow::Result<Profile> {
             .total_cmp(&a.executed())
             .then(a.address.cmp(&b.address))
     });
+    // The executions a subtraction left negative belong to the counted total (with the mean
+    // cycles per instruction of the simulated units, [`simulate`]).
+    let total = (total - counts.deducted as f64).max(0.0);
     Ok(Profile {
         mode,
         units,
@@ -1497,9 +1517,13 @@ fn=h
         let mut empty = Counts::default();
         empty.instructions.insert(("/bin/a".to_string(), 0x10), 5);
         empty.jumps.insert(("/bin/a".to_string(), 0x18, 0x10), 1);
+        empty.instructions.insert(("/bin/a".to_string(), 0x40), 4);
         let d = difference(&c, &empty);
         assert!(!d.instructions.contains_key(&("/bin/a".to_string(), 0x10)));
         assert_eq!(d.instructions.len(), 4);
+        // 0x40 ran only in the subtracted run: the total keeps it negative.
+        assert_eq!(d.deducted, 4);
+        assert_eq!(difference(&d, &d).deducted, 0);
         assert_eq!(d.jumps.get(&("/bin/a".to_string(), 0x18, 0x10)), Some(&2));
     }
 

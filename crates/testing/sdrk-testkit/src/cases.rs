@@ -110,6 +110,19 @@
 //! | `block_biquad_response` | quick | about 25 KiB |
 //! | `e2e_nfm_ctcss_f32` | full | about 50 KiB (0.4 s of signal, run twice) |
 //! | `e2e_nfm_ctcss_q15` | full | about 30 KiB (0.4 s of signal, run twice) |
+//! | `halfband_c32` | quick | about 29 KiB |
+//! | `halfband_cq15` | quick | about 15 KiB |
+//! | `halfband_real_f32` | quick | about 15 KiB |
+//! | `halfband_real_q15` | quick | about 8 KiB |
+//! | `real_to_complex_c32` | quick | about 38 KiB |
+//! | `real_to_complex_cq15` | quick | about 19 KiB |
+//! | `extremes_m23` | full | about 6 KiB |
+//! | `block_halfband_alias` | quick | about 49 KiB |
+//! | `block_real_to_complex_tone` | quick | about 33 KiB |
+//! | `e2e_real_fm_rx_f32` | quick | about 58 KiB |
+//! | `e2e_real_fm_rx_q15` | quick | about 47 KiB |
+//! | `e2e_real_fm_rx_f32_1s` | full | about 226 KiB |
+//! | `e2e_real_fm_rx_q15_1s` | full | about 216 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |

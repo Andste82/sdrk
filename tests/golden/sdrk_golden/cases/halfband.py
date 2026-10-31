@@ -90,3 +90,60 @@ def n23_q15(rng):
         notes="the integer model of fir_decimate with factor 2 and the quantized halfband taps (zero taps stay 0), "
         "real input: int64 convolution, every second output, one rounding and saturation; quantized noise sigma 0.3",
     )
+
+
+def corner_input(h, rng, n=2048):
+    """A Q15 input that drives the sums of the halfband to both saturation limits and to the edge of the
+    rounding: windows aligned with the signs of the taps (the sum of the magnitudes is above 1, so the sums
+    reach +-32767 and +-32768 after the saturation), runs of -32768 and of +32767 (the sums of a constant run
+    are about 32768 * sum(h)), full-scale alternation, and noise in between. Returns the raw int64 values."""
+    x = q15.from_float(rng.standard_normal(n) * 0.3)
+    sign = np.sign(h.astype(np.int64))
+    # For the output m the window is x[2 m - k], k = 0 .. N - 1 (``h`` is symmetric, so reversed is the same).
+    for m0, flip in ((20, 1), (60, -1), (101, 1)):
+        for k in range(len(h)):
+            x[2 * m0 - k] = 32767 if sign[k] * flip > 0 else -32768
+    x[300:340] = -32768
+    x[400:440] = 32767
+    x[500:540] = np.where(np.arange(40) % 2 == 0, -32768, 32767)
+    x[600:640] = np.where(np.arange(40) % 4 < 2, -32768, 32767)
+    return x
+
+
+@case(kernel="halfband_decimate", name="n23_cq15_corners_2048", seed=438)
+def n23_cq15_corners(rng):
+    h = taps_q15()
+    xr, xi = corner_input(h, rng), corner_input(h, rng)
+    # The second component is a delayed, inverted copy of the first in part, so that the two saturate on
+    # different outputs.
+    xi[700:900] = q15.sat16(-xr[700:900])
+    yr, yi = decimate_q15(xr, h), decimate_q15(xi, h)
+    assert (yr == 32767).any() and (yr == -32768).any() and (yi == 32767).any() and (yi == -32768).any()
+    return dict(
+        params={"taps": N, "attenuation_db": 60.0, "beta": BETA60},
+        arrays={
+            "input": Array("ci16", q15.pack(xr, xi)),
+            "taps": Array("i16", h),
+            "expected": Array("ci16", q15.pack(yr, yi)),
+        },
+        tolerance={"class": "bit_exact"},
+        notes="the integer model of fir_decimate with factor 2 (int64 convolution, one rounding and saturation per "
+        "component); the input holds windows aligned with the signs of the taps (both saturation limits), runs of "
+        "-32768 and +32767 and full-scale alternations",
+    )
+
+
+@case(kernel="halfband_decimate_real", name="n23_q15_corners_2048", seed=439)
+def n23_q15_corners(rng):
+    h = taps_q15()
+    x = corner_input(h, rng)
+    y = decimate_q15(x, h)
+    assert (y == 32767).any() and (y == -32768).any()
+    return dict(
+        params={"taps": N, "attenuation_db": 60.0, "beta": BETA60},
+        arrays={"input": Array("i16", x), "taps": Array("i16", h), "expected": Array("i16", y)},
+        tolerance={"class": "bit_exact"},
+        notes="the integer model of fir_decimate with factor 2 and the quantized halfband taps, real input; the "
+        "input holds windows aligned with the signs of the taps (both saturation limits), runs of -32768 and "
+        "+32767 and full-scale alternations",
+    )

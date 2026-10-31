@@ -143,7 +143,9 @@ Additional rules:
 
 **In:** kernels `halfband_decimate`, `halfband_decimate_real` and `real_to_complex` in `sdrk-core` (states, `Fallback`, `Reference`, facade delegation); the design functions `halfband_len` and `halfband_taps` in `sdrk-blocks`; formats with `Layout::Real` in the `convert` block; the blocks `halfband` and `real_to_complex` with descriptions; their pipeline kinds and the regenerated schema; the example flow `real_input_fm_receiver` (JSON and YAML); golden cases; suite cases; the end-to-end case `e2e_real_fm_rx_*`; the SIMD paths and counts of §7; `docs/kernels.md`, `docs/timing.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/device.md`.
 
-**Out:** halfband interpolation, CIC, external C references for `real_to_complex` (for example libairspy's converter; backlog), device drivers (Airspy and others live in their own repos), packed 12-bit real formats beyond what M01 defines, fs/4 shifts in the other direction (`+fs/4`; a mirrored spectrum is handled by the `ddc` frequency sign).
+**Out:** halfband interpolation, CIC, device drivers (Airspy and others live in their own repos), packed 12-bit real formats beyond what M01 defines, fs/4 shifts in the other direction (`+fs/4`; a mirrored spectrum is handled by the `ddc` frequency sign).
+
+> **Amendment 2026-10-31 (maintainer decisions, D63 to D65):** external C references for the three kernels are **in** scope: liquid-dsp 1.8.3 (already fetched by `benches/refs/build.sh`) and libairspy v1.0.10 (MIT licence; its `iqconverter_float` and `iqconverter_int16`, conversion only, without `remove_dc`; later libairspy versions are under a restrictive licence and must not be used) are built by `benches/refs/build.sh` under its pinning and licence conventions and linked into the measurement binary. The sentence 'external C references for `real_to_complex` (libairspy; backlog)' is removed from *Out*. Section 7 is amended below.
 
 ## Specification
 
@@ -229,7 +231,7 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 | `halfband_decimate_real` (f32, Q15) | yes | as above for real lanes | against our `halfband_decimate` per value, `info` (no real `fir_decimate` path exists in the backend) |
 | `real_to_complex` (C32, CQ15) | yes | the shift is a sign pattern on lanes and the filter is the halfband | against our `halfband_decimate` on the shifted samples at the same level (`Reference::OwnKernel`, `release` with the default limit 1.10) |
 
-**Note 2026-10-28 (D32):** a comparison with one of our own kernels is not an established reference. Under the measurement policy (`docs/performance.md#measurement-policy`) it can show that the halfband path saves work over our `fir_decimate`, but it is no fair gate. Before this milestone starts, the maintainer decides whether the `Reference::OwnKernel` entries may stay `release`, or become `info` with an efficiency verdict and an established reference for the gate where one exists.
+**Note 2026-10-28 (D32):** a comparison with one of our own kernels is not an established reference and no fair gate. The maintainer decided on 2026-10-31 (D63): all `Reference::OwnKernel` comparisons are `info` and the gates are external; see the *Amendment 2026-10-31* below. The `Accelerated`/`Count` columns of the table above are replaced by the amendment.
 
 **Comparison with an own kernel (extension of `xtask count`, normative):**
 
@@ -237,6 +239,36 @@ The rules of M13 and of the SIMD optimization apply to every new kernel unchange
 - `benches/limits.json`: an entry may carry an optional `"limit"` (number). It replaces `_limits.release` (status `release`) or `_limits.dev` (status `dev`) for that entry; `goal` stays `_limits.goal` unless the entry gives `"goal"` as well. The `halfband_decimate` entries use `"limit": 0.60`.
 - `benches/results/<platform>.json`: `compared_with` is `"ours:<kernel>"`; the verdict and the limit used are written as for the other entries.
 - Unit tests of `xtask` for the parser (an entry with and without `limit`, a wrong type) and for the verdict with a per-entry limit; `docs/performance.md` documents the new reference kind and the field.
+
+> **Amendment 2026-10-31 (maintainer decisions, D63 to D65; replaces the `Count` column of the table above, the per-entry `limit` 0.60 and the release status of the `Reference::OwnKernel` entries):**
+>
+> 1. **Count references are external.** `Reference::OwnKernel` comparisons are kept as work-saving evidence only, with status `info` (for example `halfband_decimate` <= 0.60 of `fir_decimate` with factor 2 and the expanded taps; `real_to_complex` against `halfband_decimate` on the shifted samples). They are no gate. The gates are:
+>
+>    | Kernel (type) | Level | Gate (reference) | Status |
+>    | --- | --- | --- | --- |
+>    | `halfband_decimate` (C32) | `sse2`, `sse4.2` | liquid-dsp 1.8.3 `resamp2_crcf` (`decim_execute`) with `dotprod_crcf`, SSE | `release` |
+>    | | `avx2` | the same with `dotprod_crcf`, AVX | `release` |
+>    | | `avx512` | the same, AVX-512F | `release` |
+>    | | `neon` | the same, NEON | `release` |
+>    | | `simd128` | the same, liquid portable code built with `-msimd128` (precedent: CMSIS-DSP generic C at `simd128`, D15) | `release` as D15, unless the compiler leaves it scalar; then `info` with a decision-log row |
+>    | `halfband_decimate` (C32) fallback | all | liquid-dsp portable `resamp2_crcf` (`dotprod.proto.c`), as `Family::FallbackVsLiquid` | `release` |
+>    | `halfband_decimate_real` (f32) | `sse4.2` | liquid-dsp `resamp2_rrrf` with `dotprod_rrrf`, SSE (its SSE path needs SSE3 `hadd`, so the reference starts at `sse4.2`) | `release` |
+>    | | `sse2` | liquid portable `resamp2_rrrf` (no SSE path without SSE3) | `release` |
+>    | | `avx2`, `avx512`, `neon`, `simd128` | `dotprod_rrrf` AVX, AVX-512F, NEON; `simd128` as above | `release` (`simd128` as above) |
+>    | `halfband_decimate_real` (f32) fallback | all | liquid portable `resamp2_rrrf` | `release` |
+>    | `real_to_complex` (C32) | `sse4.2`, `avx2`, `avx512`, `neon`, `simd128` | liquid-dsp `firhilbf_decim_execute` (delay branch plus one real dot product over (N + 1)/2 taps and the sign toggle) with `dotprod_rrrf` of the level | `release` |
+>    | | `sse2` | additionally libairspy v1.0.10 `iqconverter_float` (SSE2) as a second gate; liquid portable `firhilbf` as the first | `release` (both must pass) |
+>    | `real_to_complex` (C32) fallback | all | liquid portable `firhilbf`; libairspy generic `iqconverter_float` as information | `release` |
+>    | `real_to_complex` (CQ15) | all | libairspy v1.0.10 `iqconverter_int16` (lower accuracy class: truncating `>> 15`, `i32` accumulator, halves the odd samples) | **pending, measured as `info`** (see 4) |
+>    | `halfband_decimate` (CQ15), `halfband_decimate_real` (Q15) | all | no library for the SIMD branch: `info` with an efficiency verdict (D33), as the Q15 biquads (D21) | `info` |
+>    | the same, fallbacks | all | a CMSIS-DSP 1.18.0 composition in the measurement binary (polyphase split, `arm_fir_q15` with the compacted odd taps, plus the centre tap), `Family::FallbackVsCmsis`-like | `release` (risk: open item I20-1, the CQ15 FIR fallback engine) |
+>
+>    **Workload:** N = 47 taps (24 non-zero odd taps plus the centre tap; equals liquid `m = 12` and the libairspy 47-tap kernel). Our taps are injected into every reference (liquid's `resamp2` and `firhilb` filter coefficients, libairspy's `HB_KERNEL_FLOAT`/`HB_KERNEL_INT16` tables), so that accuracy (`count accuracy`) is comparable.
+> 2. **libairspy v1.0.10 moves from *Out/backlog* into scope as a reference:** conversion only, without `remove_dc`. `benches/refs/build.sh` pins the version and licence like the other references (MIT; the notice goes into the licence list of `docs/performance.md`).
+> 3. **Symmetric tap pre-add** (`h[k] * (x[m-k] + x[m+k])`) is allowed in the C32/f32 tolerance SIMD paths (contract >= 110 dB, a regression guard in the golden case, at most 1 dB below the reference). The fallback stays in ascending tap order without FMA. Pre-add in integers (Q15/CQ15) is exact and allowed anyway.
+> 4. **Status of the `real_to_complex` CQ15 gate is pending.** The entry is measured against libairspy `iqconverter_int16` and recorded provisionally as `info`. The maintainer decides whether it becomes `release` with an accuracy waiver (like D58) or stays `info` (like D56); the measured numbers go into `docs/open-items.md`.
+>
+> The mechanism of the original section stays: `Reference::OwnKernel { kernel }` (`implementation()` returns `"ours"`), the optional per-entry `"limit"` in `benches/limits.json`, `compared_with: "ours:<kernel>"`, the comparison workloads `fir_decimate_x2_halfband_taps` and `halfband_decimate_shifted`, the unit tests and the documentation, now for `info` entries (the per-entry `limit` 0.60 is recorded as the efficiency target of the `info` entry, it does not fail the command). New: `Reference::Liquid` entries for the halfband/Hilbert kernels, `Reference::Libairspy`, and a liquid resampler/Hilbert build per level in `benches/refs/build.sh`.
 
 ### 8. Documentation
 

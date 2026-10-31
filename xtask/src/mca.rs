@@ -24,6 +24,10 @@
 //! - **Per block** (the method of D35): every basic block, or run of blocks with the same count
 //!   that only cold code separates ([`regions`]), is simulated as a loop of its own.
 //!
+//! In both modes the CET markers (`endbr64`) of code built with `-fcf-protection` are simulated
+//! as the `nop` they execute as, not as the microcoded instruction of the `znver3`/`znver4`
+//! models ([`cet_markers_as_nop`]).
+//!
 //! Every unit is simulated as if it repeated back to back with itself. That is the steady state
 //! of a loop body; for a block executed once per call it is an approximation, which the coverage
 //! by loop bodies keeps small for the counted kernels. The blind spots of the method (caches,
@@ -812,6 +816,31 @@ pub fn loop_paths(g: &Cfg, l: &Loop) -> Vec<LoopPath> {
     paths
 }
 
+/// Writes the branch-target markers of CET (`endbr64`, `endbr32`; every function entry and
+/// indirect-branch target of code built with `-fcf-protection`) as `nop`. They are hint
+/// instructions that execute as a `nop` (one decode and dispatch slot, no execution port), but
+/// `llvm-mca` 23.1.1 has no scheduling information of its own for them and takes the generic
+/// `WriteSystem` class: 100 cycles of latency on every x86 model, and on `znver3` and `znver4`
+/// also the microcoded write of 100 micro-operations on the integer ALUs, about 51 (`znver3`)
+/// and 34 (`znver4`) cycles per execution. The `notrack` prefix of indirect jumps is modelled
+/// as the plain jump and is kept. Returns the text and the number of rewritten markers.
+#[must_use]
+pub fn cet_markers_as_nop(text: &[String]) -> (Vec<String>, usize) {
+    let mut markers = 0;
+    let out = text
+        .iter()
+        .map(|t| {
+            if matches!(t.trim(), "endbr64" | "endbr32") {
+                markers += 1;
+                "nop".to_string()
+            } else {
+                t.clone()
+            }
+        })
+        .collect();
+    (out, markers)
+}
+
 /// The models whose register-move elimination is not trusted in loop regions: the `znver3`
 /// and `znver4` models of `llvm-mca` 23.1.1 lose the dependency of later instructions on an
 /// eliminated `mov r32, r32` (the release path of the `agc` `CQ15` fallback: 24.7 instead of
@@ -1119,12 +1148,13 @@ pub fn parse_mca(summary: &str) -> Option<BlockTiming> {
     })
 }
 
-/// Simulates one block on `cpu`.
+/// Simulates one block on `cpu`, its CET markers written as `nop` ([`cet_markers_as_nop`]).
 ///
 /// # Errors
 /// `llvm-mca` cannot run or rejects the block.
 pub fn simulate_block(text: &[String], triple: &str, cpu: &str) -> anyhow::Result<BlockTiming> {
     use std::io::Write as _;
+    let (text, _) = cet_markers_as_nop(text);
     let mca = llvm_mca();
     let mut child = Command::new(&mca)
         .arg(format!("-mtriple={triple}"))
@@ -1681,6 +1711,54 @@ fn=h
                 "mov $0x1,%eax",
             ]
         );
+    }
+
+    #[test]
+    fn cet_markers_become_nop() {
+        let t: Vec<String> = [
+            "endbr64",
+            "mov %edi,%eax",
+            "endbr32",
+            "notrack jmp *%rax",
+            "nop",
+            "ret",
+        ]
+        .map(ToString::to_string)
+        .to_vec();
+        let (rewritten, markers) = cet_markers_as_nop(&t);
+        assert_eq!(markers, 2);
+        assert_eq!(
+            rewritten,
+            [
+                "nop",
+                "mov %edi,%eax",
+                "nop",
+                "notrack jmp *%rax",
+                "nop",
+                "ret"
+            ]
+        );
+        // Code without markers is simulated as it is.
+        let plain = &t[1..2];
+        assert_eq!(cet_markers_as_nop(plain), (plain.to_vec(), 0));
+    }
+
+    #[test]
+    fn a_cet_marker_costs_no_more_than_a_nop() -> anyhow::Result<()> {
+        if !llvm_mca().exists() {
+            return Ok(());
+        }
+        let with: Vec<String> = ["endbr64", "add %edi,%eax", "imul %eax,%ecx"]
+            .map(ToString::to_string)
+            .to_vec();
+        let without = with[1..].to_vec();
+        for cpu in ["znver3", "znver4", "alderlake"] {
+            // As compiled, `endbr64` would take about 51 (`znver3`) and 34 (`znver4`) cycles.
+            let a = simulate_block(&with, "x86_64", cpu)?;
+            let b = simulate_block(&without, "x86_64", cpu)?;
+            assert!((a.cycles - b.cycles).abs() < 0.1, "{cpu}: {a:?} {b:?}");
+        }
+        Ok(())
     }
 
     #[test]

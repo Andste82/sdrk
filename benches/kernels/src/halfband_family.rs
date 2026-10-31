@@ -13,7 +13,8 @@
 //! | --- | --- | --- | --- |
 //! | `halfband_decimate` | facade | liquid-dsp `resamp2_crcf` (SIMD dot product of the level) | `fir_decimate` by 2 with the expanded taps |
 //! | `halfband_decimate_real` | facade | liquid-dsp `resamp2_rrrf` | |
-//! | `real_to_complex` | facade | liquid-dsp `firhilbf` | libairspy `iqconverter_float` (SSE2) |
+//! | `real_to_complex` | facade | liquid-dsp `firhilbf` | |
+//! | `real_to_complex_airspy` (`sse2` only) | facade | libairspy `iqconverter_float` (SSE2), the second gate of `real_to_complex` | |
 //! | `halfband_decimate_cq15`, `halfband_decimate_real_q15` | facade | our fallback | the CMSIS-DSP composition |
 //! | `real_to_complex_cq15` | facade | libairspy `iqconverter_int16` (information until the maintainer decides) | |
 //! | `<kernel>_fallback` | our fallback | liquid-dsp with the portable dot product (`real_to_complex`: also libairspy's generic code as information); the Q15 types: the CMSIS-DSP composition (`real_to_complex_cq15`: libairspy `iqconverter_int16`) | |
@@ -1047,6 +1048,7 @@ mod tests {
             ("halfband_decimate_cq15_fallback", 60.0),
             ("halfband_decimate_real_fallback", 100.0),
             ("halfband_decimate_real_q15_fallback", 60.0),
+            ("real_to_complex_airspy", 100.0),
             ("real_to_complex_fallback", 100.0),
             ("real_to_complex_cq15_fallback", 60.0),
             ("halfband_ref_fir_decimate", 100.0),

@@ -2820,48 +2820,60 @@
   },
   "halfband_decimate": {
     "sse2": {
-      "status": "release"
+      "status": "release",
+      "own_target": 0.6
     },
     "sse4.2": {
-      "status": "release"
+      "status": "release",
+      "own_target": 0.6
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "own_target": 0.6
     },
     "avx512": {
-      "status": "release"
+      "status": "release",
+      "own_target": 0.6
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "own_target": 0.6
     },
     "simd128": {
-      "status": "release"
+      "status": "release",
+      "own_target": 0.6
     }
   },
   "halfband_decimate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)",
+      "own_target": 0.6
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)",
+      "own_target": 0.6
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)",
+      "own_target": 0.6
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)",
+      "own_target": 0.6
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)",
+      "own_target": 0.6
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)"
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D63)",
+      "own_target": 0.6
     }
   },
   "halfband_decimate_real": {
@@ -2912,48 +2924,65 @@
   },
   "real_to_complex": {
     "sse2": {
-      "status": "release"
+      "status": "release",
+      "own_target": 1.1
     },
     "sse4.2": {
-      "status": "release"
+      "status": "release",
+      "own_target": 1.1
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "own_target": 1.1
     },
     "avx512": {
-      "status": "release"
+      "status": "release",
+      "own_target": 1.1
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "own_target": 1.1
     },
     "simd128": {
+      "status": "release",
+      "own_target": 1.1
+    }
+  },
+  "real_to_complex_airspy": {
+    "sse2": {
       "status": "release"
     }
   },
   "real_to_complex_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
+      "own_target": 1.1
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
+      "own_target": 1.1
     },
     "avx2": {
       "status": "info",
-      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
+      "own_target": 1.1
     },
     "avx512": {
       "status": "info",
-      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
+      "own_target": 1.1
     },
     "neon": {
       "status": "info",
-      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
+      "own_target": 1.1
     },
     "simd128": {
       "status": "info",
-      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
+      "waiver": "provisional (D64, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
+      "own_target": 1.1
     }
   },
   "halfband_decimate_fallback": {

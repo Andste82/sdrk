@@ -324,9 +324,9 @@ pub trait Kernel {
 }
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
-/// are appended; a `<kernel>_fallback` entry takes the seed of `<kernel>`, so that both entries
-/// filter the same input.
-pub const KERNELS: [&str; 139] = [
+/// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
+/// both entries filter the same input.
+pub const KERNELS: [&str; 140] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -466,12 +466,16 @@ pub const KERNELS: [&str; 139] = [
     "halfband_ref_fir_decimate_cq15",
     "halfband_ref_shifted",
     "halfband_ref_shifted_cq15",
+    "real_to_complex_airspy",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
 pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
     KERNELS.iter().position(|k| *k == name)?;
-    let seed_of = name.strip_suffix("_fallback").unwrap_or(name);
+    let seed_of = name
+        .strip_suffix("_fallback")
+        .or_else(|| name.strip_suffix("_airspy"))
+        .unwrap_or(name);
     let idx = KERNELS.iter().position(|k| *k == seed_of)? as u64;
     let (simd, fallback) = (BiquadEntry::Simd, BiquadEntry::Fallback);
     let entry = if name.ends_with("_fallback") {
@@ -588,7 +592,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "halfband_decimate_real_q15" | "halfband_decimate_real_q15_fallback" => {
             Box::new(HalfbandRealK::<Q15>::new(rng, layout, entry))
         }
-        "real_to_complex" | "real_to_complex_fallback" => {
+        "real_to_complex" | "real_to_complex_fallback" | "real_to_complex_airspy" => {
             Box::new(RealToComplexK::<C32>::new(rng, layout, entry))
         }
         "real_to_complex_cq15" | "real_to_complex_cq15_fallback" => {

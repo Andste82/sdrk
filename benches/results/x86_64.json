@@ -2223,10 +2223,12 @@
             {
               "compared_with": "ours:halfband_ref_fir_decimate",
               "label": "information: ours:halfband_ref_fir_decimate",
+              "meets_target": true,
               "other_instr_per_sample": 24.87,
               "other_snr_db": 145.11,
               "ours_instr_per_sample": 12.77,
-              "ratio": 0.51
+              "ratio": 0.51,
+              "target": 0.6
             },
             {
               "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
@@ -2262,10 +2264,12 @@
             {
               "compared_with": "ours:halfband_ref_fir_decimate_cq15",
               "label": "information: ours:halfband_ref_fir_decimate_cq15",
+              "meets_target": true,
               "other_instr_per_sample": 148.82,
               "other_snr_db": 999.0,
               "ours_instr_per_sample": 34.73,
-              "ratio": 0.23
+              "ratio": 0.23,
+              "target": 0.6
             },
             {
               "compared_with": "sdrk fallback",
@@ -2907,10 +2911,12 @@
             {
               "compared_with": "ours:halfband_ref_shifted",
               "label": "information: ours:halfband_ref_shifted",
-              "other_instr_per_sample": 26.78,
+              "meets_target": true,
+              "other_instr_per_sample": 26.77,
               "other_snr_db": 150.01,
               "ours_instr_per_sample": 10.82,
-              "ratio": 0.4
+              "ratio": 0.4,
+              "target": 1.1
             },
             {
               "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2)",
@@ -2940,16 +2946,18 @@
               "label": "information: fallback",
               "other_instr_per_sample": 68.31,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 18.64,
+              "ours_instr_per_sample": 18.63,
               "ratio": 0.27
             },
             {
               "compared_with": "ours:halfband_ref_shifted_cq15",
               "label": "information: ours:halfband_ref_shifted_cq15",
+              "meets_target": true,
               "other_instr_per_sample": 51.24,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 18.64,
-              "ratio": 0.36
+              "ours_instr_per_sample": 18.63,
+              "ratio": 0.36,
+              "target": 1.1
             },
             {
               "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2)",
@@ -2961,7 +2969,7 @@
             }
           ],
           "other_instr_per_sample": 34.31,
-          "ours_instr_per_sample": 18.64,
+          "ours_instr_per_sample": 18.63,
           "ratio": 0.54,
           "snr_db": {
             "other": 81.49,
@@ -4356,7 +4364,7 @@
         "real_to_complex_cq15": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 18.64,
+          "other_instr_per_sample": 18.63,
           "ours_instr_per_sample": 18.67,
           "ratio": 1.0,
           "snr_db": {
@@ -6837,10 +6845,12 @@
             {
               "compared_with": "ours:halfband_ref_fir_decimate",
               "label": "information: ours:halfband_ref_fir_decimate",
+              "meets_target": true,
               "other_instr_per_sample": 47.96,
               "other_snr_db": 143.95,
               "ours_instr_per_sample": 28.2,
-              "ratio": 0.59
+              "ratio": 0.59,
+              "target": 0.6
             },
             {
               "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2)",
@@ -6876,10 +6886,12 @@
             {
               "compared_with": "ours:halfband_ref_fir_decimate_cq15",
               "label": "information: ours:halfband_ref_fir_decimate_cq15",
+              "meets_target": true,
               "other_instr_per_sample": 348.83,
               "other_snr_db": 999.0,
               "ours_instr_per_sample": 59.1,
-              "ratio": 0.17
+              "ratio": 0.17,
+              "target": 0.6
             },
             {
               "compared_with": "sdrk fallback",
@@ -7519,20 +7531,14 @@
           "goal": true,
           "informational": [
             {
-              "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2)",
-              "label": "information: airspy",
-              "other_instr_per_sample": 36.15,
-              "other_snr_db": 148.65,
-              "ours_instr_per_sample": 21.63,
-              "ratio": 0.6
-            },
-            {
               "compared_with": "ours:halfband_ref_shifted",
               "label": "information: ours:halfband_ref_shifted",
+              "meets_target": true,
               "other_instr_per_sample": 42.21,
               "other_snr_db": 148.46,
               "ours_instr_per_sample": 21.63,
-              "ratio": 0.51
+              "ratio": 0.51,
+              "target": 1.1
             },
             {
               "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2)",
@@ -7553,6 +7559,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "real_to_complex_airspy": {
+          "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 36.15,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 21.63,
+              "ratio": 0.6
+            }
+          ],
+          "other_instr_per_sample": 36.15,
+          "ours_instr_per_sample": 21.63,
+          "ratio": 0.6,
+          "snr_db": {
+            "other": 148.65,
+            "ours": 148.65
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "real_to_complex_cq15": {
           "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2)",
           "goal": true,
@@ -7568,10 +7597,12 @@
             {
               "compared_with": "ours:halfband_ref_shifted_cq15",
               "label": "information: ours:halfband_ref_shifted_cq15",
+              "meets_target": true,
               "other_instr_per_sample": 75.61,
               "other_snr_db": 999.0,
               "ours_instr_per_sample": 34.13,
-              "ratio": 0.45
+              "ratio": 0.45,
+              "target": 1.1
             },
             {
               "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2)",
@@ -10460,10 +10491,12 @@
             {
               "compared_with": "ours:halfband_ref_fir_decimate",
               "label": "information: ours:halfband_ref_fir_decimate",
+              "meets_target": true,
               "other_instr_per_sample": 47.89,
               "other_snr_db": 143.95,
               "ours_instr_per_sample": 28.57,
-              "ratio": 0.6
+              "ratio": 0.6,
+              "target": 0.6
             },
             {
               "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2)",
@@ -10499,10 +10532,12 @@
             {
               "compared_with": "ours:halfband_ref_fir_decimate_cq15",
               "label": "information: ours:halfband_ref_fir_decimate_cq15",
+              "meets_target": true,
               "other_instr_per_sample": 216.33,
               "other_snr_db": 999.0,
               "ours_instr_per_sample": 47.29,
-              "ratio": 0.22
+              "ratio": 0.22,
+              "target": 0.6
             },
             {
               "compared_with": "sdrk fallback",
@@ -11144,10 +11179,12 @@
             {
               "compared_with": "ours:halfband_ref_shifted",
               "label": "information: ours:halfband_ref_shifted",
+              "meets_target": true,
               "other_instr_per_sample": 42.57,
               "other_snr_db": 148.46,
               "ours_instr_per_sample": 21.37,
-              "ratio": 0.5
+              "ratio": 0.5,
+              "target": 1.1
             },
             {
               "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2)",
@@ -11183,10 +11220,12 @@
             {
               "compared_with": "ours:halfband_ref_shifted_cq15",
               "label": "information: ours:halfband_ref_shifted_cq15",
+              "meets_target": true,
               "other_instr_per_sample": 63.8,
               "other_snr_db": 999.0,
               "ours_instr_per_sample": 27.14,
-              "ratio": 0.43
+              "ratio": 0.43,
+              "target": 1.1
             },
             {
               "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2)",

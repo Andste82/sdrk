@@ -114,7 +114,7 @@ impl Status {
 }
 
 /// One entry of `benches/limits.json`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Limit {
     /// The state.
     pub status: Status,
@@ -124,6 +124,10 @@ pub struct Limit {
     pub waiver: Option<String>,
     /// The same for an accuracy more than [`SNR_MARGIN_DB`] below the comparison.
     pub accuracy_waiver: Option<String>,
+    /// The efficiency target of an own-kernel comparison ([`Reference::OwnKernel`]) of the
+    /// entry (`"own_target"`): the results record whether `ours / ours:<kernel>` meets it. It is
+    /// information, never judged, and it does not replace the limit of the judged comparison.
+    pub own_target: Option<f64>,
 }
 
 impl Limit {
@@ -134,6 +138,7 @@ impl Limit {
             status: Status::Release,
             waiver: None,
             accuracy_waiver: None,
+            own_target: None,
         }
     }
 }
@@ -201,6 +206,15 @@ impl Limits {
                         status,
                         waiver: text("waiver"),
                         accuracy_waiver: text("accuracy_waiver"),
+                        own_target: match entry.get("own_target") {
+                            None => None,
+                            Some(v) => match v.as_f64() {
+                                Some(t) if t > 0.0 => Some(t),
+                                _ => bail!(
+                                    "limits.json: `{kernel}.{level}`: `own_target` must be a number > 0"
+                                ),
+                            },
+                        },
                     },
                 );
             }
@@ -233,6 +247,12 @@ pub struct Extra {
 }
 
 impl Extra {
+    /// Whether this is an own-kernel comparison (`ours:<kernel>`).
+    #[must_use]
+    pub fn is_own_kernel(&self) -> bool {
+        self.compared_with.starts_with("ours:")
+    }
+
     /// `ours / other`.
     #[must_use]
     pub fn ratio(&self) -> f64 {
@@ -494,36 +514,58 @@ pub fn evaluate(limits: &Limits, rule: Rule, level: &str, measurements: &[Measur
             let _ = write!(line, "  {}", verdict.detail());
         }
         report.lines.push(line);
+        let target = limit.and_then(|l| l.own_target);
         for e in &m.extras {
-            report.lines.push(format!(
+            let mut line = format!(
                 "    {:<34} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  ({})",
                 e.label,
                 e.ours,
                 e.other,
                 e.ratio(),
                 e.compared_with
-            ));
+            );
+            if let Some(t) = target.filter(|_| e.is_own_kernel()) {
+                let _ = write!(
+                    line,
+                    "  target {t:.2}: {}",
+                    if e.ratio() <= t { "met" } else { "missed" }
+                );
+            }
+            report.lines.push(line);
         }
         report
             .records
-            .insert(m.kernel.clone(), record(m, status, &verdict, goal));
+            .insert(m.kernel.clone(), record(m, status, &verdict, goal, target));
     }
     report
 }
 
-fn record(m: &Measurement, status: &str, verdict: &Verdict, goal: bool) -> Value {
+fn record(
+    m: &Measurement,
+    status: &str,
+    verdict: &Verdict,
+    goal: bool,
+    own_target: Option<f64>,
+) -> Value {
     let extras: Vec<Value> = m
         .extras
         .iter()
         .map(|e| {
-            json!({
+            let mut v = json!({
                 "label": e.label,
                 "ours_instr_per_sample": round2(e.ours),
                 "other_instr_per_sample": round2(e.other),
                 "ratio": round2(e.ratio()),
                 "compared_with": e.compared_with,
                 "other_snr_db": e.other_snr_db.map(round2),
-            })
+            });
+            if let Some(t) = own_target.filter(|_| e.is_own_kernel())
+                && let Some(obj) = v.as_object_mut()
+            {
+                obj.insert("target".into(), json!(t));
+                obj.insert("meets_target".into(), json!(e.ratio() <= t));
+            }
+            v
         })
         .collect();
     let mut r = json!({
@@ -671,8 +713,13 @@ pub enum Family {
     /// (the portable loop at `simd128`, where liquid has no SIMD loop).
     HalfbandLiquid,
     /// `real_to_complex` of `C32`: liquid-dsp's `firhilbf` with its SIMD dot product; at `sse2`
-    /// also libairspy's `iqconverter_float` (SSE2) as information.
+    /// libairspy's `iqconverter_float` (SSE2) is the second gate, the entry
+    /// [`Family::HilbertAirspy`].
     HilbertLiquid,
+    /// `real_to_complex_airspy`, measured at `sse2` only: our `real_to_complex` against libairspy's
+    /// `iqconverter_float` (SSE2), the second gate of `real_to_complex` at that level (the
+    /// first is liquid-dsp's `firhilbf`; both must pass).
+    HilbertAirspy,
     /// `real_to_complex_cq15`: libairspy's `iqconverter_int16`, a lower accuracy class (truncating
     /// `>> 15`, a 32-bit accumulator, the odd samples halved). Its status is the maintainer's
     /// open decision (I23-1), `info` until then; our fallback as information.
@@ -736,6 +783,9 @@ impl Family {
     /// Whether the kernel has an entry at `plan`'s level.
     #[must_use]
     pub fn measured_at(self, plan: &LevelPlan) -> bool {
+        if self == Family::HilbertAirspy {
+            return plan.level == "sse2" && plan.baseline.is_none();
+        }
         !((self.is_fallback_entry() || self == Family::Workload) && plan.baseline.is_some())
     }
 }
@@ -793,7 +843,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 139] = [
+pub static KERNELS: [KernelSpec; 140] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -950,6 +1000,7 @@ pub static KERNELS: [KernelSpec; 139] = [
         Family::HilbertAirspyQ15,
         "halfband_ref_shifted_cq15",
     ),
+    spec("real_to_complex_airspy", Family::HilbertAirspy, false),
     spec(
         "halfband_decimate_fallback",
         Family::FallbackVsLiquid,
@@ -1342,16 +1393,14 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::FftCq15FallbackVsCmsis => (Reference::Cmsis, vec![Reference::KissFft]),
         Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
         Family::FallbackVsGnuRadio => (Reference::GnuRadio, vec![Reference::Cmsis]),
-        // libairspy's SSE2 converter is the information at the level it is written for.
-        Family::HilbertLiquid if plan.level == "sse2" => {
-            (Reference::Liquid, vec![Reference::Libairspy])
-        }
+        // libairspy's SSE2 converter is the second gate at the level it is written for: the
+        // entry `real_to_complex_airspy`.
         Family::FallbackVsLiquid | Family::HalfbandLiquid | Family::HilbertLiquid => {
             (Reference::Liquid, Vec::new())
         }
         Family::HilbertAirspyQ15 => (Reference::Libairspy, vec![Reference::Fallback]),
         Family::FallbackHilbert => (Reference::Liquid, vec![Reference::Libairspy]),
-        Family::FallbackVsAirspy => (Reference::Libairspy, Vec::new()),
+        Family::HilbertAirspy | Family::FallbackVsAirspy => (Reference::Libairspy, Vec::new()),
     }
 }
 
@@ -3474,6 +3523,7 @@ mod tests {
             status,
             waiver: waiver.map(Into::into),
             accuracy_waiver: accuracy.map(Into::into),
+            own_target: None,
         }
     }
 
@@ -3694,6 +3744,47 @@ mod tests {
         assert!(report.lines[0].contains("info") && report.lines[0].contains("SSE rotator"));
         assert_eq!(report.records["rotate"]["verdict"], "info");
         assert_eq!(report.records["rotate"]["status"], "info");
+    }
+
+    #[test]
+    fn an_own_target_is_recorded_for_the_own_kernel_comparison_and_never_judged() {
+        let l = limits(r#"{ "k": { "avx2": { "status": "release", "own_target": 0.60 } } }"#);
+        let mut x = m("k", 9.0, 10.0);
+        for (own, name) in [(20.0, "ours:w"), (10.0, "ours:w"), (10.0, "other")] {
+            x.extras.push(Extra {
+                label: format!("information: {name}"),
+                ours: 9.0,
+                other: own,
+                compared_with: name.into(),
+                other_snr_db: None,
+            });
+        }
+        let report = evaluate(&l, Rule::Reference, "avx2", &[x]);
+        assert!(report.ok, "a missed target does not fail");
+        let info = &report.records["k"]["informational"];
+        assert_eq!(info[0]["target"], 0.6);
+        assert_eq!(info[0]["meets_target"], true);
+        assert_eq!(info[1]["meets_target"], false);
+        assert!(info[2].get("target").is_none());
+        assert!(report.lines[1].contains("target 0.60: met"));
+        assert!(report.lines[2].contains("target 0.60: missed"));
+        assert!(!report.lines[3].contains("target"));
+        // The target does not replace the limit of the judged comparison.
+        let worse = evaluate(&l, Rule::Reference, "avx2", &[m("k", 11.5, 10.0)]);
+        assert!(!worse.ok);
+        for bad in ["0", "\"x\"", "-1"] {
+            let text = format!(
+                r#"{{ "k": {{ "avx2": {{ "status": "release", "own_target": {bad} }} }} }}"#
+            );
+            assert!(Limits::parse(&text).is_err(), "{bad}");
+        }
+        assert_eq!(
+            limits(r#"{ "k": { "avx2": { "status": "release" } } }"#)
+                .get("k", "avx2")
+                .unwrap()
+                .own_target,
+            None
+        );
     }
 
     #[test]
@@ -3954,17 +4045,23 @@ mod tests {
                 comparisons(plan(level), kernel("halfband_decimate_real")),
                 (Reference::Liquid, Vec::new())
             );
-            // libairspy's SSE2 converter is information at `sse2` only.
-            let airspy = if level == "sse2" {
-                vec![Reference::Libairspy]
-            } else {
-                Vec::new()
-            };
-            let mut extras = airspy;
-            extras.push(Reference::OwnKernel("halfband_ref_shifted"));
+            // libairspy's SSE2 converter is the second gate at `sse2` only (its own entry).
             assert_eq!(
                 comparisons(plan(level), kernel("real_to_complex")),
-                (Reference::Liquid, extras)
+                (
+                    Reference::Liquid,
+                    vec![Reference::OwnKernel("halfband_ref_shifted")]
+                )
+            );
+            assert_eq!(
+                kernel("real_to_complex_airspy")
+                    .family
+                    .measured_at(plan(level)),
+                level == "sse2"
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("real_to_complex_airspy")),
+                (Reference::Libairspy, Vec::new())
             );
             // No library has a Q15 halfband decimator: our fallback gates, the CMSIS-DSP
             // composition is information; `real_to_complex_cq15` has libairspy (D64).

@@ -36,6 +36,8 @@ not affected; only a regeneration on another host would change unrelated cases. 
 independent of the platform (own scalar math, as `sdrk_golden/scalar_math.py` already does for some cases)
 is planned (see `docs/milestones/BACKLOG.md`).
 
+The filter cases of M23 follow this rule (D107): their float expected values are exact sums (`scalar_math.fir_exact`), because the BLAS kernels behind `scipy.signal.lfilter` and `np.convolve` add in a CPU-dependent order. Check a new filter case with `OPENBLAS_CORETYPE=Nehalem python tests/golden/generate.py --kernel <name> --check` as well.
+
 ## Commands
 
 ```sh

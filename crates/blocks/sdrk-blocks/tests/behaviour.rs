@@ -378,10 +378,38 @@ fn convert_only_takes_whole_groups() {
 }
 
 #[test]
-fn planar_real_and_one_bit_formats_are_rejected() {
+fn planar_formats_are_rejected_and_real_ones_need_the_real_block() {
+    // `convert` streams interleaved complex and real formats; planar ones cannot be streamed.
+    assert!(
+        ConvertConfig {
+            format: formats::CS16_PLANAR
+        }
+        .validate(rate(1_000_000))
+        .is_err()
+    );
+    for format in [formats::RS16, formats::RF32] {
+        assert!(
+            ConvertConfig { format }.validate(rate(1_000_000)).is_ok(),
+            "{format:?}"
+        );
+        // The complex block refuses a real format, the real block a complex one.
+        let mut arena = sdrk_blocks::ArenaStorage::new(&mut []);
+        assert!(
+            ConvertBlock::<C32, _>::new(&ConvertConfig { format }, rate(1_000_000), &mut arena)
+                .is_err()
+        );
+    }
+    let mut arena = sdrk_blocks::ArenaStorage::new(&mut []);
+    assert!(
+        sdrk_blocks::ConvertRealBlock::<f32, _>::new(
+            &ConvertConfig::default(),
+            rate(1_000_000),
+            &mut arena
+        )
+        .is_err()
+    );
+    // `convert_out` has no real variant.
     for format in [formats::CS16_PLANAR, formats::RS16, formats::RF32] {
-        let cfg = ConvertConfig { format };
-        assert!(cfg.validate(rate(1_000_000)).is_err(), "{format:?}");
         assert!(
             ConvertOutConfig { format }
                 .validate(rate(1_000_000))

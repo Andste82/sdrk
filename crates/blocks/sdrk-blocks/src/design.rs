@@ -297,7 +297,7 @@ pub fn halfband_taps(beta: f64, taps: &mut [f64]) -> Result<()> {
     firwin_lowpass(0.25, 1.0, DesignWindow::Kaiser { beta }, taps)?;
     let m = (n - 1) / 2;
     for (k, t) in taps.iter_mut().enumerate() {
-        if k != m && k.abs_diff(m) % 2 == 0 {
+        if k != m && k.abs_diff(m).is_multiple_of(2) {
             *t = 0.0;
         }
     }
@@ -319,6 +319,56 @@ pub fn halfband_taps(beta: f64, taps: &mut [f64]) -> Result<()> {
         *t /= sum;
     }
     Ok(())
+}
+
+/// The halfband design of [`halfband_taps`], one tap at a time (so the blocks need no `f64`
+/// buffer). `tap(k)` equals `halfband_taps(beta, ..)[k]` bit for bit.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HalfbandDesign {
+    lp: Lowpass,
+    n: usize,
+    sum: f64,
+}
+
+impl HalfbandDesign {
+    /// Prepares the design of `n` taps (`n mod 4 == 3`).
+    pub(crate) fn new(beta: f64, n: usize) -> Result<Self> {
+        if n < 3 || n % 4 != 3 {
+            return Err(Error::InvalidParameter {
+                name: "taps",
+                reason: "a halfband filter needs 4 k + 3 taps",
+            });
+        }
+        let lp = Lowpass::new(0.25, 1.0, DesignWindow::Kaiser { beta }, n)?;
+        let mut d = Self { lp, n, sum: 1.0 };
+        let mut sum = 0.0f64;
+        for k in 0..n {
+            sum += d.unscaled(k);
+        }
+        if !(sum.is_finite() && sum != 0.0) {
+            return Err(Error::InvalidParameter {
+                name: "beta",
+                reason: "the halfband taps do not have a usable sum",
+            });
+        }
+        d.sum = sum;
+        Ok(d)
+    }
+
+    /// Mirrored tap with the even offsets from the centre set to zero, before the scaling.
+    fn unscaled(&self, k: usize) -> f64 {
+        let m = (self.n - 1) / 2;
+        if k != m && k.abs_diff(m).is_multiple_of(2) {
+            0.0
+        } else {
+            self.lp.tap(k.min(self.n - 1 - k))
+        }
+    }
+
+    /// Tap `k` (scaled so that the taps sum to 1).
+    pub(crate) fn tap(&self, k: usize) -> f64 {
+        self.unscaled(k) / self.sum
+    }
 }
 
 /// Converts taps to `f32`.

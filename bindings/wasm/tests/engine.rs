@@ -230,6 +230,7 @@ fn validate_schema_and_backends() {
         "real_to_complex",
         "stereo_matrix",
         "stereo_pll",
+        "preemph_limit",
     ] {
         assert!(names.contains(&kernel), "{kernel}");
     }
@@ -238,6 +239,7 @@ fn validate_schema_and_backends() {
     assert_eq!(backend("ddc"), "chained");
     assert_eq!(backend("squelch"), "fallback");
     assert_eq!(backend("stereo_pll"), "fallback");
+    assert_eq!(backend("preemph_limit"), "fallback");
     assert_eq!(
         backend("rotate"),
         if sdrk::SIMD_BACKEND {

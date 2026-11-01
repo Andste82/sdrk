@@ -69,7 +69,7 @@ fn the_kind_is_registered_with_its_kernels() {
         ]
     );
     assert_eq!(f.description().kind, "fm_stereo_demod");
-    assert_eq!(registry.descriptions().count(), 19);
+    assert_eq!(registry.descriptions().count(), 20);
 }
 
 #[test]

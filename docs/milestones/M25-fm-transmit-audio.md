@@ -1,10 +1,10 @@
 # M25 — FM transmit audio (pre-emphasis and limiter)
 
-> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M24](M24-fm-stereo.md) (uses the `biquad` block of [M22](M22-audio-filters.md)) · Next: [BACKLOG](BACKLOG.md)
+> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M24.1](M24.1-block-naming.md) (block names; uses the `biquad` block of [M22](M22-audio-filters.md)) · Next: [BACKLOG](BACKLOG.md)
 
 ## Goal
 
-Transmit audio that a standard FM receiver reproduces correctly and that never exceeds the allowed deviation: the kernel `preemph_limit` (pre-emphasis and peak limiter in one pass), the block `fm_tx_audio`, its pipeline kind, the updated flow `fm_transmitter`, the new flow `nfm_transmitter`, de-emphasis in the `nfm_receiver` flow, and loop tests transmitter flow → receiver flow that check the frequency response and the peak deviation.
+Transmit audio that a standard FM receiver reproduces correctly and that never exceeds the allowed deviation: the kernel `preemph_limit` (pre-emphasis and peak limiter in one pass), the block `preemph_limit` (it wraps the kernel and takes its name, rule 8 of the naming scheme of M24.1), its pipeline kind, the updated flow `fm_transmitter`, the new flow `nfm_transmitter`, de-emphasis in the `nfm_receiver` flow, and loop tests transmitter flow → receiver flow that check the frequency response and the peak deviation.
 
 ## Why
 
@@ -12,7 +12,7 @@ The transmit chain of M08 (`fm_mod`, `duc`, `convert_out`, flow `fm_transmitter`
 
 ## Order
 
-M25 follows M24 and uses M00–M15 and M19–M24 (the `biquad` block of M22 for the voice band of the NFM transmitter). Like the receive series it uses nothing from M16–M18.
+M25 follows M24.1 and uses M00–M15, M19–M24 and M24.1 (the `biquad` block of M22 for the voice band of the NFM transmitter; the kind names, the naming scheme and the reserved names of M24.1: the block of this milestone is `preemph_limit` and the resampler kind is `resample`). Like the receive series it uses nothing from M16–M18.
 
 ## Ground rules (identical in every milestone — read them completely before you start)
 
@@ -140,9 +140,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `preemph_limit` in `sdrk-core` (state, `Fallback`, `Reference`, facade delegation); the design function `preemphasis_coefs` in `sdrk-blocks`; the block `fm_tx_audio` with description; its pipeline kind and the regenerated schema; the node `shape` in `fm_transmitter`; the flow `nfm_transmitter`; de-emphasis in `nfm_receiver`; golden cases; suite cases; the loop tests of §6; `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`.
+**In:** kernel `preemph_limit` in `sdrk-core` (state, `Fallback`, `Reference`, facade delegation); the design function `preemphasis_coefs` in `sdrk-blocks`; the block `preemph_limit` with description; its pipeline kind and the regenerated schema; the node `shape` in `fm_transmitter`; the flow `nfm_transmitter`; de-emphasis in `nfm_receiver`; golden cases; suite cases; the loop tests of §6; `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`.
 
-**Out:** loudness processing (compressor, multiband processing, AGC on the transmit side), look-ahead limiting, the FM stereo encoder (pilot and 38 kHz subcarrier; backlog), RDS, CTCSS tone generation, drivers for transmitters and the live audio input (both in `sdrk-hardware`).
+**Out:** loudness processing (compressor, multiband processing, AGC on the transmit side), look-ahead limiting, the FM stereo encoder `fm_stereo_mod` (pilot and 38 kHz subcarrier; planned after M25), RDS, CTCSS tone generation, drivers for transmitters and the live audio input (both in `sdrk-hardware`).
 
 ## Specification
 
@@ -200,13 +200,13 @@ The attack is instant (the envelope jumps to every new peak), so no sample excee
 
 **Reference:** the same arithmetic for both types. The limiter compares and switches, so as for `squelch` (M19) the golden cases are computed by the exact float32 model and the integer model (log it as an exception to the f64 reference rule).
 
-### 3. Block `fm_tx_audio`
+### 3. Block `preemph_limit`
 
-The construction pattern, descriptions, storage and parameter rules of M09 §4–§5 apply unchanged.
+The construction pattern, descriptions, storage and parameter rules of M09 §4–§5 apply unchanged. Names follow the scheme of M24.1 (`docs/blocks.md`, section "Names"): module `blocks/preemph_limit.rs`, block `PreemphLimitBlock<T>`, pipeline kind type `PreemphLimitKind`; the name check of `cargo xtask check` covers it; remove its line from the reserved-names table.
 
 | Kind | Struct | In → Out | Parameters (unit, mutability, default) | Implementation |
 | --- | --- | --- | --- | --- |
-| `fm_tx_audio` | `FmTxAudioBlock<T>` | f32/Q15 → same | `preemphasis_us` (us, build, 50; 0 … 1000, 0 switches it off), `limit` (None, **runtime**, 1.0; 0.1 … 1.0), `hold_s` (Seconds, build, 0.02; 0 … 1), `release_s` (Seconds, build, 0.2; 0.001 … 10) | `preemphasis_coefs` (or `[1, 0, 0]`), `preemph_limit`; `set_param("limit")` calls `set_limit` |
+| `preemph_limit` | `PreemphLimitBlock<T>` | f32/Q15 → same | `preemphasis_us` (us, build, 50; 0 … 1000, 0 switches it off), `limit` (None, **runtime**, 1.0; 0.1 … 1.0), `hold_s` (Seconds, build, 0.02; 0 … 1), `release_s` (Seconds, build, 0.2; 0.001 … 10) | `preemphasis_coefs` (or `[1, 0, 0]`), `preemph_limit`; `set_param("limit")` calls `set_limit` |
 
 `limit` is the output peak as a fraction of full scale, which `fm_mod` maps to its `deviation_hz`: `limit` 1.0 keeps the peak deviation at `deviation_hz`. `rate_out` equals `rate_in`; a pre-emphasis at an input rate below 40 kHz is `OutOfRange`.
 
@@ -214,15 +214,15 @@ The construction pattern, descriptions, storage and parameter rules of M09 §4�
 
 ### 4. Pipeline kind and flows
 
-- Kind `fm_tx_audio` (real inputs; `kernels()` = `["preemph_limit"]`). `plan` returns `Figures` like `FmDemodKind::plan`; cost per input sample, also added to the cost table of `docs/pipeline.md`: **6**.
+- Kind `preemph_limit` (real inputs; `kernels()` = `["preemph_limit"]`). `plan` returns `Figures` like `FmDemodKind::plan`; cost per input sample, also added to the cost table of `docs/pipeline.md`: **6**.
 - `cargo xtask schema` regenerates the schema (version unchanged). Add the kind to the WASM declarations if they list kinds.
-- **`fm_transmitter`** (JSON and YAML): a node `shape` = `fm_tx_audio` (`preemphasis_us` 50, `limit` 1.0) between `up` (the resampler to 240 kHz) and `mod`. The output bytes of the flow change; update the tests and committed files that pin them and log it. The YAML comments explain pre-emphasis (75 µs outside Europe) and the limit.
-- **`nfm_transmitter`** (new, JSON and YAML; narrow-band FM for two-way and amateur radio): input `audio` `f32` at 48 kHz → `voice` = `biquad` (lowpass, order 4, `cutoff_hz` 3000) → `shape` = `fm_tx_audio` (`preemphasis_us` 530, `limit` 0.85) → `splatter` = `biquad` (lowpass, order 4, `cutoff_hz` 3000) → `mod` = `fm_mod` (`deviation_hz` 5000) → `up` = `resampler` (complex, `rate_out_hz` 240000) → `duc` (`frequency_hz` 200000, `interpolation` 10) → output `rf` `cs8` (`underrun` `zeros`). 530 µs is the 6 dB per octave pre-emphasis from 300 Hz of ETSI EN 300 086 (1 / (2π · 300 Hz)); TIA-603 radios use 750 µs. The `splatter` filter removes the harmonics the limiter makes above the voice band and overshoots: measured while planning with overdriven noise through this chain, `limit` 0.85 kept the peak below 0.88 (0.9 reached 0.97). The comments explain 12.5 kHz channels (`deviation_hz` 2500) and the offset of the `duc` (it keeps the signal away from the carrier leakage of the transmitter at the centre frequency).
+- **`fm_transmitter`** (JSON and YAML): a node `shape` = `preemph_limit` (`preemphasis_us` 50, `limit` 1.0) between `up` (the `resample` node to 240 kHz) and `mod`. The output bytes of the flow change; update the tests and committed files that pin them and log it. The YAML comments explain pre-emphasis (75 µs outside Europe) and the limit.
+- **`nfm_transmitter`** (new, JSON and YAML; narrow-band FM for two-way and amateur radio): input `audio` `f32` at 48 kHz → `voice` = `biquad` (lowpass, order 4, `cutoff_hz` 3000) → `shape` = `preemph_limit` (`preemphasis_us` 530, `limit` 0.85) → `splatter` = `biquad` (lowpass, order 4, `cutoff_hz` 3000) → `mod` = `fm_mod` (`deviation_hz` 5000) → `up` = `resample` (complex, `rate_out_hz` 240000) → `duc` (`frequency_hz` 200000, `interpolation` 10) → output `rf` `cs8` (`underrun` `zeros`). 530 µs is the 6 dB per octave pre-emphasis from 300 Hz of ETSI EN 300 086 (1 / (2π · 300 Hz)); TIA-603 radios use 750 µs. The `splatter` filter removes the harmonics the limiter makes above the voice band and overshoots: measured while planning with overdriven noise through this chain, `limit` 0.85 kept the peak below 0.88 (0.9 reached 0.97). The comments explain 12.5 kHz channels (`deviation_hz` 2500) and the offset of the `duc` (it keeps the signal away from the carrier leakage of the transmitter at the centre frequency).
 - **`nfm_receiver`** (amends M19): `fm_demod` gets `deemphasis_us` 530 (was 0), so that it reproduces radios with pre-emphasis and the `nfm_transmitter`. The f32 output still becomes exactly zero after the squelch closes (the de-emphasis state decays below the denormal flush within about 40 ms). The Q15 `deemphasis` has a dead band (`docs/kernels.md`), so its output can stay at a small constant: amend the silence check of M19/M22 for Q15 to allow the measured dead-band level (assert it at most 16 LSB) and record it in `docs/kernels.md`. The E2E-NFM kernel chain of M19 keeps its own parameters and checks. Log the change.
 
 ### 5. Testkit
 
-- Suite cases (Fallback vs Reference, invariance with 20 chunk plans): `preemph_limit_f32`, `preemph_limit_q15`, `extremes_m25`; block case `block_fm_tx_audio_peak` (random input up to 20 times full scale: no output sample exceeds `limit`).
+- Suite cases (Fallback vs Reference, invariance with 20 chunk plans): `preemph_limit_f32`, `preemph_limit_q15`, `extremes_m25`; block case `block_preemph_limit_peak` (random input up to 20 times full scale: no output sample exceeds `limit`).
 
 ### 6. Loop tests (transmitter flow → receiver flow)
 
@@ -281,7 +281,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 ## Deliverables checklist
 
 - [ ] Kernel `preemph_limit` (f32, Q15) with state, fallback, reference, delegation; design function `preemphasis_coefs`
-- [ ] Block `fm_tx_audio`, pipeline kind, regenerated schema
+- [ ] Block `preemph_limit`, pipeline kind, regenerated schema
 - [ ] `fm_transmitter` with the `shape` node, new `nfm_transmitter`, `nfm_receiver` with de-emphasis (all with YAML twins)
 - [ ] SIMD decision (not accelerated), `info` entries and results
 - [ ] Golden cases (seeds 444–449 and the design cases), suite, invariance, extremes, loop tests TX-FLAT, TX-PEAK and NFM

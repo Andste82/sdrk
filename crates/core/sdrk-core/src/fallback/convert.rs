@@ -45,11 +45,8 @@ impl Direct {
         const INV_128: f32 = 1.0 / 128.0;
         const INV_32768: f32 = 1.0 / 32768.0;
         match self {
-            Self::U8 => {
-                for (o, &b) in out.iter_mut().zip(input) {
-                    *o = f32::from(b) * INV_128 - 255.0 / 256.0;
-                }
-            }
+            Self::U8 if U8_F32_VIA_I16 => u8_to_f32_via_i16(input, out),
+            Self::U8 => u8_to_f32(input, out),
             Self::I8 => {
                 for (o, &b) in out.iter_mut().zip(input) {
                     *o = f32::from(b as i8) * INV_128;
@@ -93,6 +90,33 @@ impl Direct {
                 }
             }
         }
+    }
+}
+
+/// Whether [`Direct::to_f32`] converts `cu8` through the Q15 form shifted down by 7,
+/// `(2u - 255) * 2^-8`, instead of `u * 2^-7 - 255/256` (the same bits: both are exact).
+///
+/// On AArch64 the vectorized loop of the `i16` form is `ushll #1`, `add`, `sxtl` and
+/// `scvtf #8`; the other form zero-extends with four `tbl` (three micro-ops each on
+/// Cortex-A72) before `ucvtf #7` and `fadd`. Both are 17 instructions per 16 bytes, but
+/// Cortex-A72 simulates 1.55 instead of 2.30 cycles per sample (Cortex-A76 1.29 and 1.28). On
+/// x86 the `i16` form needs more shuffles and is slower (SSE2: Skylake 1.20 against 1.04,
+/// Zen 2 1.35 against 1.10); on Cortex-M4F both forms count 15.62 instructions per sample.
+/// The gain is the vector loop's: as a scalar loop on AArch64 the `i16` form has one integer
+/// instruction more per value, so only AArch64 with NEON takes it.
+const U8_F32_VIA_I16: bool = cfg!(all(target_arch = "aarch64", target_feature = "neon"));
+
+/// `cu8` values to `f32` as `u * 2^-7 - 255/256`.
+fn u8_to_f32(input: &[u8], out: &mut [f32]) {
+    for (o, &b) in out.iter_mut().zip(input) {
+        *o = f32::from(b) * (1.0 / 128.0) - 255.0 / 256.0;
+    }
+}
+
+/// `cu8` values to `f32` as `(2u - 255) * 2^-8`; the same bits as [`u8_to_f32`].
+fn u8_to_f32_via_i16(input: &[u8], out: &mut [f32]) {
+    for (o, &b) in out.iter_mut().zip(input) {
+        *o = f32::from(2 * i16::from(b) - 255) * (1.0 / 256.0);
     }
 }
 
@@ -379,6 +403,9 @@ mod tests {
     use super::*;
     use sdrk_device::formats;
 
+    /// A `cu8` to `f32` loop.
+    type U8Form = fn(&[u8], &mut [f32]);
+
     /// The direct loops give the values of the general mappings for every byte and for 16-bit
     /// words around zero and the extremes.
     #[test]
@@ -401,22 +428,29 @@ mod tests {
             }
         }
         // Every length up to three vector blocks plus a tail, at several byte offsets of the
-        // pattern: the vector body (where the compiler vectorizes the loop), its remainder and
-        // the scalar tail give the same bits, and nothing past the input is written.
+        // pattern: the vector body, its remainder loops and the scalar tail give the same bits,
+        // and nothing past the input is written.
         let format = formats::CU8;
         let f = ToF32::new(&format);
         for len in 0..=67 {
             for start in [0usize, 1, 7, 128, 200, 255] {
                 let input: std::vec::Vec<u8> =
                     (0..len).map(|k| ((start + 37 * k) % 256) as u8).collect();
-                let mut out = std::vec![f32::NAN; len + 1];
-                Direct::U8.to_f32(&input, &mut out);
-                for (k, &b) in input.iter().enumerate() {
-                    let e = value(&format, &input, k).unwrap();
-                    let (got, want) = (out[k].to_bits(), f.map(e).to_bits());
-                    assert_eq!(got, want, "len {len}, byte {b}");
+                let forms: [U8Form; 3] =
+                    [u8_to_f32, u8_to_f32_via_i16, |i, o| Direct::U8.to_f32(i, o)];
+                for (n, form) in forms.into_iter().enumerate() {
+                    let mut out = std::vec![f32::NAN; len + 1];
+                    form(&input, &mut out);
+                    for (k, &b) in input.iter().enumerate() {
+                        let e = value(&format, &input, k).unwrap();
+                        let (got, want) = (out[k].to_bits(), f.map(e).to_bits());
+                        assert_eq!(got, want, "form {n}, len {len}, byte {b}");
+                    }
+                    assert!(
+                        out[len].is_nan(),
+                        "form {n}, len {len}: wrote past the input"
+                    );
                 }
-                assert!(out[len].is_nan(), "len {len}: wrote past the input");
             }
         }
         let words: std::vec::Vec<i16> = (-300..300)

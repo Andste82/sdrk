@@ -15,21 +15,26 @@
 //!   away the bits of `y` below `2^-46`, so a negative `y` at or above `-2^-47` gives 128 like
 //!   zero; adding `2^-47` to `y` in `f32` first reproduces that (it leaves every `|y| >= 2^-22`
 //!   unchanged and moves exactly those tiny negative values to zero or above). The generic code
-//!   and AVX-512 take `g = floor(y)`, which is the value unless `y` is an integer, where it is the
-//!   even one of `y - 1` and `y`: `rint(g - 0.5)`. The level paths of SSE2, SSE4.2, AVX2 and NEON
-//!   convert `y - C` with `C = 0.5 - 2^-25` instead (x86 `(y + 2^-47) - C`, which gives the same
-//!   integers), which `f32` rounds to the right integer for every `y` but the negative ones above
-//!   `-2^-25` (they give 0 instead of -1; with 0.5 instead of `C`, `y = -1 + 2^-24` would also
-//!   round to the tie -1.5), and bound the saturated bytes:
-//!   by -1 where `y < -2^-47`. That bound `b` is a byte per value, -1 (`0xFF`) there and 127
-//!   elsewhere, with the low 7 bits set on a sign byte: on x86 the signed pack of the bits of
-//!   `y + 2^-47`, on NEON the narrowed lane masks of the compare. On x86 `cvtps2dq` also gives
-//!   `i32::MIN` (the byte -128) where `y - C >= 2^31`, so `b` is applied twice there: as unsigned
+//!   takes `g = floor(y)`, which is the value unless `y` is an integer, where it is the even one
+//!   of `y - 1` and `y`: `rint(g - 0.5)`. The level paths convert `y - C` with
+//!   `C = 0.5 - 2^-25` instead (AVX2 and the `Folded` and `Equal` vectors of SSE2/SSE4.2
+//!   `(y + 2^-47) - C`, which gives the same integers; AVX-512 and NEON form `x * 128 - C` with
+//!   one fused multiply-add, which rounds the same exact value once), which `f32` rounds to the
+//!   right integer for every `y` but the negative ones above `-2^-25` (they give 0 instead of
+//!   -1; with 0.5 instead of `C`, `y = -1 + 2^-24` would also round to the tie -1.5), and bound
+//!   the result by -1 where `y < -2^-47`, that is where `x < -2^-54` (exact: the factor 128 is a
+//!   power of two). On SSE2, SSE4.2, AVX2 and NEON that bound `b` is a byte per value, -1
+//!   (`0xFF`) there and 127 elsewhere, with the low 7 bits set on a sign byte: the signed pack
+//!   of the lane masks of `x < -2^-54` (the `Fresh` vectors of SSE2/SSE4.2; NEON narrows them)
+//!   or of the bits of `y + 2^-47` (AVX2 and the other vectors of SSE2/SSE4.2). On x86
+//!   `cvtps2dq` also gives `i32::MIN` (the byte -128) where `y - C >= 2^31`, so `b` is applied
+//!   twice there: as unsigned
 //!   minimum, which turns the negative bytes of the lanes with `b = 127` (where the value cannot
 //!   be negative otherwise) into 127, and as signed minimum (SSE2, which has no `pminsb`: the
-//!   unsigned minimum after flipping the sign bits of both). Each form is checked against the
-//!   `f64` formula for all 2^32 inputs. `rint(...) - 128` is saturated to `i8` and turned into
-//!   the offset binary byte by flipping the sign bit.
+//!   unsigned minimum after flipping the sign bits of both). AVX-512 caps `x` at 1 before the
+//!   conversion instead and takes the signed minimum with -1 under the mask of `x < -2^-54`.
+//!   Each form is checked against the `f64` formula for all 2^32 inputs. `rint(...) - 128` is
+//!   saturated to `i8` and turned into the offset binary byte by flipping the sign bit.
 //!
 //! Each level has its own path (`core::arch`, decision D1) for whole vectors; the generic
 //! `fearless_simd` code runs on a level without one, and the few values after the last whole
@@ -78,10 +83,13 @@ const S16: f32 = 32768.0;
 const S8: f32 = 128.0;
 /// `2^-47`, added to `x * 128` for `CU8` (see the module documentation).
 const TINY: f32 = 1.0 / (1u64 << 47) as f32;
-/// `0.5 - 2^-25`, subtracted from `x * 128 + 2^-47` for `CU8` on the level paths (see the module
-/// documentation).
+/// `0.5 - 2^-25`, subtracted from `x * 128` (AVX2: from `x * 128 + 2^-47`) for `CU8` on the
+/// level paths (see the module documentation).
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const C: f32 = 0.5 - 1.0 / (1u32 << 25) as f32;
+/// `-2^-54`: `x * 128 < -2^-47` exactly where `x < BELOW` (see the module documentation).
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+const BELOW: f32 = -1.0 / (1u64 << 54) as f32;
 
 /// Runs `body` on every whole block of `step` floats and `bytes` output bytes (see
 /// [`util::blocks`]); returns the number of floats done.
@@ -282,25 +290,24 @@ mod x86 {
     use core::arch::x86_64 as arch;
 
     use arch::{
-        __m128, __m128i, __m256, __m256i, __m512, __m512i, _CMP_EQ_OQ, _CMP_ORD_Q,
-        _MM_FROUND_NO_EXC, _MM_FROUND_TO_NEG_INF, _mm_add_ps, _mm_and_ps, _mm_castps_si128,
-        _mm_cmpord_ps, _mm_cvtps_epi32, _mm_load_ps, _mm_min_epi8, _mm_min_epu8, _mm_min_ps,
-        _mm_mul_ps, _mm_or_si128, _mm_packs_epi16, _mm_packs_epi32, _mm_set1_epi8, _mm_set1_ps,
-        _mm_sub_ps, _mm_xor_si128, _mm256_and_ps, _mm256_and_si256, _mm256_castps_si256,
-        _mm256_cmp_ps, _mm256_cvtps_epi32, _mm256_fmadd_ps, _mm256_min_epi8, _mm256_min_epu8,
-        _mm256_min_ps, _mm256_mul_ps, _mm256_or_si256, _mm256_packs_epi16, _mm256_packs_epi32,
-        _mm256_permute4x64_epi64, _mm256_permutevar8x32_epi32, _mm256_set1_epi8, _mm256_set1_ps,
-        _mm256_setr_epi32, _mm256_sub_ps, _mm256_xor_si256, _mm512_cmp_ps_mask,
-        _mm512_cvtsepi32_epi8, _mm512_cvtsepi32_epi16, _mm512_fmadd_ps,
-        _mm512_mask_cvtsepi32_storeu_epi8, _mm512_mask_cvtsepi32_storeu_epi16, _mm512_mask_sub_ps,
-        _mm512_maskz_cvtps_epi32, _mm512_maskz_loadu_ps, _mm512_min_ps, _mm512_mul_ps,
-        _mm512_roundscale_ps, _mm512_set1_ps,
+        __m128, __m128i, __m256, __m256i, __m512, __m512i, _CMP_LT_OQ, _CMP_ORD_Q, _mm_add_ps,
+        _mm_and_ps, _mm_castps_si128, _mm_cmpeq_ps, _mm_cmplt_ps, _mm_cmpord_ps, _mm_cvtps_epi32,
+        _mm_load_ps, _mm_min_epi8, _mm_min_epu8, _mm_min_ps, _mm_mul_ps, _mm_or_si128,
+        _mm_packs_epi16, _mm_packs_epi32, _mm_set1_epi8, _mm_set1_ps, _mm_sub_ps, _mm_xor_si128,
+        _mm256_and_ps, _mm256_and_si256, _mm256_castps_si256, _mm256_cmp_ps, _mm256_cvtps_epi32,
+        _mm256_fmadd_ps, _mm256_min_epi8, _mm256_min_epu8, _mm256_min_ps, _mm256_mul_ps,
+        _mm256_or_si256, _mm256_packs_epi16, _mm256_packs_epi32, _mm256_permute4x64_epi64,
+        _mm256_permutevar8x32_epi32, _mm256_set1_epi8, _mm256_set1_ps, _mm256_setr_epi32,
+        _mm256_sub_ps, _mm256_xor_si256, _mm512_cmp_ps_mask, _mm512_cvtsepi32_epi8,
+        _mm512_cvtsepi32_epi16, _mm512_fmadd_ps, _mm512_mask_cvtsepi32_storeu_epi8,
+        _mm512_mask_cvtsepi32_storeu_epi16, _mm512_mask_min_epi32, _mm512_maskz_cvtps_epi32,
+        _mm512_maskz_loadu_ps, _mm512_min_ps, _mm512_mul_ps, _mm512_set1_epi32, _mm512_set1_ps,
     };
     use core::hint::black_box;
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, f32x8, f32x16, u8x16, u8x32};
 
-    use super::{C, Kind, S8, S16, TINY, quarters, run, tail};
+    use super::{BELOW, C, Kind, S8, S16, TINY, quarters, run, tail};
 
     fearless_simd::kernel!(
         /// AVX-512 over all values (the last partial vector with masked loads and stores);
@@ -310,22 +317,28 @@ mod x86 {
         pub(super) fn avx512(t: Avx512, kind: Kind, input: &[f32], out: &mut [u8]) -> usize {
             let s16 = _mm512_set1_ps(S16);
             let s8 = _mm512_set1_ps(S8);
-            let tiny = _mm512_set1_ps(TINY);
-            let half = _mm512_set1_ps(0.5);
+            let one = _mm512_set1_ps(1.0);
+            let minus_c = _mm512_set1_ps(-C);
+            let below = _mm512_set1_ps(BELOW);
+            let minus_one = _mm512_set1_epi32(-1);
             let sign = _mm_set1_epi8(i8::MIN);
             // `rint(v)`, NaN as 0 (mask `k`), capped at `s`.
             let signed = |v: __m512, s: __m512| -> __m512i {
                 let k = _mm512_cmp_ps_mask::<_CMP_ORD_Q>(v, v);
                 _mm512_maskz_cvtps_epi32(k, _mm512_min_ps(v, s))
             };
-            // The `CU8` value minus 128 of `x` (see the module documentation).
+            // The `CU8` value minus 128 of `x` (see the module documentation): `rint(y - C)`
+            // of `y = min(x, 1) * 128` in one `vfmadd`, NaN as 0 (mask `ord`; `vminps` gives 1
+            // for NaN, so the conversion cannot overflow) and bounded by -1 where `x < -2^-54`
+            // (mask `neg`).
             let offset = |x: __m512| -> __m512i {
-                let y = _mm512_fmadd_ps(x, s8, tiny);
-                let k = _mm512_cmp_ps_mask::<_CMP_ORD_Q>(y, y);
-                let c = _mm512_min_ps(y, s8);
-                let g = _mm512_roundscale_ps::<{ _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC }>(c);
-                let tie = _mm512_cmp_ps_mask::<_CMP_EQ_OQ>(g, c);
-                _mm512_maskz_cvtps_epi32(k, _mm512_mask_sub_ps(g, tie, g, half))
+                let ord = _mm512_cmp_ps_mask::<_CMP_ORD_Q>(x, x);
+                let neg = _mm512_cmp_ps_mask::<_CMP_LT_OQ>(x, below);
+                let r = _mm512_maskz_cvtps_epi32(
+                    ord,
+                    _mm512_fmadd_ps(_mm512_min_ps(x, one), s8, minus_c),
+                );
+                _mm512_mask_min_epi32(r, neg, r, minus_one)
             };
             let load = |x: &[f32]| -> __m512 { f32x16::from_slice(t, x).into() };
             let i8_bytes = |x: __m512, u8_out: bool| -> __m128i {
@@ -447,6 +460,20 @@ mod x86 {
         }
     );
 
+    /// How a vector of the 128-bit path clears NaN from its 4 floats `x` (see [`sse`]).
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Form {
+        /// `cmpordps` of `x` with a second read of `x` into the register of that read, `andps`
+        /// with `x`: `x` stays in its register.
+        Fresh,
+        /// `cmpordps` of `x` with itself, over `x`, and `andps` with a second read folded in.
+        Folded,
+        /// `cmpeqps` of `x` with a second read folded in (`x == x`, false only for NaN), over
+        /// `x`, and `andps` with a third read folded in.
+        Equal,
+    }
+    use Form::{Equal, Folded, Fresh};
+
     /// The 128-bit path, for a token of SSE2 or of SSE4.2, over whole vectors; returns the
     /// number of floats done. `$bound` applies the signed minimum with the byte bound `b` of the
     /// module documentation to the `CU8` bytes (the value minus 128, saturated) and flips their
@@ -454,11 +481,19 @@ mod x86 {
     /// bytes.
     ///
     /// The first values up to a 16-byte boundary of the input go through the scalar formulas.
-    /// NaN is cleared from `x` with `cmpordps` and `andps`, whose second read of `x` is an
-    /// aligned load from an address the compiler cannot prove equal to the first (offset by an
-    /// opaque zero): it folds into `andps` instead of costing a register copy, as `x` is needed
-    /// twice. `cvtps2dq` rounds to even, the upper side of `CS16` and `CS8` is capped before it
-    /// (it gives `i32::MIN` there) and the packs saturate.
+    /// NaN is cleared from `x` with a compare and `andps`, which read `x` more than once; the
+    /// second and third reads are aligned loads from addresses the compiler cannot prove equal
+    /// to the first (offset by an opaque zero), so that they fold into the instructions or
+    /// give a register of their own instead of costing register copies. The vectors of a
+    /// block take different [`Form`]s: `Folded` and `Equal` need the fewest instructions, the
+    /// loads that `Fresh` and `Equal` issue early keep the instructions of the vector unit from
+    /// waiting long in its scheduler (on Zen 2 it fills up with the `Folded` form only), and
+    /// `Fresh` keeps `x` for the compare `x < -2^-54` that bounds `CU8`; with `Folded` and
+    /// `Equal`, `CU8` takes the bound from the bits of `w = x * 128 + 2^-47` (and converts
+    /// `w - C` instead of `y - C`, which gives the same integers). The mix of each format is
+    /// the fastest in simulated cycles on both Skylake and Zen 2 that keeps the instruction
+    /// count within the gate against VOLK. `cvtps2dq` rounds to even, the upper side of `CS16`
+    /// and `CS8` is capped before it (it gives `i32::MIN` there) and the packs saturate.
     macro_rules! sse {
         ($name:ident, $token:ident, $bound:expr) => {
             fearless_simd::kernel!(
@@ -476,23 +511,43 @@ mod x86 {
                     let s8 = _mm_set1_ps(S8);
                     let tiny = _mm_set1_ps(TINY);
                     let half_down = _mm_set1_ps(C);
+                    let below = _mm_set1_ps(BELOW);
                     let low = _mm_set1_epi8(i8::MAX);
-                    // `x` of 4 floats at a 16-byte boundary with NaN as 0.
-                    let clean = |x: &[f32]| -> __m128 {
-                        let v: __m128 = f32x4::from_slice(t, x).into();
+                    let load = |x: &[f32]| -> __m128 { f32x4::from_slice(t, x).into() };
+                    // A further read of the 4 floats of `x` (`k` = 1, 2 for the second and the
+                    // third, which the compiler cannot merge either).
+                    let again = |x: &[f32], k: usize| -> __m128 {
                         // SAFETY: `zero` is 0 (`black_box` returns its argument), so this reads
                         // the 4 floats of `x` (every block of `run` has a multiple of 4 floats);
                         // they start at a 16-byte boundary, as the input after `head` does.
-                        let again = unsafe { _mm_load_ps(x.as_ptr().wrapping_add(zero)) };
-                        _mm_and_ps(_mm_cmpord_ps(v, v), again)
+                        unsafe { _mm_load_ps(x.as_ptr().wrapping_add(k * zero)) }
                     };
-                    let signed = |x: &[f32], s: __m128| -> __m128i {
-                        _mm_cvtps_epi32(_mm_min_ps(_mm_mul_ps(clean(x), s), s))
+                    // `v`, the floats of `x`, with NaN as 0.
+                    let clean = |v: __m128, x: &[f32], form: Form| match form {
+                        Fresh => _mm_and_ps(_mm_cmpord_ps(again(x, 1), v), v),
+                        Folded => _mm_and_ps(_mm_cmpord_ps(v, v), again(x, 1)),
+                        Equal => _mm_and_ps(_mm_cmpeq_ps(v, again(x, 1)), again(x, 2)),
                     };
-                    // `w = x * 128 + 2^-47` with NaN as 0, and `rint(w - C)`.
-                    let offset = |x: &[f32]| _mm_add_ps(_mm_mul_ps(clean(x), s8), tiny);
-                    let rounded = |w: __m128| _mm_cvtps_epi32(_mm_sub_ps(w, half_down));
-                    let bits = _mm_castps_si128;
+                    let signed = |x: &[f32], s: __m128, form: Form| -> __m128i {
+                        _mm_cvtps_epi32(_mm_min_ps(_mm_mul_ps(clean(load(x), x, form), s), s))
+                    };
+                    // `rint(y - C)` of `y = x * 128` with NaN as 0, and a value whose sign
+                    // bit is set exactly where `x < -2^-54` (NaN: clear): with `Fresh` the mask
+                    // of `cmpltps` of `x`, else the bits of `w = y + 2^-47`.
+                    let offset = |x: &[f32], form: Form| -> (__m128i, __m128i) {
+                        let v = load(x);
+                        let y = _mm_mul_ps(clean(v, x, form), s8);
+                        if form == Fresh {
+                            let r = _mm_cvtps_epi32(_mm_sub_ps(y, half_down));
+                            (r, _mm_castps_si128(_mm_cmplt_ps(v, below)))
+                        } else {
+                            let w = _mm_add_ps(y, tiny);
+                            (
+                                _mm_cvtps_epi32(_mm_sub_ps(w, half_down)),
+                                _mm_castps_si128(w),
+                            )
+                        }
+                    };
                     let store = |o: &mut [u8], q: __m128i| {
                         let q: u8x16<_> = q.simd_into(t);
                         q.store_slice(o);
@@ -500,22 +555,30 @@ mod x86 {
                     head + match kind {
                         Kind::I16 => run(input, out, 8, 16, 8, |i, o| {
                             let (a, b) = i.split_at(4);
-                            store(o, _mm_packs_epi32(signed(a, s16), signed(b, s16)));
+                            store(
+                                o,
+                                _mm_packs_epi32(signed(a, s16, Equal), signed(b, s16, Folded)),
+                            );
                         }),
                         Kind::I8 => run(input, out, 16, 16, 8, |i, o| {
                             let [a, b, c, d] = quarters(i);
-                            let lo = _mm_packs_epi32(signed(a, s8), signed(b, s8));
-                            let hi = _mm_packs_epi32(signed(c, s8), signed(d, s8));
+                            let lo = _mm_packs_epi32(signed(a, s8, Equal), signed(b, s8, Equal));
+                            let hi = _mm_packs_epi32(signed(c, s8, Equal), signed(d, s8, Folded));
                             store(o, _mm_packs_epi16(lo, hi));
                         }),
+                        // Bounded by -1 where `x < -2^-54` (see the module documentation).
                         Kind::U8 => run(input, out, 16, 16, 4, |i, o| {
-                            let [a, b, c, d] = quarters(i).map(offset);
-                            let lo = _mm_packs_epi32(rounded(a), rounded(b));
-                            let hi = _mm_packs_epi32(rounded(c), rounded(d));
-                            let q = _mm_packs_epi16(lo, hi);
-                            let lo = _mm_packs_epi32(bits(a), bits(b));
-                            let hi = _mm_packs_epi32(bits(c), bits(d));
-                            let limit = _mm_or_si128(_mm_packs_epi16(lo, hi), low);
+                            let [a, b, c, d] = quarters(i);
+                            let [(a, na), (b, nb), (c, nc), (d, nd)] = [
+                                offset(a, Fresh),
+                                offset(b, Equal),
+                                offset(c, Fresh),
+                                offset(d, Fresh),
+                            ];
+                            let q = _mm_packs_epi16(_mm_packs_epi32(a, b), _mm_packs_epi32(c, d));
+                            let n =
+                                _mm_packs_epi16(_mm_packs_epi32(na, nb), _mm_packs_epi32(nc, nd));
+                            let limit = _mm_or_si128(n, low);
                             store(o, $bound(_mm_min_epu8(q, limit), limit));
                         }),
                     }
@@ -537,15 +600,15 @@ mod x86 {
 mod arm {
     use core::arch::aarch64::{
         float32x4_t, int8x16_t, int32x4_t, uint8x16_t, uint32x4_t, vcltq_f32, vcvtnq_s32_f32,
-        vdupq_n_f32, vdupq_n_s8, vdupq_n_u8, veorq_u8, vminq_s8, vmulq_n_f32, vorrq_s8,
+        vdupq_n_f32, vdupq_n_s8, vdupq_n_u8, veorq_u8, vfmaq_f32, vminq_s8, vmulq_n_f32, vorrq_s8,
         vqmovn_high_s16, vqmovn_high_s32, vqmovn_s16, vqmovn_s32, vreinterpretq_s8_u8,
         vreinterpretq_u8_s8, vreinterpretq_u8_s16, vreinterpretq_u8_u16, vreinterpretq_u16_u32,
-        vsubq_f32, vuzp1q_u8, vuzp1q_u16,
+        vuzp1q_u8, vuzp1q_u16,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, u8x16};
 
-    use super::{C, Kind, S8, S16, TINY, quarters, run};
+    use super::{BELOW, C, Kind, S8, S16, quarters, run};
 
     fearless_simd::kernel!(
         /// NEON over whole vectors; returns the number of floats done. `fcvtns` rounds to even,
@@ -553,8 +616,9 @@ mod arm {
         /// where `x * 128 < -2^-47` (see the module documentation).
         #[inline(always)]
         pub(super) fn neon(t: Neon, kind: Kind, input: &[f32], out: &mut [u8]) -> usize {
-            let below = vdupq_n_f32(-TINY);
-            let half_down = vdupq_n_f32(C);
+            let below = vdupq_n_f32(BELOW);
+            let minus_c = vdupq_n_f32(-C);
+            let s8 = vdupq_n_f32(S8);
             let low = vdupq_n_s8(i8::MAX);
             let sign = vdupq_n_u8(0x80);
             let load = |x: &[f32]| -> float32x4_t { f32x4::from_slice(t, x).into() };
@@ -591,12 +655,12 @@ mod arm {
                         vreinterpretq_u8_s8(bytes(quarters(i).map(|x| signed(x, S8)))),
                     );
                 }),
-                // `rint(y - C)` with `y = x * 128`, bounded by -1 where `y < -2^-47` (the
+                // `rint(x * 128 - C)` in one `fmla`, bounded by -1 where `x < -2^-54` (the
                 // compare is false for NaN, whose conversion gives 0).
                 Kind::U8 => run(input, out, 16, 16, 4, |i, o| {
-                    let y = quarters(i).map(|x| vmulq_n_f32(load(x), S8));
-                    let q = bytes(y.map(|y| vcvtnq_s32_f32(vsubq_f32(y, half_down))));
-                    let limit = vorrq_s8(masks(y.map(|y| vcltq_f32(y, below))), low);
+                    let x = quarters(i).map(load);
+                    let q = bytes(x.map(|x| vcvtnq_s32_f32(vfmaq_f32(minus_c, x, s8))));
+                    let limit = vorrq_s8(masks(x.map(|x| vcltq_f32(x, below))), low);
                     store(o, veorq_u8(vreinterpretq_u8_s8(vminq_s8(q, limit)), sign));
                 }),
             }

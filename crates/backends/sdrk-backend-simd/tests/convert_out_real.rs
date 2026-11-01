@@ -194,3 +194,84 @@ fn convert_out_real_extremes_and_ties() {
         assert_eq!(want, got, "{format:?} q15");
     }
 }
+
+/// The values where the forms of the vector paths could differ from the formula: the bound of
+/// `CU8` at `x = -2^-54` and the negative values above `-2^-25 / 128`, the ties and their
+/// neighbours of every scale, the overflow of the conversion at `2^31`, NaN payloads,
+/// infinities, signed zeros and subnormals; each with its neighbours one ulp up and down.
+fn boundary_values() -> Vec<f32> {
+    let mut base = vec![
+        0.0f32,
+        f32::from_bits(1),
+        1.0e-40,
+        2.0f32.powi(-54),
+        2.0f32.powi(-47),
+        2.0f32.powi(-32),
+        2.0f32.powi(-25),
+        2.0f32.powi(-24),
+        0.5,
+        1.0,
+        127.5 / 128.0,
+        2.0f32.powi(23),
+        2.0f32.powi(24),
+        2.0f32.powi(31) / 32768.0,
+        1.0e30,
+        f32::MAX,
+        f32::INFINITY,
+    ];
+    for scale in [128.0f32, 32768.0] {
+        for k in -132..=132 {
+            base.push(k as f32 / scale);
+            base.push((k as f32 + 0.5) / scale);
+        }
+    }
+    let mut x = Vec::new();
+    for v in base {
+        for w in [v, -v] {
+            x.push(w);
+            if w.is_finite() {
+                x.push(w.next_up());
+                x.push(w.next_down());
+            }
+        }
+    }
+    x.extend(
+        [
+            0x7FC0_0000u32,
+            0xFFC0_0000,
+            0x7F80_0001,
+            0xFFFF_FFFF,
+            0x7FBF_FFFF,
+        ]
+        .map(f32::from_bits),
+    );
+    x
+}
+
+#[test]
+fn convert_out_boundary_values_in_every_lane_of_the_vector_blocks() {
+    // The 128-bit paths take a different form for each of the four vectors of a block of 16
+    // values, the wider ones blocks of 32 and 64: every value goes through every position of a
+    // block of 64 (and through the tails), as real values and as both parts of a complex one.
+    let x = boundary_values();
+    let n = x.len();
+    for offset in 0..64 {
+        let input: Vec<f32> = (0..n + 37).map(|k| x[(k + offset) % n]).collect();
+        let c32: Vec<C32> = input
+            .chunks_exact(2)
+            .map(|p| C32::new(p[0], p[1]))
+            .collect();
+        for (real, complex) in fast()
+            .into_iter()
+            .zip([formats::CS16, formats::CS8, formats::CU8])
+        {
+            let (want, got) = encode(&real, &input, 0);
+            assert!(want == got, "{real:?} offset {offset}");
+            let m = complex.bytes_for_samples(c32.len()).unwrap();
+            let (mut want, mut got) = (vec![0u8; m], vec![0u8; m]);
+            Fallback.convert_out(&complex, &c32, &mut want).unwrap();
+            Simd.convert_out(&complex, &c32, &mut got).unwrap();
+            assert!(want == got, "{complex:?} offset {offset}");
+        }
+    }
+}

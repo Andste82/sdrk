@@ -60,8 +60,8 @@ CI is three workflow files. `ci.yml` runs on pull requests and on pushes to `mai
 | `gh workflow run nightly.yml --ref <branch>` | `nightly.yml` | the tree with scope `full` on any branch, for example before merging a change of the CI or of a long-running job |
 | push to `main` | `ci.yml` | `smoke` (build, `xtask check`, `bare-metal`, the unit tests). The pull request has tested the same tree, because a branch must be up to date with `main` before it is merged |
 | every night | `nightly.yml` | the tree with scope `full`: every `pr` job and the jobs marked `full`. When `main` is unchanged since the last green nightly run, the `pr` tests are skipped and only the `full` jobs run, except on Sunday |
-| Sunday night | `nightly.yml` | as every night, with the `pr` tests always, plus the full profile of the ESP32-P4 |
-| manual (`workflow_dispatch`) | `nightly.yml` | as at night; the inputs choose the weekly part and whether the `pr` tests are skipped |
+| Sunday night | `nightly.yml` | as every night, with the `pr` tests always |
+| manual (`workflow_dispatch`) | `nightly.yml` | as at night; the input chooses whether the `pr` tests are skipped |
 
 The branch protection of `main` requires one check, `result` of `ci.yml`: it is green only when `scope` and every job of the tree that ran passed, and the branch is up to date with `main`. A failed nightly run opens an issue with the label `nightly-failure`, or comments on the open one. Every job has a timeout; the cargo caches are saved by runs on `main` only (pull requests read them), one cache per platform and build.
 
@@ -97,8 +97,8 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 ├── build_wasm_pkg                 the package on arm64_linux and x64_win
 ├── build_m4_qemu                  the suite on the Cortex-M4F, quick profile
 │   └── test_m4_qemu_selfcheck     a failing case must fail the run (pr: when xtask/ or targets/ changed)    [pr]
-├── build_m55_qemu, build_rv32_qemu, build_esp32p4_emu, build_esp32s3_emu (emulator and hardware image)
-├── test_emu                       m4 full; m55, rv32, esp32s3 quick and full; esp32p4 quick (full on Sunday) [full]
+├── build_m55_qemu, build_rv32_qemu (emulator image; the ESP32 targets are paused in CI, D201)
+├── test_emu                       m4 full; m55, rv32 quick and full                                          [full]
 ├── count_x64_linux_sde_avx512, count_arm64_linux, count_wasm32, count_m4_qemu                                [full]
 └── sweep_x64_linux (sse2 | sse4.2 | avx2), sweep_x64_linux_sde_avx512 (4 parts), sweep_arm64_linux (native),
     sweep_wasm32, sweep_fallback_int: convert_out for every f32, mag CQ15 for every raw pair                  [full]
@@ -138,4 +138,4 @@ node --test "bindings/wasm/js-tests/*.test.mjs"
 
 ## The suite on microcontrollers
 
-The `no_std` suite of the testkit (`all_cases()`, `run_suite`, the line protocol) runs bare-metal in five emulators: a Cortex-M4F (every commit), a Cortex-M55, RISC-V `rv32imac`, the ESP32-P4 and the ESP32-S3 (nightly), with the quick and the full profile. `cargo xtask emu` builds, runs and judges them; the CI jobs are `build_m4_qemu` (every pull request), `build_*_qemu` and `build_esp32*_emu` (build only, every pull request) and `test_emu` (nightly). See [embedded.md](embedded.md).
+The `no_std` suite of the testkit (`all_cases()`, `run_suite`, the line protocol) runs bare-metal in five emulators: a Cortex-M4F (every commit), a Cortex-M55, RISC-V `rv32imac` (nightly), the ESP32-P4 and the ESP32-S3 (paused in CI, D201; local runs only), with the quick and the full profile. `cargo xtask emu` builds, runs and judges them; the CI jobs are `build_m4_qemu` (every pull request), `build_*_qemu` (build only, every pull request) and `test_emu` (nightly). See [embedded.md](embedded.md).

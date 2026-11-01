@@ -17,10 +17,6 @@ on:
         description: "`pr` (every pull request) or `full` (nightly and manual runs)."
         type: string
         required: true
-      weekly:
-        description: The weekly run also runs the full profile of the ESP32-P4.
-        type: boolean
-        default: false
       docs_only:
         description: Only documentation changed that no test reads; only `check` runs.
         type: boolean
@@ -696,6 +692,9 @@ jobs:
           echo "xtask emu exited with $code"
           test "$code" -eq 1
 
+  # The ESP32 targets (`esp32p4`, `esp32s3`) are paused in CI (D201): they stay part of the
+  # concept and of the repository (`cargo xtask emu --target esp32p4|esp32s3` works locally),
+  # but their builds and emulator runs come back with the ESP32 work later.
   build_emu:
     name: build_${{ matrix.name }}
     needs: check
@@ -706,37 +705,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: m55_qemu, target: qemu-cortex-m55, esp: false }
-          - { name: rv32_qemu, target: qemu-riscv32, esp: false }
-          - { name: esp32p4_emu, target: esp32p4, esp: true }
-          - { name: esp32s3_emu, target: esp32s3, esp: true }
+          - { name: m55_qemu, target: qemu-cortex-m55 }
+          - { name: rv32_qemu, target: qemu-riscv32 }
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust
         with:
           cache-key: emu-${{ matrix.target }}
-      - name: Cache the ESP tools (esp-emu, Espressif QEMU, espflash, Xtensa toolchain)
-        if: matrix.esp
-        uses: actions/cache@v4
-        with:
-          path: |
-            target/tools
-            ~/.rustup/toolchains/esp
-          key: esp-tools-${{ runner.os }}-${{ hashFiles('xtask/src/emu.rs') }}
-      - name: Install the ESP tools (pinned)
-        if: matrix.esp
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cargo xtask emu --install
       - name: Build, emulator configuration
         run: cargo xtask emu --target ${{ matrix.target }} --build-only
-      - name: Build, hardware configuration (ESP32-S3)
-        if: matrix.target == 'esp32s3'
-        run: cargo xtask emu --target esp32s3 --build-only --features hardware
 
   test_emu:
-    # Nightly: every target runs the quick profile and every target except the ESP32-P4 also
-    # the full profile; the full profile of the ESP32-P4 (the slow esp-emu run) runs weekly.
+    # Nightly: every target runs the full profile, and the quick profile where no pull-request
+    # job runs it (the Cortex-M4 quick profile runs in `build_m4_qemu`). The ESP32 targets are
+    # paused (D201, see `build_emu`).
     name: test_${{ matrix.name }}
     needs: [build_m4_qemu, build_emu]
     if: ${{ inputs.scope == 'full' }}
@@ -746,11 +728,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: m4_qemu_full, target: qemu-cortex-m4, quick: false, full: true, esp: false }
-          - { name: m55_qemu, target: qemu-cortex-m55, quick: true, full: true, esp: false }
-          - { name: rv32_qemu, target: qemu-riscv32, quick: true, full: true, esp: false }
-          - { name: esp32p4_emu, target: esp32p4, quick: true, full: weekly, esp: true }
-          - { name: esp32s3_emu, target: esp32s3, quick: true, full: true, esp: true }
+          - { name: m4_qemu_full, target: qemu-cortex-m4, quick: false }
+          - { name: m55_qemu, target: qemu-cortex-m55, quick: true }
+          - { name: rv32_qemu, target: qemu-riscv32, quick: true }
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust
@@ -762,24 +742,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-arm qemu-system-misc
           command -v qemu-system-riscv32 || sudo apt-get install -y qemu-system-riscv
-      - name: Cache the ESP tools (esp-emu, Espressif QEMU, espflash, Xtensa toolchain)
-        if: matrix.esp
-        uses: actions/cache@v4
-        with:
-          path: |
-            target/tools
-            ~/.rustup/toolchains/esp
-          key: esp-tools-${{ runner.os }}-${{ hashFiles('xtask/src/emu.rs') }}
-      - name: Install the ESP tools (pinned)
-        if: matrix.esp
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cargo xtask emu --install
       - name: Quick profile
         if: matrix.quick
         run: cargo xtask emu --target ${{ matrix.target }}
       - name: Full profile
-        if: matrix.full == true || (matrix.full == 'weekly' && inputs.weekly)
         run: cargo xtask emu --target ${{ matrix.target }} --full
       - name: Logs
         if: always()

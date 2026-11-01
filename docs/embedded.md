@@ -12,7 +12,7 @@ The heap-free promise is only real if the code runs on microcontrollers. The tes
 | `esp32p4` | 2 | `riscv32imafc-unknown-none-elf` | `esp-emu --chip esp32p4` | UART0 | the host stops the emulator after `SDRK-SUITE END` |
 | `esp32s3` | 2 | `xtensa-esp32s3-none-elf` | Espressif QEMU fork, `qemu-system-xtensa -machine esp32s3` | UART0 | the host stops the emulator after `SDRK-SUITE END` |
 
-Tier 1 runs on every push and pull request (quick profile), tier 2 nightly (quick and full; the full profile of the ESP32-P4 weekly). All five targets pass both profiles on Linux x86-64.
+Tier 1 runs on every push and pull request (quick profile), tier 2 nightly (quick and full). The ESP32 targets (ESP32-P4, ESP32-S3) are paused in CI since 2026-11-01 (D201): they stay part of the concept and of the repository and run locally with `cargo xtask emu --target esp32p4|esp32s3`, but CI neither builds nor runs them until the ESP32 work resumes. The Cortex-M4, Cortex-M55 and RISC-V targets pass both profiles on Linux x86-64.
 
 ### Structure
 
@@ -71,7 +71,7 @@ cargo xtask emu [--target <name>]... [--tier 1|2] [--all] [--full]
 
 - Selection: `--target` (repeatable), `--tier 1` or `--tier 2`, `--all`; without a selector the tier 1 target runs. `--list` shows the table.
 - For every target it builds with the profile `emu` (`cargo build --profile emu --bin <binary> --target-dir target/emu/build/<name>` in the target directory, with `RUSTUP_TOOLCHAIN` removed so that the target's own `rust-toolchain.toml` applies), makes the image (the ESP targets), runs the emulator with a timeout, streams the output to the console and to `target/emu/<name>.log`, and reads the protocol. The emulator is stopped as soon as `SDRK-SUITE END` has been seen (the ESP emulators do not stop by themselves).
-- Profiles: quick (default) and `--full` (adds the cargo feature `full`). Timeouts: quick 300 s and full 3600 s, longer where measured to be needed (Cortex-M4 900 s quick, Cortex-M55 1500 s quick, RISC-V 900 s quick, ESP32-P4 3600 s / 14400 s, ESP32-S3 900 s / 7200 s); `--timeout <s>` overrides all of them.
+- Profiles: quick (default) and `--full` (adds the cargo feature `full`). Timeouts: quick 300 s and full 3600 s, longer where measured to be needed (Cortex-M4 900 s / 7200 s, Cortex-M55 1500 s / 7200 s, RISC-V 900 s quick, ESP32-P4 3600 s / 14400 s, ESP32-S3 900 s / 7200 s); `--timeout <s>` overrides all of them.
 - `--features` is passed to the target crate (for example `--features inject-failure`). The summary table lists result, passed, failed and seconds per target. The exit code is 1 on any failure (also a timeout, a missing `END`, a build failure) and 2 on bad arguments.
 - A missing tool is a failure with an install hint; `--skip-missing` turns it into `SKIP` (used where esp-emu does not exist, e.g. Windows).
 - `--install` downloads the pinned tools into `target/tools/`: `esp-emu` and the Espressif QEMU fork (release archives, **SHA-256 verified** before unpacking, no `curl | sh`), `espflash` and `espup` (`cargo install --locked`, pinned version) and, through `espup`, the Xtensa Rust toolchain. Arm and RISC-V QEMU come from the distribution (`apt-get install qemu-system-arm qemu-system-misc`; Ubuntu 26.04 splits the RISC-V machines into `qemu-system-riscv`). The locations can be overridden with `SDRK_QEMU_ARM`, `SDRK_QEMU_RISCV32`, `SDRK_ESP_EMU`, `SDRK_ESP_QEMU_XTENSA`, `SDRK_ESPFLASH` and `SDRK_XTENSA_GCC`.

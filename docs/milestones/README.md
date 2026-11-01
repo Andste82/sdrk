@@ -6,7 +6,9 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M24 are delivered; M16 to M18 and M25 are planned (the receive series M19 to M25 uses nothing from M16 to M18, see the *Order* section of M19).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M24 are delivered; M16 to M18, M24.1 and M25 are planned (the receive series M19 to M25, M24.1 included, uses nothing from M16 to M18, see the *Order* section of M19).
+
+**Block names:** M24.1 fixes the naming scheme of block kinds (`docs/blocks.md`, section "Names") and renames four kinds: `resampler` → `resample`, `halfband` → `halfband_decimate`, `real_to_complex` → `real_to_iq`, `fm_stereo` → `fm_stereo_demod` (the old names stay accepted as aliases for a while). The milestone files before M24.1 are records and use the old names; every later milestone uses the scheme and the table of reserved names.
 
 | # | File | Plan phase | Delivers |
 | --- | --- | --- | --- |
@@ -35,7 +37,8 @@ Milestones are strictly sequential: each depends on all previous ones, and each 
 | M22 | [M22-audio-filters.md](M22-audio-filters.md) | 9 | Audio filters: kernels `biquad`/`biquad_real`, RBJ and Butterworth design, block `biquad`, CTCSS removal and audio low-pass in the flows |
 | M23 | [M23-real-sampling-input.md](M23-real-sampling-input.md) | 9 | Real-sampling devices: `halfband_decimate`, `real_to_complex` (SIMD), real formats in `convert`, blocks `halfband`, `real_to_complex`, E2E-REAL |
 | M24 | [M24-fm-stereo.md](M24-fm-stereo.md) | 9 | FM stereo: kernels `stereo_pll` (pilot PLL) and `stereo_matrix` (SIMD), block `fm_stereo`, stereo audio as complex samples, flow `fm_stereo_receiver`, stereo WAV, E2E-STEREO |
-| M25 | [M25-fm-transmit-audio.md](M25-fm-transmit-audio.md) | 9 | FM transmit audio: kernel `preemph_limit`, design `preemphasis_coefs`, block `fm_tx_audio`, pre-emphasis and limiter in `fm_transmitter`, flow `nfm_transmitter`, de-emphasis in `nfm_receiver`, loop tests TX → RX |
+| M24.1 | [M24.1-block-naming.md](M24.1-block-naming.md) | 9 | Block names: naming scheme in `docs/blocks.md`, kinds `resample`, `halfband_decimate`, `real_to_iq`, `fm_stereo_demod` (old names as aliases with the warning `deprecated_kind`), deprecated Rust aliases, name check in `cargo xtask check`, reserved names for the planned blocks; outputs unchanged |
+| M25 | [M25-fm-transmit-audio.md](M25-fm-transmit-audio.md) | 9 | FM transmit audio: kernel `preemph_limit`, design `preemphasis_coefs`, block `preemph_limit`, pre-emphasis and limiter in `fm_transmitter`, flow `nfm_transmitter`, de-emphasis in `nfm_receiver`, loop tests TX → RX |
 | — | [BACKLOG.md](BACKLOG.md) | 7–9, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -45,7 +48,7 @@ M00 → M01 → M02 → M03 → M04 → M05 → M06 → M07 → M08     (phases 
                           ↓
                          M13 → M14 → M15 → M16 → M17 → M18 → BACKLOG                (phases 4–7: speed, WASM, embedded)
                                       ↓
-                                     M19 → M20 → M21 → M22 → M23 → M24 → M25 → BACKLOG    (phase 9: NFM, AM, SSB, audio filters, real-sampling input, FM stereo, FM transmit audio)
+                                     M19 → M20 → M21 → M22 → M23 → M24 → M24.1 → M25 → BACKLOG    (phase 9: NFM, AM, SSB, audio filters, real-sampling input, FM stereo, block names, FM transmit audio)
 ```
 
 ## How to work on a milestone

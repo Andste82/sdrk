@@ -47,11 +47,11 @@ The suite on the MCUs is the whole testkit suite: kernels in both directions, fu
 | Target | Code | Data and stack | Source |
 | --- | --- | --- | --- |
 | `qemu-cortex-m4` | 4 MiB SRAM at `0x00000000` | 4 MiB SRAM at `0x20000000` | QEMU documentation "Arm MPS2 and MPS3 boards"; `hw/arm/mps2.c` (AN386) |
-| `qemu-cortex-m55` | 512 KiB ITCM at `0x00000000` (the reset vectors are read from address 0) | 4 MiB SRAM at `0x21000000` | QEMU 10.2.1 `info mtree` of `mps3-an547` (secure alias); `hw/arm/mps2-tz.c` |
+| `qemu-cortex-m55` | 512 KiB ITCM at `0x00000000` (the reset vectors are read from address 0; vector table, library code and constants) and 2 MiB code SRAM at `0x01000000` (the code of the test cases, section `.text.testkit`) | 4 MiB SRAM at `0x21000000` | QEMU 10.2.1 `info mtree` of `mps3-an547` (secure alias); `hw/arm/mps2-tz.c` |
 | `qemu-riscv32` | RAM at `0x80000000` (16 MiB used of the default 128 MiB) | same RAM, stack at the top | QEMU documentation "RISC-V Generic Virtual Platform"; `hw/riscv/virt.c` |
 | `esp32p4`, `esp32s3` | the linker scripts of `esp-hal` (`linkall.x`) | | `esp-hal` 1.2.2 |
 
-`memory.x` is copied by `build.rs` into `OUT_DIR` so that `cortex-m-rt` (0.7) and `riscv-rt` (0.18) find it. The Cortex-M55 needs the optimisation level `z`: the image (vector table, code and constants, 457 KB since M21) must fit the 512 KiB ITCM, which is where the vector table is; with `s` it overflowed by about 2.5 to 3.9 KB. The code at `z` is slower: the full profile took about 58 minutes at M21 and ran past the 3600 s of the other QEMU targets with the cases of M22, so this target has 7200 s for the full profile.
+`memory.x` is copied by `build.rs` into `OUT_DIR` so that `cortex-m-rt` (0.7) and `riscv-rt` (0.18) find it. The Cortex-M55 target is built with the optimisation level `z`, which M21 introduced because the whole image (457 KB then) no longer fitted the 512 KiB ITCM with `s` (it overflowed by about 2.5 to 3.9 KB). Since the suite grew, the code of the test cases (`sdrk_testkit`) is linked into the 2 MiB code SRAM (`memory.x`), and the ITCM holds the rest; at M24 the `emu` image has 449 KB of test-case code there and about 240 KB in the ITCM (vector table 2 KB, code 152 KB, constants 86 KB). Whether `s` would fit the ITCM again was not checked. The code at `z` is slower: the full profile took about 58 minutes at M21 and ran past the 3600 s of the other QEMU targets with the cases of M22, so this target has 7200 s for the full profile.
 
 ## ESP32 builds
 

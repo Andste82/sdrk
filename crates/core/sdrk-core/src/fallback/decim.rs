@@ -162,23 +162,29 @@ const NARROW_GROUP: usize = 8;
 /// `i < seen`, then the history from its newest sample backwards. `fir` and `fir_decimate` are
 /// the case `l = 1`, `phase = 0`.
 #[derive(Clone, Copy, Debug)]
-struct Out {
+pub(super) struct Out {
     /// Index of the first tap of the branch (`< l`).
-    phase: usize,
+    pub(super) phase: usize,
     /// Number of samples of `input` up to the newest one of the output.
-    seen: usize,
+    pub(super) seen: usize,
 }
 
 /// Number of taps of the branch of `phase`: `ceil((N - phase) / l)`.
 #[inline]
-fn branch_len(n_taps: usize, l: usize, phase: usize) -> usize {
+pub(super) fn branch_len(n_taps: usize, l: usize, phase: usize) -> usize {
     n_taps.saturating_sub(phase).div_ceil(l)
 }
 
 /// The sum of `out` over its whole branch, in ascending order: the samples of `input` first,
 /// then those of the history.
 #[inline]
-fn single<T: FbMac>(taps: &[T::Tap], l: usize, hist: &[T], input: &[T], out: Out) -> Result<T> {
+pub(super) fn single<T: FbMac>(
+    taps: &[T::Tap],
+    l: usize,
+    hist: &[T],
+    input: &[T],
+    out: Out,
+) -> Result<T> {
     let internal = || Error::Internal("filter window");
     let mut acc = T::zero();
     let len = branch_len(taps.len(), l, out.phase);

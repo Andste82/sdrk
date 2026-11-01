@@ -601,7 +601,7 @@
     },
     "avx2-runtime": {
       "status": "dev",
-      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); 1.39 times the instructions of the fixed build (225.72 against 162.68 per sample); open until a grouped SIMD branch replaces both"
+      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); 1.79 times the instructions of the fixed build (225.72 against 125.89 per sample; 1.39 against 162.68 before the fixed build's fallback got its own scalar loop, D173); open until a grouped SIMD branch replaces both"
     }
   },
   "resample_real_q15": {
@@ -1835,12 +1835,10 @@
   },
   "fir_interpolate_cq15_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "1.52 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "1.52 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "avx2": {
       "status": "release"
@@ -1849,8 +1847,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "1.54 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`ldrsh` and `smaddl` per multiply-add). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -1931,12 +1928,10 @@
   },
   "fir_interpolate_real_q15_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "1.62 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "1.62 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "avx2": {
       "status": "release"
@@ -1945,8 +1940,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "1.69 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`ldrsh` and `smaddl` per multiply-add). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "release"
     },
     "simd128": {
       "status": "release"

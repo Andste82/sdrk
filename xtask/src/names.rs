@@ -198,6 +198,10 @@ pub fn check_sources(sources: &Sources, blocks_dir: &Path, kinds_path: &Path) ->
 ///
 /// # Errors
 /// If a file cannot be read.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls are large; xtask is a host tool"
+)]
 pub fn check_names(root: &Path) -> anyhow::Result<Vec<Finding>> {
     let blocks_dir: PathBuf = ["crates", "blocks", "sdrk-blocks", "src", "blocks"]
         .iter()

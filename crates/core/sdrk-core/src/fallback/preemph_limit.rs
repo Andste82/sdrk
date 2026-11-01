@@ -7,8 +7,9 @@
 //! envelope that this very sample updates, so the work cannot be vectorized without changing the
 //! result. What the fallback saves is work per sample:
 //!
-//! * `f32`: a sample that is neither NaN nor infinite passes `x` unchanged; the check is one
-//!   compare of `|x|` with `f32::MAX`. The clamp of the output is two selects.
+//! * `f32`: a sample within the input limit passes `x` unchanged; the check is one compare of `|x|`
+//!   with `INPUT_LIMIT`, the clamp and the replacement of NaN and infinities are on the rare
+//!   path. The clamp of the output is two selects.
 //! * `Q15`: the quotient `|v| T_q30 / env` is a `u64` division when the product is below `2^63`
 //!   (`|v|` below 8.0 in value terms, the usual case), and a `u128` division only above that. A
 //!   64-bit division is much cheaper than a 128-bit one on x86-64 and the soft division of
@@ -20,7 +21,7 @@
 use crate::Fallback;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::preemph_limit::{PreemphLimit, PreemphLimitState, V_LIMIT};
+use crate::kernels::preemph_limit::{INPUT_LIMIT, PreemphLimit, PreemphLimitState, V_LIMIT};
 use crate::num::flush_denormal;
 use crate::types::Q15;
 
@@ -39,8 +40,15 @@ impl PreemphLimit<f32> for Fallback {
         let (b0, b1, a1, r, t) = (g.b0_f, g.b1_f, g.a1_f, g.r_f, g.t_f);
         let (mut x1, mut v1, mut env, mut hold) = (*g.x1_f, *g.v1_f, *g.env_f, *g.hold);
         for (o, &sample) in output.iter_mut().zip(input) {
-            let x = if sample.abs() <= f32::MAX {
+            let a = sample.abs();
+            let x = if a <= INPUT_LIMIT {
                 sample
+            } else if a <= f32::MAX {
+                if sample < 0.0 {
+                    -INPUT_LIMIT
+                } else {
+                    INPUT_LIMIT
+                }
             } else {
                 0.0
             };

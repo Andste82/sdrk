@@ -118,6 +118,7 @@ fn all_cases_are_present() {
     assert_eq!(
         golden::list("preemph_limit").unwrap(),
         [
+            "clamp_f32_4096",
             "limit_f32_8192",
             "limit_q15_8192",
             "nonfinite_f32_4096",
@@ -155,6 +156,11 @@ fn limit_f32_golden() {
 #[test]
 fn nonfinite_f32_golden() {
     f32_case("nonfinite_f32_4096");
+}
+
+#[test]
+fn clamp_f32_golden() {
+    f32_case("clamp_f32_4096");
 }
 
 #[test]
@@ -203,6 +209,7 @@ fn the_coefficients_of_the_kernel_cases_are_the_design_values() {
         "limit_q15_8192",
         "preemph_q15_8192",
         "nonfinite_f32_4096",
+        "clamp_f32_4096",
         "retune_f32_8192",
     ] {
         let case = golden::load("preemph_limit", name).unwrap();

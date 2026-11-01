@@ -495,6 +495,52 @@ fn the_state_is_small() {
     assert!(core::mem::size_of::<PreemphLimitState<Q15>>() <= 256);
 }
 
+/// A finite `f32` input beyond `+-1024` is clamped (M25 section 2, step 1): the output equals the
+/// output for the clamped input, bit for bit, and the state stays finite, so a corrupted sample
+/// cannot leave the limiter on NaN until `reset`.
+#[test]
+fn a_huge_finite_input_is_clamped() {
+    let huge = [1025.0_f32, -2000.0, 1e30, -1e36, 3e38, f32::MAX, f32::MIN];
+    for (tau, fs) in [(50e-6, 48_000), (530e-6, 48_000), (1e-3, 384_000)] {
+        let coefs = preemph(tau, fs as f64);
+        let mut rng = Rng(7);
+        let mut input: Vec<f32> = (0..3000).map(|_| (rng.next() * 0.3) as f32).collect();
+        for (k, h) in huge.iter().enumerate() {
+            input[100 + 50 * k] = *h;
+        }
+        let clamped: Vec<f32> = input.iter().map(|v| v.clamp(-1024.0, 1024.0)).collect();
+        let mut a = new_state::<f32>(coefs, 0.8, 0.02, 0.2, fs);
+        let mut b = a;
+        let out = run(&Fallback, &mut a, &input);
+        assert_eq!(
+            out.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+            run(&Fallback, &mut b, &clamped)
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>()
+        );
+        assert!(out.iter().all(|v| v.is_finite() && v.abs() <= 0.8));
+        assert_eq!(a, b);
+        assert!(a.gain().is_finite() && a.gain() > 0.0);
+    }
+}
+
+/// Inputs within `+-1024` are not changed by the clamp: the limiter properties of the tests above
+/// (inputs up to 20 times full scale) hold for the full range, and the output is the same with
+/// and without a pre-clamp of the input.
+#[test]
+fn an_input_within_the_limit_is_not_changed() {
+    let mut rng = Rng(11);
+    let input: Vec<f32> = (0..5000)
+        .map(|i| (rng.next() * if i % 7 == 0 { 1024.0 } else { 30.0 }) as f32)
+        .collect();
+    let clamped: Vec<f32> = input.iter().map(|v| v.clamp(-1024.0, 1024.0)).collect();
+    assert_eq!(input, clamped);
+    let mut a = new_state::<f32>(preemph(50e-6, 48_000.0), 1.0, 0.02, 0.2, 48_000);
+    let out = run(&Fallback, &mut a, &input);
+    assert!(out.iter().all(|v| v.abs() <= 1.0));
+}
+
 #[cfg(feature = "reference")]
 mod against_the_reference {
     use super::*;
@@ -564,6 +610,8 @@ mod against_the_reference {
             f32::NEG_INFINITY,
             f32::MAX,
             f32::MIN,
+            1e30,
+            -2000.0,
             0.0,
             -0.0,
         ];

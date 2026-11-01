@@ -1,0 +1,71 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "clamp_f32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "clamp_f32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "clamp_f32_4096",
+  "format_version": 1,
+  "kernel": "preemph_limit",
+  "model": "float32",
+  "notes": "the first 4096 samples of the input of preemph_f32_8192 with 24 finite values beyond the input limit 1024 (1025, 2000, 1e30, 1e36, 3e38 and the largest float32, both signs) at the listed positions; a finite input is clamped to +-1024; exact float32 model",
+  "params": {
+    "a1_bits": 4593989502643561391,
+    "b0_bits": 4614586531936190583,
+    "b1_bits": 13835405426330217021,
+    "coefs": [
+      3.2880867522836144,
+      -2.154263734254782,
+      0.13382301802883265
+    ],
+    "hold_s": 0.02,
+    "input_limit": 1024.0,
+    "limit": 1.0,
+    "positions": [
+      10,
+      11,
+      172,
+      480,
+      1284,
+      1352,
+      1551,
+      1614,
+      1664,
+      1771,
+      1901,
+      2109,
+      2170,
+      2578,
+      2882,
+      2962,
+      2994,
+      3011,
+      3083,
+      3257,
+      3302,
+      3395,
+      4064,
+      4074
+    ],
+    "rate_hz": 48000,
+    "release_s": 0.2,
+    "tau_s": 5e-05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 455,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

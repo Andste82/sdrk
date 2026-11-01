@@ -1,0 +1,29 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "cq15_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "cq15_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "cq15_4096",
+  "format_version": 1,
+  "kernel": "stereo_matrix",
+  "notes": "uniform raw values over the whole range (saturates often); l = sat16(s + 2d), r = sat16(s - 2d) with d2 exact in int64",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 443,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

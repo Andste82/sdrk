@@ -250,7 +250,8 @@ pub const TARGETS: [Target; 5] = [
             cpu: Some("cortex-m4"),
         },
         // 110 s measured on a quiet machine, 300 s on a loaded one (software `f64` in the references);
-        // 627 s since M21 (both E2E-SSB chains in the quick profile).
+        // 627 s since M21 (both E2E-SSB chains in the quick profile), 728 s since M24 (the
+        // stereo cases, D128).
         quick_s: 3 * QUICK_TIMEOUT_S,
         full_s: FULL_TIMEOUT_S,
     },
@@ -263,9 +264,10 @@ pub const TARGETS: [Target; 5] = [
             cpu: None,
         },
         // 200 s measured for the quick profile (the code must fit the 512 KiB ITCM: opt-level `z`
-        // since M21, `s` before). The full profile took about 58 minutes at M21 and ran past
+        // since M21, `s` before). 1093 s since M24 (the stereo cases, D161), so the quick profile
+        // gets five times the default. The full profile took about 58 minutes at M21 and ran past
         // 3600 s with the cases of M22 (nightly of 2026-10-28), so it gets twice the default.
-        quick_s: 3 * QUICK_TIMEOUT_S,
+        quick_s: 5 * QUICK_TIMEOUT_S,
         full_s: 2 * FULL_TIMEOUT_S,
     },
     Target {
@@ -273,7 +275,7 @@ pub const TARGETS: [Target; 5] = [
         tier: 2,
         triple: "riscv32imac-unknown-none-elf",
         runner: Runner::QemuRiscv32,
-        // Soft-float `C32` kernels: about 200 s measured.
+        // Soft-float `C32` kernels: about 200 s measured before M23, 680 s since M24 (D161).
         quick_s: 3 * QUICK_TIMEOUT_S,
         full_s: FULL_TIMEOUT_S,
     },

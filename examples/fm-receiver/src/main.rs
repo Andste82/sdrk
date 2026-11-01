@@ -7,6 +7,10 @@
 //!             [--flow examples/flows/fm_receiver.json] [--set tune.frequency_hz=600000 ...]
 //! ```
 //!
+//! The audio output decides the file: a real stream (`f32`, as in `fm_receiver.json`) gives a
+//! mono WAV file, a complex stream (`C32`, stereo audio with the left channel in `re` and the
+//! right channel in `im`, as in `fm_stereo_receiver.json`) a two-channel WAV file.
+//!
 //! The report summary and the events go to standard error. Exit code 1 with the diagnostics
 //! JSON on standard error for an invalid flow, 2 for a wrong command line.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -18,9 +22,11 @@ use std::fs::File;
 use std::path::Path;
 use std::process::ExitCode;
 
+use sdrk::C32;
+use sdrk_blocks::PortType;
 use sdrk_device::{BlockMeta, Rate, RxStream, SampleIndex, formats};
 use sdrk_io::{RawReader, SigmfReader, WavWriter, sigmf_paths};
-use sdrk_pipeline::{BuildOptions, EventKind, InputData, Pipeline, RateHz, Registry};
+use sdrk_pipeline::{BuildOptions, EventKind, InputData, Pipeline, PortKind, RateHz, Registry};
 
 use cli::{Failure, Options};
 
@@ -97,14 +103,31 @@ fn run(args: &[String]) -> Result<(), Failure> {
     let mut pipeline = cli::build(&registry, &spec, &opts)?;
     let audio_rate = pipeline.output_rate(&audio_name)?;
 
+    // A complex stream is stereo audio (left in re, right in im); a real one is mono.
+    let stereo = match pipeline.output_port(&audio_name)? {
+        PortKind::Stream(PortType::C32) => true,
+        PortKind::Stream(PortType::F32) => false,
+        _ => {
+            return Err(Failure::Usage(format!(
+                "output `{audio_name}` is neither an f32 stream nor a C32 stereo stream"
+            )));
+        }
+    };
     let wav_file = File::create(output_path)
         .map_err(|e| Failure::Run(format!("cannot create `{output_path}`: {e}")))?;
-    let mut wav = WavWriter::new(std::io::BufWriter::new(wav_file), formats::RF32, audio_rate)?;
+    let wav_format = if stereo { formats::CF32 } else { formats::RF32 };
+    let mut wav = WavWriter::new(std::io::BufWriter::new(wav_file), wav_format, audio_rate)?;
 
     let granule = cli::granule_samples(&format);
     let chunk_samples = chunk - chunk % granule;
     let mut buf = vec![0u8; format.bytes_for_samples(chunk_samples.max(granule))?];
     let mut audio = vec![0f32; 4096];
+    let mut stereo_audio = vec![C32::new(0.0, 0.0); 2048];
+    let mut scratch = Scratch {
+        mono: &mut audio,
+        stereo: &mut stereo_audio,
+        is_stereo: stereo,
+    };
     let mut stats = Stats::default();
     loop {
         let (n, meta) = reader.read(&mut buf)?;
@@ -116,7 +139,13 @@ fn run(args: &[String]) -> Result<(), Failure> {
             .ok_or_else(|| Failure::Run("internal: block longer than the buffer".into()))?;
         pipeline.push_with_meta(&input_name, InputData::Raw(bytes), &meta)?;
         stats.samples_in += format.samples_in_bytes(n) as u64;
-        drain(&mut pipeline, &audio_name, &mut audio, &mut wav, &mut stats)?;
+        drain(
+            &mut pipeline,
+            &audio_name,
+            &mut scratch,
+            &mut wav,
+            &mut stats,
+        )?;
         events(&mut pipeline, &mut stats);
     }
     let out = wav.finish()?;
@@ -179,22 +208,40 @@ struct Stats {
     printed: usize,
 }
 
+/// The read buffers of the audio output: real samples for a mono file, complex ones for stereo.
+struct Scratch<'a> {
+    mono: &'a mut [f32],
+    stereo: &'a mut [C32],
+    is_stereo: bool,
+}
+
 fn drain(
     p: &mut Pipeline,
     name: &str,
-    scratch: &mut [f32],
+    scratch: &mut Scratch<'_>,
     wav: &mut WavWriter<std::io::BufWriter<File>>,
     stats: &mut Stats,
 ) -> Result<(), Failure> {
     use sdrk_device::TxStream;
     loop {
-        let n = p.read_stream::<f32>(name, scratch)?;
+        let mut bytes = Vec::new();
+        let n = if scratch.is_stereo {
+            let n = p.read_stream::<C32>(name, scratch.stereo)?;
+            // C32 is `re, im` = left, right: the interleaved frames of a stereo WAV file.
+            for v in scratch.stereo.iter().take(n) {
+                bytes.extend_from_slice(&v.re.to_le_bytes());
+                bytes.extend_from_slice(&v.im.to_le_bytes());
+            }
+            n
+        } else {
+            let n = p.read_stream::<f32>(name, scratch.mono)?;
+            for v in scratch.mono.iter().take(n) {
+                bytes.extend_from_slice(&v.to_le_bytes());
+            }
+            n
+        };
         if n == 0 {
             return Ok(());
-        }
-        let mut bytes = Vec::with_capacity(4 * n);
-        for v in scratch.iter().take(n) {
-            bytes.extend_from_slice(&v.to_le_bytes());
         }
         wav.write(&bytes, &BlockMeta::default())?;
         stats.samples_out += n as u64;

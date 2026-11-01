@@ -669,6 +669,8 @@ impl Engine {
             ("rotate", C32),
             ("scale", C32),
             ("squelch", C32),
+            ("stereo_matrix", C32),
+            ("stereo_pll", F32),
             ("window", C32),
         ];
         KERNELS

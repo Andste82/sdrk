@@ -1,0 +1,30 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "c32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "c32_4096",
+  "format_version": 1,
+  "kernel": "stereo_matrix",
+  "model": "float32",
+  "notes": "uniform noise in +-0.6 per component; l = s + (d + d), r = s - (d + d) in float32",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 442,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

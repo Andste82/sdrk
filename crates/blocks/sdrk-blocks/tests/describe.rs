@@ -34,10 +34,10 @@ use sdrk_blocks::{
     AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
     Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, Mutability,
-    ParamKind, ParamValue, PortType, ResamplerBlock, ResamplerConfig, ResamplerRealBlock,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, all_descriptions,
+    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoBlock, FmStereoConfig,
+    FrameBlock, Mutability, ParamKind, ParamValue, PortType, ResamplerBlock, ResamplerConfig,
+    ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -57,10 +57,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_eighteen_unique_kinds() {
+fn there_are_nineteen_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 18);
-    assert_eq!(all_descriptions().len(), 18);
+    assert_eq!(kinds.len(), 19);
+    assert_eq!(all_descriptions().len(), 19);
     for kind in [
         "convert",
         "convert_out",
@@ -71,6 +71,7 @@ fn there_are_eighteen_unique_kinds() {
         "duc",
         "fm_demod",
         "fm_mod",
+        "fm_stereo",
         "resampler",
         "spectrum",
         "squelch",
@@ -243,6 +244,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("duc", |n| DucConfig::default().get(n), &[]);
     defaults_match("fm_demod", |n| FmDemodConfig::default().get(n), &[]);
     defaults_match("fm_mod", |n| FmModConfig::default().get(n), &[]);
+    defaults_match("fm_stereo", |n| FmStereoConfig::default().get(n), &[]);
     defaults_match("resampler", |n| ResamplerConfig::default().get(n), &[]);
     defaults_match(
         "spectrum",
@@ -331,6 +333,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("duc", DucConfig);
     round_trip!("fm_demod", FmDemodConfig);
     round_trip!("fm_mod", FmModConfig);
+    round_trip!("fm_stereo", FmStereoConfig);
     round_trip!("resampler", ResamplerConfig);
     round_trip!("spectrum", SpectrumConfig);
     round_trip!("convert", ConvertConfig);
@@ -460,6 +463,11 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "fm_demod",
         &mut FmDemodBlock::<CQ15, _>::new(&demod, r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "fm_stereo",
+        &mut FmStereoBlock::<C32, _>::new(&FmStereoConfig::default(), rate(480_000), &mut s)
+            .unwrap(),
     );
     check_block_params(
         "fm_mod",

@@ -59,7 +59,7 @@ fn the_kinds_are_registered_with_their_kernels() {
     assert_eq!(h.description().kind, "halfband");
     let r = registry.factory("real_to_complex").unwrap();
     assert_eq!(r.kernels(), ["real_to_complex"]);
-    assert_eq!(registry.descriptions().count(), 18);
+    assert_eq!(registry.descriptions().count(), 19);
 }
 
 #[test]

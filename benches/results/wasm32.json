@@ -3498,6 +3498,152 @@
           "status": "info",
           "verdict": "info"
         },
+        "stereo_matrix": {
+          "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.63,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.53,
+              "ratio": 0.34
+            }
+          ],
+          "other_instr_per_sample": 33.63,
+          "ours_instr_per_sample": 11.53,
+          "ratio": 0.34,
+          "snr_db": {
+            "other": 151.28,
+            "ours": 151.28
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "stereo_matrix_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 5.47,
+              "other_snr_db": 12.16,
+              "ours_instr_per_sample": 5.4,
+              "ratio": 0.99
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 5.4,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.4,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 5.4,
+          "ours_instr_per_sample": 5.4,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "stereo_matrix_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 5.47,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.4,
+              "ratio": 0.99
+            }
+          ],
+          "other_instr_per_sample": 5.47,
+          "ours_instr_per_sample": 5.4,
+          "ratio": 0.99,
+          "snr_db": {
+            "other": 12.16,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "stereo_matrix_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 47.34,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.78,
+              "ratio": 0.23
+            }
+          ],
+          "other_instr_per_sample": 47.34,
+          "ours_instr_per_sample": 10.78,
+          "ratio": 0.23,
+          "snr_db": {
+            "other": 151.28,
+            "ours": 151.28
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "stereo_pll_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, simd128)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 143.86,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 190.06,
+              "ratio": 1.32
+            }
+          ],
+          "other_instr_per_sample": 143.86,
+          "ours_instr_per_sample": 190.06,
+          "ratio": 1.32,
+          "snr_db": {
+            "other": 23.44,
+            "ours": 57.02
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
+        "stereo_pll_q15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 228.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 183.05,
+              "ratio": 0.8
+            }
+          ],
+          "other_instr_per_sample": 228.04,
+          "ours_instr_per_sample": 183.05,
+          "ratio": 0.8,
+          "snr_db": {
+            "other": 53.72,
+            "ours": 53.62
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "window": {
           "compared_with": "volk_32fc_32f_multiply_32fc",
           "goal": true,
@@ -3664,6 +3810,11 @@
       "liquid_dsp_halfband": {
         "build": "liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release: -O3 -ffp-contract=off, per level simd128:-msimd128, dot products (crcf / rrrf) simd128=LIQUID_RUNTIME_PORT/LIQUID_RUNTIME_PORT ",
         "sha256": "18fa83b73db8bb6fe6ea0376e4b5aecf8645970f4604d10d9dadbf609f3f95e2",
+        "version": "1.8.3"
+      },
+      "liquid_dsp_nco": {
+        "build": "liquid-nco.c (nco_crcf, LIQUID_VCO_INTERP): -O3 -msimd128",
+        "sha256": "9521d75069cff58a69a9ab5ae1e62ba9d23ee626a46dc688c7edc3cd61154f56",
         "version": "1.8.3"
       },
       "volk": {

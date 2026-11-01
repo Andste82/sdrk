@@ -84,9 +84,10 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 452–453 | M23 (the saturation-corner cases of the `Q15` halfband kernels, review finding) |
 | 436–437 | M20 (the audio-filter cases of `am_demod`, open item M20-5) |
 | 438–443 | M24 |
+| 454 | M24 (the additional case `stereo_pll/disable_enable_f32_16384`, D113) |
 | 444–450 | M25 |
 | 451 | M21 (the loud decimated `CQ15` case `ssb_demod_usb_cq15_dec4_loud`, review finding) |
-| 454–499 | free, for backlog milestones |
+| 455–499 | free, for backlog milestones |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
 | 530–999 | free, for backlog milestones |

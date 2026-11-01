@@ -43,12 +43,14 @@ use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod fir_family;
 mod halfband_family;
+mod stereo_family;
 
 use fir_family::{Entry, FirFamK, Mode};
 use halfband_family::{
     DecimateK as HalfbandK, DecimateRealK as HalfbandRealK, FirDecimateX2K, RealToComplexK,
     ShiftedK,
 };
+use stereo_family::{MatrixCq15K as StereoMatrixCq15K, MatrixK as StereoMatrixK, PllF32K, PllQ15K};
 
 /// Samples per call unless overridden.
 pub const N: usize = 4096;
@@ -326,7 +328,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 140] = [
+pub const KERNELS: [&str; 146] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -467,6 +469,12 @@ pub const KERNELS: [&str; 140] = [
     "halfband_ref_shifted",
     "halfband_ref_shifted_cq15",
     "real_to_complex_airspy",
+    "stereo_matrix",
+    "stereo_matrix_cq15",
+    "stereo_matrix_fallback",
+    "stereo_matrix_cq15_fallback",
+    "stereo_pll_fallback",
+    "stereo_pll_q15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -476,7 +484,12 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         .strip_suffix("_fallback")
         .or_else(|| name.strip_suffix("_airspy"))
         .unwrap_or(name);
-    let idx = KERNELS.iter().position(|k| *k == seed_of)? as u64;
+    // An entry without an entry of its base name (`stereo_pll_fallback`: `stereo_pll` has no SIMD
+    // entry) takes the seed of its own position.
+    let idx = KERNELS
+        .iter()
+        .position(|k| *k == seed_of)
+        .or_else(|| KERNELS.iter().position(|k| *k == name))? as u64;
     let (simd, fallback) = (BiquadEntry::Simd, BiquadEntry::Fallback);
     let entry = if name.ends_with("_fallback") {
         fallback
@@ -602,6 +615,14 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "halfband_ref_fir_decimate_cq15" => Box::new(FirDecimateX2K::<CQ15>::new(rng, layout)),
         "halfband_ref_shifted" => Box::new(ShiftedK::<C32>::new(rng, layout)),
         "halfband_ref_shifted_cq15" => Box::new(ShiftedK::<CQ15>::new(rng, layout)),
+        "stereo_matrix" | "stereo_matrix_fallback" => {
+            Box::new(StereoMatrixK::new(rng, layout, entry))
+        }
+        "stereo_matrix_cq15" | "stereo_matrix_cq15_fallback" => {
+            Box::new(StereoMatrixCq15K::new(rng, layout, entry))
+        }
+        "stereo_pll_fallback" => Box::new(PllF32K::new(rng, layout)),
+        "stereo_pll_q15_fallback" => Box::new(PllQ15K::new(rng, layout)),
         "agc" => Box::new(AgcK::<C32>::new(rng, layout, false)),
         "agc_cq15" => Box::new(AgcK::<CQ15>::new(rng, layout, false)),
         "agc_fallback" => Box::new(AgcK::<C32>::new(rng, layout, true)),

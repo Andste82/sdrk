@@ -31,9 +31,9 @@ use sdrk_blocks::{
     BiquadConfig, BiquadElem, BiquadRealBlock, BiquadResponse, Block, BlockSample, ConvertBlock,
     ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
     DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, FrameBlock, ResamplerBlock, ResamplerConfig, ResamplerRealBlock,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    FmModBlock, FmModConfig, FmStereoBlock, FmStereoConfig, FrameBlock, ResamplerBlock,
+    ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -164,6 +164,24 @@ fn filters_exact<T: BlockSample>() {
     }
 }
 
+fn stereo_exact<T: BlockSample + BiquadElem>()
+where
+    T::Real: BiquadElem,
+{
+    for (decimation, deemphasis_us) in [(1, 50.0), (10, 50.0), (10, 0.0)] {
+        let cfg = FmStereoConfig {
+            audio_decimation: decimation,
+            deemphasis_us,
+            ..FmStereoConfig::default()
+        };
+        let r = rate(480_000);
+        let bytes = FmStereoBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        check_exact_storage(bytes, |a| {
+            FmStereoBlock::<T, _>::new(&cfg, r, a).map(|_| ())
+        });
+    }
+}
+
 /// The biquad blocks of the complex type `T` and of the real type `R` take exactly the
 /// storage they report: 5 coefficients and 4 history values per section.
 fn biquad_exact<T: BlockSample + BiquadElem, R: sdrk_blocks::BlockReal + BiquadElem>() {
@@ -240,6 +258,7 @@ fn complex_blocks_c32() {
     simple_exact::<C32>();
     filters_exact::<C32>();
     biquad_exact::<C32, f32>();
+    stereo_exact::<C32>();
     resamplers_exact::<C32>();
     spectrum_exact::<C32>();
 }
@@ -251,6 +270,7 @@ fn complex_blocks_cq15() {
     simple_exact::<CQ15>();
     filters_exact::<CQ15>();
     biquad_exact::<CQ15, Q15>();
+    stereo_exact::<CQ15>();
     resamplers_exact::<CQ15>();
     spectrum_exact::<CQ15>();
 }
@@ -328,6 +348,7 @@ fn no_block_is_larger_than_512_bytes() {
         DdcBlock,
         DucBlock,
         FmDemodBlock,
+        FmStereoBlock,
         FmModBlock,
         ResamplerBlock,
         SpectrumBlock,
@@ -335,7 +356,8 @@ fn no_block_is_larger_than_512_bytes() {
         AgcBlock,
         AmDemodBlock,
         SsbDemodBlock,
-        BiquadBlock
+        BiquadBlock,
+        FmStereoBlock
     );
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
     check::<BiquadRealBlock<Q15, A<'static>>>("BiquadRealBlock<Q15>");
@@ -391,6 +413,7 @@ fn public_types_are_send() {
     assert_send::<DdcConfig>();
     assert_send::<DucConfig>();
     assert_send::<FmDemodConfig>();
+    assert_send::<FmStereoConfig>();
     assert_send::<FmModConfig>();
     assert_send::<ResamplerConfig>();
     assert_send::<SpectrumConfig>();

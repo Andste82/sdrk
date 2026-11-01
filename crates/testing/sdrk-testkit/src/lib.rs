@@ -11,6 +11,7 @@
 //! - [`e2e`]: the streaming FM receive and transmit chains of the end-to-end tests,
 //! - [`e2e_nfm`]: the end-to-end narrowband FM receive with squelch (M19),
 //! - [`e2e_ssb`]: the end-to-end SSB receive with squelch and AGC (M21),
+//! - [`e2e_stereo`]: the end-to-end FM stereo receive with channel separation, switching and mono checks (M24),
 //! - [`fm`]: the analytic FM baseband generator,
 //! - [`meters`]: tone fit, SINAD, frequency estimate and spectral mask,
 //! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
@@ -58,6 +59,7 @@ pub mod e2e_am;
 pub mod e2e_nfm;
 pub mod e2e_real;
 pub mod e2e_ssb;
+pub mod e2e_stereo;
 pub mod encode;
 pub mod fm;
 pub mod r#gen;

@@ -15,16 +15,34 @@ fn table_error() -> Error {
 /// `(cos, sin)` of the phase with linear interpolation, in f32 without FMA.
 #[inline]
 pub(super) fn cos_sin_f32(phase: u32) -> Result<(f32, f32)> {
-    let interp = |p: u32| -> Option<f32> {
-        let idx = (p >> 20) as usize;
-        let f = (p & 0xF_FFFF) as f32 * (1.0 / 1_048_576.0);
-        let a = *COS_F32.get(idx)?;
-        let b = *COS_F32.get(idx + 1)?;
-        Some(a + (b - a) * f)
-    };
-    let c = interp(phase).ok_or_else(table_error)?;
-    let s = interp(phase.wrapping_sub(QUARTER)).ok_or_else(table_error)?;
+    let c = interp_f32(phase).ok_or_else(table_error)?;
+    let s = interp_f32(phase.wrapping_sub(QUARTER)).ok_or_else(table_error)?;
     Ok((c, s))
+}
+
+/// The cosine of the phase `p` from `COS_F32` with linear interpolation, in f32 without FMA.
+#[inline]
+pub(super) fn interp_f32(p: u32) -> Option<f32> {
+    let idx = (p >> 20) as usize;
+    let f = (p & 0xF_FFFF) as f32 * (1.0 / 1_048_576.0);
+    let a = *COS_F32.get(idx)?;
+    let b = *COS_F32.get(idx + 1)?;
+    Some(a + (b - a) * f)
+}
+
+/// `(cos, sin)` of the phase `p` as [`interp_f32`] gives them for `p` and `p - QUARTER`, with
+/// the fraction computed once: `p - QUARTER` has the same low 20 bits and the table index
+/// `(idx + 3072) mod 4096` of the top 12 bits.
+#[inline]
+pub(super) fn interp_f32_pair(p: u32) -> Option<(f32, f32)> {
+    let idx = (p >> 20) as usize;
+    let sidx = (idx + 3072) & 4095;
+    let f = (p & 0xF_FFFF) as f32 * (1.0 / 1_048_576.0);
+    let a = *COS_F32.get(idx)?;
+    let b = *COS_F32.get(idx + 1)?;
+    let sa = *COS_F32.get(sidx)?;
+    let sb = *COS_F32.get(sidx + 1)?;
+    Some((a + (b - a) * f, sa + (sb - sa) * f))
 }
 
 /// The cosine of the phase `p` from `COS_Q15`, `sat16(a + round_shift((b - a) f15, 15))` of the
@@ -33,7 +51,7 @@ pub(super) fn cos_sin_f32(phase: u32) -> Result<(f32, f32)> {
 /// multiplications on 32-bit targets and the sign extensions and the two comparisons of the
 /// saturation (data-dependent branches on x86-64) on 64-bit targets.
 #[inline]
-fn interp_q15(p: u32) -> Option<i32> {
+pub(super) fn interp_q15(p: u32) -> Option<i32> {
     let idx = (p >> 20) as usize;
     let f15 = ((p >> 5) & 0x7FFF) as i32;
     match COS_Q15.get(idx..idx + 2) {

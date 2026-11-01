@@ -66,6 +66,9 @@ pub mod ffi {
         fn arm_scale_f32(src: *const f32, scale: f32, dst: *mut f32, n: u32);
         fn arm_scale_q15(src: *const i16, scale_fract: i16, shift: i8, dst: *mut i16, n: u32);
         fn arm_add_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
+        fn arm_sub_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
+        fn arm_add_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
+        fn arm_sub_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
         fn arm_mult_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
         fn arm_mult_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
         fn arm_cmplx_mult_real_f32(cmplx: *const f32, real: *const f32, dst: *mut f32, n: u32);
@@ -346,6 +349,42 @@ pub fn add_q15(a: &[i16], b: &[i16], dst: &mut [i16]) {
     same(a.len(), b.len(), "add_q15");
     same(a.len(), dst.len(), "add_q15");
     call!(arm_add_q15(
+        a.as_ptr(),
+        b.as_ptr(),
+        dst.as_mut_ptr(),
+        block(a.len())
+    ));
+}
+
+/// `arm_sub_q15`: `dst[i] = sat16(a[i] - b[i])`.
+pub fn sub_q15(a: &[i16], b: &[i16], dst: &mut [i16]) {
+    same(a.len(), b.len(), "sub_q15");
+    same(a.len(), dst.len(), "sub_q15");
+    call!(arm_sub_q15(
+        a.as_ptr(),
+        b.as_ptr(),
+        dst.as_mut_ptr(),
+        block(a.len())
+    ));
+}
+
+/// `arm_add_f32`: `dst[i] = a[i] + b[i]`.
+pub fn add_f32(a: &[f32], b: &[f32], dst: &mut [f32]) {
+    same(a.len(), b.len(), "add_f32");
+    same(a.len(), dst.len(), "add_f32");
+    call!(arm_add_f32(
+        a.as_ptr(),
+        b.as_ptr(),
+        dst.as_mut_ptr(),
+        block(a.len())
+    ));
+}
+
+/// `arm_sub_f32`: `dst[i] = a[i] - b[i]`.
+pub fn sub_f32(a: &[f32], b: &[f32], dst: &mut [f32]) {
+    same(a.len(), b.len(), "sub_f32");
+    same(a.len(), dst.len(), "sub_f32");
+    call!(arm_sub_f32(
         a.as_ptr(),
         b.as_ptr(),
         dst.as_mut_ptr(),

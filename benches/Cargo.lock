@@ -138,6 +138,7 @@ dependencies = [
 name = "pipeline-bench"
 version = "0.0.0"
 dependencies = [
+ "sdrk",
  "sdrk-pipeline",
 ]
 

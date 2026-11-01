@@ -28,6 +28,7 @@ use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::kernels::squelch::{Squelch, SquelchState};
+use sdrk_core::kernels::stereo::{StereoMatrix, StereoPll, StereoPllState};
 use sdrk_device::SampleFormat;
 
 // The implementation of the accelerated kernels: the SIMD backend, or the fallback when the
@@ -93,6 +94,10 @@ crate::delegate! {
     BiquadReal<Q15>::biquad_real[C: AsRef<[[i16; 5]]>, H: AsRef<[Q15]> + AsMut<[Q15]>](&self, s: &mut BiquadRealState<Q15, C, H>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fast;
     Squelch<C32>::squelch(&self, state: &mut SquelchState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     Squelch<CQ15>::squelch(&self, state: &mut SquelchState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    StereoPll<f32>::stereo_pll(&self, state: &mut StereoPllState<f32>, mpx: &[f32], pilot: &[f32], output: &mut [C32]) -> Result<()> => Fallback;
+    StereoPll<Q15>::stereo_pll(&self, state: &mut StereoPllState<Q15>, mpx: &[Q15], pilot: &[Q15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    StereoMatrix<C32>::stereo_matrix(&self, input: &[C32], output: &mut [C32]) -> Result<()> => Fast;
+    StereoMatrix<CQ15>::stereo_matrix(&self, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fast;
     Window<C32>::window(&self, input: &[C32], output: &mut [C32], w: &[f32]) -> Result<()> => Fast;
     Window<CQ15>::window(&self, input: &[CQ15], output: &mut [CQ15], w: &[Q15]) -> Result<()> => Fast;
     MagSq<C32>::mag_sq(&self, input: &[C32], output: &mut [f32]) -> Result<()> => Fast;

@@ -24,9 +24,13 @@
 #include <volk/volk_32f_s32f_convert_8i.h>
 #include <volk/volk_32f_s32f_multiply_32f.h>
 #include <volk/volk_32f_s32f_x2_convert_8u.h>
+#include <volk/volk_32f_x2_add_32f.h>
 #include <volk/volk_32f_x2_dot_prod_32f.h>
+#include <volk/volk_32f_x2_interleave_32fc.h>
+#include <volk/volk_32f_x2_subtract_32f.h>
 #include <volk/volk_32fc_32f_dot_prod_32fc.h>
 #include <volk/volk_32fc_32f_multiply_32fc.h>
+#include <volk/volk_32fc_deinterleave_32f_x2.h>
 #include <volk/volk_32fc_magnitude_32f.h>
 #include <volk/volk_32fc_magnitude_squared_32f.h>
 #include <volk/volk_32fc_s32f_atan2_32f.h>
@@ -78,6 +82,10 @@ GENERIC_KERNEL(volk_32fc_32f_multiply_32fc)
 GENERIC_KERNEL(volk_32f_s32f_multiply_32f)
 GENERIC_KERNEL(volk_32f_s32f_add_32f)
 GENERIC_KERNEL(volk_32f_log2_32f)
+GENERIC_KERNEL(volk_32fc_deinterleave_32f_x2)
+GENERIC_KERNEL(volk_32f_x2_add_32f)
+GENERIC_KERNEL(volk_32f_x2_subtract_32f)
+GENERIC_KERNEL(volk_32f_x2_interleave_32fc)
 
 /* The machine `generic` has no SIMD architecture and therefore an alignment of 1. */
 size_t volk_get_alignment(void) { return 1; }

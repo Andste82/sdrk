@@ -1,5 +1,39 @@
 {
   "chains": {
+    "fm_demod_480k": {
+      "fallback_instructions_per_input_sample": 1829.55,
+      "flow": "fm_demod with its defaults and audio_decimation 10, cf32 input at 480 kHz, 48 kHz output",
+      "input": {
+        "format": "cf32",
+        "rate_hz": 480000
+      },
+      "instructions_per_input_sample": 1204.03,
+      "latency": {
+        "group_delay_samples": 23.35,
+        "latency_samples": 25.35,
+        "latency_us": 528.1,
+        "max_buffered_samples": 2,
+        "output": "audio",
+        "rate_hz": 48000
+      }
+    },
+    "fm_stereo_480k": {
+      "fallback_instructions_per_input_sample": 1731.32,
+      "flow": "fm_stereo with its defaults, cf32 input at 480 kHz, 48 kHz output",
+      "input": {
+        "format": "cf32",
+        "rate_hz": 480000
+      },
+      "instructions_per_input_sample": 1233.58,
+      "latency": {
+        "group_delay_samples": 23.35,
+        "latency_samples": 25.35,
+        "latency_us": 528.1,
+        "max_buffered_samples": 2,
+        "output": "audio",
+        "rate_hz": 48000
+      }
+    },
     "ssb": {
       "flow": "ddc (300 kHz, decimation 50, cutoff 4 kHz, transition 2 kHz) -> agc -> ssb_demod (usb), as examples/flows/ssb_receiver.json without the squelch",
       "input": {

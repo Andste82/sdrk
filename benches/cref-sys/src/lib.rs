@@ -23,6 +23,8 @@
 //! - [`gnuradio`]: the GNU Radio references of the fallback round ([`GrRotator`],
 //!   [`GrFrequencyModulatorFc`], [`GrQuadratureDemodCf`], [`GrFmDeemph`]).
 //! - [`liquid`]: liquid-dsp's DC blocker ([`LiquidDcBlocker`], [`LiquidDcBlockerCrcf`], MIT).
+//! - [`LiquidNcoPll`]: liquid-dsp's interpolated-table NCO (`nco_crcf`, `LIQUID_VCO_INTERP`) with the
+//!   pilot loop of `stereo_pll` around it (MIT).
 //! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
 //!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
 //!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
@@ -36,6 +38,7 @@ pub mod cmsis_dsp;
 pub mod gnuradio;
 mod halfband;
 pub mod liquid;
+mod liquid_nco;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use gnuradio::{GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator};
@@ -43,6 +46,7 @@ pub use halfband::{
     AirspyFloat, AirspyInt16, LiquidFirhilbf, LiquidResamp2Crcf, LiquidResamp2Rrrf,
 };
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
+pub use liquid_nco::LiquidNcoPll;
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place
 /// (input and output are the same buffer) or out of place.

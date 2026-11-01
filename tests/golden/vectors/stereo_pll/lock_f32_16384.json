@@ -1,0 +1,51 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "lock_f32_16384.expected.bin",
+      "len": 16384
+    },
+    "mpx": {
+      "dtype": "f32",
+      "file": "lock_f32_16384.mpx.bin",
+      "len": 16384
+    },
+    "pilot": {
+      "dtype": "f32",
+      "file": "lock_f32_16384.pilot.bin",
+      "len": 16384
+    }
+  },
+  "case": "lock_f32_16384",
+  "format_version": 1,
+  "kernel": "stereo_pll",
+  "model": "float32",
+  "notes": "192 kHz, natural_hz 50, pilot_level 0.1; mpx = multiplex signal of section 2 (L 1 kHz, R 3 kHz, amplitude 1, pilot 0.1 at 19000.5 Hz, start phase 1.0 rad) plus noise sigma 0.01; pilot = the pilot term plus noise sigma 0.005; exact float32 model; snr_db_guard compares the difference channel from sample 8192 with the float64 loop (D111)",
+  "params": {
+    "beta_bits": 4547314167447437312,
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "cos_q15_sha256": "13d98640724a421074b75c96c3ebe4b1421b69216e327d4a7ffda6437414306c",
+    "guard_skip": 8192,
+    "imax_bits": 4553439463246729489,
+    "ki_bits": 4531148194575457593,
+    "kp_bits": 4575142091050383974,
+    "natural_hz": 50.0,
+    "off_bits": 4579800533065604792,
+    "on_bits": 4581421828931458172,
+    "pilot_hz": 19000.0,
+    "pilot_level": 0.1,
+    "rate_hz": 192000,
+    "snr_db_guard": 132.1,
+    "step0": 425022805
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 438,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

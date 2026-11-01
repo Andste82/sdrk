@@ -1,0 +1,60 @@
+# SDRk pipeline: receive one FM broadcast station in stereo (YAML twin of
+# fm_stereo_receiver.json). YAML is accepted as input; JSON stays the canonical format.
+sdrk: 1
+name: fm-stereo-receiver
+description: "Receive one FM broadcast station in stereo and output 48 kHz stereo audio (left in re, right in im)."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # FM stereo decoder: discriminator, 19 kHz pilot loop, 38 kHz demodulation, matrix and 50 us
+  # de-emphasis, 480 kHz -> 48 kHz (all defaults). The output is stereo audio as complex samples:
+  # re is the left channel and im the right channel, i.e. the interleaved L, R, L, R layout of
+  # sound cards and WAV files; no extra port type is needed, and a resampler or a scale block
+  # behind it treats both channels alike. Without a pilot the station is mono (left equals
+  # right). The runtime parameter "stereo" can be set to "mono" while the flow runs (for a weak
+  # station whose difference signal is noisy); the default is "auto".
+  demod:
+    kind: fm_stereo
+    params: {}
+  # Averaged power spectrum of the raw input.
+  fft:
+    kind: spectrum
+    params:
+      averaging: 4
+      fft_size: 1024
+  # Digital down converter: +600 kHz to baseband, decimate by 5 to 480 kHz. The channel is wider
+  # than in fm_receiver.yaml (480 kHz with a cutoff of 130 kHz instead of 240 kHz with 100 kHz):
+  # a stereo station is about 256 kHz wide, and a channel of 240 kHz distorts its outer
+  # sidebands, which limits the channel separation to about 29 dB (43 dB with this channel).
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 130000
+      decimation: 5
+      frequency_hz: 600000
+      transition_hz: 30000
+# The input feeds the tuner and the spectrum; the tuner feeds the stereo decoder.
+edges:
+  - { from: rf, to: tune }
+  - { from: rf, to: fft }
+  - { from: tune, to: demod }
+  - { from: demod, to: audio }
+  - { from: fft, to: spectrum }
+# Stereo audio samples (errors when full) and spectrum frames (drop the oldest).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error
+  spectrum:
+    type: frames
+    queue: 4
+    drop: drop_oldest

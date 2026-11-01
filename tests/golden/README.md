@@ -6,7 +6,7 @@ kernels and the Python Q15 integer model (`sdrk_golden/q15.py`) for bit-exact Q1
 hand and never generate them with code from this repository.
 
 The golden of a tolerance case is the mathematical optimum: the result computed in `f64`, treated as
-exact (except `squelch`, whose cases come from an exact float32 model, see `docs/kernels.md`). It is the
+exact (except `squelch` and `stereo_pll`, whose cases come from an exact float32 or integer model, see `docs/kernels.md`). It is the
 first accuracy target of a kernel, not only a pass/fail check. The `snr_db_min` stored in a case is the contract
 floor; the accuracy policy in [`docs/kernels.md`](../../docs/kernels.md#accuracy-policy) adds the
 achievable optimum and a regression guard close to the measured SNR. A bit-exact Q15 case proves agreement
@@ -96,3 +96,7 @@ fuses a multiply with an add, so the model equals Rust `f32` code compiled witho
 `bit_exact` and its JSON carries `"model": "float32"` at the top level. `f32model.self_test()` checks the
 helpers against hand-computed values (for example that `0.1f + 0.2f == 0.3f` and that a product and a subtraction
 are not fused) and runs in front of every generate and check run.
+
+## The stereo cases (seeds 438 to 443 and 454)
+
+`stereo_pll` (seeds 438 to 441 and 454) and `stereo_matrix` (442, 443) follow the model rule above: `sdrk_golden/cases/stereo.py` builds the cosine tables of `rotate` itself (`float32(cos(2 pi k / 4096))` with `scalar_math.cos`, the Q15 rule from the same f64 values) and stores their SHA-256 in every `stereo_pll` case, so a Rust test fails with a clear message when `sdrk-core` has other tables. The coefficients are stored as IEEE bits (`kp_bits`, ...). Besides the bit-exact model, every `lock_*` and `fade_*` case stores `snr_db_guard`, the regression guard of decision D111: the SNR of the difference channel (from sample `guard_skip`) of the model against the same loop in float64 with exact sine and cosine, minus 1 dB, rounded down to 0.1 dB. The float64 output is not committed (it depends on the libm of the host); the Rust test runs its own float64 loop on the stored inputs. Everything that feeds a committed byte uses plain Python arithmetic, `scalar_math` and the float32 helpers (no BLAS, no SIMD transcendental), so the files are identical on every CPU.

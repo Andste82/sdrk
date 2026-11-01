@@ -14,3 +14,4 @@ path = "src/main.rs"
 [dependencies]
 # The pipeline selects the SIMD level at run time (the facade feature `std`).
 sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline", default-features = false }
+sdrk = { path = "../../crates/facade/sdrk", default-features = false }

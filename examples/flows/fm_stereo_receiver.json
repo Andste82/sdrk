@@ -1,0 +1,71 @@
+{
+  "sdrk": 1,
+  "name": "fm-stereo-receiver",
+  "description": "Receive one FM broadcast station in stereo and output 48 kHz stereo audio (left in re, right in im).",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2400000,
+      "description": "RTL-SDR IQ"
+    }
+  },
+  "nodes": {
+    "demod": {
+      "kind": "fm_stereo"
+    },
+    "fft": {
+      "kind": "spectrum",
+      "params": {
+        "averaging": 4,
+        "fft_size": 1024
+      }
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 130000,
+        "decimation": 5,
+        "frequency_hz": 600000,
+        "transition_hz": 30000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "rf",
+      "to": "fft"
+    },
+    {
+      "from": "tune",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "audio"
+    },
+    {
+      "from": "fft",
+      "to": "spectrum"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    },
+    "spectrum": {
+      "type": "frames",
+      "queue": 4,
+      "drop": "drop_oldest"
+    }
+  }
+}

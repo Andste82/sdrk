@@ -27,5 +27,6 @@ from . import (  # noqa: F401
     rotate,
     scale,
     squelch,
+    stereo,
     window,
 )

@@ -29,6 +29,7 @@ const AIRBAND_RECEIVER: &str = include_str!("../../../examples/flows/airband_rec
 const SSB_RECEIVER: &str = include_str!("../../../examples/flows/ssb_receiver.json");
 const REAL_INPUT_FM_RECEIVER: &str =
     include_str!("../../../examples/flows/real_input_fm_receiver.json");
+const FM_STEREO_RECEIVER: &str = include_str!("../../../examples/flows/fm_stereo_receiver.json");
 const FM_TRANSMITTER: &str = include_str!("../../../examples/flows/fm_transmitter.json");
 const RESAMPLE_AUDIO: &str = include_str!("../../../examples/flows/resample_audio.json");
 const SPECTRUM_ONLY: &str = include_str!("../../../examples/flows/spectrum_only.json");
@@ -129,6 +130,7 @@ fn every_example_flow_validates_clean() {
         ("airband_receiver", AIRBAND_RECEIVER),
         ("ssb_receiver", SSB_RECEIVER),
         ("real_input_fm_receiver", REAL_INPUT_FM_RECEIVER),
+        ("fm_stereo_receiver", FM_STEREO_RECEIVER),
         ("resample_audio", RESAMPLE_AUDIO),
         ("spectrum_only", SPECTRUM_ONLY),
     ] {
@@ -184,6 +186,7 @@ fn backends_names_the_backend_of_every_kernel() {
     }
     assert_eq!(string(&b, "ddc"), "chained");
     assert_eq!(string(&b, "squelch"), "fallback");
+    assert_eq!(string(&b, "stereo_pll"), "fallback");
 }
 
 #[wasm_bindgen_test]

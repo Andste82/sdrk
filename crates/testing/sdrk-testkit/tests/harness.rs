@@ -669,7 +669,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[allow(clippy::too_many_lines)]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 138);
+    assert_eq!(cases.len(), 152);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));
@@ -770,6 +770,20 @@ fn registered_cases_have_unique_names_without_spaces() {
         "e2e_real_fm_rx_q15",
         "e2e_real_fm_rx_f32_1s",
         "e2e_real_fm_rx_q15_1s",
+        "stereo_pll_f32",
+        "stereo_pll_q15",
+        "stereo_matrix_c32",
+        "stereo_matrix_cq15",
+        "extremes_m24",
+        "block_fm_stereo_separation",
+        "block_fm_stereo_mono",
+        "e2e_fm_stereo_f32",
+        "e2e_fm_stereo_q15",
+        "e2e_fm_stereo_mono",
+        "e2e_fm_stereo_f32_2s",
+        "e2e_fm_stereo_q15_2s",
+        "e2e_fm_stereo_switch_f32",
+        "backend_vs_fallback_stereo_matrix",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

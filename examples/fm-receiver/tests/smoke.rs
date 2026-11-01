@@ -386,3 +386,127 @@ fn run_errors_exit_with_one() {
     assert_eq!(o.status.code(), Some(1));
     assert!(stderr(&o).contains("i/o error"), "{}", stderr(&o));
 }
+
+/// CU8 bytes of one stereo station at `offset_hz` (L 1 kHz, R 3 kHz, pilot 0.1, amplitude 0.9).
+fn stereo_station_cu8(offset_hz: f64, samples: usize) -> Vec<u8> {
+    use sdrk_testkit::fm::{fm_multitone_baseband, stereo_mpx_tones};
+    let mut iq = vec![Complex64::new(0.0, 0.0); samples];
+    let tones = stereo_mpx_tones((1.0, 1000.0), (1.0, 3000.0), 0.1);
+    fm_multitone_baseband(&mut iq, RATE as f64, offset_hz, 75_000.0, &tones, 0).unwrap();
+    for v in &mut iq {
+        *v *= 0.9;
+    }
+    let mut bytes = vec![0u8; samples * 2];
+    encode(&formats::CU8, &iq, &mut bytes).unwrap();
+    bytes
+}
+
+/// The frames `(left, right)` of a two-channel f32 WAV file and its rate.
+fn read_stereo_wav(path: &Path) -> (Vec<(f32, f32)>, u64) {
+    let file = std::fs::File::open(path).unwrap();
+    let mut r = WavReader::new(std::io::BufReader::new(file), true, 4096).unwrap();
+    // Two channels of f32 read as the complex format CF32 (I = left, Q = right).
+    assert_eq!(r.format(), formats::CF32);
+    let rate = r.sample_rate().num();
+    let mut out = Vec::new();
+    let mut buf = vec![0u8; 16384];
+    loop {
+        let (n, _) = r.read(&mut buf).unwrap();
+        if n == 0 {
+            break;
+        }
+        out.extend(buf[..n].chunks_exact(8).map(|c| {
+            (
+                f32::from_le_bytes([c[0], c[1], c[2], c[3]]),
+                f32::from_le_bytes([c[4], c[5], c[6], c[7]]),
+            )
+        }));
+    }
+    (out, rate)
+}
+
+/// The raw channel count of a WAV file (`fmt ` chunk).
+fn wav_channels(path: &Path) -> u16 {
+    let b = std::fs::read(path).unwrap();
+    assert_eq!(&b[..4], b"RIFF");
+    let at = b.windows(4).position(|w| w == b"fmt ").unwrap();
+    u16::from_le_bytes([b[at + 10], b[at + 11]])
+}
+
+#[test]
+fn the_stereo_flow_writes_a_two_channel_file() {
+    use sdrk_testkit::meters::MultitoneAccumulator;
+    let dir = tempfile::tempdir().unwrap();
+    let rec = dir.path().join("stereo.cu8");
+    let samples = 1_200_000;
+    std::fs::write(&rec, stereo_station_cu8(600_000.0, samples)).unwrap();
+    let flow = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../flows/fm_stereo_receiver.json"
+    );
+    let run_flow = |out: &Path, extra: &[&str]| {
+        let mut a = vec![
+            "--input",
+            p(&rec),
+            "--format",
+            "cu8",
+            "--rate",
+            "2400000",
+            "--output",
+            p(out),
+            "--flow",
+            flow,
+        ];
+        a.extend_from_slice(extra);
+        run(&a)
+    };
+    let out = dir.path().join("stereo.wav");
+    let o = run_flow(&out, &[]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(wav_channels(&out), 2);
+    let (frames, rate) = read_stereo_wav(&out);
+    assert_eq!(rate, 48_000);
+    assert_eq!(frames.len(), samples / 50);
+    // The 1 kHz tone is in the left channel, the 3 kHz tone in the right one.
+    let mut l = MultitoneAccumulator::new(48_000.0, &[1000.0, 3000.0]);
+    let mut r = l;
+    for &(a, b) in &frames[frames.len() / 2..] {
+        l.push(f64::from(a));
+        r.push(f64::from(b));
+    }
+    let (al, ar) = (l.amplitudes(), r.amplitudes());
+    let sep_l = 20.0 * (al[0] / ar[0]).log10();
+    let sep_r = 20.0 * (ar[1] / al[1]).log10();
+    assert!(sep_l > 35.0 && sep_r > 35.0, "{sep_l} dB, {sep_r} dB");
+    // `--set demod.stereo=mono` forces mono: still two channels, left equals right.
+    let mono = dir.path().join("mono.wav");
+    let o = run_flow(&mono, &["--set", "demod.stereo=mono"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(wav_channels(&mono), 2);
+    let (frames, _) = read_stereo_wav(&mono);
+    assert!(
+        frames[1000..]
+            .iter()
+            .all(|(a, b)| a.to_bits() == b.to_bits())
+    );
+}
+
+#[test]
+fn the_mono_flow_still_writes_one_channel() {
+    let dir = tempfile::tempdir().unwrap();
+    let rec = dir.path().join("rec.cu8");
+    let out = dir.path().join("audio.wav");
+    std::fs::write(&rec, station_cu8(600_000.0, 240_000)).unwrap();
+    let o = run(&[
+        "--input",
+        p(&rec),
+        "--format",
+        "cu8",
+        "--rate",
+        "2400000",
+        "--output",
+        p(&out),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(wav_channels(&out), 1);
+}

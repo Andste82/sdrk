@@ -1,0 +1,50 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "lock_q15_16384.expected.bin",
+      "len": 16384
+    },
+    "mpx": {
+      "dtype": "i16",
+      "file": "lock_q15_16384.mpx.bin",
+      "len": 16384
+    },
+    "pilot": {
+      "dtype": "i16",
+      "file": "lock_q15_16384.pilot.bin",
+      "len": 16384
+    }
+  },
+  "case": "lock_q15_16384",
+  "format_version": 1,
+  "kernel": "stereo_pll",
+  "notes": "the signals of lock_f32_16384 (own noise draw) scaled by 0.625 and quantized; pilot_level 0.0625; exact integer model (Q30 detector, Q61 level, integrator in 2^-64 turn)",
+  "params": {
+    "beta_bits": 4547314167447437312,
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "cos_q15_sha256": "13d98640724a421074b75c96c3ebe4b1421b69216e327d4a7ffda6437414306c",
+    "guard_skip": 8192,
+    "imax_bits": 4553439463246729489,
+    "ki_bits": 4534166536016323062,
+    "kp_bits": 4577947276898414264,
+    "natural_hz": 50.0,
+    "off_bits": 4576557941333898035,
+    "on_bits": 4578359381184846234,
+    "pilot_hz": 19000.0,
+    "pilot_level": 0.0625,
+    "rate_hz": 192000,
+    "snr_db_guard": 87.8,
+    "step0": 425022805
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 439,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

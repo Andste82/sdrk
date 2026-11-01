@@ -15,9 +15,10 @@ use sdrk_blocks::{
     BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock,
     DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    HalfbandBlock, HalfbandConfig, HalfbandRealBlock, ParamValue, PortType, RealToComplexBlock,
-    ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
+    FmStereoBlock, FmStereoConfig, HalfbandBlock, HalfbandConfig, HalfbandRealBlock, ParamValue,
+    PortType, RealToComplexBlock, ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock,
+    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, TUNED_PHASES,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -1192,6 +1193,76 @@ impl Kind for FmDemodKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(FmDemodBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// --------------------------------------------------------------- fm_stereo
+
+pub(crate) struct FmStereoKind;
+
+impl Kind for FmStereoKind {
+    type Cfg = FmStereoConfig;
+
+    const KIND: &'static str = "fm_stereo";
+    fn kernels() -> &'static [&'static str] {
+        &[
+            "quad_demod",
+            "biquad_real",
+            "stereo_pll",
+            "fir_decimate",
+            "stereo_matrix",
+            "biquad",
+        ]
+    }
+    fn default_cfg() -> FmStereoConfig {
+        FmStereoConfig::default()
+    }
+    fn set(cfg: &mut FmStereoConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FmStereoConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("fm_stereo needs complex samples"));
+        }
+        let taps = cfg.audio_taps(rate)?;
+        let d = cfg.audio_decimation;
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: FmStereoBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: FmStereoBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 25.0 + (2 * taps + 12) as f64 / d as f64,
+                taps,
+                delay: Delay::new(taps.max(1) as u64, 2).unwrap_or(Delay::ZERO),
+                min_input: d,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporaries of the block and the node separately; the real frame is small"
+    )]
+    fn build(
+        cfg: &FmStereoConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(FmStereoBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )

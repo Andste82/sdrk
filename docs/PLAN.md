@@ -5,7 +5,7 @@
 > If the two differ, the living document wins; update this snapshot when you notice a difference.
 > Milestones derived from this plan: [`docs/milestones/README.md`](milestones/README.md).
 >
-> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9; the receive features of phase 9 are specified as milestones M19 to M25 (NFM with squelch, AM, SSB, audio filters, real-sampling devices, FM stereo, block names (M24.1), FM transmit audio); M19 to M24 are delivered. The release 0.1 (tag `v0.1.0`) is not made yet.
+> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9; the receive features of phase 9 are specified as milestones M19 to M25 (NFM with squelch, AM, SSB, audio filters, real-sampling devices, FM stereo, block names (M24.1), FM transmit audio); M19 to M24 are delivered. The release 0.1 (tag `v0.1.0`) is not made yet; it is milestone M25.1. Milestones M26 to M36 (block ports, composition, clock drift, primitive blocks, noise reduction, multi-input pipeline, AM/SSB and FM stereo transmit) extend phase 9, M37 to M44 are phase 10 (digital modes). From M26 on, milestones follow their declared dependencies and may run in parallel.
 
 ## Project
 
@@ -194,6 +194,13 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - **Digital building blocks:** generic OOK/ASK/FSK/PSK demodulators with clock recovery, bit slicer, preamble correlator, diagram data as frames (constellation, eye diagram)
 - **Real hardware:** the same `targets/` on boards via probe-rs, cycle counters, real-time targets per platform
 - **Optional:** GStreamer-style shorthand for flows; compiling a JSON flow into heap-free Rust code
+- **Composition and analog transmit (M26–M36):** typed block ports, `Chain`/`Fork` composition with heap-free storage, primitive blocks and plans that equal the specific blocks bit for bit, clock-drift control, noise blanker and automatic notch, two-input nodes in the pipeline, AM/SSB and FM stereo transmit
+
+### Phase 10 – Digital modes
+
+- Packet ports and the crate `sdrk-proto` (protocol logic without signal processing), symbol timing recovery, slicer, test channel and BER meter (M37, M38)
+- FSK/GFSK with AFC, AFSK/APRS, OOK, ADS-B (M39, M39.1); BPSK/QPSK and variants (M40, M40.1); RDS receive and transmit (M41, M42); adaptive equalizer and QAM (M43, M44)
+- Receive and transmit of a mode in the same milestone, with loop tests TX → channel → RX against the theoretical bit error rate
 
 ### Later (prepared, not scheduled)
 

@@ -1,6 +1,6 @@
 # M25 — FM transmit audio (pre-emphasis and limiter)
 
-> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M24.1](M24.1-block-naming.md) (block names; uses the `biquad` block of [M22](M22-audio-filters.md)) · Next: [BACKLOG](BACKLOG.md)
+> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M24.1](M24.1-block-naming.md) (block names; uses the `biquad` block of [M22](M22-audio-filters.md)) · Next: [M25.1](M25.1-release-0.1.md)
 
 ## Goal
 

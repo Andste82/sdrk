@@ -228,6 +228,8 @@ fn validate_schema_and_backends() {
         "halfband_decimate",
         "halfband_decimate_real",
         "real_to_complex",
+        "stereo_matrix",
+        "stereo_pll",
     ] {
         assert!(names.contains(&kernel), "{kernel}");
     }
@@ -235,6 +237,7 @@ fn validate_schema_and_backends() {
     let backend = |kernel: &str| backends.iter().find(|(k, _)| *k == kernel).unwrap().1;
     assert_eq!(backend("ddc"), "chained");
     assert_eq!(backend("squelch"), "fallback");
+    assert_eq!(backend("stereo_pll"), "fallback");
     assert_eq!(
         backend("rotate"),
         if sdrk::SIMD_BACKEND {

@@ -238,6 +238,177 @@ impl ToneAccumulator {
     }
 }
 
+/// Most tones a [`MultitoneAccumulator`] fits.
+pub const MAX_FIT_TONES: usize = 4;
+
+/// Columns of the normal equations: a cosine and a sine per tone plus the offset.
+const FIT_COLUMNS: usize = 2 * MAX_FIT_TONES + 1;
+
+/// Streaming joint least-squares fit of several tones at known frequencies (and an offset).
+///
+/// All tones are fitted together, so a tone that leaks into the channel at another tone's
+/// frequency is separated from it exactly, and the residual power is what is left after
+/// removing every tone. Only the normal equations (about 700 bytes) are kept, never the samples,
+/// so the meter fits the small arenas of the microcontroller suite. The first pushed sample has
+/// index 0.
+///
+/// ```
+/// use sdrk_testkit::meters::MultitoneAccumulator;
+/// let mut acc = MultitoneAccumulator::new(48000.0, &[1000.0, 3000.0]);
+/// for n in 0..4800 {
+///     let t = n as f64 / 48000.0;
+///     let tau = 2.0 * std::f64::consts::PI;
+///     acc.push(0.5 * (tau * 1000.0 * t).cos() + 0.25 * (tau * 3000.0 * t + 1.0).cos());
+/// }
+/// let a = acc.amplitudes();
+/// assert!((a[0] - 0.5).abs() < 1e-12 && (a[1] - 0.25).abs() < 1e-12);
+/// assert!(acc.residual_power() < 1e-12);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MultitoneAccumulator {
+    rate: f64,
+    freqs: [f64; MAX_FIT_TONES],
+    tones: usize,
+    n: usize,
+    ata: [[f64; FIT_COLUMNS]; FIT_COLUMNS],
+    atx: [f64; FIT_COLUMNS],
+    xx: f64,
+}
+
+impl MultitoneAccumulator {
+    /// An empty accumulator for the tones `freqs` (at most [`MAX_FIT_TONES`], extra ones are
+    /// ignored) at the sample rate `rate`.
+    pub fn new(rate: f64, freqs: &[f64]) -> Self {
+        let mut f = [0.0; MAX_FIT_TONES];
+        let tones = freqs.len().min(MAX_FIT_TONES);
+        for (d, s) in f.iter_mut().zip(freqs) {
+            *d = *s;
+        }
+        Self {
+            rate,
+            freqs: f,
+            tones,
+            n: 0,
+            ata: [[0.0; FIT_COLUMNS]; FIT_COLUMNS],
+            atx: [0.0; FIT_COLUMNS],
+            xx: 0.0,
+        }
+    }
+
+    fn columns(&self) -> usize {
+        2 * self.tones + 1
+    }
+
+    /// Adds the next sample.
+    #[allow(clippy::indexing_slicing)]
+    pub fn push(&mut self, x: f64) {
+        let mut basis = [0.0f64; FIT_COLUMNS];
+        for k in 0..self.tones {
+            let (c, s) = cos_sin(self.n, self.rate, self.freqs[k]);
+            basis[2 * k] = c;
+            basis[2 * k + 1] = s;
+        }
+        let m = self.columns();
+        basis[m - 1] = 1.0;
+        for i in 0..m {
+            self.atx[i] += x * basis[i];
+            for j in 0..m {
+                self.ata[i][j] += basis[i] * basis[j];
+            }
+        }
+        self.xx += x * x;
+        self.n += 1;
+    }
+
+    /// Number of samples pushed so far.
+    pub fn len(&self) -> usize {
+        self.n
+    }
+
+    /// True before the first sample.
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
+
+    /// Solves the normal equations by Gaussian elimination with partial pivoting; `None` if
+    /// they are singular (too few samples or tones at the same frequency).
+    #[allow(clippy::indexing_slicing, clippy::needless_range_loop)]
+    fn solve(&self) -> Option<[f64; FIT_COLUMNS]> {
+        let m = self.columns();
+        let mut a = self.ata;
+        let mut b = self.atx;
+        for col in 0..m {
+            let mut piv = col;
+            for r in col + 1..m {
+                if libm::fabs(a[r][col]) > libm::fabs(a[piv][col]) {
+                    piv = r;
+                }
+            }
+            if a[piv][col].is_nan() || libm::fabs(a[piv][col]) < 1e-9 * (self.n as f64) {
+                return None;
+            }
+            a.swap(col, piv);
+            b.swap(col, piv);
+            for r in col + 1..m {
+                let f = a[r][col] / a[col][col];
+                for c in col..m {
+                    a[r][c] -= f * a[col][c];
+                }
+                b[r] -= f * b[col];
+            }
+        }
+        let mut x = [0.0; FIT_COLUMNS];
+        for r in (0..m).rev() {
+            let mut v = b[r];
+            for c in r + 1..m {
+                v -= a[r][c] * x[c];
+            }
+            x[r] = v / a[r][r];
+        }
+        Some(x)
+    }
+
+    /// Peak amplitudes of the fitted tones, in the order of `freqs` (0 for unused entries and
+    /// for a singular fit).
+    #[allow(clippy::indexing_slicing)]
+    pub fn amplitudes(&self) -> [f64; MAX_FIT_TONES] {
+        let mut out = [0.0; MAX_FIT_TONES];
+        if let Some(x) = self.solve() {
+            for k in 0..self.tones {
+                out[k] = libm::sqrt(x[2 * k] * x[2 * k] + x[2 * k + 1] * x[2 * k + 1]);
+            }
+        }
+        out
+    }
+
+    /// Mean power of what is left after removing all tones and the offset (the total power
+    /// for a singular fit, 0 for an empty accumulator).
+    #[allow(clippy::indexing_slicing)]
+    pub fn residual_power(&self) -> f64 {
+        if self.n == 0 {
+            return 0.0;
+        }
+        let nf = self.n as f64;
+        let explained = match self.solve() {
+            Some(x) => (0..self.columns()).map(|i| x[i] * self.atx[i]).sum(),
+            None => 0.0,
+        };
+        libm::fmax((self.xx - explained) / nf, 0.0)
+    }
+
+    /// SINAD in dB of tone `k` against the residual (every tone removed): `10 log10(a_k^2 / 2
+    /// / residual)`; `+inf` for a perfect fit.
+    pub fn sinad_db(&self, k: usize) -> f64 {
+        let a = self.amplitudes().get(k).copied().unwrap_or(0.0);
+        let r = self.residual_power();
+        if r <= 0.0 {
+            f64::INFINITY
+        } else {
+            10.0 * libm::log10(a * a / 2.0 / r)
+        }
+    }
+}
+
 /// Solves `m * v = rhs` by Cramer's rule; `None` when the matrix is (nearly) singular.
 /// `scale` is the sample count, which scales the determinant of a well-conditioned system.
 fn solve3(m: [[f64; 3]; 3], rhs: [f64; 3], scale: f64) -> Option<(f64, f64, f64)> {

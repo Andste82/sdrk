@@ -98,6 +98,9 @@ pub trait Sample:
 
 /// A real sample type (`f32` or `Q15`).
 pub trait RealSample: Sample {
+    /// The complex sample type whose components are this type (`C32` for `f32`, `CQ15` for
+    /// `Q15`).
+    type Complex: ComplexSample<Real = Self>;
     /// Converts to f64 (exact).
     fn to_f64(self) -> f64;
     /// Converts from f64, rounding according to the numeric conventions.
@@ -107,7 +110,7 @@ pub trait RealSample: Sample {
 /// A complex sample type (`C32` or `CQ15`).
 pub trait ComplexSample: Sample {
     /// The real component type.
-    type Real: RealSample;
+    type Real: RealSample<Complex = Self>;
     /// In-phase component.
     fn re(self) -> Self::Real;
     /// Quadrature component.
@@ -141,6 +144,7 @@ impl Sample for CQ15 {
 }
 
 impl RealSample for f32 {
+    type Complex = C32;
     fn to_f64(self) -> f64 {
         f64::from(self)
     }
@@ -150,6 +154,7 @@ impl RealSample for f32 {
 }
 
 impl RealSample for Q15 {
+    type Complex = CQ15;
     fn to_f64(self) -> f64 {
         f64::from(self.0) / 32768.0
     }

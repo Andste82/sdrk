@@ -123,6 +123,19 @@
 //! | `e2e_real_fm_rx_q15` | quick | about 47 KiB |
 //! | `e2e_real_fm_rx_f32_1s` | full | about 226 KiB |
 //! | `e2e_real_fm_rx_q15_1s` | full | about 216 KiB |
+//! | `stereo_pll_f32` | quick | about 67 KiB |
+//! | `stereo_pll_q15` | quick | about 34 KiB |
+//! | `stereo_matrix_c32` | quick | about 36 KiB |
+//! | `stereo_matrix_cq15` | quick | about 18 KiB |
+//! | `extremes_m24` | full | about 7 KiB |
+//! | `block_fm_stereo_separation` | quick | about 22 KiB |
+//! | `block_fm_stereo_mono` | quick | about 12 KiB |
+//! | `e2e_fm_stereo_f32` | quick | about 31 KiB (0.5 s of signal) |
+//! | `e2e_fm_stereo_q15` | quick | about 20 KiB (0.5 s of signal) |
+//! | `e2e_fm_stereo_mono` | full | about 31 KiB (mono transmission and noise, 0.25 s each, both types) |
+//! | `e2e_fm_stereo_f32_2s`, `e2e_fm_stereo_q15_2s` | full | as the 0.5 s variants (2.0 s of signal) |
+//! | `e2e_fm_stereo_switch_f32` | full | about 31 KiB (pilot from 0.3 s to 0.7 s of 1.0 s) |
+//! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_rotate` | quick | up to 62 KiB |
@@ -175,8 +188,10 @@ mod m21;
 mod m22;
 mod m23;
 mod m23_backend;
+mod m24;
+mod m24_backend;
 
-pub(crate) static CASES: [TestCase; 138] = [
+pub(crate) static CASES: [TestCase; 152] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -628,6 +643,11 @@ pub(crate) static CASES: [TestCase; 138] = [
         run: m23_backend::backend_vs_fallback_real_to_complex,
     },
     TestCase {
+        name: "backend_vs_fallback_stereo_matrix",
+        tier: Tier::Quick,
+        run: m24_backend::backend_vs_fallback_stereo_matrix,
+    },
+    TestCase {
         name: "squelch_c32",
         tier: Tier::Quick,
         run: m19::squelch_c32,
@@ -866,6 +886,71 @@ pub(crate) static CASES: [TestCase; 138] = [
         name: "e2e_real_fm_rx_q15_1s",
         tier: Tier::Full,
         run: m23::e2e_real_fm_rx_q15_1s,
+    },
+    TestCase {
+        name: "stereo_pll_f32",
+        tier: Tier::Quick,
+        run: m24::stereo_pll_f32,
+    },
+    TestCase {
+        name: "stereo_pll_q15",
+        tier: Tier::Quick,
+        run: m24::stereo_pll_q15,
+    },
+    TestCase {
+        name: "stereo_matrix_c32",
+        tier: Tier::Quick,
+        run: m24::stereo_matrix_c32,
+    },
+    TestCase {
+        name: "stereo_matrix_cq15",
+        tier: Tier::Quick,
+        run: m24::stereo_matrix_cq15,
+    },
+    TestCase {
+        name: "extremes_m24",
+        tier: Tier::Full,
+        run: m24::extremes_m24,
+    },
+    TestCase {
+        name: "block_fm_stereo_separation",
+        tier: Tier::Quick,
+        run: m24::block_fm_stereo_separation,
+    },
+    TestCase {
+        name: "block_fm_stereo_mono",
+        tier: Tier::Quick,
+        run: m24::block_fm_stereo_mono,
+    },
+    TestCase {
+        name: "e2e_fm_stereo_f32",
+        tier: Tier::Quick,
+        run: m24::e2e_fm_stereo_f32,
+    },
+    TestCase {
+        name: "e2e_fm_stereo_q15",
+        tier: Tier::Quick,
+        run: m24::e2e_fm_stereo_q15,
+    },
+    TestCase {
+        name: "e2e_fm_stereo_mono",
+        tier: Tier::Full,
+        run: m24::e2e_fm_stereo_mono,
+    },
+    TestCase {
+        name: "e2e_fm_stereo_f32_2s",
+        tier: Tier::Full,
+        run: m24::e2e_fm_stereo_f32_2s,
+    },
+    TestCase {
+        name: "e2e_fm_stereo_q15_2s",
+        tier: Tier::Full,
+        run: m24::e2e_fm_stereo_q15_2s,
+    },
+    TestCase {
+        name: "e2e_fm_stereo_switch_f32",
+        tier: Tier::Full,
+        run: m24::e2e_fm_stereo_switch_f32,
     },
 ];
 

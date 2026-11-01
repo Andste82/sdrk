@@ -11,6 +11,7 @@ pub mod duc;
 pub mod fir;
 pub mod fm_demod;
 pub mod fm_mod;
+pub mod fm_stereo;
 pub mod halfband;
 pub mod real_to_complex;
 pub mod resampler;

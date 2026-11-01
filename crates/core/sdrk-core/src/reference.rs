@@ -62,5 +62,6 @@ mod mix;
 mod modulate;
 mod spectrum;
 mod squelch;
+mod stereo;
 
 pub use fft::REFERENCE_IN_PLACE_MAX;

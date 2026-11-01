@@ -3214,5 +3214,143 @@
       "status": "info",
       "waiver": "a workload of the own-kernel comparison of `real_to_complex_cq15` (D69): the shift by fs/4 as a separate pass, then `halfband_decimate` on the complex signal; not a kernel of the library, never judged"
     }
+  },
+  "stereo_matrix": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "stereo_matrix_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
+    }
+  },
+  "stereo_matrix_fallback": {
+    "sse2": {
+      "status": "release",
+      "waiver": "open item I24-3 (D146): the fallback needs 1.23x the instructions of CMSIS-DSP's planar loop at `sse2` (6.51 against 5.31 per sample): LLVM compiles the loop over interleaved pairs to scalar code there, while the planar loop is vectorized; the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); the SIMD branch that the facade uses at `sse2` is 0.41 of the VOLK composition"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "stereo_matrix_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "stereo_pll_fallback": {
+    "sse2": {
+      "status": "release",
+      "waiver": "open item I24-1 (D143, D144): the fallback needs 1.15x to 1.33x the instructions of liquid-dsp's `nco_crcf` loop per sample (90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`); `avx512` (73.4, 1.08) meets the limit; the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); accuracy class of the comparison (M24 amendment of 2026-10-31, D110): liquid's reference is of a lower accuracy class than ours: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), so the reference is a speed reference only"
+    },
+    "sse4.2": {
+      "status": "release",
+      "waiver": "open item I24-1 (D143, D144): the fallback needs 1.15x to 1.33x the instructions of liquid-dsp's `nco_crcf` loop per sample (90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`); `avx512` (73.4, 1.08) meets the limit; the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); accuracy class of the comparison (M24 amendment of 2026-10-31, D110): liquid's reference is of a lower accuracy class than ours: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), so the reference is a speed reference only"
+    },
+    "avx2": {
+      "status": "release",
+      "waiver": "open item I24-1 (D143, D144): the fallback needs 1.15x to 1.33x the instructions of liquid-dsp's `nco_crcf` loop per sample (90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`); `avx512` (73.4, 1.08) meets the limit; the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); accuracy class of the comparison (M24 amendment of 2026-10-31, D110): liquid's reference is of a lower accuracy class than ours: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), so the reference is a speed reference only"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release",
+      "waiver": "open item I24-1 (D143, D144): the fallback needs 1.15x to 1.33x the instructions of liquid-dsp's `nco_crcf` loop per sample (90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`); `avx512` (73.4, 1.08) meets the limit; the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); accuracy class of the comparison (M24 amendment of 2026-10-31, D110): liquid's reference is of a lower accuracy class than ours: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), so the reference is a speed reference only"
+    },
+    "simd128": {
+      "status": "release",
+      "waiver": "open item I24-1 (D143, D144): the fallback needs 1.15x to 1.33x the instructions of liquid-dsp's `nco_crcf` loop per sample (90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`); `avx512` (73.4, 1.08) meets the limit; the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); accuracy class of the comparison (M24 amendment of 2026-10-31, D110): liquid's reference is of a lower accuracy class than ours: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), so the reference is a speed reference only"
+    }
+  },
+  "stereo_pll_q15_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
+    }
   }
 }

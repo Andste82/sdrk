@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 10] = [
+const LIBRARIES: [(&str, &str, &str); 11] = [
     ("has_fftw", "libfftw3f.a", "fftw3f"),
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
@@ -24,6 +24,7 @@ const LIBRARIES: [(&str, &str, &str); 10] = [
     ("has_grquaddemod", "libgrquaddemod.a", "grquaddemod"),
     ("has_grdeemph", "libgrdeemph.a", "grdeemph"),
     ("has_liquiddc", "libliquiddc.a", "liquiddc"),
+    ("has_liquidnco", "libliquidnco.a", "liquidnco"),
 ];
 
 /// The per-level libraries: cfg name, link name without the level.

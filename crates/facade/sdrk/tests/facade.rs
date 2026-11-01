@@ -256,6 +256,25 @@ fn backend_table_lists_the_m23_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m24_kernels() {
+    // The pilot loop is a per-sample recursion and stays with the fallback.
+    for (kernel, ty) in [
+        ("stereo_pll", SampleType::F32),
+        ("stereo_pll", SampleType::Q15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+    }
+    for (kernel, ty) in [
+        ("stereo_matrix", SampleType::C32),
+        ("stereo_matrix", SampleType::CQ15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("stereo_pll", SampleType::C32), "none");
+    assert_eq!(backend_for("stereo_matrix", SampleType::F32), "none");
+}
+
+#[test]
 fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     use sdrk::Rate;
     use sdrk::kernels::decim::{

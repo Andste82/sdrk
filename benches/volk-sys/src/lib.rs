@@ -50,6 +50,17 @@ pub type DotProd = unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const
 /// The signature of `volk_32f_x2_dot_prod_32f` and its aligned variant.
 pub type DotProdReal = unsafe extern "C" fn(*mut f32, *const f32, *const f32, c_uint);
 
+/// The signature of `volk_32f_x2_add_32f` and `volk_32f_x2_subtract_32f` (and their aligned
+/// variants): `out[i] = a[i] +- b[i]`.
+pub type AddSub = unsafe extern "C" fn(*mut f32, *const f32, *const f32, c_uint);
+
+/// The signature of `volk_32fc_deinterleave_32f_x2` and its aligned variant:
+/// `re[i]`, `im[i]` from the interleaved complex input.
+pub type Deinterleave = unsafe extern "C" fn(*mut f32, *mut f32, *const lv_32fc_t, c_uint);
+
+/// The signature of `volk_32f_x2_interleave_32fc` and its aligned variant.
+pub type Interleave = unsafe extern "C" fn(*mut lv_32fc_t, *const f32, *const f32, c_uint);
+
 /// VOLK's `volk_func_desc_t`: the implementations of a kernel on the machine VOLK selected.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -140,6 +151,19 @@ mod ffi {
         pub fn volk_32f_x2_dot_prod_32f_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32fc_x2_dot_prod_32fc_get_func_desc() -> volk_func_desc_t;
     }
+
+    // The kernels of the `stereo_matrix` composition (deinterleave, add, subtract, interleave).
+    unsafe extern "C" {
+        pub static mut volk_32f_x2_add_32f: Option<super::AddSub>;
+        pub static mut volk_32f_x2_subtract_32f: Option<super::AddSub>;
+        pub static mut volk_32fc_deinterleave_32f_x2: Option<super::Deinterleave>;
+        pub static mut volk_32f_x2_interleave_32fc: Option<super::Interleave>;
+
+        pub fn volk_32f_x2_add_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32f_x2_subtract_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_deinterleave_32f_x2_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32f_x2_interleave_32fc_get_func_desc() -> volk_func_desc_t;
+    }
 }
 
 macro_rules! wrappers {
@@ -211,6 +235,17 @@ wrappers! {
     fn volk_32f_x2_dot_prod_32f(result: *mut f32, a: *const f32, b: *const f32, n: u32);
     /// `*result = sum a[i] * b[i]` of complex vectors (no conjugate).
     fn volk_32fc_x2_dot_prod_32fc(result: *mut lv_32fc_t, a: *const lv_32fc_t, b: *const lv_32fc_t, n: u32);
+}
+
+wrappers! {
+    /// `out[i] = a[i] + b[i]` (the dispatcher's unaligned entry).
+    fn volk_32f_x2_add_32f(out: *mut f32, a: *const f32, b: *const f32, n: u32);
+    /// `out[i] = a[i] - b[i]`.
+    fn volk_32f_x2_subtract_32f(out: *mut f32, a: *const f32, b: *const f32, n: u32);
+    /// `re[i] = in[i].re`, `im[i] = in[i].im`.
+    fn volk_32fc_deinterleave_32f_x2(re: *mut f32, im: *mut f32, input: *const lv_32fc_t, n: u32);
+    /// `out[i] = (re[i], im[i])`.
+    fn volk_32f_x2_interleave_32fc(out: *mut lv_32fc_t, re: *const f32, im: *const f32, n: u32);
 }
 
 /// The VOLK functions that the first rounds compared only against VOLK's own build
@@ -433,6 +468,10 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
             "volk_32f_s32f_multiply_32f" => native::ffi::volk_32f_s32f_multiply_32f_get_func_desc,
             "volk_32f_s32f_add_32f" => native::ffi::volk_32f_s32f_add_32f_get_func_desc,
             "volk_32f_x2_dot_prod_32f" => ffi::volk_32f_x2_dot_prod_32f_get_func_desc,
+            "volk_32f_x2_add_32f" => ffi::volk_32f_x2_add_32f_get_func_desc,
+            "volk_32f_x2_subtract_32f" => ffi::volk_32f_x2_subtract_32f_get_func_desc,
+            "volk_32fc_deinterleave_32f_x2" => ffi::volk_32fc_deinterleave_32f_x2_get_func_desc,
+            "volk_32f_x2_interleave_32fc" => ffi::volk_32f_x2_interleave_32fc_get_func_desc,
             "volk_32fc_x2_dot_prod_32fc" => ffi::volk_32fc_x2_dot_prod_32fc_get_func_desc,
             _ => return None,
         };

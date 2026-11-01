@@ -386,6 +386,8 @@ name = "fm-receiver"
 version = "0.0.1"
 dependencies = [
  "num-complex",
+ "sdrk",
+ "sdrk-blocks",
  "sdrk-device",
  "sdrk-io",
  "sdrk-pipeline",
@@ -1294,6 +1296,7 @@ dependencies = [
  "sdrk-device",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

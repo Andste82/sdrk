@@ -1288,6 +1288,81 @@
           },
           {
             "additionalProperties": false,
+            "description": "Demodulates a broadcast FM signal to stereo audio (left in re, right in im).",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "fm_stereo"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "audio_cutoff_hz": {
+                    "default": 15000.0,
+                    "description": "Cutoff of the audio low-pass in Hz, 1 to 16000. Unit: Hz. Typical: 15e3 for broadcast FM. Build-time.",
+                    "maximum": 16000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "audio_decimation": {
+                    "default": 10,
+                    "description": "Decimation factor of the audio, 1 to 64. Typical: 10 to go from 480 kHz to 48 kHz. Build-time.",
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "deemphasis_us": {
+                    "default": 50.0,
+                    "description": "Time constant of the de-emphasis in microseconds; 0 switches it off. Unit: us. Typical: 50 in Europe, 75 in North America, 0 to switch off. Build-time.",
+                    "maximum": 1000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "deviation_hz": {
+                    "default": 75000.0,
+                    "description": "Peak deviation in Hz that reads full scale (C32 and the CQ15 pilot level). Unit: Hz. Typical: 75e3 for broadcast FM. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "pll_natural_hz": {
+                    "default": 20.0,
+                    "description": "Natural frequency of the pilot loop in Hz, 1 to 190. Unit: Hz. Typical: 20. Build-time.",
+                    "maximum": 190.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "stereo": {
+                    "default": "auto",
+                    "description": "auto decodes stereo while the 19 kHz pilot is present; mono forces mono output (left and right equal). Takes effect from the next call. Typical: auto; mono for a weak station. Runtime.",
+                    "enum": [
+                      "auto",
+                      "mono"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Halfband low-pass filter and decimation by 2.",
             "properties": {
               "backend": {

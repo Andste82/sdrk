@@ -9,6 +9,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+sdrk = { path = "../../crates/facade/sdrk" }
+sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
 sdrk-device = { path = "../../crates/core/sdrk-device" }
 sdrk-io = { path = "../../crates/io/sdrk-io" }
 sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline" }

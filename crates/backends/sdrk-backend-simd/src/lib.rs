@@ -65,6 +65,7 @@ mod modulate;
 mod recursion;
 mod scale;
 mod spectrum;
+mod stereo;
 mod table;
 mod util;
 

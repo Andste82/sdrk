@@ -843,7 +843,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 140] = [
+pub static KERNELS: [KernelSpec; 146] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1031,6 +1031,16 @@ pub static KERNELS: [KernelSpec; 140] = [
     spec("halfband_ref_fir_decimate_cq15", Family::Workload, false),
     spec("halfband_ref_shifted", Family::Workload, false),
     spec("halfband_ref_shifted_cq15", Family::Workload, false),
+    spec("stereo_matrix", Family::Volk, false),
+    spec("stereo_matrix_cq15", Family::Q15Own, false),
+    spec("stereo_matrix_fallback", Family::FallbackVsCmsis, false),
+    spec(
+        "stereo_matrix_cq15_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
+    spec("stereo_pll_fallback", Family::FallbackVsLiquid, false),
+    spec("stereo_pll_q15_fallback", Family::FallbackVsCmsis, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -1429,6 +1439,10 @@ volk_32f_log2_32f generic generic
 volk_32f_s32f_multiply_32f a_sse u_sse
 volk_32f_s32f_add_32f a_sse u_sse
 volk_32f_x2_dot_prod_32f a_sse u_sse
+volk_32fc_deinterleave_32f_x2 a_sse generic
+volk_32f_x2_add_32f a_sse u_sse
+volk_32f_x2_subtract_32f a_sse generic
+volk_32f_x2_interleave_32fc a_sse generic
 ";
 
 /// The defaults of VOLK 3.3's `sse4_2_64_mmx` machine for the level `sse4.2`.
@@ -1451,6 +1465,10 @@ volk_32f_log2_32f a_sse4_1 u_sse4_1
 volk_32f_s32f_multiply_32f a_sse u_sse
 volk_32f_s32f_add_32f a_sse u_sse
 volk_32f_x2_dot_prod_32f a_sse4_1 u_sse4_1
+volk_32fc_deinterleave_32f_x2 a_sse generic
+volk_32f_x2_add_32f a_sse u_sse
+volk_32f_x2_subtract_32f a_sse generic
+volk_32f_x2_interleave_32fc a_sse generic
 ";
 
 /// The VOLK implementations that need no more than AVX2 and FMA, for the levels `avx2` and
@@ -1477,6 +1495,10 @@ volk_32f_log2_32f a_avx2_fma u_avx2_fma
 volk_32f_s32f_multiply_32f a_avx u_avx
 volk_32f_s32f_add_32f a_avx u_avx
 volk_32f_x2_dot_prod_32f a_avx2_fma u_avx2_fma
+volk_32fc_deinterleave_32f_x2 a_avx u_avx
+volk_32f_x2_add_32f a_avx u_avx
+volk_32f_x2_subtract_32f a_avx u_avx
+volk_32f_x2_interleave_32fc a_avx u_avx
 ";
 
 /// The default dispatch of VOLK 3.3's `neonv8` machine (what QEMU's CPU selects), pinned so
@@ -1503,12 +1525,16 @@ volk_32f_log2_32f neonv8 neonv8
 volk_32f_s32f_multiply_32f neonv8 neonv8
 volk_32f_s32f_add_32f neonv8 neonv8
 volk_32f_x2_dot_prod_32f neonv8 neonv8
+volk_32fc_deinterleave_32f_x2 neonv8 neonv8
+volk_32f_x2_add_32f neonv8 neonv8
+volk_32f_x2_subtract_32f neonv8 neonv8
+volk_32f_x2_interleave_32fc neonv8 neonv8
 ";
 
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 18] = [
+const VOLK_FUNCTIONS: [&str; 22] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
     "volk_8i_convert_16i",
@@ -1527,6 +1553,10 @@ const VOLK_FUNCTIONS: [&str; 18] = [
     "volk_32f_s32f_multiply_32f",
     "volk_32f_s32f_add_32f",
     "volk_32f_x2_dot_prod_32f",
+    "volk_32fc_deinterleave_32f_x2",
+    "volk_32f_x2_add_32f",
+    "volk_32f_x2_subtract_32f",
+    "volk_32f_x2_interleave_32fc",
 ];
 
 /// CPUID of SDE for the level `sse2`: `GenuineIntel`, family 15, SSE2 and nothing above it; XSAVE
@@ -2766,33 +2796,43 @@ fn cheapest_volk(
     clippy::large_stack_frames,
     reason = "std::process::Command is large; xtask is a host tool"
 )]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one linear script: build, count each chain, write the document"
+)]
 fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
-    let target_dir = root.join("benches").join("target").join("pipeline");
-    println!("==> building the pipeline benchmark");
-    let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .current_dir(root.join("benches"))
-        .args(["build", "--release", "-p", "pipeline-bench", "--target-dir"])
-        .arg(&target_dir)
-        .env_remove("RUSTFLAGS")
-        .env(
-            "CARGO_ENCODED_RUSTFLAGS",
-            rustflags("-C target-cpu=x86-64-v3", root),
-        )
-        .status()
-        .context("cannot run cargo")?;
-    if !status.success() {
-        bail!("building benches/pipeline failed");
-    }
-    let binary = target_dir.join("release").join("pipeline");
+    // The benchmark binary with the vector paths (x86-64 with AVX2) and, for the whole blocks at
+    // 480 kHz, one with every kernel on the fallback (`--cfg sdrk_fallback_only`, same target
+    // features).
+    let build_pipeline = |name: &str, extra: &str| -> anyhow::Result<PathBuf> {
+        let target_dir = root.join("benches").join("target").join(name);
+        println!("==> building the pipeline benchmark ({name})");
+        let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .current_dir(root.join("benches"))
+            .args(["build", "--release", "-p", "pipeline-bench", "--target-dir"])
+            .arg(&target_dir)
+            .env_remove("RUSTFLAGS")
+            .env(
+                "CARGO_ENCODED_RUSTFLAGS",
+                rustflags(&format!("-C target-cpu=x86-64-v3{extra}"), root),
+            )
+            .status()
+            .context("cannot run cargo")?;
+        if !status.success() {
+            bail!("building benches/pipeline failed");
+        }
+        Ok(target_dir.join("release").join("pipeline"))
+    };
+    let binary = build_pipeline("pipeline", "")?;
     let blocks = K;
     // One chain: the differential count and the latency line of the benchmark binary.
-    let measure = |chain: Option<&str>| -> anyhow::Result<(f64, Value)> {
+    let measure_with = |binary: &Path, chain: Option<&str>| -> anyhow::Result<(f64, Value)> {
         let count = |k: u64| -> anyhow::Result<u64> {
             // As in `run_args`: both runs with arguments of the same length.
             let width = blocks.to_string().len();
             let out = Command::new("valgrind")
                 .args(["--tool=callgrind", "--callgrind-out-file=/dev/null"])
-                .arg(&binary)
+                .arg(binary)
                 .args(["run", &format!("{k:0width$}")])
                 .args(chain)
                 .output()
@@ -2806,7 +2846,7 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
             anyhow!("the pipeline run with more blocks counted fewer instructions")
         })?;
         let per_sample = diff as f64 / (blocks * N) as f64;
-        let info = Command::new(&binary)
+        let info = Command::new(binary)
             .arg("info")
             .args(chain)
             .output()
@@ -2814,6 +2854,7 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
         let latency: Value = serde_json::from_slice(&info.stdout).context("latency output")?;
         Ok((per_sample, latency))
     };
+    let measure = |chain: Option<&str>| measure_with(&binary, chain);
     let (per_sample, latency) = measure(None)?;
     println!(
         "pipeline fm_receiver.json at 2.4 MHz: {per_sample:.1} instructions per input sample, latency {} samples = {} us",
@@ -2826,9 +2867,46 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
         ssb_latency.get("latency_samples").unwrap_or(&Value::Null),
         ssb_latency.get("latency_us").unwrap_or(&Value::Null)
     );
+    // The whole blocks `fm_demod` and `fm_stereo` on a `cf32` input at 480 kHz (M24): the vector
+    // paths and the fallback.
+    let fallback_binary = build_pipeline("pipeline-fallback", " --cfg sdrk_fallback_only")?;
+    let mut blocks_480 = serde_json::Map::new();
+    for (chain, name, block) in [
+        ("fm480", "fm_demod_480k", "fm_demod"),
+        ("stereo480", "fm_stereo_480k", "fm_stereo"),
+    ] {
+        let (vector, latency) = measure(Some(chain))?;
+        let (fallback, _) = measure_with(&fallback_binary, Some(chain))?;
+        println!(
+            "pipeline {block} at 480 kHz: {vector:.1} instructions per input sample (AVX2), {fallback:.1} (fallback), latency {} samples = {} us",
+            latency.get("latency_samples").unwrap_or(&Value::Null),
+            latency.get("latency_us").unwrap_or(&Value::Null)
+        );
+        blocks_480.insert(
+            name.to_string(),
+            json!({
+                "flow": format!("{block} with its defaults{}, cf32 input at 480 kHz, 48 kHz output", if chain == "fm480" { " and audio_decimation 10" } else { "" }),
+                "input": { "format": "cf32", "rate_hz": 480_000 },
+                "instructions_per_input_sample": round2(vector),
+                "fallback_instructions_per_input_sample": round2(fallback),
+                "latency": latency,
+            }),
+        );
+    }
     if write {
         let dir = root.join("benches").join("results");
         std::fs::create_dir_all(&dir)?;
+        let mut chains = json!({
+            "ssb": {
+                "flow": "ddc (300 kHz, decimation 50, cutoff 4 kHz, transition 2 kHz) -> agc -> ssb_demod (usb), as examples/flows/ssb_receiver.json without the squelch",
+                "input": { "format": "cu8", "rate_hz": 2_400_000 },
+                "instructions_per_input_sample": round2(ssb_per_sample),
+                "latency": ssb_latency,
+            },
+        });
+        if let Some(map) = chains.as_object_mut() {
+            map.extend(blocks_480);
+        }
         let doc = json!({
             "flow": "examples/flows/fm_receiver.json",
             "input": { "format": "cu8", "rate_hz": 2_400_000 },
@@ -2836,14 +2914,7 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
             "method": { "blocks": blocks, "block_samples": N, "counted": "(count(k blocks) - count(0 blocks)) / (k * block_samples)" },
             "instructions_per_input_sample": round2(per_sample),
             "latency": latency,
-            "chains": {
-                "ssb": {
-                    "flow": "ddc (300 kHz, decimation 50, cutoff 4 kHz, transition 2 kHz) -> agc -> ssb_demod (usb), as examples/flows/ssb_receiver.json without the squelch",
-                    "input": { "format": "cu8", "rate_hz": 2_400_000 },
-                    "instructions_per_input_sample": round2(ssb_per_sample),
-                    "latency": ssb_latency,
-                },
-            },
+            "chains": chains,
         });
         let mut text = serde_json::to_string_pretty(&doc)?;
         text.push('\n');
@@ -4127,6 +4198,67 @@ mod tests {
                 assert!(KERNELS.iter().any(|k| k.name == own), "{own}");
             }
         }
+    }
+
+    #[test]
+    fn the_stereo_entries_are_judged_against_the_references_of_d108_to_d111() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            // The VOLK composition gates `stereo_matrix` at every level (generic kernels on
+            // `simd128`), the cheapest VOLK combination is information where the plan has it.
+            let (gate, extras) = comparisons(plan(level), kernel("stereo_matrix"));
+            assert_eq!(gate, Reference::Volk, "{level}");
+            assert_eq!(
+                extras,
+                if level == "neon" {
+                    vec![Reference::VolkCheapest]
+                } else {
+                    Vec::new()
+                },
+                "{level}"
+            );
+            // No library has a SIMD CQ15 matrix: our fallback, CMSIS-DSP as information.
+            assert_eq!(
+                comparisons(plan(level), kernel("stereo_matrix_cq15")),
+                (Reference::Fallback, vec![Reference::Cmsis]),
+                "{level}"
+            );
+            // The fallbacks: CMSIS-DSP on planar data; liquid-dsp's NCO for the f32 loop.
+            for k in [
+                "stereo_matrix_fallback",
+                "stereo_matrix_cq15_fallback",
+                "stereo_pll_q15_fallback",
+            ] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Cmsis, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+            assert_eq!(
+                comparisons(plan(level), kernel("stereo_pll_fallback")),
+                (Reference::Liquid, Vec::new()),
+                "{level}"
+            );
+        }
+        for k in [
+            "stereo_matrix_fallback",
+            "stereo_matrix_cq15_fallback",
+            "stereo_pll_fallback",
+            "stereo_pll_q15_fallback",
+        ] {
+            assert_eq!(kernel(k).family.measured(), "fallback", "{k}");
+            assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+            assert!(kernel(k).family.measured_at(plan("simd128")), "{k}");
+        }
+        for k in ["stereo_matrix", "stereo_matrix_cq15"] {
+            assert_eq!(kernel(k).family.measured(), "ours", "{k}");
+            assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        // `stereo_pll` has no SIMD branch: no entry without the suffix.
+        assert!(KERNELS.iter().all(|k| k.name != "stereo_pll"));
+        assert!(KERNELS.iter().all(|k| k.name != "stereo_pll_q15"));
     }
 
     #[test]

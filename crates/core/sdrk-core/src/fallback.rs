@@ -115,6 +115,7 @@ mod mix;
 mod modulate;
 mod spectrum;
 mod squelch;
+mod stereo;
 
 #[cfg(test)]
 mod tests {

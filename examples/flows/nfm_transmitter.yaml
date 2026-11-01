@@ -51,7 +51,7 @@ nodes:
       deviation_hz: 5000
   # 48 kHz -> 240 kHz (ratio 5/1), complex resampler.
   up:
-    kind: resampler
+    kind: resample
     params:
       rate_out_hz: 240000
   # Digital up converter: x10 to 2.4 MS/s and shift to +200 kHz. The offset keeps the signal

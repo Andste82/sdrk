@@ -123,7 +123,7 @@ fn the_squelch_gates_the_transmission() {
     let off = tone_power(mid, 3300.0, AUDIO_RATE);
     assert!(on > 1000.0 * off, "1 kHz tone: {on} vs {off}");
     // The 530 us de-emphasis lowers a 1 kHz tone by about 11 dB: peak 0.286 measured (0.5
-    // before M25, when the demodulator did not de-emphasise); decision D186.
+    // before M25, when the demodulator did not de-emphasise); decision D187.
     assert!(mid.iter().any(|v| v.abs() > 0.2));
 
     // Opening: the first non-zero audio sample comes at most 1 ms (48 samples) plus the
@@ -171,7 +171,7 @@ fn chunking_does_not_change_the_output() {
     // The f32 `deemphasis` of the SIMD backend is a tolerance kernel whose bits depend on the
     // split (docs/kernels.md, decision of 2026-10-29), so since the demodulator de-emphasises
     // (M25) the chunked run is compared by SNR (97 dB measured, at least 90 dB required) and by
-    // the positions of the exact zeros, which must be identical (decision D186).
+    // the positions of the exact zeros, which must be identical (decision D187).
     assert_eq!(whole.len(), other.len());
     let zeros = |x: &[f32]| x.iter().map(|v| *v == 0.0).collect::<Vec<_>>();
     assert_eq!(zeros(&whole), zeros(&other));
@@ -249,7 +249,7 @@ fn q15_flow_silence(limit_lsb: i32) {
     assert!(audio.len() > to + 9600);
     // Before the transmission the demodulator output is exactly zero (the squelch writes
     // zeros); from 0.2 s after its end the Q15 `deemphasis` (530 us) sits in its dead band at a
-    // constant of at most 16 LSB (amends M19/M22, decision D186; -12 LSB measured, analytically
+    // constant of at most 16 LSB (amends M19/M22, decision D187; -12 LSB measured, analytically
     // +-12 LSB for alpha_q15 = 1265, docs/kernels.md) ...
     assert!(raw[..from].iter().all(|v| *v == 0), "demod silence before");
     let demod_rest = raw[to + 9600..]
@@ -270,6 +270,6 @@ fn q15_flow_silence(limit_lsb: i32) {
     // The transmission is audible.
     let peak = worst(&audio[from + 1200..to - 1200]);
     // 1 kHz at full deviation reads 2000 LSB after the 530 us de-emphasis (1967 at the
-    // demodulator; 4000 or more before M25), decision D186.
+    // demodulator; 4000 or more before M25), decision D187.
     assert!(peak > 1500, "peak {peak}");
 }

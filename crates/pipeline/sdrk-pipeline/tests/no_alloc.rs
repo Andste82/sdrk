@@ -218,6 +218,15 @@ fn metadata_events_timed_parameters_and_pull_do_not_allocate() {
 
 #[test]
 fn pull_does_not_allocate() {
+    pull_without_allocation("fm_transmitter");
+}
+
+#[test]
+fn pull_of_the_narrow_band_transmitter_does_not_allocate() {
+    pull_without_allocation("nfm_transmitter");
+}
+
+fn pull_without_allocation(flow: &str) {
     struct Tone {
         data: Vec<f32>,
         pos: usize,
@@ -233,7 +242,7 @@ fn pull_does_not_allocate() {
         .map(|i| ((i % 48) as f32 - 24.0) / 30.0)
         .collect();
     let mut source = Tone { data, pos: 0 };
-    let mut pipeline = common::build(&common::flow("fm_transmitter"));
+    let mut pipeline = common::build(&common::flow(flow));
     let mut out = vec![0u8; 3000];
     pipeline.pull("rf", &mut out, &mut source).unwrap();
     let (total, allocations) = count_allocations(|| {

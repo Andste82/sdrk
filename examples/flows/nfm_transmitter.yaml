@@ -1,0 +1,79 @@
+# SDRk pipeline: narrow-band FM transmitter for two-way and amateur radio, in pull mode
+# (YAML twin of nfm_transmitter.json). The caller asks for bytes with Pipeline::pull; the
+# audio is supplied on demand. Use it with the nfm_receiver flow.
+sdrk: 1
+name: nfm-transmitter
+description: "Modulate 48 kHz voice audio to narrow-band FM with pre-emphasis, a peak limiter and a voice band filter and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+inputs:
+  audio:
+    type: f32
+    rate_hz: 48000
+    description: "mono audio"
+nodes:
+  # Voice band: a 4th-order Butterworth low-pass at 3 kHz before the pre-emphasis. Without
+  # it, noise and hiss above the voice band would be amplified by up to 36 dB and eat the
+  # deviation that speech needs.
+  voice:
+    kind: biquad
+    params:
+      cutoff_hz: 3000
+      order: 4
+      response: lowpass
+  # Pre-emphasis of 6 dB per octave from 300 Hz and peak limiter. 530 us = 1 / (2 pi * 300 Hz)
+  # is the pre-emphasis of ETSI EN 300 086; radios built to TIA-603 use 750 us (set
+  # preemphasis_us to 750 and the receiver deemphasis_us to the same value). The nfm_receiver
+  # flow de-emphasises with 530 us. The limit is 0.85, not 1.0: the splatter filter behind
+  # the limiter overshoots, and measured with overdriven noise a limit of 0.85 kept the peak
+  # below 0.88 while 0.9 reached 0.97. limit can be changed while the flow runs (set_param).
+  shape:
+    kind: preemph_limit
+    params:
+      limit: 0.85
+      preemphasis_us: 530
+  # Splatter filter: the limiter makes harmonics above the voice band, and they would widen
+  # the signal into the next channel. The same 4th-order Butterworth low-pass at 3 kHz
+  # removes them (and the overshoot is the reason for the limit of 0.85 above).
+  splatter:
+    kind: biquad
+    params:
+      cutoff_hz: 3000
+      order: 4
+      response: lowpass
+  # FM modulator at 48 kHz: 5 kHz deviation for 25 kHz channels; use 2500 for 12.5 kHz
+  # channels (and the same value in the receiver). At most 2*pi*5/48 radians per sample.
+  mod:
+    kind: fm_mod
+    params:
+      deviation_hz: 5000
+  # 48 kHz -> 240 kHz (ratio 5/1), complex resampler.
+  up:
+    kind: resampler
+    params:
+      rate_out_hz: 240000
+  # Digital up converter: x10 to 2.4 MS/s and shift to +200 kHz. The offset keeps the signal
+  # away from the carrier leakage that a transmitter has at its centre frequency; tune the
+  # transmitter 200 kHz below the channel.
+  duc:
+    kind: duc
+    params:
+      frequency_hz: 200000
+      interpolation: 10
+# Voice filter, pre-emphasis and limiter, splatter filter, modulator, resampler, up converter.
+edges:
+  - { from: audio, to: voice }
+  - { from: voice, to: shape }
+  - { from: shape, to: splatter }
+  - { from: splatter, to: mod }
+  - { from: mod, to: up }
+  - { from: up, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

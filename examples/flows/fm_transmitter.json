@@ -1,7 +1,7 @@
 {
   "sdrk": 1,
   "name": "fm-transmitter",
-  "description": "Modulate 48 kHz audio to FM and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode.",
+  "description": "Modulate 48 kHz audio to FM with pre-emphasis and a peak limiter and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode.",
   "settings": {
     "precision": "f32",
     "max_chunk": 4800
@@ -27,6 +27,13 @@
         "deviation_hz": 75000
       }
     },
+    "shape": {
+      "kind": "preemph_limit",
+      "params": {
+        "limit": 1.0,
+        "preemphasis_us": 50
+      }
+    },
     "up": {
       "kind": "resample",
       "params": {
@@ -41,6 +48,10 @@
     },
     {
       "from": "up",
+      "to": "shape"
+    },
+    {
+      "from": "shape",
       "to": "mod"
     },
     {

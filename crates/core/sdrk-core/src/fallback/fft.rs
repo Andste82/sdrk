@@ -6,9 +6,10 @@
 //! registers (`C32` on x86: all stages after a single first one for odd `log2 N`; `C32`
 //! elsewhere, where 32 floating-point registers hold eight samples and their seven twiddles:
 //! triples, with one pair first or one single stage last for the remainder of `log2 N / 3`;
-//! `CQ15` with fixed scaling: the first two). The butterflies and their operands are those of
-//! the stage-by-stage order, so the result is the same bit for bit; only the loads, stores and
-//! twiddle reads of the fused stages are saved.
+//! `CQ15` with fixed scaling: the first two, or on 64-bit targets and wasm32 all of them in
+//! pairs when no clamp can act, see [`fixed_cannot_saturate`]). The butterflies and their
+//! operands are those of the stage-by-stage order, so the result is the same bit for bit; only
+//! the loads, stores and twiddle reads of the fused stages are saved.
 //! Block floating point needs the largest magnitude between the stages and runs them one by one.
 
 // `(a + b) * 0.5` is the specified, exact halving; `f32::midpoint` is not part of the contract.
@@ -631,9 +632,10 @@ fn stage_q15_by<const INV: bool, const SHIFT: u32, const COUNT: bool>(
 /// [`stage_q15`], so the result is the same bit for bit. `step2` is the twiddle step of the
 /// second stage. Returns the number of clamped components (if `COUNT`).
 ///
-/// The later stages run one by one: a group of four `CQ15` butterflies with three twiddles
-/// does not fit the general registers of x86-64 (the paired loop spilled and was slower than
-/// two passes on `znver3` and at `sse2`).
+/// The later stages run one by one: a group of four clamped `CQ15` butterflies with three
+/// twiddles does not fit the general registers of x86-64 (the paired loop spilled and was
+/// slower than two passes on `znver3` and at `sse2`). Without the clamps it does, see
+/// [`stages_q15_fast`].
 fn first_stages_q15<const INV: bool, const COUNT: bool>(
     data: &mut [CQ15],
     tw: &[CQ15],
@@ -649,6 +651,237 @@ fn first_stages_q15<const INV: bool, const COUNT: bool>(
         }
     }
     Ok(clamped)
+}
+
+/// Largest `|x|^2` (in Q15 units squared) of the input of a transform with fixed scaling for
+/// which no butterfly of any stage can saturate, given twiddles with `|w|^2 <= TW_MAX_SQ`.
+///
+/// Every component rounding adds at most 1/2, so at most `sqrt(2) / 2` to the modulus. With
+/// `|w| <= 2^15 + 1` and every input sample of a stage below `R` in modulus, `|w c| / 2^15`
+/// is below `R (1 + 2^-15)`, the rounded product `t` below `R (1 + 2^-15) + 0.71` and the
+/// outputs, `(a +- t) / 2` rounded, below `R (1 + 2^-16) + 1.07`: over at most 16 stages the
+/// bound grows from 32 700 to less than 32 726. A component of `a +- t` is then below
+/// `2 * 32 726 + 2 < 65 533` in magnitude, and its rounding shift `(v + 1) >> 1` lies in
+/// `-32 768 ..= 32 767`: the clamp never acts. The products and sums of
+/// [`butterfly_q15_fast`] fit `i32` as well: `2 b` is below `2 (32 726 * 2^15 + 3 * 2^14)`
+/// and `b + p` below `32 726 * (2^15 + 2^15 + 1) + 3 * 2^14`, both below `2^31`.
+const FIXED_FAST_MAX_SQ: u32 = 32_700 * 32_700;
+/// Largest `|w|^2` of a twiddle for the bound of [`FIXED_FAST_MAX_SQ`]: `(2^15 + 1)^2`. The
+/// twiddles of `new` reach `32 768.7^2` (cosine and sine both rounded up).
+const TW_MAX_SQ: u32 = 32_769 * 32_769;
+
+/// `|x|^2` in Q15 units squared; at most `2^31`, so it fits `u32`.
+#[inline(always)]
+fn norm_sq_q15(x: CQ15) -> u32 {
+    let (r, i) = (i32::from(x.re.0), i32::from(x.im.0));
+    (r * r) as u32 + (i * i) as u32
+}
+
+/// Whether the transform with fixed scaling of `data` cannot saturate (see
+/// [`FIXED_FAST_MAX_SQ`]): every sample at most 32 700 in modulus and every twiddle of the
+/// plan at most `2^15 + 1`. Then [`butterfly_q15_fast`] gives the values of
+/// [`butterfly_q15`] with shift 1.
+fn fixed_cannot_saturate(data: &[CQ15], tw: &[CQ15], n: usize, stride: usize) -> bool {
+    let data_max = data.iter().fold(0u32, |m, x| m.max(norm_sq_q15(*x)));
+    let tw_max = tw
+        .iter()
+        .step_by(stride)
+        .take(n / 2)
+        .fold(0u32, |m, w| m.max(norm_sq_q15(*w)));
+    data_max <= FIXED_FAST_MAX_SQ && tw_max <= TW_MAX_SQ
+}
+
+/// A `CQ15` sample in `i32` components, between the butterflies of a pass.
+type Wide = (i32, i32);
+
+#[inline(always)]
+fn widen(x: CQ15) -> Wide {
+    (i32::from(x.re.0), i32::from(x.im.0))
+}
+
+/// Stores a value of the fast path, which is in the range of `Q15` (see
+/// [`FIXED_FAST_MAX_SQ`]).
+#[inline(always)]
+fn narrow(x: Wide) -> CQ15 {
+    CQ15 {
+        re: Q15(x.0 as i16),
+        im: Q15(x.1 as i16),
+    }
+}
+
+/// [`butterfly_q15`] with shift 1 for operands that cannot saturate (see
+/// [`fixed_cannot_saturate`]): the formula of [`butterfly_q15_wide`] in `i32` without the
+/// clamp. `w` is `(wr, wi)` with `wi` already negated for the inverse.
+#[inline(always)]
+fn butterfly_q15_fast(a: Wide, c: Wide, w: Wide) -> (Wide, Wide) {
+    // `b = ((a + 1) << 15) + 2^14`; the sum `b + p` and the difference `b - 1 - p`, the latter
+    // as `2 b - 1 - (b + p)`, so that the products accumulate onto `b` (multiply-add).
+    let br = (a.0 << 15) + (3 << 14);
+    let bi = (a.1 << 15) + (3 << 14);
+    let sr = br + w.0 * c.0 - w.1 * c.1;
+    let si = bi + w.0 * c.1 + w.1 * c.0;
+    (
+        (sr >> 16, si >> 16),
+        ((2 * br - 1 - sr) >> 16, (2 * bi - 1 - si) >> 16),
+    )
+}
+
+/// A twiddle of the fast path, conjugated for the inverse.
+#[inline(always)]
+fn twiddle_fast<const INV: bool>(w: CQ15) -> Wide {
+    let (wr, wi) = widen(w);
+    (wr, if INV { -wi } else { wi })
+}
+
+/// [`stage_q15_by`] with shift 1 and [`butterfly_q15_fast`].
+fn stage_q15_fast<const INV: bool>(
+    data: &mut [CQ15],
+    tw: &[CQ15],
+    half: usize,
+    step: usize,
+) -> Result<()> {
+    check_twiddles(tw, half, step)?;
+    for block in data.chunks_exact_mut(2 * half) {
+        let (lo, hi) = block.split_at_mut(half);
+        for ((a, c), w) in lo
+            .iter_mut()
+            .zip(hi.iter_mut())
+            .zip(tw.iter().step_by(step))
+        {
+            let (x, y) = butterfly_q15_fast(widen(*a), widen(*c), twiddle_fast::<INV>(*w));
+            (*a, *c) = (narrow(x), narrow(y));
+        }
+    }
+    Ok(())
+}
+
+/// The butterflies of two stages on one group of four samples (as [`quad_q15`]) with
+/// [`butterfly_q15_fast`]; the values between the stages stay in `i32`.
+#[inline(always)]
+fn quad_q15_fast(x: [&mut CQ15; 4], w: Wide, wa: Wide, wb: Wide) {
+    let [x0, x1, x2, x3] = x;
+    let (a0, a1) = butterfly_q15_fast(widen(*x0), widen(*x1), w);
+    let (a2, a3) = butterfly_q15_fast(widen(*x2), widen(*x3), w);
+    let (b0, b2) = butterfly_q15_fast(a0, a2, wa);
+    let (b1, b3) = butterfly_q15_fast(a1, a3, wb);
+    (*x0, *x1, *x2, *x3) = (narrow(b0), narrow(b1), narrow(b2), narrow(b3));
+}
+
+/// Two stages of fixed scaling in one pass with [`butterfly_q15_fast`], as [`stage_pair_c32`].
+fn stage_pair_q15_fast<const INV: bool>(
+    data: &mut [CQ15],
+    tw: &[CQ15],
+    half: usize,
+    step: usize,
+) -> Result<()> {
+    let step2 = step / 2;
+    check_twiddles(tw, half, step)?;
+    check_twiddles(tw, 2 * half, step2)?;
+    if half == 1 {
+        let w0 = twiddle_fast::<INV>(tw.first().copied().ok_or_else(tw_error)?);
+        let w1 = twiddle_fast::<INV>(tw.get(step2).copied().ok_or_else(tw_error)?);
+        for quad in data.chunks_exact_mut(4) {
+            if let [x0, x1, x2, x3] = quad {
+                quad_q15_fast([x0, x1, x2, x3], w0, w0, w1);
+            }
+        }
+        return Ok(());
+    }
+    let tw_hi = tw.get(half * step2..).ok_or_else(tw_error)?;
+    if 4 * half * half < data.len() {
+        pair_q15_fast_by_twiddle::<INV>(data, tw, tw_hi, half, step);
+    } else {
+        pair_q15_fast_by_block::<INV>(data, tw, tw_hi, half, step);
+    }
+    Ok(())
+}
+
+/// [`stage_pair_q15_fast`] with fewer twiddles than blocks: the three twiddles of a group stay
+/// in registers while the group runs through every block. `tw_hi` is `tw[half * step / 2..]`.
+fn pair_q15_fast_by_twiddle<const INV: bool>(
+    data: &mut [CQ15],
+    tw: &[CQ15],
+    tw_hi: &[CQ15],
+    half: usize,
+    step: usize,
+) {
+    let step2 = step / 2;
+    let twiddles = tw
+        .iter()
+        .step_by(step)
+        .zip(tw.iter().step_by(step2).zip(tw_hi.iter().step_by(step2)))
+        .take(half);
+    for (k, (w, (wa, wb))) in twiddles.enumerate() {
+        let (w, wa, wb) = (
+            twiddle_fast::<INV>(*w),
+            twiddle_fast::<INV>(*wa),
+            twiddle_fast::<INV>(*wb),
+        );
+        for block in data.chunks_exact_mut(4 * half) {
+            let (lo, hi) = block.split_at_mut(2 * half);
+            let (q0, q1) = lo.split_at_mut(half);
+            let (q2, q3) = hi.split_at_mut(half);
+            if let (Some(x0), Some(x1), Some(x2), Some(x3)) =
+                (q0.get_mut(k), q1.get_mut(k), q2.get_mut(k), q3.get_mut(k))
+            {
+                quad_q15_fast([x0, x1, x2, x3], w, wa, wb);
+            }
+        }
+    }
+}
+
+/// [`stage_pair_q15_fast`] block by block, the groups of a block with their twiddles in turn.
+fn pair_q15_fast_by_block<const INV: bool>(
+    data: &mut [CQ15],
+    tw: &[CQ15],
+    tw_hi: &[CQ15],
+    half: usize,
+    step: usize,
+) {
+    let step2 = step / 2;
+    for block in data.chunks_exact_mut(4 * half) {
+        let (lo, hi) = block.split_at_mut(2 * half);
+        let (q0, q1) = lo.split_at_mut(half);
+        let (q2, q3) = hi.split_at_mut(half);
+        let groups = q0
+            .iter_mut()
+            .zip(q1.iter_mut())
+            .zip(q2.iter_mut().zip(q3.iter_mut()));
+        let twiddles = tw
+            .iter()
+            .step_by(step)
+            .zip(tw.iter().step_by(step2).zip(tw_hi.iter().step_by(step2)));
+        for (((x0, x1), (x2, x3)), (w, (wa, wb))) in groups.zip(twiddles) {
+            quad_q15_fast(
+                [x0, x1, x2, x3],
+                twiddle_fast::<INV>(*w),
+                twiddle_fast::<INV>(*wa),
+                twiddle_fast::<INV>(*wb),
+            );
+        }
+    }
+}
+
+/// The stages of fixed scaling for data that cannot saturate (see [`fixed_cannot_saturate`]):
+/// every pair of stages in one pass, after a single first stage for odd `log2 N`. Without the
+/// clamps a group of four samples and its three twiddles fit the registers of x86-64 as well.
+fn stages_q15_fast<const INV: bool>(
+    data: &mut [CQ15],
+    tw: &[CQ15],
+    n: usize,
+    log2n: u32,
+    stride: usize,
+) -> Result<()> {
+    let mut s = 1;
+    if log2n % 2 == 1 {
+        stage_q15_fast::<INV>(data, tw, 1, (n >> 1) * stride)?;
+        s = 2;
+    }
+    while s < log2n {
+        stage_pair_q15_fast::<INV>(data, tw, 1 << (s - 1), (n >> s) * stride)?;
+        s += 2;
+    }
+    Ok(())
 }
 
 /// The block-floating-point shift of the next stage from the largest component magnitude.
@@ -692,6 +925,17 @@ fn stages_q15<const INV: bool, const COUNT: bool>(
             exponent += shift as i32;
         }
         return Ok((exponent, clamped));
+    }
+    // Only on 64-bit targets and wasm32 (406 instead of 454 instructions per sample at
+    // N = 1024 with simd128). On the other 32-bit targets (the embedded ones) the clamped
+    // stages are cheaper: the Cortex-M4 shifts and saturates in one `ssat`, and there the check
+    // and the paired passes took 347 instructions per sample against 328 without them.
+    if cfg!(any(target_pointer_width = "64", target_arch = "wasm32"))
+        && fixed_cannot_saturate(data, tw, n, stride)
+    {
+        // No clamp can act, so there is none to count.
+        stages_q15_fast::<INV>(data, tw, n, log2n, stride)?;
+        return Ok((log2n as i32, 0));
     }
     // `log2 N >= 4`: the first two stages in one pass, then one stage per pass.
     clamped += first_stages_q15::<INV, COUNT>(data, tw, (n >> 2) * stride)?;
@@ -1431,5 +1675,207 @@ mod tests {
         assert!(stage_pair_c32::<true>(&mut c, &tw, 2, 2).is_err());
         let tw4 = [C32::default(); 4];
         assert!(stage_pair_c32::<true>(&mut c, &tw4, 2, 2).is_ok());
+    }
+
+    /// `round(r e^(j phi))` with the components rounded half away from zero.
+    fn cq15_polar(r: f64, phi: f64) -> CQ15 {
+        CQ15 {
+            re: Q15(libm::round(r * libm::cos(phi)) as i16),
+            im: Q15(libm::round(r * libm::sin(phi)) as i16),
+        }
+    }
+
+    /// The transform of `x` with fixed scaling against the stage-by-stage formula with its
+    /// clamps, both directions: the same bits, and the formula clamps nothing.
+    fn assert_fixed_unclamped<Tw: AsRef<[CQ15]>>(p: &FftPlan<CQ15, Tw>, x: &[CQ15], what: &str) {
+        for dir in [Direction::Forward, Direction::Inverse] {
+            let mut want = x.to_vec();
+            let (e, c) = fft_cq15_stage_by_stage(p, &mut want, dir, Scaling::Default);
+            let mut got = x.to_vec();
+            let (scale, clamped) =
+                fft_cq15_counted::<true, _>(p, &mut got, dir, Scaling::Default).unwrap();
+            assert_eq!(got, want, "{what} {dir:?}");
+            assert_eq!((scale.exponent, clamped, c), (e, 0, 0), "{what} {dir:?}");
+        }
+    }
+
+    #[test]
+    fn fixed_scaling_needs_no_clamp_up_to_the_bound_of_the_fast_path() {
+        // Tones and constants of the largest modulus the stages without clamps accept, at
+        // every size up to 65 536 (16 stages, the largest growth by rounding): the clamped
+        // formula never clamps, and the transform gives its bits.
+        let r = 32_699.0;
+        for log2n in 4..=16 {
+            let n = 1usize << log2n;
+            let p = plan(n);
+            for k in [0, 1, n / 4 + 1, n / 3, n / 2 - 1, n - 1] {
+                let x: std::vec::Vec<CQ15> = (0..n)
+                    .map(|i| {
+                        let phi = 2.0 * core::f64::consts::PI * ((k * i) % n) as f64 / n as f64;
+                        cq15_polar(r, phi)
+                    })
+                    .collect();
+                assert!(fixed_cannot_saturate(&x, p.twiddles(), n, 1));
+                assert_fixed_unclamped(&p, &x, &format!("n={n} k={k}"));
+            }
+            for x0 in [
+                CQ15 {
+                    re: Q15(32_700),
+                    im: Q15(0),
+                },
+                CQ15 {
+                    re: Q15(-23_122),
+                    im: Q15(23_122),
+                },
+                CQ15 {
+                    re: Q15(0),
+                    im: Q15(-32_700),
+                },
+            ] {
+                let x = std::vec![x0; n];
+                assert!(fixed_cannot_saturate(&x, p.twiddles(), n, 1));
+                assert_fixed_unclamped(&p, &x, &format!("n={n} constant {x0:?}"));
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_scaling_needs_no_clamp_for_any_twiddles_within_the_bound() {
+        // Twiddles from `from_twiddles` of any angle with a modulus up to `2^15 + 1` (above
+        // those of `new`), and random inputs of the largest accepted modulus.
+        let mut s = 31u64;
+        let unit = |s: &mut u64| (lcg(s) % 1_000_000) as f64 / 1_000_000.0;
+        for n in sizes().chain([65_536]) {
+            let tw: std::vec::Vec<CQ15> = (0..n / 2)
+                .map(|_| {
+                    loop {
+                        let w = cq15_polar(32_768.9, 2.0 * core::f64::consts::PI * unit(&mut s));
+                        if norm_sq_q15(w) <= TW_MAX_SQ {
+                            break w;
+                        }
+                    }
+                })
+                .collect();
+            let p = FftPlan::from_twiddles(n, tw).unwrap();
+            for _ in 0..2 {
+                let x: std::vec::Vec<CQ15> = (0..n)
+                    .map(|_| cq15_polar(32_699.0, 2.0 * core::f64::consts::PI * unit(&mut s)))
+                    .collect();
+                assert!(fixed_cannot_saturate(&x, p.twiddles(), n, 1));
+                assert_fixed_unclamped(&p, &x, &format!("n={n}"));
+            }
+        }
+    }
+
+    #[test]
+    fn the_fast_path_is_taken_only_within_its_bounds() {
+        let n = 64;
+        let p = plan(n);
+        let tw = p.twiddles();
+        let mut x = std::vec![CQ15::default(); n];
+        assert!(fixed_cannot_saturate(&x, tw, n, 1));
+        x[17] = CQ15 {
+            re: Q15(32_700),
+            im: Q15(0),
+        };
+        assert!(fixed_cannot_saturate(&x, tw, n, 1));
+        x[63] = CQ15 {
+            re: Q15(32_700),
+            im: Q15(1),
+        };
+        assert!(!fixed_cannot_saturate(&x, tw, n, 1));
+        // The twiddles of `new` are inside, a twiddle of modulus above `2^15 + 1` is not,
+        // whatever the data; only the twiddles of the plan's stride count.
+        assert!(tw.iter().all(|w| norm_sq_q15(*w) <= TW_MAX_SQ));
+        let small = std::vec![CQ15::default(); n];
+        let mut bad = tw.to_vec();
+        bad[5] = CQ15 {
+            re: Q15(32_767),
+            im: Q15(370),
+        };
+        assert!(!fixed_cannot_saturate(&small, &bad, n, 1));
+        bad[5].im = Q15(360);
+        assert!(fixed_cannot_saturate(&small, &bad, n, 1));
+        bad[5].im = Q15(370);
+        let corner = CQ15 {
+            re: Q15(-32_768),
+            im: Q15(-32_768),
+        };
+        let mut odd = std::vec![CQ15::default(); n];
+        odd[1] = corner;
+        assert!(!fixed_cannot_saturate(&small, &odd, n / 2, 1));
+        assert!(fixed_cannot_saturate(&small, &odd, n / 2, 2));
+        // Outside the bounds the clamped stages run: the bits and the clamps of the formula.
+        let mut s = 37u64;
+        for (input, table) in [
+            (cq15_values(&mut s, n), tw.to_vec()),
+            (cq15_noise(&mut s, n, 32_767), tw.to_vec()),
+            (cq15_noise(&mut s, n, 2_000), std::vec![bad[5]; n / 2]),
+            (cq15_noise(&mut s, n, 20_000), std::vec![corner; n / 2]),
+        ] {
+            let p = FftPlan::from_twiddles(n, table).unwrap();
+            for dir in [Direction::Forward, Direction::Inverse] {
+                let mut want = input.clone();
+                let (e, c) = fft_cq15_stage_by_stage(&p, &mut want, dir, Scaling::Default);
+                let mut got = input.clone();
+                let (scale, clamped) =
+                    fft_cq15_counted::<true, _>(&p, &mut got, dir, Scaling::Default).unwrap();
+                assert_eq!((got, scale.exponent, clamped), (want, e, c), "{dir:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_fast_q15_butterfly_is_the_clamped_one_within_its_bounds() {
+        // Operands up to the largest modulus a stage of the fast path can see (32 726) and
+        // twiddles up to `2^15 + 1`, both directions; the corners of the twiddle components
+        // (`-32 768`, negated to `32 768` for the inverse) included.
+        let mut s = 41u64;
+        let unit = |s: &mut u64| (lcg(s) % 1_000_000) as f64 / 1_000_000.0;
+        let tau = 2.0 * core::f64::consts::PI;
+        let corners = [
+            CQ15 {
+                re: Q15(0),
+                im: Q15(-32_768),
+            },
+            CQ15 {
+                re: Q15(-32_768),
+                im: Q15(0),
+            },
+            CQ15 {
+                re: Q15(32_767),
+                im: Q15(360),
+            },
+        ];
+        let mut tried = 0;
+        for i in 0..200_000 {
+            let operand =
+                |s: &mut u64| cq15_polar(32_726.0 * libm::sqrt(unit(s)).max(0.9), tau * unit(s));
+            let a = operand(&mut s);
+            let c = operand(&mut s);
+            let w = match corners.get(i % 8) {
+                Some(w) => *w,
+                None => cq15_polar(32_768.9 * unit(&mut s).max(0.99), tau * unit(&mut s)),
+            };
+            let limit = 32_726 * 32_726;
+            if norm_sq_q15(a) > limit || norm_sq_q15(c) > limit || norm_sq_q15(w) > TW_MAX_SQ {
+                continue;
+            }
+            tried += 1;
+            for inverse in [false, true] {
+                let (mut wa, mut wc, mut clamped) = (a, c, 0usize);
+                let (x, y) = if inverse {
+                    butterfly_q15_wide::<true, 1, true>(&mut wa, &mut wc, w, &mut clamped);
+                    butterfly_q15_fast(widen(a), widen(c), twiddle_fast::<true>(w))
+                } else {
+                    butterfly_q15_wide::<false, 1, true>(&mut wa, &mut wc, w, &mut clamped);
+                    butterfly_q15_fast(widen(a), widen(c), twiddle_fast::<false>(w))
+                };
+                let what = format!("{a:?} {c:?} {w:?} {inverse}");
+                assert_eq!(clamped, 0, "{what}");
+                assert_eq!((x, y), (widen(wa), widen(wc)), "{what}");
+            }
+        }
+        assert!(tried > 150_000);
     }
 }

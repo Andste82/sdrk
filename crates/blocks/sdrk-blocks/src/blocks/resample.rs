@@ -1,4 +1,4 @@
-//! `resampler`: rational polyphase resampler and ppm-tunable polyphase resampler.
+//! `resample`: rational polyphase resampler and ppm-tunable polyphase resampler.
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::kernels::decim::{Resample, ResampleReal, ResampleRealState, ResampleState};
@@ -21,9 +21,9 @@ pub const TUNED_PHASES: usize = 128;
 /// Extra samples of the tuned resampler's work buffer beyond the filter length.
 const WORK_EXTRA: usize = 64;
 
-/// Description of the `resampler` block.
+/// Description of the `resample` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
-    kind: "resampler",
+    kind: "resample",
     summary: "Changes the sample rate by a rational factor, optionally tunable in ppm.",
     details: "Resamples to rate_out_hz. The default mode is an exact rational polyphase \
         resampler L/M with the ratio reduced from the two rates (numerator and denominator at \
@@ -134,16 +134,16 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &["rate_out_hz"],
 };
 
-/// Configuration of [`ResamplerBlock`] and [`ResamplerRealBlock`].
+/// Configuration of [`ResampleBlock`] and [`ResampleRealBlock`].
 ///
 /// ```
-/// use sdrk_blocks::ResamplerConfig;
-/// let cfg = ResamplerConfig { rate_out_hz: 8_000.0, ..ResamplerConfig::default() };
+/// use sdrk_blocks::ResampleConfig;
+/// let cfg = ResampleConfig { rate_out_hz: 8_000.0, ..ResampleConfig::default() };
 /// assert!(cfg.validate(sdrk::Rate::hz(48_000)?).is_ok());
 /// # Ok::<(), sdrk_blocks::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ResamplerConfig {
+pub struct ResampleConfig {
     /// Output sample rate in Hz (a whole number).
     pub rate_out_hz: f64,
     /// Cutoff in Hz; `None` means `0.45 * min(rate_in, rate_out)`.
@@ -160,7 +160,7 @@ pub struct ResamplerConfig {
     pub ppm: f64,
 }
 
-impl Default for ResamplerConfig {
+impl Default for ResampleConfig {
     fn default() -> Self {
         Self {
             rate_out_hz: 48_000.0,
@@ -191,7 +191,7 @@ pub(crate) enum PlanMode {
     Tuned { k: usize, beta: f64 },
 }
 
-impl ResamplerConfig {
+impl ResampleConfig {
     pub(crate) fn plan(&self, rate_in: Rate) -> Result<ResPlan> {
         let out = self.rate_out_hz;
         if !(1.0..=HZ_LIMIT).contains(&out) || libm::floor(out) != out {
@@ -280,13 +280,13 @@ impl ResamplerConfig {
     /// Checks the configuration against the input sample rate.
     ///
     /// ```
-    /// use sdrk_blocks::ResamplerConfig;
+    /// use sdrk_blocks::ResampleConfig;
     /// let rate = sdrk::Rate::hz(48_000)?;
     /// // 44100 / 48000 = 147 / 160 needs more than the default 1023 taps in the rational mode.
-    /// let cfg = ResamplerConfig { rate_out_hz: 44_100.0, ..ResamplerConfig::default() };
+    /// let cfg = ResampleConfig { rate_out_hz: 44_100.0, ..ResampleConfig::default() };
     /// assert!(cfg.validate(rate).is_err());
-    /// assert!(ResamplerConfig { max_taps: 8192, ..cfg }.validate(rate).is_ok());
-    /// assert!(ResamplerConfig { tunable: true, ..cfg }.validate(rate).is_ok());
+    /// assert!(ResampleConfig { max_taps: 8192, ..cfg }.validate(rate).is_ok());
+    /// assert!(ResampleConfig { tunable: true, ..cfg }.validate(rate).is_ok());
     /// # Ok::<(), sdrk::Error>(())
     /// ```
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
@@ -296,8 +296,8 @@ impl ResamplerConfig {
     /// Sets a parameter by its description name; checks kind and range.
     ///
     /// ```
-    /// use sdrk_blocks::{ParamValue, ResamplerConfig};
-    /// let mut cfg = ResamplerConfig::default();
+    /// use sdrk_blocks::{ParamValue, ResampleConfig};
+    /// let mut cfg = ResampleConfig::default();
     /// cfg.set("rate_out_hz", ParamValue::F64(44_100.0))?;
     /// cfg.set("tunable", ParamValue::Bool(true))?;
     /// assert_eq!(cfg.get("tunable"), Ok(ParamValue::Bool(true)));
@@ -540,28 +540,28 @@ fn tuned_delay(k: usize) -> Delay {
 /// Resampler for complex signals (`C32`, `CQ15`).
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, Block, ResamplerBlock, ResamplerConfig};
+/// use sdrk_blocks::{ArenaStorage, Block, ResampleBlock, ResampleConfig};
 /// use sdrk::{Rate, C32};
-/// let cfg = ResamplerConfig { rate_out_hz: 2_000.0, ..ResamplerConfig::default() };
+/// let cfg = ResampleConfig { rate_out_hz: 2_000.0, ..ResampleConfig::default() };
 /// let rate = Rate::hz(1_000)?;
-/// let bytes = ResamplerBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
+/// let bytes = ResampleBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
 /// let mut mem = vec![0u8; bytes + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
-/// let mut block = ResamplerBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
+/// let mut block = ResampleBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
 /// let mut out = [C32::default(); 64];
 /// let p = block.process(&[C32::new(1.0, 0.0); 16], &mut out)?;
 /// assert_eq!((p.consumed, p.produced), (16, 32)); // 1 kHz to 2 kHz doubles the count
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct ResamplerBlock<T: BlockSample, S: Storage> {
-    config: ResamplerConfig,
+pub struct ResampleBlock<T: BlockSample, S: Storage> {
+    config: ResampleConfig,
     ratio: Ratio,
     engine: Engine<T, S>,
 }
 
-impl<T: BlockSample, S: Storage> core::fmt::Debug for ResamplerBlock<T, S> {
+impl<T: BlockSample, S: Storage> core::fmt::Debug for ResampleBlock<T, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ResamplerBlock")
+        f.debug_struct("ResampleBlock")
             .field("config", &self.config)
             .field("ratio", &self.ratio)
             .finish_non_exhaustive()
@@ -573,17 +573,17 @@ enum Engine<T: BlockSample, S: Storage> {
     Tuned(TunedCore<T, S>),
 }
 
-fn resolve(config: &ResamplerConfig, plan: &ResPlan) -> ResamplerConfig {
+fn resolve(config: &ResampleConfig, plan: &ResPlan) -> ResampleConfig {
     let mut resolved = *config;
     resolved.cutoff_hz = Some(plan.spec.cutoff_hz);
     resolved.transition_hz = Some(plan.spec.transition_hz);
     resolved
 }
 
-impl<T: BlockSample, S: Storage> ResamplerBlock<T, S> {
+impl<T: BlockSample, S: Storage> ResampleBlock<T, S> {
     /// Designs the filter and creates the block; filter, history and work buffers come from
     /// `storage`.
-    pub fn new(config: &ResamplerConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &ResampleConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         let plan = config.plan(rate_in)?;
         let engine = match plan.mode {
             PlanMode::Rational { l, m, taps } => {
@@ -608,17 +608,17 @@ impl<T: BlockSample, S: Storage> ResamplerBlock<T, S> {
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
     /// address (an unaligned slice may need up to 15 bytes more).
-    pub fn storage_bytes(config: &ResamplerConfig, rate_in: Rate) -> Result<usize> {
+    pub fn storage_bytes(config: &ResampleConfig, rate_in: Rate) -> Result<usize> {
         config.storage::<T>(rate_in)
     }
 
     /// Nominal output rate (`rate_out_hz`; `ppm` is not included).
-    pub fn rate_out(config: &ResamplerConfig, rate_in: Rate) -> Result<Rate> {
+    pub fn rate_out(config: &ResampleConfig, rate_in: Rate) -> Result<Rate> {
         Ok(config.plan(rate_in)?.rate_out)
     }
 }
 
-impl<T: BlockSample, S: Storage> Block for ResamplerBlock<T, S>
+impl<T: BlockSample, S: Storage> Block for ResampleBlock<T, S>
 where
     Sdrk: Resample<T>,
 {
@@ -697,28 +697,28 @@ where
 /// Resampler for real signals (`f32`, `Q15`), for example audio.
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, Block, ResamplerConfig, ResamplerRealBlock};
+/// use sdrk_blocks::{ArenaStorage, Block, ResampleConfig, ResampleRealBlock};
 /// use sdrk::Rate;
-/// let cfg = ResamplerConfig { rate_out_hz: 1_000.0, ..ResamplerConfig::default() };
+/// let cfg = ResampleConfig { rate_out_hz: 1_000.0, ..ResampleConfig::default() };
 /// let rate = Rate::hz(2_000)?;
-/// let bytes = ResamplerRealBlock::<f32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
+/// let bytes = ResampleRealBlock::<f32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
 /// let mut mem = vec![0u8; bytes + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
-/// let mut block = ResamplerRealBlock::<f32, _>::new(&cfg, rate, &mut arena)?;
+/// let mut block = ResampleRealBlock::<f32, _>::new(&cfg, rate, &mut arena)?;
 /// let mut out = [0.0f32; 64];
 /// let p = block.process(&[1.0; 32], &mut out)?;
 /// assert_eq!((p.consumed, p.produced), (32, 16));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct ResamplerRealBlock<R: BlockReal, S: Storage> {
-    config: ResamplerConfig,
+pub struct ResampleRealBlock<R: BlockReal, S: Storage> {
+    config: ResampleConfig,
     ratio: Ratio,
     engine: RealEngine<R, S>,
 }
 
-impl<R: BlockReal, S: Storage> core::fmt::Debug for ResamplerRealBlock<R, S> {
+impl<R: BlockReal, S: Storage> core::fmt::Debug for ResampleRealBlock<R, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ResamplerRealBlock")
+        f.debug_struct("ResampleRealBlock")
             .field("config", &self.config)
             .field("ratio", &self.ratio)
             .finish_non_exhaustive()
@@ -730,10 +730,10 @@ enum RealEngine<R: BlockReal, S: Storage> {
     Tuned(TunedCore<R, S>),
 }
 
-impl<R: BlockReal, S: Storage> ResamplerRealBlock<R, S> {
+impl<R: BlockReal, S: Storage> ResampleRealBlock<R, S> {
     /// Designs the filter and creates the block; filter, history and work buffers come from
     /// `storage`.
-    pub fn new(config: &ResamplerConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &ResampleConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         let plan = config.plan(rate_in)?;
         let engine = match plan.mode {
             PlanMode::Rational { l, m, taps } => {
@@ -758,17 +758,17 @@ impl<R: BlockReal, S: Storage> ResamplerRealBlock<R, S> {
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
     /// address (an unaligned slice may need up to 15 bytes more).
-    pub fn storage_bytes(config: &ResamplerConfig, rate_in: Rate) -> Result<usize> {
+    pub fn storage_bytes(config: &ResampleConfig, rate_in: Rate) -> Result<usize> {
         config.storage::<R>(rate_in)
     }
 
     /// Nominal output rate (`rate_out_hz`; `ppm` is not included).
-    pub fn rate_out(config: &ResamplerConfig, rate_in: Rate) -> Result<Rate> {
+    pub fn rate_out(config: &ResampleConfig, rate_in: Rate) -> Result<Rate> {
         Ok(config.plan(rate_in)?.rate_out)
     }
 }
 
-impl<R: BlockReal, S: Storage> Block for ResamplerRealBlock<R, S>
+impl<R: BlockReal, S: Storage> Block for ResampleRealBlock<R, S>
 where
     Sdrk: ResampleReal<R>,
 {

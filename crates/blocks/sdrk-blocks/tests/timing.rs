@@ -30,8 +30,8 @@ use sdrk::{C32, CQ15, ComplexSample, Delay, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::{
     Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResamplerBlock, ResamplerConfig,
-    ResamplerRealBlock, ScaleBlock, ScaleConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, ScaleBlock, ScaleConfig,
 };
 use sdrk_core::kernels::{
     decim::Resample,
@@ -180,11 +180,11 @@ where
         (72_000, 3, 2),
         (32_000, 2, 3),
     ] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: out_hz as f64,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
-        let make = || ResamplerBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+        let make = || ResampleBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
         let t = make().timing();
         assert_eq!(
             (t.ratio, t.kind),
@@ -198,11 +198,11 @@ where
         );
     }
     // The tunable resampler declares a variable ratio and its own delay.
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         tunable: true,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
-    let make = || ResamplerBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let make = || ResampleBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
     let t = make().timing();
     assert_eq!((t.ratio, t.kind), (Ratio::ONE, RatioKind::Variable));
     let measured = measured_delay::<T, _>(make, 1.0, 1, 200);
@@ -211,12 +211,12 @@ where
         "tuned: {measured} vs {}",
         t.delay.as_f64()
     );
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         rate_out_hz: 44_100.0,
         tunable: true,
         ..cfg
     };
-    let t = ResamplerBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage)
+    let t = ResampleBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage)
         .unwrap()
         .timing();
     assert_eq!(
@@ -239,16 +239,16 @@ fn filters_and_resamplers_declare_the_delay_they_have() {
 
 #[test]
 fn the_real_resampler_declares_the_same_timing() {
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         rate_out_hz: 32_000.0,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
-    let c = ResamplerBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
-    let r = ResamplerRealBlock::<f32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let c = ResampleBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let r = ResampleRealBlock::<f32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
     assert_eq!(c.timing(), r.timing());
     let mut x = vec![0.0f32; 600];
     x[300] = 0.5;
-    let mut block = ResamplerRealBlock::<f32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let mut block = ResampleRealBlock::<f32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
     let y = run_block(&mut block, &x, None);
     let i = y
         .iter()
@@ -398,11 +398,11 @@ fn measured_output_counts_follow_the_declared_ratio() {
             &x,
         ),
         count(
-            ResamplerBlock::<C32, _>::new(
-                &ResamplerConfig {
+            ResampleBlock::<C32, _>::new(
+                &ResampleConfig {
                     rate_out_hz: 44_100.0,
                     max_taps: 8192,
-                    ..ResamplerConfig::default()
+                    ..ResampleConfig::default()
                 },
                 r,
                 &mut VecStorage,
@@ -411,11 +411,11 @@ fn measured_output_counts_follow_the_declared_ratio() {
             &x,
         ),
         count(
-            ResamplerBlock::<C32, _>::new(
-                &ResamplerConfig {
+            ResampleBlock::<C32, _>::new(
+                &ResampleConfig {
                     rate_out_hz: 44_100.0,
                     tunable: true,
-                    ..ResamplerConfig::default()
+                    ..ResampleConfig::default()
                 },
                 r,
                 &mut VecStorage,

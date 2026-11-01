@@ -22,7 +22,7 @@
 
 use num_complex::Complex32;
 use sdrk::{C32, Rate};
-use sdrk_blocks::{Block, FmDemodBlock, FmDemodConfig, ResamplerBlock, ResamplerConfig};
+use sdrk_blocks::{Block, FmDemodBlock, FmDemodConfig, ResampleBlock, ResampleConfig};
 use sdrk_device::{BlockMeta, SampleIndex, TimeAnchor, TimeSource};
 use sdrk_pipeline::{EventKind, InputData, PipelineSpec, VecStorage};
 use sdrk_system_tests::{build, drain_events};
@@ -41,7 +41,7 @@ const FLOW: &str = r#"{
   "settings": { "precision": "f32", "max_chunk": 4800 },
   "inputs": { "iq": { "type": "c32", "rate_hz": 240000 } },
   "nodes": {
-    "rs": { "kind": "resampler", "params": { "rate_out_hz": 240000, "tunable": true, "ppm": 37.5 } },
+    "rs": { "kind": "resample", "params": { "rate_out_hz": 240000, "tunable": true, "ppm": 37.5 } },
     "demod": { "kind": "fm_demod", "params": { "audio_decimation": 5, "deemphasis_us": 50 } }
   },
   "edges": [
@@ -111,13 +111,13 @@ fn long_run(seconds: u64) {
 
     // Declared delays of the two blocks.
     let rate = Rate::hz(RATE).unwrap();
-    let rs_cfg = ResamplerConfig {
+    let rs_cfg = ResampleConfig {
         rate_out_hz: RATE as f64,
         tunable: true,
         ppm: PPM,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
-    let rs_block = ResamplerBlock::<C32, _>::new(&rs_cfg, rate, &mut VecStorage).unwrap();
+    let rs_block = ResampleBlock::<C32, _>::new(&rs_cfg, rate, &mut VecStorage).unwrap();
     let d_rs = rs_block.timing().delay;
     let demod_cfg = FmDemodConfig {
         audio_decimation: 5,

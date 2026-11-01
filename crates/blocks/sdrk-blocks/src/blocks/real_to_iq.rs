@@ -1,19 +1,19 @@
-//! `real_to_complex`: shift by fs/4 and halfband decimation of a real signal.
+//! `real_to_iq`: shift by fs/4 and halfband decimation of a real signal.
 
 use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::kernels::halfband::{RealToComplex, RealToComplexState};
 
 use super::divide_rate;
-use super::halfband::{HalfbandConfig, PARAMS, timing_of};
+use super::halfband_decimate::{HalfbandDecimateConfig, PARAMS, timing_of};
 use crate::block::{Block, BlockTiming, ParamValue, runtime_param};
 use crate::describe::{BlockDescription, PortDesc, PortType};
 use crate::error::Result;
 use crate::sample::{BlockSample, TunedElem};
 use crate::storage::Storage;
 
-/// Description of the `real_to_complex` block.
+/// Description of the `real_to_iq` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
-    kind: "real_to_complex",
+    kind: "real_to_iq",
     summary: "Turns a real signal into a complex one at half the rate (fs/4 shift and halfband).",
     details: "Multiplies the real input by 1, -j, -1, j (a shift down by a quarter of the input \
         rate) and applies a halfband low-pass with a decimation by 2, in one step. A real \
@@ -43,13 +43,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// construction or `reset`, the input is multiplied by `(-j)^n` first.
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, Block, HalfbandConfig, RealToComplexBlock};
+/// use sdrk_blocks::{ArenaStorage, Block, HalfbandDecimateConfig, RealToIqBlock};
 /// use sdrk::{Rate, C32};
-/// let cfg = HalfbandConfig::default();
+/// let cfg = HalfbandDecimateConfig::default();
 /// let rate = Rate::hz(48_000)?;
-/// let mut mem = vec![0u8; RealToComplexBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)? + 16];
+/// let mut mem = vec![0u8; RealToIqBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)? + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
-/// let mut block = RealToComplexBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
+/// let mut block = RealToIqBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
 /// let mut out = vec![C32::default(); 200];
 /// // A tone at fs/4 (1, 0, -1, 0, ...) is the output centre: it becomes a constant of half the
 /// // amplitude. (A constant input, at 0 Hz, would land on the band edge at -fs/4.)
@@ -59,22 +59,22 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// assert!((out[199].re - 0.5).abs() < 1e-3 && out[199].im.abs() < 1e-3);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct RealToComplexBlock<T: BlockSample, S: Storage> {
-    config: HalfbandConfig,
+pub struct RealToIqBlock<T: BlockSample, S: Storage> {
+    config: HalfbandDecimateConfig,
     state: RealToComplexState<T, S::Buf<T::Real>, S::Buf<T>>,
 }
 
-impl<T: BlockSample, S: Storage> core::fmt::Debug for RealToComplexBlock<T, S> {
+impl<T: BlockSample, S: Storage> core::fmt::Debug for RealToIqBlock<T, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RealToComplexBlock")
+        f.debug_struct("RealToIqBlock")
             .field("config", &self.config)
             .finish_non_exhaustive()
     }
 }
 
-impl<T: BlockSample, S: Storage> RealToComplexBlock<T, S> {
+impl<T: BlockSample, S: Storage> RealToIqBlock<T, S> {
     /// Designs the taps and creates the block; taps and history come from `storage`.
-    pub fn new(config: &HalfbandConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &HalfbandDecimateConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
         let taps = config.alloc_taps::<T::Real, S>(rate_in, storage, <T as TunedElem>::tap)?;
         let hist = storage.alloc::<T>(taps.as_ref().len() - 1)?;
@@ -86,12 +86,12 @@ impl<T: BlockSample, S: Storage> RealToComplexBlock<T, S> {
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
     /// address (an unaligned slice may need up to 15 bytes more).
-    pub fn storage_bytes(config: &HalfbandConfig, rate_in: Rate) -> Result<usize> {
+    pub fn storage_bytes(config: &HalfbandDecimateConfig, rate_in: Rate) -> Result<usize> {
         config.plan_bytes::<T::Real, T>(rate_in)
     }
 
     /// Output rate for the configuration (half the input rate).
-    pub fn rate_out(config: &HalfbandConfig, rate_in: Rate) -> Result<Rate> {
+    pub fn rate_out(config: &HalfbandDecimateConfig, rate_in: Rate) -> Result<Rate> {
         config.validate(rate_in)?;
         divide_rate(rate_in, 2)
     }
@@ -102,7 +102,7 @@ impl<T: BlockSample, S: Storage> RealToComplexBlock<T, S> {
     }
 }
 
-impl<T: BlockSample, S: Storage> Block for RealToComplexBlock<T, S>
+impl<T: BlockSample, S: Storage> Block for RealToIqBlock<T, S>
 where
     Sdrk: RealToComplex<T>,
 {

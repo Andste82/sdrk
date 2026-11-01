@@ -29,7 +29,7 @@ use num_complex::Complex64;
 use sdrk::{C32, CQ15, ComplexSample};
 use sdrk_blocks::{
     Block, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FmModBlock, FmModConfig, FrameBlock,
-    ParamValue, ResamplerBlock, ResamplerConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
+    ParamValue, ResampleBlock, ResampleConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
     SpectrumConfig,
 };
 use sdrk_testkit::VecStorage;
@@ -266,12 +266,12 @@ fn fm_mod_deviation_changes_the_phase_step() {
 
 #[test]
 fn ppm_changes_the_output_rate_of_a_tunable_resampler() {
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         tunable: true,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     let input = vec![C32::new(0.5, 0.0); 20_000];
-    let mut block = ResamplerBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let mut block = ResampleBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
     let base = run_block(&mut block, &input, None).len();
     assert!((19_999..=20_001).contains(&base));
     block.set_param("ppm", ParamValue::F64(1000.0)).unwrap();

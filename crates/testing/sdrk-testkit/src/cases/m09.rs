@@ -1,5 +1,5 @@
 //! Suite cases of M09: the `dot` kernels and the blocks (`ddc`, `fm_demod`, `spectrum`,
-//! `resampler`).
+//! `resample`).
 //!
 //! The blocks get their memory from the suite arena through `ArenaStorage`, so the cases run on
 //! microcontrollers too.
@@ -12,8 +12,8 @@ use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::design::DesignSpec;
 use sdrk_blocks::{
-    ARENA_ALIGN, ArenaStorage, Block, BlockSample, DdcBlock, DdcConfig, FrameBlock, ResamplerBlock,
-    ResamplerConfig, SpectrumBlock, SpectrumConfig, TunedElem,
+    ARENA_ALIGN, ArenaStorage, Block, BlockSample, DdcBlock, DdcConfig, FrameBlock, ResampleBlock,
+    ResampleConfig, SpectrumBlock, SpectrumConfig, TunedElem,
 };
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate};
 use sdrk_core::kernels::dot::{Dot, DotReal};
@@ -426,21 +426,21 @@ where
     T: BlockSample,
     Sdrk: sdrk_core::kernels::decim::Resample<T>,
 {
-    const CASE: &str = "block_resampler_ppm_count";
+    const CASE: &str = "block_resample_ppm_count";
     const SAMPLES: usize = 20_000;
     const PIECE: usize = 250;
     let rate = Rate::hz(48_000)?;
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         tunable: true,
         ppm: 1000.0,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     let mut c = arena.carver();
     let mut storage = arena_for(
         &mut c,
-        ResamplerBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?,
+        ResampleBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?,
     )?;
-    let mut block = ResamplerBlock::<T, _>::new(&cfg, rate, &mut storage)?;
+    let mut block = ResampleBlock::<T, _>::new(&cfg, rate, &mut storage)?;
     let input = c.take::<T>(PIECE)?;
     let out = c.take::<T>(PIECE + 16)?;
     let mut rng = Pcg32::new(seed, 6);
@@ -450,7 +450,7 @@ where
             (rng.next_f64() - 0.5) * 0.5,
         ));
     }
-    let count = |block: &mut ResamplerBlock<T, _>, out: &mut [T]| -> Result<usize, Failure> {
+    let count = |block: &mut ResampleBlock<T, _>, out: &mut [T]| -> Result<usize, Failure> {
         let mut produced = 0usize;
         for _ in 0..SAMPLES / PIECE {
             let mut rest: &[T] = input;
@@ -485,7 +485,7 @@ where
     })
 }
 
-pub(super) fn block_resampler_ppm_count(arena: &mut Arena<'_>) -> Result<(), Failure> {
+pub(super) fn block_resample_ppm_count(arena: &mut Arena<'_>) -> Result<(), Failure> {
     ppm_count_for::<C32>(arena, 920)?;
     ppm_count_for::<CQ15>(arena, 921)
 }

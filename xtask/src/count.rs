@@ -2867,13 +2867,13 @@ fn pipeline(root: &Path, write: bool) -> anyhow::Result<bool> {
         ssb_latency.get("latency_samples").unwrap_or(&Value::Null),
         ssb_latency.get("latency_us").unwrap_or(&Value::Null)
     );
-    // The whole blocks `fm_demod` and `fm_stereo` on a `cf32` input at 480 kHz (M24): the vector
+    // The whole blocks `fm_demod` and `fm_stereo_demod` on a `cf32` input at 480 kHz (M24): the vector
     // paths and the fallback.
     let fallback_binary = build_pipeline("pipeline-fallback", " --cfg sdrk_fallback_only")?;
     let mut blocks_480 = serde_json::Map::new();
     for (chain, name, block) in [
         ("fm480", "fm_demod_480k", "fm_demod"),
-        ("stereo480", "fm_stereo_480k", "fm_stereo"),
+        ("stereo480", "fm_stereo_demod_480k", "fm_stereo_demod"),
     ] {
         let (vector, latency) = measure(Some(chain))?;
         let (fallback, _) = measure_with(&fallback_binary, Some(chain))?;

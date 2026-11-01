@@ -414,7 +414,7 @@ pub(super) fn extremes_m24(arena: &mut Arena<'_>) -> Result<(), Failure> {
 // block and end to end (E2E-STEREO)
 // ---------------------------------------------------------------------------------------
 
-const BLOCK_SEP: &str = "block_fm_stereo_separation";
+const BLOCK_SEP: &str = "block_fm_stereo_demod_separation";
 
 fn separation_case<T>(arena: &mut Arena<'_>, min_db: f64) -> Result<(), Failure>
 where
@@ -434,14 +434,14 @@ where
     })
 }
 
-pub(super) fn block_fm_stereo_separation(arena: &mut Arena<'_>) -> Result<(), Failure> {
+pub(super) fn block_fm_stereo_demod_separation(arena: &mut Arena<'_>) -> Result<(), Failure> {
     separation_case::<C32>(arena, MIN_SEPARATION_DB.0)?;
     separation_case::<CQ15>(arena, MIN_SEPARATION_DB.1)
 }
 
-const BLOCK_MONO: &str = "block_fm_stereo_mono";
+const BLOCK_MONO: &str = "block_fm_stereo_demod_mono";
 
-pub(super) fn block_fm_stereo_mono(arena: &mut Arena<'_>) -> Result<(), Failure> {
+pub(super) fn block_fm_stereo_demod_mono(arena: &mut Arena<'_>) -> Result<(), Failure> {
     for q15 in [false, true] {
         let (differing, locked) = if q15 {
             measure_block_mono::<CQ15>(arena)?

@@ -4,7 +4,7 @@
 //! 1.8 MHz at 4.8 MS/s: `Re{fm_baseband(..) e^(j 2 pi 1.8e6 n / fs)}` with the amplitude 0.45,
 //! plus real Gaussian noise (sigma 0.005), encoded to `RS16` with the independent testkit
 //! encoder. The receiver is the chain of the example flow `real_input_fm_receiver`:
-//! `ConvertRealBlock` (`rs16`), `RealToComplexBlock` (the defaults: transition 0.1 fs, 60 dB; the
+//! `ConvertRealBlock` (`rs16`), `RealToIqBlock` (the defaults: transition 0.1 fs, 60 dB; the
 //! output centre is 1.2 MHz of the input), `DdcBlock` (+600 kHz, decimation 10) and
 //! `FmDemodBlock` (75 kHz, 50 us, 15 kHz, decimation 5).
 //!
@@ -18,7 +18,7 @@ use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::{
     ARENA_ALIGN, ArenaStorage, Block, BlockReal, BlockSample, ConvertConfig, ConvertRealBlock,
-    DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig, HalfbandConfig, RealToComplexBlock,
+    DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig, HalfbandDecimateConfig, RealToIqBlock,
 };
 use sdrk_core::kernels::convert::ConvertReal;
 use sdrk_core::kernels::decim::ResampleReal;
@@ -85,7 +85,7 @@ where
     let rate_real = Rate::hz(REAL_RATE_HZ)?;
     let rate_complex = Rate::hz(REAL_RATE_HZ / 2)?;
     let rate_audio_in = Rate::hz(REAL_RATE_HZ / 20)?;
-    let half_cfg = HalfbandConfig::default();
+    let half_cfg = HalfbandDecimateConfig::default();
     // The centre of the complex signal is 1.2 MHz of the input: tune f - 1.2 MHz.
     let ddc_cfg = DdcConfig {
         frequency_hz: REAL_IF_HZ - (REAL_RATE_HZ / 4) as f64,
@@ -103,8 +103,7 @@ where
     };
     let mut c = arena.carver();
     let half_bytes =
-        RealToComplexBlock::<T, ArenaStorage<'_>>::storage_bytes(&half_cfg, rate_real)?
-            + ARENA_ALIGN;
+        RealToIqBlock::<T, ArenaStorage<'_>>::storage_bytes(&half_cfg, rate_real)? + ARENA_ALIGN;
     let ddc_bytes =
         DdcBlock::<T, ArenaStorage<'_>>::storage_bytes(&ddc_cfg, rate_complex)? + ARENA_ALIGN;
     let demod_bytes =
@@ -120,7 +119,7 @@ where
         rate_real,
         &mut ArenaStorage::new(&mut []),
     )?;
-    let mut iq_block = RealToComplexBlock::<T, _>::new(&half_cfg, rate_real, &mut half_store)?;
+    let mut iq_block = RealToIqBlock::<T, _>::new(&half_cfg, rate_real, &mut half_store)?;
     let mut ddc = DdcBlock::<T, _>::new(&ddc_cfg, rate_complex, &mut ddc_store)?;
     let mut demod = FmDemodBlock::<T, _>::new(&demod_cfg, rate_audio_in, &mut demod_store)?;
 

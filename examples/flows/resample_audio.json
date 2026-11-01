@@ -15,7 +15,7 @@
   },
   "nodes": {
     "to_cd": {
-      "kind": "resampler",
+      "kind": "resample",
       "params": {
         "max_taps": 8192,
         "rate_out_hz": 44100

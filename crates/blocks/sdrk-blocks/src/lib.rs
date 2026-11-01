@@ -54,10 +54,12 @@ pub use blocks::duc::{DucBlock, DucConfig};
 pub use blocks::fir::{FirBlock, FirConfig};
 pub use blocks::fm_demod::{FM_CHUNK, FmDemodBlock, FmDemodConfig};
 pub use blocks::fm_mod::{FmModBlock, FmModConfig};
-pub use blocks::fm_stereo::{FM_STEREO_CHUNK, FmStereoBlock, FmStereoConfig};
-pub use blocks::halfband::{HalfbandBlock, HalfbandConfig, HalfbandRealBlock};
-pub use blocks::real_to_complex::RealToComplexBlock;
-pub use blocks::resampler::{ResamplerBlock, ResamplerConfig, ResamplerRealBlock, TUNED_PHASES};
+pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
+pub use blocks::halfband_decimate::{
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
+};
+pub use blocks::real_to_iq::RealToIqBlock;
+pub use blocks::resample::{ResampleBlock, ResampleConfig, ResampleRealBlock, TUNED_PHASES};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};

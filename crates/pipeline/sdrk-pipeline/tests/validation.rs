@@ -195,6 +195,22 @@ fn a_structure_error_stops_the_graph_stage() {
 }
 
 #[test]
+fn the_kind_names_before_m24_1_are_unknown() {
+    // M24.1 renamed four kinds without aliases: the old names are like any unregistered name.
+    for old in ["resampler", "halfband", "real_to_complex", "fm_stereo"] {
+        let mut doc = base();
+        doc["nodes"]["g"] = json!({ "kind": old });
+        let report = validate_value(&doc);
+        assert_eq!(
+            codes(&report),
+            BTreeSet::from([("unknown_kind".into(), "nodes.g.kind".into())]),
+            "{old}"
+        );
+        assert!(Registry::standard().factory(old).is_none(), "{old}");
+    }
+}
+
+#[test]
 fn syntax_errors_carry_line_and_column() {
     let report = validate("{\n  \"sdrk\": 1,\n  \"name\": \n}");
     assert_eq!(report.errors.len(), 1);
@@ -427,8 +443,8 @@ fn types_are_checked_at_every_edge() {
     let doc = json!({
         "sdrk": 1, "name": "t",
         "inputs": { "iq": { "type": "c32", "rate_hz": 48000 }, "au": { "type": "f32", "rate_hz": 48000 } },
-        "nodes": { "m": { "kind": "fm_mod" }, "r": { "kind": "resampler", "params": { "rate_out_hz": 96000 } },
-                   "r2": { "kind": "resampler", "params": { "rate_out_hz": 96000 } } },
+        "nodes": { "m": { "kind": "fm_mod" }, "r": { "kind": "resample", "params": { "rate_out_hz": 96000 } },
+                   "r2": { "kind": "resample", "params": { "rate_out_hz": 96000 } } },
         "edges": [ { "from": "iq", "to": "m" }, { "from": "m", "to": "o1" }, { "from": "au", "to": "r" },
                    { "from": "r", "to": "o2" }, { "from": "iq", "to": "r2" }, { "from": "r2", "to": "o3" } ],
         "outputs": { "o1": { "type": "stream" }, "o2": { "type": "stream" }, "o3": { "type": "stream" } }
@@ -553,7 +569,7 @@ fn raw_formats_that_cannot_stream_are_rejected_at_the_input() {
     let doc = json!({
         "sdrk": 1, "name": "t",
         "inputs": { "au": { "type": "f32", "rate_hz": 48000 } },
-        "nodes": { "r": { "kind": "resampler", "params": { "rate_out_hz": 96000 } } },
+        "nodes": { "r": { "kind": "resample", "params": { "rate_out_hz": 96000 } } },
         "edges": [ { "from": "au", "to": "r" }, { "from": "r", "to": "out" } ],
         "outputs": { "out": { "type": "stream", "format": "rs16" } }
     });
@@ -649,14 +665,14 @@ fn delays_of_validate_match_the_blocks_for_every_kind() {
             json!({ "audio_decimation": 2, "audio_cutoff_hz": 5000 }),
         ),
         (
-            "resampler",
+            "resample",
             json!({ "rate_out_hz": 44100, "max_taps": 8192 }),
         ),
         (
-            "resampler",
+            "resample",
             json!({ "rate_out_hz": 44100, "tunable": true, "ppm": 100 }),
         ),
-        ("resampler", json!({ "rate_out_hz": 96000 })),
+        ("resample", json!({ "rate_out_hz": 96000 })),
     ];
     let registry = Registry::standard();
     for precision in ["f32", "q15"] {

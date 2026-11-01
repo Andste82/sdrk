@@ -1,4 +1,4 @@
-//! `halfband`: halfband low-pass filter and decimation by 2 (complex and real).
+//! `halfband_decimate`: halfband low-pass filter and decimation by 2 (complex and real).
 
 use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::kernels::halfband::{
@@ -17,7 +17,7 @@ use crate::error::{Error, Result};
 use crate::sample::{BlockReal, BlockSample, TunedElem};
 use crate::storage::{Plan, Storage};
 
-/// The parameters shared by the blocks `halfband` and `real_to_complex`.
+/// The parameters shared by the blocks `halfband_decimate` and `real_to_iq`.
 pub(crate) const PARAMS: &[ParamDesc] = &[
     ParamDesc {
         name: "transition_hz",
@@ -58,9 +58,9 @@ pub(crate) const PARAMS: &[ParamDesc] = &[
     },
 ];
 
-/// Description of the `halfband` block.
+/// Description of the `halfband_decimate` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
-    kind: "halfband",
+    kind: "halfband_decimate",
     summary: "Halfband low-pass filter and decimation by 2.",
     details: "A Kaiser-window halfband filter with a cutoff at a quarter of the input rate, \
         followed by a decimation by 2; every other tap is zero, so the block needs about a \
@@ -68,7 +68,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         follows from the transition width and the attenuation. The usable band after the \
         decimation is plus or minus (fs / 4 - transition / 2) of the input rate; a signal above \
         fs / 4 + transition / 2 is attenuated by the stop-band attenuation. The group delay is \
-        (taps - 1) / 2 input samples. Several halfband blocks in a row decimate by powers of \
+        (taps - 1) / 2 input samples. Several halfband_decimate blocks in a row decimate by powers of \
         two, for example in front of a ddc. It accepts complex and real samples.",
     inputs: &[PortDesc {
         name: "in",
@@ -84,19 +84,19 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &[],
 };
 
-/// Configuration of [`HalfbandBlock`], [`HalfbandRealBlock`] and
-/// [`RealToComplexBlock`](crate::RealToComplexBlock).
+/// Configuration of [`HalfbandDecimateBlock`], [`HalfbandDecimateRealBlock`] and
+/// [`RealToIqBlock`](crate::RealToIqBlock).
 ///
 /// ```
-/// use sdrk_blocks::HalfbandConfig;
-/// let cfg = HalfbandConfig::default();
+/// use sdrk_blocks::HalfbandDecimateConfig;
+/// let cfg = HalfbandDecimateConfig::default();
 /// let rate = sdrk::Rate::hz(48_000)?;
 /// assert_eq!(cfg.num_taps(rate)? % 4, 3);
-/// assert!(HalfbandConfig { transition_hz: Some(30_000.0), ..cfg }.validate(rate).is_err());
+/// assert!(HalfbandDecimateConfig { transition_hz: Some(30_000.0), ..cfg }.validate(rate).is_err());
 /// # Ok::<(), sdrk_blocks::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct HalfbandConfig {
+pub struct HalfbandDecimateConfig {
     /// Width of the transition band in Hz; `None` means `0.1 * fs`.
     pub transition_hz: Option<f64>,
     /// Stop-band attenuation in dB.
@@ -105,7 +105,7 @@ pub struct HalfbandConfig {
     pub max_taps: usize,
 }
 
-impl Default for HalfbandConfig {
+impl Default for HalfbandDecimateConfig {
     fn default() -> Self {
         Self {
             transition_hz: None,
@@ -115,7 +115,7 @@ impl Default for HalfbandConfig {
     }
 }
 
-impl HalfbandConfig {
+impl HalfbandDecimateConfig {
     /// The transition width for the input rate with the default filled in.
     pub fn transition_for(&self, rate_in: Rate) -> f64 {
         self.transition_hz.unwrap_or(0.1 * super::hz(rate_in))
@@ -242,36 +242,36 @@ pub(crate) fn timing_of<S: Timing>(state: &S) -> BlockTiming {
 /// decimating FIR with factor 2).
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, Block, HalfbandBlock, HalfbandConfig};
+/// use sdrk_blocks::{ArenaStorage, Block, HalfbandDecimateBlock, HalfbandDecimateConfig};
 /// use sdrk::{Rate, C32};
-/// let cfg = HalfbandConfig::default();
+/// let cfg = HalfbandDecimateConfig::default();
 /// let rate = Rate::hz(48_000)?;
-/// let mut mem = vec![0u8; HalfbandBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)? + 16];
+/// let mut mem = vec![0u8; HalfbandDecimateBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)? + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
-/// let mut block = HalfbandBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
+/// let mut block = HalfbandDecimateBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
 /// let mut out = vec![C32::default(); 100];
 /// let p = block.process(&[C32::new(1.0, 0.0); 200], &mut out)?;
 /// assert_eq!((p.consumed, p.produced), (200, 100));
 /// assert!((out[99].re - 1.0).abs() < 1e-5); // unity gain at DC
-/// assert_eq!(HalfbandBlock::<C32, ArenaStorage<'_>>::rate_out(&cfg, rate)?, Rate::hz(24_000)?);
+/// assert_eq!(HalfbandDecimateBlock::<C32, ArenaStorage<'_>>::rate_out(&cfg, rate)?, Rate::hz(24_000)?);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct HalfbandBlock<T: BlockSample, S: Storage> {
-    config: HalfbandConfig,
+pub struct HalfbandDecimateBlock<T: BlockSample, S: Storage> {
+    config: HalfbandDecimateConfig,
     state: HalfbandState<T, S::Buf<T::Real>, S::Buf<T>>,
 }
 
-impl<T: BlockSample, S: Storage> core::fmt::Debug for HalfbandBlock<T, S> {
+impl<T: BlockSample, S: Storage> core::fmt::Debug for HalfbandDecimateBlock<T, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("HalfbandBlock")
+        f.debug_struct("HalfbandDecimateBlock")
             .field("config", &self.config)
             .finish_non_exhaustive()
     }
 }
 
-impl<T: BlockSample, S: Storage> HalfbandBlock<T, S> {
+impl<T: BlockSample, S: Storage> HalfbandDecimateBlock<T, S> {
     /// Designs the taps and creates the block; taps and history come from `storage`.
-    pub fn new(config: &HalfbandConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &HalfbandDecimateConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
         let taps = config.alloc_taps::<T::Real, S>(rate_in, storage, <T as TunedElem>::tap)?;
         let hist = storage.alloc::<T>(taps.as_ref().len() - 1)?;
@@ -283,12 +283,12 @@ impl<T: BlockSample, S: Storage> HalfbandBlock<T, S> {
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
     /// address (an unaligned slice may need up to 15 bytes more).
-    pub fn storage_bytes(config: &HalfbandConfig, rate_in: Rate) -> Result<usize> {
+    pub fn storage_bytes(config: &HalfbandDecimateConfig, rate_in: Rate) -> Result<usize> {
         config.plan_bytes::<T::Real, T>(rate_in)
     }
 
     /// Output rate for the configuration (half the input rate).
-    pub fn rate_out(config: &HalfbandConfig, rate_in: Rate) -> Result<Rate> {
+    pub fn rate_out(config: &HalfbandDecimateConfig, rate_in: Rate) -> Result<Rate> {
         config.validate(rate_in)?;
         divide_rate(rate_in, 2)
     }
@@ -299,7 +299,7 @@ impl<T: BlockSample, S: Storage> HalfbandBlock<T, S> {
     }
 }
 
-impl<T: BlockSample, S: Storage> Block for HalfbandBlock<T, S>
+impl<T: BlockSample, S: Storage> Block for HalfbandDecimateBlock<T, S>
 where
     Sdrk: HalfbandDecimate<T>,
 {
@@ -343,35 +343,35 @@ where
 /// Halfband filter and decimation by 2 for `f32` and `Q15`.
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, Block, HalfbandConfig, HalfbandRealBlock};
+/// use sdrk_blocks::{ArenaStorage, Block, HalfbandDecimateConfig, HalfbandDecimateRealBlock};
 /// use sdrk::Rate;
-/// let cfg = HalfbandConfig::default();
+/// let cfg = HalfbandDecimateConfig::default();
 /// let rate = Rate::hz(48_000)?;
-/// let mut mem = vec![0u8; HalfbandRealBlock::<f32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)? + 16];
+/// let mut mem = vec![0u8; HalfbandDecimateRealBlock::<f32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)? + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
-/// let mut block = HalfbandRealBlock::<f32, _>::new(&cfg, rate, &mut arena)?;
+/// let mut block = HalfbandDecimateRealBlock::<f32, _>::new(&cfg, rate, &mut arena)?;
 /// let mut out = vec![0.0f32; 100];
 /// let p = block.process(&[0.5f32; 200], &mut out)?;
 /// assert_eq!((p.consumed, p.produced), (200, 100));
 /// assert!((out[99] - 0.5).abs() < 1e-5);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct HalfbandRealBlock<R: BlockReal, S: Storage> {
-    config: HalfbandConfig,
+pub struct HalfbandDecimateRealBlock<R: BlockReal, S: Storage> {
+    config: HalfbandDecimateConfig,
     state: HalfbandRealState<R, S::Buf<R>, S::Buf<R>>,
 }
 
-impl<R: BlockReal, S: Storage> core::fmt::Debug for HalfbandRealBlock<R, S> {
+impl<R: BlockReal, S: Storage> core::fmt::Debug for HalfbandDecimateRealBlock<R, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("HalfbandRealBlock")
+        f.debug_struct("HalfbandDecimateRealBlock")
             .field("config", &self.config)
             .finish_non_exhaustive()
     }
 }
 
-impl<R: BlockReal, S: Storage> HalfbandRealBlock<R, S> {
+impl<R: BlockReal, S: Storage> HalfbandDecimateRealBlock<R, S> {
     /// Designs the taps and creates the block; taps and history come from `storage`.
-    pub fn new(config: &HalfbandConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &HalfbandDecimateConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
         let taps = config.alloc_taps::<R, S>(rate_in, storage, <R as TunedElem>::tap)?;
         let hist = storage.alloc::<R>(taps.as_ref().len() - 1)?;
@@ -383,12 +383,12 @@ impl<R: BlockReal, S: Storage> HalfbandRealBlock<R, S> {
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
     /// address (an unaligned slice may need up to 15 bytes more).
-    pub fn storage_bytes(config: &HalfbandConfig, rate_in: Rate) -> Result<usize> {
+    pub fn storage_bytes(config: &HalfbandDecimateConfig, rate_in: Rate) -> Result<usize> {
         config.plan_bytes::<R, R>(rate_in)
     }
 
     /// Output rate for the configuration (half the input rate).
-    pub fn rate_out(config: &HalfbandConfig, rate_in: Rate) -> Result<Rate> {
+    pub fn rate_out(config: &HalfbandDecimateConfig, rate_in: Rate) -> Result<Rate> {
         config.validate(rate_in)?;
         divide_rate(rate_in, 2)
     }
@@ -399,7 +399,7 @@ impl<R: BlockReal, S: Storage> HalfbandRealBlock<R, S> {
     }
 }
 
-impl<R: BlockReal, S: Storage> Block for HalfbandRealBlock<R, S>
+impl<R: BlockReal, S: Storage> Block for HalfbandDecimateRealBlock<R, S>
 where
     Sdrk: HalfbandDecimateReal<R>,
 {

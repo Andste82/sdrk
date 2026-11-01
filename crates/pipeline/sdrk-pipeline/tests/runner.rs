@@ -185,7 +185,7 @@ fn a_stall_with_the_error_policy_loses_nothing() {
         &json!({
             "sdrk": 1, "name": "stall", "settings": { "max_chunk": 64 },
             "inputs": { "iq": { "type": "c32", "rate_hz": 48000 } },
-            "nodes": { "r": { "kind": "resampler", "params": { "rate_out_hz": 96000, "max_taps": 4096 } } },
+            "nodes": { "r": { "kind": "resample", "params": { "rate_out_hz": 96000, "max_taps": 4096 } } },
             "edges": [ { "from": "iq", "to": "r" }, { "from": "r", "to": "out" } ],
             "outputs": { "out": { "type": "stream", "capacity": 150, "drop": "error" } }
         })
@@ -208,7 +208,7 @@ fn a_stall_with_the_error_policy_loses_nothing() {
         &json!({
             "sdrk": 1, "name": "stall", "settings": { "max_chunk": 640 },
             "inputs": { "iq": { "type": "c32", "rate_hz": 48000 } },
-            "nodes": { "r": { "kind": "resampler", "params": { "rate_out_hz": 96000, "max_taps": 4096 } } },
+            "nodes": { "r": { "kind": "resample", "params": { "rate_out_hz": 96000, "max_taps": 4096 } } },
             "edges": [ { "from": "iq", "to": "r" }, { "from": "r", "to": "out" } ],
             "outputs": { "out": { "type": "stream", "capacity": 4000, "drop": "error" } }
         })
@@ -425,7 +425,7 @@ fn two_inputs_run_independently() {
             "sdrk": 1, "name": "two", "settings": { "max_chunk": 128 },
             "inputs": { "i1": { "type": "c32", "rate_hz": 48000 }, "i2": { "type": "f32", "rate_hz": 8000 } },
             "nodes": { "g": { "kind": "scale", "params": { "gain_db": -6.0206 } },
-                       "r": { "kind": "resampler", "params": { "rate_out_hz": 16000 } } },
+                       "r": { "kind": "resample", "params": { "rate_out_hz": 16000 } } },
             "edges": [ { "from": "i1", "to": "g" }, { "from": "g", "to": "o1" }, { "from": "i2", "to": "r" }, { "from": "r", "to": "o2" } ],
             "outputs": { "o1": { "type": "stream" }, "o2": { "type": "stream" } }
         })

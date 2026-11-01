@@ -78,7 +78,7 @@
 //! | `block_ddc_vs_chain` | quick | about 30 KiB |
 //! | `block_fm_demod_sinad` | quick | about 45 KiB |
 //! | `block_spectrum_tone_level` | quick | about 34 KiB |
-//! | `block_resampler_ppm_count` | quick | about 24 KiB |
+//! | `block_resample_ppm_count` | quick | about 24 KiB |
 //! | `squelch_c32` | quick | about 48 KiB |
 //! | `squelch_cq15` | quick | about 24 KiB |
 //! | `extremes_m19` | full | about 7 KiB |
@@ -117,8 +117,8 @@
 //! | `real_to_complex_c32` | quick | about 38 KiB |
 //! | `real_to_complex_cq15` | quick | about 19 KiB |
 //! | `extremes_m23` | full | about 6 KiB |
-//! | `block_halfband_alias` | quick | about 49 KiB |
-//! | `block_real_to_complex_tone` | quick | about 33 KiB |
+//! | `block_halfband_decimate_alias` | quick | about 49 KiB |
+//! | `block_real_to_iq_tone` | quick | about 33 KiB |
 //! | `e2e_real_fm_rx_f32` | quick | about 58 KiB |
 //! | `e2e_real_fm_rx_q15` | quick | about 47 KiB |
 //! | `e2e_real_fm_rx_f32_1s` | full | about 226 KiB |
@@ -128,8 +128,8 @@
 //! | `stereo_matrix_c32` | quick | about 36 KiB |
 //! | `stereo_matrix_cq15` | quick | about 18 KiB |
 //! | `extremes_m24` | full | about 7 KiB |
-//! | `block_fm_stereo_separation` | quick | about 22 KiB |
-//! | `block_fm_stereo_mono` | quick | about 12 KiB |
+//! | `block_fm_stereo_demod_separation` | quick | about 22 KiB |
+//! | `block_fm_stereo_demod_mono` | quick | about 12 KiB |
 //! | `e2e_fm_stereo_f32` | quick | about 31 KiB (0.5 s of signal) |
 //! | `e2e_fm_stereo_q15` | quick | about 20 KiB (0.5 s of signal) |
 //! | `e2e_fm_stereo_mono` | full | about 31 KiB (mono transmission and noise, 0.25 s each, both types) |
@@ -568,9 +568,9 @@ pub(crate) static CASES: [TestCase; 152] = [
         run: m09::block_spectrum_tone_level,
     },
     TestCase {
-        name: "block_resampler_ppm_count",
+        name: "block_resample_ppm_count",
         tier: Tier::Quick,
-        run: m09::block_resampler_ppm_count,
+        run: m09::block_resample_ppm_count,
     },
     TestCase {
         name: "backend_vs_fallback_convert",
@@ -858,14 +858,14 @@ pub(crate) static CASES: [TestCase; 152] = [
         run: m23::extremes_m23,
     },
     TestCase {
-        name: "block_halfband_alias",
+        name: "block_halfband_decimate_alias",
         tier: Tier::Quick,
-        run: m23::block_halfband_alias,
+        run: m23::block_halfband_decimate_alias,
     },
     TestCase {
-        name: "block_real_to_complex_tone",
+        name: "block_real_to_iq_tone",
         tier: Tier::Quick,
-        run: m23::block_real_to_complex_tone,
+        run: m23::block_real_to_iq_tone,
     },
     TestCase {
         name: "e2e_real_fm_rx_f32",
@@ -913,14 +913,14 @@ pub(crate) static CASES: [TestCase; 152] = [
         run: m24::extremes_m24,
     },
     TestCase {
-        name: "block_fm_stereo_separation",
+        name: "block_fm_stereo_demod_separation",
         tier: Tier::Quick,
-        run: m24::block_fm_stereo_separation,
+        run: m24::block_fm_stereo_demod_separation,
     },
     TestCase {
-        name: "block_fm_stereo_mono",
+        name: "block_fm_stereo_demod_mono",
         tier: Tier::Quick,
-        run: m24::block_fm_stereo_mono,
+        run: m24::block_fm_stereo_demod_mono,
     },
     TestCase {
         name: "e2e_fm_stereo_f32",

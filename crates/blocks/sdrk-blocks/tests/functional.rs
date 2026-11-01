@@ -31,7 +31,7 @@ use sdrk::{C32, CQ15, ComplexSample, Q15, RealSample, Sdrk};
 use sdrk_blocks::{
     Block, BlockReal, BlockSample, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock,
     DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FrameBlock, ResamplerBlock, ResamplerConfig, ResamplerRealBlock, SpectrumBlock, SpectrumConfig,
+    FrameBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, SpectrumBlock, SpectrumConfig,
     SpectrumSample, SpectrumWindow,
 };
 use sdrk_core::kernels::{
@@ -158,13 +158,13 @@ where
         (16_000.0, false),
         (96_000.0, true),
     ] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: out_hz,
             tunable,
             max_taps: 8192,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
-        let mut block = ResamplerBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+        let mut block = ResampleBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
         // DC passes with gain 1.
         let dc = vec![T::from_c64_round(Complex64::new(0.5, -0.25)); 3000];
         let y = run_block(&mut block, &dc, None);
@@ -207,14 +207,14 @@ where
         (12_000.0, false),
         (8_000.0, true),
     ] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: out_hz,
             tunable,
             max_taps: 8192,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
         let mut block =
-            ResamplerRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+            ResampleRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
         let x: Vec<R> = (0..6000)
             .map(|i| R::from_f64_round(0.5 * (TAU * 1_000.0 / 48_000.0 * i as f64).sin()))
             .collect();

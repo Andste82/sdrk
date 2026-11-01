@@ -275,7 +275,7 @@ pub enum ParamKind {
 /// ```
 /// let kinds: Vec<_> = sdrk_blocks::all_descriptions().iter().map(|d| d.kind).collect();
 /// assert_eq!(kinds.len(), 19);
-/// assert!(kinds.contains(&"resampler"));
+/// assert!(kinds.contains(&"resample"));
 /// ```
 pub fn all_descriptions() -> &'static [&'static BlockDescription] {
     static ALL: [&BlockDescription; 19] = [
@@ -288,16 +288,16 @@ pub fn all_descriptions() -> &'static [&'static BlockDescription] {
         &crate::blocks::duc::DESCRIPTION,
         &crate::blocks::fm_demod::DESCRIPTION,
         &crate::blocks::fm_mod::DESCRIPTION,
-        &crate::blocks::fm_stereo::DESCRIPTION,
-        &crate::blocks::resampler::DESCRIPTION,
+        &crate::blocks::fm_stereo_demod::DESCRIPTION,
+        &crate::blocks::resample::DESCRIPTION,
         &crate::blocks::spectrum::DESCRIPTION,
         &crate::blocks::squelch::DESCRIPTION,
         &crate::blocks::agc::DESCRIPTION,
         &crate::blocks::am_demod::DESCRIPTION,
         &crate::blocks::ssb_demod::DESCRIPTION,
         &crate::blocks::biquad::DESCRIPTION,
-        &crate::blocks::halfband::DESCRIPTION,
-        &crate::blocks::real_to_complex::DESCRIPTION,
+        &crate::blocks::halfband_decimate::DESCRIPTION,
+        &crate::blocks::real_to_iq::DESCRIPTION,
     ];
     &ALL
 }

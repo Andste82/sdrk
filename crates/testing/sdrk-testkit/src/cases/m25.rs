@@ -195,8 +195,8 @@ pub(super) fn preemph_limit_q15(arena: &mut Arena<'_>) -> Result<(), Failure> {
 // extremes
 // ---------------------------------------------------------------------------------------
 
-/// The f32 specials cycled with an offset: NaN, infinities, a denormal and `f32::MAX` are all
-/// handled by the specified arithmetic (only NaN and infinities are replaced by zero).
+/// The f32 specials cycled with an offset: NaN, infinities and a denormal are all handled by the
+/// specified arithmetic (NaN and infinities are replaced by zero).
 const SPECIALS: [f32; 7] = [
     0.0,
     -0.0,
@@ -206,6 +206,9 @@ const SPECIALS: [f32; 7] = [
     f32::MIN_POSITIVE / 2.0,
     1.0,
 ];
+
+/// Finite `f32` values beyond the input limit of 1024, both signs.
+const HUGE: [f32; 8] = [1025.0, -2000.0, 1e30, -1e36, 3e38, f32::MAX, f32::MIN, -1e6];
 
 /// The Q15 corner values.
 const CORNERS: [i16; 7] = [-32768, -32767, -1, 0, 1, 32766, 32767];
@@ -261,6 +264,34 @@ pub(super) fn extremes_m25(arena: &mut Arena<'_>) -> Result<(), Failure> {
             o1.iter()
                 .all(|v| v.is_finite() && f64::from(v.abs()) <= top),
             || fail("the output is not finite or exceeds the limit"),
+        )?;
+    }
+
+    // Finite values far beyond full scale (the input is clamped to +-1024): the implementations
+    // agree, the output stays finite and below the limit, and the state recovers (the gain is
+    // finite and positive afterwards).
+    for offset in 0..HUGE.len() {
+        for (i, v) in x.iter_mut().enumerate() {
+            *v = if i % 5 == 0 {
+                HUGE.get((i / 5 + offset) % HUGE.len())
+                    .copied()
+                    .unwrap_or(0.0)
+            } else {
+                0.25
+            };
+        }
+        let (mut a, mut b) = (state::<f32>()?, state::<f32>()?);
+        PreemphLimit::<f32>::preemph_limit(&Fallback, &mut a, x, o1)?;
+        PreemphLimit::<f32>::preemph_limit(&Reference, &mut b, x, o2)?;
+        ensure(same_bits(o1, o2) && a == b, || {
+            fail("implementations differ on huge finite input")
+        })?;
+        ensure(
+            o1.iter()
+                .all(|v| v.is_finite() && f64::from(v.abs()) <= top)
+                && a.gain().is_finite()
+                && a.gain() > 0.0,
+            || fail("a huge finite input left a non-finite output or state"),
         )?;
     }
 

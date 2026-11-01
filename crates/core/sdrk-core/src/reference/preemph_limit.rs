@@ -8,16 +8,18 @@
 use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::preemph_limit::{PreemphLimit, PreemphLimitParts, PreemphLimitState, V_LIMIT};
+use crate::kernels::preemph_limit::{
+    INPUT_LIMIT, PreemphLimit, PreemphLimitParts, PreemphLimitState, V_LIMIT,
+};
 use crate::num::{flush_denormal, round_shift, sat16};
 use crate::types::Q15;
 
-/// Step 1: a non-finite input counts as zero.
+/// Step 1: a non-finite input counts as zero, a finite one is clamped to `[-1024, 1024]`.
 fn sanitize(x: f32) -> f32 {
     if x.is_nan() || x.is_infinite() {
         0.0
     } else {
-        x
+        x.clamp(-INPUT_LIMIT, INPUT_LIMIT)
     }
 }
 

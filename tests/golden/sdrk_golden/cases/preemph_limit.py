@@ -23,6 +23,9 @@ TAU_S = 50e-6
 HOLD_S = 0.02
 RELEASE_S = 0.2
 
+# Largest absolute f32 input: a finite input beyond it is clamped (M25 section 2, step 1).
+INPUT_LIMIT = 1024.0
+
 # Saturation of the Q15 pre-emphasized value in Q30 (2^62), never reached by a stable filter.
 V_LIMIT = 1 << 62
 
@@ -55,7 +58,7 @@ def preemph_f32(x, coefs, limit, hold_s, release_s, rate_hz, retune=None):
     for i, sample in enumerate(np.asarray(x, dtype=np.float32).tolist()):
         if retune is not None and i == retune[0]:
             t = fm.f32(retune[1])
-        xs = fm.f32(sample) if math.isfinite(sample) else zero
+        xs = fm.f32(max(-INPUT_LIMIT, min(INPUT_LIMIT, sample))) if math.isfinite(sample) else zero
         v = fm.sub(fm.add(fm.mul(b0, xs), fm.mul(b1, x1)), fm.mul(a1, v1))
         x1 = xs
         v1 = fm.flush_denormal(v)
@@ -245,6 +248,30 @@ def nonfinite_f32_case(rng):
         model="float32",
         notes="the first 4096 samples of the input of preemph_f32_8192 with NaN, +inf and -inf "
         "(in turn) at the 20 listed positions; a non-finite input counts as 0; exact float32 model",
+    )
+
+
+@case(kernel="preemph_limit", name="clamp_f32_4096", seed=455)
+def clamp_f32_case(rng):
+    # The first 4096 samples of the input of preemph_f32_8192 (seed 444) with 24 finite values
+    # beyond the input limit: 1025, 2000, 1e30, 1e36, 3e38 and the largest float32, each with
+    # both signs, twice.
+    x = noise(np.random.default_rng(444), 8192, 0.05).astype(np.float32)[:4096]
+    positions = sorted(int(p) for p in rng.choice(4096, size=24, replace=False))
+    big = [1025.0, 2000.0, 1e30, 1e36, 3e38, float(np.finfo(np.float32).max)]
+    for k, pos in enumerate(positions):
+        x[pos] = np.float32(big[k % 6] * (1.0 if (k // 6) % 2 == 0 else -1.0) * (1.0 if k % 2 == 0 else -1.0))
+    coefs = coefs_of(TAU_S)
+    expected, stats = preemph_f32(x, coefs, 1.0, HOLD_S, RELEASE_S, RATE_HZ)
+    assert np.all(np.isfinite(expected))
+    return dict(
+        params=params(TAU_S, 1.0, coefs, positions=positions, input_limit=INPUT_LIMIT),
+        arrays={"input": Array("f32", x), "expected": Array("f32", expected)},
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="the first 4096 samples of the input of preemph_f32_8192 with 24 finite values beyond the input "
+        "limit 1024 (1025, 2000, 1e30, 1e36, 3e38 and the largest float32, both signs) at the listed positions; "
+        "a finite input is clamped to +-1024; exact float32 model",
     )
 
 

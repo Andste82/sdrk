@@ -20,8 +20,8 @@
 //! `H = floor(hold_s * fs + 0.5)` samples, `r = exp(-1 / (fs * release_s))` (f64) and `T` is the
 //! limit.
 //!
-//! `f32` (every operation rounded once, no FMA): per sample `x` is the input, or `0.0` when it is
-//! NaN or infinite; `v = (b0 x + b1 x1) - a1 v1`; `x1 = x`; `v1 = flush_denormal(v)`; `m = |v|`;
+//! `f32` (every operation rounded once, no FMA): per sample `x` is the input clamped to
+//! `[-1024, 1024]`, or `0.0` when it is NaN or infinite; `v = (b0 x + b1 x1) - a1 v1`; `x1 = x`; `v1 = flush_denormal(v)`; `m = |v|`;
 //! if `m >= env` then `env = m` and `hold = H`, else if `hold > 0` then `hold -= 1`, else
 //! `env = flush_denormal(env r)`; `y = v (T / env)` when `env > T`, else `y = v`; the output is
 //! `y` clamped to `[-T, T]` (a NaN stays a NaN).
@@ -39,9 +39,12 @@
 //! The gain of the envelope after a release can be larger than `T / |v|` for the sample that
 //! follows (the envelope falls below the current peak), which the final clamp catches.
 //!
-//! A finite `f32` input of about `1e36` or more (or a coefficient sum that overflows `f32`) makes
-//! `v` infinite and the state NaN; only NaN and infinite *inputs* are replaced. Keep the input
-//! within full scale (a few times that is fine).
+//! The clamp of the input (`2^10`, 60 dB above full scale) only matters for a corrupted input: with
+//! it, `v` stays below about `1e6` for every coefficient set of `preemphasis_coefs` (`tau` up to
+//! 1 ms, rates up to 384 kHz), so `v`, the envelope and `T / env` stay finite and the state cannot
+//! become NaN. Without a clamp, a single finite input of `1e35` to `1e38` (depending on the
+//! coefficients) made `v` infinite and the state NaN until `reset`. Inputs within the clamp give
+//! the same bits as before. `Q15` needs no clamp: its input is a 16-bit integer and `v` saturates.
 
 use core::marker::PhantomData;
 
@@ -64,6 +67,10 @@ const MAX_HOLD: f64 = 2_147_483_648.0;
 
 /// Saturation of the `Q15` pre-emphasized value in Q30 (`2^62`).
 pub(crate) const V_LIMIT: i64 = 1 << 62;
+
+/// Largest absolute `f32` input (`2^10`, 60 dB above full scale): a finite input beyond it is
+/// clamped to `+-INPUT_LIMIT`.
+pub(crate) const INPUT_LIMIT: f32 = 1024.0;
 
 /// Mutable view of the numeric fields, used by the kernel implementations of this crate.
 pub(crate) struct PreemphLimitParts<'a> {

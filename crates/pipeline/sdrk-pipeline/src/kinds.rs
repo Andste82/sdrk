@@ -17,9 +17,9 @@ use sdrk_blocks::{
     DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
     FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
     HalfbandDecimateRealBlock, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    RESAMPLE_TUNED_PHASES, RealToIqBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    RESAMPLE_TUNED_PHASES, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};

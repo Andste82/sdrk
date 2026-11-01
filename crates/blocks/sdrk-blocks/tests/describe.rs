@@ -35,9 +35,10 @@ use sdrk_blocks::{
     Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
     FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
+    FmStereoDemodConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -246,11 +247,11 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("fm_demod", |n| FmDemodConfig::default().get(n), &[]);
     defaults_match("fm_mod", |n| FmModConfig::default().get(n), &[]);
     defaults_match(
-    defaults_match(
         "preemph_limit",
         |n| PreemphLimitConfig::default().get(n),
         &[],
     );
+    defaults_match(
         "fm_stereo_demod",
         |n| FmStereoDemodConfig::default().get(n),
         &[],

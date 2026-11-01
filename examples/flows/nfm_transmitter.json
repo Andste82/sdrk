@@ -43,7 +43,7 @@
       }
     },
     "up": {
-      "kind": "resampler",
+      "kind": "resample",
       "params": {
         "rate_out_hz": 240000
       }

@@ -12,7 +12,8 @@ use crate::error::{Error, Result};
 use crate::kinds::{
     AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DucKind,
     Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, Kind,
-    PreemphLimitKind, RealToIqKind, ResampleKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind,
+    PreemphLimitKind, RealToIqKind, ResampleKind, ScaleKind, SpectrumKind, SquelchKind,
+    SsbDemodKind,
 };
 use crate::model::{PipelineSpec, Precision};
 use crate::node::Node;

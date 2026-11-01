@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M24 are delivered; M16 to M18, M24.1 and M25 are planned (the receive series M19 to M25, M24.1 included, uses nothing from M16 to M18, see the *Order* section of M19).
+Up to M25.1 the milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. **From M26 on, a milestone depends only on the milestones named in its *Depends on* line** (rule R1.1 of those files): milestones that do not depend on each other may be implemented in parallel, each on its own branch, and the second one to merge rebases onto the first. State on `main`: M00 to M15 and M19 to M24 are delivered; M24.1, M25, M25.1 to M44 and the backends M16 to M18 are planned. M16 to M18 come after M29 (the backends then also cover the primitive blocks; their kernels are unchanged by M26 to M29). From M37 on, rule R2 includes the crate `sdrk-proto` (`crates/proto`).
 
 **Block names:** M24.1 fixes the naming scheme of block kinds (`docs/blocks.md`, section "Names") and renames four kinds: `resampler` → `resample`, `halfband` → `halfband_decimate`, `real_to_complex` → `real_to_iq`, `fm_stereo` → `fm_stereo_demod` (the old names stay accepted as aliases for a while). The milestone files before M24.1 are records and use the old names; every later milestone uses the scheme and the table of reserved names.
 
@@ -39,17 +39,66 @@ Milestones are strictly sequential: each depends on all previous ones, and each 
 | M24 | [M24-fm-stereo.md](M24-fm-stereo.md) | 9 | FM stereo: kernels `stereo_pll` (pilot PLL) and `stereo_matrix` (SIMD), block `fm_stereo`, stereo audio as complex samples, flow `fm_stereo_receiver`, stereo WAV, E2E-STEREO |
 | M24.1 | [M24.1-block-naming.md](M24.1-block-naming.md) | 9 | Block names: naming scheme in `docs/blocks.md`, kinds `resample`, `halfband_decimate`, `real_to_iq`, `fm_stereo_demod` (old names as aliases with the warning `deprecated_kind`), deprecated Rust aliases, name check in `cargo xtask check`, reserved names for the planned blocks; outputs unchanged |
 | M25 | [M25-fm-transmit-audio.md](M25-fm-transmit-audio.md) | 9 | FM transmit audio: kernel `preemph_limit`, design `preemphasis_coefs`, block `preemph_limit`, pre-emphasis and limiter in `fm_transmitter`, flow `nfm_transmitter`, de-emphasis in `nfm_receiver`, loop tests TX → RX |
-| — | [BACKLOG.md](BACKLOG.md) | 7–9, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
+| M25.1 | [M25.1-release-0.1.md](M25.1-release-0.1.md) | 9 | Release 0.1.0: release condition with accepted waivers, `cargo xtask release-check`, version 0.1.0, CHANGELOG section, release notes; the tag is the maintainer's step |
+| M26 | [M26-block-ports.md](M26-block-ports.md) | 9 | Block ports: `StreamElem`, `Ports`, `Two<A, B>`, `Frame`; `FrameBlock` removed (`spectrum` becomes a `Block` with frame output) |
+| M27 | [M27-chain.md](M27-chain.md) | 9 | `Chain<A, B, S>` and `chain!`: typed, heap-free composition of blocks; parameter paths; target test on Cortex-M4 |
+| M28 | [M28-clock-drift.md](M28-clock-drift.md) | 9 | `DriftController`: PI control of the tunable `resample` from a buffer fill; `PipelineDrift`; testkit `TwoClockSim` |
+| M29 | [M29-primitive-blocks.md](M29-primitive-blocks.md) | 9 | Primitive blocks `quad_demod`, `deemphasis`, `rotate`, `decimate`, `interpolate`, `mag`, `delay` with kinds |
+| M30 | [M30-two-port-blocks.md](M30-two-port-blocks.md) | 9 | Kernels `add`, `mul`, `oscillate`, `interleave`; blocks `add`, `mul`, `make_complex`, `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_pll`, `stereo_matrix` |
+| M31 | [M31-composite-tools.md](M31-composite-tools.md) | 9 | `Chain` with `Two` intermediates, `Fork` with delay alignment, `ParamMap` |
+| M32 | [M32-composite-plans.md](M32-composite-plans.md) | 9 | `sdrk_blocks::plans`: the six specific blocks as compositions of primitives, equal bit for bit; real `dc_block` |
+| M33 | [M33-noise-reduction.md](M33-noise-reduction.md) | 9 | Noise blanker and automatic notch (kernels, blocks, kinds), flow `hf_am_receiver` |
+| M34 | [M34-multi-input.md](M34-multi-input.md) | 9 | Two-input nodes in the pipeline: edge `port`, lockstep runner, `rate_mismatch`/`clock_domain`/`misaligned_inputs`, automatic alignment, proof flow `fm_stereo_receiver_primitives` |
+| M35 | [M35-am-ssb-tx.md](M35-am-ssb-tx.md) | 9 | AM and SSB transmit: kernel and block `am_mod`, block `ssb_mod`, flows `am_transmitter`, `ssb_transmitter`, loop tests |
+| M36 | [M36-fm-stereo-tx.md](M36-fm-stereo-tx.md) | 9 | FM stereo transmit: stereo `preemph_limit` with linked gain, `stereo_encode`/`fm_stereo_mod`, flow `fm_stereo_transmitter` |
+| M37 | [M37-packet-ports.md](M37-packet-ports.md) | 10 | Packet ports, `Clocked<S, Packets>`, crate `sdrk-proto` (packet, CRCs, test framing), packet inputs/outputs, JSON Lines |
+| M38 | [M38-symbol-sync.md](M38-symbol-sync.md) | 10 | `symbol_sync` (Gardner, Mueller–Müller), `slice`, PRBS, testkit channel model and BER meter |
+| M39 | [M39-fsk.md](M39-fsk.md) | 10 | FSK/GFSK RX+TX (`fsk_demod`, `fsk_mod`), `afc` with ppm report, PN9 whitening, GFSK packet flows |
+| M39.1 | [M39.1-afsk-ook-adsb.md](M39.1-afsk-ook-adsb.md) | 10 | AFSK with NRZI/HDLC/AX.25 (APRS RX+TX), OOK RX+TX, ADS-B decoder |
+| M40 | [M40-psk.md](M40-psk.md) | 10 | BPSK/QPSK RX+TX, coherent and differential, `costas`, RRC design, QPSK flows |
+| M40.1 | [M40.1-psk-variants.md](M40.1-psk-variants.md) | 10 | 8PSK, π/4-DQPSK, OQPSK |
+| M41 | [M41-rds-rx.md](M41-rds-rx.md) | 10 | RDS receive: `rds_demod`, `rds_decode`, `sdrk_proto::rds`, flow `fm_rds_receiver`, E2E-RDS |
+| M42 | [M42-rds-tx.md](M42-rds-tx.md) | 10 | RDS transmit: group carousel, `rds_encode` (`Clocked`), `fm_stereo_rds_mod`, flow `fm_stereo_rds_transmitter` |
+| M43 | [M43-equalizer.md](M43-equalizer.md) | 10 | Adaptive equalizer `equalize` (CMA, decision-directed), testkit multipath |
+| M44 | [M44-qam.md](M44-qam.md) | 10 | 16-QAM and 64-QAM RX+TX |
+| — | [BACKLOG.md](BACKLOG.md) | 7–10, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
 M00 → M01 → M02 → M03 → M04 → M05 → M06 → M07 → M08     (phases 0–2: foundation and kernels)
                                                    ↓
                          M12 ← M11 ← M10 ← M09 ←───┘     (phase 3: blocks, pipeline, I/O)
                           ↓
-                         M13 → M14 → M15 → M16 → M17 → M18 → BACKLOG                (phases 4–7: speed, WASM, embedded)
+                         M13 → M14 → M15                 (phases 4–6: speed, WASM, emulators)
                                       ↓
-                                     M19 → M20 → M21 → M22 → M23 → M24 → M24.1 → M25 → BACKLOG    (phase 9: NFM, AM, SSB, audio filters, real-sampling input, FM stereo, block names, FM transmit audio)
+                                     M19 → M20 → M21 → M22 → M23 → M24 → M24.1 → M25 → M25.1    (phase 9, strictly sequential)
 ```
+
+From M26 on, the dependencies (the *Depends on* line of each file; dependencies of dependencies are implied):
+
+| Milestone | Depends on | Can run in parallel with |
+| --- | --- | --- |
+| M26 Block ports | M25.1 | M28 |
+| M27 Chain | M26 | M28, M29, M30, M33, M34 |
+| M28 Clock drift | M25.1 | everything from M26 on |
+| M29 Primitive blocks | M26 | M27, M28, M30, M33 |
+| M30 Two-port blocks | M26 | M27, M28, M29, M33 |
+| M31 Composite tools | M27, M29, M30 | M33, M34, M35, M36 |
+| M32 Composite plans | M31 | M33–M36 |
+| M33 Noise reduction | M26 | M27–M32, M34–M36 |
+| M34 Multi-input pipeline | M26, M30 | M27, M29, M31–M33, M35, M36 |
+| M35 AM/SSB transmit | M29, M30 | M31–M34, M36 |
+| M36 FM stereo transmit | M30 | M31–M35 |
+| M37 Packet ports, `sdrk-proto` | M34 | M35, M36 |
+| M38 Symbol sync, BER | M29, M37 | M35, M36 |
+| M39 FSK, AFC | M38 | M40 |
+| M39.1 AFSK/APRS, OOK, ADS-B | M39 | M40, M40.1, M41 |
+| M40 BPSK/QPSK | M38 | M39, M39.1 |
+| M40.1 8PSK, π/4-DQPSK, OQPSK | M40 | M39.1, M41 |
+| M41 RDS receive | M40 | M39.1, M40.1, M43, M44 |
+| M42 RDS transmit | M41, M36, M37 | M43, M44 |
+| M43 Equalizer | M40.1 | M41, M42 |
+| M44 QAM | M43 | M41, M42 |
+| M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
 
@@ -90,13 +139,31 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 451 | M21 (the loud decimated `CQ15` case `ssb_demod_usb_cq15_dec4_loud`, review finding) |
 | 452–453 | M23 (the saturation-corner cases of the `Q15` halfband kernels, review finding) |
 | 454 | M24 (the additional case `stereo_pll/disable_enable_f32_16384`, D113) |
-| 455–499 | free, for backlog milestones |
+| 455–461 | M29 |
+| 462 | M28 |
+| 463–468 | M30 |
+| 469 | M31 |
+| 470 | M32 |
+| 471–477 | M33 |
+| 478 | M34 |
+| 479 | M37 |
+| 480–484 | M35 |
+| 485–489 | M36 |
+| 490–499 | M38 |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |
-| 530–999 | free, for backlog milestones |
+| 530–539 | M39 |
+| 540–549 | M39.1 |
+| 550–559 | M40 |
+| 560–569 | M40.1 |
+| 570–579 | M41 |
+| 580–589 | M42 |
+| 590–599 | M43 |
+| 600–619 | M44 |
+| 620–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory
 
-- `M00-…` to `M25-…`: the milestones (each contains the full ground rules).
-- `BACKLOG.md`: work after M18 and M25.
+- `M00-…` to `M44-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2).
+- `BACKLOG.md`: work after M18 and M44.

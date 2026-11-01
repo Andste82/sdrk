@@ -1,0 +1,66 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "nonfinite_f32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "nonfinite_f32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "nonfinite_f32_4096",
+  "format_version": 1,
+  "kernel": "preemph_limit",
+  "model": "float32",
+  "notes": "the first 4096 samples of the input of preemph_f32_8192 with NaN, +inf and -inf (in turn) at the 20 listed positions; a non-finite input counts as 0; exact float32 model",
+  "params": {
+    "a1_bits": 4593989502643561391,
+    "b0_bits": 4614586531936190583,
+    "b1_bits": 13835405426330217021,
+    "coefs": [
+      3.2880867522836144,
+      -2.154263734254782,
+      0.13382301802883265
+    ],
+    "hold_s": 0.02,
+    "limit": 1.0,
+    "positions": [
+      132,
+      180,
+      452,
+      468,
+      694,
+      808,
+      1718,
+      1781,
+      1803,
+      1903,
+      2058,
+      2477,
+      2842,
+      2935,
+      3016,
+      3071,
+      3193,
+      3316,
+      3621,
+      3770
+    ],
+    "rate_hz": 48000,
+    "release_s": 0.2,
+    "tau_s": 5e-05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 448,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

@@ -89,6 +89,19 @@ def biquad_coefs(response, f0, q, fs):
     return [b[0] / a[0], b[1] / a[0], b[2] / a[0], a[1] / a[0], a[2] / a[0]]
 
 
+def preemphasis_coefs(tau_s, fs_hz):
+    """``[b0, b1, a1]`` of the first-order pre-emphasis of ``sdrk_blocks::design::preemphasis_coefs``.
+
+    Plain ``math`` floats in the same evaluation order as the Rust code (the pole at ``fs / 2.4``,
+    the bilinear transform without prewarping), so the result is identical on every CPU.
+    """
+    assert 0.0 < tau_s <= 1e-3 and fs_hz >= 40000.0
+    tau_p = 1.0 / (2.0 * math.pi * (fs_hz / 2.4))
+    k = 2.0 * fs_hz
+    den = 1.0 + k * tau_p
+    return [(1.0 + k * tau_s) / den, (1.0 - k * tau_s) / den, (1.0 - k * tau_p) / den]
+
+
 def butterworth_sos(response, order, cutoff, fs):
     """Rows ``[b0, b1, b2, a1, a2]`` of an even-order Butterworth cascade, lowest Q first."""
     assert response in ("lowpass", "highpass") and order % 2 == 0 and 2 <= order <= 8

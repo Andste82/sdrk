@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "limit_f32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "limit_f32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "limit_f32_8192",
+  "format_version": 1,
+  "kernel": "preemph_limit",
+  "model": "float32",
+  "notes": "as preemph_f32_8192 with limit 0.5; tone bursts at 1 kHz (samples 500-1499) and 8 kHz (3500-4299) with amplitude 1.5 over noise sigma 0.05, so the limiter attacks, holds and releases; exact float32 model",
+  "params": {
+    "a1_bits": 4593989502643561391,
+    "b0_bits": 4614586531936190583,
+    "b1_bits": 13835405426330217021,
+    "coefs": [
+      3.2880867522836144,
+      -2.154263734254782,
+      0.13382301802883265
+    ],
+    "hold_s": 0.02,
+    "limit": 0.5,
+    "rate_hz": 48000,
+    "release_s": 0.2,
+    "tau_s": 5e-05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 445,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

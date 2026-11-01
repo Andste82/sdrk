@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "i16",
+      "file": "preemph_q15_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "preemph_q15_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "preemph_q15_8192",
+  "format_version": 1,
+  "kernel": "preemph_limit",
+  "notes": "48 kHz, tau 530 us (gain up to 36 dB inside the kernel), limit 1.0, hold 0.02 s, release 0.2 s, noise sigma 0.2 quantized to Q15; exact integer model",
+  "params": {
+    "a1_bits": 4593989502643561391,
+    "b0_bits": 4628971782111108730,
+    "b1_bits": 13852024676158290867,
+    "coefs": [
+      29.411369087667914,
+      -28.277546069639083,
+      0.13382301802883265
+    ],
+    "hold_s": 0.02,
+    "limit": 1.0,
+    "rate_hz": 48000,
+    "release_s": 0.2,
+    "tau_s": 0.00053
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 447,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

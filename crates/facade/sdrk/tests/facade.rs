@@ -275,6 +275,19 @@ fn backend_table_lists_the_m24_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m25_kernels() {
+    // Both the pre-emphasis and the envelope are per-sample recursions: not accelerated.
+    for (kernel, ty) in [
+        ("preemph_limit", SampleType::F32),
+        ("preemph_limit", SampleType::Q15),
+    ] {
+        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("preemph_limit", SampleType::C32), "none");
+    assert_eq!(backend_for("preemph_limit", SampleType::CQ15), "none");
+}
+
+#[test]
 fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     use sdrk::Rate;
     use sdrk::kernels::decim::{

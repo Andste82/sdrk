@@ -1,7 +1,6 @@
 # The nightly run: the whole CI tree (tree.yml) with scope `full`, that is every pull-request
 # job plus the long jobs (sweeps, emulators with the full profile, every instruction count,
-# fuzzing, the long run). On Sunday it also runs the full profile of the ESP32-P4. When main
-# has not changed since the last green nightly run, the pull-request tests are skipped and
+# fuzzing, the long run). When main has not changed since the last green nightly run, the pull-request tests are skipped and
 # only the long jobs run (except on Sunday, so that a change of the environment, a new
 # toolchain or runner image, still shows within a week). A failure opens or updates an issue.
 name: nightly
@@ -9,14 +8,10 @@ name: nightly
 on:
   schedule:
     - cron: "17 3 * * 1-6"
-    # Sunday: also the full profile of the ESP32-P4.
+    # Sunday: always with the pull-request tests.
     - cron: "17 3 * * 0"
   workflow_dispatch:
     inputs:
-      weekly:
-        description: Also run the full profile of the ESP32-P4.
-        type: boolean
-        default: false
       skip_pr_nodes:
         description: Skip the tests that every pull request runs.
         type: boolean
@@ -38,7 +33,6 @@ jobs:
     permissions:
       actions: read
     outputs:
-      weekly: ${{ steps.delta.outputs.weekly }}
       skip_pr_nodes: ${{ steps.delta.outputs.skip_pr_nodes }}
     steps:
       - name: Last green nightly run
@@ -47,21 +41,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SCHEDULE: ${{ github.event.schedule }}
-          WEEKLY_INPUT: ${{ inputs.weekly }}
           SKIP_INPUT: ${{ inputs.skip_pr_nodes }}
         run: |
-          weekly=false
-          if [ "$SCHEDULE" = "17 3 * * 0" ] || [ "$WEEKLY_INPUT" = "true" ]; then weekly=true; fi
           skip=false
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             [ "$SKIP_INPUT" = "true" ] && skip=true
-          elif [ "$weekly" = "false" ]; then
+          elif [ "$SCHEDULE" != "17 3 * * 0" ]; then
             last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --branch main \
               --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
             echo "last green nightly: ${last:-none}, now: $GITHUB_SHA"
             [ "$last" = "$GITHUB_SHA" ] && skip=true
           fi
-          { echo "weekly=$weekly"; echo "skip_pr_nodes=$skip"; } | tee -a "$GITHUB_OUTPUT"
+          echo "skip_pr_nodes=$skip" | tee -a "$GITHUB_OUTPUT"
 
   tree:
     needs: delta
@@ -69,7 +60,6 @@ jobs:
     secrets: inherit
     with:
       scope: full
-      weekly: ${{ needs.delta.outputs.weekly == 'true' }}
       skip_pr_nodes: ${{ needs.delta.outputs.skip_pr_nodes == 'true' }}
 
   report:

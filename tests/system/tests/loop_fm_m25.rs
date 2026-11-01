@@ -156,7 +156,7 @@ fn loop_fm_peak(precision: Precision) {
         // The Q15 audio input saturates at full scale, so without the shape node the deviation
         // cannot exceed 1.0 plus the overshoot of the filters: the control of the milestone
         // (more than 1.5) cannot hold in Q15. The measured value is recorded (1.043) and the
-        // threshold is not changed for f32; open item I25-2, decision D180.
+        // threshold is not changed for f32; open item I25-2, decision D190.
         assert!(
             (0.9..1.1).contains(&without),
             "{precision:?}: without shape {without:.4}"

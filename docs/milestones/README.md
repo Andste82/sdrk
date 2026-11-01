@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M24 are delivered; M16 to M18, M24.1 and M25 are planned (the receive series M19 to M24, M24.1 and M25 use nothing from M16 to M18, see the *Order* section of M19).
+Milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. State on `main`: M00 to M15 and M19 to M24 are delivered; M16 to M18, M24.1 and M25 are planned (the receive series M19 to M25, M24.1 included, uses nothing from M16 to M18, see the *Order* section of M19).
 
 **Block names:** M24.1 fixes the naming scheme of block kinds (`docs/blocks.md`, section "Names") and renames four kinds: `resampler` → `resample`, `halfband` → `halfband_decimate`, `real_to_complex` → `real_to_iq`, `fm_stereo` → `fm_stereo_demod` (the old names stay accepted as aliases for a while). The milestone files before M24.1 are records and use the old names; every later milestone uses the scheme and the table of reserved names.
 
@@ -84,12 +84,12 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 421–423 | M21 |
 | 424–429 | M22 |
 | 430–435 | M23 |
-| 452–453 | M23 (the saturation-corner cases of the `Q15` halfband kernels, review finding) |
 | 436–437 | M20 (the audio-filter cases of `am_demod`, open item M20-5) |
 | 438–443 | M24 |
-| 454 | M24 (the additional case `stereo_pll/disable_enable_f32_16384`, D113) |
 | 444–450 | M25 |
 | 451 | M21 (the loud decimated `CQ15` case `ssb_demod_usb_cq15_dec4_loud`, review finding) |
+| 452–453 | M23 (the saturation-corner cases of the `Q15` halfband kernels, review finding) |
+| 454 | M24 (the additional case `stereo_pll/disable_enable_f32_16384`, D113) |
 | 455–499 | free, for backlog milestones |
 | 500–519 | M17 (RVV stress and digest inputs; no golden vectors) |
 | 520–529 | M18 (arm-dsp stress inputs; no golden vectors) |

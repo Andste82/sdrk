@@ -400,6 +400,25 @@ mod tests {
                 );
             }
         }
+        // Every length up to three vector blocks plus a tail, at several byte offsets of the
+        // pattern: the vector body (where the compiler vectorizes the loop), its remainder and
+        // the scalar tail give the same bits, and nothing past the input is written.
+        let format = formats::CU8;
+        let f = ToF32::new(&format);
+        for len in 0..=67 {
+            for start in [0usize, 1, 7, 128, 200, 255] {
+                let input: std::vec::Vec<u8> =
+                    (0..len).map(|k| ((start + 37 * k) % 256) as u8).collect();
+                let mut out = std::vec![f32::NAN; len + 1];
+                Direct::U8.to_f32(&input, &mut out);
+                for (k, &b) in input.iter().enumerate() {
+                    let e = value(&format, &input, k).unwrap();
+                    let (got, want) = (out[k].to_bits(), f.map(e).to_bits());
+                    assert_eq!(got, want, "len {len}, byte {b}");
+                }
+                assert!(out[len].is_nan(), "len {len}: wrote past the input");
+            }
+        }
         let words: std::vec::Vec<i16> = (-300..300)
             .chain([i16::MIN, i16::MIN + 1, i16::MAX - 1, i16::MAX])
             .collect();

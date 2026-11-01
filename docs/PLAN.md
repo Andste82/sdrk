@@ -345,7 +345,7 @@ A server with an SDR, a web UI and MCP access: mark a signal in the waterfall, t
 | Topic | Decision |
 | --- | --- |
 | Name | **SDRk** in text, code comments and documentation, pronounced shark (Software-Defined Radio Kernels); lowercase `sdrk` everywhere else in code |
-| Support tiers | Tier 1 (every commit, a failure blocks the merge): x86-64, AArch64, wasm32, Cortex-M4. Tier 2 (nightly): ESP32-P4/S3, RISC-V, Cortex-M55. Tier 3 (builds, not tested): every other Rust target via the fallback |
+| Support tiers | Tier 1 (every commit, a failure blocks the merge): x86-64, AArch64, wasm32, Cortex-M4. Tier 2 (nightly): RISC-V, Cortex-M55; ESP32-P4/S3 paused in CI (D177). Tier 3 (builds, not tested): every other Rust target via the fallback |
 | Q15 format | Q1.15 in `i16`, range −1 to 1 − 2⁻¹⁵ |
 | Q15 rounding | round half up: add ½ LSB, then arithmetic shift |
 | Q15 overflow | always saturate, never wrap (−1 × −1 saturates to the maximum) |

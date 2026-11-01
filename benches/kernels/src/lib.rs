@@ -34,6 +34,7 @@ use sdrk::kernels::interp::{
 };
 use sdrk::kernels::mix::{Nco, Rotate};
 use sdrk::kernels::modulate::{FmMod, FmModState};
+use sdrk::kernels::preemph_limit::{PreemphLimit, PreemphLimitState};
 use sdrk::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk::kernels::squelch::{Squelch, SquelchState};
 use sdrk::{C32, CQ15, ComplexSample, Fallback, Q15, Rate, Sdrk};
@@ -328,7 +329,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 146] = [
+pub const KERNELS: [&str; 148] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -475,6 +476,8 @@ pub const KERNELS: [&str; 146] = [
     "stereo_matrix_cq15_fallback",
     "stereo_pll_fallback",
     "stereo_pll_q15_fallback",
+    "preemph_limit",
+    "preemph_limit_q15",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -632,6 +635,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "deemphasis" => Box::new(DeemphasisK::<f32>::new(rng, layout, simd)),
         "deemphasis_q15" => Box::new(DeemphasisK::<Q15>::new(rng, layout, simd)),
         "deemphasis_fallback" => Box::new(DeemphasisK::<f32>::new(rng, layout, fallback)),
+        "preemph_limit" => Box::new(PreemphK::<f32>::new(rng, layout)),
+        "preemph_limit_q15" => Box::new(PreemphK::<Q15>::new(rng, layout)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),
@@ -4749,6 +4754,95 @@ where
             Impl::GnuRadio => {
                 "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)"
             }
+            _ => "sdrk",
+        }
+    }
+}
+
+/// `preemph_limit` (`f32`) and `preemph_limit_q15` (`Q15`): the fallback through the facade,
+/// `info` against our own fallback (the kernel is not accelerated: the pre-emphasis and the
+/// envelope are recursions over the previous sample). The workload follows the golden case
+/// `limit_f32`: 4096 samples at 48 kHz, pre-emphasis of 50 us, limit 0.5, hold 20 ms, release
+/// 200 ms, quiet noise (the limiter idles) with two tone bursts above the limit (attack, hold,
+/// release), so that all three limiter states are visited. The Q15 input is the same signal
+/// quantised.
+struct PreemphK<T: RealNoise> {
+    input: Aligned<T>,
+    out: Aligned<T>,
+}
+
+impl<T: RealNoise> PreemphK<T> {
+    fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let n = layout.n;
+        let mut input = Aligned::<T>::skewed(n, layout.skew(core::mem::size_of::<T>()));
+        for (i, s) in input.iter_mut().enumerate() {
+            let burst = (n / 8..n / 8 + n / 4).contains(&i) || (5 * n / 8..11 * n / 16).contains(&i);
+            let tone = if burst {
+                0.9 * (2.0 * core::f64::consts::PI * 3000.0 / 48_000.0 * i as f64).sin()
+            } else {
+                0.0
+            };
+            // `noise` with amplitude 0 and offset `v` is the quantisation of `v`.
+            let v = (tone + f64::from(rng.unit()) * 0.05) as f32;
+            *s = T::noise(rng, 0.0, v);
+        }
+        PreemphK {
+            input,
+            out: Aligned::skewed(n, layout.skew(core::mem::size_of::<T>())),
+        }
+    }
+
+    fn state() -> PreemphLimitState<T> {
+        let coefs = sdrk_blocks::design::preemphasis_coefs(50e-6, 48_000.0).expect("preemphasis");
+        PreemphLimitState::new(coefs, 0.5, 0.02, 0.2, Rate::hz(48_000).expect("rate"))
+            .expect("preemph_limit")
+    }
+}
+
+#[inline(never)]
+fn preemph_limit<T: sdrk_core::RealSample, B: PreemphLimit<T>>(
+    backend: &B,
+    state: &mut PreemphLimitState<T>,
+    input: &[T],
+    out: &mut [T],
+) {
+    let _ = black_box(backend.preemph_limit(state, black_box(input), out));
+}
+
+impl<T: RealNoise> Kernel for PreemphK<T>
+where
+    Sdrk: PreemphLimit<T>,
+    Fallback: PreemphLimit<T>,
+    Reference: PreemphLimit<T>,
+{
+    fn run(&mut self, which: Impl, k: usize) {
+        let mut state = Self::state();
+        for _ in 0..k {
+            match which {
+                Impl::Ours => preemph_limit(&Sdrk, &mut state, &self.input, &mut self.out),
+                Impl::Fallback => preemph_limit(&Fallback, &mut state, &self.input, &mut self.out),
+                other => unreachable!("preemph_limit has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        self.run(which, 1);
+        let mut want = vec![self.out[0]; self.out.len()];
+        let _ = Reference.preemph_limit(&mut Self::state(), &self.input, &mut want);
+        let want: Vec<f64> = want.iter().map(|v| v.as_f64()).collect();
+        let got: Vec<f64> = self.out.iter().map(|v| v.as_f64()).collect();
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }

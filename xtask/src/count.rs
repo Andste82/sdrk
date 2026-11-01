@@ -843,7 +843,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 146] = [
+pub static KERNELS: [KernelSpec; 148] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1041,6 +1041,8 @@ pub static KERNELS: [KernelSpec; 146] = [
     ),
     spec("stereo_pll_fallback", Family::FallbackVsLiquid, false),
     spec("stereo_pll_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("preemph_limit", Family::Own, false),
+    spec("preemph_limit_q15", Family::Own, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -4287,6 +4289,29 @@ mod tests {
                 .family
                 .measured_at(plan("avx2-runtime"))
         );
+    }
+
+    #[test]
+    fn preemph_limit_is_information_against_the_fallback_at_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            for k in ["preemph_limit", "preemph_limit_q15"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in ["preemph_limit", "preemph_limit_q15"] {
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(k)).0,
+                Reference::OwnLevel("avx2"),
+                "{k}"
+            );
+            assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
     }
 
     #[test]

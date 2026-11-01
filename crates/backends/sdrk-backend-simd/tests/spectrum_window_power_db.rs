@@ -254,6 +254,56 @@ fn power_db_f32_extremes_are_bit_exact() {
 }
 
 #[test]
+fn power_db_f32_every_reduced_mantissa_is_bit_exact() {
+    // The reduction depends on the mantissa only, and the binades [sqrt(2)/2, 1) and
+    // [1, sqrt(2)) hold every reduced value `m` once: every pattern of [0.5, 2) covers all of
+    // them (and the shift of `k` at sqrt(2)) for both exponents.
+    let p: Vec<f32> = (0x3f00_0000u32..0x4000_0000).map(f32::from_bits).collect();
+    check_power_db_f32(&p, -1.25, "mantissas of [0.5, 2)");
+}
+
+#[test]
+fn power_db_f32_special_value_at_every_position_is_bit_exact() {
+    // One special value at each position of each length up to 80 samples: the prologue, the
+    // steady loop and the drain of the pipelined and blocked forms at every level, and the tail.
+    let base: Vec<f32> = (0..80).map(|i| 10f32.powf(i as f32 / 7.0 - 5.0)).collect();
+    for special in [
+        f32::INFINITY,
+        f32::NAN,
+        0.0,
+        -1.0,
+        f32::MAX,
+        f32::MIN_POSITIVE,
+    ] {
+        for n in 1..=base.len() {
+            for pos in 0..n {
+                let mut p = base[..n].to_vec();
+                p[pos] = special;
+                check_power_db_f32(&p, 3.0, &format!("{special} at {pos} of {n}"));
+            }
+        }
+    }
+}
+
+#[test]
+fn power_db_f32_is_chunk_invariant() {
+    // A stateless kernel: the output of a buffer is the output of its pieces, cut anywhere.
+    let mut rng = Rng::new(154);
+    let p: Vec<f32> = (0..1000)
+        .map(|_| rng.unit() * 10f32.powi(rng.below(40) as i32 - 20))
+        .collect();
+    let mut whole = vec![0f32; p.len()];
+    Simd.power_db(&p, &mut whole, 7.5).unwrap();
+    for cut in [1, 3, 4, 5, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65, 100, 999] {
+        let mut pieces = vec![0f32; p.len()];
+        for (i, o) in p.chunks(cut).zip(pieces.chunks_mut(cut)) {
+            Simd.power_db(i, o, 7.5).unwrap();
+        }
+        assert!(same_f32(&whole, &pieces), "cut {cut}");
+    }
+}
+
+#[test]
 fn power_db_q15_every_value_is_bit_exact() {
     // Every raw value, shifted by one per round so that each passes every lane and the tail.
     let all: Vec<Q15> = (i16::MIN..=i16::MAX).map(Q15).collect();

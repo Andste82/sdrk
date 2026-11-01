@@ -12,7 +12,7 @@ Every later milestone needs blocks with two inputs or two outputs: the building 
 
 ## Order
 
-M26 depends on M25.1 (release 0.1.0 is made before the interface changes). M27, M29, M30, M33 and M34 can start after it; M28 does not need it and can run in parallel with it.
+M26 depends on M25.1 (release 0.1.0 is made before the interface changes). M27, M29, M30 and M33 can start after it (M34 also needs M29 and M30); M28 does not need it and can run in parallel with it.
 
 ## Ground rules (identical in every milestone — read them completely before you start)
 

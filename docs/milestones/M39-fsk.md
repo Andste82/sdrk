@@ -166,7 +166,7 @@ Parameters: `levels` (I64, build, 2; 2 or 4), `samples_per_symbol` (I64, build, 
 `FskDemodBlock`: input C32 (the channel already filtered by `ddc`), output soft bits `f32`. A chain of existing parts:
 
 1. `quad_demod` with `deviation_hz` (so the outer levels give ±1).
-2. Matched filter: `fir` real with `round(sps)` equal taps `1/round(sps)` (the boxcar; for `bt` > 0 the same boxcar, the Gaussian is not inverted).
+2. Matched filter: a boxcar of `round(sps)` equal taps `1/round(sps)` (for `bt` > 0 the same boxcar, the Gaussian is not inverted). There is no real `fir` kernel; use `resample_real` with `L = M = 1` and these taps, as `decimate` does for real input (M29).
 3. `symbol_sync` (Gardner, real) with `symbol_rate_hz` and the loop parameters of M38 (`loop_bw` default 0.01).
 4. `slice`: `levels` 2: `real` (soft bit = level). `levels` 4: two soft bits per symbol `s0 = −v` (bit 0 is 1 for negative levels), `s1 = |v| − 2/3` (bit 1 is 1 for the outer levels); add this as constellation `fsk4` to the `slice` table of M38.
 
@@ -193,7 +193,7 @@ Parameters: `time_constant_s` (s, build, 0.5), `max_offset_hz` (Hz, build, requi
 
 ## Tests
 
-1. Golden: `design/gaussian_*`; `blocks/fsk_mod_gfsk_c32` (seed 530, f64 chain, SNR ≥ 90 dB); `blocks/fsk_demod_2fsk_f32` (seed 531, float32 model, bit-exact).
+1. Golden: `design/gaussian_*`; `blocks/fsk_mod_gfsk_c32` (seed 530, f64 chain, SNR ≥ 90 dB); `blocks/fsk_demod_2fsk_f32` (seed 531, f64 chain with the float32 `symbol_sync` model, SNR ≥ 80 dB; `quad_demod` and `resample_real` are tolerance kernels, so the chain is not bit-exact).
 2. **Loop 2-FSK (`fsk_loop_ber`):** `fsk_mod` (sps 8, h = 1) → AWGN → `fsk_demod` → BER over 10^6 bits within a factor 2 of `0.5·exp(−Eb/(2·N0))` (non-coherent 2-FSK) at Eb/N0 10 and 12 dB (seed 532). GFSK with bt 0.5 at most 1.5 dB worse (seed 533).
 3. **Loop 4-FSK:** 10^5 symbols at Eb/N0 14 dB, symbol error rate below 1e-3 (seed 534).
 4. **AFC:** an offset of 5 kHz and 20 ppm drift over 10 s at 868 MHz carrier: `afc` converges to within 50 Hz in 1 s, reports the ppm within 0.1 ppm; packets decode with PER < 1 % at Eb/N0 12 dB with AFC and fail without (seed 535). `hold` freezes the estimate.

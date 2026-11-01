@@ -26,9 +26,9 @@
 //! `pmulhrsw` with a fix of the one overflow at SSE4.2, AVX2 and AVX-512, `pmulhw`/`pmullw` at
 //! SSE2, `sqrdmulh` on NEON and `i16x8.q15mulr_sat_s` on wasm32 (loop form [`window_steps!`]).
 //!
-//! `power_db` is `libm::log10f` step by step on whole vectors, in three passes over blocks of
-//! [`POWER_DB_BLOCK`] samples, so it is bit-exact with the fallback as well; the generic code on
-//! every level.
+//! `power_db` is `libm::log10f` step by step on whole vectors, so it is bit-exact with the
+//! fallback as well; the generic code on every level, with a loop form per level (see `Plan`):
+//! blocks in three passes or a software pipeline of two stages.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
@@ -664,23 +664,30 @@ fn to_db(p: f32, offset_db: f32) -> f32 {
 /// fallback. After the floor every lane is a normal positive number or `+inf`, so of the special
 /// cases of `log10f` only `+inf` remains (`log10f(1) = 0` is also what the general steps give).
 ///
-/// The steps form one dependency chain of about 70 cycles (the division in its middle), longer
-/// than the window of independent work the cores keep in flight, so a block of
-/// [`POWER_DB_BLOCK`] samples runs in three passes over small buffers on the stack: the first
-/// ([`log10_reduce`]) reduces the argument and divides, the second ([`log10_split`]) evaluates
-/// the polynomial and splits `f - f^2/2`, the third ([`log10_sum`]) adds the five terms and
-/// scales. Each pass has a chain of a third of the length, so the work of several vectors
-/// overlaps. The operations and their order are those of one pass, so the bits are the same.
-/// Simulated at `avx2` (`cargo measure power_db`, whole-loop, `znver3` / `alderlake`, cycles per
-/// sample): `f32` 2.76 / 2.12 in one pass, 2.15 / 1.91 in two passes of 64 samples, 2.17 / 1.90
-/// in three of 32; `Q15` 3.09 / 2.46, 2.57 / 2.01 and 1.98 / 1.95. The block must be a multiple
-/// of the longest vector of `i16` (32 lanes at AVX-512).
-const POWER_DB_BLOCK: usize = 32;
+/// The steps form one dependency chain of about 90 cycles (the division in its middle), longer
+/// than the window of independent work the cores keep in flight, so the loops cut it up (see
+/// [`Plan`]): blocks of [`PASS_VECS`] vectors in three passes over small buffers on the stack
+/// (the reduction and the division, [`log10_reduce`]; the polynomial and the split of
+/// `f - f^2/2`, [`log10_split`]; the sum of the five terms and the scale, [`log10_sum_db`]), or
+/// a software pipeline that reduces the next vector while it finishes the current one. The
+/// operations of each vector and their order stay those of one pass, so the bits are the same.
+const PASS_VECS: usize = 4;
+
+/// The longest block of the passes: [`PASS_VECS`] vectors of 16 `f32` (AVX-512).
+const PASS_BUF: usize = 64;
+
+/// A buffer of the passes.
+#[derive(Clone, Copy)]
+#[repr(C, align(64))]
+struct PassBuf([f32; PASS_BUF]);
 
 /// The first steps of `log10f` on one vector of powers: the floor, the reduction of `x` to
-/// `2^k (1 + f)` and the quotient `s = f / (2 + f)`. Returns `(s, f, k)` (`k` as `f32`).
+/// `2^k (1 + f)` and the quotient `s = f / (2 + f)`. Returns `(s, f, dk)` with `dk = k` as
+/// `f32`; with `inf`, `dk` is `+inf` where `x` is, which makes the sum of [`log10_sum_db`]
+/// `+inf` there (`f`, `s`, `lo` and `hi` are 0 in those lanes, so every other term is 0), as
+/// `log10f(+inf)`; `10 y + offset` is then what the fallback computes from `+inf`.
 #[inline(always)]
-fn log10_reduce<S: SimdToken>(simd: S, p: S::f32s) -> (S::f32s, S::f32s, S::f32s) {
+fn log10_reduce<S: SimdToken>(simd: S, p: S::f32s, inf: bool) -> (S::f32s, S::f32s, S::f32s) {
     let floor = S::f32s::splat(simd, FLOOR);
     // `p > FLOOR ? p : FLOOR`: NaN takes the floor too. On x86 that is `maxps(p, FLOOR)`, which
     // returns its second operand where either is NaN (the scalar level uses `f32::max`, which
@@ -689,13 +696,25 @@ fn log10_reduce<S: SimdToken>(simd: S, p: S::f32s) -> (S::f32s, S::f32s, S::f32s
     let x = p.max(floor);
     #[cfg(not(target_arch = "x86_64"))]
     let x = p.simd_gt(floor).select(p, floor);
-    // Reduce `x` to `2^k m` with `m` in `[sqrt(2)/2, sqrt(2))`.
-    let ix = x.bitcast::<S::u32s>() + (0x3f80_0000 - 0x3f35_04f3);
-    let k: S::i32s = (ix >> 23u32).bitcast::<S::i32s>() - 0x7f;
+    // Reduce `x` to `2^k m` with `m` in `[sqrt(2)/2, sqrt(2))`. `log10f` forms
+    // `ix = bits(x) + (0x3f800000 - 0x3f3504f3)`, `k = (ix >> 23) - 0x7f` and
+    // `m = (ix & 0x7fffff) + 0x3f3504f3`; with `ix - 0x3f800000 = bits(x) - 0x3f3504f3` the same
+    // `k` is one arithmetic shift (`ix < 2^31`), and the low 23 bits are those of `ix`.
+    let ix: S::i32s = x.bitcast::<S::i32s>() - 0x3f35_04f3;
+    let k: S::i32s = ix >> 23u32;
     let m: S::f32s = ((ix & 0x007f_ffff) + 0x3f35_04f3).bitcast();
+    // `f = m - 1` is exact (`m` is within a factor 2 of 1), so `f + 2` is `m + 1` rounded once:
+    // the same bits, one step less on the way to the division.
     let f = m - 1.0;
-    let s = f / (f + 2.0);
-    (s, f, k.to_float())
+    let s = f / (m + 1.0);
+    let dk: S::f32s = k.to_float();
+    let dk = if inf {
+        let inf = S::f32s::splat(simd, f32::INFINITY);
+        x.simd_eq(inf).select(inf, dk)
+    } else {
+        dk
+    };
+    (s, f, dk)
 }
 
 /// The middle steps of `log10f` from [`log10_reduce`]: the polynomial and the split of
@@ -718,121 +737,174 @@ fn log10_split<S: SimdToken>(s: S::f32s, f: S::f32s) -> (S::f32s, S::f32s) {
     (lo, hi)
 }
 
-/// The last step of `log10f`: the sum of the five terms (not the case `+inf`, see the
-/// callers).
+/// The last steps: the sum of the five terms of `log10f`, then `10 y + offset`.
 #[inline(always)]
-fn log10_sum<S: SimdToken>(lo: S::f32s, hi: S::f32s, dk: S::f32s) -> S::f32s {
+fn log10_sum_db<S: SimdToken>(lo: S::f32s, hi: S::f32s, dk: S::f32s, offset: S::f32s) -> S::f32s {
     const IVLN10HI: f32 = f32::from_bits(0x3ede_6000);
     const IVLN10LO: f32 = f32::from_bits(0xb804_ead9);
     const LOG10_2HI: f32 = f32::from_bits(0x3e9a_2080);
     const LOG10_2LO: f32 = f32::from_bits(0x3554_27db);
-    dk * LOG10_2LO + (lo + hi) * IVLN10LO + lo * IVLN10HI + hi * IVLN10HI + dk * LOG10_2HI
+    let y = dk * LOG10_2LO + (lo + hi) * IVLN10LO + lo * IVLN10HI + hi * IVLN10HI + dk * LOG10_2HI;
+    y * 10.0 + offset
 }
 
 /// All steps after [`log10_reduce`].
 #[inline(always)]
-fn log10_finish<S: SimdToken>(s: S::f32s, f: S::f32s, dk: S::f32s) -> S::f32s {
+fn log10_finish<S: SimdToken>((s, f, dk): (S::f32s, S::f32s, S::f32s), offset: S::f32s) -> S::f32s {
     let (lo, hi) = log10_split::<S>(s, f);
-    log10_sum::<S>(lo, hi, dk)
+    log10_sum_db::<S>(lo, hi, dk, offset)
 }
 
-/// The middle pass over the buffers of a block: `lo` and `hi` in place of `s` and `f`.
+/// How `power_db` runs the whole vectors of a level (simulated with `cargo measure power_db`,
+/// cycles per sample on the two core models of each level; see `docs/backends.md`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Plan {
+    /// Every vector in one pass (wasm32, where no core model judges the cycles; the
+    /// instructions are those of the code before the plans).
+    OnePass,
+    /// A software pipeline of two stages in registers: each iteration reduces vector `j + 1`
+    /// first, then splits and sums vector `j` (`f32` at SSE4.2, both types at AVX-512 and on
+    /// NEON). A third
+    /// stage (sum `j`, split `j + 1`, reduce `j + 2`) simulated faster at SSE4.2 but costs one
+    /// more instruction per vector (register moves), above the release limit against VOLK.
+    TwoStage,
+    /// Blocks of [`PASS_VECS`] vectors in three passes (`f32` at SSE2 and AVX2, `Q15` at SSE2,
+    /// SSE4.2 and AVX2).
+    Passes,
+}
+
+/// The plan of `power_db` for the level of `simd` (`q15`: for `Q15` input).
 #[inline(always)]
-fn log10_split_pass<S: SimdToken>(simd: S, sb: &mut [f32], fb: &mut [f32]) {
-    let l = S::f32s::LEN;
-    for (s, f) in sb.chunks_exact_mut(l).zip(fb.chunks_exact_mut(l)) {
-        let (lo, hi) = log10_split::<S>(S::f32s::from_slice(simd, s), S::f32s::from_slice(simd, f));
-        lo.store_slice(s);
-        hi.store_slice(f);
+fn plan<S: SimdToken>(simd: S, q15: bool) -> Plan {
+    let lanes = S::f32s::LEN;
+    if cfg!(target_arch = "x86_64") {
+        let passes = if q15 {
+            lanes < 16
+        } else {
+            lanes == 8 || crate::level::is_sse2_baseline(simd)
+        };
+        if passes { Plan::Passes } else { Plan::TwoStage }
+    } else if cfg!(target_arch = "aarch64") {
+        Plan::TwoStage
+    } else {
+        Plan::OnePass
     }
 }
 
-/// `10 y + offset` of the logarithm `y` of the powers `p`, with `log10f(+inf) = +inf` (a lane is
-/// `+inf` after the floor exactly where it is `+inf` before it).
+/// The second and third passes over the buffers of a block: `lo` and `hi` in place of `s` and
+/// `f`, then the sum and the scale into `out` (as long as the block).
 #[inline(always)]
-fn f32_db<S: SimdToken>(simd: S, p: S::f32s, y: S::f32s, offset: S::f32s) -> S::f32s {
-    let inf = S::f32s::splat(simd, f32::INFINITY);
-    p.simd_eq(inf).select(inf, y) * 10.0 + offset
+fn db_passes<S: SimdToken>(
+    simd: S,
+    [sb, fb, kb]: &mut [PassBuf; 3],
+    out: &mut [f32],
+    offset: S::f32s,
+) {
+    let l = S::f32s::LEN;
+    let load = |x: &[f32]| S::f32s::from_slice(simd, x);
+    let b = out.len();
+    let (sb, fb, kb) = (
+        sb.0.split_at_mut(b).0,
+        fb.0.split_at_mut(b).0,
+        kb.0.split_at(b).0,
+    );
+    for (s, f) in sb.chunks_exact_mut(l).zip(fb.chunks_exact_mut(l)) {
+        let (lo, hi) = log10_split::<S>(load(s), load(f));
+        lo.store_slice(s);
+        hi.store_slice(f);
+    }
+    let bufs = sb
+        .chunks_exact(l)
+        .zip(fb.chunks_exact(l))
+        .zip(kb.chunks_exact(l));
+    for (o, ((lo, hi), k)) in out.chunks_exact_mut(l).zip(bufs) {
+        log10_sum_db::<S>(load(lo), load(hi), load(k), offset).store_slice(o);
+    }
 }
 
-/// Whether `power_db` runs whole blocks in passes, for vectors of `lanes` values of `f32` (`q15`:
-/// for `Q15` input). The passes cost loads and stores. They pay off for both types with 8 lanes
-/// (AVX2, numbers at [`POWER_DB_BLOCK`]) and for `Q15` with 16 (AVX-512, `znver4` /
-/// `sapphirerapids`: 1.56 / 1.70 against 1.85 / 1.75 cycles per sample in one pass). They do not
-/// for `f32` with 16 lanes (1.54 / 1.64 against 1.54 / 1.59), add 13 to 16 % instructions with 4
-/// lanes at SSE2 and SSE4.2 (`f32` at SSE4.2 above the release limit against VOLK) and do not
-/// on NEON (per block, `cortex-a72` / `cortex-a76`, cycles per sample: `f32` 15.80 / 8.38 in
-/// passes against 15.91 / 6.84 in one pass, `Q15` `cortex-a76` 7.71 against 7.03).
+/// The chunks of `l` values of the buffers of the first pass, up to `len`.
 #[inline(always)]
-const fn passes(lanes: usize, q15: bool) -> bool {
-    if q15 { lanes >= 8 } else { lanes == 8 }
+fn pass_chunks(
+    [sb, fb, kb]: &mut [PassBuf; 3],
+    len: usize,
+    l: usize,
+) -> impl Iterator<Item = ((&mut [f32], &mut [f32]), &mut [f32])> {
+    let (sb, fb, kb) = (
+        sb.0.split_at_mut(len).0,
+        fb.0.split_at_mut(len).0,
+        kb.0.split_at_mut(len).0,
+    );
+    sb.chunks_exact_mut(l)
+        .zip(fb.chunks_exact_mut(l))
+        .zip(kb.chunks_exact_mut(l))
 }
 
-/// `power_db` of linear powers in `f32`: blocks of [`POWER_DB_BLOCK`] samples in three passes
-/// (where [`passes`]), then the whole vectors in one, then the scalar tail.
+/// Stores the result of [`log10_reduce`] into the chunks of the buffers.
+#[inline(always)]
+fn store_reduced<S: SimdToken>(
+    ((sb, fb), kb): ((&mut [f32], &mut [f32]), &mut [f32]),
+    (s, f, k): (S::f32s, S::f32s, S::f32s),
+) {
+    s.store_slice(sb);
+    f.store_slice(fb);
+    k.store_slice(kb);
+}
+
+/// [`Plan::TwoStage`] over the whole vectors of `input` and `out` (at least one).
+#[inline(always)]
+fn db_two_stage<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32], offset: S::f32s) {
+    let l = S::f32s::LEN;
+    let (head, rest) = input.split_at(l);
+    let mut reduced = log10_reduce(simd, S::f32s::from_slice(simd, head), true);
+    let n = out.len();
+    let (body, last) = out.split_at_mut(n - l);
+    for (i, o) in rest.chunks_exact(l).zip(body.chunks_exact_mut(l)) {
+        let next = log10_reduce(simd, S::f32s::from_slice(simd, i), true);
+        log10_finish::<S>(reduced, offset).store_slice(o);
+        reduced = next;
+    }
+    log10_finish::<S>(reduced, offset).store_slice(last);
+}
+
+/// `power_db` of linear powers in `f32`: the whole vectors by the [`Plan`] of the level, then
+/// the scalar tail.
 #[allow(
     clippy::large_stack_frames,
     reason = "the lint counts the temporaries of the inlined vector steps before optimization; \
-              the buffers of the passes are three arrays of 32 `f32` (384 bytes)"
+              the buffers of the passes are three arrays of 64 `f32` (768 bytes)"
 )]
 #[inline(always)]
 fn power_db_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32], offset_db: f32) {
     let l = S::f32s::LEN;
     let offset = S::f32s::splat(simd, offset_db);
     let n = out.len().min(input.len());
-    let blocked = if passes(l, false) {
-        n - n % POWER_DB_BLOCK
+    let plan = plan(simd, false);
+    let block = PASS_VECS * l;
+    let blocked = if plan == Plan::Passes {
+        n - n % block
     } else {
         0
     };
     let (bi, ri) = input.split_at(blocked);
     let (bo, ro) = out.split_at_mut(bi.len());
-    let (mut sb, mut fb, mut kb) = (
-        [0f32; POWER_DB_BLOCK],
-        [0f32; POWER_DB_BLOCK],
-        [0f32; POWER_DB_BLOCK],
-    );
-    for (i, o) in bi
-        .chunks_exact(POWER_DB_BLOCK)
-        .zip(bo.chunks_exact_mut(POWER_DB_BLOCK))
-    {
-        let bufs = sb
-            .chunks_exact_mut(l)
-            .zip(fb.chunks_exact_mut(l))
-            .zip(kb.chunks_exact_mut(l));
-        for (i, ((s, f), k)) in i.chunks_exact(l).zip(bufs) {
-            let (vs, vf, vk) = log10_reduce(simd, S::f32s::from_slice(simd, i));
-            vs.store_slice(s);
-            vf.store_slice(f);
-            vk.store_slice(k);
+    let mut bufs = [PassBuf([0.0; PASS_BUF]); 3];
+    for (i, o) in bi.chunks_exact(block).zip(bo.chunks_exact_mut(block)) {
+        for (i, b) in i.chunks_exact(l).zip(pass_chunks(&mut bufs, block, l)) {
+            let reduced = log10_reduce(simd, S::f32s::from_slice(simd, i), true);
+            store_reduced::<S>(b, reduced);
         }
-        log10_split_pass(simd, &mut sb, &mut fb);
-        let bufs = sb
-            .chunks_exact(l)
-            .zip(fb.chunks_exact(l))
-            .zip(kb.chunks_exact(l));
-        for ((i, o), ((lo, hi), k)) in i.chunks_exact(l).zip(o.chunks_exact_mut(l)).zip(bufs) {
-            let load = |x: &[f32]| S::f32s::from_slice(simd, x);
-            let y = log10_sum::<S>(load(lo), load(hi), load(k));
-            f32_db(simd, load(i), y, offset).store_slice(o);
-        }
+        db_passes(simd, &mut bufs, o, offset);
     }
     let nv = ri.len().min(ro.len()) / l * l;
     let (vi, ri) = ri.split_at(nv);
     let (vo, ro) = ro.split_at_mut(nv);
-    for (i, o) in vi.chunks_exact(l).zip(vo.chunks_exact_mut(l)) {
-        let p = S::f32s::from_slice(simd, i);
-        let (s, f, k) = log10_reduce(simd, p);
-        // On NEON the `+inf` test takes the floored value, the select of [`log10_reduce`] (the
-        // same lanes are `+inf`), so that LLVM schedules the loop as in the one-pass code before
-        // the passes (`cortex-a72` / `cortex-a76`, per block: 15.91 / 6.84 cycles per sample
-        // against 16.18 / 6.82 with the raw input; wasm32 would count 0.25 more instructions).
-        #[cfg(target_arch = "aarch64")]
-        let p = {
-            let floor = S::f32s::splat(simd, FLOOR);
-            p.simd_gt(floor).select(p, floor)
-        };
-        f32_db(simd, p, log10_finish::<S>(s, f, k), offset).store_slice(o);
+    if plan == Plan::TwoStage && nv > 0 {
+        db_two_stage(simd, vi, vo, offset);
+    } else {
+        for (i, o) in vi.chunks_exact(l).zip(vo.chunks_exact_mut(l)) {
+            let reduced = log10_reduce(simd, S::f32s::from_slice(simd, i), true);
+            log10_finish::<S>(reduced, offset).store_slice(o);
+        }
     }
     for (o, &p) in ro.iter_mut().zip(ri) {
         *o = to_db(p, offset_db);
@@ -858,73 +930,66 @@ fn q15_powers<S: SimdToken>(simd: S, i: &[i16]) -> (S::f32s, S::f32s) {
     )
 }
 
-/// `power_db` of Q15 powers, in the passes of [`power_db_f32`] (see [`passes`]). A `Q15` power is below 1, so
-/// the case `+inf` cannot occur.
+/// `power_db` of Q15 powers, by the [`Plan`] of the level (a block of [`PASS_VECS`] vectors of
+/// `f32` is a whole number of vectors of `i16`). A `Q15` power is below 1, so the case `+inf`
+/// cannot occur.
 #[allow(
     clippy::large_stack_frames,
     reason = "the lint counts the temporaries of the inlined vector steps before optimization; \
-              the buffers of the passes are three arrays of 32 `f32` (384 bytes)"
+              the buffers of the passes are three arrays of 64 `f32` (768 bytes)"
 )]
 #[inline(always)]
 fn power_db_q15<S: SimdToken>(simd: S, input: &[i16], out: &mut [f32], offset_db: f32) {
     let l = S::i16s::LEN;
     let h = l / 2;
     let offset = S::f32s::splat(simd, offset_db);
-    let db = |y: S::f32s| y * 10.0 + offset;
     let n = out.len().min(input.len());
-    let blocked = if passes(S::f32s::LEN, true) {
-        n - n % POWER_DB_BLOCK
+    let block = PASS_VECS * h;
+    let plan = plan(simd, true);
+    let blocked = if plan == Plan::Passes {
+        n - n % block
     } else {
         0
     };
     let (bi, ri) = input.split_at(blocked);
     let (bo, ro) = out.split_at_mut(bi.len());
-    let (mut sb, mut fb, mut kb) = (
-        [0f32; POWER_DB_BLOCK],
-        [0f32; POWER_DB_BLOCK],
-        [0f32; POWER_DB_BLOCK],
-    );
-    for (i, o) in bi
-        .chunks_exact(POWER_DB_BLOCK)
-        .zip(bo.chunks_exact_mut(POWER_DB_BLOCK))
-    {
-        let bufs = sb
-            .chunks_exact_mut(l)
-            .zip(fb.chunks_exact_mut(l))
-            .zip(kb.chunks_exact_mut(l));
-        for (i, ((s, f), k)) in i.chunks_exact(l).zip(bufs) {
+    let mut bufs = [PassBuf([0.0; PASS_BUF]); 3];
+    for (i, o) in bi.chunks_exact(block).zip(bo.chunks_exact_mut(block)) {
+        for (i, ((s, f), k)) in i.chunks_exact(l).zip(pass_chunks(&mut bufs, block, l)) {
             let (a, b) = q15_powers(simd, i);
             let ((s0, s1), (f0, f1), (k0, k1)) =
                 (s.split_at_mut(h), f.split_at_mut(h), k.split_at_mut(h));
-            let (vs, vf, vk) = log10_reduce(simd, a);
-            vs.store_slice(s0);
-            vf.store_slice(f0);
-            vk.store_slice(k0);
-            let (vs, vf, vk) = log10_reduce(simd, b);
-            vs.store_slice(s1);
-            vf.store_slice(f1);
-            vk.store_slice(k1);
+            store_reduced::<S>(((s0, f0), k0), log10_reduce(simd, a, false));
+            store_reduced::<S>(((s1, f1), k1), log10_reduce(simd, b, false));
         }
-        log10_split_pass(simd, &mut sb, &mut fb);
-        let bufs = sb
-            .chunks_exact(h)
-            .zip(fb.chunks_exact(h))
-            .zip(kb.chunks_exact(h));
-        for (o, ((lo, hi), k)) in o.chunks_exact_mut(h).zip(bufs) {
-            let load = |x: &[f32]| S::f32s::from_slice(simd, x);
-            db(log10_sum::<S>(load(lo), load(hi), load(k))).store_slice(o);
-        }
+        db_passes(simd, &mut bufs, o, offset);
     }
     let nv = ri.len().min(ro.len()) / l * l;
     let (vi, ri) = ri.split_at(nv);
     let (vo, ro) = ro.split_at_mut(nv);
-    for (i, o) in vi.chunks_exact(l).zip(vo.chunks_exact_mut(l)) {
-        let (a, b) = q15_powers(simd, i);
-        let (o0, o1) = o.split_at_mut(h);
-        let (s, f, k) = log10_reduce(simd, a);
-        db(log10_finish::<S>(s, f, k)).store_slice(o0);
-        let (s, f, k) = log10_reduce(simd, b);
-        db(log10_finish::<S>(s, f, k)).store_slice(o1);
+    if plan == Plan::TwoStage && nv > 0 {
+        let (head, rest) = vi.split_at(l);
+        let (a, b) = q15_powers(simd, head);
+        let mut reduced = (log10_reduce(simd, a, false), log10_reduce(simd, b, false));
+        let (body, last) = vo.split_at_mut(nv - l);
+        for (i, o) in rest.chunks_exact(l).zip(body.chunks_exact_mut(l)) {
+            let (a, b) = q15_powers(simd, i);
+            let next = (log10_reduce(simd, a, false), log10_reduce(simd, b, false));
+            let (o0, o1) = o.split_at_mut(h);
+            log10_finish::<S>(reduced.0, offset).store_slice(o0);
+            log10_finish::<S>(reduced.1, offset).store_slice(o1);
+            reduced = next;
+        }
+        let (o0, o1) = last.split_at_mut(h);
+        log10_finish::<S>(reduced.0, offset).store_slice(o0);
+        log10_finish::<S>(reduced.1, offset).store_slice(o1);
+    } else {
+        for (i, o) in vi.chunks_exact(l).zip(vo.chunks_exact_mut(l)) {
+            let (a, b) = q15_powers(simd, i);
+            let (o0, o1) = o.split_at_mut(h);
+            log10_finish::<S>(log10_reduce(simd, a, false), offset).store_slice(o0);
+            log10_finish::<S>(log10_reduce(simd, b, false), offset).store_slice(o1);
+        }
     }
     for (o, &p) in ro.iter_mut().zip(ri) {
         *o = to_db(f32::from(p) / 32768.0, offset_db);

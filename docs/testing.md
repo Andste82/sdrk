@@ -65,7 +65,8 @@ The tree, with `[pr]` for every run and `[full]` for nightly and manual runs. Th
 ```text
 check                              gate: fmt · deny · clippy (x86-64, wasm32-wasip1 with SIMD128, sdrk-wasm on
 │                                  wasm32-unknown-unknown, thumbv7em) · xtask check (with cargo doc -D warnings) ·
-│                                  schema · golden (pr: when tests/golden/ changed)
+│                                  schema · golden (pr: when tests/golden/ changed) · the benches workspace
+│                                  builds (pr: when kernels, benches, xtask or the toolchain changed)
 ├── check_msrv                     cargo +<rust-version> check --workspace                                    [pr]
 ├── golden_x64_win, golden_arm64_linux   the golden generator runs on the other hosts; the byte comparison
 │                                  is information, the vectors are generated on Linux x86-64          [full]
@@ -74,8 +75,7 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 │   ├── test_x64_linux_fallback    --cfg sdrk_fallback_only                                                   [pr]
 │   ├── test_x64_linux_fixed_arch  sse2 | sse4.2 | avx2 fixed at compile time; without the tables at sse2, avx2 [pr]
 │   ├── test_x64_linux_sde_runtime sse2 | sse4.2 CPUIDs under SDE: the arms of the run-time dispatch          [pr]
-│   ├── count_x64                  instruction counts (pr: when kernels, benches, xtask or the toolchain changed;
-│   │                              full: with the variants and the pipeline)
+│   ├── count_x64                  instruction counts with the variants and the pipeline (D175)               [full]
 │   ├── fuzz                       pipeline_json, five minutes                                                [full]
 │   └── soak                       the ten-minute long_run_no_drift                                           [full]
 ├── build_x64_linux_sde_avx512     target-cpu=sapphirerapids, profile emulated, nextest archive

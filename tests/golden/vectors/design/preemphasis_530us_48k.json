@@ -1,0 +1,29 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "preemphasis_530us_48k.expected.bin",
+      "len": 3
+    }
+  },
+  "case": "preemphasis_530us_48k",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "[b0, b1, a1] of (1 + s tau) / (1 + s tau_p), tau_p = 1 / (2 pi fs / 2.4), bilinear transform without prewarping (K = 2 fs); formulas in float64, equal to scipy.signal.bilinear within 1e-12",
+  "params": {
+    "fs_hz": 48000.0,
+    "tau_s": 0.00053
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-14,
+    "skip": 0
+  }
+}

@@ -280,9 +280,22 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Kernel `preemph_limit` (f32, Q15) with state, fallback, reference, delegation; design function `preemphasis_coefs`
+- [x] Kernel `preemph_limit` (f32, Q15) with state, fallback, reference, delegation; design function `preemphasis_coefs`
 - [ ] Block `preemph_limit`, pipeline kind, regenerated schema
 - [ ] `fm_transmitter` with the `shape` node, new `nfm_transmitter`, `nfm_receiver` with de-emphasis (all with YAML twins)
 - [ ] SIMD decision (not accelerated), `info` entries and results
 - [ ] Golden cases (seeds 444–449 and the design cases), suite, invariance, extremes, loop tests TX-FLAT, TX-PEAK and NFM
 - [ ] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
+
+## Delivery status
+
+Complete:
+
+- Kernel `preemph_limit` (`f32`, `Q15`): `PreemphLimitState<T>` (`new`, `set_limit`, `limit`, `hold_samples`, `gain`, `reset`, timing 1/1 with delay 0), the trait `PreemphLimit<T>`, `Fallback`, `Reference` and the facade delegation (`backend_for` reports `fallback`; not accelerated, section 7); the design function `sdrk_blocks::design::preemphasis_coefs` with the constants `PREEMPHASIS_MIN_RATE_HZ` and `PREEMPHASIS_MAX_TAU_S`. Decisions D166 to D173 (the `i128` release product, the huge-input behaviour, the `-32768` clamp, the clamp after a release, the extra rejection of a release that never completes, the golden construction, the fallback form, the measured design error).
+- Golden cases `preemph_limit/*` (seeds 444 to 449) and `design/preemphasis_*` (float32 model, integer model, plain `math` floats; byte-identical under the four CPU settings of the proof and in the full `generate.py --check`).
+- Tests 1 to 4 for the kernel and the design: `crates/core/sdrk-core/tests/kernels_m25.rs` (validation rows, hold and release at exact sample positions, `set_limit`, no output above the limit for input up to 20 times full scale, the `i128` corner with 1000 us at 240 kHz, NaN and infinities, `Fallback` against `Reference`), `crates/testing/sdrk-testkit/tests/kernels_m25.rs` (`Fallback`, `Reference` and `Sdrk` equal for 20 chunk plans each, both types), `crates/testing/sdrk-testkit/tests/golden_m25.rs` (every case whole and in random chunks through `Sdrk`, `Fallback` and `Reference`, retune before sample 4096), `crates/blocks/sdrk-blocks/tests/preemphasis_design.rs` (0.2 dB for 44.1, 48, 96 and 240 kHz with 50, 75 and 530 us: at most 0.17 dB measured; DC gain, Nyquist gain, rejections), the facade table test.
+- Documentation of this part: `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `tests/golden/README.md`.
+
+Open (see `docs/open-items.md`):
+
+- I25-1: a finite `f32` input of about `1e36` or more makes the `f32` state NaN until `reset` (D167).

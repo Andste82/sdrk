@@ -6,7 +6,7 @@ kernels and the Python Q15 integer model (`sdrk_golden/q15.py`) for bit-exact Q1
 hand and never generate them with code from this repository.
 
 The golden of a tolerance case is the mathematical optimum: the result computed in `f64`, treated as
-exact (except `squelch` and `stereo_pll`, whose cases come from an exact float32 or integer model, see `docs/kernels.md`). It is the
+exact (except `squelch`, `stereo_pll` and `preemph_limit`, whose cases come from an exact float32 or integer model, see `docs/kernels.md`). It is the
 first accuracy target of a kernel, not only a pass/fail check. The `snr_db_min` stored in a case is the contract
 floor; the accuracy policy in [`docs/kernels.md`](../../docs/kernels.md#accuracy-policy) adds the
 achievable optimum and a regression guard close to the measured SNR. A bit-exact Q15 case proves agreement
@@ -100,3 +100,7 @@ are not fused) and runs in front of every generate and check run.
 ## The stereo cases (seeds 438 to 443 and 454)
 
 `stereo_pll` (seeds 438 to 441 and 454) and `stereo_matrix` (442, 443) follow the model rule above: `sdrk_golden/cases/stereo.py` builds the cosine tables of `rotate` itself (`float32(cos(2 pi k / 4096))` with `scalar_math.cos`, the Q15 rule from the same f64 values) and stores their SHA-256 in every `stereo_pll` case, so a Rust test fails with a clear message when `sdrk-core` has other tables. The coefficients are stored as IEEE bits (`kp_bits`, ...). Besides the bit-exact model, every `lock_*` and `fade_*` case stores `snr_db_guard`, the regression guard of decision D111: the SNR of the difference channel (from sample `guard_skip`) of the model against the same loop in float64 with exact sine and cosine, minus 1 dB, rounded down to 0.1 dB. The float64 output is not committed (it depends on the libm of the host); the Rust test runs its own float64 loop on the stored inputs. Everything that feeds a committed byte uses plain Python arithmetic, `scalar_math` and the float32 helpers (no BLAS, no SIMD transcendental), so the files are identical on every CPU.
+
+## The preemph_limit cases (seeds 444 to 449)
+
+`preemph_limit` follows the model rule above: `sdrk_golden/cases/preemph_limit.py` implements the float32 model of the `f32` variant with the `f32model` helpers and the integer model of the `Q15` variant with Python integers (no NumPy arithmetic, no `sin`/`exp`/`lfilter`; the tone bursts use `math.sin`), so the files are identical on every CPU. The cases are `preemph_f32_8192` (444, limiter idle), `limit_f32_8192` (445, limit 0.5 with two tone bursts above the limit), `limit_q15_8192` (446, the input of 445 quantized), `preemph_q15_8192` (447, tau 530 us), `nonfinite_f32_4096` (448, NaN and infinities at 20 listed positions) and `retune_f32_8192` (449, `set_limit(0.5)` before sample 4096). The coefficients are stored as IEEE bits (`b0_bits`, `b1_bits`, `a1_bits`) and the Rust tests build the state from them. The generator asserts that the limiter visits the states the case is meant to cover. The design cases `design/preemphasis_*` (seed 0) store the values of the formulas of `sdrk_golden/design.py:preemphasis_coefs` in plain `math` floats; the generator asserts that `scipy.signal.bilinear` agrees within 1e-12.

@@ -520,6 +520,67 @@ pub fn biquad_coefs(response: BiquadResponse, f0_hz: f64, q: f64, fs_hz: f64) ->
     ])
 }
 
+/// Lowest sample rate that `preemphasis_coefs` accepts, in hertz. Below it the bilinear mapping
+/// without pre-warping differs from the ideal `1 + j 2 pi f tau` by more than 0.2 dB inside the
+/// audio band (1 dB at 32 kHz).
+pub const PREEMPHASIS_MIN_RATE_HZ: f64 = 40_000.0;
+
+/// Largest time constant that `preemphasis_coefs` accepts, in seconds (1000 us).
+pub const PREEMPHASIS_MAX_TAU_S: f64 = 1e-3;
+
+/// First-order pre-emphasis for the de-emphasis time constant `tau_s`: `[b0, b1, a1]` of
+/// `H(z) = (b0 + b1 z^-1) / (1 + a1 z^-1)` with unity gain at DC.
+///
+/// The ideal pre-emphasis `1 + s tau` has no upper limit, so the design adds a pole at
+/// `f_p = fs / 2.4` (20 kHz at 48 kHz) and maps `H(s) = (1 + s tau) / (1 + s tau_p)` with
+/// `tau_p = 1 / (2 pi f_p)` by the bilinear transform without pre-warping: with `K = 2 fs`,
+/// `b0 = (1 + K tau) / (1 + K tau_p)`, `b1 = (1 - K tau) / (1 + K tau_p)` and
+/// `a1 = (1 - K tau_p) / (1 + K tau_p)`. The magnitude differs from `|1 + j 2 pi f tau|` by at
+/// most 0.2 dB from 30 Hz to `min(15 kHz, 0.45 fs)`. The gain at Nyquist is `tau / tau_p`
+/// (16 dB for 50 us at 48 kHz, 36 dB for 530 us at 48 kHz, 56 dB for 1000 us at 240 kHz), which
+/// is why the `preemph_limit` kernel keeps the pre-emphasized value in a wide format.
+///
+/// `tau_s` must be in `(0, 1e-3]` and `fs_hz` at least 40 000 and finite, else `OutOfRange`
+/// (NaN included).
+///
+/// ```
+/// use sdrk_blocks::design::preemphasis_coefs;
+/// let [b0, b1, a1] = preemphasis_coefs(50e-6, 48_000.0)?;
+/// // Unity gain at DC.
+/// assert!(((b0 + b1) / (1.0 + a1) - 1.0).abs() < 1e-12);
+/// // 75 us is fine, 2 ms and a sample rate below 40 kHz are rejected.
+/// assert!(preemphasis_coefs(75e-6, 48_000.0).is_ok());
+/// assert!(preemphasis_coefs(2e-3, 48_000.0).is_err());
+/// assert!(preemphasis_coefs(50e-6, 32_000.0).is_err());
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+pub fn preemphasis_coefs(tau_s: f64, fs_hz: f64) -> Result<[f64; 3]> {
+    if !(tau_s > 0.0 && tau_s <= PREEMPHASIS_MAX_TAU_S) {
+        return Err(Error::OutOfRange {
+            name: "tau_s",
+            min: 0.0,
+            max: PREEMPHASIS_MAX_TAU_S,
+            got: tau_s,
+        });
+    }
+    if !(fs_hz >= PREEMPHASIS_MIN_RATE_HZ && fs_hz.is_finite()) {
+        return Err(Error::OutOfRange {
+            name: "fs_hz",
+            min: PREEMPHASIS_MIN_RATE_HZ,
+            max: f64::INFINITY,
+            got: fs_hz,
+        });
+    }
+    let tau_p = 1.0 / (2.0 * PI * (fs_hz / 2.4));
+    let k = 2.0 * fs_hz;
+    let den = 1.0 + k * tau_p;
+    Ok([
+        (1.0 + k * tau_s) / den,
+        (1.0 - k * tau_s) / den,
+        (1.0 - k * tau_p) / den,
+    ])
+}
+
 /// Butterworth filter of even order `2 ..= 8` as `order / 2` sections, low-pass or high-pass
 /// (`Bandpass` and `Notch` give `InvalidParameter`), the lowest `Q` first.
 ///

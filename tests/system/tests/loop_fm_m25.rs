@@ -20,7 +20,6 @@
     clippy::cast_precision_loss
 )]
 
-use sdrk_device::formats;
 use sdrk_pipeline::{FormatName, Precision};
 use sdrk_system_tests::{
     AUDIO_RATE, band_limited_noise, build, flow_value, peak_deviation, receive_bytes, remove_node,
@@ -157,7 +156,7 @@ fn loop_fm_peak(precision: Precision) {
         // The Q15 audio input saturates at full scale, so without the shape node the deviation
         // cannot exceed 1.0 plus the overshoot of the filters: the control of the milestone
         // (more than 1.5) cannot hold in Q15. The measured value is recorded (1.043) and the
-        // threshold is not changed for f32; open item I25-2, decision D183.
+        // threshold is not changed for f32; open item I25-2, decision D180.
         assert!(
             (0.9..1.1).contains(&without),
             "{precision:?}: without shape {without:.4}"
@@ -214,7 +213,6 @@ fn loop_nfm(precision: Precision, min_sinad_db: f64) {
     let peak = peak_deviation(&bytes, 200_000.0, 25_000.0, 15_000.0, 5_000.0, 2000);
     println!("{precision:?} NFM peak deviation {peak:.4}");
     assert!(peak < 1.0, "{precision:?}: NFM peak {peak:.4}");
-    let _ = formats::CS8;
 }
 
 #[test]

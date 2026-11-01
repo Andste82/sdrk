@@ -1,6 +1,6 @@
 # M24 — FM stereo
 
-> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M23](M23-real-sampling-input.md) (uses the `biquad` kernels of [M22](M22-audio-filters.md)) · Next: [M25](M25-fm-transmit-audio.md)
+> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M23](M23-real-sampling-input.md) (uses the `biquad` kernels of [M22](M22-audio-filters.md)) · Next: [M24.1](M24.1-block-naming.md)
 
 ## Goal
 

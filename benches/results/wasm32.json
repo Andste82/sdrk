@@ -2804,6 +2804,52 @@
           "status": "info",
           "verdict": "info"
         },
+        "preemph_limit": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 93.56,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 93.56,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 93.56,
+          "ours_instr_per_sample": 93.56,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "preemph_limit_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 448.58,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 448.58,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 448.58,
+          "ours_instr_per_sample": 448.58,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "quad_demod": {
           "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
           "goal": true,

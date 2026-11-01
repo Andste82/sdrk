@@ -281,10 +281,10 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 ## Deliverables checklist
 
 - [x] Kernel `preemph_limit` (f32, Q15) with state, fallback, reference, delegation; design function `preemphasis_coefs`
-- [ ] Block `preemph_limit`, pipeline kind, regenerated schema
-- [ ] `fm_transmitter` with the `shape` node, new `nfm_transmitter`, `nfm_receiver` with de-emphasis (all with YAML twins)
+- [x] Block `preemph_limit`, pipeline kind, regenerated schema
+- [x] `fm_transmitter` with the `shape` node, new `nfm_transmitter`, `nfm_receiver` with de-emphasis (all with YAML twins)
 - [ ] SIMD decision (not accelerated), `info` entries and results
-- [ ] Golden cases (seeds 444–449 and the design cases), suite, invariance, extremes, loop tests TX-FLAT, TX-PEAK and NFM
+- [x] Golden cases (seeds 444–449 and the design cases), suite, invariance, extremes, loop tests TX-FLAT, TX-PEAK and NFM (the Q15 control of TX-PEAK misses its threshold, open item I25-2)
 - [ ] `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `docs/performance.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
 
 ## Delivery status
@@ -295,7 +295,14 @@ Complete:
 - Golden cases `preemph_limit/*` (seeds 444 to 449) and `design/preemphasis_*` (float32 model, integer model, plain `math` floats; byte-identical under the four CPU settings of the proof and in the full `generate.py --check`).
 - Tests 1 to 4 for the kernel and the design: `crates/core/sdrk-core/tests/kernels_m25.rs` (validation rows, hold and release at exact sample positions, `set_limit`, no output above the limit for input up to 20 times full scale, the `i128` corner with 1000 us at 240 kHz, NaN and infinities, `Fallback` against `Reference`), `crates/testing/sdrk-testkit/tests/kernels_m25.rs` (`Fallback`, `Reference` and `Sdrk` equal for 20 chunk plans each, both types), `crates/testing/sdrk-testkit/tests/golden_m25.rs` (every case whole and in random chunks through `Sdrk`, `Fallback` and `Reference`, retune before sample 4096), `crates/blocks/sdrk-blocks/tests/preemphasis_design.rs` (0.2 dB for 44.1, 48, 96 and 240 kHz with 50, 75 and 530 us: at most 0.17 dB measured; DC gain, Nyquist gain, rejections), the facade table test.
 - Documentation of this part: `docs/kernels.md`, `docs/timing.md`, `docs/backends.md`, `tests/golden/README.md`.
+- Block `preemph_limit` (`PreemphLimitBlock<T>`, `PreemphLimitConfig`; description with the position before `fm_mod` and the 1.41 against 1.0 measurement; `limit` is the runtime parameter, the rest is build time; a pre-emphasis below 40 kHz is `OutOfRange`; storage 0 bytes; `gain()`), the pipeline kind `preemph_limit` (cost 6, real input only), the regenerated schema, the WASM `backends()` entry, `docs/blocks.md` (generated table, twenty blocks, the block bullet, the design bullet). Tests: `crates/blocks/sdrk-blocks/tests/preemph_limit.rs` (test 5), the arena, size and `Send` lists of `construction.rs`, `describe.rs`, `crates/pipeline/sdrk-pipeline/tests/preemph.rs` (test 6), `no_alloc.rs` for `nfm_transmitter`.
+- Flows with YAML twins: `fm_transmitter` (node `shape`), `nfm_transmitter` (new), `nfm_receiver` (`deemphasis_us` 530); the `nfm_receiver` tests are amended with measured values (D178); the smoke test of `fm-transmitter` runs the `nfm_transmitter` flow into the `nfm_receiver` flow.
+- Suite cases `preemph_limit_f32`, `preemph_limit_q15`, `block_preemph_limit_peak` (quick) and `extremes_m25` (full), `tests/suite_m25.rs`, the arena table (D183, emulator times in D184).
+- Loop tests `loop_fm_flat_{f32,q15}`, `loop_fm_peak_{f32,q15}`, `loop_nfm_{f32,q15}` in `tests/system/tests/loop_fm_m25.rs`, all thresholds held except the Q15 negative control (D181, D182): TX-FLAT within 0.04 dB, TX-PEAK 0.998 and 0.983, NFM SINAD 56.5 and 55.4 dB with the noise peak at 0.80 and 0.79.
+- Docs of this part: `docs/blocks.md`, `docs/pipeline.md`, `docs/testing.md`, `examples/README.md`, `CHANGELOG.md`, `docs/milestones/README.md`. Decisions D176 to D184.
+- After M24.1 lands: rename the kind `resampler` to `resample` in the nodes `up` of `fm_transmitter` and `nfm_transmitter` (JSON and YAML) and strike `preemph_limit` from the reserved-names table of `docs/blocks.md` (section Names, created by M24.1) (D176).
 
 Open (see `docs/open-items.md`):
 
 - I25-1: a finite `f32` input of about `1e36` or more makes the `f32` state NaN until `reset` (D167).
+- I25-2: the negative control of TX-PEAK cannot exceed 1.5 in Q15 (1.043 measured), because the Q15 input saturates at full scale (D182).

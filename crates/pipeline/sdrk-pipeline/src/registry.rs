@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::kinds::{
     AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DucKind,
     Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, Kind,
-    RealToIqKind, ResampleKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind,
+    PreemphLimitKind, RealToIqKind, ResampleKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind,
 };
 use crate::model::{PipelineSpec, Precision};
 use crate::node::Node;
@@ -162,7 +162,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 19);
+/// assert_eq!(registry.descriptions().count(), 20);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -199,6 +199,7 @@ impl Registry {
         register::<DucKind>(&mut factories);
         register::<FmDemodKind>(&mut factories);
         register::<FmStereoDemodKind>(&mut factories);
+        register::<PreemphLimitKind>(&mut factories);
         register::<FmModKind>(&mut factories);
         register::<ResampleKind>(&mut factories);
         register::<SpectrumKind>(&mut factories);

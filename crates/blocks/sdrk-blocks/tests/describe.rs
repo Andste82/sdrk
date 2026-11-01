@@ -35,7 +35,7 @@ use sdrk_blocks::{
     Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
     FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType, ResampleBlock,
+    FmStereoDemodConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, ResampleBlock,
     ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
     SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
 };
@@ -57,10 +57,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_nineteen_unique_kinds() {
+fn there_are_twenty_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 19);
-    assert_eq!(all_descriptions().len(), 19);
+    assert_eq!(kinds.len(), 20);
+    assert_eq!(all_descriptions().len(), 20);
     for kind in [
         "convert",
         "convert_out",
@@ -70,6 +70,7 @@ fn there_are_nineteen_unique_kinds() {
         "ddc",
         "duc",
         "fm_demod",
+        "preemph_limit",
         "fm_mod",
         "fm_stereo_demod",
         "resample",
@@ -245,6 +246,11 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("fm_demod", |n| FmDemodConfig::default().get(n), &[]);
     defaults_match("fm_mod", |n| FmModConfig::default().get(n), &[]);
     defaults_match(
+    defaults_match(
+        "preemph_limit",
+        |n| PreemphLimitConfig::default().get(n),
+        &[],
+    );
         "fm_stereo_demod",
         |n| FmStereoDemodConfig::default().get(n),
         &[],
@@ -337,6 +343,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("duc", DucConfig);
     round_trip!("fm_demod", FmDemodConfig);
     round_trip!("fm_mod", FmModConfig);
+    round_trip!("preemph_limit", PreemphLimitConfig);
     round_trip!("fm_stereo_demod", FmStereoDemodConfig);
     round_trip!("resample", ResampleConfig);
     round_trip!("spectrum", SpectrumConfig);
@@ -396,6 +403,11 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "scale",
         &mut ScaleBlock::<C32, _>::new(&ScaleConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "preemph_limit",
+        &mut PreemphLimitBlock::<sdrk::Q15, _>::new(&PreemphLimitConfig::default(), r, &mut s)
+            .unwrap(),
     );
     check_block_params(
         "squelch",

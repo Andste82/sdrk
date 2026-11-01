@@ -135,6 +135,10 @@
 //! | `e2e_fm_stereo_mono` | full | about 31 KiB (mono transmission and noise, 0.25 s each, both types) |
 //! | `e2e_fm_stereo_f32_2s`, `e2e_fm_stereo_q15_2s` | full | as the 0.5 s variants (2.0 s of signal) |
 //! | `e2e_fm_stereo_switch_f32` | full | about 31 KiB (pilot from 0.3 s to 0.7 s of 1.0 s) |
+//! | `preemph_limit_f32` | quick | about 24 KiB |
+//! | `preemph_limit_q15` | quick | about 12 KiB |
+//! | `extremes_m25` | full | about 6 KiB |
+//! | `block_preemph_limit_peak` | quick | about 18 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -190,8 +194,9 @@ mod m23;
 mod m23_backend;
 mod m24;
 mod m24_backend;
+mod m25;
 
-pub(crate) static CASES: [TestCase; 152] = [
+pub(crate) static CASES: [TestCase; 156] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -951,6 +956,26 @@ pub(crate) static CASES: [TestCase; 152] = [
         name: "e2e_fm_stereo_switch_f32",
         tier: Tier::Full,
         run: m24::e2e_fm_stereo_switch_f32,
+    },
+    TestCase {
+        name: "preemph_limit_f32",
+        tier: Tier::Quick,
+        run: m25::preemph_limit_f32,
+    },
+    TestCase {
+        name: "preemph_limit_q15",
+        tier: Tier::Quick,
+        run: m25::preemph_limit_q15,
+    },
+    TestCase {
+        name: "extremes_m25",
+        tier: Tier::Full,
+        run: m25::extremes_m25,
+    },
+    TestCase {
+        name: "block_preemph_limit_peak",
+        tier: Tier::Quick,
+        run: m25::block_preemph_limit_peak,
     },
 ];
 

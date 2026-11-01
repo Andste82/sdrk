@@ -1,8 +1,8 @@
-# FM transmitter in pull mode (YAML twin of fm_transmitter.json).
+# FM broadcast transmitter in pull mode (YAML twin of fm_transmitter.json).
 # The caller asks for bytes with Pipeline::pull; the audio is supplied on demand.
 sdrk: 1
 name: fm-transmitter
-description: "Modulate 48 kHz audio to FM and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode."
+description: "Modulate 48 kHz audio to FM with pre-emphasis and a peak limiter and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode."
 # Chunks of 4800 audio samples (100 ms).
 settings:
   precision: f32
@@ -29,9 +29,24 @@ nodes:
     kind: resample
     params:
       rate_out_hz: 240000
+  # Pre-emphasis and peak limiter in one node, at the rate of the modulator. Every FM
+  # broadcast receiver de-emphasises the audio with 50 us (75 us in North America and South
+  # Korea: set preemphasis_us to 75 there); without the matching pre-emphasis the treble
+  # arrives about 10 dB too low at 10 kHz. The limiter keeps the output at limit times full
+  # scale, so the deviation never exceeds limit * 75 kHz; 1.0 is the full allowed deviation.
+  # It sits directly before the modulator on purpose: a filter or resampler between the
+  # limiter and fm_mod raises the peaks again (limiting at 48 kHz and then resampling reached
+  # 1.41 times the limit in a measurement, limiting at 240 kHz kept it at 1.0). The limit can
+  # be changed while the flow runs (set_param); hold_s 0.02 and release_s 0.2 are the defaults.
+  shape:
+    kind: preemph_limit
+    params:
+      limit: 1.0
+      preemphasis_us: 50
 edges:
   - { from: audio, to: up }
-  - { from: up, to: mod }
+  - { from: up, to: shape }
+  - { from: shape, to: mod }
   - { from: mod, to: duc }
   - { from: duc, to: rf }
 # Raw signed 8-bit IQ; fill with silence when the audio source runs dry.

@@ -251,13 +251,13 @@ def nonfinite_f32_case(rng):
     )
 
 
-@case(kernel="preemph_limit", name="clamp_f32_4096", seed=455)
-def clamp_f32_case(rng):
+@case(kernel="preemph_limit", name="clamp_f32_4096", seed=0)
+def clamp_f32_case(_rng):
     # The first 4096 samples of the input of preemph_f32_8192 (seed 444) with 24 finite values
     # beyond the input limit: 1025, 2000, 1e30, 1e36, 3e38 and the largest float32, each with
     # both signs, twice.
     x = noise(np.random.default_rng(444), 8192, 0.05).astype(np.float32)[:4096]
-    positions = sorted(int(p) for p in rng.choice(4096, size=24, replace=False))
+    positions = [100 + 163 * k for k in range(24)]
     big = [1025.0, 2000.0, 1e30, 1e36, 3e38, float(np.finfo(np.float32).max)]
     for k, pos in enumerate(positions):
         x[pos] = np.float32(big[k % 6] * (1.0 if (k // 6) % 2 == 0 else -1.0) * (1.0 if k % 2 == 0 else -1.0))

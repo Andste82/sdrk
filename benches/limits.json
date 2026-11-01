@@ -2291,10 +2291,10 @@
   },
   "fft_64_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2306,16 +2306,15 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP's `arm_cfft_f32` uses radix-8 and radix-4 passes, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+      "status": "release"
     }
   },
   "fft_1024_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2327,15 +2326,15 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "fft_4096_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2344,11 +2343,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP's `arm_cfft_f32` uses radix-8 and radix-4 passes, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+      "status": "dev"
     }
   },
   "fft_cq15_1024_fallback": {
@@ -2402,7 +2400,7 @@
   },
   "rfft_1024_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
       "status": "dev"
@@ -2414,11 +2412,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP's `arm_rfft_fast_f32` uses a radix-8 and radix-4 complex FFT, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+      "status": "release"
     }
   },
   "convert_cs8_fallback": {

@@ -1,11 +1,14 @@
 //! Fallback implementation of the FFT kernels: iterative in-place radix-2 with a bit-reversal
 //! permutation, decimation in time. The order of operations is part of the numeric contract.
 //!
-//! Some stages run in pairs: one pass over the data applies the butterflies of two consecutive
-//! radix-2 stages to every group of four samples while it is in registers (`C32`: all stages
-//! after a single first one for odd `log2 N`; `CQ15` with fixed scaling: the first two). The
-//! butterflies and their operands are those of the stage-by-stage order, so the result is the
-//! same bit for bit; only the loads, stores and twiddle reads of every second stage are saved.
+//! Some stages run in pairs or triples: one pass over the data applies the butterflies of two
+//! (three) consecutive radix-2 stages to every group of four (eight) samples while it is in
+//! registers (`C32` on x86: all stages after a single first one for odd `log2 N`; `C32`
+//! elsewhere, where 32 floating-point registers hold eight samples and their seven twiddles:
+//! triples, with one pair first or one single stage last for the remainder of `log2 N / 3`;
+//! `CQ15` with fixed scaling: the first two). The butterflies and their operands are those of
+//! the stage-by-stage order, so the result is the same bit for bit; only the loads, stores and
+//! twiddle reads of the fused stages are saved.
 //! Block floating point needs the largest magnitude between the stages and runs them one by one.
 
 // `(a + b) * 0.5` is the specified, exact halving; `f32::midpoint` is not part of the contract.
@@ -70,6 +73,47 @@ fn bit_reverse_by_bits<T>(data: &mut [T], log2n: u32) {
         let j = i.reverse_bits() >> shift;
         if i < j && j < data.len() {
             data.swap(i, j);
+        }
+    }
+}
+
+/// [`bit_reverse`] in `N / 4` iterations instead of `N` (`data.len()` is `2^log2n`, at least 4).
+///
+/// For an even `i < N/2` with `j = rev(i)` (even and below `N/2` as well): `rev(i + 1) =
+/// j + N/2`, `rev(i + N/2) = j + 1` and `rev(i + N/2 + 1) = j + N/2 + 1`. One iteration swaps
+/// `i + 1` with `j + N/2` (always `i + 1 < j + N/2`) and, if `i < j`, `i` with `j` and `i + N/2 +
+/// 1` with `j + N/2 + 1`; the pair of `i + N/2` is that of `i' + 1` for `i' = j`. Every pair is
+/// swapped once, so the permutation is that of [`bit_reverse`].
+///
+/// On x86 and wasm32 `j` is carried as in [`bit_reverse`] (`j = rev_{log2n - 1}(i / 2)`), elsewhere
+/// it is `reverse_bits`.
+fn bit_reverse_quarter<T>(data: &mut [T], log2n: u32) {
+    let n = data.len();
+    if log2n < 2 || n != 1 << log2n {
+        bit_reverse(data, log2n);
+        return;
+    }
+    let half = n / 2;
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32")))]
+    let shift = usize::BITS - log2n;
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+    let mut j = 0usize;
+    for u in 0..half / 2 {
+        let i = 2 * u;
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32")))]
+        let j = i.reverse_bits() >> shift;
+        if i < j {
+            data.swap(i, j);
+            data.swap(i + half + 1, j + half + 1);
+        }
+        data.swap(i + 1, j + half);
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+        {
+            // `rev_{log2n - 1}(u + 1)` from `rev_{log2n - 1}(u)`: the `t + 1` lowest bits of `u`
+            // flip (`t` = its trailing ones), the `t + 1` highest of the `log2n - 1` bits of
+            // `j`; `t + 1 < log2n` as `u < N/4`.
+            let t = (!u).trailing_zeros();
+            j ^= half - (half >> (t + 1));
         }
     }
 }
@@ -188,8 +232,167 @@ fn stage_pair_c32<const INV: bool>(
     Ok(())
 }
 
-/// The stages of the `C32` transform after the bit reversal: one radix-2 stage first if
-/// `log2 N` is odd, then pairs of stages.
+/// The butterflies of three stages on one group of eight samples: the four of the first stage
+/// with `w`, then `(x0, x2)`, `(x4, x6)` with `wa` and `(x1, x3)`, `(x5, x7)` with `wb`, then
+/// `(x_m, x_{m+4})` with `wc[m]`. The samples are read once into locals and written once.
+#[inline(always)]
+fn oct_c32<const INV: bool>(x: [&mut C32; 8], w: C32, wa: C32, wb: C32, wc: [C32; 4]) {
+    let [x0, x1, x2, x3, x4, x5, x6, x7] = x;
+    let a = oct_values_c32::<INV>([*x0, *x1, *x2, *x3, *x4, *x5, *x6, *x7], w, wa, wb, wc);
+    [*x0, *x1, *x2, *x3, *x4, *x5, *x6, *x7] = a;
+}
+
+/// [`oct_c32`] on values.
+#[inline(always)]
+fn oct_values_c32<const INV: bool>(
+    x: [C32; 8],
+    w: C32,
+    wa: C32,
+    wb: C32,
+    wc: [C32; 4],
+) -> [C32; 8] {
+    let [
+        mut a0,
+        mut a1,
+        mut a2,
+        mut a3,
+        mut a4,
+        mut a5,
+        mut a6,
+        mut a7,
+    ] = x;
+    butterfly_c32::<INV>(&mut a0, &mut a1, w);
+    butterfly_c32::<INV>(&mut a2, &mut a3, w);
+    butterfly_c32::<INV>(&mut a4, &mut a5, w);
+    butterfly_c32::<INV>(&mut a6, &mut a7, w);
+    butterfly_c32::<INV>(&mut a0, &mut a2, wa);
+    butterfly_c32::<INV>(&mut a1, &mut a3, wb);
+    butterfly_c32::<INV>(&mut a4, &mut a6, wa);
+    butterfly_c32::<INV>(&mut a5, &mut a7, wb);
+    let [c0, c1, c2, c3] = wc;
+    butterfly_c32::<INV>(&mut a0, &mut a4, c0);
+    butterfly_c32::<INV>(&mut a1, &mut a5, c1);
+    butterfly_c32::<INV>(&mut a2, &mut a6, c2);
+    butterfly_c32::<INV>(&mut a3, &mut a7, c3);
+    [a0, a1, a2, a3, a4, a5, a6, a7]
+}
+
+/// Three radix-2 stages of `C32` data in one pass: the stages of half block length `half`,
+/// `2 * half` and `4 * half` with the twiddle steps `step`, `step / 2` and `step / 4`. The
+/// eight samples `k + m half` (`m < 8`) of a block of `8 * half` go through the butterflies of
+/// the three stages while they are in registers, with the operands of three separate stages:
+/// the result is the same bit for bit. `step` is a multiple of 4.
+fn stage_triple_c32<const INV: bool>(
+    data: &mut [C32],
+    tw: &[C32],
+    half: usize,
+    step: usize,
+) -> Result<()> {
+    let (step2, step4) = (step / 2, step / 4);
+    check_twiddles(tw, half, step)?;
+    check_twiddles(tw, 2 * half, step2)?;
+    check_twiddles(tw, 4 * half, step4)?;
+    if half == 1 {
+        // The first three stages: the same seven twiddles serve every block.
+        let at = |i: usize| tw.get(i).copied().ok_or_else(tw_error);
+        let (w0, w1) = (at(0)?, at(step2)?);
+        let wc = [w0, at(step4)?, w1, at(3 * step4)?];
+        for oct in data.chunks_exact_mut(8) {
+            if let [x0, x1, x2, x3, x4, x5, x6, x7] = oct {
+                oct_c32::<INV>([x0, x1, x2, x3, x4, x5, x6, x7], w0, w0, w1, wc);
+            }
+        }
+        return Ok(());
+    }
+    triple_blocks_c32::<INV>(data, tw, half, step4)
+}
+
+/// [`stage_triple_c32`] for `half > 1`, where every group has twiddles of its own. A function
+/// of its own, so that without optimization its frame and that of the first triple are not
+/// added up.
+fn triple_blocks_c32<const INV: bool>(
+    data: &mut [C32],
+    tw: &[C32],
+    half: usize,
+    step4: usize,
+) -> Result<()> {
+    let [tw0, tw1, tw2, tw3, twa, twb, tww] =
+        triple_windows(tw, half, step4).ok_or_else(tw_error)?;
+    for block in data.chunks_exact_mut(8 * half) {
+        let [q0, q1, q2, q3, q4, q5, q6, q7] = eighths(block, half);
+        let groups = q0
+            .iter_mut()
+            .zip(q1.iter_mut())
+            .zip(q2.iter_mut().zip(q3.iter_mut()))
+            .zip(
+                q4.iter_mut()
+                    .zip(q5.iter_mut())
+                    .zip(q6.iter_mut().zip(q7.iter_mut())),
+            );
+        // The twiddles by a running index `i = k step4` instead of strided iterators, whose
+        // state did not fit the general registers of AArch64 next to the eight samples.
+        let mut i = 0;
+        for (((x0, x1), (x2, x3)), ((x4, x5), (x6, x7))) in groups {
+            let (Some(c0), Some(c1), Some(c2), Some(c3)) =
+                (tw0.get(i), tw1.get(i), tw2.get(i), tw3.get(i))
+            else {
+                return Err(tw_error());
+            };
+            let (Some(w), Some(wa), Some(wb)) = (tww.get(4 * i), twa.get(2 * i), twb.get(2 * i))
+            else {
+                return Err(tw_error());
+            };
+            let wc = [*c0, *c1, *c2, *c3];
+            oct_c32::<INV>([x0, x1, x2, x3, x4, x5, x6, x7], *w, *wa, *wb, wc);
+            i += step4;
+        }
+    }
+    Ok(())
+}
+
+/// The twiddle windows of [`triple_blocks_c32`]: `tw[(k + m half) step4]` for `m < 4` and
+/// `k < half` lie in four windows of `len1` entries from `m half step4`; `tw[2 k step4]` and
+/// `tw[(2 k + 2 half) step4]` (the second twiddle of the middle stage) in two of `len2` from 0
+/// and `2 half step4`, and `tw[4 k step4]` in one of `len4`. Windows of one length share one
+/// bounds check in the loop.
+#[inline]
+fn triple_windows(tw: &[C32], half: usize, step4: usize) -> Option<[&[C32]; 7]> {
+    let len1 = (half - 1) * step4 + 1;
+    let (len2, len4) = (2 * len1 - 1, 4 * len1 - 3);
+    let window = |from: usize, len: usize| tw.get(from..from + len);
+    let m = half * step4;
+    Some([
+        window(0, len1)?,
+        window(m, len1)?,
+        window(2 * m, len1)?,
+        window(3 * m, len1)?,
+        window(0, len2)?,
+        window(2 * m, len2)?,
+        window(0, len4)?,
+    ])
+}
+
+/// The eight parts of `half` samples of a block of `8 * half`.
+#[inline]
+fn eighths(block: &mut [C32], half: usize) -> [&mut [C32]; 8] {
+    let (lo, hi) = block.split_at_mut(4 * half);
+    let (l0, l1) = lo.split_at_mut(2 * half);
+    let (h0, h1) = hi.split_at_mut(2 * half);
+    let (q0, q1) = l0.split_at_mut(half);
+    let (q2, q3) = l1.split_at_mut(half);
+    let (q4, q5) = h0.split_at_mut(half);
+    let (q6, q7) = h1.split_at_mut(half);
+    [q0, q1, q2, q3, q4, q5, q6, q7]
+}
+
+/// Whether the `C32` stages run in triples (eight samples in registers) instead of pairs: not
+/// on x86, whose 16 vector registers do not hold the eight samples and seven twiddles (at
+/// `avx2` the triples were slower than the pairs for 1024 and 4096 points).
+const TRIPLE_STAGES: bool = !cfg!(any(target_arch = "x86", target_arch = "x86_64"));
+
+/// The stages of the `C32` transform after the bit reversal, grouped as [`TRIPLE_STAGES`] says
+/// (see [`stages_c32_by`]).
+#[inline(always)]
 fn stages_c32<const INV: bool>(
     data: &mut [C32],
     tw: &[C32],
@@ -197,7 +400,36 @@ fn stages_c32<const INV: bool>(
     log2n: u32,
     stride: usize,
 ) -> Result<()> {
+    stages_c32_by::<INV, TRIPLE_STAGES>(data, tw, n, log2n, stride)
+}
+
+/// The stages of the `C32` transform after the bit reversal. With `TRIPLES`: a pair of stages
+/// first if `log2 N mod 3 = 2`, then triples, and a last single stage if `log2 N mod 3 = 1`
+/// (cheaper than a single stage first followed by a triple of half block length 2, whose
+/// blocks of 16 samples hold two groups of eight). Without: one radix-2 stage first if
+/// `log2 N` is odd, then pairs of stages. Every grouping gives the same bits.
+fn stages_c32_by<const INV: bool, const TRIPLES: bool>(
+    data: &mut [C32],
+    tw: &[C32],
+    n: usize,
+    log2n: u32,
+    stride: usize,
+) -> Result<()> {
     let mut s = 1;
+    if TRIPLES {
+        if log2n % 3 == 2 {
+            stage_pair_c32::<INV>(data, tw, 1, (n >> 1) * stride)?;
+            s = 3;
+        }
+        while s + 2 <= log2n {
+            stage_triple_c32::<INV>(data, tw, 1 << (s - 1), (n >> s) * stride)?;
+            s += 3;
+        }
+        if s == log2n {
+            stage_c32::<INV>(data, tw, 1 << (s - 1), (n >> s) * stride)?;
+        }
+        return Ok(());
+    }
     if log2n % 2 == 1 {
         stage_c32::<INV>(data, tw, 1, (n >> 1) * stride)?;
         s = 2;
@@ -505,7 +737,7 @@ impl Fft<C32> for Fallback {
         check_len(plan.n, data.len())?;
         let tw = plan.twiddles.as_ref();
         let inverse = dir == Direction::Inverse;
-        bit_reverse(data, plan.log2n);
+        bit_reverse_quarter(data, plan.log2n);
         let (n, log2n, stride) = (plan.n, plan.log2n, plan.tw_stride);
         if inverse {
             stages_c32::<true>(data, tw, n, log2n, stride)?;
@@ -698,7 +930,7 @@ mod tests {
     ) {
         let tw = plan.twiddles.as_ref();
         let inverse = dir == Direction::Inverse;
-        bit_reverse(data, plan.log2n);
+        bit_reverse_by_bits(data, plan.log2n);
         for s in 1..=plan.log2n {
             let half = 1usize << (s - 1);
             let step = (plan.n >> s) * plan.tw_stride;
@@ -727,10 +959,27 @@ mod tests {
         x.iter().map(|v| (v.re.to_bits(), v.im.to_bits())).collect()
     }
 
+    /// The forward `C32` transform with the stages grouped in pairs and in triples (both on
+    /// every host, whatever [`TRIPLE_STAGES`] selects), with the bit reversal of the fallback.
+    fn fft_c32_both_groupings<Tw: AsRef<[C32]>>(
+        plan: &FftPlan<C32, Tw>,
+        data: &[C32],
+    ) -> [std::vec::Vec<C32>; 2] {
+        let tw = plan.twiddles.as_ref();
+        let (n, log2n, stride) = (plan.n, plan.log2n, plan.tw_stride);
+        let mut pairs = data.to_vec();
+        bit_reverse_quarter(&mut pairs, log2n);
+        let mut triples = pairs.clone();
+        stages_c32_by::<false, false>(&mut pairs, tw, n, log2n, stride).unwrap();
+        stages_c32_by::<false, true>(&mut triples, tw, n, log2n, stride).unwrap();
+        [pairs, triples]
+    }
+
     #[test]
-    fn c32_paired_stages_equal_the_stage_by_stage_transform_bit_for_bit() {
-        // Every size from 16 to 4096 (odd and even `log2 N`), both directions, plans of their
-        // own and over a larger table (stride > 1).
+    fn c32_grouped_stages_equal_the_stage_by_stage_transform_bit_for_bit() {
+        // Every size from 16 to 4096 (every `log2 N mod 3`), both directions, plans of their
+        // own and over a larger table (stride > 1); the forward transform also with the stages
+        // in pairs and in triples, whichever the target uses.
         let mut s = 11u64;
         for n in sizes() {
             for big in [n, 4096.max(n)] {
@@ -742,6 +991,11 @@ mod tests {
                     let mut got = x.clone();
                     Fallback.fft(&p, &mut got, dir, Scaling::Default).unwrap();
                     assert_eq!(bits(&got), bits(&want), "n={n} big={big} {dir:?}");
+                    if dir == Direction::Forward {
+                        for grouped in fft_c32_both_groupings(&p, &x) {
+                            assert_eq!(bits(&grouped), bits(&want), "n={n} big={big}");
+                        }
+                    }
                 }
             }
         }
@@ -759,6 +1013,9 @@ mod tests {
         }
         let mut want = x.clone();
         fft_c32_stage_by_stage(&p, &mut want, Direction::Forward);
+        for grouped in fft_c32_both_groupings(&p, &x) {
+            assert_eq!(bits(&grouped), bits(&want));
+        }
         let mut got = x;
         Fallback
             .fft(&p, &mut got, Direction::Forward, Scaling::Default)
@@ -967,6 +1224,9 @@ mod tests {
             bit_reverse(&mut got, log2n);
             bit_reverse_by_bits(&mut want, log2n);
             assert_eq!(got, want, "log2n={log2n}");
+            let mut quarter: std::vec::Vec<usize> = (0..n).collect();
+            bit_reverse_quarter(&mut quarter, log2n);
+            assert_eq!(quarter, want, "log2n={log2n}");
             assert!(
                 got.iter()
                     .enumerate()
@@ -1099,6 +1359,50 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_c32_stage_triple_is_three_stages_bit_for_bit() {
+        // Arbitrary twiddles (not those of a plan), every triple of stages, both directions,
+        // and non-finite values.
+        let mut s = 41u64;
+        for log2 in 3..=9 {
+            let n = 1usize << log2;
+            let mut x = c32_noise(&mut s, n);
+            if log2 == 6 {
+                x[5] = C32::new(f32::INFINITY, -0.0);
+                x[17] = C32::new(f32::NAN, 0.0);
+                x[40] = C32::new(f32::MAX, -f32::MAX);
+            }
+            let tw = c32_noise(&mut s, n / 2);
+            for stage in 1..log2 - 1 {
+                let half = 1usize << (stage - 1);
+                let step = n >> stage;
+                for inverse in [false, true] {
+                    let mut want = x.clone();
+                    let mut got = x.clone();
+                    if inverse {
+                        stage_c32::<true>(&mut want, &tw, half, step).unwrap();
+                        stage_c32::<true>(&mut want, &tw, 2 * half, step / 2).unwrap();
+                        stage_c32::<true>(&mut want, &tw, 4 * half, step / 4).unwrap();
+                        stage_triple_c32::<true>(&mut got, &tw, half, step).unwrap();
+                    } else {
+                        stage_c32::<false>(&mut want, &tw, half, step).unwrap();
+                        stage_c32::<false>(&mut want, &tw, 2 * half, step / 2).unwrap();
+                        stage_c32::<false>(&mut want, &tw, 4 * half, step / 4).unwrap();
+                        stage_triple_c32::<false>(&mut got, &tw, half, step).unwrap();
+                    }
+                    assert_eq!(bits(&got), bits(&want), "n={n} half={half} {inverse}");
+                }
+            }
+        }
+        // A triple of half 1 and step 4 needs the twiddles 0 to 3; of half 2 and step 4 the
+        // twiddles 0 and 4 (first stage), 0 to 3 (second) and 0 to 7 (third).
+        let mut c = [C32::default(); 16];
+        assert!(stage_triple_c32::<false>(&mut c, &[C32::default(); 4], 1, 4).is_ok());
+        assert!(stage_triple_c32::<false>(&mut c, &[C32::default(); 3], 1, 4).is_err());
+        assert!(stage_triple_c32::<false>(&mut c, &[C32::default(); 8], 2, 4).is_ok());
+        assert!(stage_triple_c32::<true>(&mut c, &[C32::default(); 7], 2, 4).is_err());
     }
 
     #[test]

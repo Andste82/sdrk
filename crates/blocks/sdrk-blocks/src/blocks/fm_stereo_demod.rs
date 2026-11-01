@@ -1,6 +1,6 @@
-//! `fm_stereo`: FM stereo decoder (pilot PLL, 38 kHz demodulation, matrix, de-emphasis).
+//! `fm_stereo_demod`: FM stereo decoder (pilot PLL, 38 kHz demodulation, matrix, de-emphasis).
 //!
-//! Processing order per piece of at most [`FM_STEREO_CHUNK`] input samples:
+//! Processing order per piece of at most [`FM_STEREO_DEMOD_CHUNK`] input samples:
 //! `quad_demod`, `biquad_real` band-pass at 19 kHz, `stereo_pll`, `fir_decimate` with the audio
 //! low-pass, `stereo_matrix`, and the optional de-emphasis `biquad`.
 
@@ -24,7 +24,7 @@ use crate::sample::{BlockSample, TunedElem};
 use crate::storage::{Plan, Storage};
 
 /// Samples per piece the block processes at a time.
-pub const FM_STEREO_CHUNK: usize = 256;
+pub const FM_STEREO_DEMOD_CHUNK: usize = 256;
 
 /// Largest tap count of the audio filter.
 const AUDIO_MAX_TAPS: usize = 1023;
@@ -45,9 +45,9 @@ const PILOT_AMPLITUDE: f64 = 0.1;
 /// Names of the values of the `stereo` parameter.
 const MODES: [&str; 2] = ["auto", "mono"];
 
-/// Description of the `fm_stereo` block.
+/// Description of the `fm_stereo_demod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
-    kind: "fm_stereo",
+    kind: "fm_stereo_demod",
     summary: "Demodulates a broadcast FM signal to stereo audio (left in re, right in im).",
     details: "A quadrature discriminator gives the multiplex signal (MPX: sum L+R up to 15 kHz, \
         a 19 kHz pilot and the difference L-R around 38 kHz). A band-pass at 19 kHz isolates the \
@@ -153,18 +153,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &[],
 };
 
-/// Configuration of [`FmStereoBlock`].
+/// Configuration of [`FmStereoDemodBlock`].
 ///
 /// ```
-/// use sdrk_blocks::FmStereoConfig;
-/// let cfg = FmStereoConfig::default();
+/// use sdrk_blocks::FmStereoDemodConfig;
+/// let cfg = FmStereoDemodConfig::default();
 /// assert!(cfg.validate(sdrk::Rate::hz(480_000)?).is_ok());
 /// // The multiplex signal does not fit into a lower rate.
 /// assert!(cfg.validate(sdrk::Rate::hz(96_000)?).is_err());
 /// # Ok::<(), sdrk_blocks::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FmStereoConfig {
+pub struct FmStereoDemodConfig {
     /// Peak deviation in Hz that reads full scale.
     pub deviation_hz: f64,
     /// De-emphasis time constant in microseconds; 0 is off.
@@ -179,7 +179,7 @@ pub struct FmStereoConfig {
     pub pll_natural_hz: f64,
 }
 
-impl Default for FmStereoConfig {
+impl Default for FmStereoDemodConfig {
     fn default() -> Self {
         Self {
             deviation_hz: 75_000.0,
@@ -192,7 +192,7 @@ impl Default for FmStereoConfig {
     }
 }
 
-impl FmStereoConfig {
+impl FmStereoDemodConfig {
     fn audio_spec(&self) -> DesignSpec {
         DesignSpec {
             cutoff_hz: self.audio_cutoff_hz,
@@ -292,23 +292,23 @@ type BandpassState<T, S> = BiquadRealState<
 type DeemphState<T, S> =
     BiquadState<T, <S as Storage>::Buf<[<T as BiquadSample>::Coef; 5]>, <S as Storage>::Buf<T>>;
 
-/// Most output samples of one piece (`ceil(FM_STEREO_CHUNK / audio_decimation)`).
+/// Most output samples of one piece (`ceil(FM_STEREO_DEMOD_CHUNK / audio_decimation)`).
 fn dec_len(decimation: usize) -> usize {
-    FM_STEREO_CHUNK / decimation + 1
+    FM_STEREO_DEMOD_CHUNK / decimation + 1
 }
 
 /// FM stereo decoder: `C32` to `C32` or `CQ15` to `CQ15` (`T` is the complex type; `re` of the
 /// output is the left channel, `im` the right channel).
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, Block, FmStereoBlock, FmStereoConfig};
+/// use sdrk_blocks::{ArenaStorage, Block, FmStereoDemodBlock, FmStereoDemodConfig};
 /// use sdrk::{Rate, C32};
-/// let cfg = FmStereoConfig::default();
+/// let cfg = FmStereoDemodConfig::default();
 /// let rate = Rate::hz(480_000)?;
-/// let bytes = FmStereoBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
+/// let bytes = FmStereoDemodBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
 /// let mut mem = vec![0u8; bytes + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
-/// let mut block = FmStereoBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
+/// let mut block = FmStereoDemodBlock::<C32, _>::new(&cfg, rate, &mut arena)?;
 /// // A carrier at the centre is silence; without a pilot the block outputs mono.
 /// let input = [C32::new(1.0, 0.0); 480];
 /// let mut audio = [C32::new(9.0, 9.0); 48];
@@ -318,11 +318,11 @@ fn dec_len(decimation: usize) -> usize {
 /// assert_eq!(audio[47].re, audio[47].im);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct FmStereoBlock<T: BlockSample + BiquadElem, S: Storage>
+pub struct FmStereoDemodBlock<T: BlockSample + BiquadElem, S: Storage>
 where
     T::Real: BiquadElem,
 {
-    config: FmStereoConfig,
+    config: FmStereoDemodConfig,
     quad: QuadDemodState<T>,
     gain: T::Real,
     pilot_bp: BandpassState<T, S>,
@@ -335,12 +335,12 @@ where
     dec: S::Buf<T>,
 }
 
-impl<T: BlockSample + BiquadElem, S: Storage> core::fmt::Debug for FmStereoBlock<T, S>
+impl<T: BlockSample + BiquadElem, S: Storage> core::fmt::Debug for FmStereoDemodBlock<T, S>
 where
     T::Real: BiquadElem,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("FmStereoBlock")
+        f.debug_struct("FmStereoDemodBlock")
             .field("config", &self.config)
             .finish_non_exhaustive()
     }
@@ -352,7 +352,7 @@ fn deemphasis_section(tau_us: f64, fs_audio: f64) -> [f64; 5] {
     [alpha, 0.0, 0.0, -(1.0 - alpha), 0.0]
 }
 
-impl<T: BlockSample + BiquadElem, S: Storage> FmStereoBlock<T, S>
+impl<T: BlockSample + BiquadElem, S: Storage> FmStereoDemodBlock<T, S>
 where
     T::Real: BiquadElem,
 {
@@ -362,7 +362,7 @@ where
         clippy::large_stack_frames,
         reason = "clippy counts the temporary of every `?` separately; the real frame is small"
     )]
-    pub fn new(config: &FmStereoConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &FmStereoDemodConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         let n = config.audio_taps(rate_in)?;
         let fs = hz(rate_in);
         let lp = config.audio_spec().lowpass(fs, AUDIO_MAX_TAPS)?;
@@ -383,9 +383,9 @@ where
         let mut pll = Self::new_pll(config, rate_in)?;
         pll.set_enabled(!config.mono);
 
-        let mpx = storage.alloc::<T::Real>(FM_STEREO_CHUNK)?;
-        let pilot = storage.alloc::<T::Real>(FM_STEREO_CHUNK)?;
-        let work = storage.alloc::<T>(FM_STEREO_CHUNK)?;
+        let mpx = storage.alloc::<T::Real>(FM_STEREO_DEMOD_CHUNK)?;
+        let pilot = storage.alloc::<T::Real>(FM_STEREO_DEMOD_CHUNK)?;
+        let work = storage.alloc::<T>(FM_STEREO_DEMOD_CHUNK)?;
         let dec = storage.alloc::<T>(dec_len(config.audio_decimation))?;
 
         let deemph = if config.deemphasis_us > 0.0 {
@@ -417,7 +417,7 @@ where
     /// `0.1 * 2 * deviation_hz / fs`, which must lie in `(0, 1]` and give non-zero loop
     /// coefficients; `rate_out` and `storage_bytes` run this check on a scratch state, so a
     /// deviation that `new` would reject is already a diagnostic when the flow is validated.
-    fn new_pll(config: &FmStereoConfig, rate_in: Rate) -> Result<StereoPllState<T::Real>> {
+    fn new_pll(config: &FmStereoDemodConfig, rate_in: Rate) -> Result<StereoPllState<T::Real>> {
         let fs = hz(rate_in);
         let level = if <T as BiquadElem>::Q15 {
             // The discriminator output of a deviation df is 2 df / fs in units of pi.
@@ -444,7 +444,7 @@ where
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
     /// address (an unaligned slice may need up to 15 bytes more).
-    pub fn storage_bytes(config: &FmStereoConfig, rate_in: Rate) -> Result<usize> {
+    pub fn storage_bytes(config: &FmStereoDemodConfig, rate_in: Rate) -> Result<usize> {
         let n = config.audio_taps(rate_in)?;
         Self::new_pll(config, rate_in)?;
         let mut plan = Plan::default();
@@ -452,9 +452,9 @@ where
         plan.add::<T>(n - 1)?;
         plan.add::<[RCoef<T>; 5]>(1)?;
         plan.add::<T::Real>(4)?;
-        plan.add::<T::Real>(FM_STEREO_CHUNK)?;
-        plan.add::<T::Real>(FM_STEREO_CHUNK)?;
-        plan.add::<T>(FM_STEREO_CHUNK)?;
+        plan.add::<T::Real>(FM_STEREO_DEMOD_CHUNK)?;
+        plan.add::<T::Real>(FM_STEREO_DEMOD_CHUNK)?;
+        plan.add::<T>(FM_STEREO_DEMOD_CHUNK)?;
         plan.add::<T>(dec_len(config.audio_decimation))?;
         if config.deemphasis_us > 0.0 {
             plan.add::<[T::Coef; 5]>(1)?;
@@ -464,7 +464,7 @@ where
     }
 
     /// Output rate: the input rate divided by `audio_decimation`.
-    pub fn rate_out(config: &FmStereoConfig, rate_in: Rate) -> Result<Rate> {
+    pub fn rate_out(config: &FmStereoDemodConfig, rate_in: Rate) -> Result<Rate> {
         config.validate(rate_in)?;
         Self::new_pll(config, rate_in)?;
         divide_rate(rate_in, config.audio_decimation)
@@ -483,7 +483,7 @@ where
     }
 }
 
-impl<T: BlockSample + BiquadElem, S: Storage> Block for FmStereoBlock<T, S>
+impl<T: BlockSample + BiquadElem, S: Storage> Block for FmStereoDemodBlock<T, S>
 where
     T::Real: BiquadElem,
     Sdrk: QuadDemod<T>
@@ -510,7 +510,7 @@ where
         loop {
             let room = (output.len() - produced).min(dec_cap);
             let m = (input.len() - consumed)
-                .min(FM_STEREO_CHUNK)
+                .min(FM_STEREO_DEMOD_CHUNK)
                 .min(self.fir.max_input_for_output(room));
             if m == 0 {
                 break;

@@ -1303,7 +1303,7 @@
                 "type": "string"
               },
               "kind": {
-                "const": "fm_stereo"
+                "const": "fm_stereo_demod"
               },
               "params": {
                 "additionalProperties": false,
@@ -1378,7 +1378,7 @@
                 "type": "string"
               },
               "kind": {
-                "const": "halfband"
+                "const": "halfband_decimate"
               },
               "params": {
                 "additionalProperties": false,
@@ -1429,7 +1429,7 @@
                 "type": "string"
               },
               "kind": {
-                "const": "real_to_complex"
+                "const": "real_to_iq"
               },
               "params": {
                 "additionalProperties": false,
@@ -1480,7 +1480,7 @@
                 "type": "string"
               },
               "kind": {
-                "const": "resampler"
+                "const": "resample"
               },
               "params": {
                 "additionalProperties": false,

@@ -1,4 +1,4 @@
-//! The kinds `halfband` and `real_to_complex`, the real variant of `convert` (explicit and
+//! The kinds `halfband_decimate` and `real_to_iq`, the real variant of `convert` (explicit and
 //! automatic) and the `real_input_fm_receiver` example flow: plan figures, the cost formula,
 //! validation, and a run on the E2E-REAL signal.
 #![allow(
@@ -54,10 +54,10 @@ fn single(kind: &str, ty: &str, precision: &str, params: Value) -> Value {
 #[test]
 fn the_kinds_are_registered_with_their_kernels() {
     let registry = Registry::standard();
-    let h = registry.factory("halfband").unwrap();
+    let h = registry.factory("halfband_decimate").unwrap();
     assert_eq!(h.kernels(), ["halfband_decimate", "halfband_decimate_real"]);
-    assert_eq!(h.description().kind, "halfband");
-    let r = registry.factory("real_to_complex").unwrap();
+    assert_eq!(h.description().kind, "halfband_decimate");
+    let r = registry.factory("real_to_iq").unwrap();
     assert_eq!(r.kernels(), ["real_to_complex"]);
     assert_eq!(registry.descriptions().count(), 19);
 }
@@ -66,12 +66,12 @@ fn the_kinds_are_registered_with_their_kernels() {
 fn the_plan_follows_the_cost_formula_and_halves_the_rate() {
     let registry = Registry::standard();
     for (kind, ty, precision) in [
-        ("halfband", "c32", "f32"),
-        ("halfband", "cq15", "q15"),
-        ("halfband", "f32", "f32"),
-        ("halfband", "q15", "q15"),
-        ("real_to_complex", "f32", "f32"),
-        ("real_to_complex", "q15", "q15"),
+        ("halfband_decimate", "c32", "f32"),
+        ("halfband_decimate", "cq15", "q15"),
+        ("halfband_decimate", "f32", "f32"),
+        ("halfband_decimate", "q15", "q15"),
+        ("real_to_iq", "f32", "f32"),
+        ("real_to_iq", "q15", "q15"),
     ] {
         for (transition, att) in [(None, 60.0), (Some(2400.0), 80.0), (Some(480.0), 40.0)] {
             let mut params = json!({ "attenuation_db": att });
@@ -104,12 +104,7 @@ fn the_plan_follows_the_cost_formula_and_halves_the_rate() {
 #[test]
 fn the_estimate_matches_the_built_pipeline() {
     let registry = Registry::standard();
-    let doc = single(
-        "real_to_complex",
-        "q15",
-        "q15",
-        json!({ "attenuation_db": 70 }),
-    );
+    let doc = single("real_to_iq", "q15", "q15", json!({ "attenuation_db": 70 }));
     let report = registry.validate_json(&doc.to_string(), &BuildOptions::default());
     assert!(report.is_ok(), "{}", report.to_json());
     let built = registry
@@ -130,33 +125,38 @@ fn types_and_parameters_are_checked() {
             .is_ok()
     };
     // real_to_complex takes real samples only.
-    assert!(invalid("real_to_complex", "c32", "f32", json!({})));
-    assert!(invalid("real_to_complex", "cq15", "q15", json!({})));
+    assert!(invalid("real_to_iq", "c32", "f32", json!({})));
+    assert!(invalid("real_to_iq", "cq15", "q15", json!({})));
     // A transition at or above half the input rate, an attenuation below 8 dB, too few taps.
     assert!(invalid(
-        "halfband",
+        "halfband_decimate",
         "c32",
         "f32",
         json!({ "transition_hz": 24000 })
     ));
     assert!(invalid(
-        "halfband",
+        "halfband_decimate",
         "c32",
         "f32",
         json!({ "attenuation_db": 7 })
     ));
     assert!(invalid(
-        "halfband",
+        "halfband_decimate",
         "c32",
         "f32",
         json!({ "transition_hz": 100, "max_taps": 31 })
     ));
-    assert!(invalid("halfband", "f32", "f32", json!({ "nope": 1 })));
+    assert!(invalid(
+        "halfband_decimate",
+        "f32",
+        "f32",
+        json!({ "nope": 1 })
+    ));
     // Each is fine with its defaults.
     for (kind, ty, precision) in [
-        ("halfband", "c32", "f32"),
-        ("halfband", "q15", "q15"),
-        ("real_to_complex", "q15", "q15"),
+        ("halfband_decimate", "c32", "f32"),
+        ("halfband_decimate", "q15", "q15"),
+        ("real_to_iq", "q15", "q15"),
     ] {
         assert!(!invalid(kind, ty, precision, json!({})), "{kind} {ty}");
     }
@@ -187,13 +187,13 @@ fn a_real_raw_input_gets_the_real_automatic_conversion() {
         let names: Vec<_> = report.nodes.iter().map(|n| n.kind.as_str()).collect();
         assert_eq!(
             names,
-            ["convert", "real_to_complex", "ddc", "fm_demod"],
+            ["convert", "real_to_iq", "ddc", "fm_demod"],
             "{port}"
         );
         let r2c = report
             .nodes
             .iter()
-            .find(|n| n.kind == "real_to_complex")
+            .find(|n| n.kind == "real_to_iq")
             .unwrap();
         assert_eq!(r2c.rate_in, Rate::hz(REAL_RATE_HZ).unwrap());
         assert_eq!(r2c.rate_out, Rate::hz(REAL_RATE_HZ / 2).unwrap());

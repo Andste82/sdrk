@@ -310,7 +310,7 @@ impl Kernel for MatrixCq15K {
 const PLL_RATE_HZ: u64 = 480_000;
 /// The pilot frequency the loops are created for.
 const PLL_PILOT_HZ: f64 = 19_000.0;
-/// Natural frequency of the loop (the default of the block `fm_stereo`).
+/// Natural frequency of the loop (the default of the block `fm_stereo_demod`).
 const PLL_NATURAL_HZ: f64 = 20.0;
 /// Pilot cycles per call of 4096 samples (18 984.375 Hz): the repeated buffer is continuous.
 const PILOT_CYCLES: u64 = 162;

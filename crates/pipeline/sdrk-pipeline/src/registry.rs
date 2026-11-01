@@ -11,8 +11,8 @@ use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
     AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DucKind,
-    Factory, FirKind, FmDemodKind, FmModKind, FmStereoKind, HalfbandKind, Kind, RealToComplexKind,
-    ResamplerKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind,
+    Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, Kind,
+    RealToIqKind, ResampleKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind,
 };
 use crate::model::{PipelineSpec, Precision};
 use crate::node::Node;
@@ -93,7 +93,7 @@ pub trait BlockFactory: Send + Sync {
     /// The description of the block kind.
     fn description(&self) -> &'static BlockDescription;
     /// Parses the params (already JSON-checked) into a config and validates it for this input
-    /// rate and precision. `input` is the port type arriving at this node (it lets `resampler`
+    /// rate and precision. `input` is the port type arriving at this node (it lets `resample`
     /// choose the complex or the real block). The paths of the diagnostics are relative to the
     /// node, e.g. `params.frequency_hz`; an empty path means the node itself.
     fn check(
@@ -198,17 +198,17 @@ impl Registry {
         register::<DdcKind>(&mut factories);
         register::<DucKind>(&mut factories);
         register::<FmDemodKind>(&mut factories);
-        register::<FmStereoKind>(&mut factories);
+        register::<FmStereoDemodKind>(&mut factories);
         register::<FmModKind>(&mut factories);
-        register::<ResamplerKind>(&mut factories);
+        register::<ResampleKind>(&mut factories);
         register::<SpectrumKind>(&mut factories);
         register::<SquelchKind>(&mut factories);
         register::<AgcKind>(&mut factories);
         register::<AmDemodKind>(&mut factories);
         register::<SsbDemodKind>(&mut factories);
         register::<BiquadKind>(&mut factories);
-        register::<HalfbandKind>(&mut factories);
-        register::<RealToComplexKind>(&mut factories);
+        register::<HalfbandDecimateKind>(&mut factories);
+        register::<RealToIqKind>(&mut factories);
         Self { factories }
     }
 

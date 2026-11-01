@@ -15,7 +15,7 @@
   },
   "nodes": {
     "demod": {
-      "kind": "fm_stereo"
+      "kind": "fm_stereo_demod"
     },
     "fft": {
       "kind": "spectrum",

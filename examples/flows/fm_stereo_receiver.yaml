@@ -22,7 +22,7 @@ nodes:
   # right). The runtime parameter "stereo" can be set to "mono" while the flow runs (for a weak
   # station whose difference signal is noisy); the default is "auto".
   demod:
-    kind: fm_stereo
+    kind: fm_stereo_demod
     params: {}
   # Averaged power spectrum of the raw input.
   fft:

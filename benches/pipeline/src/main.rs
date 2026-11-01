@@ -1,7 +1,7 @@
 //! The pipeline benchmark of `cargo xtask count --pipeline`: the receive chain of
 //! `examples/flows/fm_receiver.json` and the SSB chain (`ddc`, `agc`, `ssb_demod` at the rates
 //! of the end-to-end SSB test) at 2.4 MHz, and the whole blocks `fm_demod` (`fm480`) and
-//! `fm_stereo` (`stereo480`) on a `cf32` input at 480 kHz (M24).
+//! `fm_stereo_demod` (`stereo480`) on a `cf32` input at 480 kHz (M24).
 //!
 //! ```text
 //! pipeline run <k> [ssb|fm480|stereo480]    one warm-up block, then k blocks of 4096 input samples
@@ -39,7 +39,7 @@ const SSB_FLOW: &str = r#"{
 }"#;
 
 /// The whole `fm_demod` block on a `cf32` input at 480 kHz (the rate of the stereo flow) with
-/// the audio decimation of `fm_stereo` (48 kHz output).
+/// the audio decimation of `fm_stereo_demod` (48 kHz output).
 const FM480_FLOW: &str = r#"{
   "sdrk": 1,
   "name": "fm-480k",
@@ -50,13 +50,13 @@ const FM480_FLOW: &str = r#"{
   "outputs": { "audio": { "type": "stream", "capacity": 16384, "drop": "error" } }
 }"#;
 
-/// The whole `fm_stereo` block on a `cf32` input at 480 kHz with its defaults.
+/// The whole `fm_stereo_demod` block on a `cf32` input at 480 kHz with its defaults.
 const STEREO480_FLOW: &str = r#"{
   "sdrk": 1,
   "name": "fm-stereo-480k",
   "settings": { "precision": "f32", "max_chunk": 4096 },
   "inputs": { "rf": { "format": "cf32", "rate_hz": 480000 } },
-  "nodes": { "demod": { "kind": "fm_stereo", "params": {} } },
+  "nodes": { "demod": { "kind": "fm_stereo_demod", "params": {} } },
   "edges": [ { "from": "rf", "to": "demod" }, { "from": "demod", "to": "audio" } ],
   "outputs": { "audio": { "type": "stream", "capacity": 16384, "drop": "error" } }
 }"#;

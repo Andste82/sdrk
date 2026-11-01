@@ -26,7 +26,7 @@ nodes:
       deviation_hz: 75000
   # 48 kHz -> 240 kHz (ratio 5/1), real resampler.
   up:
-    kind: resampler
+    kind: resample
     params:
       rate_out_hz: 240000
 edges:

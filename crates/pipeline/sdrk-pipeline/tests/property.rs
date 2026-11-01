@@ -126,7 +126,7 @@ fn params(rng: &mut Pcg32, kind: &str, rate: f64) -> Value {
                 json!(rate * frac(rng, 0.0, if sloppy { 2.0 } else { 0.4 })),
             );
         }
-        "resampler" => {
+        "resample" => {
             p.insert(
                 "rate_out_hz".into(),
                 json!(*pick(rng, &[8000u64, 16000, 24000, 48000, 96000])),
@@ -191,11 +191,11 @@ fn random_flow(seed: u64) -> Value {
         "ddc",
         "duc",
         "fm_demod",
-        "resampler",
+        "resample",
         "spectrum",
         "convert_out",
     ];
-    let kinds_real = ["resampler", "fm_mod"];
+    let kinds_real = ["resample", "fm_mod"];
     let mut nodes = Map::new();
     let mut edges = Vec::new();
     let mut used = vec![false; 0];
@@ -239,7 +239,7 @@ fn random_flow(seed: u64) -> Value {
                         .as_f64()
                         .unwrap_or(1.0)
             }
-            "resampler" => nodes[&name]["params"]["rate_out_hz"]
+            "resample" => nodes[&name]["params"]["rate_out_hz"]
                 .as_f64()
                 .unwrap_or(prate),
             _ => prate,

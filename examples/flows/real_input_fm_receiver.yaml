@@ -17,7 +17,7 @@ nodes:
   # Shift by a quarter of the input rate and halve the rate: 4.8 MS/s real -> 2.4 MS/s complex.
   # The output centre (0 Hz) is the input frequency 1.2 MHz.
   iq:
-    kind: real_to_complex
+    kind: real_to_iq
     params:
       attenuation_db: 60
       transition_hz: 480000

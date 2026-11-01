@@ -15,10 +15,10 @@ use sdrk_blocks::{
     BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock,
     DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FmStereoBlock, FmStereoConfig, HalfbandBlock, HalfbandConfig, HalfbandRealBlock, ParamValue,
-    PortType, RealToComplexBlock, ResamplerBlock, ResamplerConfig, ResamplerRealBlock, ScaleBlock,
-    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, TUNED_PHASES,
+    FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
+    HalfbandDecimateRealBlock, ParamValue, PortType, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -841,25 +841,25 @@ impl Kind for BiquadKind {
     }
 }
 
-// ---------------------------------------------------------------- halfband
+// ----------------------------------------------------------- halfband_decimate
 
-pub(crate) struct HalfbandKind;
+pub(crate) struct HalfbandDecimateKind;
 
-impl Kind for HalfbandKind {
-    type Cfg = HalfbandConfig;
+impl Kind for HalfbandDecimateKind {
+    type Cfg = HalfbandDecimateConfig;
 
-    const KIND: &'static str = "halfband";
+    const KIND: &'static str = "halfband_decimate";
     fn kernels() -> &'static [&'static str] {
         &["halfband_decimate", "halfband_decimate_real"]
     }
-    fn default_cfg() -> HalfbandConfig {
-        HalfbandConfig::default()
+    fn default_cfg() -> HalfbandDecimateConfig {
+        HalfbandDecimateConfig::default()
     }
-    fn set(cfg: &mut HalfbandConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+    fn set(cfg: &mut HalfbandDecimateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
         cfg.set(name, value)
     }
     fn plan(
-        cfg: &HalfbandConfig,
+        cfg: &HalfbandDecimateConfig,
         input: PortType,
         rate: Rate,
         p: Precision,
@@ -870,8 +870,8 @@ impl Kind for HalfbandKind {
                 p,
                 T,
                 (
-                    HalfbandBlock::<T, VecStorage>::rate_out(cfg, rate)?,
-                    HalfbandBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                    HalfbandDecimateBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    HalfbandDecimateBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
                 )
             )
         } else {
@@ -879,8 +879,8 @@ impl Kind for HalfbandKind {
                 p,
                 R,
                 (
-                    HalfbandRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
-                    HalfbandRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                    HalfbandDecimateRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    HalfbandDecimateRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
                 )
             )
         };
@@ -896,7 +896,7 @@ impl Kind for HalfbandKind {
         })
     }
     fn build(
-        cfg: &HalfbandConfig,
+        cfg: &HalfbandDecimateConfig,
         input: PortType,
         rate: Rate,
         p: Precision,
@@ -906,55 +906,55 @@ impl Kind for HalfbandKind {
             with_complex!(
                 p,
                 T,
-                Ok(Box::new(StreamNode::new(HalfbandBlock::<T, _>::new(
-                    cfg, rate, st
-                )?)))
+                Ok(Box::new(StreamNode::new(
+                    HalfbandDecimateBlock::<T, _>::new(cfg, rate, st)?
+                )))
             )
         } else {
             with_real!(
                 p,
                 R,
-                Ok(Box::new(StreamNode::new(HalfbandRealBlock::<R, _>::new(
-                    cfg, rate, st
-                )?)))
+                Ok(Box::new(StreamNode::new(
+                    HalfbandDecimateRealBlock::<R, _>::new(cfg, rate, st)?
+                )))
             )
         }
     }
 }
 
-// ------------------------------------------------------------ real_to_complex
+// ------------------------------------------------------------------ real_to_iq
 
-pub(crate) struct RealToComplexKind;
+pub(crate) struct RealToIqKind;
 
-impl Kind for RealToComplexKind {
-    type Cfg = HalfbandConfig;
+impl Kind for RealToIqKind {
+    type Cfg = HalfbandDecimateConfig;
 
-    const KIND: &'static str = "real_to_complex";
+    const KIND: &'static str = "real_to_iq";
     fn kernels() -> &'static [&'static str] {
         &["real_to_complex"]
     }
-    fn default_cfg() -> HalfbandConfig {
-        HalfbandConfig::default()
+    fn default_cfg() -> HalfbandDecimateConfig {
+        HalfbandDecimateConfig::default()
     }
-    fn set(cfg: &mut HalfbandConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+    fn set(cfg: &mut HalfbandDecimateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
         cfg.set(name, value)
     }
     fn plan(
-        cfg: &HalfbandConfig,
+        cfg: &HalfbandDecimateConfig,
         input: PortType,
         rate: Rate,
         p: Precision,
     ) -> BlockResult<Figures> {
         if is_complex(input) {
-            return Err(mismatch("real_to_complex needs real samples"));
+            return Err(mismatch("real_to_iq needs real samples"));
         }
         let taps = cfg.num_taps(rate)?;
         with_complex!(
             p,
             T,
             Ok(Figures {
-                rate_out: RealToComplexBlock::<T, VecStorage>::rate_out(cfg, rate)?,
-                memory_bytes: RealToComplexBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                rate_out: RealToIqBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: RealToIqBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
                 cost: (taps + 3) as f64 / 4.0,
                 taps,
                 delay: delay_half(taps),
@@ -964,7 +964,7 @@ impl Kind for RealToComplexKind {
         )
     }
     fn build(
-        cfg: &HalfbandConfig,
+        cfg: &HalfbandDecimateConfig,
         _input: PortType,
         rate: Rate,
         p: Precision,
@@ -973,7 +973,7 @@ impl Kind for RealToComplexKind {
         with_complex!(
             p,
             T,
-            Ok(Box::new(StreamNode::new(RealToComplexBlock::<T, _>::new(
+            Ok(Box::new(StreamNode::new(RealToIqBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )
@@ -1199,14 +1199,14 @@ impl Kind for FmDemodKind {
     }
 }
 
-// --------------------------------------------------------------- fm_stereo
+// ------------------------------------------------------------- fm_stereo_demod
 
-pub(crate) struct FmStereoKind;
+pub(crate) struct FmStereoDemodKind;
 
-impl Kind for FmStereoKind {
-    type Cfg = FmStereoConfig;
+impl Kind for FmStereoDemodKind {
+    type Cfg = FmStereoDemodConfig;
 
-    const KIND: &'static str = "fm_stereo";
+    const KIND: &'static str = "fm_stereo_demod";
     fn kernels() -> &'static [&'static str] {
         &[
             "quad_demod",
@@ -1217,20 +1217,20 @@ impl Kind for FmStereoKind {
             "biquad",
         ]
     }
-    fn default_cfg() -> FmStereoConfig {
-        FmStereoConfig::default()
+    fn default_cfg() -> FmStereoDemodConfig {
+        FmStereoDemodConfig::default()
     }
-    fn set(cfg: &mut FmStereoConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+    fn set(cfg: &mut FmStereoDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
         cfg.set(name, value)
     }
     fn plan(
-        cfg: &FmStereoConfig,
+        cfg: &FmStereoDemodConfig,
         input: PortType,
         rate: Rate,
         p: Precision,
     ) -> BlockResult<Figures> {
         if !is_complex(input) {
-            return Err(mismatch("fm_stereo needs complex samples"));
+            return Err(mismatch("fm_stereo_demod needs complex samples"));
         }
         let taps = cfg.audio_taps(rate)?;
         let d = cfg.audio_decimation;
@@ -1238,8 +1238,8 @@ impl Kind for FmStereoKind {
             p,
             T,
             Ok(Figures {
-                rate_out: FmStereoBlock::<T, VecStorage>::rate_out(cfg, rate)?,
-                memory_bytes: FmStereoBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                rate_out: FmStereoDemodBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: FmStereoDemodBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
                 cost: 25.0 + (2 * taps + 12) as f64 / d as f64,
                 taps,
                 delay: Delay::new(taps.max(1) as u64, 2).unwrap_or(Delay::ZERO),
@@ -1253,7 +1253,7 @@ impl Kind for FmStereoKind {
         reason = "clippy counts the temporaries of the block and the node separately; the real frame is small"
     )]
     fn build(
-        cfg: &FmStereoConfig,
+        cfg: &FmStereoDemodConfig,
         _input: PortType,
         rate: Rate,
         p: Precision,
@@ -1262,7 +1262,7 @@ impl Kind for FmStereoKind {
         with_complex!(
             p,
             T,
-            Ok(Box::new(StreamNode::new(FmStereoBlock::<T, _>::new(
+            Ok(Box::new(StreamNode::new(FmStereoDemodBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )
@@ -1317,14 +1317,14 @@ impl Kind for FmModKind {
     }
 }
 
-// --------------------------------------------------------------- resampler
+// -------------------------------------------------------------------- resample
 
-pub(crate) struct ResamplerKind;
+pub(crate) struct ResampleKind;
 
-/// Taps, group delay and smallest input of the resampler for a configuration, from the same
-/// design rules as the block (`ResamplerConfig::validate` has already accepted it).
-fn resampler_figures(
-    cfg: &ResamplerConfig,
+/// Taps, group delay and smallest input of the `resample` block for a configuration, from the same
+/// design rules as the block (`ResampleConfig::validate` has already accepted it).
+fn resample_figures(
+    cfg: &ResampleConfig,
     rate: Rate,
     rate_out: Rate,
 ) -> BlockResult<(usize, Delay, usize, f64)> {
@@ -1363,21 +1363,21 @@ fn resampler_figures(
     }
 }
 
-impl Kind for ResamplerKind {
-    type Cfg = ResamplerConfig;
+impl Kind for ResampleKind {
+    type Cfg = ResampleConfig;
 
-    const KIND: &'static str = "resampler";
+    const KIND: &'static str = "resample";
     fn kernels() -> &'static [&'static str] {
         &["resample", "resample_real", "dot", "dot_real"]
     }
-    fn default_cfg() -> ResamplerConfig {
-        ResamplerConfig::default()
+    fn default_cfg() -> ResampleConfig {
+        ResampleConfig::default()
     }
-    fn set(cfg: &mut ResamplerConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+    fn set(cfg: &mut ResampleConfig, name: &str, value: ParamValue) -> BlockResult<()> {
         cfg.set(name, value)
     }
     fn plan(
-        cfg: &ResamplerConfig,
+        cfg: &ResampleConfig,
         input: PortType,
         rate: Rate,
         p: Precision,
@@ -1388,8 +1388,8 @@ impl Kind for ResamplerKind {
                 p,
                 T,
                 (
-                    ResamplerBlock::<T, VecStorage>::rate_out(cfg, rate)?,
-                    ResamplerBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                    ResampleBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    ResampleBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
                 )
             )
         } else {
@@ -1397,12 +1397,12 @@ impl Kind for ResamplerKind {
                 p,
                 R,
                 (
-                    ResamplerRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
-                    ResamplerRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                    ResampleRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    ResampleRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
                 )
             )
         };
-        let (taps, delay, min_input, cost) = resampler_figures(cfg, rate, rate_out)?;
+        let (taps, delay, min_input, cost) = resample_figures(cfg, rate, rate_out)?;
         Ok(Figures {
             rate_out,
             memory_bytes,
@@ -1414,17 +1414,17 @@ impl Kind for ResamplerKind {
         })
     }
     fn build(
-        cfg: &ResamplerConfig,
+        cfg: &ResampleConfig,
         input: PortType,
         rate: Rate,
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         match (is_complex(input), p) {
-            (true, Precision::F32) => resampler_c32(cfg, rate, st),
-            (true, Precision::Q15) => resampler_cq15(cfg, rate, st),
-            (false, Precision::F32) => resampler_f32(cfg, rate, st),
-            (false, Precision::Q15) => resampler_q15(cfg, rate, st),
+            (true, Precision::F32) => resample_c32(cfg, rate, st),
+            (true, Precision::Q15) => resample_cq15(cfg, rate, st),
+            (false, Precision::F32) => resample_f32(cfg, rate, st),
+            (false, Precision::Q15) => resample_q15(cfg, rate, st),
         }
     }
 }
@@ -1432,10 +1432,10 @@ impl Kind for ResamplerKind {
 // One function per sample type: the four blocks differ in size, and a single function that
 // builds all of them would need the stack of all four at once.
 
-macro_rules! resampler_builder {
+macro_rules! resample_builder {
     ($name:ident, $block:ident, $t:ty) => {
         fn $name(
-            cfg: &ResamplerConfig,
+            cfg: &ResampleConfig,
             rate: Rate,
             st: &mut VecStorage,
         ) -> BlockResult<Box<dyn Node>> {
@@ -1446,10 +1446,10 @@ macro_rules! resampler_builder {
     };
 }
 
-resampler_builder!(resampler_c32, ResamplerBlock, C32);
-resampler_builder!(resampler_cq15, ResamplerBlock, CQ15);
-resampler_builder!(resampler_f32, ResamplerRealBlock, f32);
-resampler_builder!(resampler_q15, ResamplerRealBlock, Q15);
+resample_builder!(resample_c32, ResampleBlock, C32);
+resample_builder!(resample_cq15, ResampleBlock, CQ15);
+resample_builder!(resample_f32, ResampleRealBlock, f32);
+resample_builder!(resample_q15, ResampleRealBlock, Q15);
 
 // ---------------------------------------------------------------- spectrum
 

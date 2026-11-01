@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use crate::layers;
 use crate::scan::Finding;
 
-const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|docs] | bare-metal | schema [--check] | test-all | emu [options] | count --platform <p> | measure <kernel> [options] | sde-cpuid <sse2|sse4.2> <file> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
+const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|names|docs] | bare-metal | schema [--check] | test-all | emu [options] | count --platform <p> | measure <kernel> [options] | sde-cpuid <sse2|sse4.2> <file> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
 
 /// The bare-metal target used to prove that heap-free crates need no allocator.
 pub const BARE_METAL_TARGET: &str = "thumbv7em-none-eabihf";
@@ -28,6 +28,7 @@ pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
             "global-state",
             &layers::check_global_state(root)?,
         )),
+        ["check", "names"] => Ok(print_findings("names", &crate::names::check_names(root)?)),
         ["check", "docs"] => check_docs(root),
         ["bare-metal"] => bare_metal(root),
         ["schema"] => schema(root, false),
@@ -61,6 +62,7 @@ fn check_all(root: &Path) -> anyhow::Result<bool> {
     let mut ok = print_findings("layers", &layers::check_layers(root)?);
     ok &= print_findings("heap", &layers::check_heap(root)?);
     ok &= print_findings("global-state", &layers::check_global_state(root)?);
+    ok &= print_findings("names", &crate::names::check_names(root)?);
     ok &= check_docs(root)?;
     Ok(ok)
 }

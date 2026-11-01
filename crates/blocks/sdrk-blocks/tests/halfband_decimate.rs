@@ -1,4 +1,4 @@
-//! The blocks `halfband` and `real_to_complex` and the real variant of `convert`: design,
+//! The blocks `halfband_decimate` and `real_to_iq` and the real variant of `convert`: design,
 //! timing, alias rejection, block-size invariance, storage, parameters and validation.
 #![allow(
     clippy::unwrap_used,
@@ -28,8 +28,8 @@ use sdrk::{C32, CQ15, ComplexSample, Delay, Q15, Sdrk};
 use sdrk_blocks::design::{halfband_len, halfband_taps, kaiser_beta};
 use sdrk_blocks::{
     ArenaStorage, Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig, ConvertRealBlock,
-    Error, HalfbandBlock, HalfbandConfig, HalfbandRealBlock, ParamValue, RealToComplexBlock,
-    all_descriptions,
+    Error, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ParamValue,
+    RealToIqBlock, all_descriptions,
 };
 use sdrk_core::kernels::convert::ConvertReal;
 use sdrk_core::kernels::halfband::{HalfbandDecimate, HalfbandDecimateReal, RealToComplex};
@@ -40,8 +40,8 @@ type A<'a> = ArenaStorage<'a>;
 
 const FS: u64 = 48_000;
 
-fn cfg() -> HalfbandConfig {
-    HalfbandConfig::default()
+fn cfg() -> HalfbandDecimateConfig {
+    HalfbandDecimateConfig::default()
 }
 
 /// Identical bits (R6.2: the same backend gives the same bits for any split of the input).
@@ -71,7 +71,7 @@ where
 #[test]
 fn the_f32_taps_are_the_designed_halfband_taps() {
     let r = rate(FS);
-    let c = HalfbandConfig {
+    let c = HalfbandDecimateConfig {
         transition_hz: Some(4800.0),
         attenuation_db: 70.0,
         max_taps: 1023,
@@ -81,7 +81,7 @@ fn the_f32_taps_are_the_designed_halfband_taps() {
     let mut h = vec![0.0f64; n];
     halfband_taps(kaiser_beta(70.0), &mut h).unwrap();
 
-    let mut real = HalfbandRealBlock::<f32, _>::new(&c, r, &mut VecStorage).unwrap();
+    let mut real = HalfbandDecimateRealBlock::<f32, _>::new(&c, r, &mut VecStorage).unwrap();
     assert_eq!(real.num_taps(), n);
     // Even taps: y[j] = h[2 j] for an impulse at index 0, the odd ones for an impulse at 1.
     let even = impulse_taps(&mut real, 1.0f32, 0.0, n);
@@ -108,7 +108,7 @@ fn the_f32_taps_are_the_designed_halfband_taps() {
 fn the_q15_blocks_keep_the_zero_taps_exactly_zero() {
     let r = rate(FS);
     let n = cfg().num_taps(r).unwrap();
-    let mut block = HalfbandRealBlock::<Q15, _>::new(&cfg(), r, &mut VecStorage).unwrap();
+    let mut block = HalfbandDecimateRealBlock::<Q15, _>::new(&cfg(), r, &mut VecStorage).unwrap();
     let mut x = vec![Q15(0); n + 2];
     x[1] = Q15(32767);
     let odd = run_block(&mut block, &x, None);
@@ -142,12 +142,13 @@ fn the_group_delay_matches_an_impulse_within_half_a_sample() {
     // is input time 2 j = m + 1: a delay of m = (N - 1) / 2 input samples after the impulse.
     for taps_cfg in [
         cfg(),
-        HalfbandConfig {
+        HalfbandDecimateConfig {
             attenuation_db: 90.0,
             ..cfg()
         },
     ] {
-        let block = HalfbandRealBlock::<f32, _>::new(&taps_cfg, r, &mut VecStorage).unwrap();
+        let block =
+            HalfbandDecimateRealBlock::<f32, _>::new(&taps_cfg, r, &mut VecStorage).unwrap();
         let n = block.num_taps();
         timing_checks(&block, n);
         let mut block = block;
@@ -168,9 +169,9 @@ fn the_group_delay_matches_an_impulse_within_half_a_sample() {
             "{measured} vs {promised}"
         );
     }
-    let c = HalfbandBlock::<C32, _>::new(&cfg(), r, &mut VecStorage).unwrap();
+    let c = HalfbandDecimateBlock::<C32, _>::new(&cfg(), r, &mut VecStorage).unwrap();
     timing_checks(&c, c.num_taps());
-    let q = RealToComplexBlock::<CQ15, _>::new(&cfg(), r, &mut VecStorage).unwrap();
+    let q = RealToIqBlock::<CQ15, _>::new(&cfg(), r, &mut VecStorage).unwrap();
     timing_checks(&q, q.num_taps());
 }
 
@@ -178,12 +179,12 @@ fn the_group_delay_matches_an_impulse_within_half_a_sample() {
 
 /// RMS of a complex tone `a e^{j 2 pi f n / fs}` after the block, relative to the input, with
 /// the transient (two filter lengths) skipped.
-fn complex_gain<T: BlockSample>(c: &HalfbandConfig, f_hz: f64) -> f64
+fn complex_gain<T: BlockSample>(c: &HalfbandDecimateConfig, f_hz: f64) -> f64
 where
     Sdrk: HalfbandDecimate<T>,
 {
     let r = rate(FS);
-    let mut block = HalfbandBlock::<T, _>::new(c, r, &mut VecStorage).unwrap();
+    let mut block = HalfbandDecimateBlock::<T, _>::new(c, r, &mut VecStorage).unwrap();
     let n = 8192;
     let x: Vec<T> = (0..n)
         .map(|i| {
@@ -202,7 +203,7 @@ where
 fn a_tone_in_the_stop_band_is_attenuated_by_the_design_value_minus_3_db() {
     let fs = FS as f64;
     for (att, tr) in [(60.0, 0.1), (60.0, 0.2), (80.0, 0.1)] {
-        let c = HalfbandConfig {
+        let c = HalfbandDecimateConfig {
             transition_hz: Some(tr * fs),
             attenuation_db: att,
             max_taps: 1023,
@@ -224,11 +225,11 @@ fn a_tone_in_the_stop_band_is_attenuated_by_the_design_value_minus_3_db() {
     }
 }
 
-fn real_gain<R: BlockReal>(c: &HalfbandConfig, f_hz: f64) -> f64
+fn real_gain<R: BlockReal>(c: &HalfbandDecimateConfig, f_hz: f64) -> f64
 where
     Sdrk: HalfbandDecimateReal<R>,
 {
-    let mut block = HalfbandRealBlock::<R, _>::new(c, rate(FS), &mut VecStorage).unwrap();
+    let mut block = HalfbandDecimateRealBlock::<R, _>::new(c, rate(FS), &mut VecStorage).unwrap();
     let n = 8192;
     let x: Vec<R> = (0..n)
         .map(|i| {
@@ -264,7 +265,7 @@ fn real_to_complex_maps_f_to_f_minus_a_quarter_and_rejects_the_mirror() {
     let fs = FS as f64;
     let c = cfg();
     let limit = 10f64.powf(-57.0 / 20.0);
-    let mut block = RealToComplexBlock::<C32, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+    let mut block = RealToIqBlock::<C32, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
     let n = 16384;
     // A real tone at f = 0.33 fs: output frequency f - fs/4 = 0.08 fs (rate fs/2, so 0.16 cycles
     // per output sample), the mirror at -f lands at -0.33 fs - fs/4 and is removed.
@@ -297,24 +298,24 @@ fn invariance_complex<T: BlockSample>()
 where
     Sdrk: HalfbandDecimate<T>,
 {
-    let c = HalfbandConfig {
+    let c = HalfbandDecimateConfig {
         transition_hz: Some(0.2 * FS as f64),
         ..cfg()
     };
     let x = signal::<T>(5000, 11, 0.13);
     let whole = run_block(
-        &mut HalfbandBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap(),
+        &mut HalfbandDecimateBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap(),
         &x,
         None,
     );
     assert_eq!(whole.len(), 2500);
     for plan in plans20() {
-        let mut b = HalfbandBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+        let mut b = HalfbandDecimateBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
         let got = run_block(&mut b, &x, Some(plan));
         assert!(same_bits(&whole, &got), "plan {plan:?}");
     }
     // `reset` restarts from the first input sample.
-    let mut b = HalfbandBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+    let mut b = HalfbandDecimateBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
     run_block(&mut b, &x[..777], None);
     b.reset();
     assert!(same_bits(&whole, &run_block(&mut b, &x, None)));
@@ -324,22 +325,22 @@ fn invariance_real<R: BlockReal>()
 where
     Sdrk: HalfbandDecimateReal<R>,
 {
-    let c = HalfbandConfig {
+    let c = HalfbandDecimateConfig {
         transition_hz: Some(0.2 * FS as f64),
         ..cfg()
     };
     let x = real_signal::<R>(5001, 12, 0.13);
     let whole = run_block(
-        &mut HalfbandRealBlock::<R, _>::new(&c, rate(FS), &mut VecStorage).unwrap(),
+        &mut HalfbandDecimateRealBlock::<R, _>::new(&c, rate(FS), &mut VecStorage).unwrap(),
         &x,
         None,
     );
     for plan in plans20() {
-        let mut b = HalfbandRealBlock::<R, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+        let mut b = HalfbandDecimateRealBlock::<R, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
         let got = run_block(&mut b, &x, Some(plan));
         assert!(same_bits(&whole, &got), "plan {plan:?}");
     }
-    let mut b = HalfbandRealBlock::<R, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+    let mut b = HalfbandDecimateRealBlock::<R, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
     run_block(&mut b, &x[..501], None);
     b.reset();
     assert!(same_bits(&whole, &run_block(&mut b, &x, None)));
@@ -349,23 +350,23 @@ fn invariance_r2c<T: BlockSample>()
 where
     Sdrk: RealToComplex<T>,
 {
-    let c = HalfbandConfig {
+    let c = HalfbandDecimateConfig {
         transition_hz: Some(0.2 * FS as f64),
         ..cfg()
     };
     let x = real_signal::<T::Real>(5003, 13, 0.31);
     let whole = run_block(
-        &mut RealToComplexBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap(),
+        &mut RealToIqBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap(),
         &x,
         None,
     );
     for plan in plans20() {
-        let mut b = RealToComplexBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+        let mut b = RealToIqBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
         let got = run_block(&mut b, &x, Some(plan));
         assert!(same_bits(&whole, &got), "plan {plan:?}");
     }
     // After a reset the counter n restarts at 0, also after an odd number of samples.
-    let mut b = RealToComplexBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
+    let mut b = RealToIqBlock::<T, _>::new(&c, rate(FS), &mut VecStorage).unwrap();
     run_block(&mut b, &x[..501], None);
     b.reset();
     assert!(same_bits(&whole, &run_block(&mut b, &x, None)));
@@ -383,7 +384,8 @@ fn the_blocks_are_independent_of_the_chunking() {
 
 #[test]
 fn a_full_output_buffer_holds_the_input_back() {
-    let mut b = HalfbandRealBlock::<f32, _>::new(&cfg(), rate(FS), &mut VecStorage).unwrap();
+    let mut b =
+        HalfbandDecimateRealBlock::<f32, _>::new(&cfg(), rate(FS), &mut VecStorage).unwrap();
     let x = vec![0.25f32; 100];
     let mut out = [0.0f32; 3];
     let p = b.process(&x, &mut out).unwrap();
@@ -403,22 +405,22 @@ fn a_full_output_buffer_holds_the_input_back() {
 fn the_arena_is_used_exactly() {
     fn exact<T: BlockSample, R: BlockReal>() {
         for (tr, att) in [(None, 60.0), (Some(2000.0), 80.0)] {
-            let c = HalfbandConfig {
+            let c = HalfbandDecimateConfig {
                 transition_hz: tr,
                 attenuation_db: att,
                 ..cfg()
             };
             let r = rate(FS);
-            let bytes = HalfbandBlock::<T, A<'_>>::storage_bytes(&c, r).unwrap();
+            let bytes = HalfbandDecimateBlock::<T, A<'_>>::storage_bytes(&c, r).unwrap();
             assert!(bytes > 0);
-            check_exact_storage(bytes, |a| HalfbandBlock::<T, _>::new(&c, r, a).map(|_| ()));
-            let bytes = RealToComplexBlock::<T, A<'_>>::storage_bytes(&c, r).unwrap();
             check_exact_storage(bytes, |a| {
-                RealToComplexBlock::<T, _>::new(&c, r, a).map(|_| ())
+                HalfbandDecimateBlock::<T, _>::new(&c, r, a).map(|_| ())
             });
-            let bytes = HalfbandRealBlock::<R, A<'_>>::storage_bytes(&c, r).unwrap();
+            let bytes = RealToIqBlock::<T, A<'_>>::storage_bytes(&c, r).unwrap();
+            check_exact_storage(bytes, |a| RealToIqBlock::<T, _>::new(&c, r, a).map(|_| ()));
+            let bytes = HalfbandDecimateRealBlock::<R, A<'_>>::storage_bytes(&c, r).unwrap();
             check_exact_storage(bytes, |a| {
-                HalfbandRealBlock::<R, _>::new(&c, r, a).map(|_| ())
+                HalfbandDecimateRealBlock::<R, _>::new(&c, r, a).map(|_| ())
             });
         }
     }
@@ -432,18 +434,18 @@ fn no_block_is_larger_than_512_bytes_and_all_are_send() {
         let size = std::mem::size_of::<T>();
         assert!(size <= 512, "{name} is {size} bytes");
     }
-    check::<HalfbandBlock<C32, A<'static>>>("HalfbandBlock<C32>");
-    check::<HalfbandBlock<CQ15, VecStorage>>("HalfbandBlock<CQ15, Vec>");
-    check::<HalfbandRealBlock<f32, A<'static>>>("HalfbandRealBlock<f32>");
-    check::<HalfbandRealBlock<Q15, VecStorage>>("HalfbandRealBlock<Q15, Vec>");
-    check::<RealToComplexBlock<C32, A<'static>>>("RealToComplexBlock<C32>");
-    check::<RealToComplexBlock<CQ15, VecStorage>>("RealToComplexBlock<CQ15, Vec>");
+    check::<HalfbandDecimateBlock<C32, A<'static>>>("HalfbandDecimateBlock<C32>");
+    check::<HalfbandDecimateBlock<CQ15, VecStorage>>("HalfbandDecimateBlock<CQ15, Vec>");
+    check::<HalfbandDecimateRealBlock<f32, A<'static>>>("HalfbandDecimateRealBlock<f32>");
+    check::<HalfbandDecimateRealBlock<Q15, VecStorage>>("HalfbandDecimateRealBlock<Q15, Vec>");
+    check::<RealToIqBlock<C32, A<'static>>>("RealToIqBlock<C32>");
+    check::<RealToIqBlock<CQ15, VecStorage>>("RealToIqBlock<CQ15, Vec>");
     check::<ConvertRealBlock<f32, A<'static>>>("ConvertRealBlock<f32>");
     check::<ConvertRealBlock<Q15, VecStorage>>("ConvertRealBlock<Q15, Vec>");
     fn sync<T: Sync>() {}
-    sync::<HalfbandBlock<C32, A<'static>>>();
-    sync::<HalfbandRealBlock<Q15, A<'static>>>();
-    sync::<RealToComplexBlock<CQ15, A<'static>>>();
+    sync::<HalfbandDecimateBlock<C32, A<'static>>>();
+    sync::<HalfbandDecimateRealBlock<Q15, A<'static>>>();
+    sync::<RealToIqBlock<CQ15, A<'static>>>();
     sync::<ConvertRealBlock<f32, A<'static>>>();
 }
 
@@ -451,7 +453,7 @@ fn no_block_is_larger_than_512_bytes_and_all_are_send() {
 
 #[test]
 fn the_descriptions_name_the_kinds_and_the_parameters() {
-    for kind in ["halfband", "real_to_complex"] {
+    for kind in ["halfband_decimate", "real_to_iq"] {
         let d = all_descriptions().iter().find(|d| d.kind == kind).unwrap();
         let names: Vec<_> = d.params.iter().map(|p| p.name).collect();
         assert_eq!(names, ["transition_hz", "attenuation_db", "max_taps"]);
@@ -467,7 +469,7 @@ fn the_descriptions_name_the_kinds_and_the_parameters() {
 #[test]
 fn parameters_are_read_back_with_the_defaults_resolved() {
     let r = rate(FS);
-    let b = HalfbandBlock::<C32, _>::new(&cfg(), r, &mut VecStorage).unwrap();
+    let b = HalfbandDecimateBlock::<C32, _>::new(&cfg(), r, &mut VecStorage).unwrap();
     assert_eq!(b.param("transition_hz"), Ok(ParamValue::F64(4800.0)));
     assert_eq!(b.param("attenuation_db"), Ok(ParamValue::F64(60.0)));
     assert_eq!(b.param("max_taps"), Ok(ParamValue::I64(1023)));
@@ -481,7 +483,7 @@ fn parameters_are_read_back_with_the_defaults_resolved() {
         b.set_param("nope", ParamValue::I64(10)),
         Err(Error::UnknownParameter)
     );
-    let mut c = HalfbandConfig::default();
+    let mut c = HalfbandDecimateConfig::default();
     c.set("transition_hz", ParamValue::F64(1000.0)).unwrap();
     assert_eq!(c.get("transition_hz"), Ok(ParamValue::F64(1000.0)));
     assert!(matches!(
@@ -499,15 +501,15 @@ fn invalid_designs_are_errors() {
     let r = rate(FS);
     // Transition at or above half the input rate, or not positive.
     for t in [24_000.0, 30_000.0, -1.0, 0.0] {
-        let c = HalfbandConfig {
+        let c = HalfbandDecimateConfig {
             transition_hz: Some(t),
             ..cfg()
         };
         assert!(c.validate(r).is_err(), "{t}");
-        assert!(HalfbandBlock::<C32, _>::new(&c, r, &mut VecStorage).is_err());
+        assert!(HalfbandDecimateBlock::<C32, _>::new(&c, r, &mut VecStorage).is_err());
     }
     // More taps than allowed.
-    let c = HalfbandConfig {
+    let c = HalfbandDecimateConfig {
         transition_hz: Some(100.0),
         max_taps: 63,
         ..cfg()
@@ -521,7 +523,7 @@ fn invalid_designs_are_errors() {
     ));
     // The tap count is 4 k + 3 and never above max_taps.
     for att in [20.0, 60.0, 100.0] {
-        let c = HalfbandConfig {
+        let c = HalfbandDecimateConfig {
             attenuation_db: att,
             ..cfg()
         };

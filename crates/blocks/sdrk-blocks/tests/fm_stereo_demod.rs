@@ -1,4 +1,4 @@
-//! Block `fm_stereo`: stereo decoding of a generated multiplex signal, the runtime parameter
+//! Block `fm_stereo_demod`: stereo decoding of a generated multiplex signal, the runtime parameter
 //! `stereo`, `pilot_locked()`, validation, the equality with the hand-wired kernel chain,
 //! invariance against the block size and extreme inputs.
 #![allow(
@@ -26,7 +26,8 @@ use num_complex::Complex64;
 use sdrk::{C32, CQ15, ComplexSample, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::design::{BiquadResponse, biquad_coefs};
 use sdrk_blocks::{
-    BiquadElem, Block, BlockSample, Error, FmStereoBlock, FmStereoConfig, ParamValue, TunedElem,
+    BiquadElem, Block, BlockSample, Error, FmStereoDemodBlock, FmStereoDemodConfig, ParamValue,
+    TunedElem,
 };
 use sdrk_core::RealSample;
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
@@ -49,12 +50,12 @@ fn mpx_signal<T: ComplexSample>(n: usize, pilot: f64, right: (f64, f64)) -> Vec<
         .collect::<Vec<T>>()
 }
 
-fn block<T>(cfg: &FmStereoConfig) -> FmStereoBlock<T, VecStorage>
+fn block<T>(cfg: &FmStereoDemodConfig) -> FmStereoDemodBlock<T, VecStorage>
 where
     T: BlockSample + BiquadElem,
     T::Real: BiquadElem,
 {
-    FmStereoBlock::<T, _>::new(cfg, rate(FS), &mut VecStorage).unwrap()
+    FmStereoDemodBlock::<T, _>::new(cfg, rate(FS), &mut VecStorage).unwrap()
 }
 
 /// Separation in dB of the 1 kHz tone in L over R and of the 3 kHz tone in R over L, measured
@@ -77,7 +78,7 @@ fn separation<T: ComplexSample>(audio: &[T], skip: usize) -> (f64, f64) {
 fn it_decodes_stereo_and_reports_the_pilot() {
     let n = 96_000;
     let input = mpx_signal::<C32>(n, 0.1, (1.0, 3000.0));
-    let mut b = block::<C32>(&FmStereoConfig::default());
+    let mut b = block::<C32>(&FmStereoDemodConfig::default());
     assert!(!b.pilot_locked());
     let out = run_block(&mut b, &input, None);
     assert_eq!(out.len(), n / 10);
@@ -90,7 +91,7 @@ fn it_decodes_stereo_and_reports_the_pilot() {
 fn the_q15_block_decodes_stereo_too() {
     let n = 96_000;
     let input = mpx_signal::<CQ15>(n, 0.1, (1.0, 3000.0));
-    let mut b = block::<CQ15>(&FmStereoConfig::default());
+    let mut b = block::<CQ15>(&FmStereoDemodConfig::default());
     let out = run_block(&mut b, &input, None);
     assert!(b.pilot_locked());
     let (sl, sr) = separation(&out, 4800);
@@ -100,7 +101,7 @@ fn the_q15_block_decodes_stereo_too() {
 #[test]
 fn without_a_pilot_the_output_is_mono_and_the_loop_is_not_locked() {
     let input = mpx_signal::<C32>(48_000, 0.0, (1.0, 1000.0));
-    let mut b = block::<C32>(&FmStereoConfig::default());
+    let mut b = block::<C32>(&FmStereoDemodConfig::default());
     let out = run_block(&mut b, &input, None);
     assert!(!b.pilot_locked());
     assert!(out.iter().all(|v| v.re.to_bits() == v.im.to_bits()));
@@ -110,7 +111,7 @@ fn without_a_pilot_the_output_is_mono_and_the_loop_is_not_locked() {
 fn the_stereo_parameter_switches_between_auto_and_mono() {
     let n = 96_000;
     let input = mpx_signal::<C32>(n, 0.1, (1.0, 3000.0));
-    let mut b = block::<C32>(&FmStereoConfig::default());
+    let mut b = block::<C32>(&FmStereoDemodConfig::default());
     assert_eq!(b.param("stereo").unwrap(), ParamValue::Choice(0));
     let first = run_block(&mut b, &input[..48_000], None);
     assert!(first[2400..].iter().any(|v| v.re != v.im));
@@ -140,7 +141,7 @@ fn the_stereo_parameter_switches_between_auto_and_mono() {
 
 #[test]
 fn a_block_built_in_mono_is_mono_from_the_first_sample() {
-    let mut cfg = FmStereoConfig::default();
+    let mut cfg = FmStereoDemodConfig::default();
     cfg.set("stereo", ParamValue::Choice(1)).unwrap();
     let input = mpx_signal::<C32>(24_000, 0.1, (1.0, 3000.0));
     let mut b = block::<C32>(&cfg);
@@ -150,10 +151,10 @@ fn a_block_built_in_mono_is_mono_from_the_first_sample() {
 
 #[test]
 fn the_configuration_is_validated() {
-    let ok = FmStereoConfig::default();
-    assert!(FmStereoBlock::<C32, VecStorage>::rate_out(&ok, rate(FS)).is_ok());
+    let ok = FmStereoDemodConfig::default();
+    assert!(FmStereoDemodBlock::<C32, VecStorage>::rate_out(&ok, rate(FS)).is_ok());
     assert_eq!(
-        FmStereoBlock::<C32, VecStorage>::rate_out(&ok, rate(FS))
+        FmStereoDemodBlock::<C32, VecStorage>::rate_out(&ok, rate(FS))
             .unwrap()
             .as_f64(),
         48_000.0
@@ -164,7 +165,7 @@ fn the_configuration_is_validated() {
         Err(Error::OutOfRange { .. })
     ));
     assert!(ok.validate(rate(120_000)).is_err()); // 12 kHz output is too low for 15 kHz
-    let at_min = FmStereoConfig {
+    let at_min = FmStereoDemodConfig {
         audio_decimation: 2,
         ..ok
     };
@@ -179,7 +180,7 @@ fn the_configuration_is_validated() {
     assert!(cfg.set("pll_natural_hz", ParamValue::F64(0.5)).is_err());
     assert!(cfg.set("audio_decimation", ParamValue::I64(65)).is_err());
     // An output rate too low for the cutoff.
-    let low = FmStereoConfig {
+    let low = FmStereoDemodConfig {
         audio_decimation: 20,
         ..ok
     };
@@ -187,7 +188,7 @@ fn the_configuration_is_validated() {
         low.validate(rate(FS)),
         Err(Error::OutOfRange { .. })
     ));
-    let nan = FmStereoConfig {
+    let nan = FmStereoDemodConfig {
         deviation_hz: f64::NAN,
         ..ok
     };
@@ -196,7 +197,7 @@ fn the_configuration_is_validated() {
 
 #[test]
 fn timing_is_the_decimation_and_the_filter_delay() {
-    let b = block::<C32>(&FmStereoConfig::default());
+    let b = block::<C32>(&FmStereoDemodConfig::default());
     let t = b.timing();
     assert_eq!(t.ratio, Ratio::new(1, 10).unwrap());
     assert_eq!(t.kind, RatioKind::Constant);
@@ -212,7 +213,7 @@ fn timing_is_the_decimation_and_the_filter_delay() {
 }
 
 /// The chain of the milestone wired by hand from the kernels.
-fn hand_chain<T>(cfg: &FmStereoConfig, input: &[T]) -> Vec<T>
+fn hand_chain<T>(cfg: &FmStereoDemodConfig, input: &[T]) -> Vec<T>
 where
     T: BlockSample + BiquadElem,
     T::Real: BiquadElem,
@@ -303,11 +304,11 @@ where
 {
     let input = mpx_signal::<T>(24_000, 0.1, (1.0, 3000.0));
     for cfg in [
-        FmStereoConfig::default(),
-        FmStereoConfig {
+        FmStereoDemodConfig::default(),
+        FmStereoDemodConfig {
             deemphasis_us: 0.0,
             audio_decimation: 5,
-            ..FmStereoConfig::default()
+            ..FmStereoDemodConfig::default()
         },
     ] {
         let want = hand_chain::<T>(&cfg, &input);
@@ -341,7 +342,7 @@ where
         + Biquad<T>,
 {
     let input = mpx_signal::<T>(16_000, 0.1, (1.0, 3000.0));
-    let cfg = FmStereoConfig::default();
+    let cfg = FmStereoDemodConfig::default();
     let whole = run_block(&mut block::<T>(&cfg), &input, None);
     assert!(whole.len() > 100);
     let mut max = 1usize;
@@ -373,7 +374,7 @@ fn the_output_does_not_depend_on_the_block_size() {
 #[test]
 fn reset_returns_to_the_start() {
     let input = mpx_signal::<C32>(24_000, 0.1, (1.0, 3000.0));
-    let cfg = FmStereoConfig::default();
+    let cfg = FmStereoDemodConfig::default();
     let mut b = block::<C32>(&cfg);
     let first = run_block(&mut b, &input, None);
     assert!(b.pilot_locked());
@@ -389,7 +390,7 @@ fn reset_returns_to_the_start() {
 
 #[test]
 fn extreme_inputs_do_not_panic() {
-    let cfg = FmStereoConfig::default();
+    let cfg = FmStereoDemodConfig::default();
     let mut b = block::<C32>(&cfg);
     let mut out = vec![C32::default(); 4096];
     let zeros = vec![C32::new(0.0, 0.0); 2000];
@@ -441,13 +442,13 @@ fn the_block_builds_over_the_range_of_input_rates_in_both_types() {
         (1_920_000, 40, false),
         (2_400_000, 50, false),
     ] {
-        let cfg = FmStereoConfig {
+        let cfg = FmStereoDemodConfig {
             audio_decimation: decimation,
-            ..FmStereoConfig::default()
+            ..FmStereoDemodConfig::default()
         };
         let r = rate(fs);
-        let c32 = FmStereoBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage);
-        let q15 = FmStereoBlock::<CQ15, VecStorage>::new(&cfg, r, &mut VecStorage);
+        let c32 = FmStereoDemodBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage);
+        let q15 = FmStereoDemodBlock::<CQ15, VecStorage>::new(&cfg, r, &mut VecStorage);
         assert_eq!(c32.is_ok(), builds, "C32 at {fs} Hz");
         assert_eq!(q15.is_ok(), builds, "CQ15 at {fs} Hz");
         if !builds {
@@ -462,20 +463,20 @@ fn extreme_deviations_are_rejected_before_the_build_in_q15() {
     // use the deviation for the loop at all.
     let r = rate(FS);
     for deviation_hz in [2.5e6, 1e9, 1e11] {
-        let cfg = FmStereoConfig {
+        let cfg = FmStereoDemodConfig {
             deviation_hz,
-            ..FmStereoConfig::default()
+            ..FmStereoDemodConfig::default()
         };
         assert!(
             cfg.validate(r).is_ok(),
             "{deviation_hz}: the config is fine for C32"
         );
-        assert!(FmStereoBlock::<C32, VecStorage>::rate_out(&cfg, r).is_ok());
-        assert!(FmStereoBlock::<C32, VecStorage>::storage_bytes(&cfg, r).is_ok());
-        assert!(FmStereoBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage).is_ok());
+        assert!(FmStereoDemodBlock::<C32, VecStorage>::rate_out(&cfg, r).is_ok());
+        assert!(FmStereoDemodBlock::<C32, VecStorage>::storage_bytes(&cfg, r).is_ok());
+        assert!(FmStereoDemodBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage).is_ok());
         assert!(
             matches!(
-                FmStereoBlock::<CQ15, VecStorage>::rate_out(&cfg, r),
+                FmStereoDemodBlock::<CQ15, VecStorage>::rate_out(&cfg, r),
                 Err(Error::OutOfRange {
                     name: "deviation_hz",
                     ..
@@ -483,23 +484,23 @@ fn extreme_deviations_are_rejected_before_the_build_in_q15() {
             ),
             "{deviation_hz}"
         );
-        assert!(FmStereoBlock::<CQ15, VecStorage>::storage_bytes(&cfg, r).is_err());
-        assert!(FmStereoBlock::<CQ15, VecStorage>::new(&cfg, r, &mut VecStorage).is_err());
+        assert!(FmStereoDemodBlock::<CQ15, VecStorage>::storage_bytes(&cfg, r).is_err());
+        assert!(FmStereoDemodBlock::<CQ15, VecStorage>::new(&cfg, r, &mut VecStorage).is_err());
     }
     // Whatever `new` rejects, `rate_out` and `storage_bytes` reject, too (small deviations).
     for deviation_hz in [1.0, 2.0, 10.0, 100.0, 75_000.0, 2.4e6] {
-        let cfg = FmStereoConfig {
+        let cfg = FmStereoDemodConfig {
             deviation_hz,
-            ..FmStereoConfig::default()
+            ..FmStereoDemodConfig::default()
         };
-        let built = FmStereoBlock::<CQ15, VecStorage>::new(&cfg, r, &mut VecStorage).is_ok();
+        let built = FmStereoDemodBlock::<CQ15, VecStorage>::new(&cfg, r, &mut VecStorage).is_ok();
         assert_eq!(
-            FmStereoBlock::<CQ15, VecStorage>::rate_out(&cfg, r).is_ok(),
+            FmStereoDemodBlock::<CQ15, VecStorage>::rate_out(&cfg, r).is_ok(),
             built,
             "{deviation_hz}"
         );
         assert_eq!(
-            FmStereoBlock::<CQ15, VecStorage>::storage_bytes(&cfg, r).is_ok(),
+            FmStereoDemodBlock::<CQ15, VecStorage>::storage_bytes(&cfg, r).is_ok(),
             built,
             "{deviation_hz}"
         );

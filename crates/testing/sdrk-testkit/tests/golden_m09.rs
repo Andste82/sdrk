@@ -18,7 +18,7 @@ use sdrk::Sdrk;
 use sdrk_blocks::design::{DesignWindow, firwin_lowpass, kaiserord};
 use sdrk_blocks::{
     AmDemodBlock, AmDemodConfig, Block, DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig,
-    FrameBlock, ResamplerBlock, ResamplerConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
+    FrameBlock, ResampleBlock, ResampleConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
     SsbDemodBlock, SsbDemodConfig, SsbSideband,
 };
 use sdrk_core::kernels::dot::{Dot, DotReal};
@@ -518,13 +518,13 @@ fn rational_resampler_matches_upfirdn() {
     let Array::CF32(input) = case.array("input").unwrap() else {
         panic!()
     };
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         rate_out_hz: case.param_f64("rate_out_hz").unwrap(),
         max_taps: usize_param(&case, "max_taps"),
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     let rate = Rate::hz(case.param_f64("rate_in_hz").unwrap() as u64).unwrap();
-    let block = ResamplerBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap();
+    let block = ResampleBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap();
     assert_eq!(
         block.timing().ratio,
         sdrk::Ratio::new(
@@ -534,16 +534,16 @@ fn rational_resampler_matches_upfirdn() {
         .unwrap()
     );
     check_stream(&case, input, || {
-        ResamplerBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+        ResampleBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
 
-fn tuned_config(case: &GoldenCase) -> (ResamplerConfig, Rate) {
-    let cfg = ResamplerConfig {
+fn tuned_config(case: &GoldenCase) -> (ResampleConfig, Rate) {
+    let cfg = ResampleConfig {
         rate_out_hz: case.param_f64("rate_out_hz").unwrap(),
         tunable: true,
         ppm: case.param_f64("ppm").unwrap(),
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     (
         cfg,
@@ -559,7 +559,7 @@ fn tuned_resampler_matches_python_model_c32() {
     };
     let (cfg, rate) = tuned_config(&case);
     check_stream(&case, input, || {
-        ResamplerBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+        ResampleBlock::<C32, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
 
@@ -571,7 +571,7 @@ fn tuned_resampler_matches_python_model_cq15() {
     };
     let (cfg, rate) = tuned_config(&case);
     check_stream(&case, input, || {
-        ResamplerBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
+        ResampleBlock::<CQ15, VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap()
     });
 }
 

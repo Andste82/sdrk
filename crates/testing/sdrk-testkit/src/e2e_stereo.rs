@@ -5,7 +5,7 @@
 //! 0.1), scaled to 0.9, plus complex noise (sigma 0.003), encoded to `CU8` with the independent
 //! testkit encoder. The receiver is the chain of the example flow `fm_stereo_receiver`:
 //! `ConvertBlock` (`cu8`), `DdcBlock` (+600 kHz, decimation 5, cutoff 130 kHz, transition
-//! 30 kHz) and `FmStereoBlock` (defaults: 480 kHz to 48 kHz).
+//! 30 kHz) and `FmStereoDemodBlock` (defaults: 480 kHz to 48 kHz).
 //!
 //! [`measure_stereo`] streams the signal in blocks of [`CHUNK`] samples and keeps only the
 //! normal equations of a joint least-squares fit of both tones and the pilot per channel
@@ -27,7 +27,7 @@ use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::{
     ARENA_ALIGN, ArenaStorage, BiquadElem, Block, BlockSample, ConvertBlock, ConvertConfig,
-    DdcBlock, DdcConfig, FmStereoBlock, FmStereoConfig,
+    DdcBlock, DdcConfig, FmStereoDemodBlock, FmStereoDemodConfig,
 };
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal};
 use sdrk_core::kernels::convert::Convert;
@@ -336,12 +336,13 @@ where
         max_chunk: CHUNK,
         ..DdcConfig::default()
     };
-    let stereo_cfg = FmStereoConfig::default();
+    let stereo_cfg = FmStereoDemodConfig::default();
     let mut c = arena.carver();
     let ddc_bytes =
         DdcBlock::<T, ArenaStorage<'_>>::storage_bytes(&ddc_cfg, if_rate)? + ARENA_ALIGN;
     let stereo_bytes =
-        FmStereoBlock::<T, ArenaStorage<'_>>::storage_bytes(&stereo_cfg, bb_rate)? + ARENA_ALIGN;
+        FmStereoDemodBlock::<T, ArenaStorage<'_>>::storage_bytes(&stereo_cfg, bb_rate)?
+            + ARENA_ALIGN;
     let mut ddc_store = ArenaStorage::new(c.take::<u8>(ddc_bytes)?);
     let mut stereo_store = ArenaStorage::new(c.take::<u8>(stereo_bytes)?);
     let mut convert = ConvertBlock::<T, _>::new(
@@ -352,7 +353,7 @@ where
         &mut ArenaStorage::new(&mut []),
     )?;
     let mut ddc = DdcBlock::<T, _>::new(&ddc_cfg, if_rate, &mut ddc_store)?;
-    let mut stereo = FmStereoBlock::<T, _>::new(&stereo_cfg, bb_rate, &mut stereo_store)?;
+    let mut stereo = FmStereoDemodBlock::<T, _>::new(&stereo_cfg, bb_rate, &mut stereo_store)?;
 
     let bytes = c.take::<u8>(formats::CU8.bytes_for_samples(CHUNK)?)?;
     let iq = c.take::<T>(CHUNK)?;
@@ -596,7 +597,7 @@ const BLOCK_CHUNK: usize = 480;
 pub const BLOCK_SAMPLES: usize = 96_000;
 
 /// The block case of M24: 0.2 s of the multiplex signal of E2E-STEREO as FM baseband at 480 kHz
-/// (without the RF part) through `FmStereoBlock` alone. Returns the separation in dB of the
+/// (without the RF part) through `FmStereoDemodBlock` alone. Returns the separation in dB of the
 /// 1 kHz tone in L over R and of the 3 kHz tone in R over L, measured from 0.1 s on (4800 audio
 /// samples). Needs about 12 KiB of the arena.
 ///
@@ -614,11 +615,12 @@ where
         + Biquad<T>,
 {
     let bb_rate = Rate::hz(STEREO_BASEBAND_HZ)?;
-    let cfg = FmStereoConfig::default();
+    let cfg = FmStereoDemodConfig::default();
     let mut c = arena.carver();
-    let bytes = FmStereoBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, bb_rate)? + ARENA_ALIGN;
+    let bytes =
+        FmStereoDemodBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, bb_rate)? + ARENA_ALIGN;
     let mut store = ArenaStorage::new(c.take::<u8>(bytes)?);
-    let mut block = FmStereoBlock::<T, _>::new(&cfg, bb_rate, &mut store)?;
+    let mut block = FmStereoDemodBlock::<T, _>::new(&cfg, bb_rate, &mut store)?;
     let scratch = c.take::<Complex64>(BLOCK_CHUNK)?;
     let input = c.take::<T>(BLOCK_CHUNK)?;
     let out = c.take::<T>(BLOCK_CHUNK / 10 + 2)?;
@@ -661,7 +663,7 @@ where
 
 /// The mono checks of M24 at the block level (the RF part left out, so that they fit the quick
 /// profile of the microcontrollers): 0.1 s of a mono transmission (`L = R` = 1 kHz, no pilot) and
-/// 0.1 s of complex noise (sigma 0.3) at 480 kHz through `FmStereoBlock` alone. Returns the
+/// 0.1 s of complex noise (sigma 0.3) at 480 kHz through `FmStereoDemodBlock` alone. Returns the
 /// number of samples in which left and right differ and whether the block reported the pilot at
 /// any time. Needs about 12 KiB of the arena.
 ///
@@ -679,11 +681,12 @@ where
         + Biquad<T>,
 {
     let bb_rate = Rate::hz(STEREO_BASEBAND_HZ)?;
-    let cfg = FmStereoConfig::default();
+    let cfg = FmStereoDemodConfig::default();
     let mut c = arena.carver();
-    let bytes = FmStereoBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, bb_rate)? + ARENA_ALIGN;
+    let bytes =
+        FmStereoDemodBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, bb_rate)? + ARENA_ALIGN;
     let mut store = ArenaStorage::new(c.take::<u8>(bytes)?);
-    let mut block = FmStereoBlock::<T, _>::new(&cfg, bb_rate, &mut store)?;
+    let mut block = FmStereoDemodBlock::<T, _>::new(&cfg, bb_rate, &mut store)?;
     let scratch = c.take::<Complex64>(BLOCK_CHUNK)?;
     let input = c.take::<T>(BLOCK_CHUNK)?;
     let out = c.take::<T>(BLOCK_CHUNK / 10 + 2)?;

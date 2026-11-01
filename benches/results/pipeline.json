@@ -17,9 +17,9 @@
         "rate_hz": 48000
       }
     },
-    "fm_stereo_480k": {
+    "fm_stereo_demod_480k": {
       "fallback_instructions_per_input_sample": 1731.32,
-      "flow": "fm_stereo with its defaults, cf32 input at 480 kHz, 48 kHz output",
+      "flow": "fm_stereo_demod with its defaults, cf32 input at 480 kHz, 48 kHz output",
       "input": {
         "format": "cf32",
         "rate_hz": 480000

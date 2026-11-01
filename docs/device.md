@@ -53,7 +53,7 @@ v1 = (b1 >> 4) | b2 << 4        (both sign-extended from 12 bits)
 | `RF32` | F32, real | real-valued audio, real-sampling front ends |
 | `RS16` | I16, real | PCM audio, real-sampling devices (Airspy R2 and Mini, direct-sampling front ends, sound-card IF receivers) |
 
-**Real inputs.** A device that delivers real samples puts the whole band from 0 to `fs / 2` into one value per sample. The `convert` block and the automatic conversion of a raw pipeline input accept the formats with a real layout and produce `f32` or Q15 (`convert_real`, `ConvertRealBlock`); `Progress` counts bytes and real samples, a packing group is the smallest whole number of samples (`rs16`: one sample in 2 bytes). The block `real_to_complex` then shifts the signal by `fs / 4` and halves the rate; the output centre is the input frequency `fs / 4` and a station at the real frequency `f` is tuned with a `ddc` frequency of `f - fs / 4` (see [blocks.md](blocks.md) and the flow `real_input_fm_receiver`). Planar layouts cannot be streamed; real formats have no `convert_out` variant.
+**Real inputs.** A device that delivers real samples puts the whole band from 0 to `fs / 2` into one value per sample. The `convert` block and the automatic conversion of a raw pipeline input accept the formats with a real layout and produce `f32` or Q15 (`convert_real`, `ConvertRealBlock`); `Progress` counts bytes and real samples, a packing group is the smallest whole number of samples (`rs16`: one sample in 2 bytes). The block `real_to_iq` then shifts the signal by `fs / 4` and halves the rate; the output centre is the input frequency `fs / 4` and a station at the real frequency `f` is tuned with a `ddc` frequency of `f - fs / 4` (see [blocks.md](blocks.md) and the flow `real_input_fm_receiver`). Planar layouts cannot be streamed; real formats have no `convert_out` variant.
 
 ## Time model
 
@@ -124,7 +124,7 @@ The device API was checked against the SoapySDR `Device.hpp` and `Constants.h` (
 | Frequency | `setFrequency`, `getFrequency` (overall) | `Tuner::set_frequency`, `frequency` | returns the actual frequency |
 | | `getFrequencyRange` | `Tuner::frequency_ranges` | |
 | | components: `listFrequencies`, `setFrequency(name)`, `getFrequency(name)`, `getFrequencyRange(name)`, `getFrequencyArgsInfo` | none | gap: tuning components (RF, BB) are hardware specific; the overall frequency is what the pipeline needs |
-| | `hasFrequencyCorrection`, `setFrequencyCorrection`, `getFrequencyCorrection` | none | gap: ppm correction is available in the pipeline (`resampler` `ppm`) |
+| | `hasFrequencyCorrection`, `setFrequencyCorrection`, `getFrequencyCorrection` | none | gap: ppm correction is available in the pipeline (`resample` `ppm`) |
 | Gain | `setGain`, `getGain`, `getGainRange` (overall) | `GainControl::set_gain(None, db)`, `gain_stages` | |
 | | elements: `listGains`, `setGain(name)`, `getGain(name)`, `getGainRange(name)` | `GainControl::gain_stages`, `set_gain(Some(name), db)` | there is no getter for one stage; `set_gain` returns the applied value |
 | | `hasGainMode`, `setGainMode`, `getGainMode` | `GainControl::set_agc` | no getter |

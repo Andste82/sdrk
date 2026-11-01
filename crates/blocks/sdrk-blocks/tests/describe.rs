@@ -34,10 +34,10 @@ use sdrk_blocks::{
     AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
     Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoBlock, FmStereoConfig,
-    FrameBlock, Mutability, ParamKind, ParamValue, PortType, ResamplerBlock, ResamplerConfig,
-    ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
+    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -71,8 +71,8 @@ fn there_are_nineteen_unique_kinds() {
         "duc",
         "fm_demod",
         "fm_mod",
-        "fm_stereo",
-        "resampler",
+        "fm_stereo_demod",
+        "resample",
         "spectrum",
         "squelch",
         "agc",
@@ -244,8 +244,12 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("duc", |n| DucConfig::default().get(n), &[]);
     defaults_match("fm_demod", |n| FmDemodConfig::default().get(n), &[]);
     defaults_match("fm_mod", |n| FmModConfig::default().get(n), &[]);
-    defaults_match("fm_stereo", |n| FmStereoConfig::default().get(n), &[]);
-    defaults_match("resampler", |n| ResamplerConfig::default().get(n), &[]);
+    defaults_match(
+        "fm_stereo_demod",
+        |n| FmStereoDemodConfig::default().get(n),
+        &[],
+    );
+    defaults_match("resample", |n| ResampleConfig::default().get(n), &[]);
     defaults_match(
         "spectrum",
         |n| SpectrumConfig::default().get(n),
@@ -333,8 +337,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("duc", DucConfig);
     round_trip!("fm_demod", FmDemodConfig);
     round_trip!("fm_mod", FmModConfig);
-    round_trip!("fm_stereo", FmStereoConfig);
-    round_trip!("resampler", ResamplerConfig);
+    round_trip!("fm_stereo_demod", FmStereoDemodConfig);
+    round_trip!("resample", ResampleConfig);
     round_trip!("spectrum", SpectrumConfig);
     round_trip!("convert", ConvertConfig);
     round_trip!("convert_out", ConvertOutConfig);
@@ -465,25 +469,29 @@ fn blocks_accept_and_report_every_described_parameter() {
         &mut FmDemodBlock::<CQ15, _>::new(&demod, r, &mut s).unwrap(),
     );
     check_block_params(
-        "fm_stereo",
-        &mut FmStereoBlock::<C32, _>::new(&FmStereoConfig::default(), rate(480_000), &mut s)
-            .unwrap(),
+        "fm_stereo_demod",
+        &mut FmStereoDemodBlock::<C32, _>::new(
+            &FmStereoDemodConfig::default(),
+            rate(480_000),
+            &mut s,
+        )
+        .unwrap(),
     );
     check_block_params(
         "fm_mod",
         &mut FmModBlock::<C32, _>::new(&FmModConfig::default(), r, &mut s).unwrap(),
     );
-    let tuned = ResamplerConfig {
+    let tuned = ResampleConfig {
         tunable: true,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     check_block_params(
-        "resampler",
-        &mut ResamplerBlock::<C32, _>::new(&tuned, rate(48_000), &mut s).unwrap(),
+        "resample",
+        &mut ResampleBlock::<C32, _>::new(&tuned, rate(48_000), &mut s).unwrap(),
     );
     check_block_params(
-        "resampler",
-        &mut ResamplerRealBlock::<f32, _>::new(&tuned, rate(48_000), &mut s).unwrap(),
+        "resample",
+        &mut ResampleRealBlock::<f32, _>::new(&tuned, rate(48_000), &mut s).unwrap(),
     );
     let sp = SpectrumConfig {
         fft_size: 64,
@@ -508,14 +516,14 @@ fn blocks_accept_and_report_every_described_parameter() {
 
 #[test]
 fn a_non_tunable_resampler_rejects_ppm() {
-    let cfg = ResamplerConfig::default();
-    let mut block = ResamplerBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let cfg = ResampleConfig::default();
+    let mut block = ResampleBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
     assert_eq!(
         block.set_param("ppm", ParamValue::F64(10.0)),
         Err(Error::ReadOnlyParameter)
     );
     assert_eq!(block.param("ppm"), Ok(ParamValue::F64(0.0)));
-    let bad = ResamplerConfig { ppm: 5.0, ..cfg };
+    let bad = ResampleConfig { ppm: 5.0, ..cfg };
     assert!(matches!(
         bad.validate(rate(48_000)),
         Err(Error::InvalidParameter { name: "ppm", .. })

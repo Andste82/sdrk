@@ -28,8 +28,8 @@ use sdrk::{C32, CQ15, Q15, Sdrk};
 use sdrk_blocks::{
     Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, ResamplerBlock,
-    ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
     SpectrumSample, SpectrumWindow,
 };
 use sdrk_core::kernels::{
@@ -183,29 +183,29 @@ where
     resets("duc", &x, make);
 
     for tunable in [false, true] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: 32_000.0,
             tunable,
             ppm: if tunable { 300.0 } else { 0.0 },
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
-        let make = || ResamplerBlock::<T, _>::new(&cfg, r, &mut VecStorage).unwrap();
-        invariant("resampler", &x, make);
-        resets("resampler", &x, make);
+        let make = || ResampleBlock::<T, _>::new(&cfg, r, &mut VecStorage).unwrap();
+        invariant("resample", &x, make);
+        resets("resample", &x, make);
     }
     // Decimation by 100 skips input between two windows.
     // (A sloppy 8 dB filter keeps the taps per phase small, so the step of 100 input samples
     // exceeds the work buffer and the block has to skip input.)
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         rate_out_hz: 480.0,
         cutoff_hz: Some(100.0),
         transition_hz: Some(200.0),
         attenuation_db: 8.0,
         tunable: true,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     let big = signal::<T>(20_000, seed, 0.0001);
-    let make = || ResamplerBlock::<T, _>::new(&cfg, r, &mut VecStorage).unwrap();
+    let make = || ResampleBlock::<T, _>::new(&cfg, r, &mut VecStorage).unwrap();
     invariant("resampler by 100", &big, make);
     resets("resampler by 100", &big, make);
 
@@ -247,13 +247,13 @@ where
 {
     let x = real_signal::<R>(3000, seed, 0.03);
     for (out_hz, tunable) in [(32_000.0, false), (44_100.0, true), (12_000.0, true)] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: out_hz,
             tunable,
             max_taps: 8192,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
-        let make = || ResamplerRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+        let make = || ResampleRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
         invariant("real resampler", &x, make);
         resets("real resampler", &x, make);
     }
@@ -509,13 +509,13 @@ fn silence_and_full_scale_do_not_break_the_q15_blocks() {
         finite_or_nan_is_fine("duc", x, || {
             DucBlock::<CQ15, _>::new(&cfg, r, &mut VecStorage).unwrap()
         });
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: 44_100.0,
             tunable: true,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
-        finite_or_nan_is_fine("resampler", x, || {
-            ResamplerBlock::<CQ15, _>::new(&cfg, r, &mut VecStorage).unwrap()
+        finite_or_nan_is_fine("resample", x, || {
+            ResampleBlock::<CQ15, _>::new(&cfg, r, &mut VecStorage).unwrap()
         });
         let cfg = DcBlockConfig::default();
         finite_or_nan_is_fine("dc_block", x, || {
@@ -593,13 +593,13 @@ fn f32_blocks_survive_nan_and_infinity() {
     )
     .len();
     assert_eq!(n, 750);
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         rate_out_hz: 44_100.0,
         tunable: true,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     let n = run_block(
-        &mut ResamplerBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap(),
+        &mut ResampleBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap(),
         &x,
         None,
     )
@@ -706,13 +706,13 @@ fn small_output_buffers_never_lose_samples() {
         DucBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap()
     });
     for tunable in [false, true] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: 32_000.0,
             tunable,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
         small(&x, || {
-            ResamplerBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap()
+            ResampleBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap()
         });
     }
     let cfg = FmDemodConfig {
@@ -753,11 +753,11 @@ fn empty_input_and_empty_output_make_no_progress_and_no_panic() {
         block.process(&[C32::default()], &mut []).unwrap().produced,
         0
     );
-    let cfg = ResamplerConfig {
+    let cfg = ResampleConfig {
         tunable: true,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
-    let mut rs = ResamplerBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap();
+    let mut rs = ResampleBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap();
     assert_eq!(rs.process(&[], &mut out).unwrap().produced, 0);
     let p = rs.process(&[C32::default(); 3], &mut []).unwrap();
     assert_eq!(p.produced, 0);

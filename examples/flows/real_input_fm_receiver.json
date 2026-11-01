@@ -23,7 +23,7 @@
       }
     },
     "iq": {
-      "kind": "real_to_complex",
+      "kind": "real_to_iq",
       "params": {
         "attenuation_db": 60,
         "transition_hz": 480000

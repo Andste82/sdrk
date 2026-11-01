@@ -1,4 +1,4 @@
-//! The kind `fm_stereo` and the example flow `fm_stereo_receiver`: registration, the cost
+//! The kind `fm_stereo_demod` and the example flow `fm_stereo_receiver`: registration, the cost
 //! formula, validation, the run on the E2E-STEREO signal (equal to the hand-wired blocks bit for
 //! bit), the runtime parameter `stereo`, a tunable resampler behind the decoder, and the YAML
 //! twin.
@@ -25,7 +25,8 @@ mod common;
 use num_complex::Complex64;
 use sdrk::{C32, CQ15, Delay, Rate};
 use sdrk_blocks::{
-    Block, ConvertBlock, ConvertConfig, DdcBlock, DdcConfig, FmStereoBlock, FmStereoConfig,
+    Block, ConvertBlock, ConvertConfig, DdcBlock, DdcConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig,
 };
 use sdrk_device::formats;
 use sdrk_pipeline::{BuildOptions, DiagCode, InputData, Pipeline, Registry, VecStorage};
@@ -42,7 +43,7 @@ fn single(ty: &str, precision: &str, rate: u64, params: Value) -> Value {
     json!({
         "sdrk": 1, "name": "t", "settings": { "precision": precision, "max_chunk": 1024 },
         "inputs": { "in": { "type": ty, "rate_hz": rate } },
-        "nodes": { "n": { "kind": "fm_stereo", "params": params } },
+        "nodes": { "n": { "kind": "fm_stereo_demod", "params": params } },
         "edges": [ { "from": "in", "to": "n" }, { "from": "n", "to": "out" } ],
         "outputs": { "out": { "type": "stream" } }
     })
@@ -55,7 +56,7 @@ fn validate(doc: &Value) -> sdrk_pipeline::Report {
 #[test]
 fn the_kind_is_registered_with_its_kernels() {
     let registry = Registry::standard();
-    let f = registry.factory("fm_stereo").unwrap();
+    let f = registry.factory("fm_stereo_demod").unwrap();
     assert_eq!(
         f.kernels(),
         [
@@ -67,7 +68,7 @@ fn the_kind_is_registered_with_its_kernels() {
             "biquad"
         ]
     );
-    assert_eq!(f.description().kind, "fm_stereo");
+    assert_eq!(f.description().kind, "fm_stereo_demod");
     assert_eq!(registry.descriptions().count(), 19);
 }
 
@@ -88,9 +89,9 @@ fn the_plan_follows_the_cost_formula() {
                 continue;
             }
             assert!(report.is_ok(), "{ty} {decimation}: {}", report.to_json());
-            let cfg = FmStereoConfig {
+            let cfg = FmStereoDemodConfig {
                 audio_decimation: decimation,
-                ..FmStereoConfig::default()
+                ..FmStereoDemodConfig::default()
             };
             let taps = cfg.audio_taps(Rate::hz(480_000).unwrap()).unwrap();
             assert_eq!(
@@ -241,8 +242,8 @@ where
     )
     .unwrap();
     let mut ddc = DdcBlock::<T, _>::new(&ddc_cfg, if_rate, &mut VecStorage).unwrap();
-    let mut stereo = FmStereoBlock::<T, _>::new(
-        &FmStereoConfig::default(),
+    let mut stereo = FmStereoDemodBlock::<T, _>::new(
+        &FmStereoDemodConfig::default(),
         Rate::hz(480_000).unwrap(),
         &mut VecStorage,
     )
@@ -294,7 +295,7 @@ fn the_flow_receives_the_stereo_signal_like_the_hand_wired_blocks() {
     assert!(report.is_ok(), "{}", report.to_json());
     let mut names: Vec<_> = report.nodes.iter().map(|n| n.kind.as_str()).collect();
     names.sort_unstable();
-    assert_eq!(names, ["convert", "ddc", "fm_stereo", "spectrum"]);
+    assert_eq!(names, ["convert", "ddc", "fm_stereo_demod", "spectrum"]);
     let mut p = build(&doc.to_string());
     assert_eq!(p.output_rate("audio").unwrap().as_f64(), 48_000.0);
     let got = run(&mut p, StereoSignal::STEREO, samples, 4096);
@@ -407,7 +408,7 @@ fn the_stereo_parameter_can_change_while_the_flow_runs() {
 fn a_tunable_resampler_works_on_the_stereo_stream() {
     let mut doc = stereo_flow();
     doc["nodes"]["rs"] = json!({
-        "kind": "resampler",
+        "kind": "resample",
         "params": { "rate_out_hz": 44100, "tunable": true }
     });
     doc["edges"] = json!([

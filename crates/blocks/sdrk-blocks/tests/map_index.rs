@@ -21,8 +21,8 @@ mod common;
 use common::rate;
 use sdrk::C32;
 use sdrk_blocks::{
-    Block, DdcBlock, DdcConfig, DucBlock, DucConfig, ResamplerBlock, ResamplerConfig,
-    ResamplerRealBlock, ScaleBlock, ScaleConfig,
+    Block, DdcBlock, DdcConfig, DucBlock, DucConfig, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, ScaleBlock, ScaleConfig,
 };
 use sdrk_testkit::VecStorage;
 
@@ -89,11 +89,11 @@ fn fixed_ratio_blocks_map_to_the_samples_they_produce() {
         );
 
         // 3/2 = 72 000 / 48 000.
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: 72_000.0,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
-        let mut res = ResamplerBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+        let mut res = ResampleBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
         assert_eq!(res.map_index(n as u64), (3 * n as u64).div_ceil(2));
         assert_eq!(
             produced(&mut res, n, one) as u64,
@@ -112,18 +112,18 @@ fn fixed_ratio_blocks_map_to_the_samples_they_produce() {
 
 #[test]
 fn the_tuned_resampler_maps_with_its_position_step() {
-    let nominal = |tunable_ppm: f64| ResamplerConfig {
+    let nominal = |tunable_ppm: f64| ResampleConfig {
         rate_out_hz: 48_000.0,
         tunable: true,
         ppm: tunable_ppm,
-        ..ResamplerConfig::default()
+        ..ResampleConfig::default()
     };
     let rate_in = rate(48_000);
-    let zero = ResamplerRealBlock::<f32, _>::new(&nominal(0.0), rate_in, &mut VecStorage).unwrap();
+    let zero = ResampleRealBlock::<f32, _>::new(&nominal(0.0), rate_in, &mut VecStorage).unwrap();
     assert_eq!(zero.map_index(0), 0);
     assert_eq!(zero.map_index(1_000_000), 1_000_000);
     let mut fast =
-        ResamplerRealBlock::<f32, _>::new(&nominal(1000.0), rate_in, &mut VecStorage).unwrap();
+        ResampleRealBlock::<f32, _>::new(&nominal(1000.0), rate_in, &mut VecStorage).unwrap();
     // +1000 ppm: the output rate is 0.1 % higher, 1000 more samples per million.
     let m = fast.map_index(1_000_000);
     assert!((1_000_990..=1_001_010).contains(&m), "{m}");
@@ -133,7 +133,7 @@ fn the_tuned_resampler_maps_with_its_position_step() {
     let m = fast.map_index(1_000_000);
     assert!((998_990..=999_010).contains(&m), "{m}");
     // Monotone, and the complex block agrees.
-    let complex = ResamplerBlock::<C32, _>::new(&nominal(250.0), rate_in, &mut VecStorage).unwrap();
+    let complex = ResampleBlock::<C32, _>::new(&nominal(250.0), rate_in, &mut VecStorage).unwrap();
     let mut last = 0;
     for n in (0..5000u64).step_by(37) {
         let m = complex.map_index(n);
@@ -143,7 +143,7 @@ fn the_tuned_resampler_maps_with_its_position_step() {
     // The count of outputs that a long run really produces is close (the window holds back a
     // few samples).
     let mut tuned =
-        ResamplerRealBlock::<f32, _>::new(&nominal(500.0), rate_in, &mut VecStorage).unwrap();
+        ResampleRealBlock::<f32, _>::new(&nominal(500.0), rate_in, &mut VecStorage).unwrap();
     let n = 200_000usize;
     let made = produced(&mut tuned, n, 0.25f32) as i64;
     let mapped = tuned.map_index(n as u64) as i64;

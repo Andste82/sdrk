@@ -31,8 +31,8 @@ use sdrk_blocks::{
     BiquadConfig, BiquadElem, BiquadRealBlock, BiquadResponse, Block, BlockSample, ConvertBlock,
     ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
     DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, FmStereoBlock, FmStereoConfig, FrameBlock, ResamplerBlock,
-    ResamplerConfig, ResamplerRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FrameBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
     SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
@@ -169,15 +169,15 @@ where
     T::Real: BiquadElem,
 {
     for (decimation, deemphasis_us) in [(1, 50.0), (10, 50.0), (10, 0.0)] {
-        let cfg = FmStereoConfig {
+        let cfg = FmStereoDemodConfig {
             audio_decimation: decimation,
             deemphasis_us,
-            ..FmStereoConfig::default()
+            ..FmStereoDemodConfig::default()
         };
         let r = rate(480_000);
-        let bytes = FmStereoBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        let bytes = FmStereoDemodBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
         check_exact_storage(bytes, |a| {
-            FmStereoBlock::<T, _>::new(&cfg, r, a).map(|_| ())
+            FmStereoDemodBlock::<T, _>::new(&cfg, r, a).map(|_| ())
         });
     }
 }
@@ -212,17 +212,17 @@ fn biquad_exact<T: BlockSample + BiquadElem, R: sdrk_blocks::BlockReal + BiquadE
 
 fn resamplers_exact<T: BlockSample>() {
     for (tunable, out_hz) in [(false, 32_000.0), (true, 44_100.0), (true, 48_000.0)] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: out_hz,
             tunable,
             max_taps: 4096,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
         let r = rate(48_000);
-        let bytes = ResamplerBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        let bytes = ResampleBlock::<T, A<'_>>::storage_bytes(&cfg, r).unwrap();
         assert!(bytes > 0);
         check_exact_storage(bytes, |a| {
-            ResamplerBlock::<T, _>::new(&cfg, r, a).map(|_| ())
+            ResampleBlock::<T, _>::new(&cfg, r, a).map(|_| ())
         });
     }
 }
@@ -277,16 +277,16 @@ fn complex_blocks_cq15() {
 
 fn real_resamplers<R: sdrk_blocks::BlockReal>() {
     for (tunable, out_hz) in [(false, 12_000.0), (true, 48_000.0)] {
-        let cfg = ResamplerConfig {
+        let cfg = ResampleConfig {
             rate_out_hz: out_hz,
             tunable,
-            ..ResamplerConfig::default()
+            ..ResampleConfig::default()
         };
         let r = rate(48_000);
-        let bytes = ResamplerRealBlock::<R, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        let bytes = ResampleRealBlock::<R, A<'_>>::storage_bytes(&cfg, r).unwrap();
         assert!(bytes > 0);
         check_exact_storage(bytes, |a| {
-            ResamplerRealBlock::<R, _>::new(&cfg, r, a).map(|_| ())
+            ResampleRealBlock::<R, _>::new(&cfg, r, a).map(|_| ())
         });
     }
 }
@@ -348,24 +348,24 @@ fn no_block_is_larger_than_512_bytes() {
         DdcBlock,
         DucBlock,
         FmDemodBlock,
-        FmStereoBlock,
+        FmStereoDemodBlock,
         FmModBlock,
-        ResamplerBlock,
+        ResampleBlock,
         SpectrumBlock,
         SquelchBlock,
         AgcBlock,
         AmDemodBlock,
         SsbDemodBlock,
         BiquadBlock,
-        FmStereoBlock
+        FmStereoDemodBlock
     );
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
     check::<BiquadRealBlock<Q15, A<'static>>>("BiquadRealBlock<Q15>");
     check::<BiquadRealBlock<f32, sdrk_testkit::VecStorage>>("BiquadRealBlock<f32, Vec>");
     check::<BiquadRealBlock<Q15, sdrk_testkit::VecStorage>>("BiquadRealBlock<Q15, Vec>");
-    check::<ResamplerRealBlock<f32, A<'static>>>("ResamplerRealBlock<f32>");
-    check::<ResamplerRealBlock<Q15, A<'static>>>("ResamplerRealBlock<Q15>");
-    check::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>("ResamplerRealBlock<Q15, Vec>");
+    check::<ResampleRealBlock<f32, A<'static>>>("ResampleRealBlock<f32>");
+    check::<ResampleRealBlock<Q15, A<'static>>>("ResampleRealBlock<Q15>");
+    check::<ResampleRealBlock<Q15, sdrk_testkit::VecStorage>>("ResampleRealBlock<Q15, Vec>");
 }
 
 fn assert_send<T: Send>() {}
@@ -391,7 +391,7 @@ fn public_types_are_send() {
         DucBlock,
         FmDemodBlock,
         FmModBlock,
-        ResamplerBlock,
+        ResampleBlock,
         SpectrumBlock,
         SquelchBlock,
         AgcBlock,
@@ -403,8 +403,8 @@ fn public_types_are_send() {
     assert_send::<BiquadRealBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_sync::<BiquadRealBlock<Q15, A<'static>>>();
     assert_send::<BiquadConfig>();
-    assert_send::<ResamplerRealBlock<f32, A<'static>>>();
-    assert_send::<ResamplerRealBlock<Q15, sdrk_testkit::VecStorage>>();
+    assert_send::<ResampleRealBlock<f32, A<'static>>>();
+    assert_send::<ResampleRealBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_send::<ConvertConfig>();
     assert_send::<ConvertOutConfig>();
     assert_send::<ScaleConfig>();
@@ -413,9 +413,9 @@ fn public_types_are_send() {
     assert_send::<DdcConfig>();
     assert_send::<DucConfig>();
     assert_send::<FmDemodConfig>();
-    assert_send::<FmStereoConfig>();
+    assert_send::<FmStereoDemodConfig>();
     assert_send::<FmModConfig>();
-    assert_send::<ResamplerConfig>();
+    assert_send::<ResampleConfig>();
     assert_send::<SpectrumConfig>();
     assert_send::<SquelchConfig>();
     assert_send::<AgcConfig>();

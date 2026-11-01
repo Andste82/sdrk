@@ -1,5 +1,5 @@
 //! Suite cases of M23: the kernels `halfband_decimate`, `halfband_decimate_real` and
-//! `real_to_complex`, their extreme inputs, the blocks `halfband` and `real_to_complex`, and the
+//! `real_to_complex`, their extreme inputs, the blocks `halfband_decimate` and `real_to_iq`, and the
 //! end-to-end FM receive from a real 16-bit input.
 //!
 //! Every kernel case compares `Fallback` with `Reference`, the facade with `Fallback` and runs
@@ -20,8 +20,8 @@ use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::design::{halfband_taps, kaiser_beta, to_f32, to_q15};
 use sdrk_blocks::{
-    ARENA_ALIGN, ArenaStorage, Block, BlockReal, BlockSample, HalfbandBlock, HalfbandConfig,
-    HalfbandRealBlock, RealToComplexBlock,
+    ARENA_ALIGN, ArenaStorage, Block, BlockReal, BlockSample, HalfbandDecimateBlock,
+    HalfbandDecimateConfig, HalfbandDecimateRealBlock, RealToIqBlock,
 };
 use sdrk_core::kernels::convert::ConvertReal;
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate, ResampleReal};
@@ -785,7 +785,7 @@ fn delay_error(peak_out_index: usize, impulse_at: usize, delay: sdrk_core::Delay
     (2.0 * peak_out_index as f64 - impulse_at as f64) - promised
 }
 
-const ALIAS: &str = "block_halfband_alias";
+const ALIAS: &str = "block_halfband_decimate_alias";
 
 /// A tone in the stop band is attenuated by at least `attenuation_db - 3` dB; the pass band is
 /// flat; the impulse peak sits at the promised delay (+-0.5 sample).
@@ -794,13 +794,13 @@ where
     Sdrk: HalfbandDecimate<T>,
 {
     let fail = |msg: &'static str| Failure::new(ALIAS, msg);
-    let cfg = HalfbandConfig::default();
+    let cfg = HalfbandDecimateConfig::default();
     let r = rate()?;
     let fs = FS as f64;
-    let bytes = HalfbandBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, r)? + ARENA_ALIGN;
+    let bytes = HalfbandDecimateBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, r)? + ARENA_ALIGN;
     let mut c = arena.carver();
     let mut store = ArenaStorage::new(c.take::<u8>(bytes)?);
-    let mut block = HalfbandBlock::<T, _>::new(&cfg, r, &mut store)?;
+    let mut block = HalfbandDecimateBlock::<T, _>::new(&cfg, r, &mut store)?;
     let (x, y) = (c.take::<T>(BN)?, c.take::<T>(BN / 2 + 2)?);
     let limit = libm::pow(10.0, -(cfg.attenuation_db - 3.0) / 10.0);
     // The stop band starts at fs / 4 + transition / 2 = 0.3 fs.
@@ -849,12 +849,13 @@ where
     Sdrk: HalfbandDecimateReal<R>,
 {
     let fail = |msg: &'static str| Failure::new(ALIAS, msg);
-    let cfg = HalfbandConfig::default();
+    let cfg = HalfbandDecimateConfig::default();
     let r = rate()?;
-    let bytes = HalfbandRealBlock::<R, ArenaStorage<'_>>::storage_bytes(&cfg, r)? + ARENA_ALIGN;
+    let bytes =
+        HalfbandDecimateRealBlock::<R, ArenaStorage<'_>>::storage_bytes(&cfg, r)? + ARENA_ALIGN;
     let mut c = arena.carver();
     let mut store = ArenaStorage::new(c.take::<u8>(bytes)?);
-    let mut block = HalfbandRealBlock::<R, _>::new(&cfg, r, &mut store)?;
+    let mut block = HalfbandDecimateRealBlock::<R, _>::new(&cfg, r, &mut store)?;
     let (x, y) = (c.take::<R>(BN)?, c.take::<R>(BN / 2 + 2)?);
     let limit = libm::pow(10.0, -(cfg.attenuation_db - 3.0) / 10.0);
     // A real tone at f in (0.3, 0.5) fs aliases into the pass band.
@@ -873,14 +874,14 @@ where
     Ok(())
 }
 
-pub(super) fn block_halfband_alias(arena: &mut Arena<'_>) -> Result<(), Failure> {
+pub(super) fn block_halfband_decimate_alias(arena: &mut Arena<'_>) -> Result<(), Failure> {
     alias_complex::<C32>(arena)?;
     alias_complex::<CQ15>(arena)?;
     alias_real::<f32>(arena)?;
     alias_real::<Q15>(arena)
 }
 
-const TONE: &str = "block_real_to_complex_tone";
+const TONE: &str = "block_real_to_iq_tone";
 
 /// Power of `y` at the normalised frequency `g` (cycles per sample), single-bin DFT over the
 /// last [`WINDOW`] samples, as an amplitude.
@@ -902,13 +903,13 @@ where
     T::Real: BlockReal,
 {
     let fail = |msg: &'static str| Failure::new(TONE, msg);
-    let cfg = HalfbandConfig::default();
+    let cfg = HalfbandDecimateConfig::default();
     let r = rate()?;
     let fs = FS as f64;
-    let bytes = RealToComplexBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, r)? + ARENA_ALIGN;
+    let bytes = RealToIqBlock::<T, ArenaStorage<'_>>::storage_bytes(&cfg, r)? + ARENA_ALIGN;
     let mut c = arena.carver();
     let mut store = ArenaStorage::new(c.take::<u8>(bytes)?);
-    let mut block = RealToComplexBlock::<T, _>::new(&cfg, r, &mut store)?;
+    let mut block = RealToIqBlock::<T, _>::new(&cfg, r, &mut store)?;
     let (x, y) = (c.take::<T::Real>(BN)?, c.take::<T>(BN / 2 + 2)?);
     // The usable band is fs/4 +- (fs/4 - transition/2) around the output centre.
     for f in [0.10, 0.33, 0.40] {
@@ -942,7 +943,7 @@ where
     Ok(())
 }
 
-pub(super) fn block_real_to_complex_tone(arena: &mut Arena<'_>) -> Result<(), Failure> {
+pub(super) fn block_real_to_iq_tone(arena: &mut Arena<'_>) -> Result<(), Failure> {
     tone_for::<C32>(arena)?;
     tone_for::<CQ15>(arena)
 }

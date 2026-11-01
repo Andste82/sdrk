@@ -210,7 +210,7 @@ fn biquad_exact<T: BlockSample + BiquadElem, R: sdrk_blocks::BlockReal + BiquadE
     }
 }
 
-fn resamplers_exact<T: BlockSample>() {
+fn resample_blocks_exact<T: BlockSample>() {
     for (tunable, out_hz) in [(false, 32_000.0), (true, 44_100.0), (true, 48_000.0)] {
         let cfg = ResampleConfig {
             rate_out_hz: out_hz,
@@ -259,7 +259,7 @@ fn complex_blocks_c32() {
     filters_exact::<C32>();
     biquad_exact::<C32, f32>();
     stereo_exact::<C32>();
-    resamplers_exact::<C32>();
+    resample_blocks_exact::<C32>();
     spectrum_exact::<C32>();
 }
 
@@ -271,11 +271,11 @@ fn complex_blocks_cq15() {
     filters_exact::<CQ15>();
     biquad_exact::<CQ15, Q15>();
     stereo_exact::<CQ15>();
-    resamplers_exact::<CQ15>();
+    resample_blocks_exact::<CQ15>();
     spectrum_exact::<CQ15>();
 }
 
-fn real_resamplers<R: sdrk_blocks::BlockReal>() {
+fn real_resample_blocks<R: sdrk_blocks::BlockReal>() {
     for (tunable, out_hz) in [(false, 12_000.0), (true, 48_000.0)] {
         let cfg = ResampleConfig {
             rate_out_hz: out_hz,
@@ -292,9 +292,9 @@ fn real_resamplers<R: sdrk_blocks::BlockReal>() {
 }
 
 #[test]
-fn real_resampler_blocks() {
-    real_resamplers::<f32>();
-    real_resamplers::<Q15>();
+fn real_resample_blocks_storage() {
+    real_resample_blocks::<f32>();
+    real_resample_blocks::<Q15>();
 }
 
 #[test]

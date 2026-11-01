@@ -393,7 +393,7 @@ where
         while !rest.is_empty() {
             let r = stereo.process(rest, out)?;
             if r.consumed == 0 && r.produced == 0 {
-                return Err(fail("fm_stereo made no progress"));
+                return Err(fail("fm_stereo_demod made no progress"));
             }
             // The state of the loop is polled after the block took the piece, which is the
             // precision of the lock time (one block of 0.2 ms).
@@ -645,7 +645,7 @@ where
         }
         let p = block.process(input, out)?;
         if p.consumed != BLOCK_CHUNK {
-            return Err(fail("fm_stereo did not take the whole block"));
+            return Err(fail("fm_stereo_demod did not take the whole block"));
         }
         for v in out.iter().take(p.produced) {
             if produced_total >= skip {
@@ -717,7 +717,7 @@ where
             }
             let p = block.process(input, out)?;
             if p.consumed != BLOCK_CHUNK {
-                return Err(fail("fm_stereo did not take the whole block"));
+                return Err(fail("fm_stereo_demod did not take the whole block"));
             }
             ever_locked |= block.pilot_locked();
             for v in out.iter().take(p.produced) {

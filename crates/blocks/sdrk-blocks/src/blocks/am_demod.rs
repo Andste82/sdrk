@@ -27,7 +27,7 @@ type AudioState<T, S> = ResampleRealState<
 >;
 
 /// Samples per piece the block processes at a time (the size of its two work buffers).
-pub const AM_CHUNK: usize = 256;
+pub const AM_DEMOD_CHUNK: usize = 256;
 
 /// Largest tap count of the audio filter.
 const AUDIO_MAX_TAPS: usize = 1023;
@@ -285,8 +285,8 @@ impl<T: BlockSample, S: Storage> AmDemodBlock<T, S> {
         } else {
             None
         };
-        let mag = storage.alloc::<T::Real>(AM_CHUNK)?;
-        let scratch = storage.alloc::<T::Real>(AM_CHUNK)?;
+        let mag = storage.alloc::<T::Real>(AM_DEMOD_CHUNK)?;
+        let scratch = storage.alloc::<T::Real>(AM_DEMOD_CHUNK)?;
         let dc = if config.dc_cutoff_hz > 0.0 {
             Some(DcBlockRealState::new(T::Real::from_f64_round(dc_pole(
                 config.dc_cutoff_hz,
@@ -314,8 +314,8 @@ impl<T: BlockSample, S: Storage> AmDemodBlock<T, S> {
             plan.add::<T::Real>(n)?;
             plan.add::<T::Real>(n)?;
         }
-        plan.add::<T::Real>(AM_CHUNK)?;
-        plan.add::<T::Real>(AM_CHUNK)?;
+        plan.add::<T::Real>(AM_DEMOD_CHUNK)?;
+        plan.add::<T::Real>(AM_DEMOD_CHUNK)?;
         Ok(plan.bytes())
     }
 
@@ -427,7 +427,7 @@ where
         loop {
             let room = output.len() - produced;
             let m = (input.len() - consumed)
-                .min(AM_CHUNK)
+                .min(AM_DEMOD_CHUNK)
                 .min(room.saturating_mul(dec));
             if m == 0 {
                 break;

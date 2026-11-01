@@ -44,7 +44,7 @@ mod storage;
 
 pub use block::{Block, BlockTiming, FrameBlock, FrameMeta, ParamValue};
 pub use blocks::agc::{AgcBlock, AgcConfig};
-pub use blocks::am_demod::{AM_CHUNK, AmDemodBlock, AmDemodConfig};
+pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
@@ -52,18 +52,20 @@ pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig};
 pub use blocks::ddc::{DdcBlock, DdcConfig};
 pub use blocks::duc::{DucBlock, DucConfig};
 pub use blocks::fir::{FirBlock, FirConfig};
-pub use blocks::fm_demod::{FM_CHUNK, FmDemodBlock, FmDemodConfig};
+pub use blocks::fm_demod::{FM_DEMOD_CHUNK, FmDemodBlock, FmDemodConfig};
 pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
 pub use blocks::real_to_iq::RealToIqBlock;
-pub use blocks::resample::{ResampleBlock, ResampleConfig, ResampleRealBlock, TUNED_PHASES};
+pub use blocks::resample::{
+    RESAMPLE_TUNED_PHASES, ResampleBlock, ResampleConfig, ResampleRealBlock,
+};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
-pub use blocks::ssb_demod::{SSB_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
+pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
 pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
 };

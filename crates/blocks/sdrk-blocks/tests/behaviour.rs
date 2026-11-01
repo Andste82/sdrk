@@ -206,8 +206,8 @@ where
     };
     let big = signal::<T>(20_000, seed, 0.0001);
     let make = || ResampleBlock::<T, _>::new(&cfg, r, &mut VecStorage).unwrap();
-    invariant("resampler by 100", &big, make);
-    resets("resampler by 100", &big, make);
+    invariant("resample by 100", &big, make);
+    resets("resample by 100", &big, make);
 
     let r240 = rate(240_000);
     for (dec, deemph) in [(1, 50.0), (5, 50.0), (4, 0.0)] {
@@ -241,7 +241,7 @@ fn complex_blocks_are_invariant_and_reset_cq15() {
     complex_blocks::<CQ15>(2);
 }
 
-fn real_resamplers<R: sdrk_blocks::BlockReal + sdrk::Sample>(seed: u64)
+fn real_resample_blocks<R: sdrk_blocks::BlockReal + sdrk::Sample>(seed: u64)
 where
     Sdrk: sdrk_core::kernels::decim::ResampleReal<R>,
 {
@@ -254,15 +254,15 @@ where
             ..ResampleConfig::default()
         };
         let make = || ResampleRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
-        invariant("real resampler", &x, make);
-        resets("real resampler", &x, make);
+        invariant("real resample", &x, make);
+        resets("real resample", &x, make);
     }
 }
 
 #[test]
-fn real_resamplers_are_invariant_and_reset() {
-    real_resamplers::<f32>(3);
-    real_resamplers::<Q15>(4);
+fn real_resample_blocks_are_invariant_and_reset() {
+    real_resample_blocks::<f32>(3);
+    real_resample_blocks::<Q15>(4);
 }
 
 fn converts<T: BlockSample>()

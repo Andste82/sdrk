@@ -147,7 +147,7 @@ fn a_tone_survives_duc_and_ddc() {
     updown::<CQ15>();
 }
 
-fn resampler_dc_and_tone<T: BlockSample + Default>()
+fn resample_dc_and_tone<T: BlockSample + Default>()
 where
     Sdrk: Resample<T>,
 {
@@ -192,12 +192,12 @@ where
 }
 
 #[test]
-fn complex_resamplers_keep_dc_gain_and_tone() {
-    resampler_dc_and_tone::<C32>();
-    resampler_dc_and_tone::<CQ15>();
+fn complex_resample_blocks_keep_dc_gain_and_tone() {
+    resample_dc_and_tone::<C32>();
+    resample_dc_and_tone::<CQ15>();
 }
 
-fn real_resampler_tone<R: BlockReal + Default>()
+fn real_resample_tone<R: BlockReal + Default>()
 where
     Sdrk: ResampleReal<R>,
 {
@@ -240,9 +240,9 @@ where
 }
 
 #[test]
-fn real_resamplers_keep_dc_gain_and_tone() {
-    real_resampler_tone::<f32>();
-    real_resampler_tone::<Q15>();
+fn real_resample_blocks_keep_dc_gain_and_tone() {
+    real_resample_tone::<f32>();
+    real_resample_tone::<Q15>();
 }
 
 fn fm_loop<T: BlockSample>(min_sinad: f64, deemphasis_us: f64)

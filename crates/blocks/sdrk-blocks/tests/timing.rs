@@ -170,7 +170,7 @@ where
     }
 }
 
-fn check_resampler<T: BlockSample + Default>()
+fn check_resample<T: BlockSample + Default>()
 where
     Sdrk: Resample<T>,
 {
@@ -193,7 +193,7 @@ where
         let measured = measured_delay::<T, _>(make, m as f64 / l as f64, m as usize, 600);
         assert!(
             (measured - t.delay.as_f64()).abs() <= 0.5,
-            "resampler {l}/{m}: {measured} vs {}",
+            "resample {l}/{m}: {measured} vs {}",
             t.delay.as_f64()
         );
     }
@@ -226,19 +226,19 @@ where
 }
 
 #[test]
-fn filters_and_resamplers_declare_the_delay_they_have() {
+fn filters_and_resample_blocks_declare_the_delay_they_have() {
     check_fir::<C32>();
     check_fir::<CQ15>();
     check_ddc::<C32>();
     check_ddc::<CQ15>();
     check_duc::<C32>();
     check_duc::<CQ15>();
-    check_resampler::<C32>();
-    check_resampler::<CQ15>();
+    check_resample::<C32>();
+    check_resample::<CQ15>();
 }
 
 #[test]
-fn the_real_resampler_declares_the_same_timing() {
+fn the_real_resample_block_declares_the_same_timing() {
     let cfg = ResampleConfig {
         rate_out_hz: 32_000.0,
         ..ResampleConfig::default()

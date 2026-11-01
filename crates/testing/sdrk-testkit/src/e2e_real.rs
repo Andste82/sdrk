@@ -161,7 +161,7 @@ where
         while !real_rest.is_empty() {
             let p = iq_block.process(real_rest, iq)?;
             if p.consumed == 0 && p.produced == 0 {
-                return Err(fail("real_to_complex made no progress"));
+                return Err(fail("real_to_iq made no progress"));
             }
             real_rest = real_rest.get(p.consumed..).unwrap_or_default();
             let mut iq_rest = iq.get(..p.produced).unwrap_or_default();

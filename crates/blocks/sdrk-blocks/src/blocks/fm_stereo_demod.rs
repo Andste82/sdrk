@@ -31,7 +31,7 @@ const AUDIO_MAX_TAPS: usize = 1023;
 
 /// Smallest input sample rate in Hz: the multiplex signal reaches 53 kHz and the products of
 /// the 38 kHz demodulation reach 91 kHz.
-pub const MIN_RATE_HZ: f64 = 120_000.0;
+pub const FM_STEREO_DEMOD_MIN_RATE_HZ: f64 = 120_000.0;
 
 /// Centre frequency of the pilot band-pass and the pilot of the loop in Hz.
 const PILOT_HZ: f64 = 19_000.0;
@@ -220,10 +220,10 @@ impl FmStereoDemodConfig {
             }
         }
         let fs = hz(rate_in);
-        if fs < MIN_RATE_HZ {
+        if fs < FM_STEREO_DEMOD_MIN_RATE_HZ {
             return Err(Error::OutOfRange {
                 name: "sample_rate",
-                min: MIN_RATE_HZ,
+                min: FM_STEREO_DEMOD_MIN_RATE_HZ,
                 max: f64::INFINITY,
                 got: fs,
             });

@@ -98,7 +98,7 @@ fn fixed_ratio_blocks_map_to_the_samples_they_produce() {
         assert_eq!(
             produced(&mut res, n, one) as u64,
             res.map_index(n as u64),
-            "resampler {n}"
+            "resample {n}"
         );
     }
     // A million samples do not overflow.

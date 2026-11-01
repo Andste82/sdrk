@@ -5,7 +5,7 @@
 > If the two differ, the living document wins; update this snapshot when you notice a difference.
 > Milestones derived from this plan: [`docs/milestones/README.md`](milestones/README.md).
 >
-> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9; the receive features of phase 9 are specified as milestones M19 to M25 (NFM with squelch, AM, SSB, audio filters, real-sampling devices, FM stereo, block names (M24.1), FM transmit audio); M19 to M24 are delivered. The release 0.1 (tag `v0.1.0`) is not made yet; it is milestone M25.1. Milestones M26 to M36 (block ports, composition, clock drift, primitive blocks, noise reduction, multi-input pipeline, AM/SSB and FM stereo transmit) extend phase 9, M37 to M44 are phase 10 (digital modes). From M26 on, milestones follow their declared dependencies and may run in parallel.
+> Status: phases 0 to 6 are delivered (milestones M00 to M15: kernels, blocks, pipeline, I/O, the SIMD backend, the WebAssembly bindings and the emulator targets). Phase 7 (milestones M16 to M18: ESP32-P4 PIE, RVV and Arm DSP backends) is planned, as are phases 8 and 9; the receive features of phase 9 are specified as milestones M19 to M25 (NFM with squelch, AM, SSB, audio filters, real-sampling devices, FM stereo, block names (M24.1), FM transmit audio); M19 to M24 and M24.1 are delivered. The release 0.1 (tag `v0.1.0`) is not made yet; it is milestone M25.1. Milestones M26 to M36 (block ports, composition, clock drift, primitive blocks, noise reduction, multi-input pipeline, AM/SSB and FM stereo transmit) extend phase 9, M37 to M44 are phase 10 (digital modes). From M26 on, milestones follow their declared dependencies and may run in parallel.
 
 ## Project
 
@@ -66,7 +66,7 @@ sdrk/
 ├── benches/        comparative benchmarks
 ├── tests/golden/   golden samples + generator script
 ├── examples/       fm-receiver, fm-transmitter (CLI)
-├── xtask/          layer, heap, global-state and docs checks; bare-metal check; instruction counting (`count`); WASM package and tests; schema generation; emulator matrix (planned)
+├── xtask/          layer, heap, global-state, names and docs checks; bare-metal check; instruction counting (`count`); WASM package and tests; schema generation; emulator matrix (planned)
 └── docs/           architecture, kernels, backends, device, pipeline, timing, performance
 ```
 

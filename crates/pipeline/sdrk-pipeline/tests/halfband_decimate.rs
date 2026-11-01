@@ -124,7 +124,7 @@ fn types_and_parameters_are_checked() {
             .validate_json(&doc.to_string(), &BuildOptions::default())
             .is_ok()
     };
-    // real_to_complex takes real samples only.
+    // real_to_iq takes real samples only.
     assert!(invalid("real_to_iq", "c32", "f32", json!({})));
     assert!(invalid("real_to_iq", "cq15", "q15", json!({})));
     // A transition at or above half the input rate, an attenuation below 8 dB, too few taps.
@@ -182,7 +182,7 @@ fn a_real_raw_input_gets_the_real_automatic_conversion() {
             ("rf__convert", "convert")
         );
         assert!(first.auto);
-        // Same rate in and out; the chain goes on to real_to_complex at half the rate.
+        // Same rate in and out; the chain goes on to real_to_iq at half the rate.
         assert_eq!(first.rate_in, first.rate_out);
         let names: Vec<_> = report.nodes.iter().map(|n| n.kind.as_str()).collect();
         assert_eq!(

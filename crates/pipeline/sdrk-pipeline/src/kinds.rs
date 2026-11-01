@@ -16,9 +16,9 @@ use sdrk_blocks::{
     ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock,
     DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
     FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
-    HalfbandDecimateRealBlock, ParamValue, PortType, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, TUNED_PHASES,
+    HalfbandDecimateRealBlock, ParamValue, PortType, RESAMPLE_TUNED_PHASES, RealToIqBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -1341,19 +1341,19 @@ fn resample_figures(
         rate.num().saturating_mul(rate_out.den()),
     )?;
     if cfg.tunable {
-        let phases = TUNED_PHASES as f64;
+        let phases = RESAMPLE_TUNED_PHASES as f64;
         let (n_hi, _beta) = kaiserord(spec.attenuation_db, spec.transition_hz, phases * fin)?;
-        let k = n_hi.div_ceil(TUNED_PHASES);
+        let k = n_hi.div_ceil(RESAMPLE_TUNED_PHASES);
         let delay = Delay::new(
-            (TUNED_PHASES * k).saturating_sub(1) as u64,
-            2 * TUNED_PHASES as u64,
+            (RESAMPLE_TUNED_PHASES * k).saturating_sub(1) as u64,
+            2 * RESAMPLE_TUNED_PHASES as u64,
         )
         .unwrap_or(Delay::ZERO);
         // The step is the input per output sample, corrected by up to 1000 ppm.
         let step = fin / fout * 1.002;
         let min_input = step as usize + 4;
         let cost = k as f64 * ratio.num() as f64 / ratio.den() as f64 + 4.0;
-        Ok((TUNED_PHASES * k, delay, min_input, cost))
+        Ok((RESAMPLE_TUNED_PHASES * k, delay, min_input, cost))
     } else {
         let (l, m) = (ratio.num(), ratio.den());
         let taps = spec.num_taps(l as f64 * fin, cfg.max_taps)?;

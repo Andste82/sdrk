@@ -1107,7 +1107,8 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "the run-time-detection build counts 1.07x the instructions of the fixed `avx2` build (6.28 against 5.84 per sample): a fixed cost of about 28 instructions per call of 64 points, 18 of them in `level::dispatch_fn!`. No gross outlier, and the speed target is the simulated cycles (D68), so the entry is information"
     }
   },
   "fft_1024": {
@@ -1764,7 +1765,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item I20-1 in docs/open-items.md (the `simd128` instruction gap of the grouped fallback)"
+      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #71 (the `simd128` instruction gap of the grouped fallback)"
     }
   },
   "fir_decimate_fallback": {
@@ -1796,22 +1797,22 @@
   "fir_decimate_cq15_fallback": {
     "sse2": {
       "status": "dev",
-      "waiver": "1.36 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, widening to 64 bits, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "1.36 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, widening to 64 bits, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "sse4.2": {
       "status": "dev",
-      "waiver": "1.58 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, `pmovsxdq`, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "1.58 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, `pmovsxdq`, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "avx2": {
       "status": "dev",
-      "waiver": "1.34 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. Its whole-loop `avx2` cycles are 20.13 / 17.45 against 42.02 / 17.53 for CMSIS-DSP (`znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "1.34 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. Its whole-loop `avx2` cycles are 20.13 / 17.45 against 42.02 / 17.53 for CMSIS-DSP (`znver3` / `alderlake`, D37). the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "avx512": {
       "status": "release"
     },
     "neon": {
       "status": "dev",
-      "waiver": "2.09 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level (2.40 before D172, which groups 7 outputs on AArch64 so that their accumulators fit the integer registers and groups the first outputs of a call too; 35.78 / 33.33 -> 29.57 / 27.63 simulated cycles per sample against CMSIS-DSP's 16.42 / 16.90 on `cortex-a72` / `cortex-a76`), above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening NEON multiply-adds into 64-bit lanes); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 83.33 to 92.54 instructions per sample (more instructions here, but fewer simulated cycles: 39.50 / 35.40 to 37.85 / 34.16 per sample on `cortex-a72` / `cortex-a76`, per block). Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "2.09 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level (2.40 before D172, which groups 7 outputs on AArch64 so that their accumulators fit the integer registers and groups the first outputs of a call too; 35.78 / 33.33 -> 29.57 / 27.63 simulated cycles per sample against CMSIS-DSP's 16.42 / 16.90 on `cortex-a72` / `cortex-a76`), above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening NEON multiply-adds into 64-bit lanes); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 83.33 to 92.54 instructions per sample (more instructions here, but fewer simulated cycles: 39.50 / 35.40 to 37.85 / 34.16 per sample on `cortex-a72` / `cortex-a76`, per block). the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "simd128": {
       "status": "release"
@@ -1927,7 +1928,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item I20-1 in docs/open-items.md (the `simd128` instruction gap of the grouped fallback)"
+      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #71 (the `simd128` instruction gap of the grouped fallback)"
     }
   },
   "fir_interpolate_real_q15_fallback": {

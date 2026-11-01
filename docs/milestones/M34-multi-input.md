@@ -1,6 +1,6 @@
 # M34 — Multi-input nodes in the pipeline
 
-> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M26](M26-block-ports.md), [M30](M30-two-port-blocks.md) · Next: [M35](M35-am-ssb-tx.md)
+> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M26](M26-block-ports.md), [M29](M29-primitive-blocks.md), [M30](M30-two-port-blocks.md) · Next: [M35](M35-am-ssb-tx.md)
 
 ## Goal
 
@@ -12,7 +12,7 @@ Until now every node has exactly one incoming edge (docs/pipeline.md › Edges),
 
 ## Order
 
-M34 depends on M26 (port types) and M30 (the two-input blocks). It can run in parallel with M27, M28, M29, M31–M33.
+M34 depends on M26 (port types), M29 (the kind `delay` for the automatic alignment; `quad_demod` and `decimate` for the proof flow) and M30 (the two-input blocks). It can run in parallel with M27, M28, M31–M33, M35 and M36.
 ## Ground rules (identical in every milestone — read them completely before you start)
 
 These rules apply to every line of code in this repository. They are repeated in every milestone file so that each milestone is self-contained. If a rule and a milestone-specific instruction ever conflict, stop and ask; do not guess.

@@ -85,7 +85,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M31 Composite tools | M27, M29, M30 | M33, M34, M35, M36 |
 | M32 Composite plans | M31 | M33–M36 |
 | M33 Noise reduction | M26 | M27–M32, M34–M36 |
-| M34 Multi-input pipeline | M26, M30 | M27, M29, M31–M33, M35, M36 |
+| M34 Multi-input pipeline | M26, M29, M30 | M27, M28, M31–M33, M35, M36 |
 | M35 AM/SSB transmit | M29, M30 | M31–M34, M36 |
 | M36 FM stereo transmit | M30 | M31–M35 |
 | M37 Packet ports, `sdrk-proto` | M34 | M35, M36 |

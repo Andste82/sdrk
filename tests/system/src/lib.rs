@@ -235,3 +235,193 @@ pub fn encode_bytes(format: &sdrk_device::SampleFormat, iq: &[Complex64]) -> Vec
     encode(format, iq, &mut bytes).unwrap();
     bytes
 }
+
+// ---------------------------------------------------------------- loop tests of M25
+
+/// An example flow as a JSON value (to change a node or an edge before it is built).
+pub fn flow_value(name: &str) -> serde_json::Value {
+    let text = std::fs::read_to_string(workspace_file(&format!("examples/flows/{name}.json")))
+        .unwrap_or_else(|e| panic!("cannot read flow {name}: {e}"));
+    serde_json::from_str(&text).unwrap_or_else(|e| panic!("cannot parse flow {name}: {e}"))
+}
+
+/// A description from a JSON value.
+pub fn spec_from_value(value: &serde_json::Value) -> PipelineSpec {
+    PipelineSpec::from_json(&value.to_string())
+        .unwrap_or_else(|e| panic!("cannot parse the changed flow: {e}"))
+}
+
+/// Sets the precision of a flow; a real `audio` input of the flow gets the matching type (the
+/// input type must fit the precision).
+pub fn set_precision(value: &mut serde_json::Value, precision: Precision) {
+    let (p, t) = match precision {
+        Precision::F32 => ("f32", "f32"),
+        Precision::Q15 => ("q15", "q15"),
+    };
+    value["settings"]["precision"] = serde_json::json!(p);
+    if value["inputs"]["audio"]["type"].is_string() {
+        value["inputs"]["audio"]["type"] = serde_json::json!(t);
+    }
+}
+
+/// Removes the node `node` from a flow and connects its predecessor to its successor.
+pub fn remove_node(value: &mut serde_json::Value, node: &str) {
+    let edges = value["edges"].as_array().expect("edges").clone();
+    let from = edges
+        .iter()
+        .find(|e| e["to"] == node)
+        .map(|e| e["from"].clone())
+        .expect("edge into the node");
+    let to = edges
+        .iter()
+        .find(|e| e["from"] == node)
+        .map(|e| e["to"].clone())
+        .expect("edge out of the node");
+    let mut kept: Vec<serde_json::Value> = edges
+        .into_iter()
+        .filter(|e| e["from"] != node && e["to"] != node)
+        .collect();
+    kept.push(serde_json::json!({"from": from, "to": to}));
+    value["edges"] = serde_json::Value::Array(kept);
+    value["nodes"].as_object_mut().expect("nodes").remove(node);
+}
+
+/// A pull source over a vector of audio samples (`f32` or, converted with saturation, Q15).
+#[derive(Debug)]
+pub struct VecAudio {
+    data: Vec<f32>,
+    pos: usize,
+    q15: bool,
+    buf_q15: Vec<sdrk::Q15>,
+}
+
+impl VecAudio {
+    /// A source that delivers `data` once and then nothing.
+    pub fn new(data: Vec<f32>, precision: Precision) -> Self {
+        Self {
+            data,
+            pos: 0,
+            q15: precision == Precision::Q15,
+            buf_q15: Vec::new(),
+        }
+    }
+}
+
+impl PullSource for VecAudio {
+    fn provide(&mut self, _input: &str, max_samples: usize) -> Result<InputData<'_>, PullError> {
+        let n = (self.data.len() - self.pos).min(max_samples);
+        let part = &self.data[self.pos..self.pos + n];
+        self.pos += n;
+        if self.q15 {
+            self.buf_q15.clear();
+            self.buf_q15.extend(part.iter().map(|v| {
+                sdrk::Q15(
+                    (f64::from(*v) * 32768.0 + 0.5)
+                        .floor()
+                        .clamp(-32768.0, 32767.0) as i16,
+                )
+            }));
+            Ok(InputData::Q15(&self.buf_q15))
+        } else {
+            Ok(InputData::F32(part))
+        }
+    }
+}
+
+/// Runs a transmitter flow over `audio` in pull mode and returns the `cs8` bytes of `rf`.
+pub fn transmit_bytes(spec: &PipelineSpec, audio: Vec<f32>, precision: Precision) -> Vec<u8> {
+    let mut source = VecAudio::new(audio, precision);
+    let blocks = transmit(spec, "rf", &mut source, 1 << 16);
+    blocks.into_iter().flat_map(|(b, _)| b).collect()
+}
+
+/// Pushes `bytes` (without a channel) into a receiver flow whose input `rf` has a raw format,
+/// and returns all audio of the stream output `audio` (Q15 converted to `f32`).
+pub fn receive_bytes(p: &mut Pipeline, bytes: &[u8], precision: Precision) -> Vec<f32> {
+    let mut audio = Vec::new();
+    let mut scratch = vec![0f32; 4096];
+    // 4096 samples of cs8 per push: the largest chunk of the receiver flows.
+    for piece in bytes.chunks(8192) {
+        p.push("rf", InputData::Raw(piece)).expect("push");
+        read_audio(p, "audio", precision, &mut scratch, &mut audio);
+    }
+    audio
+}
+
+/// The highest absolute instantaneous frequency of `cs8` bytes, in units of `deviation_hz`:
+/// a `ddc` from 2.4 MS/s to 240 kS/s (centre `frequency_hz`, low-pass `cutoff_hz`) and
+/// `fm_demod` without de-emphasis, i.e. `quad_demod` with the gain `240 kHz / (2 pi
+/// deviation_hz)`; the first `skip` output samples (filter settling) are ignored.
+#[allow(clippy::large_stack_frames)]
+pub fn peak_deviation(
+    bytes: &[u8],
+    frequency_hz: f64,
+    cutoff_hz: f64,
+    transition_hz: f64,
+    deviation_hz: f64,
+    skip: usize,
+) -> f64 {
+    let spec = serde_json::json!({
+        "sdrk": 1,
+        "name": "peak-meter",
+        "settings": {"precision": "f32", "max_chunk": 4096},
+        "inputs": {"rf": {"format": "cs8", "rate_hz": IF_RATE}},
+        "nodes": {
+            "tune": {"kind": "ddc", "params": {
+                "frequency_hz": frequency_hz, "decimation": 10, "cutoff_hz": cutoff_hz,
+                "transition_hz": transition_hz, "max_taps": 4096}},
+            "demod": {"kind": "fm_demod", "params": {
+                "deviation_hz": deviation_hz, "deemphasis_us": 0, "audio_decimation": 1}}
+        },
+        "edges": [
+            {"from": "rf", "to": "tune"},
+            {"from": "tune", "to": "demod"},
+            {"from": "demod", "to": "audio"}
+        ],
+        "outputs": {"audio": {"type": "stream", "capacity": 16384, "drop": "error"}}
+    });
+    let mut p = build(&spec_from_value(&spec));
+    let audio = receive_bytes(&mut p, bytes, Precision::F32);
+    assert!(audio.len() > skip + 1000, "{} samples", audio.len());
+    audio[skip..]
+        .iter()
+        .map(|v| f64::from(v.abs()))
+        .fold(0.0, f64::max)
+}
+
+/// `samples` samples of white noise (`Pcg32::new(seed, 1)`), filtered by a fourth-order
+/// Butterworth low-pass at `cutoff_hz` (two biquads in `f64`), scaled to the standard
+/// deviation `sigma` after the filter.
+pub fn band_limited_noise(
+    seed: u64,
+    samples: usize,
+    rate: f64,
+    cutoff_hz: f64,
+    sigma: f64,
+) -> Vec<f32> {
+    let mut rng = sdrk_testkit::Pcg32::new(seed, 1);
+    let mut x: Vec<f64> = (0..samples).map(|_| rng.normal()).collect();
+    let w0 = 2.0 * std::f64::consts::PI * cutoff_hz / rate;
+    // Q of the two sections of a fourth-order Butterworth filter: 1 / (2 cos(k pi / 8)), k = 1, 3.
+    for k in [1.0, 3.0] {
+        let q = 1.0 / (2.0 * (k * std::f64::consts::PI / 8.0).cos());
+        let alpha = w0.sin() / (2.0 * q);
+        let a0 = 1.0 + alpha;
+        let b0 = (1.0 - w0.cos()) / 2.0 / a0;
+        let b1 = (1.0 - w0.cos()) / a0;
+        let a1 = -2.0 * w0.cos() / a0;
+        let a2 = (1.0 - alpha) / a0;
+        let (mut x1, mut x2, mut y1, mut y2) = (0.0, 0.0, 0.0, 0.0);
+        for v in &mut x {
+            let y = b0 * *v + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1;
+            x1 = *v;
+            y2 = y1;
+            y1 = y;
+            *v = y;
+        }
+    }
+    let power = x.iter().map(|v| v * v).sum::<f64>() / x.len() as f64;
+    let scale = sigma / power.sqrt();
+    x.iter().map(|v| (v * scale) as f32).collect()
+}

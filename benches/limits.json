@@ -2377,8 +2377,7 @@
   },
   "fft_cq15_1024_default_fallback": {
     "sse2": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+      "status": "release"
     },
     "sse4.2": {
       "status": "release"
@@ -2390,12 +2389,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+      "status": "release"
     }
   },
   "rfft_1024_fallback": {

@@ -113,6 +113,7 @@ mod halfband;
 mod interp;
 mod mix;
 mod modulate;
+mod preemph_limit;
 mod spectrum;
 mod squelch;
 mod stereo;

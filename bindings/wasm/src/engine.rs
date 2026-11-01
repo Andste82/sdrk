@@ -661,6 +661,7 @@ impl Engine {
             ("mag", C32),
             ("mag_sq", C32),
             ("power_db", F32),
+            ("preemph_limit", F32),
             ("quad_demod", C32),
             ("real_to_complex", C32),
             ("resample", C32),

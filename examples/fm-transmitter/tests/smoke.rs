@@ -246,3 +246,43 @@ fn usage_and_run_errors() {
     assert!(help.status.success());
     assert!(String::from_utf8_lossy(&help.stdout).contains("usage: fm-transmitter"));
 }
+
+#[test]
+fn the_narrow_band_flow_modulates_a_wav_file_for_the_nfm_receiver() {
+    let dir = tempfile::tempdir().unwrap();
+    let wav = dir.path().join("audio.wav");
+    let out = dir.path().join("nfm.cs8");
+    // The tone of the helper has amplitude 0.8: the pre-emphasis lifts it above the limit of
+    // 0.85 and the limiter works; the receiver must still decode the tone cleanly.
+    let n = write_tone(&wav, 48_000, 0.5, false);
+    let flow = Path::new(env!("CARGO_MANIFEST_DIR")).join("../flows/nfm_transmitter.json");
+    let o = run(&["--input", p(&wav), "--output", p(&out), "--flow", p(&flow)]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(stderr(&o).contains("node shape"), "{}", stderr(&o));
+    let bytes = std::fs::read(&out).unwrap();
+    let samples = bytes.len() / 2;
+    assert!(
+        samples <= n * 50 && samples > (n - 100) * 50,
+        "{samples} samples for {n} audio samples"
+    );
+    // Decode with the NFM receiver flow: cs8 input, channel at +200 kHz.
+    let json = include_str!("../../flows/nfm_receiver.json").replace("\"cu8\"", "\"cs8\"");
+    let mut p = Registry::standard()
+        .build_json(&json, &BuildOptions::default())
+        .unwrap();
+    p.set_param("tune", "frequency_hz", serde_json::json!(200_000))
+        .unwrap();
+    let mut audio = Vec::new();
+    let mut buf = vec![0f32; 4096];
+    for piece in bytes.chunks(8192) {
+        p.push("rf", InputData::Raw(piece)).unwrap();
+        loop {
+            let got = p.read_stream("audio", &mut buf).unwrap();
+            if got == 0 {
+                break;
+            }
+            audio.extend(buf[..got].iter().map(|&v| f64::from(v)));
+        }
+    }
+    assert!(sinad_db(&audio[audio.len() / 2..], 48_000.0, 1000.0) > 30.0);
+}

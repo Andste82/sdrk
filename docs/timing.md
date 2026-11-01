@@ -80,7 +80,7 @@ Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, d
 | --- | --- | --- | --- |
 | `convert` | samples per byte of a packing group (for example `1/2` for `cu8`, `2/5` for `packed10`) | `Constant` | 0 |
 | `convert_out` | bytes per sample (the inverse) | `Constant` | 0 |
-| `scale`, `dc_block`, `fm_mod`, `squelch`, `agc`, `biquad`, `stereo_pll` | `1/1` | `Constant` | 0 (`dc_block`, `biquad`: the delay of the IIR filter depends on the frequency and is not declared; `stereo_matrix` is stateless and has no `Timing`, it works sample by sample) |
+| `scale`, `dc_block`, `fm_mod`, `squelch`, `agc`, `biquad`, `stereo_pll`, `preemph_limit` | `1/1` | `Constant` | 0 (`dc_block`, `biquad`, `preemph_limit`: the delay of the IIR filter depends on the frequency and is not declared; `stereo_matrix` is stateless and has no `Timing`, it works sample by sample) |
 | `fir` with `N` taps | `1/1` | `Constant` | `(N - 1) / 2` |
 | `ddc` with `N` taps, decimation `M` | `1/M` | `Constant` | `(N - 1) / 2` |
 | `duc` with `N` taps, interpolation `L` | `L/1` | `Constant` | `(N - 1) / (2 L)` |

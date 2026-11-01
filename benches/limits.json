@@ -3345,5 +3345,65 @@
       "status": "info",
       "waiver": "no library has a fixed-point PLL for the pilot (liquid-dsp's `nco_crcf` is float only, CMSIS-DSP has no PLL); the comparison is the loop of the kernel with the oscillator of CMSIS-DSP (`arm_cos_q15`, `arm_sin_q15`, a 512-entry table) shown as information, as for `rotate` and `fm_mod` `CQ15`; the kernel is judged by its efficiency (simulated cycles against the dependency chain of the loop)"
     }
+  },
+  "preemph_limit": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "preemph_limit_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`preemph_limit` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
   }
 }

@@ -1,0 +1,46 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "retune_f32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "retune_f32_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "retune_f32_8192",
+  "format_version": 1,
+  "kernel": "preemph_limit",
+  "model": "float32",
+  "notes": "the construction of limit_f32_8192 with this case's own seed; limit 1.0 for samples 0-4095 and 0.5 from sample 4096 (set_limit before that sample; the 8 kHz burst spans the change); exact float32 model",
+  "params": {
+    "a1_bits": 4593989502643561391,
+    "b0_bits": 4614586531936190583,
+    "b1_bits": 13835405426330217021,
+    "coefs": [
+      3.2880867522836144,
+      -2.154263734254782,
+      0.13382301802883265
+    ],
+    "hold_s": 0.02,
+    "limit": 1.0,
+    "rate_hz": 48000,
+    "release_s": 0.2,
+    "retune_at": 4096,
+    "retune_limit": 0.5,
+    "tau_s": 5e-05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 449,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

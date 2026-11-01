@@ -58,6 +58,7 @@ pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmS
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
+pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig};
 pub use blocks::real_to_iq::RealToIqBlock;
 pub use blocks::resample::{
     RESAMPLE_TUNED_PHASES, ResampleBlock, ResampleConfig, ResampleRealBlock,

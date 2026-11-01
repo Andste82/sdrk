@@ -14,6 +14,7 @@ pub mod halfband;
 pub mod interp;
 pub mod mix;
 pub mod modulate;
+pub mod preemph_limit;
 pub mod spectrum;
 pub mod squelch;
 pub mod stereo;

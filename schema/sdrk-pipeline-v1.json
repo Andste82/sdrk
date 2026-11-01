@@ -1414,6 +1414,65 @@
           },
           {
             "additionalProperties": false,
+            "description": "Pre-emphasis and peak limiter for the audio of an FM transmitter.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "preemph_limit"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "hold_s": {
+                    "default": 0.02,
+                    "description": "Time the gain stays constant after the last peak. Unit: s. Typical: 0.02 (covers 50 Hz). Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "limit": {
+                    "default": 1.0,
+                    "description": "Peak of the output as a fraction of full scale. Typical: 1.0 before fm_mod, 0.85 when a filter follows. Runtime.",
+                    "maximum": 1.0,
+                    "minimum": 0.1,
+                    "type": "number"
+                  },
+                  "preemphasis_us": {
+                    "default": 50.0,
+                    "description": "Time constant of the pre-emphasis in microseconds; 0 switches the filter off. Unit: us. Typical: 50 (Europe), 75 (North America), 530 for two-way radio, 0 for none. Build-time.",
+                    "maximum": 1000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "release_s": {
+                    "default": 0.2,
+                    "description": "Time constant of the gain recovery after the hold. Unit: s. Typical: 0.2. Build-time.",
+                    "maximum": 10.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Turns a real signal into a complex one at half the rate (fs/4 shift and halfband).",
             "properties": {
               "backend": {

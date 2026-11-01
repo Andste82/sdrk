@@ -13,6 +13,7 @@ pub mod fm_demod;
 pub mod fm_mod;
 pub mod fm_stereo_demod;
 pub mod halfband_decimate;
+pub mod preemph_limit;
 pub mod real_to_iq;
 pub mod resample;
 pub mod scale;

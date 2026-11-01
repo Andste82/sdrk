@@ -19,23 +19,27 @@ nodes:
   # other radios; it is part of the demodulated signal and would be audible as a hum. Voice
   # for communication needs 300 Hz and above, so the high-pass removes the tone and keeps the
   # speech. cutoff_hz can be changed while the flow runs (set_param); the filter keeps its
-  # state. At the squelch the audio is exact silence (f32); in a Q15 pipeline this filter may
-  # keep a limit cycle of a few LSB after the gate closes.
+  # state. At the squelch the audio is exact silence (f32); in a Q15 pipeline the
+  # de-emphasis and this filter may keep a small constant rest of a few LSB after the gate
+  # closes.
   ctcss:
     kind: biquad
     params:
       cutoff_hz: 300
       order: 4
       response: highpass
-  # Quadrature FM demodulation without de-emphasis (two-way radio audio is not
-  # pre-emphasised in the same way as broadcast FM). deviation_hz is the deviation that reads
-  # full scale: 5000 for 25 kHz channels, 2500 for 12.5 kHz channels. audio_cutoff_hz only
-  # matters when audio_decimation is above 1; the channel is already at 48 kHz here.
+  # Quadrature FM demodulation with a 530 us de-emphasis: two-way radio transmits audio with
+  # a pre-emphasis of 6 dB per octave from 300 Hz (ETSI EN 300 086, 1 / (2 pi * 300 Hz) =
+  # 530 us; TIA-603 radios use 750 us), and the nfm_transmitter flow does the same. Set
+  # deemphasis_us to 0 for a transmitter without pre-emphasis. deviation_hz is the deviation
+  # that reads full scale: 5000 for 25 kHz channels, 2500 for 12.5 kHz channels.
+  # audio_cutoff_hz only matters when audio_decimation is above 1; the channel is already at
+  # 48 kHz here.
   demod:
     kind: fm_demod
     params:
       audio_cutoff_hz: 4000
-      deemphasis_us: 0
+      deemphasis_us: 530
       deviation_hz: 5000
   # Power squelch with the defaults: it opens at -40 dBFS, closes 3 dB lower and averages the
   # power over 10 ms. While it is closed the audio is exact silence. It sits after the channel

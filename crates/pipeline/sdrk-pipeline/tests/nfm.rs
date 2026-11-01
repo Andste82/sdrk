@@ -122,7 +122,9 @@ fn the_squelch_gates_the_transmission() {
     let on = tone_power(mid, 1000.0, AUDIO_RATE);
     let off = tone_power(mid, 3300.0, AUDIO_RATE);
     assert!(on > 1000.0 * off, "1 kHz tone: {on} vs {off}");
-    assert!(mid.iter().any(|v| v.abs() > 0.5));
+    // The 530 us de-emphasis lowers a 1 kHz tone by about 11 dB: peak 0.286 measured (0.5
+    // before M25, when the demodulator did not de-emphasise); decision D187.
+    assert!(mid.iter().any(|v| v.abs() > 0.2));
 
     // Opening: the first non-zero audio sample comes at most 1 ms (48 samples) plus the
     // delay of the channel and audio filters after the start of the transmission, and not
@@ -166,7 +168,20 @@ fn chunking_does_not_change_the_output() {
     let bytes = recording();
     let whole = run(&mut receiver(), &bytes, 8192);
     let other = run(&mut receiver(), &bytes, 4097);
-    assert_eq!(common::bits(&whole), common::bits(&other));
+    // The f32 `deemphasis` of the SIMD backend is a tolerance kernel whose bits depend on the
+    // split (docs/kernels.md, decision of 2026-10-29), so since the demodulator de-emphasises
+    // (M25) the chunked run is compared by SNR (97 dB measured, at least 90 dB required) and by
+    // the positions of the exact zeros, which must be identical (decision D187).
+    assert_eq!(whole.len(), other.len());
+    let zeros = |x: &[f32]| x.iter().map(|v| *v == 0.0).collect::<Vec<_>>();
+    assert_eq!(zeros(&whole), zeros(&other));
+    let (mut signal, mut error) = (0f64, 0f64);
+    for (a, b) in whole.iter().zip(&other) {
+        signal += f64::from(*a).powi(2);
+        error += (f64::from(*a) - f64::from(*b)).powi(2);
+    }
+    let snr = 10.0 * (signal / error).log10();
+    assert!(snr >= 90.0, "chunked run differs: SNR {snr} dB");
 }
 
 #[test]
@@ -189,6 +204,11 @@ fn the_threshold_can_be_moved_while_running() {
 /// The maintainer approved the measured value as the Q15 bound (decision D22, M22 section 4);
 /// the `f32` flow stays exactly zero (`the_squelch_gates_the_transmission`).
 const CTCSS_Q15_MAX_REST_LSB: i32 = 321;
+
+/// The bound for the output of the Q15 `fm_demod` (with the 530 us `deemphasis`) after the
+/// squelch closed, in LSB (M25 section 4). The dead band of the Q15 `deemphasis` keeps the
+/// output at a small constant: -12 LSB measured.
+const Q15_DEMOD_MAX_REST_LSB: i32 = 16;
 
 #[test]
 fn the_q15_flow_keeps_at_most_the_approved_rest_after_the_squelch() {
@@ -227,12 +247,19 @@ fn q15_flow_silence(limit_lsb: i32) {
     let (from, to) = (TX_FROM / per_sample, TX_TO / per_sample);
     assert_eq!(audio.len(), raw.len());
     assert!(audio.len() > to + 9600);
-    // Before the transmission and from 0.2 s after its end the demodulator output is exactly
-    // zero (the squelch writes zeros) ...
+    // Before the transmission the demodulator output is exactly zero (the squelch writes
+    // zeros); from 0.2 s after its end the Q15 `deemphasis` (530 us) sits in its dead band at a
+    // constant of at most 16 LSB (amends M19/M22, decision D187; -12 LSB measured, analytically
+    // +-12 LSB for alpha_q15 = 1265, docs/kernels.md) ...
     assert!(raw[..from].iter().all(|v| *v == 0), "demod silence before");
+    let demod_rest = raw[to + 9600..]
+        .iter()
+        .map(|v| i32::from(*v).abs())
+        .max()
+        .unwrap();
     assert!(
-        raw[to + 9600..].iter().all(|v| *v == 0),
-        "demod silence after"
+        demod_rest <= Q15_DEMOD_MAX_REST_LSB,
+        "demod rest {demod_rest} LSB"
     );
     // ... and the output of `ctcss` (Q15, DF1) stays within the approved DC rest (D22).
     let worst = |x: &[i16]| x.iter().map(|v| i32::from(*v).abs()).max().unwrap();
@@ -242,5 +269,7 @@ fn q15_flow_silence(limit_lsb: i32) {
 
     // The transmission is audible.
     let peak = worst(&audio[from + 1200..to - 1200]);
-    assert!(peak > 4000, "peak {peak}");
+    // 1 kHz at full deviation reads 2000 LSB after the 530 us de-emphasis (1967 at the
+    // demodulator; 4000 or more before M25), decision D187.
+    assert!(peak > 1500, "peak {peak}");
 }

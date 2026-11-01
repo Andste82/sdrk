@@ -1,0 +1,97 @@
+{
+  "sdrk": 1,
+  "name": "nfm-transmitter",
+  "description": "Modulate 48 kHz voice audio to narrow-band FM with pre-emphasis, a peak limiter and a voice band filter and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4800
+  },
+  "inputs": {
+    "audio": {
+      "type": "f32",
+      "rate_hz": 48000,
+      "description": "mono audio"
+    }
+  },
+  "nodes": {
+    "duc": {
+      "kind": "duc",
+      "params": {
+        "frequency_hz": 200000,
+        "interpolation": 10
+      }
+    },
+    "mod": {
+      "kind": "fm_mod",
+      "params": {
+        "deviation_hz": 5000
+      }
+    },
+    "shape": {
+      "kind": "preemph_limit",
+      "params": {
+        "limit": 0.85,
+        "preemphasis_us": 530
+      }
+    },
+    "splatter": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 3000,
+        "order": 4,
+        "response": "lowpass"
+      }
+    },
+    "up": {
+      "kind": "resample",
+      "params": {
+        "rate_out_hz": 240000
+      }
+    },
+    "voice": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 3000,
+        "order": 4,
+        "response": "lowpass"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "audio",
+      "to": "voice"
+    },
+    {
+      "from": "voice",
+      "to": "shape"
+    },
+    {
+      "from": "shape",
+      "to": "splatter"
+    },
+    {
+      "from": "splatter",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "up"
+    },
+    {
+      "from": "up",
+      "to": "duc"
+    },
+    {
+      "from": "duc",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs8",
+      "underrun": "zeros"
+    }
+  }
+}

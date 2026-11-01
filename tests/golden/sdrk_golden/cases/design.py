@@ -1,5 +1,7 @@
 """Cases for the filter design of sdrk-blocks (``scipy.signal.firwin``, ``kaiserord``)."""
 
+import math
+
 import numpy as np
 import scipy.signal
 
@@ -178,3 +180,36 @@ def halfband_len_table(rng):
             "N with N mod 4 == 3; attenuation 40 to 100 dB (linspace), transition 0.02 to 0.2 (geomspace)"
         ),
     )
+
+
+# Pre-emphasis design (M25)
+
+
+def _register_preemphasis(tau_us, fs_hz, tag):
+    @case(kernel="design", name=f"preemphasis_{tag}", seed=0)
+    def _case(rng):
+        tau = tau_us * 1e-6
+        coefs = sdrk_design.preemphasis_coefs(tau, float(fs_hz))
+        # SciPy is the reference: H(s) = (1 + s tau) / (1 + s tau_p) mapped by the bilinear
+        # transform without prewarping. The stored values are the formulas in plain floats.
+        tau_p = 1.0 / (2.0 * math.pi * (fs_hz / 2.4))
+        b, a = scipy.signal.bilinear([tau, 1.0], [tau_p, 1.0], fs=float(fs_hz))
+        assert np.max(np.abs(np.array([b[0], b[1], a[1]]) - np.array(coefs))) <= 1e-12
+        assert abs(a[0] - 1.0) <= 1e-15
+        return dict(
+            params={"tau_s": tau, "fs_hz": float(fs_hz)},
+            arrays={"expected": Array("f64", np.array(coefs))},
+            tolerance={"class": "max_abs_err", "max_abs_err": 1e-14, "skip": 0},
+            notes="[b0, b1, a1] of (1 + s tau) / (1 + s tau_p), tau_p = 1 / (2 pi fs / 2.4), bilinear "
+            "transform without prewarping (K = 2 fs); formulas in float64, equal to "
+            "scipy.signal.bilinear within 1e-12",
+        )
+
+
+for _tau_us, _fs, _tag in (
+    (50, 48000, "50us_48k"),
+    (75, 48000, "75us_48k"),
+    (530, 48000, "530us_48k"),
+    (50, 240000, "50us_240k"),
+):
+    _register_preemphasis(_tau_us, _fs, _tag)

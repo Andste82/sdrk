@@ -20,6 +20,7 @@ from . import (  # noqa: F401
     mag,
     mag_sq,
     power_db,
+    preemph_limit,
     q15_ops,
     quad_demod,
     real_to_complex,

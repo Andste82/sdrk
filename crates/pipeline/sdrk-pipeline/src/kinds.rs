@@ -16,9 +16,10 @@ use sdrk_blocks::{
     ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock,
     DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
     FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
-    HalfbandDecimateRealBlock, ParamValue, PortType, RESAMPLE_TUNED_PHASES, RealToIqBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    HalfbandDecimateRealBlock, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    RESAMPLE_TUNED_PHASES, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -1193,6 +1194,64 @@ impl Kind for FmDemodKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(FmDemodBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ----------------------------------------------------------- preemph_limit
+
+pub(crate) struct PreemphLimitKind;
+
+impl Kind for PreemphLimitKind {
+    type Cfg = PreemphLimitConfig;
+
+    const KIND: &'static str = "preemph_limit";
+    fn kernels() -> &'static [&'static str] {
+        &["preemph_limit"]
+    }
+    fn default_cfg() -> PreemphLimitConfig {
+        PreemphLimitConfig::default()
+    }
+    fn set(cfg: &mut PreemphLimitConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &PreemphLimitConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if is_complex(input) {
+            return Err(mismatch("preemph_limit needs real samples"));
+        }
+        with_real!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: PreemphLimitBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: PreemphLimitBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                // One pole (3 multiplications), the envelope and the gain.
+                cost: 6.0,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(input),
+            })
+        )
+    }
+    fn build(
+        cfg: &PreemphLimitConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_real!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(PreemphLimitBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )

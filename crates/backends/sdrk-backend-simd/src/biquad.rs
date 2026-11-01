@@ -17,10 +17,13 @@
 //! `C32` and `CQ15`, the scalar code of the fallback for `f32` and `Q15`). Padding a missing
 //! section with a pass-through section would not do: `x + 0.0` turns `-0.0` into `+0.0`.
 //!
-//! - **`f32`:** one `f32x4` holds both sections, `[s1, s2]` of the first and of the second.
-//!   A step is three products, three sums and the shuffles that bring the input and the
-//!   output into place; the sum with the shifted `s2` adds `-0.0` in the lanes of the new `s2`,
-//!   which leaves every value (also `-0.0`) unchanged.
+//! - **`f32`:** the layout of KFR's `iir_state<float, 2>`: one vector per quantity (`s1`, `s2`,
+//!   `y`, each coefficient) with the two sections in two lanes, `float32x2_t` on NEON and the
+//!   lanes 0 and 1 of an `f32x4` elsewhere. A step is the five products and four sums of the
+//!   fallback and one shuffle for the input `[x, y A]`; the chain from one output to the next
+//!   is only the product with `a1`, the difference and the sum with `b0 x` (the recursion
+//!   itself), the shuffle is off it. The flush after a block of sixteen steps is behind a
+//!   branch on whether any state is below the limit, so its compare is off the chain as well.
 //! - **`C32`:** one `f32x4` per state, `[re, im]` of the first and of the second section: the
 //!   five products and four sums of the fallback per step, on four lanes.
 //! - **`f32` flush:** both kinds flush on the schedule of [`FLUSH_PERIOD`]: section `k` after
@@ -295,65 +298,113 @@ fn df2t(c: &[f32; 5], s: &mut [f32; 2], x: f32) -> f32 {
     y
 }
 
-/// Two `f32` sections A and B in one vector: `s = [s1 A, s2 A, s1 B, s2 B]`.
+/// A mask of the lane 0 (the first section of an `f32` pair) or of the others.
+#[inline(always)]
+fn lane0_f32<S: SimdToken>(simd: S, first: bool) -> mask32x4<S> {
+    let idx = f32x4::simd_from(simd, [0.0, 1.0, 1.0, 1.0]);
+    if first {
+        idx.simd_lt(f32x4::splat(simd, 0.5))
+    } else {
+        idx.simd_gt(f32x4::splat(simd, 0.5))
+    }
+}
+
+/// Two `f32` sections A and B in the lanes 0 and 1 of one vector per quantity, as KFR's
+/// `iir_state<float, 2>`: `s1 = [s1 A, s1 B, ..]`, `s2 = [s2 A, s2 B, ..]`, the coefficients
+/// `[c A, c B, 0, 0]`; the lanes 2 and 3 are never read. The chain from one output to the next
+/// is the product with `a1`, the difference and the sum with `b0 x`, the arithmetic of the
+/// recursion itself; the input `[x, y A, x, y B]` (one `unpcklps` of the broadcast `x` and
+/// the last output) is off that chain. The flush after a block is behind a branch, and the
+/// state passes [`opaque`] between two blocks.
 struct PairF32<S: SimdToken> {
     simd: S,
-    /// `[b0, b0]` of A and of B.
     b0: f32x4<S>,
-    /// `[b1, b2]` of A and of B.
-    b12: f32x4<S>,
-    /// `[a1, a2]` of A and of B.
-    a12: f32x4<S>,
+    b1: f32x4<S>,
+    b2: f32x4<S>,
+    a1: f32x4<S>,
+    a2: f32x4<S>,
     limit: f32x4<S>,
-    s: f32x4<S>,
-    /// The outputs of the last step in the lanes 0 (A) and 2 (B).
+    s1: f32x4<S>,
+    s2: f32x4<S>,
+    /// The outputs of the last step: A in the lane 0, B in the lane 1.
     y: f32x4<S>,
 }
 
-impl<S: SimdToken> PairF32<S> {
+/// A pair of `f32` sections: [`PairF32`], or the `float32x2_t` pair of NEON.
+trait PairReal: Pair<T = f32> {
+    type Tok: Copy;
     /// `h` holds the eight history entries of the two sections.
+    fn new(t: Self::Tok, a: &[f32; 5], b: &[f32; 5], h: &[f32]) -> Self;
+    fn store(&self, h: &mut [f32]);
+}
+
+impl<S: SimdToken> PairReal for PairF32<S> {
+    type Tok = S;
+
     #[inline(always)]
     fn new(simd: S, a: &[f32; 5], b: &[f32; 5], h: &[f32]) -> Self {
         let at = |i: usize| h.get(i).copied().unwrap_or(0.0);
+        let c = |i: usize| f32x4::simd_from(simd, [coef(a, i), coef(b, i), 0.0, 0.0]);
         PairF32 {
             simd,
-            b0: f32x4::simd_from(simd, [a[0], a[0], b[0], b[0]]),
-            b12: f32x4::simd_from(simd, [a[1], a[2], b[1], b[2]]),
-            a12: f32x4::simd_from(simd, [a[3], a[4], b[3], b[4]]),
+            b0: c(0),
+            b1: c(1),
+            b2: c(2),
+            a1: c(3),
+            a2: c(4),
             limit: f32x4::splat(simd, 1e-30),
-            s: f32x4::simd_from(simd, [at(0), at(1), at(4), at(5)]),
+            s1: f32x4::simd_from(simd, [at(0), at(4), 0.0, 0.0]),
+            s2: f32x4::simd_from(simd, [at(1), at(5), 0.0, 0.0]),
             y: f32x4::splat(simd, 0.0),
         }
     }
 
     #[inline(always)]
     fn store(&self, h: &mut [f32]) {
-        let [s1a, s2a, s1b, s2b] = *self.s;
-        for (i, v) in [(0, s1a), (1, s2a), (4, s1b), (5, s2b)] {
-            if let Some(d) = h.get_mut(i) {
-                *d = v;
-            }
+        let [s1a, s1b, ..] = *self.s1;
+        let [s2a, s2b, ..] = *self.s2;
+        store_f32(h, [s1a, s2a, s1b, s2b]);
+    }
+}
+
+/// Writes `[s1 A, s2 A, s1 B, s2 B]` to the history entries of a pair.
+#[inline(always)]
+fn store_f32(h: &mut [f32], s: [f32; 4]) {
+    for (i, v) in [0, 1, 4, 5].into_iter().zip(s) {
+        if let Some(d) = h.get_mut(i) {
+            *d = v;
         }
     }
+}
 
-    /// The outputs and the new state for the inputs `xv = [x A, x A, x B, x B]`.
+impl<S: SimdToken> PairF32<S> {
+    /// The outputs and the new state for the inputs `xv = [x A, x B, ..]`: the fallback's
+    /// `df2t` in every lane.
     #[inline(always)]
-    fn next(&self, xv: f32x4<S>) -> (f32x4<S>, f32x4<S>) {
-        // y = b0 x + s1
-        let y = xv * self.b0 + self.s;
-        let [ya, _, yb, _] = *y;
-        let yd = f32x4::simd_from(self.simd, [ya, ya, yb, yb]);
-        // s1 = (b1 x + s2) - a1 y; s2 = (b2 x + -0.0) - a2 y
-        let [_, s2a, _, s2b] = *self.s;
-        let sh = f32x4::simd_from(self.simd, [s2a, -0.0, s2b, -0.0]);
-        let s = (xv * self.b12 + sh) - yd * self.a12;
-        (y, s)
+    fn next(&self, xv: f32x4<S>) -> (f32x4<S>, f32x4<S>, f32x4<S>) {
+        let y = self.b0 * xv + self.s1;
+        let s1 = (self.b1 * xv + self.s2) - self.a1 * y;
+        let s2 = self.b2 * xv - self.a2 * y;
+        (y, s1, s2)
+    }
+
+    /// `[x, y A, ..]`: the input of A and the last output of A as the input of B.
+    #[inline(always)]
+    fn input(&self, x: f32) -> f32x4<S> {
+        f32x4::splat(self.simd, x).zip_low(self.y)
     }
 
     #[inline(always)]
-    fn input(&self, x: f32) -> f32x4<S> {
-        let [yp, ..] = *self.y;
-        f32x4::simd_from(self.simd, [x, x, yp, yp])
+    fn masked(&mut self, xv: f32x4<S>, flush: bool, first: bool) -> f32x4<S> {
+        let (y, mut s1, mut s2) = self.next(xv);
+        if flush {
+            s1 = flushed(s1, self.limit);
+            s2 = flushed(s2, self.limit);
+        }
+        let m = lane0_f32(self.simd, first);
+        self.s1 = m.select(s1, self.s1);
+        self.s2 = m.select(s2, self.s2);
+        y
     }
 }
 
@@ -362,31 +413,23 @@ impl<S: SimdToken> Pair for PairF32<S> {
 
     #[inline(always)]
     fn fill(&mut self, x: f32, flush: bool) {
-        let (y, mut s) = self.next(f32x4::simd_from(self.simd, [x, x, 0.0, 0.0]));
-        if flush {
-            s = flushed(s, self.limit);
-        }
-        self.s = first_half_f32(self.simd, true).select(s, self.s);
-        self.y = y;
+        self.y = self.masked(f32x4::simd_from(self.simd, [x, 0.0, 0.0, 0.0]), flush, true);
     }
 
     #[inline(always)]
     fn step(&mut self, x: f32) -> f32 {
-        let (y, s) = self.next(self.input(x));
-        self.s = s;
+        let (y, s1, s2) = self.next(self.input(x));
+        self.s1 = s1;
+        self.s2 = s2;
         self.y = y;
-        let [_, _, yb, _] = *y;
+        let [_, yb, ..] = *y;
         yb
     }
 
     #[inline(always)]
     fn drain(&mut self, flush: bool) -> f32 {
-        let (y, mut s) = self.next(self.input(0.0));
-        if flush {
-            s = flushed(s, self.limit);
-        }
-        self.s = first_half_f32(self.simd, false).select(s, self.s);
-        let [_, _, yb, _] = *y;
+        let xv = self.input(0.0);
+        let [_, yb, ..] = *self.masked(xv, flush, false);
         yb
     }
 
@@ -396,15 +439,72 @@ impl<S: SimdToken> Pair for PairF32<S> {
         let (os, _) = o.as_chunks_mut::<4>();
         for (x, o) in xs.iter().zip(os) {
             let [a, b, c, d] = *x;
-            let out = [self.step(a), self.step(b), self.step(c), self.step(d)];
-            *o = *f32x4::simd_from(self.simd, out);
+            let [oa, ob, oc, od] = o;
+            *oa = self.step(a);
+            *ob = self.step(b);
+            *oc = self.step(c);
+            *od = self.step(d);
         }
         self.flush();
+        self.y = opaque(self.simd, self.y);
+        self.s1 = opaque(self.simd, self.s1);
+        self.s2 = opaque(self.simd, self.s2);
     }
 
+    /// The flush behind a branch on whether a state of A or B is below the limit (the lanes 2
+    /// and 3 are not looked at): the branch is predicted, so the compare is off the chain from
+    /// `s1` to the next output; the result is the same, a flush changes no other value.
     #[inline(always)]
     fn flush(&mut self) {
-        self.s = flushed(self.s, self.limit);
+        let tiny = self.s1.abs().simd_lt(self.limit) | self.s2.abs().simd_lt(self.limit);
+        if tiny.to_bitmask() & 0b11 != 0 {
+            self.s1 = flushed(self.s1, self.limit);
+            self.s2 = flushed(self.s2, self.limit);
+        }
+    }
+}
+
+/// `v`, unchanged, as a value the compiler cannot look into: [`PairF32`] passes its state
+/// through this after every block of sixteen steps. Without it the compiler tracked the lanes
+/// of the state across the loop of the blocks and rebuilt the vectors between two blocks from
+/// their halves and the output of A through a general register, on the chain from one output
+/// to the next (0.8 cycles per sample at AVX2 on the Alder Lake model). An empty `asm!` block
+/// on x86 (as `keep` of the integer lanes), the value itself elsewhere.
+#[inline(always)]
+fn opaque<S: SimdToken>(simd: S, v: f32x4<S>) -> f32x4<S> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        f32x4::simd_from(simd, opaque_x86::keep(*v))
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = simd;
+        v
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[allow(unsafe_code)]
+mod opaque_x86 {
+    use core::arch::asm;
+    use core::arch::x86_64::__m128;
+
+    /// `v` through an empty `asm!` block in an `xmm` register (SSE2, so every x86-64 level).
+    #[inline(always)]
+    pub(super) fn keep(v: [f32; 4]) -> [f32; 4] {
+        // SAFETY: `[f32; 4]` and `__m128` have the same size, and every bit pattern is a
+        // valid value of both.
+        let mut r = unsafe { core::mem::transmute::<[f32; 4], __m128>(v) };
+        // SAFETY: an empty block: no instruction, no memory, stack or flags.
+        unsafe {
+            asm!(
+                "/* {v} */",
+                v = inout(xmm_reg) r,
+                options(pure, nomem, nostack, preserves_flags)
+            );
+        };
+        // SAFETY: as above.
+        unsafe { core::mem::transmute::<__m128, [f32; 4]>(r) }
     }
 }
 
@@ -445,12 +545,29 @@ fn cascade_f32<S: SimdToken>(
     input: &[f32],
     out: &mut [f32],
 ) {
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = simd.level().as_neon() {
+        return f32_neon::cascade(t, coefs, hist, phase, input, out);
+    }
+    cascade_pairs::<PairF32<S>>(simd, coefs, hist, phase, input, out);
+}
+
+/// The `f32` cascade with the pairs `P`: pair by pair, an odd last section alone.
+#[inline(always)]
+fn cascade_pairs<P: PairReal>(
+    t: P::Tok,
+    coefs: &[[f32; 5]],
+    hist: &mut [f32],
+    phase: usize,
+    input: &[f32],
+    out: &mut [f32],
+) {
     for (j, (c, h)) in coefs.chunks(2).zip(hist.chunks_mut(8)).enumerate() {
         let ph = (phase + 2 * j) % BLOCK;
         let src = (j == 0).then_some(input);
         match c {
             [a, b] => {
-                let mut p = PairF32::new(simd, a, b, h);
+                let mut p = P::new(t, a, b, h);
                 run_pair(&mut p, ph, src, out);
                 p.store(h);
             }
@@ -463,6 +580,187 @@ fn cascade_f32<S: SimdToken>(
                 }
             }
             _ => {}
+        }
+    }
+}
+
+/// The `f32` pair of NEON in 64-bit vectors, as KFR's `iir_state<float, 2>` on NEON: one
+/// `float32x2_t` `[A, B]` per quantity, so that every operation of a step is one instruction
+/// of one micro-operation. With the 128-bit vectors of [`PairF32`] every operation is two
+/// micro-operations on the Cortex-A72, and the compiler moved their unused upper halves
+/// through a general register on the chain from one output to the next.
+#[cfg(target_arch = "aarch64")]
+mod f32_neon {
+    use core::arch::aarch64::{
+        float32x2_t, vadd_f32, vbic_u32, vbsl_f32, vcalt_f32, vcreate_u32, vdup_n_f32, vext_f32,
+        vget_lane_f32, vget_lane_u64, vmul_f32, vorr_u32, vreinterpret_f32_u32,
+        vreinterpret_u32_f32, vreinterpret_u64_u32, vset_lane_f32, vsub_f32,
+    };
+
+    use fearless_simd::Neon;
+
+    use super::{BLOCK, Pair, PairReal, cascade_pairs, coef, store_f32};
+
+    fearless_simd::kernel!(
+        pub(super) fn cascade(
+            t: Neon,
+            coefs: &[[f32; 5]],
+            hist: &mut [f32],
+            phase: usize,
+            input: &[f32],
+            out: &mut [f32],
+        ) {
+            cascade_pairs::<PairNeon>(t, coefs, hist, phase, input, out);
+        }
+    );
+
+    /// Functions of the token around intrinsics (see `fearless_simd::kernel!`), as in the
+    /// module `int`.
+    macro_rules! kernels {
+        ($($(#[$m:meta])* fn $name:ident($tok:ident $(, $a:ident: $ty:ty)*) -> $ret:ty {
+            $($body:tt)*
+        })*) => {$(
+            $(#[$m])*
+            #[inline(always)]
+            fn $name(t: $tok $(, $a: $ty)*) -> $ret {
+                fearless_simd::kernel!(
+                    #[inline(always)]
+                    fn inner(_t: $tok $(, $a: $ty)*) -> $ret { $($body)* }
+                );
+                inner(t $(, $a)*)
+            }
+        )*};
+    }
+
+    kernels! {
+        /// `[a, b]`.
+        fn ab(Neon, a: f32, b: f32) -> float32x2_t { vset_lane_f32::<1>(b, vdup_n_f32(a)) }
+        /// `[x, y A]`: the input of A and the last output of A as the input of B.
+        fn feed(Neon, x: f32, y: float32x2_t) -> float32x2_t { vext_f32::<1>(vdup_n_f32(x), y) }
+        /// The lane A (`a`) or B (`!a`) of `x`, the other one of `y`.
+        fn pick(Neon, a: bool, x: float32x2_t, y: float32x2_t) -> float32x2_t {
+            let m = vcreate_u32(if a { 0x0000_0000_ffff_ffff } else { 0xffff_ffff_0000_0000 });
+            vbsl_f32(m, x, y)
+        }
+        /// `[lane A, lane B]`.
+        fn lanes(Neon, v: float32x2_t) -> [f32; 2] {
+            [vget_lane_f32::<0>(v), vget_lane_f32::<1>(v)]
+        }
+        /// The lane B.
+        fn lane_b(Neon, v: float32x2_t) -> f32 { vget_lane_f32::<1>(v) }
+        /// `flush_denormal` on both lanes, as [`super::flushed`]: `|s| < limit` becomes `+0.0`.
+        fn flushed(Neon, s: float32x2_t, limit: float32x2_t) -> float32x2_t {
+            let tiny = vcalt_f32(s, limit);
+            vreinterpret_f32_u32(vbic_u32(vreinterpret_u32_f32(s), tiny))
+        }
+        /// Whether a lane of `a` or of `b` is below `limit` in magnitude.
+        fn any_tiny(Neon, a: float32x2_t, b: float32x2_t, limit: float32x2_t) -> bool {
+            vget_lane_u64::<0>(vreinterpret_u64_u32(vorr_u32(
+                vcalt_f32(a, limit),
+                vcalt_f32(b, limit),
+            ))) != 0
+        }
+        /// `y = b0 x + s1`, `s1 = (b1 x + s2) - a1 y`, `s2 = b2 x - a2 y` in both lanes: the
+        /// fallback's `df2t`; `c` is `[b0, b1, b2, a1, a2]`, `s` is `[s1, s2]`.
+        fn df2t(Neon, c: &[float32x2_t; 5], s: [float32x2_t; 2], x: float32x2_t)
+            -> (float32x2_t, [float32x2_t; 2])
+        {
+            let [b0, b1, b2, a1, a2] = *c;
+            let [s1, s2] = s;
+            let y = vadd_f32(vmul_f32(b0, x), s1);
+            let s1 = vsub_f32(vadd_f32(vmul_f32(b1, x), s2), vmul_f32(a1, y));
+            let s2 = vsub_f32(vmul_f32(b2, x), vmul_f32(a2, y));
+            (y, [s1, s2])
+        }
+    }
+
+    /// Two `f32` sections A and B: every vector is `[A, B]`.
+    struct PairNeon {
+        t: Neon,
+        /// `[b0, b1, b2, a1, a2]`.
+        c: [float32x2_t; 5],
+        limit: float32x2_t,
+        /// `[s1, s2]`.
+        s: [float32x2_t; 2],
+        /// The outputs of the last step.
+        y: float32x2_t,
+    }
+
+    impl PairNeon {
+        /// A step that changes only the state of A (`first`) or only that of B.
+        #[inline(always)]
+        fn masked(&mut self, xv: float32x2_t, flush: bool, first: bool) -> float32x2_t {
+            let (y, mut s) = df2t(self.t, &self.c, self.s, xv);
+            if flush {
+                s = s.map(|v| flushed(self.t, v, self.limit));
+            }
+            let [s1, s2] = s;
+            let [o1, o2] = self.s;
+            self.s = [pick(self.t, first, s1, o1), pick(self.t, first, s2, o2)];
+            y
+        }
+    }
+
+    impl PairReal for PairNeon {
+        type Tok = Neon;
+
+        #[inline(always)]
+        fn new(t: Neon, a: &[f32; 5], b: &[f32; 5], h: &[f32]) -> Self {
+            let at = |i: usize| h.get(i).copied().unwrap_or(0.0);
+            let c = |i: usize| ab(t, coef(a, i), coef(b, i));
+            PairNeon {
+                t,
+                c: [c(0), c(1), c(2), c(3), c(4)],
+                limit: ab(t, 1e-30, 1e-30),
+                s: [ab(t, at(0), at(4)), ab(t, at(1), at(5))],
+                y: ab(t, 0.0, 0.0),
+            }
+        }
+
+        #[inline(always)]
+        fn store(&self, h: &mut [f32]) {
+            let [[s1a, s1b], [s2a, s2b]] = self.s.map(|v| lanes(self.t, v));
+            store_f32(h, [s1a, s2a, s1b, s2b]);
+        }
+    }
+
+    impl Pair for PairNeon {
+        type T = f32;
+
+        #[inline(always)]
+        fn fill(&mut self, x: f32, flush: bool) {
+            self.y = self.masked(ab(self.t, x, 0.0), flush, true);
+        }
+
+        #[inline(always)]
+        fn step(&mut self, x: f32) -> f32 {
+            let (y, s) = df2t(self.t, &self.c, self.s, feed(self.t, x, self.y));
+            self.s = s;
+            self.y = y;
+            lane_b(self.t, y)
+        }
+
+        #[inline(always)]
+        fn drain(&mut self, flush: bool) -> f32 {
+            let xv = feed(self.t, 0.0, self.y);
+            lane_b(self.t, self.masked(xv, flush, false))
+        }
+
+        #[inline(always)]
+        fn block(&mut self, x: &[f32; BLOCK], o: &mut [f32; BLOCK]) {
+            for (o, x) in o.iter_mut().zip(x) {
+                *o = self.step(*x);
+            }
+            self.flush();
+        }
+
+        #[inline(always)]
+        /// The flush behind a branch, as for [`super::PairF32`].
+        fn flush(&mut self) {
+            let [s1, s2] = self.s;
+            if any_tiny(self.t, s1, s2, self.limit) {
+                self.s = self.s.map(|v| flushed(self.t, v, self.limit));
+            }
         }
     }
 }

@@ -30,7 +30,9 @@ on:
         type: boolean
         default: false
       run_count:
-        description: Kernels, backends, benches, xtask or the toolchain changed.
+        description: >-
+          Kernels, backends, benches, xtask or the toolchain changed: `check` builds the
+          measurement harness (the instruction counts themselves run in scope `full` only).
         type: boolean
         default: true
       run_golden:
@@ -105,6 +107,12 @@ jobs:
         run: |
           pip install -r tests/golden/requirements.txt
           python tests/golden/generate.py --check
+      # The instruction counts (count_x64) run at night only (D175), so a pull request checks
+      # that the measurement harness still builds. Without the C references (they are optional,
+      # benches/cref-sys/build.rs) the code behind their cfgs is left to the nightly counts.
+      - name: Bench harness compiles (benches workspace, without the C references)
+        if: inputs.run_count
+        run: cargo check --manifest-path benches/Cargo.toml --workspace --all-targets
 
   check_msrv:
     name: check_msrv
@@ -786,10 +794,13 @@ jobs:
   # the compilers of the C references (benches/refs/build.sh), glibc (VOLK's generic atan2 and
   # rotator call libm) and the counters are the same in every run and on a development machine
   # with the same image; benches/results/*.json record the compiler versions and VOLK's flags.
+  # Nightly and manual runs only (D175): the speed target is the simulated cycles (D68), the
+  # instruction counts are the gate against gross outliers, and a pull request that needs them
+  # runs `gh workflow run nightly.yml --ref <branch>`.
   count_x64:
     name: count_x64
     needs: build_x64_linux
-    if: ${{ inputs.run_count }}
+    if: ${{ inputs.scope == 'full' }}
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
@@ -863,27 +874,18 @@ jobs:
           gcc --version | head -n 1
           valgrind --version
       - name: Count the x86-64 levels (sse2 and sse4.2 under SDE, avx2, avx2-runtime)
-        # The misaligned and small-block variants are information and are not judged: pull
-        # requests skip them, the nightly run measures them for the committed results.
-        shell: bash
-        run: |
-          if [ "${{ inputs.scope }}" = "full" ]; then
-            cargo xtask count --platform x86_64
-          else
-            cargo xtask count --platform x86_64 --no-variants --no-write
-          fi
+        # With the misaligned and small-block variants (information, not judged) for the
+        # committed results.
+        run: cargo xtask count --platform x86_64
       - name: Count the FM receiver pipeline
-        if: inputs.scope == 'full'
         run: cargo xtask count --pipeline
       # The counts depend on the CPU of the runner (the pool mixes EPYC 7763, 9V45 and 9V74) and
       # on the toolchain of the day, so they cannot be compared byte for byte against the
       # committed files. Show the drift and keep the fresh results instead of failing the run;
       # the limits are judged by `cargo xtask count` itself.
       - name: Results drift against the committed files (informational)
-        if: inputs.scope == 'full'
         run: git diff -- benches/results
       - name: Keep the fresh results
-        if: inputs.scope == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: count-results-x64

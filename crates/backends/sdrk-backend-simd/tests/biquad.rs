@@ -505,6 +505,58 @@ fn f32_is_bit_exact_with_zeros_nan_infinity_and_subnormals() {
     }
 }
 
+/// The flush of an `f32` pair with the states of one section in the flush range and those of
+/// the other not: the SIMD path skips the flush when no state of the pair is below the limit
+/// (a branch), and must then flush exactly the tiny lanes. `tiny` is an FIR section whose two
+/// states are `1e-32 x` (nonzero and below 1e-30 for the noise input of magnitude about 1),
+/// `loud` one whose states are `1e30` times its input (normal also for a tiny input), and
+/// `stable` an ordinary low-pass: each order of them as the pair, alone and ahead of a third
+/// section, in one call and in calls of 1 to 40 samples (every phase of the flush schedule),
+/// against the fallback. The test fails if the branch looks at only one of the two sections.
+#[test]
+fn f32_flushes_exactly_the_tiny_states_of_a_pair() {
+    let tiny = [0.0, 1e-32, 1e-32, 0.0, 0.0];
+    let loud = [1e30, 1e30, 1e30, 0.0, 0.0];
+    let stable = stable(0.1, 0.7);
+    let mut rng = Rng::new(2231);
+    let x = re_f32(&c32_noise(&mut rng, 600, 1.0));
+    for pair in [
+        [tiny, loud],
+        [stable, tiny],
+        [tiny, tiny],
+        [stable, stable],
+        [tiny, stable],
+    ] {
+        for third in [None, Some(stable)] {
+            let mut coefs = pair.to_vec();
+            coefs.extend(third);
+            check_f32(&coefs, &x, &format!("{coefs:?} in one call"));
+            let n = coefs.len();
+            let new = || BiquadRealState::<f32, _, _>::new(coefs.clone(), vec![0.0f32; 4 * n]);
+            let (mut sw, mut sg) = (new().unwrap(), new().unwrap());
+            let (mut want, mut got) = (vec![0.0f32; x.len()], vec![0.0f32; x.len()]);
+            let mut done = 0;
+            let mut len = 1;
+            while done < x.len() {
+                let r = done..(done + len).min(x.len());
+                Fallback
+                    .biquad_real(&mut sw, &x[r.clone()], &mut want[r.clone()])
+                    .unwrap();
+                Simd.biquad_real(&mut sg, &x[r.clone()], &mut got[r.clone()])
+                    .unwrap();
+                done = r.end;
+                len = len % 40 + 1;
+            }
+            let what = format!("{coefs:?} in chunks");
+            assert!(same_f32(&want, &got), "{what}: output differs");
+            assert!(
+                same_f32(sw.history(), sg.history()),
+                "{what}: history differs"
+            );
+        }
+    }
+}
+
 /// Random chunks, then `reset` and `set_coefs` in the middle of a stream: the phase of the
 /// flush schedule is part of the state.
 #[test]

@@ -28,6 +28,21 @@ pub(super) trait FbMac: Copy {
         Self::mac(acc, h, x);
     }
     fn finish(acc: Self::Acc) -> Self;
+    /// The `count` outputs of `fir_decimate` (windows `s` samples apart, the first one after
+    /// `seen` samples of `input`): [`progression`], unless the type has a faster form with the
+    /// same bits for the target.
+    #[inline]
+    fn decimate_outputs(
+        taps: &[Self::Tap],
+        hist: &[Self],
+        input: &[Self],
+        seen: usize,
+        s: usize,
+        out: &mut [Self],
+    ) -> Result<()> {
+        let count = out.len();
+        progression(taps, 1, hist, input, 0, seen, s, count, out.iter_mut())
+    }
 }
 
 impl FbMac for C32 {
@@ -73,6 +88,18 @@ impl FbMac for CQ15 {
             re: acc.0.finish(),
             im: acc.1.finish(),
         }
+    }
+    #[cfg(target_arch = "aarch64")]
+    #[inline]
+    fn decimate_outputs(
+        taps: &[Q15],
+        hist: &[CQ15],
+        input: &[CQ15],
+        seen: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Result<()> {
+        a64::decimate(taps, hist, input, seen, s, out)
     }
 }
 
@@ -135,23 +162,29 @@ const NARROW_GROUP: usize = 8;
 /// `i < seen`, then the history from its newest sample backwards. `fir` and `fir_decimate` are
 /// the case `l = 1`, `phase = 0`.
 #[derive(Clone, Copy, Debug)]
-struct Out {
+pub(super) struct Out {
     /// Index of the first tap of the branch (`< l`).
-    phase: usize,
+    pub(super) phase: usize,
     /// Number of samples of `input` up to the newest one of the output.
-    seen: usize,
+    pub(super) seen: usize,
 }
 
 /// Number of taps of the branch of `phase`: `ceil((N - phase) / l)`.
 #[inline]
-fn branch_len(n_taps: usize, l: usize, phase: usize) -> usize {
+pub(super) fn branch_len(n_taps: usize, l: usize, phase: usize) -> usize {
     n_taps.saturating_sub(phase).div_ceil(l)
 }
 
 /// The sum of `out` over its whole branch, in ascending order: the samples of `input` first,
 /// then those of the history.
 #[inline]
-fn single<T: FbMac>(taps: &[T::Tap], l: usize, hist: &[T], input: &[T], out: Out) -> Result<T> {
+pub(super) fn single<T: FbMac>(
+    taps: &[T::Tap],
+    l: usize,
+    hist: &[T],
+    input: &[T],
+    out: Out,
+) -> Result<T> {
     let internal = || Error::Internal("filter window");
     let mut acc = T::zero();
     let len = branch_len(taps.len(), l, out.phase);
@@ -418,20 +451,115 @@ fn decimate<T: FbMac>(
         (len, first + produced * factor - len)
     };
     let out = output.get_mut(..produced).ok_or_else(internal)?;
-    progression(
-        taps,
-        1,
-        hist,
-        input,
-        0,
-        first + 1,
-        factor,
-        produced,
-        out.iter_mut(),
-    )?;
+    T::decimate_outputs(taps, hist, input, first + 1, factor, out)?;
     *countdown = next;
     update_history(hist, input.get(..consumed).ok_or_else(internal)?)?;
     Ok(Progress { consumed, produced })
+}
+
+/// `fir_decimate` `CQ15` on AArch64 (scalar, D40-style form per target): the grouped engine with
+/// [`a64::GROUP`] outputs per group, and the first outputs of a call, whose windows reach into
+/// the history, grouped as well in a stack copy of the history and the start of the input.
+///
+/// The hot loop is the one of [`group_strided`]: per tap one `smaddl` for each component of
+/// every output of the group and two `ldrsh` for its sample. With 8 outputs the 16
+/// accumulators, the tap and the window pointers do not fit into the 31 integer registers of
+/// AArch64 (two accumulators spilled, four more loads and stores per tap); 7 outputs fit. The
+/// history outputs (`ceil(N / M)` per call, 13 of 410 at 127 taps and decimation by 10) took
+/// the one-output loop of [`single`]. The sums are the same exact `i64` sums, so the outputs are
+/// those of every other form bit for bit.
+#[cfg(target_arch = "aarch64")]
+mod a64 {
+    use super::{progression, progression_of};
+    use crate::error::{Error, Result};
+    use crate::types::{CQ15, Q15};
+
+    /// Outputs per group.
+    pub(super) const GROUP: usize = 7;
+    /// Longest filter whose first outputs are grouped in the stack copy (it holds `2 (N - 1)`
+    /// samples).
+    const HEAD_TAPS: usize = 256;
+
+    /// [`super::FbMac::decimate_outputs`] of `CQ15`.
+    pub(super) fn decimate(
+        taps: &[Q15],
+        hist: &[CQ15],
+        input: &[CQ15],
+        seen: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Result<()> {
+        let len = taps.len();
+        // Outputs `t` with `seen + t s < len` reach into the history.
+        let n_head = if seen < len && s > 0 {
+            (len - seen).div_ceil(s).min(out.len())
+        } else {
+            0
+        };
+        let (oh, ob) = out.split_at_mut(n_head);
+        if n_head > 0 {
+            if len <= HEAD_TAPS && hist.len() + 1 == len {
+                head(taps, hist, input, seen, s, oh)?;
+            } else {
+                progression(taps, 1, hist, input, 0, seen, s, n_head, oh.iter_mut())?;
+            }
+        }
+        grouped(taps, hist, input, seen + n_head * s, s, ob)
+    }
+
+    /// The outputs of `out` (the first one after `at` samples) in groups of [`GROUP`], the
+    /// remaining fewer than [`GROUP`] in groups of 4 and 2 (a single output is bound by the
+    /// latency of its two sums).
+    fn grouped(
+        taps: &[Q15],
+        hist: &[CQ15],
+        input: &[CQ15],
+        at: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Result<()> {
+        let main = out.len() - out.len() % GROUP;
+        let (om, rest) = out.split_at_mut(main);
+        progression_of::<CQ15, GROUP>(taps, 1, hist, input, 0, at, s, main, om.iter_mut())?;
+        let at = at + main * s;
+        let fours = rest.len() & !3;
+        let (o4, o2) = rest.split_at_mut(fours);
+        progression_of::<CQ15, 4>(taps, 1, hist, input, 0, at, s, fours, o4.iter_mut())?;
+        let count = o2.len();
+        progression_of::<CQ15, 2>(
+            taps,
+            1,
+            hist,
+            input,
+            0,
+            at + fours * s,
+            s,
+            count,
+            o2.iter_mut(),
+        )
+    }
+
+    /// The first outputs, whose windows end before sample `N` of the input: in the stack copy
+    /// `history ++ input[..N - 1]`, where every window lies inside the copy.
+    #[inline(never)]
+    fn head(
+        taps: &[Q15],
+        hist: &[CQ15],
+        input: &[CQ15],
+        seen: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Result<()> {
+        let internal = || Error::Internal("decimation head");
+        let mut buf = [CQ15::default(); 2 * HEAD_TAPS];
+        let n = hist.len();
+        let take = input.len().min(n);
+        let buf = buf.get_mut(..n + take).ok_or_else(internal)?;
+        let (bh, bi) = buf.split_at_mut(n);
+        bh.copy_from_slice(hist);
+        bi.copy_from_slice(input.get(..take).ok_or_else(internal)?);
+        grouped(taps, &[], buf, seen + n, s, out)
+    }
 }
 
 /// Greatest common divisor.
@@ -772,6 +900,25 @@ mod tests {
     fn cq15_batches_equal_the_definition_bit_for_bit() {
         all::<CQ15>(false);
         all::<CQ15>(true);
+    }
+
+    /// `CQ15` decimation of longer filters: the first outputs of a call grouped in the stack
+    /// copy of the AArch64 form (up to 256 taps) and beyond it (257, 300), every factor where
+    /// the groups of 7, 4 and 2 and the single outputs occur at the start and the end of a call.
+    #[test]
+    fn cq15_decimation_of_long_filters_equals_the_definition_bit_for_bit() {
+        for n_taps in [127, 255, 256, 257, 300] {
+            for m in [1, 2, 6, 10, 13, 40] {
+                for extreme in [false, true] {
+                    check::<CQ15>(
+                        n_taps as u32 + 1000 * m as u32,
+                        n_taps,
+                        Kind::Decimate(m),
+                        extreme,
+                    );
+                }
+            }
+        }
     }
 
     #[test]

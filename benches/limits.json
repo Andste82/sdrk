@@ -601,7 +601,7 @@
     },
     "avx2-runtime": {
       "status": "dev",
-      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); 1.39 times the instructions of the fixed build (225.72 against 162.68 per sample); open until a grouped SIMD branch replaces both"
+      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); 1.79 times the instructions of the fixed build (225.72 against 125.89 per sample; 1.39 against 162.68 before the fixed build's fallback got its own scalar loop, D173); open until a grouped SIMD branch replaces both"
     }
   },
   "resample_real_q15": {
@@ -753,27 +753,31 @@
   "power_db_q15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.98 and 1.95 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.57 and 0.64 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+      "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the run-time-detection build counts 6.69 instructions per sample, the fixed `avx2` build 6.49 (1.03x): the same loop of the three passes but for register allocation inside the `vectorize_avx2` wrapper of the run-time dispatch. No gross outlier, and the speed target is the simulated cycles (D68), so the entry is information"
     }
   },
   "mag_sq_fallback": {
@@ -1103,7 +1107,8 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "the run-time-detection build counts 1.07x the instructions of the fixed `avx2` build (6.28 against 5.84 per sample): a fixed cost of about 28 instructions per call of 64 points, 18 of them in `level::dispatch_fn!`. No gross outlier, and the speed target is the simulated cycles (D68), so the entry is information"
     }
   },
   "fft_1024": {
@@ -1760,7 +1765,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item I20-1 in docs/open-items.md (the `simd128` instruction gap of the grouped fallback)"
+      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #71 (the `simd128` instruction gap of the grouped fallback)"
     }
   },
   "fir_decimate_fallback": {
@@ -1792,22 +1797,22 @@
   "fir_decimate_cq15_fallback": {
     "sse2": {
       "status": "dev",
-      "waiver": "1.36 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, widening to 64 bits, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "1.36 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, widening to 64 bits, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "sse4.2": {
       "status": "dev",
-      "waiver": "1.58 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, `pmovsxdq`, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "1.58 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (`pmullw`/`pmulhw`, `pmovsxdq`, `paddq`); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 178.89 to 118.11 instructions per sample. the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "avx2": {
       "status": "dev",
-      "waiver": "1.34 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. Its whole-loop `avx2` cycles are 20.13 / 17.45 against 42.02 / 17.53 for CMSIS-DSP (`znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "1.34 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, within the `dev` limit. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. Its whole-loop `avx2` cycles are 20.13 / 17.45 against 42.02 / 17.53 for CMSIS-DSP (`znver3` / `alderlake`, D37). the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "avx512": {
       "status": "release"
     },
     "neon": {
       "status": "dev",
-      "waiver": "2.40 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening NEON multiply-adds into 64-bit lanes); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 83.33 to 92.54 instructions per sample (more instructions here, but fewer simulated cycles: 39.50 / 35.40 to 37.85 / 34.16 per sample on `cortex-a72` / `cortex-a76`, per block). Open item I20-1 in docs/open-items.md: a vectorizable `Q15` form of the strided group"
+      "waiver": "2.09 times the instructions of CMSIS-DSP's `arm_fir_decimate_q15` at this level (2.40 before D172, which groups 7 outputs on AArch64 so that their accumulators fit the integer registers and groups the first outputs of a call too; 35.78 / 33.33 -> 29.57 / 27.63 simulated cycles per sample against CMSIS-DSP's 16.42 / 16.90 on `cortex-a72` / `cortex-a76`), above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening NEON multiply-adds into 64-bit lanes); our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds. Inlining the per-tap step of the group (an out-of-line closure before, one call per tap) took it from 83.33 to 92.54 instructions per sample (more instructions here, but fewer simulated cycles: 39.50 / 35.40 to 37.85 / 34.16 per sample on `cortex-a72` / `cortex-a76`, per block). the gap in simulated cycles is tracked in issue #71: a vectorizable `Q15` form of the strided group"
     },
     "simd128": {
       "status": "release"
@@ -1835,12 +1840,10 @@
   },
   "fir_interpolate_cq15_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "1.52 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "1.52 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "avx2": {
       "status": "release"
@@ -1849,8 +1852,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "1.54 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` (run on `re` and `im`) at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`ldrsh` and `smaddl` per multiply-add). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (79.4 / 73.5 against 137.9 / 152.9, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -1926,17 +1928,15 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item I20-1 in docs/open-items.md (the `simd128` instruction gap of the grouped fallback)"
+      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #71 (the `simd128` instruction gap of the grouped fallback)"
     }
   },
   "fir_interpolate_real_q15_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "1.62 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "1.62 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`movsx`, `imul` and `add` per multiply-add plus copies and spills of its 16 `i64` accumulators, more than the free registers of x86-64). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "dev"
     },
     "avx2": {
       "status": "release"
@@ -1945,8 +1945,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "1.69 times the instructions of CMSIS-DSP's `arm_fir_interpolate_q15` at this level, above the `dev` limit of 1.50. The gap is not the accuracy class: CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so it is our code generation. CMSIS-DSP's loop computes two outputs at a time and keeps the samples of four taps in registers, so each loaded tap and sample serves two multiply-adds; our grouped form loads every sample again for every tap and output and compiles here to scalar code (`ldrsh` and `smaddl` per multiply-add). At `avx2` and `avx512` it is within the release limit, and its whole-loop `avx2` cycles are below CMSIS-DSP's (47.6 / 41.9 against 68.9 / 76.5, `znver3` / `alderlake`, D37). Open item I20-1 in docs/open-items.md: a `Q15` form for these levels that reuses the loaded samples across taps"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -2291,10 +2290,10 @@
   },
   "fft_64_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2306,16 +2305,15 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP's `arm_cfft_f32` uses radix-8 and radix-4 passes, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+      "status": "release"
     }
   },
   "fft_1024_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2327,15 +2325,15 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "fft_4096_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2344,11 +2342,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP's `arm_cfft_f32` uses radix-8 and radix-4 passes, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+      "status": "dev"
     }
   },
   "fft_cq15_1024_fallback": {
@@ -2379,8 +2376,7 @@
   },
   "fft_cq15_1024_default_fallback": {
     "sse2": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+      "status": "release"
     },
     "sse4.2": {
       "status": "release"
@@ -2392,17 +2388,15 @@
       "status": "release"
     },
     "neon": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` truncates the shifts of its radix-4 passes: 41.6 dB on the measured input against 46.1 dB of our fixed-scaling fallback, which rounds every radix-2 butterfly as the contract prescribes. A lower accuracy class (D34, as `power_db` against VOLK): where it is cheaper by more than the release limit the entry is information"
+      "status": "release"
     }
   },
   "rfft_1024_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
       "status": "dev"
@@ -2414,11 +2408,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP's `arm_rfft_fast_f32` uses a radix-8 and radix-4 complex FFT, which need fewer operations than the radix-2 butterflies that `docs/kernels.md` prescribes for the fallback (no contract change, D34); in wasm32 instructions the gap is above the dev limit, so the entry is information and the fallback is judged by its simulated cycles at avx2"
+      "status": "release"
     }
   },
   "convert_cs8_fallback": {

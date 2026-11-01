@@ -53,7 +53,7 @@ const FM480_FLOW: &str = r#"{
 /// The whole `fm_stereo_demod` block on a `cf32` input at 480 kHz with its defaults.
 const STEREO480_FLOW: &str = r#"{
   "sdrk": 1,
-  "name": "fm-stereo-480k",
+  "name": "fm-stereo-demod-480k",
   "settings": { "precision": "f32", "max_chunk": 4096 },
   "inputs": { "rf": { "format": "cf32", "rate_hz": 480000 } },
   "nodes": { "demod": { "kind": "fm_stereo_demod", "params": {} } },

@@ -9,7 +9,7 @@ import math
 import numpy as np
 import scipy.signal
 
-# Number of phases of the tuned resampler (sdrk_blocks::TUNED_PHASES).
+# Number of phases of the tuned resampler (sdrk_blocks::RESAMPLE_TUNED_PHASES).
 PHASES = 128
 
 

@@ -25,7 +25,7 @@ type AudioState<T, S> = ResampleRealState<
 >;
 
 /// Samples per piece the block processes at a time (the size of its two work buffers).
-pub const FM_CHUNK: usize = 256;
+pub const FM_DEMOD_CHUNK: usize = 256;
 
 /// Largest tap count of the audio filter.
 const AUDIO_MAX_TAPS: usize = 1023;
@@ -276,8 +276,8 @@ impl<T: BlockSample, S: Storage> FmDemodBlock<T, S> {
         } else {
             None
         };
-        let demod = storage.alloc::<T::Real>(FM_CHUNK)?;
-        let scratch = storage.alloc::<T::Real>(FM_CHUNK)?;
+        let demod = storage.alloc::<T::Real>(FM_DEMOD_CHUNK)?;
+        let scratch = storage.alloc::<T::Real>(FM_DEMOD_CHUNK)?;
         let deemph = if config.deemphasis_us > 0.0 {
             Some(DeemphasisState::new(config.deemphasis_us * 1e-6, rate_in)?)
         } else {
@@ -304,8 +304,8 @@ impl<T: BlockSample, S: Storage> FmDemodBlock<T, S> {
             plan.add::<T::Real>(n)?;
             plan.add::<T::Real>(n)?;
         }
-        plan.add::<T::Real>(FM_CHUNK)?;
-        plan.add::<T::Real>(FM_CHUNK)?;
+        plan.add::<T::Real>(FM_DEMOD_CHUNK)?;
+        plan.add::<T::Real>(FM_DEMOD_CHUNK)?;
         Ok(plan.bytes())
     }
 
@@ -333,7 +333,7 @@ where
         loop {
             let room = output.len() - produced;
             let m = (input.len() - consumed)
-                .min(FM_CHUNK)
+                .min(FM_DEMOD_CHUNK)
                 .min(room.saturating_mul(dec));
             if m == 0 {
                 break;

@@ -261,7 +261,7 @@ fn a_real_tone_in_the_stop_band_is_attenuated_too() {
 }
 
 #[test]
-fn real_to_complex_maps_f_to_f_minus_a_quarter_and_rejects_the_mirror() {
+fn real_to_iq_maps_f_to_f_minus_a_quarter_and_rejects_the_mirror() {
     let fs = FS as f64;
     let c = cfg();
     let limit = 10f64.powf(-57.0 / 20.0);
@@ -346,7 +346,7 @@ where
     assert!(same_bits(&whole, &run_block(&mut b, &x, None)));
 }
 
-fn invariance_r2c<T: BlockSample>()
+fn invariance_real_to_iq<T: BlockSample>()
 where
     Sdrk: RealToComplex<T>,
 {
@@ -378,8 +378,8 @@ fn the_blocks_are_independent_of_the_chunking() {
     invariance_complex::<CQ15>();
     invariance_real::<f32>();
     invariance_real::<Q15>();
-    invariance_r2c::<C32>();
-    invariance_r2c::<CQ15>();
+    invariance_real_to_iq::<C32>();
+    invariance_real_to_iq::<CQ15>();
 }
 
 #[test]

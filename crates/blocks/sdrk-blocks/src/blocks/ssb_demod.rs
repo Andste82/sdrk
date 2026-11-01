@@ -17,7 +17,7 @@ use crate::sample::{BlockSample, TunedElem};
 use crate::storage::{Plan, Storage};
 
 /// Samples per piece the block processes at a time (the size of its two work buffers).
-pub const SSB_CHUNK: usize = 256;
+pub const SSB_DEMOD_CHUNK: usize = 256;
 
 /// The sideband an [`SsbDemodBlock`] passes.
 ///
@@ -374,8 +374,8 @@ impl<T: BlockSample, S: Storage> SsbDemodBlock<T, S> {
             *t = <T as TunedElem>::tap(lp.tap(i))?;
         }
         let hist = storage.alloc::<T>(n - 1)?;
-        let a = storage.alloc::<T>(SSB_CHUNK)?;
-        let b = storage.alloc::<T>(SSB_CHUNK)?;
+        let a = storage.alloc::<T>(SSB_DEMOD_CHUNK)?;
+        let b = storage.alloc::<T>(SSB_DEMOD_CHUNK)?;
         let rate_out = divide_rate(rate_in, config.audio_decimation)?;
         let centre_hz = config.centre_hz();
         let s = config.sideband.sign();
@@ -399,8 +399,8 @@ impl<T: BlockSample, S: Storage> SsbDemodBlock<T, S> {
         let mut plan = Plan::default();
         plan.add::<T::Real>(n)?;
         plan.add::<T>(n - 1)?;
-        plan.add::<T>(SSB_CHUNK)?;
-        plan.add::<T>(SSB_CHUNK)?;
+        plan.add::<T>(SSB_DEMOD_CHUNK)?;
+        plan.add::<T>(SSB_DEMOD_CHUNK)?;
         Ok(plan.bytes())
     }
 
@@ -430,11 +430,11 @@ where
     fn process(&mut self, input: &[T], output: &mut [T::Real]) -> Result<Progress> {
         let (mut consumed, mut produced) = (0usize, 0usize);
         loop {
-            let room = (output.len() - produced).min(SSB_CHUNK);
+            let room = (output.len() - produced).min(SSB_DEMOD_CHUNK);
             // The piece never holds an input sample the filter would leave unconsumed, so the
             // first oscillator stays exact.
             let m = (input.len() - consumed)
-                .min(SSB_CHUNK)
+                .min(SSB_DEMOD_CHUNK)
                 .min(self.fir.max_input_for_output(room));
             if m == 0 {
                 break;

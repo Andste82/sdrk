@@ -16,7 +16,7 @@ use crate::sample::{BlockReal, BlockSample, TunedElem};
 use crate::storage::{Plan, Storage};
 
 /// Number of phases of the tuned resampler's filter bank.
-pub const TUNED_PHASES: usize = 128;
+pub const RESAMPLE_TUNED_PHASES: usize = 128;
 
 /// Extra samples of the tuned resampler's work buffer beyond the filter length.
 const WORK_EXTRA: usize = 64;
@@ -244,9 +244,9 @@ impl ResampleConfig {
             });
         }
         let mode = if self.tunable {
-            let phases = TUNED_PHASES as f64;
+            let phases = RESAMPLE_TUNED_PHASES as f64;
             let (n_hi, beta) = kaiserord(spec.attenuation_db, spec.transition_hz, phases * fin)?;
-            let k = n_hi.div_ceil(TUNED_PHASES);
+            let k = n_hi.div_ceil(RESAMPLE_TUNED_PHASES);
             if k > self.max_taps {
                 return Err(Error::OutOfRange {
                     name: "max_taps",
@@ -355,7 +355,7 @@ impl ResampleConfig {
                 p.add::<E>(taps.div_ceil(l))?;
             }
             PlanMode::Tuned { k, .. } => {
-                p.add::<E::Tap>(TUNED_PHASES * k)?;
+                p.add::<E::Tap>(RESAMPLE_TUNED_PHASES * k)?;
                 p.add::<E>(k + WORK_EXTRA)?;
             }
         }
@@ -391,20 +391,20 @@ impl<E: TunedElem, S: Storage> TunedCore<E, S> {
         beta: f64,
         storage: &mut S,
     ) -> Result<Self> {
-        let phases = TUNED_PHASES as f64;
+        let phases = RESAMPLE_TUNED_PHASES as f64;
         let fin = hz(rate_in);
         let proto = Lowpass::new(
             plan.spec.cutoff_hz,
             phases * fin,
             DesignWindow::Kaiser { beta },
-            TUNED_PHASES * k,
+            RESAMPLE_TUNED_PHASES * k,
         )?;
-        let mut bank = storage.alloc::<E::Tap>(TUNED_PHASES * k)?;
+        let mut bank = storage.alloc::<E::Tap>(RESAMPLE_TUNED_PHASES * k)?;
         for (idx, t) in bank.as_mut().iter_mut().enumerate() {
             // Phase p holds h[p + i P] reversed, so that a dot product with the oldest sample
             // first applies the newest sample to h[p].
             let (p, j) = (idx / k, idx % k);
-            *t = E::tap(proto.tap(p + (k - 1 - j) * TUNED_PHASES) * phases)?;
+            *t = E::tap(proto.tap(p + (k - 1 - j) * RESAMPLE_TUNED_PHASES) * phases)?;
         }
         let work = storage.alloc::<E>(k + WORK_EXTRA)?;
         let rate_out = hz(plan.rate_out);
@@ -459,7 +459,7 @@ impl<E: TunedElem, S: Storage> TunedCore<E, S> {
         let frac = self.pos & 0xFFFF_FFFF;
         let phase = (frac >> 25) as usize;
         let mu = ((frac >> 9) & 0xFFFF) as u32;
-        let wrap = phase + 1 == TUNED_PHASES;
+        let wrap = phase + 1 == RESAMPLE_TUNED_PHASES;
         if index + 1 + usize::from(wrap) > self.filled {
             return Ok(None);
         }
@@ -534,7 +534,11 @@ fn map_nominal(ratio: Ratio, rel_in: u64) -> u64 {
 }
 
 fn tuned_delay(k: usize) -> Delay {
-    Delay::new((TUNED_PHASES * k - 1) as u64, 2 * TUNED_PHASES as u64).unwrap_or(Delay::ZERO)
+    Delay::new(
+        (RESAMPLE_TUNED_PHASES * k - 1) as u64,
+        2 * RESAMPLE_TUNED_PHASES as u64,
+    )
+    .unwrap_or(Delay::ZERO)
 }
 
 /// Resampler for complex signals (`C32`, `CQ15`).

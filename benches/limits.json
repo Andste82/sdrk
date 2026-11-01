@@ -774,6 +774,10 @@
     "simd128": {
       "status": "info",
       "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
+    },
+    "avx2-runtime": {
+      "status": "release",
+      "waiver": "the run-time-detection build counts 6.69 instructions per sample (6.66 before D166), the fixed `avx2` build 6.49 (6.65 before): D166 made the fixed build shorter, the run-time build not. The hot loop of the three passes is the same code in both builds but for register allocation: 213 instead of 207 instructions per block of 32 samples inside the `vectorize_avx2` wrapper of the run-time dispatch (three register copies, two spill stores or reloads and one broadcast more). Open item I20-2 in docs/open-items.md"
     }
   },
   "mag_sq_fallback": {

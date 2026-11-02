@@ -88,6 +88,54 @@ impl Delay {
         let num = left.checked_add(right).ok_or(overflow)?;
         Ok(Delay { num, den: lcm }.reduced())
     }
+
+    /// Exact quotient of the delay by a ratio, in lowest terms: `self * ratio.den / ratio.num`.
+    ///
+    /// Converts a delay counted in the output samples of a stage into input samples of that
+    /// stage (a ratio is output over input). Fails on overflow of the reduced result.
+    ///
+    /// ```
+    /// use sdrk_core::timing::{Delay, Ratio};
+    /// // 8 output samples of a 1/4 decimator are 32 input samples.
+    /// let d = Delay::new(8, 1)?.div_ratio(Ratio::new(1, 4)?)?;
+    /// assert_eq!(d, Delay::new(32, 1)?);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn div_ratio(self, ratio: Ratio) -> Result<Delay> {
+        let overflow = Error::InvalidParameter("delay quotient overflows");
+        if ratio.num() == 0 || ratio.den() == 0 {
+            return Err(Error::InvalidParameter("delay divided by a zero ratio"));
+        }
+        let num = u128::from(self.num) * u128::from(ratio.den());
+        let den = u128::from(self.den) * u128::from(ratio.num());
+        let g = gcd128(num, den).max(1);
+        let num = u64::try_from(num / g).map_err(|_| overflow.clone())?;
+        let den = u64::try_from(den / g).map_err(|_| overflow)?;
+        Ok(Delay { num, den })
+    }
+}
+
+fn gcd128(mut a: u128, mut b: u128) -> u128 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
+/// Exact `ceil(num / den)` in integers; `None` for `den == 0`.
+///
+/// ```
+/// use sdrk_core::timing::ceil_div;
+/// assert_eq!(ceil_div(7, 2), Some(4));
+/// assert_eq!(ceil_div(8, 2), Some(4));
+/// assert_eq!(ceil_div(0, 5), Some(0));
+/// assert_eq!(ceil_div(1, 0), None);
+/// ```
+pub fn ceil_div(num: u128, den: u128) -> Option<u128> {
+    if den == 0 {
+        return None;
+    }
+    Some(num / den + u128::from(!num.is_multiple_of(den)))
 }
 
 /// Whether the output/input rate ratio is fixed or can change at run time.
@@ -118,4 +166,48 @@ pub struct Progress {
     pub consumed: usize,
     /// Output samples produced.
     pub produced: usize,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn div_ratio_is_exact_and_reduced() {
+        let d = Delay::new(31, 2).unwrap();
+        // x / (1/4) = 4x
+        assert_eq!(
+            d.div_ratio(Ratio::new(1, 4).unwrap()).unwrap(),
+            Delay::new(62, 1).unwrap()
+        );
+        // x / (3/2) = 2x/3
+        assert_eq!(
+            d.div_ratio(Ratio::new(3, 2).unwrap()).unwrap(),
+            Delay::new(31, 3).unwrap()
+        );
+        assert_eq!(
+            Delay::ZERO.div_ratio(Ratio::new(5, 7).unwrap()).unwrap(),
+            Delay::ZERO
+        );
+        assert_eq!(d.div_ratio(Ratio::ONE).unwrap(), d);
+    }
+
+    #[test]
+    fn div_ratio_overflow_is_an_error() {
+        let big = Delay::new(u64::MAX, 1).unwrap();
+        let r = Ratio::new(1, u64::MAX - 1).unwrap();
+        assert!(big.div_ratio(r).is_err());
+        // Intermediates beyond u64 that reduce back are fine.
+        let d = Delay::new(u64::MAX, 3).unwrap();
+        let r = Ratio::new(u64::MAX, 3).unwrap();
+        assert_eq!(d.div_ratio(r).unwrap(), Delay::new(1, 1).unwrap());
+    }
+
+    #[test]
+    fn ceil_div_cases() {
+        assert_eq!(ceil_div(u128::MAX, 1), Some(u128::MAX));
+        assert_eq!(ceil_div(u128::MAX, 2), Some(u128::MAX / 2 + 1));
+        assert_eq!(ceil_div(1, 0), None);
+    }
 }

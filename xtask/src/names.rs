@@ -18,8 +18,11 @@ use anyhow::Context;
 
 use crate::scan::Finding;
 
-/// Kinds that cannot follow the file and type rules, with the reason. M24.1 needs none.
-const EXCEPTIONS: &[(&str, &str)] = &[];
+/// Kinds that cannot follow the file and type rules, with the reason.
+const EXCEPTIONS: &[(&str, &str)] = &[(
+    "chain",
+    "a Rust-only construct in `chain.rs` (M27), not a pipeline kind and not in `all_descriptions()`",
+)];
 
 /// The longest kind.
 pub const MAX_KIND_LEN: usize = 32;

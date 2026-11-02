@@ -3,7 +3,7 @@
 [package]
 name = "sdrk-target-common"
 description = "Shared suite driver of the SDRk emulator targets."
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"

@@ -2,7 +2,7 @@
 [package]
 name = "sdrk-target-esp32s3"
 description = "SDRk on-target suite for the ESP32-S3 in the Espressif QEMU fork."
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"

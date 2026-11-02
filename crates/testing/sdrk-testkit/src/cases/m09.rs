@@ -12,7 +12,7 @@ use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::design::DesignSpec;
 use sdrk_blocks::{
-    ARENA_ALIGN, ArenaStorage, Block, BlockSample, DdcBlock, DdcConfig, FrameBlock, ResampleBlock,
+    ARENA_ALIGN, ArenaStorage, Block, BlockSample, DdcBlock, DdcConfig, FrameOut, ResampleBlock,
     ResampleConfig, SpectrumBlock, SpectrumConfig, TunedElem,
 };
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate};
@@ -389,8 +389,15 @@ where
             }
             let mut rest: &[T] = piece;
             while !rest.is_empty() && meta.is_none() {
-                let (used, m) = block.push(rest, frame)?;
-                meta = m;
+                let used = block
+                    .process(
+                        rest,
+                        FrameOut {
+                            values: frame,
+                            meta: &mut meta,
+                        },
+                    )?
+                    .consumed;
                 rest = rest.get(used..).unwrap_or_default();
             }
             fed += 128 - rest.len();

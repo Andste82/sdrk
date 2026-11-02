@@ -68,11 +68,12 @@ pub use model::{
     MAX_PENDING_PARAMS, NAME_PATTERN, NodeSpec, OutputSpec, OutputType, PipelineSpec, Precision,
     RateHz, Settings, UnderrunPolicy, is_valid_name,
 };
-pub use node::{FrameNode, Node, NodeElem, NodeInput, NodeOutput, StreamNode};
+pub use node::{FrameNode, Node, NodeInput, NodeOutput, NodeSlice, StreamNode};
 pub use pull::{PullError, PullSource};
 pub use registry::{BlockFactory, BuildOptions, Checked, Limits, PortKind, Registry};
 pub use runner::{InputData, NodeStats, Pipeline};
 pub use schema::{SCHEMA_FILE, SCHEMA_ID};
+pub use sdrk_blocks::StreamElem;
 pub use storage::VecStorage;
 pub use time::{Event, EventKind, Latency, NodeId, OutputId, ParamTime};
 pub use validate::{DiagCode, Diagnostic, GroupEdge, NodeReport, OutputReport, Report};

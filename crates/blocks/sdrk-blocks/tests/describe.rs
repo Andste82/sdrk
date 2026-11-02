@@ -35,10 +35,10 @@ use sdrk_blocks::{
     Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
     FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FrameBlock, Mutability, ParamKind, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, all_descriptions,
+    FmStereoDemodConfig, Mutability, ParamKind, ParamValue, PortType, PreemphLimitBlock,
+    PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig,
+    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -513,18 +513,18 @@ fn blocks_accept_and_report_every_described_parameter() {
     let mut block = SpectrumBlock::<C32, _>::new(&sp, r, &mut s).unwrap();
     let d = find("spectrum");
     for p in d.params {
-        let value = FrameBlock::param(&block, p.name).unwrap();
+        let value = Block::param(&block, p.name).unwrap();
         p.check(&value).unwrap();
         match p.mutability {
-            Mutability::Runtime => FrameBlock::set_param(&mut block, p.name, value).unwrap(),
+            Mutability::Runtime => Block::set_param(&mut block, p.name, value).unwrap(),
             Mutability::Build => assert_eq!(
-                FrameBlock::set_param(&mut block, p.name, value),
+                Block::set_param(&mut block, p.name, value),
                 Err(Error::ReadOnlyParameter)
             ),
             _ => panic!(),
         }
     }
-    assert_eq!(FrameBlock::description(&block).kind, "spectrum");
+    assert_eq!(Block::description(&block).kind, "spectrum");
 }
 
 #[test]

@@ -23,7 +23,7 @@
 
 use num_complex::Complex64;
 use sdrk::{ComplexSample, Rate};
-use sdrk_blocks::{ArenaStorage, Block, Error, FrameBlock, FrameMeta};
+use sdrk_blocks::{ArenaStorage, Block, Error, Frame, FrameMeta, FrameOut, StreamElem};
 use sdrk_testkit::{ChunkPlan, Pcg32};
 
 pub fn rate(hz: u64) -> Rate {
@@ -55,13 +55,14 @@ pub fn real_signal<R: sdrk::RealSample>(n: usize, seed: u64, cycles_per_sample: 
 
 /// Feeds `input` to the block in pieces from `plan` (all at once for `None`) and resubmits
 /// what the block did not consume together with the next piece.
-pub fn run_block<B: Block>(block: &mut B, input: &[B::In], plan: Option<ChunkPlan>) -> Vec<B::Out>
-where
-    B::Out: Default,
-{
+pub fn run_block<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+    block: &mut B,
+    input: &[I],
+    plan: Option<ChunkPlan>,
+) -> Vec<O> {
     let mut out = Vec::new();
-    let mut room = vec![B::Out::default(); 4096];
-    let mut pending: Vec<B::In> = Vec::new();
+    let mut room = vec![O::default(); 4096];
+    let mut pending: Vec<I> = Vec::new();
     let mut pos = 0;
     let mut sizes = plan.map(|p| p.sizes());
     while pos < input.len() {
@@ -86,9 +87,9 @@ where
 }
 
 /// Pushes `input` into a frame block in pieces from `plan` and collects the frames.
-pub fn run_frames<B: FrameBlock>(
+pub fn run_frames<I: StreamElem, B: Block<In = I, Out = Frame>>(
     block: &mut B,
-    input: &[B::In],
+    input: &[I],
     plan: Option<ChunkPlan>,
 ) -> Vec<(Vec<f32>, FrameMeta)> {
     let mut out = Vec::new();
@@ -103,11 +104,16 @@ pub fn run_frames<B: FrameBlock>(
         let mut piece = &input[pos..pos + want];
         pos += want;
         while !piece.is_empty() {
-            let (used, meta) = block.push(piece, &mut frame).unwrap();
+            let mut meta = None;
+            let out_port = FrameOut {
+                values: &mut frame,
+                meta: &mut meta,
+            };
+            let used = block.process(piece, out_port).unwrap().consumed;
             if let Some(meta) = meta {
                 out.push((frame.clone(), meta));
             }
-            assert!(used > 0, "push made no progress");
+            assert!(used > 0, "process made no progress");
             piece = &piece[used..];
         }
     }

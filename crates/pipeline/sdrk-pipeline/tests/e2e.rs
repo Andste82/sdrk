@@ -27,7 +27,7 @@
 mod common;
 
 use sdrk::{C32, Rate};
-use sdrk_blocks::{Block, ConvertBlock, ConvertConfig, FrameBlock, SpectrumBlock, SpectrumConfig};
+use sdrk_blocks::{Block, ConvertBlock, ConvertConfig, FrameOut, SpectrumBlock, SpectrumConfig};
 use sdrk_device::formats;
 use sdrk_pipeline::VecStorage;
 use sdrk_testkit::ChunkPlan;
@@ -116,7 +116,12 @@ fn fan_out_reads_the_same_buffer() {
     let mut rest = &iq[..];
     let mut frame = vec![0f32; 1024];
     while !rest.is_empty() {
-        let (used, meta) = spectrum.push(rest, &mut frame).unwrap();
+        let mut meta = None;
+        let out = FrameOut {
+            values: &mut frame,
+            meta: &mut meta,
+        };
+        let used = spectrum.process(rest, out).unwrap().consumed;
         rest = &rest[used..];
         if let Some(m) = meta {
             expected.push((frame.clone(), m));

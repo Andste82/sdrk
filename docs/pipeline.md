@@ -126,7 +126,7 @@ let canonical = spec.to_json();               // pretty, keys in field order, ma
 
 `Registry::standard()` registers every block of `sdrk-blocks`. Each kind has a `BlockFactory`: it parses and checks the parameters for the input type, rate and precision (`check`), names the kernels the block calls (`kernels`), and builds the type-erased `Node` (`build`). `Checked` carries the figures of a checked node: output rate, memory, cost, output kind, number of taps, group delay and the smallest input count that produces an output.
 
-The runner works on type-erased nodes: `NodeInput`/`NodeOutput` are typed, borrowed views, `StreamNode<B: Block>` and `FrameNode<B: FrameBlock>` wrap the generic blocks. A variant mismatch inside `process` is an `Internal` error that cannot happen after a successful build.
+The runner works on type-erased nodes: `NodeInput`/`NodeOutput` are typed, borrowed views, `StreamNode<B: Block>` (stream input and output) and `FrameNode<B: Block<Out = Frame>>` wrap the generic blocks. A variant mismatch inside `process` is an `Internal` error that cannot happen after a successful build.
 
 ## Validation
 

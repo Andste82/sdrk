@@ -477,7 +477,7 @@
         },
         {
           "const": "frames",
-          "description": "Frames of `f32` values from a `FrameBlock`.",
+          "description": "Frames of `f32` values from a block with frame output.",
           "type": "string"
         }
       ]

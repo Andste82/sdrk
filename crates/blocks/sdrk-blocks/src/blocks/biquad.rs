@@ -13,6 +13,7 @@ use crate::describe::{
 };
 use crate::design::{BiquadResponse, biquad_coefs, butterworth_sos, to_f32_sos, to_q14};
 use crate::error::{Error, Result};
+use crate::ports::StreamElem;
 use crate::sample::{BlockReal, BlockSample};
 use crate::storage::{Plan, Storage};
 
@@ -267,7 +268,7 @@ impl BiquadConfig {
 }
 
 /// A sample type with a `biquad` kernel: the coefficient conversion and the Q15 rule.
-pub trait BiquadElem: Sample + BiquadSample<Coef: bytemuck::Pod + Default> {
+pub trait BiquadElem: Sample + StreamElem + BiquadSample<Coef: bytemuck::Pod + Default> {
     /// Whether the coefficients are Q2.14 (the Q15 cutoff rule applies).
     const Q15: bool;
 

@@ -26,6 +26,8 @@ The folder of a crate is its layer. A crate may depend only on crates in lower l
 7. Deterministic: same backend, bit-identical output regardless of block size or partitioning.
 8. Bindings configure, Rust processes. The WebAssembly bindings (`bindings/wasm`) are the first: see [wasm.md](wasm.md).
 
+Port types: the input and the output of a block are not sample types but port types (`Ports` in `sdrk-blocks`, see [blocks.md](blocks.md#the-block-interface)). They are resolved at compile time: a stream of one sample type (`StreamElem`: `C32`, `CQ15`, `f32`, `Q15`, `u8`), a pair of streams that advance together (`Two<A, B>`) and frames of `f32` values (`Frame`). One `Block` trait therefore covers stream blocks, blocks with two inputs or outputs (M30, M33) and the spectrum; a later milestone adds packets as a further port type (`Packets`, M38).
+
 See [PLAN.md](PLAN.md) for the full list and the reasoning.
 
 ## Extensibility rules

@@ -630,7 +630,7 @@ pub struct EdgeSpec {
 pub enum OutputType {
     /// A stream of samples from a `Block`.
     Stream,
-    /// Frames of `f32` values from a `FrameBlock`.
+    /// Frames of `f32` values from a block with frame output.
     Frames,
 }
 

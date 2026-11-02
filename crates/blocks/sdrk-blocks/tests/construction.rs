@@ -31,10 +31,10 @@ use sdrk_blocks::{
     BiquadConfig, BiquadElem, BiquadRealBlock, BiquadResponse, Block, BlockSample, ConvertBlock,
     ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
     DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FrameBlock,
-    PreemphLimitBlock, PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, Frame, PreemphLimitBlock,
+    PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig,
+    SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -464,7 +464,7 @@ fn public_types_are_send() {
         assert_send::<B>();
     }
     is_block::<FirBlock<C32, A<'static>>>();
-    fn is_frame<B: FrameBlock>() {
+    fn is_frame<B: Block<Out = Frame>>() {
         assert_send::<B>();
     }
     is_frame::<SpectrumBlock<CQ15, A<'static>>>();

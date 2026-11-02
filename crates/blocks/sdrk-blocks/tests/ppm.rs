@@ -25,16 +25,19 @@ mod common;
 
 use common::rate;
 use sdrk::{C32, CQ15, Q15};
-use sdrk_blocks::{Block, ParamValue, ResampleBlock, ResampleConfig, ResampleRealBlock};
+use sdrk_blocks::{
+    Block, ParamValue, ResampleBlock, ResampleConfig, ResampleRealBlock, StreamElem,
+};
 use sdrk_testkit::VecStorage;
 
 /// Pushes `n` samples of a constant through the block in pieces of 4000 and counts the outputs.
-fn count_outputs<B: Block>(block: &mut B, n: usize, sample: B::In) -> usize
-where
-    B::Out: Default,
-{
+fn count_outputs<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+    block: &mut B,
+    n: usize,
+    sample: I,
+) -> usize {
     let input = vec![sample; 4000];
-    let mut room = vec![B::Out::default(); 8192];
+    let mut room = vec![O::default(); 8192];
     let (mut fed, mut produced) = (0usize, 0usize);
     while fed < n {
         let piece = &input[..(n - fed).min(4000)];

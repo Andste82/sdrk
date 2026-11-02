@@ -28,9 +28,9 @@ use sdrk::{C32, CQ15, Q15, Sdrk};
 use sdrk_blocks::{
     Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
-    SpectrumSample, SpectrumWindow,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample,
+    SpectrumWindow, StreamElem,
 };
 use sdrk_core::kernels::{
     basic::Scale,
@@ -76,29 +76,37 @@ fn same_or_close<T: bytemuck::Pod>(a: &[T], b: &[T]) -> bool {
 }
 
 /// Runs a fresh block whole and in several chunkings and requires identical output.
-fn invariant<B: Block>(name: &str, input: &[B::In], make: impl Fn() -> B)
-where
-    B::Out: Default + bytemuck::Pod,
-{
+fn invariant<I: StreamElem, O: StreamElem + Default + bytemuck::Pod, B: Block<In = I, Out = O>>(
+    name: &str,
+    input: &[I],
+    make: impl Fn() -> B,
+) {
     invariant_with(name, input, make, same_bits);
 }
 
 /// [`invariant`] with [`same_or_close`].
-fn invariant_close<B: Block>(name: &str, input: &[B::In], make: impl Fn() -> B)
-where
-    B::Out: Default + bytemuck::Pod,
-{
+fn invariant_close<
+    I: StreamElem,
+    O: StreamElem + Default + bytemuck::Pod,
+    B: Block<In = I, Out = O>,
+>(
+    name: &str,
+    input: &[I],
+    make: impl Fn() -> B,
+) {
     invariant_with(name, input, make, same_or_close);
 }
 
-fn invariant_with<B: Block>(
+fn invariant_with<
+    I: StreamElem,
+    O: StreamElem + Default + bytemuck::Pod,
+    B: Block<In = I, Out = O>,
+>(
     name: &str,
-    input: &[B::In],
+    input: &[I],
     make: impl Fn() -> B,
-    same: fn(&[B::Out], &[B::Out]) -> bool,
-) where
-    B::Out: Default + bytemuck::Pod,
-{
+    same: fn(&[O], &[O]) -> bool,
+) {
     let whole = run_block(&mut make(), input, None);
     assert!(!whole.is_empty(), "{name}: no output");
     for plan in plans(11) {
@@ -113,10 +121,11 @@ fn invariant_with<B: Block>(
 }
 
 /// After `reset` the block behaves like a new one.
-fn resets<B: Block>(name: &str, input: &[B::In], make: impl Fn() -> B)
-where
-    B::Out: Default + bytemuck::Pod,
-{
+fn resets<I: StreamElem, O: StreamElem + Default + bytemuck::Pod, B: Block<In = I, Out = O>>(
+    name: &str,
+    input: &[I],
+    make: impl Fn() -> B,
+) {
     let fresh = run_block(&mut make(), input, None);
     let mut block = make();
     let _ = run_block(&mut block, &input[..input.len() / 3 + 1], None);
@@ -463,10 +472,11 @@ fn spectrum_is_invariant_and_resets() {
 // ---------------------------------------------------------------------------------------------
 // extreme inputs
 
-fn finite_or_nan_is_fine<B: Block>(name: &str, input: &[B::In], make: impl Fn() -> B) -> Vec<B::Out>
-where
-    B::Out: Default,
-{
+fn finite_or_nan_is_fine<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+    name: &str,
+    input: &[I],
+    make: impl Fn() -> B,
+) -> Vec<O> {
     let out = run_block(&mut make(), input, None);
     assert!(!out.is_empty(), "{name}: no output");
     out
@@ -658,24 +668,26 @@ fn cfg_dc() -> DcBlockConfig {
 #[test]
 fn small_output_buffers_never_lose_samples() {
     // Feed the whole input with output buffers of 1 to 3 samples; the output must not change.
-    fn small<B: Block>(input: &[B::In], make: impl Fn() -> B)
-    where
-        B::Out: Default + bytemuck::Pod,
-    {
+    fn small<I: StreamElem, O: StreamElem + Default + bytemuck::Pod, B: Block<In = I, Out = O>>(
+        input: &[I],
+        make: impl Fn() -> B,
+    ) {
         small_with(input, make, same_bits);
     }
-    fn small_with<B: Block>(
-        input: &[B::In],
+    fn small_with<
+        I: StreamElem,
+        O: StreamElem + Default + bytemuck::Pod,
+        B: Block<In = I, Out = O>,
+    >(
+        input: &[I],
         make: impl Fn() -> B,
-        same: fn(&[B::Out], &[B::Out]) -> bool,
-    ) where
-        B::Out: Default + bytemuck::Pod,
-    {
+        same: fn(&[O], &[O]) -> bool,
+    ) {
         let want = run_block(&mut make(), input, None);
         let mut block = make();
         let mut got = Vec::new();
-        let mut pending: Vec<B::In> = input.to_vec();
-        let mut room = [B::Out::default(); 3];
+        let mut pending: Vec<I> = input.to_vec();
+        let mut room = [O::default(); 3];
         // Calls with an empty input flush the outputs that were left pending.
         loop {
             let p = block.process(&pending, &mut room).unwrap();

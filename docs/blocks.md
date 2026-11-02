@@ -93,6 +93,41 @@ fir.process(&[C32::new(1.0, 0.0)], &mut out)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+## Chains
+
+`Chain<A, B, S>` (M27, module `chain.rs`) is two blocks in a row, itself a `Block`, so chains nest. It needs no pipeline, no JSON and no heap: the one intermediate buffer comes from the same `Storage` as the blocks. It is for programs that know their chain at compile time, a microcontroller receiver above all.
+
+```rust
+use sdrk::{Rate, C32};
+use sdrk_blocks::{
+    chain, AlignedBytes, ArenaStorage, Block, ConvertBlock, ConvertConfig, DdcBlock, DdcConfig,
+    FmDemodBlock, FmDemodConfig,
+};
+
+fn receiver() -> Result<(), Box<dyn std::error::Error>> {
+    let rate = Rate::hz(2_400_000)?;
+    let mut mem = AlignedBytes([0u8; 65536]);
+    let mut arena = ArenaStorage::new(&mut mem.0);
+    let ddc_cfg = DdcConfig { frequency_hz: 600e3, decimation: 10, ..DdcConfig::default() };
+    let mut rx = chain!(
+        &mut arena, 256;
+        ConvertBlock::<C32, _>::new(&ConvertConfig::default(), rate, &mut arena)?,
+        DdcBlock::<C32, _>::new(&ddc_cfg, rate, &mut arena)?,
+        FmDemodBlock::<C32, _>::new(&FmDemodConfig::default(), Rate::hz(240_000)?, &mut arena)?
+    );
+    rx.set_param("1.0.frequency_hz", sdrk_blocks::ParamValue::F64(610e3))?;
+    Ok(())
+}
+```
+
+- **Types:** `A::Out` must be a stream element (`StreamElem`), because the intermediate buffer is a slice of it: a chain cannot pass `Two` or `Frame` between its stages, and a port type that is not a stream element (the packets of M37) does not compile. `A::In` and `B::Out` may be any port type, so a chain can end in a frame block (`convert -> spectrum`) or start with a pair of streams. `S` is the storage of the buffer; it is the storage type of the blocks in the usual case.
+- **`process`:** the buffer holds what `A` produced and `B` has not consumed. One call feeds `B` while the buffer holds `b.min_input()` samples (or the input is used up and the buffer is not empty), moves the rest to the front, fills the buffer from `A`, and repeats until the output is full or neither stage progresses. `Progress.consumed` is what `A` consumed, `Progress.produced` what `B` produced. Each stage is called at most `2 + input.len() / chunk + output.len()` times per call, never per sample. The result is the same as running `A` over the whole input and then `B` over the whole result, for any cut of input and output, as far as the stages are invariant themselves (the `f32` `fm_demod` is invariant up to the tolerance of its SIMD kernels, the Q15 blocks to the bit). The buffer is raised to `b.min_input()` and at least 1. A chain does not check the lengths of a call itself: a pair of unequal streams or a wrong frame length is reported by the stage that sees it.
+- **Timing:** `ratio = ratio_a * ratio_b`; `kind` is `Variable` if either is; `delay = delay_a + delay_b / ratio_a` in input samples of `A`, exact (`Delay::add`, `Delay::div_ratio`); `min_input() = max(a.min_input(), ceil(b.min_input() / ratio_a))`; `map_index(n) = b.map_index(a.map_index(n))`; `frame_len()` is that of `B`; `reset()` resets both stages and empties the buffer.
+- **Parameters:** `"<stage>.<name>"`, stage `0` for `A`, `1` for `B`; nested chains add prefixes. `chain!(storage, chunk; a, b, c)` nests to the right, so the names read `0.`, `1.0.` and `1.1.` (`"1.0.frequency_hz"` above). A name without prefix or with another stage is `UnknownParameter`; the error of a stage is returned unchanged.
+- **`chain!`:** two to eight blocks, one `chunk` for all buffers. The macro expands to `Chain::new(...)?`: the calling function returns a `Result` whose error type is built from `sdrk_blocks::Error`.
+- **Storage:** `Chain::storage_bytes(chunk)` is `chunk * size_of::<A::Out>()`: exactly what `new` takes from an arena that starts at an aligned address (`AlignedBytes`) and is still empty. At an unaligned position up to `align_of::<A::Out>() - 1` bytes of padding come on top. See [embedded.md](embedded.md#sizing-the-arena-of-a-chain).
+- **Description:** `CHAIN_DESCRIPTION` has the kind `chain` and empty port lists (they follow from the stages and cannot be written down statically). A chain is a Rust construct: it is not a pipeline kind and not in `all_descriptions()`, and `cargo xtask check` (names) lists `chain` as the one exception to the rule that a kind lives in `blocks/<kind>.rs` with a `<Kind>Block`.
+
 ## Filter design
 
 `sdrk_blocks::design` computes in `f64` and writes into caller slices; the functions mirror SciPy so that golden vectors can check them (`tests/golden/sdrk_golden/design.py` calls SciPy and is the reference):

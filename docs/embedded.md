@@ -42,6 +42,17 @@ Every case works in a 256 KiB arena (quick cases in 80 KiB); a case that needs m
 
 The suite on the MCUs is the whole testkit suite: kernels in both directions, fused kernels, blocks with `ArenaStorage` and the end-to-end FM chains (`e2e_fm_rx_*`, `e2e_fm_txrx_*`; 0.1 s in the quick profile, 1 s in the full profile), NFM (`e2e_nfm_rx_*`; 2 s variants in the full profile) AM (`e2e_am_rx_*`; 0.2 s quick, 1 s full) and SSB (`e2e_ssb_rx_*`; 0.2 s quick, 1 s full, both sidebands; the `f32` chain needs about 75 KiB, which set the quick arena to 80 KiB) and FM stereo (`e2e_fm_stereo_*`: 0.5 s of a 2.4 MS/s stereo broadcast in the quick profile for `f32` and Q15, the mono, 2 s and switching variants in the full profile; the quick profile of the Cortex-M4 takes about 705 of its 900 s, RISC-V 711 of 900 s and the Cortex-M55 1111 of 1500 s with the cases of M25, D128, D197). The `C32` cases run with the hardware FPU on the Cortex-M4F, Cortex-M55, ESP32-P4 and ESP32-S3 and in soft float on RISC-V `imac`. The `f64` of the references is software floating point on every target but the Cortex-M55 (the P4 and the M4F have single-precision FPUs only), which dominates the run times.
 
+## Sizing the arena of a chain
+
+A chain (`Chain`, `chain!`; [blocks.md](blocks.md#chains)) takes one buffer per joint from the arena, after the buffers of its blocks. Sum the sizes for the arena:
+
+```text
+arena bytes >= sum of storage_bytes(config, rate) of every block
+             + sum of Chain::storage_bytes(chunk) of every joint     // chunk * size_of::<A::Out>()
+```
+
+`Chain::storage_bytes(chunk)` is `chunk * size_of::<A::Out>()` (8 for `C32`, 4 for `CQ15` and `f32`, 2 for `Q15`, 1 for `u8`) without padding. On a fresh arena that starts at an aligned address (`AlignedBytes`) and is used by the blocks in construction order, each buffer starts at the next multiple of its element alignment, as for the blocks. A chain of `convert -> ddc -> fm_demod` with `chunk` 256 on `C32` takes two buffers of 2048 bytes. Add `ARENA_ALIGN - 1` bytes when the arena does not start at an aligned address. A `chunk` below `b.min_input()` is raised to it; give at least that, or size the arena from the stage's `min_input()`.
+
 ## Memory maps and linker scripts
 
 | Target | Code | Data and stack | Source |

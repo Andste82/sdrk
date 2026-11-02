@@ -669,7 +669,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[allow(clippy::too_many_lines)]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 156);
+    assert_eq!(cases.len(), 157);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));
@@ -788,6 +788,7 @@ fn registered_cases_have_unique_names_without_spaces() {
         "preemph_limit_q15",
         "extremes_m25",
         "block_preemph_limit_peak",
+        "chain_fm_receiver",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

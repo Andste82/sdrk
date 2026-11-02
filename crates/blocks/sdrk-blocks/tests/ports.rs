@@ -306,3 +306,102 @@ fn port_types_and_blocks_are_send() {
     assert_send::<Split>();
     assert_send::<Summer>();
 }
+
+fn views_roundtrip<P: Ports>(
+    input: P::Ref<'_>,
+    mut output: P::Mut<'_>,
+    n: usize,
+) -> (usize, usize) {
+    let rest_in = P::ref_skip(input, n);
+    let n_before = P::mut_len(&output);
+    {
+        let re = P::mut_reborrow(&mut output);
+        assert_eq!(P::mut_len(&re), n_before);
+    }
+    let rest_out = P::mut_skip(output, n);
+    (P::ref_len(&rest_in), P::mut_len(&rest_out))
+}
+
+#[test]
+fn stream_helpers() {
+    let data = [1u8, 2, 3, 4];
+    let mut out = [0u8; 4];
+    assert_eq!(<u8 as Ports>::ref_len(&&data[..]), 4);
+    assert_eq!(views_roundtrip::<u8>(&data, &mut out, 1), (3, 3));
+    assert_eq!(views_roundtrip::<u8>(&data, &mut out, 4), (0, 0));
+    assert_eq!(views_roundtrip::<u8>(&data, &mut out, 9), (0, 0));
+    let rest = <u8 as Ports>::ref_skip(&data, 3);
+    assert_eq!(rest, &[4]);
+    let mut view: &mut [u8] = &mut out;
+    <u8 as Ports>::mut_reborrow(&mut view)[0] = 7;
+    let tail = <u8 as Ports>::mut_skip(view, 2);
+    tail[0] = 9;
+    assert_eq!(out, [7, 0, 9, 0]);
+}
+
+#[test]
+fn two_helpers_skip_in_lockstep() {
+    type P = Two<f32, C32>;
+    let a = [1.0f32, 2.0, 3.0];
+    let b = [C32::new(1.0, 0.0), C32::new(2.0, 0.0), C32::new(3.0, 0.0)];
+    let mut oa = [0.0f32; 3];
+    let mut ob = [C32::new(0.0, 0.0); 3];
+    assert_eq!(<P as Ports>::ref_len(&(&a[..], &b[..])), 3);
+    let rest = <P as Ports>::ref_skip((&a, &b), 2);
+    assert_eq!((rest.0, rest.1), (&a[2..], &b[2..]));
+    assert_eq!(
+        views_roundtrip::<P>((&a, &b), (&mut oa, &mut ob), 1),
+        (2, 2)
+    );
+    assert_eq!(
+        views_roundtrip::<P>((&a, &b), (&mut oa, &mut ob), 7),
+        (0, 0)
+    );
+    let mut view = (&mut oa[..], &mut ob[..]);
+    let (x, y) = <P as Ports>::mut_reborrow(&mut view);
+    x[1] = 5.0;
+    y[1] = C32::new(5.0, 0.0);
+    let (x, y) = <P as Ports>::mut_skip(view, 2);
+    x[0] = 6.0;
+    y[0] = C32::new(6.0, 0.0);
+    assert_eq!(oa, [0.0, 5.0, 6.0]);
+    assert_eq!(ob[2], C32::new(6.0, 0.0));
+}
+
+#[test]
+fn frame_helpers_have_capacity_one() {
+    let mut values = [0.0f32; 4];
+    let mut meta = None;
+    let mut out = FrameOut {
+        values: &mut values,
+        meta: &mut meta,
+    };
+    assert_eq!(<Frame as Ports>::mut_len(&out), 1);
+    assert_eq!(<Frame as Ports>::ref_len(&&[1.0f32, 2.0][..]), 2);
+    <Frame as Ports>::mut_reborrow(&mut out).values[0] = 3.0;
+    assert_eq!(<Frame as Ports>::mut_len(&out), 1);
+    let same = <Frame as Ports>::mut_skip(out, 0);
+    assert_eq!(<Frame as Ports>::mut_len(&same), 1);
+    let none = <Frame as Ports>::mut_skip(same, 1);
+    assert_eq!(<Frame as Ports>::mut_len(&none), 0);
+    assert_eq!(none.values.len(), 0);
+    let r = <Frame as Ports>::ref_skip(&[1.0f32, 2.0, 3.0], 2);
+    assert_eq!(r, &[3.0]);
+    assert_eq!(values[0], 3.0);
+}
+
+#[test]
+fn stream_elements_are_pod_and_default() {
+    fn check<T: StreamElem>() -> usize {
+        assert_eq!(
+            bytemuck::bytes_of(&T::default()).len(),
+            core::mem::size_of::<T>()
+        );
+        core::mem::size_of::<T>()
+    }
+    assert_eq!(check::<C32>(), 8);
+    assert_eq!(check::<CQ15>(), 4);
+    assert_eq!(check::<f32>(), 4);
+    assert_eq!(check::<Q15>(), 2);
+    assert_eq!(check::<u8>(), 1);
+}

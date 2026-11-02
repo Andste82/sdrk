@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+
+- M27: `Chain<A, B, S>` and the macro `chain!` (two to eight blocks) in `sdrk-blocks`: blocks in a row without the pipeline and without a heap, with one intermediate buffer from the storage, exact timing, stage-prefixed parameters (`"1.0.frequency_hz"`), `Chain::storage_bytes` and `CHAIN_DESCRIPTION`. `Ports` gets the helpers `ref_len`, `mut_len`, `ref_skip`, `mut_skip` and `mut_reborrow`, and its `Ref` is `Copy`; `StreamElem` gets the supertraits `bytemuck::Pod + Default` and the functions `view` and `view_mut`. `sdrk-core`: `Delay::div_ratio` and `timing::ceil_div`. `docs/blocks.md` (Chains) and `docs/embedded.md` (sizing the arena). Testkit: the quick suite case `chain_fm_receiver` (157 cases), checked against the pipeline by the digest test `sdrk-pipeline/tests/chain_digest.rs`.
+
 ### Changed
 
 - M26: the input and the output of `Block` are port types (`Ports`) instead of sample types: a stream of one sample type (`StreamElem`), a pair of streams (`Two<A, B>`) and frames (`Frame`, written through `FrameOut`). `FrameBlock` is removed; `SpectrumBlock` is a `Block<In = T, Out = Frame>`. In `sdrk-pipeline`, `NodeElem` is replaced by `StreamElem` (re-exported from `sdrk-blocks`) and the helper trait `NodeSlice`; `FrameNode<B>` requires `B: Block<Out = Frame>`. No block changes its output. Migration:

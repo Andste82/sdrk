@@ -36,6 +36,7 @@
 
 mod block;
 mod blocks;
+mod chain;
 pub mod describe;
 pub mod design;
 mod error;
@@ -68,6 +69,7 @@ pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
+pub use chain::{CHAIN_DESCRIPTION, Chain};
 pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
 };

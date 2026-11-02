@@ -139,6 +139,7 @@
 //! | `preemph_limit_q15` | quick | about 12 KiB |
 //! | `extremes_m25` | full | about 6 KiB |
 //! | `block_preemph_limit_peak` | quick | about 18 KiB |
+//! | `chain_fm_receiver` | quick | about 30 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -195,8 +196,14 @@ mod m23_backend;
 mod m24;
 mod m24_backend;
 mod m25;
+mod m27;
 
-pub(crate) static CASES: [TestCase; 156] = [
+pub use m27::{
+    CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
+    chain_fm_receiver_digest, digest_q15,
+};
+
+pub(crate) static CASES: [TestCase; 157] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -976,6 +983,11 @@ pub(crate) static CASES: [TestCase; 156] = [
         name: "block_preemph_limit_peak",
         tier: Tier::Quick,
         run: m25::block_preemph_limit_peak,
+    },
+    TestCase {
+        name: "chain_fm_receiver",
+        tier: Tier::Quick,
+        run: m27::chain_fm_receiver,
     },
 ];
 

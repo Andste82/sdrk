@@ -78,6 +78,10 @@ pub mod virtual_tx;
 mod cases;
 
 pub use arena::{Arena, Carver};
+pub use cases::{
+    CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
+    chain_fm_receiver_digest, digest_q15,
+};
 pub use invariance::{ChunkPlan, InvarianceReport, check_block_invariance, check_block_tolerance};
 pub use metrics::{Comparison, bit_exact, compare_complex, compare_real};
 pub use rng::Pcg32;

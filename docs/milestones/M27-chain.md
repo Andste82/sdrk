@@ -217,5 +217,5 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `cargo xtask emu --ta
 
 - [x] `Chain`, `storage_bytes`, stage accessors, `CHAIN_DESCRIPTION`; `Delay` helpers if needed
 - [x] `chain!` with doc example
-- [ ] Tests 1–5; the target test `chain_fm_receiver`
+- [x] Tests 1–5; the target test `chain_fm_receiver`
 - [x] `docs/blocks.md` (section "Chains"), `docs/embedded.md` (how to size the arena), CHANGELOG, decisions log

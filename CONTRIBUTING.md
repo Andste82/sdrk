@@ -30,6 +30,12 @@ Every kernel change follows the measurement policy (decisions D32 to D34):
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format in `CHANGELOG.md`; every user-visible change gets an entry under "Unreleased".
 
+## Making a release
+
+1. A pull request whose title starts with `Release` (for example `Release 0.1.0`) sets the workspace version in `Cargo.toml` (and in the crates of `targets/*`, which are workspaces of their own), moves the entries of `[Unreleased]` into `## [<version>] - <date>` of `CHANGELOG.md`, adds `docs/releases/<version>.md` and passes `cargo xtask release-check <version>` (CI runs it on such pull requests, job `release_check`).
+2. Before the merge, the last CI run of `main` and the last nightly run are green; a nightly run on the branch: `gh workflow run nightly.yml --ref <branch>`.
+3. After the merge, the maintainer tags the merge commit and pushes the tag: `git tag -a v<version> -m "SDRk <version>"` and `git push origin v<version>`. The tag is the maintainer's step; the pull request does not create it. Nothing is published to crates.io or npm without a separate maintainer decision.
+
 ## Publishing order
 
 `sdrk-device`, `sdrk-core`, the backends, `sdrk`, `sdrk-blocks`, `sdrk-io`, `sdrk-pipeline`, `sdrk-testkit`.

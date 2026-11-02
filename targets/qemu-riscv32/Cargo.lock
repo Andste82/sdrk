@@ -182,7 +182,7 @@ checksum = "d3f2ad9f15a07f4a0e1677124f9120ce7e83ab7e1ca7186af0ca9da529b62e80"
 
 [[package]]
 name = "sdrk"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-backend-simd",
  "sdrk-core",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-backend-simd"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-blocks"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "libm",
@@ -224,18 +224,18 @@ dependencies = [
 
 [[package]]
 name = "sdrk-device"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "sdrk-target-common"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-testkit",
 ]
 
 [[package]]
 name = "sdrk-target-qemu-riscv32"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "riscv-rt",
  "riscv-semihosting",
@@ -246,7 +246,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-testkit"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",

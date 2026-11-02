@@ -1,17 +1,18 @@
 //! `spectrum`: windowed, averaged power spectrum in dB relative to full scale.
 
-use sdrk::{C32, CQ15, Rate, Sdrk};
+use sdrk::{C32, CQ15, Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::RealSample;
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, Scaling};
 use sdrk_core::kernels::spectrum::{MagSq, PowerDb, Window};
 use sdrk_core::window::{Symmetry, blackman_harris, hann, kaiser};
 
 use super::{check_count, head, tail, unknown};
-use crate::block::{FrameBlock, FrameMeta, ParamValue, runtime_param};
+use crate::block::{Block, BlockTiming, FrameMeta, ParamValue, runtime_param};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
 use crate::error::{Error, Result};
+use crate::ports::{Frame, FrameOut};
 use crate::sample::BlockSample;
 use crate::storage::{Plan, Storage};
 
@@ -303,7 +304,7 @@ impl SpectrumSample for CQ15 {
 /// Averaged power spectrum for `C32` and `CQ15`.
 ///
 /// ```
-/// use sdrk_blocks::{ArenaStorage, FrameBlock, SpectrumBlock, SpectrumConfig};
+/// use sdrk_blocks::{ArenaStorage, Block, FrameOut, SpectrumBlock, SpectrumConfig};
 /// use sdrk::{Rate, C32};
 /// let cfg = SpectrumConfig { fft_size: 16, ..SpectrumConfig::default() };
 /// let rate = Rate::hz(16_000)?;
@@ -319,8 +320,11 @@ impl SpectrumSample for CQ15 {
 ///     })
 ///     .collect();
 /// let mut frame = [0.0f32; 16];
-/// let (used, meta) = block.push(&tone, &mut frame)?;
-/// assert_eq!(used, 16);
+/// let mut meta = None;
+/// let out = FrameOut { values: &mut frame, meta: &mut meta };
+/// let progress = block.process(&tone, out)?;
+/// assert_eq!(progress.consumed, 16);
+/// assert_eq!(progress.produced, 1);
 /// assert!(meta.is_some());
 /// assert!(frame[8 + 4].abs() < 0.01); // 0 dBFS at +4 kHz (DC is at index 8)
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -453,11 +457,12 @@ where
     }
 }
 
-impl<T: SpectrumSample, S: Storage> FrameBlock for SpectrumBlock<T, S>
+impl<T: SpectrumSample, S: Storage> Block for SpectrumBlock<T, S>
 where
     Sdrk: Window<T> + Fft<T> + PowerDb<f32>,
 {
     type In = T;
+    type Out = Frame;
 
     fn description(&self) -> &'static BlockDescription {
         &DESCRIPTION
@@ -467,7 +472,11 @@ where
         self.config.fft_size
     }
 
-    fn push(&mut self, input: &[T], frame: &mut [f32]) -> Result<(usize, Option<FrameMeta>)> {
+    fn process(&mut self, input: &[T], output: FrameOut<'_>) -> Result<Progress> {
+        let FrameOut {
+            values: frame,
+            meta: out_meta,
+        } = output;
         let n = self.config.fft_size;
         if frame.len() != n {
             return Err(Error::Core(sdrk_core::Error::LengthMismatch {
@@ -482,7 +491,10 @@ where
             self.skip -= skipped;
             consumed += skipped;
             if self.skip > 0 {
-                return Ok((consumed, None));
+                return Ok(Progress {
+                    consumed,
+                    produced: 0,
+                });
             }
             let take = (n - self.fill).min(input.len() - consumed);
             let dst = self
@@ -494,7 +506,10 @@ where
             self.fill += take;
             consumed += take;
             if self.fill < n {
-                return Ok((consumed, None));
+                return Ok(Progress {
+                    consumed,
+                    produced: 0,
+                });
             }
             // A window is complete. The frame buffer serves as the work buffer of the power.
             if self.count == 0 {
@@ -513,9 +528,29 @@ where
             }
             if self.count >= self.config.averaging {
                 let meta = self.finish(frame)?;
-                return Ok((consumed, Some(meta)));
+                *out_meta = Some(meta);
+                return Ok(Progress {
+                    consumed,
+                    produced: 1,
+                });
             }
         }
+    }
+
+    fn timing(&self) -> BlockTiming {
+        BlockTiming {
+            ratio: Ratio::new(1, self.config.interval() as u64).unwrap_or(Ratio::ONE),
+            kind: RatioKind::Variable,
+            delay: Delay::new(self.config.fft_size as u64 - 1, 1).unwrap_or(Delay::ZERO),
+        }
+    }
+
+    fn min_input(&self) -> usize {
+        1
+    }
+
+    fn map_index(&self, rel_in: u64) -> u64 {
+        rel_in
     }
 
     fn reset(&mut self) {

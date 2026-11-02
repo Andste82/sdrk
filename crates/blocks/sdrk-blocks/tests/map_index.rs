@@ -22,17 +22,18 @@ use common::rate;
 use sdrk::C32;
 use sdrk_blocks::{
     Block, DdcBlock, DdcConfig, DucBlock, DucConfig, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, ScaleBlock, ScaleConfig,
+    ResampleRealBlock, ScaleBlock, ScaleConfig, StreamElem,
 };
 use sdrk_testkit::VecStorage;
 
 /// Feeds `n` samples in pieces of 777 and counts the outputs.
-fn produced<B: Block>(block: &mut B, n: usize, sample: B::In) -> usize
-where
-    B::Out: Default,
-{
+fn produced<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+    block: &mut B,
+    n: usize,
+    sample: I,
+) -> usize {
     let input = vec![sample; 777];
-    let mut room = vec![B::Out::default(); 20_000];
+    let mut room = vec![O::default(); 20_000];
     let (mut fed, mut made) = (0usize, 0usize);
     while fed < n {
         let mut pending = &input[..(n - fed).min(777)];

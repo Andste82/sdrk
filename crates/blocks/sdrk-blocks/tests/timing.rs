@@ -31,7 +31,7 @@ use sdrk_blocks::{
     Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
     DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, FirBlock, FirConfig,
     FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, ScaleBlock, ScaleConfig,
+    ResampleRealBlock, ScaleBlock, ScaleConfig, StreamElem,
 };
 use sdrk_core::kernels::{
     decim::Resample,
@@ -48,7 +48,7 @@ fn declared<B: Block>(b: &B) -> f64 {
 
 /// Sends a unit impulse at input index `at` and returns the index of the output with the
 /// largest magnitude.
-fn peak_index<T: ComplexSample, B: Block<In = T, Out = T>>(
+fn peak_index<T: ComplexSample + StreamElem, B: Block<In = T, Out = T>>(
     block: &mut B,
     at: usize,
     len: usize,
@@ -68,7 +68,7 @@ where
 
 /// Measured delay in input samples: the best alignment of the impulse with the output grid
 /// `output_index * step` (`step` input samples per output sample).
-fn measured_delay<T: ComplexSample + Default, B: Block<In = T, Out = T>>(
+fn measured_delay<T: ComplexSample + StreamElem + Default, B: Block<In = T, Out = T>>(
     make: impl Fn() -> B,
     step: f64,
     alignments: usize,
@@ -363,10 +363,10 @@ fn fm_demod_declares_the_discriminator_and_the_audio_filter() {
 
 #[test]
 fn measured_output_counts_follow_the_declared_ratio() {
-    fn count<B: Block>(mut block: B, input: &[B::In]) -> (usize, Ratio)
-    where
-        B::Out: Default,
-    {
+    fn count<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+        mut block: B,
+        input: &[I],
+    ) -> (usize, Ratio) {
         let ratio = block.timing().ratio;
         (run_block(&mut block, input, None).len(), ratio)
     }

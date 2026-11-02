@@ -17,9 +17,9 @@
 use sdrk::Sdrk;
 use sdrk_blocks::design::{DesignWindow, firwin_lowpass, kaiserord};
 use sdrk_blocks::{
-    AmDemodBlock, AmDemodConfig, Block, DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig,
-    FrameBlock, ResampleBlock, ResampleConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
-    SsbDemodBlock, SsbDemodConfig, SsbSideband,
+    AmDemodBlock, AmDemodConfig, Block, DdcBlock, DdcConfig, FmDemodBlock, FmDemodConfig, Frame,
+    FrameOut, ResampleBlock, ResampleConfig, SpectrumBlock, SpectrumConfig, SpectrumWindow,
+    SsbDemodBlock, SsbDemodConfig, SsbSideband, StreamElem,
 };
 use sdrk_core::kernels::dot::{Dot, DotReal};
 use sdrk_core::{C32, CQ15, Q15, Rate, Reference, Sample};
@@ -224,13 +224,14 @@ fn dot_golden() {
 
 /// Feeds `input` to the block in pieces from `plan` (all at once for `None`), resubmitting what
 /// the block did not consume together with the next piece.
-fn run_block<B: Block>(block: &mut B, input: &[B::In], plan: Option<ChunkPlan>) -> Vec<B::Out>
-where
-    B::Out: Default,
-{
+fn run_block<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+    block: &mut B,
+    input: &[I],
+    plan: Option<ChunkPlan>,
+) -> Vec<O> {
     let mut out = Vec::new();
-    let mut room = vec![B::Out::default(); 2048];
-    let mut pending: Vec<B::In> = Vec::new();
+    let mut room = vec![O::default(); 2048];
+    let mut pending: Vec<I> = Vec::new();
     let mut pos = 0;
     let mut sizes = plan.map(|p| p.sizes());
     while pos < input.len() {
@@ -258,10 +259,11 @@ fn chunk_plans(seed: u64) -> impl Iterator<Item = ChunkPlan> {
 }
 
 /// Runs a fresh block over `input` whole and chunked; checks the golden file and the invariance.
-fn check_stream<B: Block>(case: &GoldenCase, input: &[B::In], make: impl Fn() -> B)
-where
-    B::Out: Default + Sample,
-{
+fn check_stream<I: StreamElem, O: StreamElem + Default + Sample, B: Block<In = I, Out = O>>(
+    case: &GoldenCase,
+    input: &[I],
+    make: impl Fn() -> B,
+) {
     check_stream_with(case, input, make, true);
 }
 
@@ -269,17 +271,24 @@ where
 /// `fm_demod` and `am_demod`): those kernels are tolerance kernels of the SIMD backend whose
 /// bits may depend on the split (maintainer decision of 2026-10-29), so a chunked run has to
 /// match the golden file instead of the bits of the whole run.
-fn check_stream_tolerant<B: Block>(case: &GoldenCase, input: &[B::In], make: impl Fn() -> B)
-where
-    B::Out: Default + Sample,
-{
+fn check_stream_tolerant<
+    I: StreamElem,
+    O: StreamElem + Default + Sample,
+    B: Block<In = I, Out = O>,
+>(
+    case: &GoldenCase,
+    input: &[I],
+    make: impl Fn() -> B,
+) {
     check_stream_with(case, input, make, false);
 }
 
-fn check_stream_with<B: Block>(case: &GoldenCase, input: &[B::In], make: impl Fn() -> B, bits: bool)
-where
-    B::Out: Default + Sample,
-{
+fn check_stream_with<I: StreamElem, O: StreamElem + Default + Sample, B: Block<In = I, Out = O>>(
+    case: &GoldenCase,
+    input: &[I],
+    make: impl Fn() -> B,
+    bits: bool,
+) {
     let expected = case.array("expected").unwrap();
     let whole = run_block(&mut make(), input, None);
     golden::assert_matches(case, expected, &whole).unwrap();
@@ -588,9 +597,9 @@ fn spectrum_config(case: &GoldenCase) -> SpectrumConfig {
 }
 
 /// Pushes `input` in pieces of the plan and collects every completed frame.
-fn frames<B: FrameBlock>(
+fn frames<I: StreamElem, B: Block<In = I, Out = Frame>>(
     block: &mut B,
-    input: &[B::In],
+    input: &[I],
     plan: Option<ChunkPlan>,
 ) -> Vec<(Vec<f32>, sdrk_blocks::FrameMeta)> {
     let mut out = Vec::new();
@@ -605,11 +614,16 @@ fn frames<B: FrameBlock>(
         let mut piece = &input[pos..pos + want];
         pos += want;
         while !piece.is_empty() {
-            let (used, meta) = block.push(piece, &mut frame).unwrap();
+            let mut meta = None;
+            let port = FrameOut {
+                values: &mut frame,
+                meta: &mut meta,
+            };
+            let used = block.process(piece, port).unwrap().consumed;
             if let Some(meta) = meta {
                 out.push((frame.clone(), meta));
             }
-            assert!(used > 0, "push made no progress");
+            assert!(used > 0, "process made no progress");
             piece = &piece[used..];
         }
     }

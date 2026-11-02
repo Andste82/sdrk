@@ -29,7 +29,7 @@ use sdrk_blocks::design::{halfband_len, halfband_taps, kaiser_beta};
 use sdrk_blocks::{
     ArenaStorage, Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig, ConvertRealBlock,
     Error, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ParamValue,
-    RealToIqBlock, all_descriptions,
+    RealToIqBlock, StreamElem, all_descriptions,
 };
 use sdrk_core::kernels::convert::ConvertReal;
 use sdrk_core::kernels::halfband::{HalfbandDecimate, HalfbandDecimateReal, RealToComplex};
@@ -59,10 +59,12 @@ fn plans20() -> Vec<ChunkPlan> {
 
 /// The response of the block to an impulse at input index 1 is `h[2 j - 1]`; at index 0 it is
 /// `h[2 j]`. Together they read out all the taps.
-fn impulse_taps<B: Block>(block: &mut B, one: B::In, zero: B::In, n: usize) -> Vec<B::Out>
-where
-    B::Out: Default,
-{
+fn impulse_taps<I: StreamElem, O: StreamElem + Default, B: Block<In = I, Out = O>>(
+    block: &mut B,
+    one: I,
+    zero: I,
+    n: usize,
+) -> Vec<O> {
     let mut x = vec![zero; n + 1];
     x[0] = one;
     run_block(block, &x, None)

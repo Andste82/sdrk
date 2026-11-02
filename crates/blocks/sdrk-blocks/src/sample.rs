@@ -13,9 +13,10 @@ use sdrk_core::{C32, CQ15, ComplexSample, Q15, RealSample, Sample};
 
 use crate::design::q15_tap;
 use crate::error::Result;
+use crate::ports::StreamElem;
 
 /// Operations of the tuned (polyphase) resampler for one sample type.
-pub trait TunedElem: Sample {
+pub trait TunedElem: Sample + StreamElem {
     /// Type of the filter taps (`f32` or `Q15`).
     type Tap: Sample;
 
@@ -115,7 +116,9 @@ impl BlockReal for f32 {}
 impl BlockReal for Q15 {}
 
 /// A complex sample type the blocks work with: `C32` or `CQ15`.
-pub trait BlockSample: ComplexSample + TunedElem<Tap = <Self as ComplexSample>::Real> {
+pub trait BlockSample:
+    ComplexSample<Real: StreamElem> + TunedElem<Tap = <Self as ComplexSample>::Real>
+{
     /// Largest gain of the `scale` block in dB: `+40` for `C32`, `0` for `CQ15` (Q15 cannot
     /// represent a gain above 1).
     const MAX_GAIN_DB: f64;

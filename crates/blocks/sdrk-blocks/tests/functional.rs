@@ -30,8 +30,8 @@ use num_complex::Complex64;
 use sdrk::{C32, CQ15, ComplexSample, Q15, RealSample, Sdrk};
 use sdrk_blocks::{
     Block, BlockReal, BlockSample, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock,
-    DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FrameBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, SpectrumBlock, SpectrumConfig,
+    DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FrameOut,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, SpectrumBlock, SpectrumConfig,
     SpectrumSample, SpectrumWindow,
 };
 use sdrk_core::kernels::{
@@ -407,15 +407,39 @@ fn spectrum_push_stops_after_a_frame_and_reports_consumption() {
     let mut block = SpectrumBlock::<C32, _>::new(&cfg, rate(16_000), &mut VecStorage).unwrap();
     let x = vec![C32::new(0.5, 0.0); 40];
     let mut frame = [0.0f32; 16];
-    assert_eq!(block.push(&x[..10], &mut frame).unwrap(), (10, None));
-    let (used, meta) = block.push(&x[10..], &mut frame).unwrap();
-    assert_eq!(used, 6, "the call stops right after the frame");
+    let mut meta = None;
+    let out = FrameOut {
+        values: &mut frame,
+        meta: &mut meta,
+    };
+    let p = block.process(&x[..10], out).unwrap();
+    assert_eq!((p.consumed, p.produced), (10, 0));
+    assert!(meta.is_none());
+    let out = FrameOut {
+        values: &mut frame,
+        meta: &mut meta,
+    };
+    let p = block.process(&x[10..], out).unwrap();
+    assert_eq!(p.consumed, 6, "the call stops right after the frame");
+    assert_eq!(p.produced, 1);
     assert_eq!(meta.unwrap().first_sample, 0);
-    let (used, meta) = block.push(&x[16..], &mut frame).unwrap();
-    assert_eq!(used, 16);
+    let mut meta = None;
+    let out = FrameOut {
+        values: &mut frame,
+        meta: &mut meta,
+    };
+    let p = block.process(&x[16..], out).unwrap();
+    assert_eq!(p.consumed, 16);
     assert_eq!(meta.unwrap().first_sample, 16);
     // A frame buffer of the wrong size is an error.
-    assert!(block.push(&x, &mut [0.0; 8]).is_err());
+    let mut wrong = [0.0f32; 8];
+    let mut meta = None;
+    let out = FrameOut {
+        values: &mut wrong,
+        meta: &mut meta,
+    };
+    assert!(block.process(&x, out).is_err());
+    assert!(meta.is_none());
     assert_eq!(block.frame_len(), 16);
     // DC reads -6 dB (amplitude 0.5) at index N/2 for the rectangular-ish Hann sum.
     assert!(

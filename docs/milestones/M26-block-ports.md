@@ -261,7 +261,7 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-p
 
 ## Deliverables checklist
 
-- [ ] `ports.rs` with `StreamElem`, `Ports`, `Two`, `Frame`, `FrameOut`, doc tests
-- [ ] `Block` on port types, `frame_len`; `FrameBlock` removed; `SpectrumBlock` on `Block<Out = Frame>`
-- [ ] Node wrappers on the new trait; every caller migrated; outputs bit-identical
-- [ ] `docs/blocks.md`, `docs/architecture.md`, CHANGELOG with migration note, decisions log
+- [x] `ports.rs` with `StreamElem`, `Ports`, `Two`, `Frame`, `FrameOut`, doc tests
+- [x] `Block` on port types, `frame_len`; `FrameBlock` removed; `SpectrumBlock` on `Block<Out = Frame>`
+- [x] Node wrappers on the new trait; every caller migrated; outputs bit-identical
+- [x] `docs/blocks.md`, `docs/architecture.md`, CHANGELOG with migration note, decisions log

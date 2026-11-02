@@ -5,6 +5,7 @@ use sdrk_device::SampleFormat;
 
 use crate::describe::BlockDescription;
 use crate::error::{Error, Result};
+use crate::ports::Ports;
 
 /// Exact timing of a block: output rate divided by input rate, whether it can change, and the
 /// group delay in input samples.
@@ -110,23 +111,37 @@ pub(crate) fn runtime_param(
     Ok(p.name)
 }
 
-/// A processing block with one streaming input and one streaming output (multi-port routing
-/// is the pipeline's job).
+/// A processing block. Its input and output are port types ([`Ports`]): a stream of one sample
+/// type, a pair of streams ([`Two`](crate::Two)) or frames ([`Frame`](crate::Frame)). A stream
+/// block writes `type In = C32;` and `fn process(&mut self, input: &[C32], output: &mut [C32])`.
+///
+/// Lockstep rule for [`Two`](crate::Two) ports: both slices of a pair have the same length
+/// (otherwise `LengthMismatch`, nothing changes) and `Progress` counts pairs.
+///
+/// Frame rule for `Out = Frame`: `process` consumes input and stops right after completing a
+/// frame; it then writes the frame into `FrameOut::values`, sets `*FrameOut::meta` to `Some`
+/// and returns `produced: 1`. Without a completed frame `produced` is 0 and `*meta` is left
+/// unchanged. `values.len() != frame_len()` is `LengthMismatch`; the content of `values` is
+/// unspecified unless a frame is returned.
 ///
 /// Blocks use caller-provided storage, never allocate and never panic. `process` follows the
 /// contract of the rate-changing kernels: it consumes as much input as it can and produces at
 /// most `output.len()` samples; the caller resubmits the unconsumed input.
 pub trait Block: Send {
-    /// Input sample type.
-    type In: Copy + Send;
-    /// Output sample type.
-    type Out: Copy + Send;
+    /// Input port type.
+    type In: Ports;
+    /// Output port type.
+    type Out: Ports;
 
     /// The machine-readable description of this block kind.
     fn description(&self) -> &'static BlockDescription;
 
     /// Consumes as much input as possible and produces at most `output.len()` samples.
-    fn process(&mut self, input: &[Self::In], output: &mut [Self::Out]) -> Result<Progress>;
+    fn process(
+        &mut self,
+        input: <Self::In as Ports>::Ref<'_>,
+        output: <Self::Out as Ports>::Mut<'_>,
+    ) -> Result<Progress>;
 
     /// Exact ratio out/in and group delay (in input samples).
     fn timing(&self) -> BlockTiming;
@@ -164,6 +179,11 @@ pub trait Block: Send {
         let v = (u128::from(rel_in) * u128::from(ratio.num())).div_ceil(u128::from(ratio.den()));
         u64::try_from(v).unwrap_or(u64::MAX)
     }
+
+    /// Number of `f32` values of one frame for `Out = Frame`; 0 for every other block.
+    fn frame_len(&self) -> usize {
+        0
+    }
 }
 
 /// Metadata of a completed frame.
@@ -182,35 +202,4 @@ pub struct FrameMeta {
     pub averaged: u32,
     /// Power of two the values still have to be multiplied by (always 0: already applied).
     pub exponent: i32,
-}
-
-/// Blocks that output frames (spectrum, measurements) instead of a stream.
-pub trait FrameBlock: Send {
-    /// Input sample type.
-    type In: Copy + Send;
-
-    /// The machine-readable description of this block kind.
-    fn description(&self) -> &'static BlockDescription;
-
-    /// Number of `f32` values in a frame.
-    fn frame_len(&self) -> usize;
-
-    /// Consumes input; when a frame completes, writes it into `frame` and returns its metadata.
-    /// At most one frame per call: the call stops consuming right after completing a frame.
-    /// Returns the number of consumed input samples and the frame metadata, if any.
-    ///
-    /// # Errors
-    /// `LengthMismatch` if `frame.len()` differs from [`FrameBlock::frame_len`]. The content of
-    /// `frame` is unspecified unless a frame is returned.
-    fn push(&mut self, input: &[Self::In], frame: &mut [f32])
-    -> Result<(usize, Option<FrameMeta>)>;
-
-    /// Clears all history and the sample counter; the parameters stay.
-    fn reset(&mut self);
-
-    /// Changes a run-time parameter (see [`Block::set_param`]).
-    fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()>;
-
-    /// Current value of a parameter (see [`Block::param`]).
-    fn param(&self, name: &str) -> Result<ParamValue>;
 }

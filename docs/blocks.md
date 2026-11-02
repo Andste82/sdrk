@@ -6,11 +6,19 @@
 
 ```rust,ignore
 pub trait Block: Send {
-    type In: Copy + Send;
-    type Out: Copy + Send;
+    type In: Ports;
+    type Out: Ports;
     fn description(&self) -> &'static BlockDescription;
-    fn process(&mut self, input: &[Self::In], output: &mut [Self::Out]) -> Result<Progress>;
+    fn process(&mut self, input: <Self::In as Ports>::Ref<'_>,
+               output: <Self::Out as Ports>::Mut<'_>) -> Result<Progress>;
     fn timing(&self) -> BlockTiming;               // { ratio, kind, delay }
+    fn reset(&mut self);
+    fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()>;
+    fn param(&self, name: &str) -> Result<ParamValue>;
+    fn min_input(&self) -> usize;
+    fn map_index(&self, rel_in: u64) -> u64;       // default: ceil(rel_in * L / M)
+    fn frame_len(&self) -> usize { 0 }             // values per frame for Out = Frame
+}
     fn reset(&mut self);
     fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()>;
     fn param(&self, name: &str) -> Result<ParamValue>;
@@ -19,13 +27,15 @@ pub trait Block: Send {
 }
 ```
 
+- The input and the output of a block are *port types* (`Ports`): a stream of one sample type (`C32`, `CQ15`, `f32`, `Q15`, `u8`; the sealed trait `StreamElem`), a pair of streams `Two<A, B>` or frames `Frame`. A stream element is its own port type with `Ref = &[T]` and `Mut = &mut [T]`, so a stream block keeps its signature: `type In = C32;` and `fn process(&mut self, input: &[C32], output: &mut [C32])`. A pair block reads `(&[A], &[B])` and writes `(&mut [A], &mut [B])`; a frame block writes a `FrameOut { values, meta }`.
+- Lockstep rule for `Two`: both input slices of a call have the same length and the block consumes the same number of samples from each (`Progress.consumed` counts pairs); both output slices have the same length and the block writes the same number of samples to each (`Progress.produced` counts pairs). Unequal lengths are `LengthMismatch` and change nothing.
 - `process` follows the contract of the rate-changing kernels: it consumes as much input as it can and produces at most `output.len()` samples; the caller resubmits `input[consumed..]`. A call that can neither consume nor produce returns `Progress { 0, 0 }` (no input, no output room, or less than one packing group). A resampler that ran out of output room keeps the remaining outputs pending and delivers them in the next call, also with an empty input.
 - The output depends only on the absolute input position, never on how the input was cut into calls or how big the output buffer was (tested for every block with random chunk plans, including 1-sample chunks).
 - `map_index(rel_in)` maps a count of input samples since the last origin (construction or `reset`) to the number of output samples that include them: the first output sample that includes input sample `n` is `map_index(n)`. The default is `ceil(rel_in * L / M)` with the exact ratio of `timing()`; the tunable resampler overrides it with its position step (`ceil(rel_in * 2^32 / step)` in `u128`). The pipeline uses it for the index domains of [timing.md](timing.md#index-domains-in-the-pipeline).
 - `timing()` is exact: `ratio` is output rate divided by input rate (`Ratio`), `kind` is `Constant` or `Variable` (the tunable resampler), `delay` the group delay in input samples as an exact fraction (see [timing.md](timing.md)).
 - `reset()` clears all history (the pipeline calls it on gaps) and keeps the parameters; the output after a reset equals that of a fresh block.
 - `set_param` changes a *runtime* parameter from the first sample of the next `process` call. Errors: `UnknownParameter` (name not in the description), `ReadOnlyParameter` (a build parameter), `WrongParamType`, `OutOfRange { name, min, max, got }` (also for NaN). A rejected value changes nothing. `param` returns the value in use, also for build parameters and for defaults that depend on the sample rate (`cutoff_hz` of a `ddc` reads `0.4 * fs / decimation`).
-- Blocks that output frames instead of a stream (the spectrum) implement `FrameBlock`: `push(input, frame) -> (consumed, Option<FrameMeta>)` completes at most one frame per call and stops consuming right after it. `FrameMeta { first_sample, averaged, exponent }` (`exponent` is always 0: the block applies the exponent of the block-floating-point FFT itself).
+- Blocks that output frames instead of a stream (the spectrum) are `Block<Out = Frame>`: `process(input, FrameOut { values, meta })` completes at most one frame per call and stops consuming right after it. It writes the frame into `values` (`values.len() != frame_len()` is `LengthMismatch`), sets `*meta = Some(FrameMeta { first_sample, averaged, exponent })` and returns `produced: 1`; without a completed frame `produced` is 0 and `*meta` is left unchanged (the caller sets it to `None` before the call). `exponent` is always 0: the block applies the exponent of the block-floating-point FFT itself. The `timing()` of the spectrum is the nominal ratio `1 / interval_samples` (`Variable`) with the delay `fft_size - 1`; the pipeline does not use it for rates.
 
 `ParamValue` is `F64`, `I64`, `Bool`, `Choice(index)` or `Format(SampleFormat)`.
 

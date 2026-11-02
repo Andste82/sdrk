@@ -28,9 +28,8 @@ use common::{arg, norm, rate, run_block, run_frames};
 use num_complex::Complex64;
 use sdrk::{C32, CQ15, ComplexSample};
 use sdrk_blocks::{
-    Block, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FmModBlock, FmModConfig, FrameBlock,
-    ParamValue, ResampleBlock, ResampleConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig,
+    Block, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FmModBlock, FmModConfig, ParamValue,
+    ResampleBlock, ResampleConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
 };
 use sdrk_testkit::VecStorage;
 
@@ -303,10 +302,7 @@ fn spectrum_averaging_and_interval_apply_to_the_next_frame() {
     assert_eq!(frames[0].1.averaged, 1);
     assert_eq!(frames[1].1.first_sample, 64);
     block.set_param("averaging", ParamValue::I64(4)).unwrap();
-    assert_eq!(
-        FrameBlock::param(&block, "averaging"),
-        Ok(ParamValue::I64(4))
-    );
+    assert_eq!(Block::param(&block, "averaging"), Ok(ParamValue::I64(4)));
     let frames = run_frames(&mut block, &input[128..128 + 64 * 8], None);
     assert_eq!(frames.len(), 2);
     assert!(frames.iter().all(|f| f.1.averaged == 4));
@@ -318,7 +314,7 @@ fn spectrum_averaging_and_interval_apply_to_the_next_frame() {
         .set_param("interval_samples", ParamValue::I64(16))
         .unwrap();
     assert_eq!(
-        FrameBlock::param(&block, "interval_samples"),
+        Block::param(&block, "interval_samples"),
         Ok(ParamValue::I64(16))
     );
     let frames = run_frames(&mut block, &input[640..640 + 64 + 32], None);

@@ -39,10 +39,11 @@ mod blocks;
 pub mod describe;
 pub mod design;
 mod error;
+mod ports;
 mod sample;
 mod storage;
 
-pub use block::{Block, BlockTiming, FrameBlock, FrameMeta, ParamValue};
+pub use block::{Block, BlockTiming, FrameMeta, ParamValue};
 pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
@@ -72,5 +73,6 @@ pub use describe::{
 };
 pub use design::{BiquadResponse, DesignSpec, DesignWindow};
 pub use error::{Error, Result};
+pub use ports::{Frame, FrameOut, Ports, StreamElem, Two};
 pub use sample::{BlockReal, BlockSample, TunedElem};
 pub use storage::{ARENA_ALIGN, AlignedBytes, ArenaStorage, Storage};

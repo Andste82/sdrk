@@ -2,7 +2,8 @@
 
 use sdrk::{C32, CQ15, Progress, Q15};
 use sdrk_blocks::{
-    Block, BlockDescription, BlockTiming, Error as BlockError, FrameBlock, FrameMeta, ParamValue,
+    Block, BlockDescription, BlockTiming, Error as BlockError, Frame, FrameMeta, FrameOut,
+    ParamValue, StreamElem,
 };
 
 /// Typed, borrowed input views used by the type-erased runner. The variant always matches the
@@ -38,13 +39,9 @@ pub enum NodeOutput<'a> {
     Frame(&'a mut [f32]),
 }
 
-mod sealed {
-    pub trait Sealed {}
-}
-
-/// An element type that can travel through a [`NodeInput`] or [`NodeOutput`] (`u8`, `C32`,
-/// `CQ15`, `f32`, `Q15`). Sealed.
-pub trait NodeElem: Copy + Send + 'static + sealed::Sealed {
+/// How a stream element is taken out of a [`NodeInput`] or [`NodeOutput`]. Implemented for
+/// every [`StreamElem`] (`u8`, `C32`, `CQ15`, `f32`, `Q15`); the supertrait seals it.
+pub trait NodeSlice: StreamElem {
     /// The slice of this type, if the view has the matching variant.
     fn input(i: NodeInput<'_>) -> Option<&[Self]>;
     /// The mutable slice of this type, if the view has the matching variant.
@@ -53,8 +50,7 @@ pub trait NodeElem: Copy + Send + 'static + sealed::Sealed {
 
 macro_rules! elem {
     ($t:ty, $v:ident) => {
-        impl sealed::Sealed for $t {}
-        impl NodeElem for $t {
+        impl NodeSlice for $t {
             fn input(i: NodeInput<'_>) -> Option<&[Self]> {
                 match i {
                     NodeInput::$v(s) => Some(s),
@@ -81,7 +77,7 @@ fn mismatch() -> BlockError {
     BlockError::Core(sdrk_core::Error::Internal("node port type mismatch"))
 }
 
-/// Object-safe wrapper around a `Block` or `FrameBlock`.
+/// Object-safe wrapper around a `Block` with stream or frame ports.
 ///
 /// Implemented by [`StreamNode`] and [`FrameNode`]; a custom block can be wrapped the same way.
 pub trait Node: Send {
@@ -137,11 +133,11 @@ impl<B: Block> StreamNode<B> {
     }
 }
 
-impl<B> Node for StreamNode<B>
+impl<B, I, O> Node for StreamNode<B>
 where
-    B: Block,
-    B::In: NodeElem,
-    B::Out: NodeElem,
+    B: Block<In = I, Out = O>,
+    I: NodeSlice,
+    O: NodeSlice,
 {
     fn process(
         &mut self,
@@ -149,8 +145,8 @@ where
         output: NodeOutput<'_>,
         _meta: &mut Option<FrameMeta>,
     ) -> Result<Progress, BlockError> {
-        let input = <B::In as NodeElem>::input(input).ok_or_else(mismatch)?;
-        let output = <B::Out as NodeElem>::output(output).ok_or_else(mismatch)?;
+        let input = <I as NodeSlice>::input(input).ok_or_else(mismatch)?;
+        let output = <O as NodeSlice>::output(output).ok_or_else(mismatch)?;
         self.block.process(input, output)
     }
 
@@ -183,7 +179,7 @@ where
     }
 }
 
-/// A [`Node`] around a [`FrameBlock`].
+/// A [`Node`] around a [`Block`] with `Out = Frame`.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -201,21 +197,21 @@ where
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug)]
-pub struct FrameNode<B: FrameBlock> {
+pub struct FrameNode<B: Block<Out = Frame>> {
     block: B,
 }
 
-impl<B: FrameBlock> FrameNode<B> {
+impl<B: Block<Out = Frame>> FrameNode<B> {
     /// Wraps a frame block.
     pub fn new(block: B) -> Self {
         Self { block }
     }
 }
 
-impl<B> Node for FrameNode<B>
+impl<B, I> Node for FrameNode<B>
 where
-    B: FrameBlock,
-    B::In: NodeElem,
+    B: Block<In = I, Out = Frame>,
+    I: NodeSlice,
 {
     fn process(
         &mut self,
@@ -223,16 +219,18 @@ where
         output: NodeOutput<'_>,
         meta: &mut Option<FrameMeta>,
     ) -> Result<Progress, BlockError> {
-        let input = <B::In as NodeElem>::input(input).ok_or_else(mismatch)?;
+        let input = <I as NodeSlice>::input(input).ok_or_else(mismatch)?;
         let NodeOutput::Frame(frame) = output else {
             return Err(mismatch());
         };
-        let (consumed, done) = self.block.push(input, frame)?;
-        *meta = done;
-        Ok(Progress {
-            consumed,
-            produced: usize::from(done.is_some()),
-        })
+        *meta = None;
+        self.block.process(
+            input,
+            FrameOut {
+                values: frame,
+                meta,
+            },
+        )
     }
 
     fn reset(&mut self) {

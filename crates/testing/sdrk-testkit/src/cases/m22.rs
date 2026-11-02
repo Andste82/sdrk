@@ -16,7 +16,7 @@ use sdrk::Sdrk;
 use sdrk_blocks::design::{BiquadResponse, biquad_coefs, butterworth_sos, to_f32_sos, to_q14};
 use sdrk_blocks::{
     ARENA_ALIGN, ArenaStorage, BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock, Block,
-    BlockReal, BlockSample, ParamValue,
+    BlockReal, BlockSample, ParamValue, StreamElem,
 };
 use sdrk_core::kernels::biquad::{
     Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState, MAX_SECTIONS,
@@ -673,10 +673,10 @@ where
 }
 
 /// Runs `block` over `input`: in one call, or in the chunks of `plan`.
-fn drive<B: Block>(
+fn drive<I: StreamElem, O: StreamElem, B: Block<In = I, Out = O>>(
     block: &mut B,
-    input: &[B::In],
-    output: &mut [B::Out],
+    input: &[I],
+    output: &mut [O],
     plan: Option<ChunkPlan>,
 ) -> Result<(), Failure> {
     let Some(plan) = plan else {

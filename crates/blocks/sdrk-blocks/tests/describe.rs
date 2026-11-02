@@ -33,12 +33,13 @@ use sdrk::{C32, CQ15};
 use sdrk_blocks::{
     AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
     Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, Mutability, ParamKind, ParamValue, PortType, PreemphLimitBlock,
-    PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig,
-    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    all_descriptions,
+    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig,
+    DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
+    FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, InterpolateConfig,
+    Mutability, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    QuadDemodConfig, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock,
+    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -58,10 +59,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_twenty_unique_kinds() {
+fn there_are_twenty_seven_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 20);
-    assert_eq!(all_descriptions().len(), 20);
+    assert_eq!(kinds.len(), 27);
+    assert_eq!(all_descriptions().len(), 27);
     for kind in [
         "convert",
         "convert_out",
@@ -81,6 +82,15 @@ fn there_are_twenty_unique_kinds() {
         "am_demod",
         "ssb_demod",
         "biquad",
+        "halfband_decimate",
+        "real_to_iq",
+        "quad_demod",
+        "deemphasis",
+        "rotate",
+        "decimate",
+        "interpolate",
+        "mag",
+        "delay",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -269,6 +279,12 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("ssb_demod", |n| SsbDemodConfig::default().get(n), &[]);
     defaults_match("biquad", |n| BiquadConfig::default().get(n), &[]);
     defaults_match("convert_out", |n| ConvertOutConfig::default().get(n), &[]);
+    defaults_match("quad_demod", |n| QuadDemodConfig::default().get(n), &[]);
+    defaults_match("deemphasis", |n| DeemphasisConfig::default().get(n), &[]);
+    defaults_match("rotate", |n| RotateConfig::default().get(n), &[]);
+    defaults_match("decimate", |n| DecimateConfig::default().get(n), &[]);
+    defaults_match("interpolate", |n| InterpolateConfig::default().get(n), &[]);
+    defaults_match("delay", |n| DelayConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts

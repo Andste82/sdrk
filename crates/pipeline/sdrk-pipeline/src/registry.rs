@@ -10,9 +10,10 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DucKind,
-    Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, Kind,
-    PreemphLimitKind, RealToIqKind, ResampleKind, ScaleKind, SpectrumKind, SquelchKind,
+    AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind,
+    DecimateKind, DeemphasisKind, DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind,
+    FmStereoDemodKind, HalfbandDecimateKind, InterpolateKind, Kind, MagKind, PreemphLimitKind,
+    QuadDemodKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SpectrumKind, SquelchKind,
     SsbDemodKind,
 };
 use crate::model::{PipelineSpec, Precision};
@@ -163,7 +164,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 20);
+/// assert_eq!(registry.descriptions().count(), 27);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -201,6 +202,13 @@ impl Registry {
         register::<FmDemodKind>(&mut factories);
         register::<FmStereoDemodKind>(&mut factories);
         register::<PreemphLimitKind>(&mut factories);
+        register::<QuadDemodKind>(&mut factories);
+        register::<DeemphasisKind>(&mut factories);
+        register::<RotateKind>(&mut factories);
+        register::<DecimateKind>(&mut factories);
+        register::<InterpolateKind>(&mut factories);
+        register::<MagKind>(&mut factories);
+        register::<DelayKind>(&mut factories);
         register::<FmModKind>(&mut factories);
         register::<ResampleKind>(&mut factories);
         register::<SpectrumKind>(&mut factories);

@@ -96,13 +96,31 @@ jobs:
       run_golden: ${{ needs.scope.outputs.run_golden == 'true' }}
       run_selfcheck: ${{ needs.scope.outputs.run_selfcheck == 'true' }}
 
+  release_check:
+    # `cargo xtask release-check` on a release pull request (title `Release ...`, M25.1).
+    name: release_check
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Release')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-release-check
+      - name: Release check of the workspace version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          echo "workspace version $version"
+          cargo xtask release-check "$version"
+
   result:
     # The one required check of the branch protection: green only when `scope` and every job
     # of the tree that ran passed. A single check keeps the protection independent of the
     # jobs in the tree (a skipped matrix job reports an unexpanded name such as
     # `build_wasm_pkg (${{ matrix.host }})`, which a list of required names would wait for).
     name: result
-    needs: [scope, tree]
+    needs: [scope, tree, release_check]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -112,6 +130,8 @@ jobs:
         env:
           SCOPE: ${{ needs.scope.result }}
           TREE: ${{ needs.tree.result }}
+          RELEASE: ${{ needs.release_check.result }}
         run: |
-          echo "scope: $SCOPE, tree: $TREE"
+          echo "scope: $SCOPE, tree: $TREE, release_check: $RELEASE"
           test "$SCOPE" = success && test "$TREE" = success
+          test "$RELEASE" = success || test "$RELEASE" = skipped

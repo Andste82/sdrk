@@ -137,7 +137,7 @@ cargo xtask wasm-pkg [--relaxed] [--no-opt] [--no-pack]
 
 `wasm-pkg` checks that `wasm-bindgen --version` equals the version pinned (`=x.y.z`) in `bindings/wasm/Cargo.toml`, builds the variants with their `RUSTFLAGS` in `target/wasm-pkg-build/<variant>`, runs `wasm-bindgen --target web`, runs `wasm-opt -O3` if it is in `PATH` (skipped otherwise, with a message), assembles `target/wasm-pkg/` and runs `npm pack` (tarball in `target/wasm-pkg-tgz/`) if `npm` exists. It prints the sizes of the modules and warns above the soft limit of 1.5 MiB per variant.
 
-Sizes of the modules with `wasm-opt -O3` (version 0.0.1): `sdrk_simd.wasm` 0.95 MiB, `sdrk_scalar.wasm` 0.93 MiB, `sdrk_relaxed.wasm` 0.95 MiB (999 832, 976 342 and 999 900 bytes). The tarball is 1.1 MB.
+Sizes of the modules with `wasm-opt -O3` (measured before 0.1.0): `sdrk_simd.wasm` 0.95 MiB, `sdrk_scalar.wasm` 0.93 MiB, `sdrk_relaxed.wasm` 0.95 MiB (999 832, 976 342 and 999 900 bytes). The tarball is 1.1 MB.
 
 ### Workers
 

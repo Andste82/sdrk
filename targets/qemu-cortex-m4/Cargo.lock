@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-backend-simd",
  "sdrk-core",
@@ -232,7 +232,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-backend-simd"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-blocks"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",
@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "libm",
@@ -265,18 +265,18 @@ dependencies = [
 
 [[package]]
 name = "sdrk-device"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "sdrk-target-common"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-testkit",
 ]
 
 [[package]]
 name = "sdrk-target-qemu-cortex-m4"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -291,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-testkit"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",

@@ -4,8 +4,13 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-02
+
+The first release (M25.1, D202): the milestones M00 to M15 and M19 to M25 with M24.1; release notes in [docs/releases/0.1.0.md](docs/releases/0.1.0.md). Nothing is published to crates.io or npm; the release is the tag `v0.1.0`.
+
 ### Added
 
+- M25.1: `cargo xtask release-check <version>` checks a release commit (workspace version and its inheritance, the `CHANGELOG.md` section, the release notes, the open items named by waivers, the `__VERSION__` placeholder of the npm template, no stray old version) and lists every `dev` or `release` entry of `benches/limits.json` with a waiver; CI runs it on pull requests whose title starts with `Release`. Workspace version 0.1.0, also in the emulator target crates.
 - M00: workspace with the layer folders, placeholder crates `sdrk-device`, `sdrk-core`, `sdrk` and `sdrk-testkit`, `xtask` (`check`, `bare-metal`, `test-all`), lint and format configuration, `deny.toml`, CI on Linux x86_64, Linux arm64 and Windows x86_64, documentation skeleton, development container (`.devcontainer/`).
 - M01: `sdrk-device` with `ErrorKind`/`SdrkError`/`Error`, `SampleFormat` and the `formats` constants, exact time types (`SampleIndex`, `Rate`, `Ratio`, `TimeAnchor`), `BlockFlags`/`BlockMeta` and the `RxStream`/`TxStream` traits; `docs/device.md`.
 - M02: `sdrk-core` with the sample types (`C32`, `CQ15`, `F32`, `Q15`), Q15 arithmetic (`num`), `Error`, timing declarations (`Delay`, `Timing`, `Progress`), the one-trait-per-kernel pattern with `Fallback` and `Reference` (feature `reference`), `map_kernel!` and the example kernel `Scale`; facade `sdrk` with `Sdrk`, `delegate!` and `backend_for`; `docs/kernels.md`.

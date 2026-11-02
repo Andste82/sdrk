@@ -12,7 +12,7 @@ The repository contains only reusable SDR building blocks and what is needed to 
 
 ## Status
 
-Milestones M00 to M15, M19 to M24 and M24.1 are delivered: the kernels, the blocks, the JSON pipeline with time, events and the transmit path, file I/O and device capabilities, the SIMD backend (x86-64, AArch64, wasm32), the WebAssembly bindings with the npm package layout, the emulator targets (Cortex-M4, Cortex-M55, RISC-V 32, ESP32-P4, ESP32-S3), NFM receive with a squelch (M19), AM receive with an AGC (M20), SSB receive (M21), audio filters (M22), real-sampling devices (M23), FM stereo (M24) and the block names (M24.1). M16 to M18 and M25 are planned. The workspace version is 0.0.1; the release 0.1 (tag `v0.1.0`) is not made, and nothing is published to crates.io or npm. See [docs/milestones/README.md](docs/milestones/README.md) and [docs/open-items.md](docs/open-items.md).
+Milestones M00 to M15, M19 to M25, M24.1 and M25.1 are delivered: the kernels, the blocks, the JSON pipeline with time, events and the transmit path, file I/O and device capabilities, the SIMD backend (x86-64, AArch64, wasm32), the WebAssembly bindings with the npm package layout, the emulator targets (Cortex-M4, Cortex-M55, RISC-V 32, ESP32-P4, ESP32-S3), NFM receive with a squelch (M19), AM receive with an AGC (M20), SSB receive (M21), audio filters (M22), real-sampling devices (M23), FM stereo (M24), the block names (M24.1), FM transmit audio (M25) and the release 0.1.0 (M25.1, [release notes](docs/releases/0.1.0.md)). M16 to M18 are planned. The workspace version is 0.1.0, released as the tag `v0.1.0`; nothing is published to crates.io or npm. See [docs/milestones/README.md](docs/milestones/README.md) and [docs/open-items.md](docs/open-items.md).
 
 ## Documentation
 

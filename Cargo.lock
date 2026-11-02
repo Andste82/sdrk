@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "fm-receiver"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "num-complex",
  "sdrk",
@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "fm-transmitter"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-device",
  "sdrk-io",
@@ -1191,7 +1191,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "sdrk"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-backend-simd",
  "sdrk-core",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-backend-simd"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -1211,7 +1211,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-blocks"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",
@@ -1225,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "libm",
@@ -1235,11 +1235,11 @@ dependencies = [
 
 [[package]]
 name = "sdrk-device"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "sdrk-io"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "sdrk-device",
  "sdrk-testkit",
@@ -1249,7 +1249,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-pipeline"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "jsonschema",
@@ -1268,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-system-tests"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "num-complex",
  "sdrk",
@@ -1283,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-testkit"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",
@@ -1301,7 +1301,7 @@ dependencies = [
 
 [[package]]
 name = "sdrk-wasm"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "console_error_panic_hook",
@@ -1880,7 +1880,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",

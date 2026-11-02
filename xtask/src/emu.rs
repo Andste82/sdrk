@@ -268,18 +268,21 @@ pub const TARGETS: [Target; 5] = [
         // 200 s measured for the quick profile (the code must fit the 512 KiB ITCM: opt-level `z`
         // since M21, `s` before). 1093 s since M24 (the stereo cases, D161), so the quick profile
         // gets five times the default. The full profile took about 58 minutes at M21 and ran past
-        // 3600 s with the cases of M22 (nightly of 2026-10-28), so it gets twice the default.
+        // 3600 s with the cases of M22 (nightly of 2026-10-28), so it got twice the default; that
+        // ran out on a slow runner in the nightly of 2026-11-01 (D203), so it gets three times.
         quick_s: 5 * QUICK_TIMEOUT_S,
-        full_s: 2 * FULL_TIMEOUT_S,
+        full_s: 3 * FULL_TIMEOUT_S,
     },
     Target {
         name: "qemu-riscv32",
         tier: 2,
         triple: "riscv32imac-unknown-none-elf",
         runner: Runner::QemuRiscv32,
-        // Soft-float `C32` kernels: about 200 s measured before M23, 680 s since M24 (D161).
+        // Soft-float `C32` kernels: about 200 s measured before M23, 680 s since M24 (D161). The
+        // full profile took about 2700 s in the nightly of 2026-11-01 and ran past 3600 s after
+        // 150 of 156 cases in the nightly of 2026-11-02 (D203), so it gets twice the default.
         quick_s: 3 * QUICK_TIMEOUT_S,
-        full_s: FULL_TIMEOUT_S,
+        full_s: 2 * FULL_TIMEOUT_S,
     },
     Target {
         name: "esp32p4",

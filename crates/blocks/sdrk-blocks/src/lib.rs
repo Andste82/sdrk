@@ -52,6 +52,9 @@ pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
 pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig};
 pub use blocks::ddc::{DdcBlock, DdcConfig};
+pub use blocks::decimate::{DecimateBlock, DecimateConfig, DecimateRealBlock};
+pub use blocks::deemphasis::{DeemphasisConfig, DeemphasisRealBlock};
+pub use blocks::delay::{DelayBlock, DelayConfig, DelayRealBlock};
 pub use blocks::duc::{DucBlock, DucConfig};
 pub use blocks::fir::{FirBlock, FirConfig};
 pub use blocks::fm_demod::{FM_DEMOD_CHUNK, FmDemodBlock, FmDemodConfig};
@@ -60,11 +63,15 @@ pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmS
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
+pub use blocks::interpolate::{InterpolateBlock, InterpolateConfig, InterpolateRealBlock};
+pub use blocks::mag::{MagBlock, MagConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig};
+pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::real_to_iq::RealToIqBlock;
 pub use blocks::resample::{
     RESAMPLE_TUNED_PHASES, ResampleBlock, ResampleConfig, ResampleRealBlock,
 };
+pub use blocks::rotate::{RotateBlock, RotateConfig};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};

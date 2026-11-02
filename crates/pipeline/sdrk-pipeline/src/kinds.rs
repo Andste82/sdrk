@@ -13,11 +13,14 @@ use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
     AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
     BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DesignSpec, DucBlock,
-    DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
-    HalfbandDecimateRealBlock, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    RESAMPLE_TUNED_PHASES, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock,
+    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DecimateBlock,
+    DecimateConfig, DecimateRealBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
+    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, InterpolateBlock,
+    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
+    RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig,
     ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
     SsbDemodBlock, SsbDemodConfig,
 };
@@ -1255,6 +1258,460 @@ impl Kind for PreemphLimitKind {
                 cfg, rate, st
             )?)))
         )
+    }
+}
+
+// --------------------------------------------------------------- quad_demod
+
+pub(crate) struct QuadDemodKind;
+
+impl Kind for QuadDemodKind {
+    type Cfg = QuadDemodConfig;
+
+    const KIND: &'static str = "quad_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["quad_demod"]
+    }
+    fn default_cfg() -> QuadDemodConfig {
+        QuadDemodConfig::default()
+    }
+    fn set(cfg: &mut QuadDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &QuadDemodConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("quad_demod needs complex samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: QuadDemodBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: QuadDemodBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 12.0,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(real_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &QuadDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(QuadDemodBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// -------------------------------------------------------------- deemphasis
+
+pub(crate) struct DeemphasisKind;
+
+impl Kind for DeemphasisKind {
+    type Cfg = DeemphasisConfig;
+
+    const KIND: &'static str = "deemphasis";
+    fn kernels() -> &'static [&'static str] {
+        &["deemphasis"]
+    }
+    fn default_cfg() -> DeemphasisConfig {
+        DeemphasisConfig::default()
+    }
+    fn set(cfg: &mut DeemphasisConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &DeemphasisConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if is_complex(input) {
+            return Err(mismatch("deemphasis needs real samples"));
+        }
+        with_real!(
+            p,
+            R,
+            Ok(Figures {
+                rate_out: DeemphasisRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: DeemphasisRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 3.0,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(input),
+            })
+        )
+    }
+    fn build(
+        cfg: &DeemphasisConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_real!(
+            p,
+            R,
+            Ok(Box::new(StreamNode::new(DeemphasisRealBlock::<R, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------ rotate
+
+pub(crate) struct RotateKind;
+
+impl Kind for RotateKind {
+    type Cfg = RotateConfig;
+
+    const KIND: &'static str = "rotate";
+    fn kernels() -> &'static [&'static str] {
+        &["rotate"]
+    }
+    fn default_cfg() -> RotateConfig {
+        RotateConfig::default()
+    }
+    fn set(cfg: &mut RotateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &RotateConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("rotate needs complex samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: RotateBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: RotateBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 6.0,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &RotateConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(RotateBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ---------------------------------------------------------------- decimate
+
+pub(crate) struct DecimateKind;
+
+impl Kind for DecimateKind {
+    type Cfg = DecimateConfig;
+
+    const KIND: &'static str = "decimate";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_decimate", "resample_real"]
+    }
+    fn default_cfg() -> DecimateConfig {
+        DecimateConfig::default()
+    }
+    fn set(cfg: &mut DecimateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &DecimateConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        let taps = cfg.num_taps(rate)?;
+        let (rate_out, memory_bytes) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    DecimateBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    DecimateBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    DecimateRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    DecimateRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            cost: taps as f64 / cfg.factor as f64,
+            taps,
+            delay: delay_half(taps),
+            min_input: cfg.factor,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &DecimateConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(DecimateBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(DecimateRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
+    }
+}
+
+// -------------------------------------------------------------- interpolate
+
+pub(crate) struct InterpolateKind;
+
+impl Kind for InterpolateKind {
+    type Cfg = InterpolateConfig;
+
+    const KIND: &'static str = "interpolate";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate", "fir_interpolate_real"]
+    }
+    fn default_cfg() -> InterpolateConfig {
+        InterpolateConfig::default()
+    }
+    fn set(cfg: &mut InterpolateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &InterpolateConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        let taps = cfg.num_taps(rate)?;
+        let (rate_out, memory_bytes) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    InterpolateBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    InterpolateBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    InterpolateRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    InterpolateRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            cost: taps as f64,
+            taps,
+            // The taps run at the output rate, which is `factor` times the input rate.
+            delay: Delay::new(taps.saturating_sub(1) as u64, 2 * cfg.factor as u64)
+                .unwrap_or(Delay::ZERO),
+            min_input: 1,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &InterpolateConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(InterpolateBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(
+                    InterpolateRealBlock::<R, _>::new(cfg, rate, st)?
+                )))
+            )
+        }
+    }
+}
+
+// --------------------------------------------------------------------- mag
+
+pub(crate) struct MagKind;
+
+impl Kind for MagKind {
+    type Cfg = MagConfig;
+
+    const KIND: &'static str = "mag";
+    fn kernels() -> &'static [&'static str] {
+        &["mag"]
+    }
+    fn default_cfg() -> MagConfig {
+        MagConfig
+    }
+    fn set(cfg: &mut MagConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &MagConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("mag needs complex samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: MagBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: MagBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 4.0,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(real_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &MagConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(MagBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------- delay
+
+pub(crate) struct DelayKind;
+
+impl Kind for DelayKind {
+    type Cfg = DelayConfig;
+
+    const KIND: &'static str = "delay";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> DelayConfig {
+        DelayConfig::default()
+    }
+    fn set(cfg: &mut DelayConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &DelayConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        let (rate_out, memory_bytes) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    DelayBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    DelayBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    DelayRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    DelayRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            cost: 1.0,
+            taps: 0,
+            delay: Delay::new(cfg.samples as u64, 1).unwrap_or(Delay::ZERO),
+            min_input: 1,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &DelayConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(DelayBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(DelayRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 

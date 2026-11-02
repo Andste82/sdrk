@@ -1048,6 +1048,152 @@
           },
           {
             "additionalProperties": false,
+            "description": "Low-pass filter and decimation by an integer factor.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "decimate"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stop-band attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "cutoff_hz": {
+                    "description": "Cutoff (-6 dB point) of the low-pass in Hz. The default is 0.4 * fs / factor. Unit: Hz. Typical: 100e3 for FM broadcast; default 0.4 times the output rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "factor": {
+                    "description": "Decimation factor, 1 to 1024. Required. Typical: 10 to go from 2.4 MHz to 240 kHz. Build-time.",
+                    "maximum": 1024,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz. The default is 0.1 * fs / factor. Cutoff plus half the transition must not exceed half the output rate. Unit: Hz. Typical: default 0.1 times the output rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "factor"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Single-pole low-pass that undoes the pre-emphasis of FM broadcast audio.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "deemphasis"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "tau_us": {
+                    "default": 50.0,
+                    "description": "Time constant of the de-emphasis in microseconds. Unit: us. Typical: 50 in Europe, 75 in North America. Build-time.",
+                    "maximum": 10000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Delays a signal by a whole number of samples.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "delay"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "samples": {
+                    "description": "Delay in samples, 0 to 65536. Required. Unit: samples. Typical: 63 to match the group delay of a 127-tap linear-phase filter. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "samples"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Interpolates a signal, removes the images and shifts it up to a carrier frequency.",
             "properties": {
               "backend": {
@@ -1414,6 +1560,103 @@
           },
           {
             "additionalProperties": false,
+            "description": "Interpolation by an integer factor with an image-rejection low-pass.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "interpolate"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Image attenuation in dB (at least 8). Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 200.0,
+                    "minimum": 8.0,
+                    "type": "number"
+                  },
+                  "cutoff_hz": {
+                    "description": "Cutoff (-6 dB point) in Hz, relative to the input rate. The default is 0.4 * fs. Unit: Hz. Typical: default 0.4 times the input rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "factor": {
+                    "description": "Interpolation factor, 1 to 1024. Required. Typical: 10 to go from 240 kHz to 2.4 MHz. Build-time.",
+                    "maximum": 1024,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "max_taps": {
+                    "default": 1023,
+                    "description": "Upper limit of the number of taps; a design that needs more fails. Typical: 1023. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "transition_hz": {
+                    "description": "Width of the transition band in Hz. The default is 0.1 * fs. Cutoff plus half the transition must not exceed half the input rate. Unit: Hz. Typical: default 0.1 times the input rate. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "factor"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Magnitude (envelope) of complex samples.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "mag"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Pre-emphasis and peak limiter for the audio of an FM transmitter.",
             "properties": {
               "backend": {
@@ -1460,6 +1703,44 @@
                     "description": "Time constant of the gain recovery after the hold. Unit: s. Typical: 0.2. Build-time.",
                     "maximum": 10.0,
                     "minimum": 0.001,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Quadrature (FM) discriminator: the phase step between consecutive samples.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "quad_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "deviation_hz": {
+                    "default": 75000.0,
+                    "description": "Peak deviation in Hz that reads full scale (used by C32 only). Unit: Hz. Typical: 75e3 for broadcast FM, 5e3 for narrow-band voice. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
                     "type": "number"
                   }
                 },
@@ -1591,6 +1872,47 @@
                 },
                 "required": [
                   "rate_out_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Shifts the spectrum of a complex signal by a frequency.",
+            "properties": {
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "rotate"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "frequency_hz": {
+                    "description": "Shift in Hz; positive values shift the spectrum up. Within plus or minus half the input rate, exclusive. Required. Unit: Hz. Typical: -600e3 to bring a carrier 600 kHz above the tuner centre to 0 Hz. Runtime.",
+                    "maximum": 1000000000000.0,
+                    "minimum": -1000000000000.0,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "frequency_hz"
                 ],
                 "type": "object"
               }

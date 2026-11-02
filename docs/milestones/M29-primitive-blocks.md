@@ -191,7 +191,24 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-p
 
 ## Deliverables checklist
 
-- [ ] Seven blocks with descriptions, storage sizing and doc examples
-- [ ] Seven pipeline kinds, costs, regenerated schema, WASM list
-- [ ] Tests 1–6; differences of test 2 logged if any
-- [ ] `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, reserved-names table, CHANGELOG, decisions log
+- [x] Seven blocks with descriptions, storage sizing and doc examples
+- [x] Seven pipeline kinds, costs, regenerated schema, WASM list
+- [x] Tests 1–6; differences of test 2 logged if any
+- [x] `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, reserved-names table, CHANGELOG, decisions log
+
+## Status
+
+Completely done (last gate green: fmt, clippy workspace, `xtask check`, `cargo doc -D warnings`, `xtask bare-metal`, thumb clippy, the `sdrk-blocks` and `sdrk-pipeline` tests, doc tests, `schema --check`):
+
+- The seven blocks with descriptions, exact storage sizing and doc examples.
+- The seven pipeline kinds with costs, delay figures and the regenerated schema (version unchanged).
+- Tests 1 to 6 (`primitive_blocks.rs`, `primitive_kinds.rs`, `describe.rs`). Test 2 shows no difference to `ddc`, `duc` and the first stage of `am_demod` (D226), so no open item was needed.
+- `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the reserved-names table (the M29 rows are removed, D229), `CHANGELOG.md` and the decisions log (D219 to D233).
+
+Not done or deviating, all intentional:
+
+- The WebAssembly list is unchanged: it lists kernels, not kinds, and every kernel the new kinds call is already in it (D228).
+- The chunked runs of the `f32` `deemphasis` block are compared with the whole run by SNR (at least 120 dB) instead of bit for bit, because the SIMD kernel is a tolerance kernel (D225). The whole-buffer run is bit-exact.
+- `deemphasis` has only `DeemphasisRealBlock` (no complex variant, as the spec says); the name check of M24.1 was extended for this (D233).
+- No open-items row was added by this milestone.
+- Nothing is committed yet.

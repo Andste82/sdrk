@@ -129,7 +129,8 @@ fn block_problems(stem: &str, text: &str) -> Vec<(usize, String)> {
             )));
         }
         let block = format!("{}Block", upper_camel(&kind));
-        if !defines_type(text, &block) {
+        let real_block = format!("{}RealBlock", upper_camel(&kind));
+        if !defines_type(text, &block) && !defines_type(text, &real_block) {
             out.push((line, format!(
                 "kind `{kind}`: `{stem}.rs` does not define `{block}` (rule 9 of the naming scheme)"
             )));
@@ -334,6 +335,17 @@ mod tests {
                 "kind `resample`: `resample.rs` does not define `ResampleBlock` (rule 9 of the naming scheme)"
             ]
         );
+    }
+
+    #[test]
+    fn a_real_only_block_type_passes() {
+        let m = messages(&sources(
+            "deemphasis",
+            "deemphasis",
+            "DeemphasisRealBlock",
+            "DeemphasisKind",
+        ));
+        assert!(m.is_empty(), "{m:?}");
     }
 
     #[test]

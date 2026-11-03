@@ -843,7 +843,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 148] = [
+pub static KERNELS: [KernelSpec; 172] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1043,6 +1043,30 @@ pub static KERNELS: [KernelSpec; 148] = [
     spec("stereo_pll_q15_fallback", Family::FallbackVsCmsis, false),
     spec("preemph_limit", Family::Own, false),
     spec("preemph_limit_q15", Family::Own, false),
+    spec("add", Family::Volk, false),
+    spec("add_cq15", Family::Volk, false),
+    spec("add_real", Family::Volk, false),
+    spec("add_real_q15", Family::Volk, false),
+    spec("mul", Family::Volk, false),
+    spec("mul_cq15", Family::Own, false),
+    spec("mul_real", Family::Volk, false),
+    spec("mul_real_q15", Family::Own, false),
+    spec("interleave", Family::Volk, false),
+    spec("interleave_cq15", Family::Own, false),
+    spec("deinterleave", Family::Volk, false),
+    spec("deinterleave_cq15", Family::Volk, false),
+    spec("add_fallback", Family::FallbackVsCmsis, false),
+    spec("add_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("add_real_fallback", Family::FallbackVsCmsis, false),
+    spec("add_real_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("mul_fallback", Family::FallbackVsCmsis, false),
+    spec("mul_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("mul_real_fallback", Family::FallbackVsCmsis, false),
+    spec("mul_real_q15_fallback", Family::FallbackVsCmsis, false),
+    spec("oscillate", Family::Own, false),
+    spec("oscillate_cq15", Family::Own, false),
+    spec("oscillate_fallback", Family::FallbackVsCmsis, false),
+    spec("oscillate_cq15_fallback", Family::FallbackVsCmsis, false),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -1445,6 +1469,11 @@ volk_32fc_deinterleave_32f_x2 a_sse generic
 volk_32f_x2_add_32f a_sse u_sse
 volk_32f_x2_subtract_32f a_sse generic
 volk_32f_x2_interleave_32fc a_sse generic
+volk_32fc_x2_add_32fc a_sse u_sse
+volk_32f_x2_multiply_32f a_sse u_sse
+volk_32fc_x2_multiply_32fc generic generic
+volk_16i_x2_add_saturated_16i a_sse2 u_sse2
+volk_16ic_deinterleave_16i_x2 a_sse2 generic
 ";
 
 /// The defaults of VOLK 3.3's `sse4_2_64_mmx` machine for the level `sse4.2`.
@@ -1471,6 +1500,11 @@ volk_32fc_deinterleave_32f_x2 a_sse generic
 volk_32f_x2_add_32f a_sse u_sse
 volk_32f_x2_subtract_32f a_sse generic
 volk_32f_x2_interleave_32fc a_sse generic
+volk_32fc_x2_add_32fc a_sse u_sse
+volk_32f_x2_multiply_32f a_sse u_sse
+volk_32fc_x2_multiply_32fc a_sse3 u_sse3
+volk_16i_x2_add_saturated_16i a_sse2 u_sse2
+volk_16ic_deinterleave_16i_x2 a_ssse3 generic
 ";
 
 /// The VOLK implementations that need no more than AVX2 and FMA, for the levels `avx2` and
@@ -1501,6 +1535,11 @@ volk_32fc_deinterleave_32f_x2 a_avx u_avx
 volk_32f_x2_add_32f a_avx u_avx
 volk_32f_x2_subtract_32f a_avx u_avx
 volk_32f_x2_interleave_32fc a_avx u_avx
+volk_32fc_x2_add_32fc a_avx u_avx
+volk_32f_x2_multiply_32f a_avx u_avx
+volk_32fc_x2_multiply_32fc a_avx2_fma u_avx2_fma
+volk_16i_x2_add_saturated_16i a_avx2 u_avx2
+volk_16ic_deinterleave_16i_x2 a_avx2 u_avx2
 ";
 
 /// The default dispatch of VOLK 3.3's `neonv8` machine (what QEMU's CPU selects), pinned so
@@ -1531,12 +1570,17 @@ volk_32fc_deinterleave_32f_x2 neonv8 neonv8
 volk_32f_x2_add_32f neonv8 neonv8
 volk_32f_x2_subtract_32f neonv8 neonv8
 volk_32f_x2_interleave_32fc neonv8 neonv8
+volk_32fc_x2_add_32fc neonv8 neonv8
+volk_32f_x2_multiply_32f neonv8 neonv8
+volk_32fc_x2_multiply_32fc neonv8 neonv8
+volk_16i_x2_add_saturated_16i neonv8 neonv8
+volk_16ic_deinterleave_16i_x2 neonv8 neonv8
 ";
 
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 22] = [
+const VOLK_FUNCTIONS: [&str; 27] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
     "volk_8i_convert_16i",
@@ -1559,6 +1603,11 @@ const VOLK_FUNCTIONS: [&str; 22] = [
     "volk_32f_x2_add_32f",
     "volk_32f_x2_subtract_32f",
     "volk_32f_x2_interleave_32fc",
+    "volk_32fc_x2_add_32fc",
+    "volk_32f_x2_multiply_32f",
+    "volk_32fc_x2_multiply_32fc",
+    "volk_16i_x2_add_saturated_16i",
+    "volk_16ic_deinterleave_16i_x2",
 ];
 
 /// CPUID of SDE for the level `sse2`: `GenuineIntel`, family 15, SSE2 and nothing above it; XSAVE
@@ -4366,6 +4415,72 @@ mod tests {
         ] {
             assert_eq!(kernel(k).family.measured(), "fallback", "{k}");
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Cmsis, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+            assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+    }
+
+    #[test]
+    fn the_m30_entries_have_the_comparisons_of_their_decisions() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let levels = ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"];
+        // VOLK has the function: the gate at every level.
+        for k in [
+            "add",
+            "add_cq15",
+            "add_real",
+            "add_real_q15",
+            "mul",
+            "mul_real",
+            "interleave",
+            "deinterleave",
+            "deinterleave_cq15",
+        ] {
+            for level in levels {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)).0,
+                    Reference::Volk,
+                    "{k} at {level}"
+                );
+            }
+        }
+        // No library has the function: our fallback, as information.
+        for k in [
+            "mul_cq15",
+            "mul_real_q15",
+            "interleave_cq15",
+            "oscillate",
+            "oscillate_cq15",
+        ] {
+            for level in levels {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+        }
+        // The fallbacks against CMSIS-DSP's generic C, not at `avx2-runtime`.
+        for k in [
+            "add_fallback",
+            "add_cq15_fallback",
+            "add_real_fallback",
+            "add_real_q15_fallback",
+            "mul_fallback",
+            "mul_cq15_fallback",
+            "mul_real_fallback",
+            "mul_real_q15_fallback",
+            "oscillate_fallback",
+            "oscillate_cq15_fallback",
+        ] {
+            assert_eq!(kernel(k).family.measured(), "fallback", "{k}");
+            for level in levels {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
                     (Reference::Cmsis, Vec::new()),

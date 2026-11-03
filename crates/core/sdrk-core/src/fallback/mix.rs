@@ -2,7 +2,7 @@
 
 use crate::Fallback;
 use crate::error::{Error, Result};
-use crate::kernels::mix::{Nco, Rotate};
+use crate::kernels::mix::{Nco, Oscillate, Rotate, check_harmonic};
 use crate::tables::{COS_F32, COS_Q15};
 use crate::types::{C32, CQ15, Q15};
 
@@ -129,6 +129,37 @@ impl Rotate<CQ15> for Fallback {
             phase = phase.wrapping_add(inc);
         }
         nco.advance(input.len());
+        Ok(())
+    }
+}
+
+impl Oscillate<C32> for Fallback {
+    fn oscillate(&self, nco: &mut Nco, harmonic: u32, out: &mut [C32]) -> Result<()> {
+        check_harmonic(harmonic)?;
+        // `k · (p + inc) = k · p + k · inc` modulo 2^32, so the scaled phase is an accumulator
+        // of its own.
+        let step = nco.increment().wrapping_mul(harmonic);
+        let mut phase = nco.phase().wrapping_mul(harmonic);
+        for o in out.iter_mut() {
+            let (c, s) = interp_f32_pair(phase).ok_or_else(table_error)?;
+            *o = C32::new(c, s);
+            phase = phase.wrapping_add(step);
+        }
+        nco.advance(out.len());
+        Ok(())
+    }
+}
+
+impl Oscillate<CQ15> for Fallback {
+    fn oscillate(&self, nco: &mut Nco, harmonic: u32, out: &mut [CQ15]) -> Result<()> {
+        check_harmonic(harmonic)?;
+        let step = nco.increment().wrapping_mul(harmonic);
+        let mut phase = nco.phase().wrapping_mul(harmonic);
+        for o in out.iter_mut() {
+            *o = cos_sin_q15(phase)?;
+            phase = phase.wrapping_add(step);
+        }
+        nco.advance(out.len());
         Ok(())
     }
 }

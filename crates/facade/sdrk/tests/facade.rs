@@ -680,3 +680,41 @@ fn m22_kernels_agree_with_the_fallback() -> Result<()> {
     assert_eq!((a, sa.history()), (b, sb.history()));
     Ok(())
 }
+
+#[test]
+fn backend_table_lists_the_m30_kernels() {
+    use sdrk::kernels::math::{Add, Interleave, Mul};
+    use sdrk::kernels::mix::{Nco, Oscillate};
+    for ty in [SampleType::C32, SampleType::CQ15] {
+        for kernel in ["add", "mul", "interleave", "deinterleave"] {
+            assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
+        }
+        assert_eq!(backend_for("oscillate", ty), ACCEL, "oscillate {ty:?}");
+    }
+    for ty in [SampleType::F32, SampleType::Q15] {
+        for kernel in ["add_real", "mul_real"] {
+            assert_eq!(backend_for(kernel, ty), ACCEL, "{kernel} {ty:?}");
+        }
+    }
+    assert_eq!(backend_for("add", SampleType::F32), "none");
+
+    // The facade gives the results of the fallback (these kernels are bit-exact).
+    let a = [C32::new(1.0, 2.0), C32::new(-0.5, 0.25)];
+    let b = [C32::new(0.5, -1.0), C32::new(2.0, 2.0)];
+    let (mut x, mut y) = ([C32::default(); 2], [C32::default(); 2]);
+    Sdrk.add(&a, &b, &mut x).unwrap();
+    Fallback.add(&a, &b, &mut y).unwrap();
+    assert_eq!(x, y);
+    Sdrk.mul(&a, &b, &mut x).unwrap();
+    Fallback.mul(&a, &b, &mut y).unwrap();
+    assert_eq!(x, y);
+    let (mut n1, mut n2) = (Nco::from_increment(1 << 28), Nco::from_increment(1 << 28));
+    Sdrk.oscillate(&mut n1, 2, &mut x).unwrap();
+    Fallback.oscillate(&mut n2, 2, &mut y).unwrap();
+    assert_eq!((x, n1), (y, n2));
+    let mut out = [CQ15::default(); 2];
+    Sdrk.interleave(&[Q15(1), Q15(2)], None, &mut out).unwrap();
+    let mut re = [Q15(0); 2];
+    Sdrk.deinterleave(&out, Some(&mut re), None).unwrap();
+    assert_eq!(re, [Q15(1), Q15(2)]);
+}

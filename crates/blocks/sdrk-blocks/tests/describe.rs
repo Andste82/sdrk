@@ -31,15 +31,17 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock, BiquadConfig, BiquadRealBlock,
-    Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig,
-    DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, InterpolateConfig,
-    Mutability, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    QuadDemodConfig, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock,
-    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, all_descriptions,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock,
+    BiquadConfig, BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig,
+    ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig,
+    DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability,
+    NcoBlock, NcoConfig, NcoRealBlock, ParamKind, ParamValue, PortType, PreemphLimitBlock,
+    PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock, StereoPllBlock,
+    StereoPllConfig, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -59,10 +61,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_twenty_seven_unique_kinds() {
+fn there_are_thirty_six_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 27);
-    assert_eq!(all_descriptions().len(), 27);
+    assert_eq!(kinds.len(), 36);
+    assert_eq!(all_descriptions().len(), 36);
     for kind in [
         "convert",
         "convert_out",
@@ -91,6 +93,15 @@ fn there_are_twenty_seven_unique_kinds() {
         "interpolate",
         "mag",
         "delay",
+        "add",
+        "mul",
+        "make_complex",
+        "to_complex",
+        "real_part",
+        "imag_part",
+        "nco",
+        "stereo_pll",
+        "stereo_matrix",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -285,6 +296,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("decimate", |n| DecimateConfig::default().get(n), &[]);
     defaults_match("interpolate", |n| InterpolateConfig::default().get(n), &[]);
     defaults_match("delay", |n| DelayConfig::default().get(n), &[]);
+    defaults_match("nco", |n| NcoConfig::default().get(n), &[]);
+    defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -371,6 +384,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("am_demod", AmDemodConfig);
     round_trip!("ssb_demod", SsbDemodConfig);
     round_trip!("biquad", BiquadConfig);
+    round_trip!("nco", NcoConfig);
+    round_trip!("stereo_pll", StereoPllConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -463,6 +478,50 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "biquad",
         &mut BiquadRealBlock::<f32, _>::new(&biquad, r, &mut s).unwrap(),
+    );
+    let nco = NcoConfig {
+        frequency_hz: 1_000.0,
+        ..NcoConfig::default()
+    };
+    check_block_params(
+        "nco",
+        &mut NcoBlock::<C32, _>::new(&nco, r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "nco",
+        &mut NcoRealBlock::<CQ15, _>::new(&nco, r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "stereo_pll",
+        &mut StereoPllBlock::<C32, _>::new(&StereoPllConfig::default(), rate(192_000), &mut s)
+            .unwrap(),
+    );
+    check_block_params("add", &mut AddBlock::<C32, _>::new(r, &mut s).unwrap());
+    check_block_params("add", &mut AddRealBlock::<f32, _>::new(r, &mut s).unwrap());
+    check_block_params("mul", &mut MulBlock::<CQ15, _>::new(r, &mut s).unwrap());
+    check_block_params(
+        "mul",
+        &mut MulRealBlock::<sdrk::Q15, _>::new(r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "make_complex",
+        &mut MakeComplexBlock::<C32, _>::new(r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "to_complex",
+        &mut ToComplexBlock::<CQ15, _>::new(r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "real_part",
+        &mut RealPartBlock::<C32, _>::new(r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "imag_part",
+        &mut ImagPartBlock::<CQ15, _>::new(r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "stereo_matrix",
+        &mut StereoMatrixBlock::<C32, _>::new(r, &mut s).unwrap(),
     );
     check_block_params(
         "dc_block",

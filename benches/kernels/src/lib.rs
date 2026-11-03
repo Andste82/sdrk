@@ -44,12 +44,16 @@ use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod fir_family;
 mod halfband_family;
+mod math_family;
 mod stereo_family;
 
 use fir_family::{Entry, FirFamK, Mode};
 use halfband_family::{
     DecimateK as HalfbandK, DecimateRealK as HalfbandRealK, FirDecimateX2K, RealToComplexK,
     ShiftedK,
+};
+use math_family::{
+    ComplexC32K, ComplexCq15K, Op, OscC32K, OscCq15K, RealF32K, RealQ15K, SplitC32K, SplitCq15K,
 };
 use stereo_family::{MatrixCq15K as StereoMatrixCq15K, MatrixK as StereoMatrixK, PllF32K, PllQ15K};
 
@@ -329,7 +333,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 148] = [
+pub const KERNELS: [&str; 172] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -478,6 +482,30 @@ pub const KERNELS: [&str; 148] = [
     "stereo_pll_q15_fallback",
     "preemph_limit",
     "preemph_limit_q15",
+    "add",
+    "add_cq15",
+    "add_real",
+    "add_real_q15",
+    "mul",
+    "mul_cq15",
+    "mul_real",
+    "mul_real_q15",
+    "interleave",
+    "interleave_cq15",
+    "deinterleave",
+    "deinterleave_cq15",
+    "add_fallback",
+    "add_cq15_fallback",
+    "add_real_fallback",
+    "add_real_q15_fallback",
+    "mul_fallback",
+    "mul_cq15_fallback",
+    "mul_real_fallback",
+    "mul_real_q15_fallback",
+    "oscillate",
+    "oscillate_cq15",
+    "oscillate_fallback",
+    "oscillate_cq15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -662,6 +690,28 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "dot_cq15" => Box::new(DotCq15K::new(rng, layout, simd)),
         "dot_real" => Box::new(DotF32K::new(rng, layout, simd)),
         "dot_real_q15" => Box::new(DotQ15K::new(rng, layout, simd)),
+        "add" | "add_fallback" => Box::new(ComplexC32K::new(rng, layout, entry, Op::Add)),
+        "add_cq15" | "add_cq15_fallback" => {
+            Box::new(ComplexCq15K::new(rng, layout, entry, Op::Add))
+        }
+        "add_real" | "add_real_fallback" => Box::new(RealF32K::new(rng, layout, entry, Op::Add)),
+        "add_real_q15" | "add_real_q15_fallback" => {
+            Box::new(RealQ15K::new(rng, layout, entry, Op::Add))
+        }
+        "mul" | "mul_fallback" => Box::new(ComplexC32K::new(rng, layout, entry, Op::Mul)),
+        "mul_cq15" | "mul_cq15_fallback" => {
+            Box::new(ComplexCq15K::new(rng, layout, entry, Op::Mul))
+        }
+        "mul_real" | "mul_real_fallback" => Box::new(RealF32K::new(rng, layout, entry, Op::Mul)),
+        "mul_real_q15" | "mul_real_q15_fallback" => {
+            Box::new(RealQ15K::new(rng, layout, entry, Op::Mul))
+        }
+        "oscillate" | "oscillate_fallback" => Box::new(OscC32K::new(layout, entry)),
+        "oscillate_cq15" | "oscillate_cq15_fallback" => Box::new(OscCq15K::new(layout, entry)),
+        "interleave" => Box::new(SplitC32K::new(rng, layout, false)),
+        "interleave_cq15" => Box::new(SplitCq15K::new(rng, layout, false)),
+        "deinterleave" => Box::new(SplitC32K::new(rng, layout, true)),
+        "deinterleave_cq15" => Box::new(SplitCq15K::new(rng, layout, true)),
         "scale" => Box::new(ScaleK::new(rng, layout, simd)),
         "scale_cq15" => Box::new(ScaleCq15K::new(rng, layout, simd)),
         "dot_fallback" => Box::new(DotC32K::new(rng, layout, fallback)),
@@ -4776,7 +4826,8 @@ impl<T: RealNoise> PreemphK<T> {
         let n = layout.n;
         let mut input = Aligned::<T>::skewed(n, layout.skew(core::mem::size_of::<T>()));
         for (i, s) in input.iter_mut().enumerate() {
-            let burst = (n / 8..n / 8 + n / 4).contains(&i) || (5 * n / 8..11 * n / 16).contains(&i);
+            let burst =
+                (n / 8..n / 8 + n / 4).contains(&i) || (5 * n / 8..11 * n / 16).contains(&i);
             let tone = if burst {
                 0.9 * (2.0 * core::f64::consts::PI * 3000.0 / 48_000.0 * i as f64).sin()
             } else {

@@ -67,6 +67,7 @@ output[n]   = input[n] * exp(j * 2 * pi * phase_n / 2^32)
 - Negative frequencies map to `inc > 2^31`; `f = 0.25 fs` gives `inc = 2^30`, `f = -0.25 fs` gives `3 * 2^30`. Frequencies of one sample rate or more alias (`frac` drops whole turns).
 - The phase wraps naturally with `u32` arithmetic, so there is no drift and no accumulated floating-point error however long the stream runs. The frequency resolution is `fs / 2^32` (about 0.23 mHz at 1 MS/s).
 - `Nco::set_frequency` changes only `inc` and keeps the phase: the signal stays phase-continuous across a retune. `set_phase` and `reset` are the only ways to jump.
+- `oscillate` (M30) uses the same accumulator and tables as `rotate`: it writes `exp(j 2 pi (k phase_n) / 2^32)` for the harmonic `k` (1 to 8) and advances the phase by `out.len()` steps of `inc` (not of `k inc`), so harmonic 1 equals `rotate` of the constant `(1, 0)` bit for bit for `C32`, and the harmonics of one oscillator stay phase-locked because `k phase_n` wraps modulo `2^32`. A call with a bad harmonic changes neither the output nor the phase. The block `nco` produces one output sample per clock sample (ratio `1/1`, delay 0) and `set_frequency` keeps the phase.
 - A call to `rotate` advances the phase by exactly `input.len()` samples (also when called with an empty slice, which changes nothing).
 - Frequencies are given in hertz together with the sample `Rate`; NaN and infinity are rejected with `InvalidParameter`.
 
@@ -80,7 +81,7 @@ Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, d
 | --- | --- | --- | --- |
 | `convert` | samples per byte of a packing group (for example `1/2` for `cu8`, `2/5` for `packed10`) | `Constant` | 0 |
 | `convert_out` | bytes per sample (the inverse) | `Constant` | 0 |
-| `scale`, `dc_block`, `fm_mod`, `squelch`, `agc`, `biquad`, `stereo_pll`, `preemph_limit` | `1/1` | `Constant` | 0 (`dc_block`, `biquad`, `preemph_limit`: the delay of the IIR filter depends on the frequency and is not declared; `stereo_matrix` is stateless and has no `Timing`, it works sample by sample) |
+| `scale`, `dc_block`, `fm_mod`, `squelch`, `agc`, `biquad`, `stereo_pll`, `preemph_limit`, `add`, `mul`, `make_complex`, `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_matrix` | `1/1` | `Constant` | 0 (`dc_block`, `biquad`, `preemph_limit`: the delay of the IIR filter depends on the frequency and is not declared; `stereo_matrix` and the blocks of M30 work sample by sample; the blocks with two inputs take both slices in lockstep, so the ratio is 1 per pair and a length mismatch is an error, not a delay) |
 | `rotate`, `deemphasis`, `mag` | `1/1` | `Constant` | 0 (`deemphasis`: the IIR delay is not declared) |
 | `quad_demod` | `1/1` | `Constant` | `1/2` (the discriminator looks at two samples) |
 | `delay` with `samples` = `D` | `1/1` | `Constant` | `D` (exactly; the first `D` outputs are zero) |

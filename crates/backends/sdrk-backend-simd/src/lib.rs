@@ -60,6 +60,7 @@ mod fft;
 mod fir;
 mod halfband;
 mod level;
+mod math;
 mod mix;
 mod modulate;
 mod recursion;

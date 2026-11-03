@@ -1,6 +1,6 @@
 //! The single place that maps kernels to implementations.
 
-use crate::{C32, CQ15, Chained, Fallback, Progress, Q15, Result};
+use crate::{C32, CQ15, Chained, ComplexSample, Fallback, Progress, Q15, Result};
 use sdrk_core::fused::{ddc_chained, duc_chained, fm_demod_chained};
 use sdrk_core::kernels::agc::{Agc, AgcState};
 use sdrk_core::kernels::basic::Scale;
@@ -24,7 +24,8 @@ use sdrk_core::kernels::halfband::{
 use sdrk_core::kernels::interp::{
     FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
 };
-use sdrk_core::kernels::mix::{Nco, Rotate};
+use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
+use sdrk_core::kernels::mix::{Nco, Oscillate, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
 use sdrk_core::kernels::preemph_limit::{PreemphLimit, PreemphLimitState};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
@@ -99,6 +100,16 @@ crate::delegate! {
     PreemphLimit<Q15>::preemph_limit(&self, state: &mut PreemphLimitState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
     StereoPll<f32>::stereo_pll(&self, state: &mut StereoPllState<f32>, mpx: &[f32], pilot: &[f32], output: &mut [C32]) -> Result<()> => Fallback;
     StereoPll<Q15>::stereo_pll(&self, state: &mut StereoPllState<Q15>, mpx: &[Q15], pilot: &[Q15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    Add<C32>::add(&self, a: &[C32], b: &[C32], out: &mut [C32]) -> Result<()> => Fast;
+    Add<CQ15>::add(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> => Fast;
+    AddReal<f32>::add_real(&self, a: &[f32], b: &[f32], out: &mut [f32]) -> Result<()> => Fast;
+    AddReal<Q15>::add_real(&self, a: &[Q15], b: &[Q15], out: &mut [Q15]) -> Result<()> => Fast;
+    Mul<C32>::mul(&self, a: &[C32], b: &[C32], out: &mut [C32]) -> Result<()> => Fast;
+    Mul<CQ15>::mul(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> => Fast;
+    MulReal<f32>::mul_real(&self, a: &[f32], b: &[f32], out: &mut [f32]) -> Result<()> => Fast;
+    MulReal<Q15>::mul_real(&self, a: &[Q15], b: &[Q15], out: &mut [Q15]) -> Result<()> => Fast;
+    Oscillate<C32>::oscillate(&self, nco: &mut Nco, harmonic: u32, out: &mut [C32]) -> Result<()> => Fast;
+    Oscillate<CQ15>::oscillate(&self, nco: &mut Nco, harmonic: u32, out: &mut [CQ15]) -> Result<()> => Fast;
     StereoMatrix<C32>::stereo_matrix(&self, input: &[C32], output: &mut [C32]) -> Result<()> => Fast;
     StereoMatrix<CQ15>::stereo_matrix(&self, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fast;
     Window<C32>::window(&self, input: &[C32], output: &mut [C32], w: &[f32]) -> Result<()> => Fast;
@@ -126,6 +137,10 @@ crate::delegate! {
     DotReal<f32>::dot_real(&self, x: &[f32], taps: &[f32]) -> Result<f32> => Fast;
     DotReal<Q15>::dot_real(&self, x: &[Q15], taps: &[Q15]) -> Result<Q15> => Fast;
     @extra [
+        ("interleave", C32, Fast),
+        ("deinterleave", C32, Fast),
+        ("interleave", CQ15, Fast),
+        ("deinterleave", CQ15, Fast),
         ("rfft", f32, Fast),
         ("irfft", f32, Fast),
         ("ddc", C32, Chained),
@@ -224,3 +239,34 @@ macro_rules! fused_for {
 
 fused_for!(C32);
 fused_for!(CQ15);
+
+// `Interleave` has two methods and the macro delegates one method per entry, so the trait is
+// delegated by hand; the rows in `@extra` above register both methods in the `backend_for`
+// table.
+macro_rules! delegate_interleave {
+    ($($ty:ty),+) => {$(
+        impl Interleave<$ty> for crate::Sdrk {
+            #[inline]
+            fn interleave(
+                &self,
+                re: &[<$ty as ComplexSample>::Real],
+                im: Option<&[<$ty as ComplexSample>::Real]>,
+                out: &mut [$ty],
+            ) -> Result<()> {
+                <Fast as Interleave<$ty>>::interleave(&Fast, re, im, out)
+            }
+
+            #[inline]
+            fn deinterleave(
+                &self,
+                input: &[$ty],
+                re: Option<&mut [<$ty as ComplexSample>::Real]>,
+                im: Option<&mut [<$ty as ComplexSample>::Real]>,
+            ) -> Result<()> {
+                <Fast as Interleave<$ty>>::deinterleave(&Fast, input, re, im)
+            }
+        }
+    )+};
+}
+
+delegate_interleave!(C32, CQ15);

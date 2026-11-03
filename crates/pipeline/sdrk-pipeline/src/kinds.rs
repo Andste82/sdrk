@@ -17,12 +17,13 @@ use sdrk_blocks::{
     DecimateConfig, DecimateRealBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
     DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig,
     FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
-    RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
+    InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, NcoBlock,
+    NcoConfig, NcoRealBlock, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
+    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, StereoMatrixBlock, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -2021,6 +2022,276 @@ impl Kind for SpectrumKind {
             Ok(Box::new(FrameNode::new(SpectrumBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------ to_complex
+
+pub(crate) struct ToComplexKind;
+
+/// Parameter-less kinds: every `set` is an unknown parameter.
+fn no_params(name: &str) -> BlockResult<()> {
+    let _ = name;
+    Err(sdrk_blocks::Error::UnknownParameter)
+}
+
+/// Figures of a stateless block with ratio 1 and delay 0.
+fn unit_figures(rate: Rate, cost: f64, output: PortKind) -> Figures {
+    Figures {
+        rate_out: rate,
+        memory_bytes: 0,
+        cost,
+        taps: 0,
+        delay: Delay::ZERO,
+        min_input: 1,
+        output,
+    }
+}
+
+impl Kind for ToComplexKind {
+    type Cfg = ();
+
+    const KIND: &'static str = "to_complex";
+    fn kernels() -> &'static [&'static str] {
+        &["interleave"]
+    }
+    fn default_cfg() {}
+    fn set(_cfg: &mut (), name: &str, _value: ParamValue) -> BlockResult<()> {
+        no_params(name)
+    }
+    fn plan(_cfg: &(), input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if is_complex(input) {
+            return Err(mismatch("to_complex needs real samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(unit_figures(
+                ToComplexBlock::<T, VecStorage>::rate_out(rate)?,
+                1.0,
+                stream(complex_port(p)),
+            ))
+        )
+    }
+    fn build(
+        _cfg: &(),
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(ToComplexBlock::<T, _>::new(
+                rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------ real_part
+
+pub(crate) struct RealPartKind;
+
+impl Kind for RealPartKind {
+    type Cfg = ();
+
+    const KIND: &'static str = "real_part";
+    fn kernels() -> &'static [&'static str] {
+        &["deinterleave"]
+    }
+    fn default_cfg() {}
+    fn set(_cfg: &mut (), name: &str, _value: ParamValue) -> BlockResult<()> {
+        no_params(name)
+    }
+    fn plan(_cfg: &(), input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("real_part needs complex samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(unit_figures(
+                RealPartBlock::<T, VecStorage>::rate_out(rate)?,
+                1.0,
+                stream(real_port(p)),
+            ))
+        )
+    }
+    fn build(
+        _cfg: &(),
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(RealPartBlock::<T, _>::new(
+                rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------ imag_part
+
+pub(crate) struct ImagPartKind;
+
+impl Kind for ImagPartKind {
+    type Cfg = ();
+
+    const KIND: &'static str = "imag_part";
+    fn kernels() -> &'static [&'static str] {
+        &["deinterleave"]
+    }
+    fn default_cfg() {}
+    fn set(_cfg: &mut (), name: &str, _value: ParamValue) -> BlockResult<()> {
+        no_params(name)
+    }
+    fn plan(_cfg: &(), input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("imag_part needs complex samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(unit_figures(
+                ImagPartBlock::<T, VecStorage>::rate_out(rate)?,
+                1.0,
+                stream(real_port(p)),
+            ))
+        )
+    }
+    fn build(
+        _cfg: &(),
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(ImagPartBlock::<T, _>::new(
+                rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------- stereo_matrix
+
+pub(crate) struct StereoMatrixKind;
+
+impl Kind for StereoMatrixKind {
+    type Cfg = ();
+
+    const KIND: &'static str = "stereo_matrix";
+    fn kernels() -> &'static [&'static str] {
+        &["stereo_matrix"]
+    }
+    fn default_cfg() {}
+    fn set(_cfg: &mut (), name: &str, _value: ParamValue) -> BlockResult<()> {
+        no_params(name)
+    }
+    fn plan(_cfg: &(), input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("stereo_matrix needs complex samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(unit_figures(
+                StereoMatrixBlock::<T, VecStorage>::rate_out(rate)?,
+                2.0,
+                stream(complex_port(p)),
+            ))
+        )
+    }
+    fn build(
+        _cfg: &(),
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(StereoMatrixBlock::<T, _>::new(
+                rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------------ nco
+
+pub(crate) struct NcoKind;
+
+impl Kind for NcoKind {
+    type Cfg = NcoConfig;
+
+    const KIND: &'static str = "nco";
+    fn kernels() -> &'static [&'static str] {
+        &["oscillate"]
+    }
+    fn default_cfg() -> NcoConfig {
+        NcoConfig::default()
+    }
+    fn set(cfg: &mut NcoConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &NcoConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        let (rate_out, memory_bytes) = with_complex!(
+            p,
+            T,
+            if is_complex(input) {
+                (
+                    NcoBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    NcoBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                )
+            } else {
+                (
+                    NcoRealBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    NcoRealBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                )
+            }
+        );
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            // The table lookups, the interpolation and the phase step.
+            cost: 6.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(complex_port(p)),
+        })
+    }
+    fn build(
+        cfg: &NcoConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            if is_complex(input) {
+                Ok(Box::new(StreamNode::new(NcoBlock::<T, _>::new(
+                    cfg, rate, st,
+                )?)))
+            } else {
+                Ok(Box::new(StreamNode::new(NcoRealBlock::<T, _>::new(
+                    cfg, rate, st,
+                )?)))
+            }
         )
     }
 }

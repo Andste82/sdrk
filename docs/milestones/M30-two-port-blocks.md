@@ -240,8 +240,17 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Kernels `add`, `add_real`, `mul`, `mul_real`, `oscillate`, `interleave`, `deinterleave` with reference, fallback, delegation, contracts
-- [ ] Golden cases (seeds 463–468), suite cases, extremes
-- [ ] SIMD paths, counts and results
-- [ ] Nine blocks; five pipeline kinds; regenerated schema
-- [ ] Docs (`kernels.md`, `backends.md`, `performance.md`, `blocks.md`, `pipeline.md`, `timing.md`), reserved-names table, CHANGELOG, decisions log
+- [x] Kernels `add`, `add_real`, `mul`, `mul_real`, `oscillate`, `interleave`, `deinterleave` with reference, fallback, delegation, contracts
+- [x] Golden cases (seeds 463–468), suite cases, extremes
+- [x] SIMD paths, counts and results
+- [x] Nine blocks; five pipeline kinds; regenerated schema
+- [x] Docs (`kernels.md`, `backends.md`, `performance.md`, `blocks.md`, `pipeline.md`, `timing.md`), reserved-names table, CHANGELOG, decisions log
+
+## Status
+
+Done: the seven kernels with reference, fallback, facade delegation and contracts; golden cases (seeds 463-468) and suite cases; the nine blocks, the five pipeline kinds and the regenerated schema; the docs, reserved-names table, CHANGELOG and decisions log. Gate steps 1-9 pass (fmt, clippy, xtask check, doc, bare-metal, thumb clippy, milestone tests, golden check with Python 3.12, schema, benches check).
+
+Not done:
+- Counts at all six levels are in `benches/results`, including `wasm32.json`. `make_complex`, `real_part` and `imag_part` have no entries of their own: their blocks call `interleave` and `deinterleave`.
+- Release entries that miss their limit carry waivers in `benches/limits.json` (`mul` C32 against VOLK, `interleave`/`deinterleave` against VOLK, `mul` fallbacks against CMSIS-DSP, the Q15 `add_real` and `mul_real` fallbacks at `simd128`, `oscillate_fallback` accuracy). Tracked in open-items.md I30-1 (maintainer decision: accept, tune or move to `info`).
+- `cargo xtask emu --target qemu-cortex-m4` (quick profile) was not part of the recorded gate and is not verified here.

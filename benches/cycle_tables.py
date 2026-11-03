@@ -37,7 +37,7 @@ LEVELS = [("x86_64", "sse2"), ("x86_64", "sse4.2"), ("x86_64", "avx2"),
 # The kernel prefixes in the order of the results tables; entries of a prefix are sorted.
 PREFIXES = ["convert", "rotate", "fir", "resample", "mag", "quad_demod", "fm_mod", "squelch",
             "window", "power_db", "agc", "dc_block", "deemphasis", "biquad", "dot", "scale",
-            "fft", "rfft"]
+            "add", "mul", "interleave", "deinterleave", "oscillate", "fft", "rfft"]
 
 
 def documents(paths):

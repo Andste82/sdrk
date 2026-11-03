@@ -8,6 +8,7 @@ pub mod blockcount;
 pub mod commands;
 pub mod count;
 pub mod count_embedded;
+pub mod cycle_gate;
 pub mod emu;
 pub mod layers;
 pub mod mca;

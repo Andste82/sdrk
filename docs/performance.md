@@ -16,7 +16,7 @@ This section is the maintainer's policy (D32 to D34; worked out in issue #20). I
 
 Each rule below is marked as one of three kinds: **decided** (applies now), **planned** (decided, but the tooling does not exist yet) or **proposed** (a threshold that still needs the maintainer's confirmation).
 
-**Gates today:** instructions per sample stay the gate on every platform, with the limits of the table above; on the levels with a core model their role is to catch gross outliers, and the speed target is the simulated cycles (D68). The cycles are reported by `cargo measure` on every such level and are not judged: gates on cycles are a separate decision of the maintainer. A SIMD branch without a fair reference is `info` and its `waiver` text names the reason. `count accuracy` stays the accuracy check of the counts.
+**Gates today:** instructions per sample stay the gate on every platform, with the limits of the table above; on the levels with a core model their role is to catch gross outliers, and the speed target is the simulated cycles (D68). The cycles are reported by `cargo measure` on every such level; one rule on them is gated (D321): no SIMD entry may be slower than its own fallback in simulated cycles per sample on the reference model or on the counter-model of its level (`cargo xtask check cycles`, part of `cargo xtask check` in CI, on the committed [cycle tables](#results)). Gates on the cycle ratios against the libraries are a separate decision of the maintainer. A SIMD branch without a fair reference is `info` and its `waiver` text names the reason. `count accuracy` stays the accuracy check of the counts.
 
 ### Three questions, three measures
 
@@ -37,7 +37,7 @@ Decided. The goal is an optimal branch for every kernel at every SIMD level (`ss
 | SIMD branch of a level | SIMD code of an established library at the **same level**, the **same algorithm class** and the **same work** | VOLK, KFR, FFTW, IPP, rustfft |
 | Scalar fallback | established **scalar** code of the same algorithm | CMSIS-DSP generic C, the loops of GNU Radio |
 | A branch for which no such library exists | the efficiency of the branch ([below](#efficiency-a-measure-without-a-reference)), recorded per kernel | the `Q15` and `CQ15` biquads, which no library has in SIMD on our levels |
-| SIMD branch against our own fallback | never a gate: at most `info` | a SIMD branch beats a scalar loop almost always, so the ratio says nothing about whether the branch is good |
+| SIMD branch against our own fallback | never the judged comparison in instructions (at most `info`); but in simulated cycles per sample the branch must be at least as fast as the fallback of its level on both models (D321, gated by `cargo xtask check cycles`; a violation needs a `cycle_waiver` naming an open item) | a SIMD branch that is not faster than the scalar loop (possibly auto-vectorised by the compiler) has no reason to exist; beating it says nothing yet about whether the branch is good, which is what the library comparison is for |
 
 "The same work" is meant literally: no apples against oranges. Where the reference does less (for example no NaN rule) or more, the difference is named next to the entry, and the entry is only `release` if the comparison is still fair.
 
@@ -140,7 +140,7 @@ The f64 golden is the mathematical optimum and the first target; an established 
 | --- | --- |
 | Instructions per sample, `count accuracy` | in place (this file) |
 | Fair references for every entry | partly: the entries gated against our own fallback, the kernels without a SIMD branch or without a count are listed in issue #20 (groups A to D) |
-| Simulated cycles and efficiency | reported by `cargo measure` at `sse2`, `sse4.2` and `avx512` (SDE), `avx2` (callgrind) and `neon` (QEMU), D68; the speed target, not judged and not written to `benches/results`; the gates are a separate decision |
+| Simulated cycles and efficiency | reported by `cargo measure` at `sse2`, `sse4.2` and `avx512` (SDE), `avx2` (callgrind) and `neon` (QEMU), D68; the speed target and not written to `benches/results`. Gated since D321: SIMD entry ≤ its `_fallback` entry on both models of every level, read from the committed cycle tables of this file by `cargo xtask check cycles` (CI runs no `llvm-mca`); `cargo measure` prints the same verdict for every pair it simulates. Gates on the ratios against the libraries are a separate decision |
 | `avx512` measurement build and KFR reference at `x86-64-v4` instead of `sapphirerapids` | planned |
 | Accuracy against the achievable optimum | measured and shown per golden case by `cargo measure` (not judged) |
 | SNR regression guards, Q15 SNR against an f64 golden | planned ([kernels.md](kernels.md#accuracy-policy)) |
@@ -823,9 +823,9 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `preemph_limit` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 | `preemph_limit_q15` (our fallback) | exact | exact | exact | exact | exact | exact |
 
-Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. Not judged: the gate stays the instruction ratio above. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
+Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
-The M30 kernels have cycle rows for `interleave` and `deinterleave` (both sample types) at every level with a core model (D281 to D286, `cargo measure interleave` and `cargo measure deinterleave` on 2026-11-03), for `mul` C32 and `oscillate` C32 at every level with a core model (D287 to D290, `cargo measure mul` and `cargo measure oscillate` on 2026-11-03; only these two entries were merged) and for the `oscillate` fallbacks and `oscillate_cq15` at `avx2` (D278); `mul_fallback`, `mul_cq15_fallback` and `mul` `CQ15` have rows at every level with a core model (D291 to D293, `cargo measure mul` on 2026-11-03; only these three entries were merged, the `C32` `mul` rows above are those of D288; `mul_fallback` at `avx512`, the plain loop unchanged by D291, simulates at 1.42 of CMSIS-DSP on `znver4` and 0.98 on `sapphirerapids`, within the instruction gate at 0.79; tracked in open item I30-1 with the `interleave` `CQ15` SIMD path at `neon`, 1.07 / 1.05 of our fallback on `cortex-a72` / `cortex-a76`); the `mul` C32 row at `sse4.2` is that of D295 (`cargo measure mul --level sse4.2` on 2026-11-03, only this entry merged); `add` and the other `mul` entries are not simulated yet. The four fallback entries of `interleave` and `deinterleave` have rows at every level with a core model (D297, D298, `cargo measure interleave` and `cargo measure deinterleave` on all three platforms on 2026-11-03; the `interleave` and `deinterleave` SIMD rows were merged from the same runs, their code unchanged). Before the tuning of D298 they simulated, on the reference / counter model, at 1.12 / 1.10 (`interleave_fallback`) and 1.11 / 1.09 (`interleave_cq15_fallback`) of VOLK's `generic` code at `sse2` and `sse4.2`, `deinterleave_cq15_fallback` at 1.40 / 1.23, 1.50 / 1.07, 1.33 / 1.00 and 1.04 / 1.00 at `sse2`, `sse4.2`, `avx2` and `avx512`, and the two `deinterleave` fallbacks at 2.20 / 1.43 and 4.35 / 2.13 at `neon`; after it every one is at most 1.00 on the reference model except `deinterleave_cq15_fallback` at `avx2` (0.23 against 0.20 on `znver3`, 1.14; 0.86 on `alderlake`; 0.90 in instructions), tracked in open item I30-1. The `interleave` `CQ15` SIMD path at `sse2` and `sse4.2` now simulates at 1.02 / 1.06 of the faster fallback (before 0.91 / 0.92), also in I30-1. `mul` C32 against VOLK's fused dispatch (information, not in the tables; the same counters and models, before D287): VOLK 0.49 / 0.54 cycles per sample at `avx2` (`znver3` / `alderlake`), 0.49 / 0.54 at `avx512` (`znver4` / `sapphirerapids`), 2.78 / 2.27 at `neon` (`cortex-a72` / `cortex-a76`), so ours is 0.88 / 0.94, 0.96 / 0.70 and 1.12 / 0.89 of it (the `neon` gap is tracked in open item I30-1). The `oscillate` row at `avx512` rests on 64-bit gathers on our side and 32-bit gathers in the compiler-vectorised fallback, a blind spot of the model (low confidence): `znver4` rates them far cheaper than `sapphirerapids` (the fallback 0.76 against 3.79), and both models put ours below the fallback.
+The M30 kernels have cycle rows for `interleave` and `deinterleave` (both sample types) at every level with a core model (D281 to D286, `cargo measure interleave` and `cargo measure deinterleave` on 2026-11-03), for `mul` C32 and `oscillate` C32 at every level with a core model (D287 to D290, `cargo measure mul` and `cargo measure oscillate` on 2026-11-03; only these two entries were merged) and for the `oscillate` fallbacks and `oscillate_cq15` at `avx2` (D278); `mul_fallback`, `mul_cq15_fallback` and `mul` `CQ15` have rows at every level with a core model (D291 to D293, `cargo measure mul` on 2026-11-03; only these three entries were merged, the `C32` `mul` rows above are those of D288; `mul_fallback` at `avx512`, the plain loop unchanged by D291, simulates at 1.42 of CMSIS-DSP on `znver4` and 0.98 on `sapphirerapids`, within the instruction gate at 0.79; tracked in open item I30-1); the `mul` C32 row at `sse4.2` is that of D295 (`cargo measure mul --level sse4.2` on 2026-11-03, only this entry merged). The four fallback entries of `interleave` and `deinterleave` have rows at every level with a core model (D297, D298, `cargo measure interleave` and `cargo measure deinterleave` on all three platforms on 2026-11-03; the `interleave` and `deinterleave` SIMD rows were merged from the same runs, their code unchanged). Before the tuning of D298 they simulated, on the reference / counter model, at 1.12 / 1.10 (`interleave_fallback`) and 1.11 / 1.09 (`interleave_cq15_fallback`) of VOLK's `generic` code at `sse2` and `sse4.2`, `deinterleave_cq15_fallback` at 1.40 / 1.23, 1.50 / 1.07, 1.33 / 1.00 and 1.04 / 1.00 at `sse2`, `sse4.2`, `avx2` and `avx512`, and the two `deinterleave` fallbacks at 2.20 / 1.43 and 4.35 / 2.13 at `neon`; after it every one is at most 1.00 on the reference model except `deinterleave_cq15_fallback` at `avx2` (0.23 against 0.20 on `znver3`, 1.14; 0.86 on `alderlake`; 0.90 in instructions), tracked in open item I30-1. Gate of D321 (2026-11-03): every row of `add`, `mul`, `interleave` and `deinterleave` (both sample types, SIMD and fallback) was measured again on all three platforms (`cargo measure <kernel> --platform x86_64|x86_64-avx512|aarch64 --no-count --no-golden`) and merged, after D322 to D324; before them the SIMD paths of `add`, `add_cq15`, `add_real` and `mul_real` at `avx2` (0.39 / 0.38, 0.20 / 0.19 on `znver3`), `add_cq15` (0.77 / 0.76 on both models), `interleave` (1.08 / 1.02, 0.93 / 0.89) and `interleave_cq15` (0.55 / 0.51, 0.47 / 0.45) at `neon`, `interleave` (0.52 / 0.51), `interleave_cq15` (0.27 / 0.26, 0.33 / 0.31) and `deinterleave` (0.52 / 0.51, 0.58 / 0.54) at `sse2` and `sse4.2`, and `deinterleave_cq15` at `sse2` (0.76 / 0.64 on `znver2`) were slower than their fallbacks (SIMD / fallback); now each is at most the fallback on both models. Two rows got slower within the gate: `interleave` at `avx2` on `alderlake` 0.48 to 0.51 (the fallback 0.51) and at `avx512` on `znver4` 0.13 to 0.14 (the fallback 0.26). `mul` C32 against VOLK's fused dispatch (information, not in the tables; the same counters and models, before D287): VOLK 0.49 / 0.54 cycles per sample at `avx2` (`znver3` / `alderlake`), 0.49 / 0.54 at `avx512` (`znver4` / `sapphirerapids`), 2.78 / 2.27 at `neon` (`cortex-a72` / `cortex-a76`), so ours is 0.88 / 0.94, 0.96 / 0.70 and 1.12 / 0.89 of it (the `neon` gap is tracked in open item I30-1). The `oscillate` row at `avx512` rests on 64-bit gathers on our side and 32-bit gathers in the compiler-vectorised fallback, a blind spot of the model (low confidence): `znver4` rates them far cheaper than `sapphirerapids` (the fallback 0.76 against 3.79), and both models put ours below the fallback.
 
 <!-- cycle-tables:begin -->
 
@@ -945,28 +945,28 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scale_cq15` | 2.03 | 2.03 | 1.00 | 2.11 | 2.11 | 1.00 | sdrk fallback |
 | `scale_cq15_fallback` | 2.03 | 3.78 | 0.54 | 2.11 | 3.65 | 0.58 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `scale_fallback` | 0.63 | 0.63 | 1.00 | 0.79 | 0.79 | 1.00 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `add` | 0.52 | 0.70 | 0.73 | 0.56 | 0.79 | 0.71 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.26 | 0.35 | 0.74 | 0.29 | 0.40 | 0.72 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add` | 0.51 | 0.70 | 0.72 | 0.56 | 0.79 | 0.70 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.25 | 0.35 | 0.72 | 0.28 | 0.40 | 0.71 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.35 | 3.66 | 0.10 | 0.46 | 3.78 | 0.12 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `add_fallback` | 0.70 | 0.70 | 1.00 | 0.91 | 0.91 | 1.00 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `add_real` | 0.26 | 0.36 | 0.73 | 0.29 | 0.40 | 0.72 | volk_32f_x2_add_32f |
+| `add_real` | 0.26 | 0.36 | 0.71 | 0.28 | 0.40 | 0.70 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `add_real_q15` | 0.14 | 0.18 | 0.75 | 0.15 | 0.20 | 0.73 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 0.13 | 0.18 | 0.71 | 0.14 | 0.20 | 0.70 | volk_16i_x2_add_saturated_16i |
 | `add_real_q15_fallback` | 0.15 | 1.83 | 0.08 | 0.18 | 1.89 | 0.10 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mul` | 1.53 | 4.35 | 0.35 | 1.59 | 6.09 | 0.26 | volk_32fc_x2_multiply_32fc |
 | `mul_cq15` | 5.03 | 5.03 | 1.00 | 3.90 | 3.90 | 1.00 | sdrk fallback |
 | `mul_cq15_fallback` | 5.03 | 5.29 | 0.95 | 3.90 | 4.78 | 0.82 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mul_fallback` | 1.53 | 2.53 | 0.60 | 1.59 | 2.09 | 0.76 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `mul_real` | 0.26 | 0.36 | 0.73 | 0.28 | 0.40 | 0.71 | volk_32f_x2_multiply_32f |
+| `mul_real` | 0.26 | 0.36 | 0.71 | 0.28 | 0.40 | 0.70 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `mul_real_q15` | 0.97 | 0.97 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
-| `mul_real_q15_fallback` | 0.97 | 1.21 | 0.81 | 1.02 | 1.39 | 0.73 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `interleave` | 0.52 | 0.52 | 1.00 | 0.58 | 0.64 | 0.90 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.27 | 0.26 | 1.02 | 0.33 | 0.31 | 1.06 | sdrk fallback |
+| `mul_real_q15` | 0.97 | 0.98 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.98 | 1.21 | 0.81 | 1.02 | 1.39 | 0.73 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `interleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.26 | 0.26 | 0.99 | 0.24 | 0.31 | 0.78 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.26 | 0.26 | 1.00 | 0.31 | 0.33 | 0.95 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `interleave_fallback` | 0.51 | 0.52 | 0.98 | 0.61 | 0.64 | 0.94 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
-| `deinterleave` | 0.52 | 0.52 | 0.99 | 0.58 | 0.64 | 0.90 | volk_32fc_deinterleave_32f_x2 |
-| `deinterleave_cq15` | 0.43 | 1.52 | 0.28 | 0.76 | 0.89 | 0.86 | volk_16ic_deinterleave_16i_x2 |
+| `deinterleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave_cq15` | 0.34 | 1.52 | 0.23 | 0.40 | 0.89 | 0.45 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 1.02 | 1.27 | 0.80 | 0.64 | 0.73 | 0.88 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `deinterleave_fallback` | 0.51 | 0.58 | 0.88 | 0.54 | 0.71 | 0.77 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `oscillate` | 2.30 | 4.90 | 0.47 | 2.28 | 6.35 | 0.36 | sdrk fallback |
@@ -1124,27 +1124,27 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scale_cq15` | 0.26 | 1.10 | 0.24 | 0.26 | 1.02 | 0.26 | sdrk fallback |
 | `scale_cq15_fallback` | 1.10 | 1.78 | 0.62 | 1.02 | 1.65 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `scale_fallback` | 0.52 | 0.63 | 0.82 | 0.58 | 0.79 | 0.74 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `add` | 0.52 | 0.70 | 0.73 | 0.56 | 0.79 | 0.71 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.26 | 0.35 | 0.74 | 0.29 | 0.40 | 0.72 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add` | 0.51 | 0.70 | 0.72 | 0.56 | 0.79 | 0.70 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.25 | 0.35 | 0.72 | 0.28 | 0.40 | 0.71 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.35 | 2.28 | 0.15 | 0.46 | 1.46 | 0.31 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `add_fallback` | 0.70 | 0.70 | 1.00 | 0.91 | 0.91 | 1.00 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `add_real` | 0.26 | 0.36 | 0.73 | 0.29 | 0.40 | 0.72 | volk_32f_x2_add_32f |
+| `add_real` | 0.26 | 0.36 | 0.71 | 0.28 | 0.40 | 0.70 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `add_real_q15` | 0.14 | 0.18 | 0.75 | 0.15 | 0.20 | 0.73 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 0.13 | 0.18 | 0.71 | 0.14 | 0.20 | 0.70 | volk_16i_x2_add_saturated_16i |
 | `add_real_q15_fallback` | 0.15 | 1.14 | 0.13 | 0.18 | 0.73 | 0.25 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `mul` | 1.51 | 1.55 | 0.98 | 1.18 | 1.55 | 0.76 | volk_32fc_x2_multiply_32fc |
+| `mul` | 1.52 | 1.55 | 0.98 | 1.19 | 1.55 | 0.77 | volk_32fc_x2_multiply_32fc |
 | `mul_cq15` | 1.43 | 3.04 | 0.47 | 1.51 | 2.89 | 0.52 | sdrk fallback |
 | `mul_cq15_fallback` | 3.04 | 3.71 | 0.82 | 2.89 | 3.53 | 0.82 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mul_fallback` | 1.52 | 1.53 | 0.99 | 1.23 | 1.34 | 0.92 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `mul_real` | 0.26 | 0.36 | 0.73 | 0.28 | 0.40 | 0.71 | volk_32f_x2_multiply_32f |
+| `mul_real` | 0.26 | 0.36 | 0.71 | 0.28 | 0.40 | 0.70 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `mul_real_q15` | 0.20 | 0.67 | 0.30 | 0.24 | 0.55 | 0.43 | sdrk fallback |
+| `mul_real_q15` | 0.20 | 0.67 | 0.31 | 0.24 | 0.55 | 0.44 | sdrk fallback |
 | `mul_real_q15_fallback` | 0.67 | 0.64 | 1.04 | 0.55 | 0.71 | 0.78 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `interleave` | 0.52 | 0.52 | 1.00 | 0.58 | 0.64 | 0.90 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.27 | 0.26 | 1.02 | 0.33 | 0.31 | 1.06 | sdrk fallback |
+| `interleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.26 | 0.26 | 0.99 | 0.24 | 0.31 | 0.78 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.26 | 0.26 | 1.00 | 0.31 | 0.33 | 0.95 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `interleave_fallback` | 0.51 | 0.52 | 0.98 | 0.61 | 0.64 | 0.94 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
-| `deinterleave` | 0.52 | 0.52 | 0.99 | 0.58 | 0.64 | 0.90 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.51 | 0.52 | 0.99 | 0.30 | 0.48 | 0.63 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.52 | 0.51 | 1.00 | 0.48 | 0.55 | 0.89 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `deinterleave_fallback` | 0.51 | 0.58 | 0.88 | 0.54 | 0.71 | 0.77 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
@@ -1304,28 +1304,28 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `scale_cq15` | 0.13 | 0.28 | 0.47 | 0.10 | 0.42 | 0.24 | sdrk fallback |
 | `scale_cq15_fallback` | 0.28 | 0.65 | 0.44 | 0.42 | 0.78 | 0.54 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `scale_fallback` | 0.26 | 0.27 | 0.95 | 0.20 | 0.29 | 0.69 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `add` | 0.39 | 0.40 | 0.98 | 0.26 | 0.35 | 0.74 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.20 | 0.20 | 0.98 | 0.13 | 0.18 | 0.76 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add` | 0.38 | 0.40 | 0.96 | 0.26 | 0.35 | 0.73 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.19 | 0.20 | 0.95 | 0.13 | 0.18 | 0.74 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.19 | 1.03 | 0.19 | 0.14 | 1.03 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `add_fallback` | 0.38 | 0.40 | 0.97 | 0.27 | 0.35 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `add_real` | 0.20 | 0.20 | 0.98 | 0.13 | 0.18 | 0.75 | volk_32f_x2_add_32f |
+| `add_real` | 0.19 | 0.20 | 0.95 | 0.13 | 0.18 | 0.73 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `add_real_q15` | 0.10 | 0.10 | 0.99 | 0.07 | 0.09 | 0.77 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 0.10 | 0.10 | 0.93 | 0.07 | 0.09 | 0.74 | volk_16i_x2_add_saturated_16i |
 | `add_real_q15_fallback` | 0.10 | 0.52 | 0.19 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul` | 0.43 | 0.53 | 0.82 | 0.51 | 0.54 | 0.95 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `mul_cq15` | 0.51 | 0.83 | 0.62 | 0.63 | 1.37 | 0.46 | sdrk fallback |
 | `mul_cq15_fallback` | 0.83 | 1.27 | 0.65 | 1.37 | 1.41 | 0.98 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul_fallback` | 0.51 | 0.53 | 0.97 | 0.51 | 0.79 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `mul_real` | 0.20 | 0.20 | 0.97 | 0.13 | 0.18 | 0.74 | volk_32f_x2_multiply_32f |
+| `mul_real` | 0.19 | 0.20 | 0.95 | 0.13 | 0.18 | 0.73 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul_real_q15` | 0.10 | 0.51 | 0.20 | 0.09 | 0.39 | 0.23 | sdrk fallback |
 | `mul_real_q15_fallback` | 0.51 | 0.30 | 1.71 | 0.39 | 0.31 | 1.25 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `interleave` | 0.26 | 0.27 | 0.97 | 0.48 | 0.52 | 0.91 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.13 | 0.13 | 1.00 | 0.13 | 0.13 | 0.99 | sdrk fallback |
+| `interleave` | 0.26 | 0.27 | 0.97 | 0.51 | 0.52 | 0.97 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.13 | 0.13 | 1.01 | 0.13 | 0.13 | 1.00 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.13 | 0.14 | 0.97 | 0.13 | 0.14 | 0.96 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `interleave_fallback` | 0.26 | 0.27 | 0.98 | 0.51 | 0.52 | 0.98 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `deinterleave` | 0.26 | 0.39 | 0.66 | 0.26 | 0.40 | 0.65 | volk_32fc_deinterleave_32f_x2 |
-| `deinterleave_cq15` | 0.17 | 0.26 | 0.63 | 0.19 | 0.26 | 0.74 | volk_16ic_deinterleave_16i_x2 |
+| `deinterleave_cq15` | 0.17 | 0.26 | 0.63 | 0.20 | 0.26 | 0.74 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.23 | 0.20 | 1.14 | 0.23 | 0.26 | 0.86 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `deinterleave_fallback` | 0.26 | 1.02 | 0.26 | 0.26 | 0.52 | 0.50 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `oscillate` | 1.40 | 2.27 | 0.62 | 1.45 | 4.03 | 0.36 | sdrk fallback |
@@ -1484,27 +1484,27 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `scale_cq15` | 0.07 | 0.50 | 0.14 | 0.07 | 0.39 | 0.17 | sdrk fallback |
 | `scale_cq15_fallback` | 0.50 | 0.59 | 0.85 | 0.39 | 1.04 | 0.38 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `scale_fallback` | 0.13 | 0.27 | 0.49 | 0.14 | 0.29 | 0.48 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `add` | 0.20 | 0.40 | 0.50 | 0.13 | 0.35 | 0.38 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.10 | 0.20 | 0.52 | 0.07 | 0.18 | 0.40 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add` | 0.19 | 0.40 | 0.48 | 0.13 | 0.35 | 0.37 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.10 | 0.20 | 0.48 | 0.07 | 0.18 | 0.38 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.10 | 0.54 | 0.18 | 0.09 | 1.03 | 0.09 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `add_fallback` | 0.20 | 0.40 | 0.50 | 0.18 | 0.35 | 0.50 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `add_real` | 0.10 | 0.11 | 0.99 | 0.07 | 0.09 | 0.75 | volk_32f_x2_add_32f |
+| `add_real` | 0.10 | 0.11 | 0.93 | 0.07 | 0.09 | 0.72 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `add_real_q15` | 0.06 | 0.10 | 0.54 | 0.04 | 0.09 | 0.42 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 0.05 | 0.10 | 0.48 | 0.04 | 0.09 | 0.39 | volk_16i_x2_add_saturated_16i |
 | `add_real_q15_fallback` | 0.10 | 0.27 | 0.36 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul` | 0.47 | 0.53 | 0.90 | 0.38 | 0.54 | 0.71 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `mul` | 0.47 | 0.53 | 0.90 | 0.39 | 0.54 | 0.71 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `mul_cq15` | 0.70 | 0.78 | 0.90 | 0.59 | 1.08 | 0.55 | sdrk fallback |
 | `mul_cq15_fallback` | 0.78 | 1.06 | 0.74 | 1.08 | 1.66 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul_fallback` | 0.75 | 0.53 | 1.42 | 0.78 | 0.79 | 0.98 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_real` | 0.10 | 0.11 | 0.97 | 0.07 | 0.09 | 0.74 | volk_32f_x2_multiply_32f |
+| `mul_real` | 0.10 | 0.11 | 0.92 | 0.07 | 0.09 | 0.72 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.76 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_real_q15` | 0.06 | 0.34 | 0.16 | 0.06 | 0.26 | 0.22 | sdrk fallback |
+| `mul_real_q15` | 0.06 | 0.34 | 0.17 | 0.06 | 0.26 | 0.22 | sdrk fallback |
 | `mul_real_q15_fallback` | 0.34 | 0.27 | 1.26 | 0.26 | 0.39 | 0.65 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `interleave` | 0.13 | 0.27 | 0.50 | 0.13 | 0.52 | 0.25 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.07 | 0.13 | 0.54 | 0.13 | 0.13 | 0.99 | sdrk fallback |
+| `interleave` | 0.14 | 0.27 | 0.50 | 0.13 | 0.52 | 0.25 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.07 | 0.13 | 0.54 | 0.13 | 0.13 | 1.00 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.13 | 0.14 | 0.97 | 0.13 | 0.26 | 0.51 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `interleave_fallback` | 0.26 | 0.27 | 0.97 | 0.14 | 0.27 | 0.50 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
-| `deinterleave` | 0.13 | 0.27 | 0.50 | 0.13 | 0.27 | 0.48 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave` | 0.13 | 0.27 | 0.50 | 0.13 | 0.27 | 0.49 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.07 | 0.33 | 0.22 | 0.13 | 0.26 | 0.50 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.20 | 0.20 | 1.00 | 0.26 | 0.27 | 0.97 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `deinterleave_fallback` | 0.26 | 0.39 | 0.67 | 0.26 | 0.27 | 0.96 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
@@ -1664,28 +1664,28 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `scale_cq15` | 0.70 | 1.52 | 0.46 | 0.58 | 1.39 | 0.41 | sdrk fallback |
 | `scale_cq15_fallback` | 1.52 | 1.80 | 0.84 | 1.39 | 1.55 | 0.90 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `scale_fallback` | 1.52 | 2.04 | 0.75 | 1.27 | 2.03 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `add` | 1.71 | 2.03 | 0.84 | 1.52 | 1.77 | 0.86 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.77 | 0.90 | 0.86 | 0.77 | 0.90 | 0.86 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add` | 1.64 | 2.03 | 0.81 | 1.39 | 1.77 | 0.78 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.70 | 0.90 | 0.78 | 0.70 | 0.90 | 0.78 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.76 | 1.79 | 0.42 | 0.76 | 1.53 | 0.50 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `add_fallback` | 1.77 | 2.54 | 0.70 | 1.52 | 2.04 | 0.75 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `add_real` | 0.86 | 1.02 | 0.84 | 0.77 | 0.90 | 0.86 | volk_32f_x2_add_32f |
+| `add_real` | 0.82 | 1.02 | 0.80 | 0.70 | 0.90 | 0.78 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 1.14 | 1.28 | 0.89 | 1.01 | 1.03 | 0.99 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `add_real_q15` | 0.39 | 0.46 | 0.85 | 0.39 | 0.46 | 0.86 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 0.35 | 0.46 | 0.77 | 0.35 | 0.46 | 0.77 | volk_16i_x2_add_saturated_16i |
 | `add_real_q15_fallback` | 0.51 | 0.90 | 0.56 | 0.51 | 0.77 | 0.66 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mul` | 3.11 | 3.29 | 0.95 | 2.01 | 2.53 | 0.80 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `mul` | 3.12 | 3.29 | 0.95 | 2.02 | 2.53 | 0.80 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `mul_cq15` | 1.48 | 1.78 | 0.83 | 1.39 | 1.65 | 0.84 | sdrk fallback |
 | `mul_cq15_fallback` | 1.78 | 3.31 | 0.54 | 1.65 | 2.29 | 0.72 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `mul_fallback` | 3.30 | 3.54 | 0.93 | 2.03 | 3.03 | 0.67 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mul_real` | 0.86 | 1.02 | 0.84 | 0.77 | 0.90 | 0.85 | volk_32f_x2_multiply_32f |
+| `mul_real` | 0.82 | 1.02 | 0.80 | 0.70 | 0.90 | 0.78 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 1.14 | 1.28 | 0.89 | 1.01 | 1.03 | 0.99 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mul_real_q15` | 0.44 | 0.89 | 0.49 | 0.44 | 0.82 | 0.53 | sdrk fallback |
-| `mul_real_q15_fallback` | 0.89 | 0.90 | 0.98 | 0.82 | 0.78 | 1.06 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `interleave` | 1.08 | 1.40 | 0.77 | 0.93 | 1.15 | 0.81 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.55 | 0.51 | 1.07 | 0.47 | 0.45 | 1.05 | sdrk fallback |
+| `mul_real_q15` | 0.44 | 0.89 | 0.49 | 0.44 | 0.83 | 0.53 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.89 | 0.90 | 0.98 | 0.83 | 0.78 | 1.06 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `interleave` | 1.02 | 1.40 | 0.73 | 0.83 | 1.15 | 0.72 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.51 | 0.51 | 1.00 | 0.42 | 0.45 | 0.93 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.51 | 0.64 | 0.80 | 0.45 | 0.52 | 0.87 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `interleave_fallback` | 1.02 | 1.27 | 0.80 | 0.89 | 1.03 | 0.87 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
-| `deinterleave` | 1.05 | 1.28 | 0.82 | 1.11 | 1.40 | 0.79 | volk_32fc_deinterleave_32f_x2 |
-| `deinterleave_cq15` | 0.53 | 0.65 | 0.82 | 0.57 | 0.71 | 0.80 | volk_16ic_deinterleave_16i_x2 |
+| `deinterleave` | 1.05 | 1.28 | 0.82 | 1.12 | 1.40 | 0.80 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave_cq15` | 0.53 | 0.65 | 0.82 | 0.57 | 0.71 | 0.79 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.58 | 0.65 | 0.89 | 0.64 | 0.90 | 0.71 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `deinterleave_fallback` | 1.15 | 1.28 | 0.90 | 1.27 | 1.78 | 0.71 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `oscillate` | 5.55 | 8.11 | 0.68 | 3.28 | 10.06 | 0.33 | sdrk fallback |

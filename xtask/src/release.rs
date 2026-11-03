@@ -146,7 +146,7 @@ pub fn waivers(limits_json: &str) -> anyhow::Result<Vec<Waiver>> {
             if status != "dev" && status != "release" {
                 continue;
             }
-            let texts: Vec<(&str, &str)> = ["waiver", "accuracy_waiver"]
+            let texts: Vec<(&str, &str)> = ["waiver", "accuracy_waiver", "cycle_waiver"]
                 .iter()
                 .filter_map(|f| entry.get(*f).and_then(Value::as_str).map(|t| (*f, t)))
                 .collect();

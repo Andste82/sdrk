@@ -12,8 +12,9 @@ use crate::validate::{DiagCode, Report};
 /// Keeps the queue of a stream output at a target fill level by steering the `ppm` parameter of
 /// a tunable `resample` node with a [`DriftController`].
 ///
-/// The application calls [`update`](Self::update) at roughly regular moments (for example in
-/// every audio callback). See `docs/blocks.md` (section "Clock drift") for the control law.
+/// The application calls [`update`](Self::update) before every `push` to the input and before
+/// every read of the output (see `update` for why). See `docs/blocks.md` (section "Clock drift")
+/// for the control law.
 ///
 /// ```
 /// use sdrk_blocks::DriftConfig;
@@ -128,6 +129,18 @@ impl PipelineDrift {
     /// Reads `available(output)` plus `extra_fill` (samples the application holds outside the
     /// pipeline, for example in the sound-card buffer), runs the controller and sets `ppm` on
     /// the node. Returns the value set. Does not allocate.
+    ///
+    /// Calling contract: call `update` immediately before every `push` to the input that feeds
+    /// `output` and immediately before every read of `output` (in a sound-card callback: update
+    /// first, then take the block). The queue changes only at those two events, so each call
+    /// sees the level that held during the interval since the previous call, and the
+    /// controller's time-weighted smoothing (`smoothing_s`) averages the queue over time. That
+    /// average moves continuously as the input and output clocks slip against each other.
+    /// Calling `update` only after each read instead samples the queue at one fixed phase of
+    /// the output clock: when input and output blocks have about the same period (480 in at
+    /// 48 kHz, 441 out at 44.1 kHz) the reading jumps by a whole output block each time the
+    /// two clocks slip by one period, and the controller answers every jump with a spike of
+    /// several hundred ppm (D314).
     ///
     /// # Errors
     /// The errors of [`Pipeline::available`] and [`Pipeline::set_param`].

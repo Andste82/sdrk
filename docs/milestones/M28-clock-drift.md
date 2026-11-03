@@ -231,9 +231,9 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-p
 
 ## Status
 
-Completely done: `DriftController` and `DriftConfig` (with doc example and the formulas in `docs/blocks.md`), `PipelineDrift` with a non-allocating `update`, `TwoClockSim`, spec tests 1 to 6, the example comment, the README paragraph, `docs/pipeline.md`, CHANGELOG and the decisions log (D300 to D313). The last gate was green (fmt, clippy, xtask check, doc, bare-metal, thumb clippy, the drift tests of all three crates, doc tests).
+Completely done: `DriftController` and `DriftConfig` (with doc example and the formulas in `docs/blocks.md`), `PipelineDrift` with a non-allocating `update`, `TwoClockSim`, spec tests 1 to 6, the example comment, the README paragraph, `docs/pipeline.md`, CHANGELOG and the decisions log (D300 to D316). The last gate was green (fmt, clippy, xtask check, doc, bare-metal, thumb clippy, the drift tests of all three crates, doc tests).
 
 Not done as written in the first version of this file:
 
 - The numeric bounds of tests 1 to 3 were amended, not met: the literal bounds are unreachable with the specified gains and the simulated call-time jitter. The controller formulas and defaults are unchanged. Reason and measurements: D310 (decisions-log).
-- No controller that filters the block quantisation of a block-based resampler is built; the documentation advises a larger target and a longer `smoothing_s` instead. Tracked: D312, D313 (decisions-log).
+- Spec test 5 calls `PipelineDrift::update` before every push and before every read, not after every read: with the specified pattern the fill jumps by one output block whenever the input and output clocks slip by one period (not, as first stated in D312, because the resampler delivers whole blocks) and the controller answers with spikes of several hundred ppm. With the new calling contract, documented for `update`, the test settles within 1.74 ppm of -50 ppm from 180 s on and asserts it (D314, D315); no push-time hook and no pending-input estimate is built (D316). The controller is unchanged.

@@ -45,6 +45,7 @@ mod sample;
 mod storage;
 
 pub use block::{Block, BlockTiming, FrameMeta, ParamValue};
+pub use blocks::add::{AddBlock, AddRealBlock};
 pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
@@ -60,7 +61,12 @@ pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmS
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
+pub use blocks::imag_part::ImagPartBlock;
+pub use blocks::make_complex::MakeComplexBlock;
+pub use blocks::mul::{MulBlock, MulRealBlock};
+pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig};
+pub use blocks::real_part::RealPartBlock;
 pub use blocks::real_to_iq::RealToIqBlock;
 pub use blocks::resample::{
     RESAMPLE_TUNED_PHASES, ResampleBlock, ResampleConfig, ResampleRealBlock,
@@ -69,6 +75,9 @@ pub use blocks::scale::{ScaleBlock, ScaleConfig};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
+pub use blocks::stereo_matrix::StereoMatrixBlock;
+pub use blocks::stereo_pll::{StereoPllBlock, StereoPllConfig};
+pub use blocks::to_complex::ToComplexBlock;
 pub use chain::{CHAIN_DESCRIPTION, Chain};
 pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,

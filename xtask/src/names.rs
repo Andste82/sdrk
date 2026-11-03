@@ -24,6 +24,27 @@ const EXCEPTIONS: &[(&str, &str)] = &[(
     "a Rust-only construct in `chain.rs` (M27), not a pipeline kind and not in `all_descriptions()`",
 )];
 
+/// Kinds that have a description but no pipeline kind yet, with the reason (D271). They have two
+/// inputs and a pipeline node has one incoming edge. Remove the entries in M34.
+const UNREGISTERED: &[(&str, &str)] = &[
+    (
+        "add",
+        "two inputs, pipeline kind comes with multi-input nodes in M34",
+    ),
+    (
+        "mul",
+        "two inputs, pipeline kind comes with multi-input nodes in M34",
+    ),
+    (
+        "make_complex",
+        "two inputs, pipeline kind comes with multi-input nodes in M34",
+    ),
+    (
+        "stereo_pll",
+        "two inputs, pipeline kind comes with multi-input nodes in M34",
+    ),
+];
+
 /// The longest kind.
 pub const MAX_KIND_LEN: usize = 32;
 
@@ -158,6 +179,9 @@ fn pipeline_problems(kinds_rs: &str, described: &BTreeSet<String>) -> Vec<(usize
         piped.insert(kind);
     }
     for kind in described.difference(&piped) {
+        if UNREGISTERED.iter().any(|(k, _)| k == kind) {
+            continue;
+        }
         out.push((0, format!(
             "the block kind `{kind}` has no pipeline kind (`struct {}Kind` with `KIND = \"{kind}\"`)",
             upper_camel(kind)
@@ -359,6 +383,17 @@ mod tests {
             m.iter().any(|m| m.contains("is the type `HalfbandKind`")),
             "{m:?}"
         );
+    }
+
+    #[test]
+    fn unregistered_kinds_need_no_pipeline_kind() {
+        let described: BTreeSet<String> = ["add", "stereo_pll", "agc"]
+            .iter()
+            .map(|k| (*k).to_string())
+            .collect();
+        let problems = pipeline_problems("", &described);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].1.contains("`agc`"));
     }
 
     #[test]

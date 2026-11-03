@@ -1,5 +1,6 @@
 //! The blocks.
 
+pub mod add;
 pub mod agc;
 pub mod am_demod;
 pub mod biquad;
@@ -13,13 +14,21 @@ pub mod fm_demod;
 pub mod fm_mod;
 pub mod fm_stereo_demod;
 pub mod halfband_decimate;
+pub mod imag_part;
+pub mod make_complex;
+pub mod mul;
+pub mod nco;
 pub mod preemph_limit;
+pub mod real_part;
 pub mod real_to_iq;
 pub mod resample;
 pub mod scale;
 pub mod spectrum;
 pub mod squelch;
 pub mod ssb_demod;
+pub mod stereo_matrix;
+pub mod stereo_pll;
+pub mod to_complex;
 
 use sdrk::{Delay, Rate, Ratio, RatioKind};
 
@@ -65,6 +74,19 @@ pub(crate) fn tail_mut<T>(slice: &mut [T], from: usize) -> Result<&mut [T]> {
     slice
         .get_mut(from..)
         .ok_or(Error::Core(sdrk_core::Error::Internal("block split")))
+}
+
+/// The common length of the two inputs of a [`Two`](crate::Two) port, or `LengthMismatch`
+/// (the lockstep rule).
+pub(crate) fn lockstep<A, B>(a: &[A], b: &[B]) -> Result<usize> {
+    if a.len() == b.len() {
+        Ok(a.len())
+    } else {
+        Err(Error::Core(sdrk_core::Error::LengthMismatch {
+            expected: a.len(),
+            got: b.len(),
+        }))
+    }
 }
 
 /// Sample rate in Hz as a float (parameters are floats, the rate itself stays exact).

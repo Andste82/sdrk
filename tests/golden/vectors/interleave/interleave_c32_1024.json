@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "interleave_c32_1024.expected.bin",
+      "len": 1024
+    },
+    "expected_no_im": {
+      "dtype": "cf32",
+      "file": "interleave_c32_1024.expected_no_im.bin",
+      "len": 1024
+    },
+    "im": {
+      "dtype": "f32",
+      "file": "interleave_c32_1024.im.bin",
+      "len": 1024
+    },
+    "re": {
+      "dtype": "f32",
+      "file": "interleave_c32_1024.re.bin",
+      "len": 1024
+    }
+  },
+  "case": "interleave_c32_1024",
+  "format_version": 1,
+  "kernel": "interleave",
+  "notes": "expected[n] = (re[n], im[n]); expected_no_im[n] = (re[n], 0); deinterleave of expected gives re and im back",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 468,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

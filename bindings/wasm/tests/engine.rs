@@ -231,6 +231,9 @@ fn validate_schema_and_backends() {
         "stereo_matrix",
         "stereo_pll",
         "preemph_limit",
+        "interleave",
+        "deinterleave",
+        "oscillate",
     ] {
         assert!(names.contains(&kernel), "{kernel}");
     }

@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "a": {
+      "dtype": "ci16",
+      "file": "mul_cq15_4096.a.bin",
+      "len": 4096
+    },
+    "b": {
+      "dtype": "ci16",
+      "file": "mul_cq15_4096.b.bin",
+      "len": 4096
+    },
+    "expected": {
+      "dtype": "ci16",
+      "file": "mul_cq15_4096.expected.bin",
+      "len": 4096
+    }
+  },
+  "case": "mul_cq15_4096",
+  "format_version": 1,
+  "kernel": "mul",
+  "notes": "one rounding and saturation per component on the i64 sums of products; noise sigma 0.4 quantized, the first 64 samples are corner values (-1 * -1 gives 32767)",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 465,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

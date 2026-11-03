@@ -238,7 +238,7 @@ fn cmul<S: SimdToken>(ar: S::f32s, ai: S::f32s, br: S::f32s, bi: S::f32s) -> (S:
 
 /// How a level loads `h` interleaved samples as a vector of real parts and a vector of
 /// imaginary parts, and stores them back.
-trait Split<S: SimdToken>: Copy {
+pub(crate) trait Split<S: SimdToken>: Copy {
     /// Whether the lanes hold the samples in the order of [`lane_sample`] instead of
     /// `0, 1, ..., h - 1`.
     const IN_LANE: bool = false;
@@ -263,7 +263,7 @@ trait Split<S: SimdToken>: Copy {
 
 /// [`Split`] with the deinterleave and interleave of `fearless_simd`, for every level.
 #[derive(Clone, Copy)]
-struct Portable;
+pub(crate) struct Portable;
 
 impl<S: SimdToken> Split<S> for Portable {}
 
@@ -646,7 +646,7 @@ fn rotate_f32<S: SimdToken>(simd: S, phase: u32, inc: u32, x: &[f32], y: &mut [f
 /// and `unpcklps`/`unpckhps`, which stay within the blocks, and the lane order of
 /// [`lane_sample`].
 #[cfg(target_arch = "x86_64")]
-mod x86 {
+pub(crate) mod x86 {
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         _mm256_shuffle_ps, _mm256_unpackhi_ps, _mm256_unpacklo_ps, _mm512_shuffle_ps,
@@ -659,7 +659,7 @@ mod x86 {
 
     /// [`Split`] of AVX2 and AVX-512 with the in-lane shuffles.
     #[derive(Clone, Copy)]
-    pub(super) struct InLane;
+    pub(crate) struct InLane;
 
     impl Split<Avx2> for InLane {
         const IN_LANE: bool = true;
@@ -754,7 +754,7 @@ mod x86 {
 /// (`fearless_simd` loads and shuffles: three instructions each way instead of one).
 #[cfg(target_arch = "aarch64")]
 #[allow(unsafe_code)]
-mod neon {
+pub(crate) mod neon {
     use core::arch::aarch64::{float32x4x2_t, vld2q_f32, vst2q_f32};
     use fearless_simd::prelude::*;
     use fearless_simd::{Neon, SimdFrom, f32x4};
@@ -763,7 +763,7 @@ mod neon {
 
     /// [`Split`] with `ld2` and `st2`.
     #[derive(Clone, Copy)]
-    pub(super) struct Ld2;
+    pub(crate) struct Ld2;
 
     impl Split<Neon> for Ld2 {
         #[inline(always)]

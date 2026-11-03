@@ -1,0 +1,34 @@
+{
+  "arrays": {
+    "a": {
+      "dtype": "i16",
+      "file": "mul_q15_4096.a.bin",
+      "len": 4096
+    },
+    "b": {
+      "dtype": "i16",
+      "file": "mul_q15_4096.b.bin",
+      "len": 4096
+    },
+    "expected": {
+      "dtype": "i16",
+      "file": "mul_q15_4096.expected.bin",
+      "len": 4096
+    }
+  },
+  "case": "mul_q15_4096",
+  "format_version": 1,
+  "kernel": "mul_real",
+  "notes": "expected = sat16((a * b + 2^14) >> 15); noise sigma 0.4 quantized, the first 64 samples are corner values",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 466,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

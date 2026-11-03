@@ -26,6 +26,11 @@ def from_float(x):
     return sat16(v.astype(np.int64))
 
 
+def add(a, b):
+    """Saturating Q15 add: sat16(a + b)."""
+    return sat16(np.asarray(a, dtype=np.int64) + np.asarray(b, dtype=np.int64))
+
+
 def mul(a, b):
     """Q15 multiply: sat16((a * b + (1 << 14)) >> 15)."""
     a = np.asarray(a, dtype=np.int64)
@@ -62,6 +67,8 @@ def self_test():
     assert f.tolist() == [32767, -32768, 0, 32767, -32768, 1, 0], f.tolist()
     assert int(round_shift(np.int64(-3), 1)) == -1
     assert int(round_shift(np.int64(5), 0)) == 5
+    assert int(add(32767, 32767)) == 32767 and int(add(-32768, -1)) == -32768
+    assert int(add(-5, 3)) == -2
     re, im = cmul(-32768, -32768, -32768, -32768)
     assert int(re) == 0 and int(im) == 32767
     assert float(to_float(np.int64(-32768))) == -1.0

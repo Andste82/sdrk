@@ -932,15 +932,29 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scale_cq15` | 2.03 | 2.03 | 1.00 | 2.11 | 2.11 | 1.00 | sdrk fallback |
 | `scale_cq15_fallback` | 2.03 | 3.78 | 0.54 | 2.11 | 3.65 | 0.58 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `scale_fallback` | 0.63 | 0.63 | 1.00 | 0.79 | 0.79 | 1.00 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `add` | 0.52 | 0.70 | 0.73 | 0.56 | 0.79 | 0.71 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.26 | 0.35 | 0.74 | 0.29 | 0.40 | 0.72 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15_fallback` | 0.35 | 3.66 | 0.10 | 0.46 | 3.78 | 0.12 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `add_fallback` | 0.70 | 0.70 | 1.00 | 0.91 | 0.91 | 1.00 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `add_real` | 0.26 | 0.36 | 0.73 | 0.29 | 0.40 | 0.72 | volk_32f_x2_add_32f |
+| `add_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `add_real_q15` | 0.14 | 0.18 | 0.75 | 0.15 | 0.20 | 0.73 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15_fallback` | 0.15 | 1.83 | 0.08 | 0.18 | 1.89 | 0.10 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mul` | 1.53 | 4.35 | 0.35 | 1.59 | 6.09 | 0.26 | volk_32fc_x2_multiply_32fc |
 | `mul_cq15` | 5.03 | 5.03 | 1.00 | 3.90 | 3.90 | 1.00 | sdrk fallback |
 | `mul_cq15_fallback` | 5.03 | 5.29 | 0.95 | 3.90 | 4.78 | 0.82 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mul_fallback` | 1.53 | 2.53 | 0.60 | 1.59 | 2.09 | 0.76 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `mul_real` | 0.26 | 0.36 | 0.73 | 0.28 | 0.40 | 0.71 | volk_32f_x2_multiply_32f |
+| `mul_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `mul_real_q15` | 0.97 | 0.97 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.97 | 1.21 | 0.81 | 1.02 | 1.39 | 0.73 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `interleave` | 0.52 | 0.52 | 1.00 | 0.58 | 0.64 | 0.90 | volk_32f_x2_interleave_32fc |
 | `interleave_cq15` | 0.27 | 0.29 | 0.91 | 0.33 | 0.36 | 0.92 | sdrk fallback |
 | `deinterleave` | 0.52 | 0.52 | 0.99 | 0.58 | 0.64 | 0.90 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.43 | 1.52 | 0.28 | 0.76 | 0.89 | 0.86 | volk_16ic_deinterleave_16i_x2 |
 | `oscillate` | 2.30 | 4.90 | 0.47 | 2.28 | 6.35 | 0.36 | sdrk fallback |
+| `oscillate_cq15` | 3.78 | 5.34 | 0.71 | 3.79 | 6.82 | 0.55 | sdrk fallback |
+| `oscillate_cq15_fallback` | 5.34 | 21.81 | 0.24 | 6.82 | 19.33 | 0.35 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_1024` | 7.20 | 6.91 | 1.04 | 6.39 | 6.78 | 0.94 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
 | `fft_1024_fallback` | 31.46 | 26.16 | 1.20 | 30.55 | 28.76 | 1.06 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_4096` | 8.15 | 10.41 | 0.78 | 7.34 | 8.86 | 0.83 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
@@ -1092,15 +1106,29 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scale_cq15` | 0.26 | 1.10 | 0.24 | 0.26 | 1.02 | 0.26 | sdrk fallback |
 | `scale_cq15_fallback` | 1.10 | 1.78 | 0.62 | 1.02 | 1.65 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `scale_fallback` | 0.52 | 0.63 | 0.82 | 0.58 | 0.79 | 0.74 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `add` | 0.52 | 0.70 | 0.73 | 0.56 | 0.79 | 0.71 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.26 | 0.35 | 0.74 | 0.29 | 0.40 | 0.72 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15_fallback` | 0.35 | 2.28 | 0.15 | 0.46 | 1.46 | 0.31 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `add_fallback` | 0.70 | 0.70 | 1.00 | 0.91 | 0.91 | 1.00 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `add_real` | 0.26 | 0.36 | 0.73 | 0.29 | 0.40 | 0.72 | volk_32f_x2_add_32f |
+| `add_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `add_real_q15` | 0.14 | 0.18 | 0.75 | 0.15 | 0.20 | 0.73 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15_fallback` | 0.15 | 1.14 | 0.13 | 0.18 | 0.73 | 0.25 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mul` | 1.51 | 1.55 | 0.98 | 1.18 | 1.55 | 0.76 | volk_32fc_x2_multiply_32fc |
 | `mul_cq15` | 1.43 | 3.04 | 0.47 | 1.51 | 2.89 | 0.52 | sdrk fallback |
 | `mul_cq15_fallback` | 3.04 | 3.71 | 0.82 | 2.89 | 3.53 | 0.82 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mul_fallback` | 1.52 | 1.53 | 0.99 | 1.23 | 1.34 | 0.92 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `mul_real` | 0.26 | 0.36 | 0.73 | 0.28 | 0.40 | 0.71 | volk_32f_x2_multiply_32f |
+| `mul_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `mul_real_q15` | 0.20 | 0.67 | 0.30 | 0.24 | 0.55 | 0.43 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.67 | 0.64 | 1.04 | 0.55 | 0.71 | 0.78 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `interleave` | 0.52 | 0.52 | 1.00 | 0.58 | 0.64 | 0.90 | volk_32f_x2_interleave_32fc |
 | `interleave_cq15` | 0.27 | 0.29 | 0.91 | 0.33 | 0.36 | 0.92 | sdrk fallback |
 | `deinterleave` | 0.52 | 0.52 | 0.99 | 0.58 | 0.64 | 0.90 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.51 | 0.52 | 0.99 | 0.30 | 0.48 | 0.63 | volk_16ic_deinterleave_16i_x2 |
 | `oscillate` | 2.29 | 4.90 | 0.47 | 2.57 | 6.35 | 0.40 | sdrk fallback |
+| `oscillate_cq15` | 2.61 | 8.08 | 0.32 | 3.04 | 7.08 | 0.43 | sdrk fallback |
+| `oscillate_cq15_fallback` | 8.08 | 21.81 | 0.37 | 7.08 | 19.33 | 0.37 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fft_1024` | 7.20 | 9.32 | 0.77 | 6.39 | 9.28 | 0.69 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 31.40 | 25.79 | 1.22 | 30.67 | 28.44 | 1.08 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fft_4096` | 8.15 | 10.68 | 0.76 | 7.34 | 10.64 | 0.69 | rustfft (FftPlanner, forward, in place) |
@@ -1253,10 +1281,22 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `scale_cq15` | 0.13 | 0.28 | 0.47 | 0.10 | 0.42 | 0.24 | sdrk fallback |
 | `scale_cq15_fallback` | 0.28 | 0.65 | 0.44 | 0.42 | 0.78 | 0.54 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `scale_fallback` | 0.26 | 0.27 | 0.95 | 0.20 | 0.29 | 0.69 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `add` | 0.39 | 0.40 | 0.98 | 0.26 | 0.35 | 0.74 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.20 | 0.20 | 0.98 | 0.13 | 0.18 | 0.76 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15_fallback` | 0.19 | 1.03 | 0.19 | 0.14 | 1.03 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `add_fallback` | 0.38 | 0.40 | 0.97 | 0.27 | 0.35 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `add_real` | 0.20 | 0.20 | 0.98 | 0.13 | 0.18 | 0.75 | volk_32f_x2_add_32f |
+| `add_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `add_real_q15` | 0.10 | 0.10 | 0.99 | 0.07 | 0.09 | 0.77 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15_fallback` | 0.10 | 0.52 | 0.19 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul` | 0.43 | 0.53 | 0.82 | 0.51 | 0.54 | 0.95 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `mul_cq15` | 0.51 | 0.83 | 0.62 | 0.63 | 1.37 | 0.46 | sdrk fallback |
 | `mul_cq15_fallback` | 0.83 | 1.27 | 0.65 | 1.37 | 1.41 | 0.98 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul_fallback` | 0.51 | 0.53 | 0.97 | 0.51 | 0.79 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `mul_real` | 0.20 | 0.20 | 0.97 | 0.13 | 0.18 | 0.74 | volk_32f_x2_multiply_32f |
+| `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `mul_real_q15` | 0.10 | 0.51 | 0.20 | 0.09 | 0.39 | 0.23 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.51 | 0.30 | 1.71 | 0.39 | 0.31 | 1.25 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `interleave` | 0.26 | 0.27 | 0.97 | 0.51 | 0.52 | 0.97 | volk_32f_x2_interleave_32fc |
 | `interleave_cq15` | 0.13 | 0.13 | 1.01 | 0.13 | 0.13 | 0.99 | sdrk fallback |
 | `deinterleave` | 0.26 | 0.39 | 0.66 | 0.26 | 0.40 | 0.65 | volk_32fc_deinterleave_32f_x2 |
@@ -1417,15 +1457,29 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `scale_cq15` | 0.07 | 0.50 | 0.14 | 0.07 | 0.39 | 0.17 | sdrk fallback |
 | `scale_cq15_fallback` | 0.50 | 0.59 | 0.85 | 0.39 | 1.04 | 0.38 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `scale_fallback` | 0.13 | 0.27 | 0.49 | 0.14 | 0.29 | 0.48 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `add` | 0.20 | 0.40 | 0.50 | 0.13 | 0.35 | 0.38 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.10 | 0.20 | 0.52 | 0.07 | 0.18 | 0.40 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15_fallback` | 0.10 | 0.54 | 0.18 | 0.09 | 1.03 | 0.09 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `add_fallback` | 0.20 | 0.40 | 0.50 | 0.18 | 0.35 | 0.50 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `add_real` | 0.10 | 0.11 | 0.99 | 0.07 | 0.09 | 0.75 | volk_32f_x2_add_32f |
+| `add_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `add_real_q15` | 0.06 | 0.10 | 0.54 | 0.04 | 0.09 | 0.42 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15_fallback` | 0.10 | 0.27 | 0.36 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul` | 0.47 | 0.53 | 0.90 | 0.38 | 0.54 | 0.71 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `mul_cq15` | 0.70 | 0.78 | 0.90 | 0.59 | 1.08 | 0.55 | sdrk fallback |
 | `mul_cq15_fallback` | 0.78 | 1.06 | 0.74 | 1.08 | 1.66 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul_fallback` | 0.75 | 0.53 | 1.42 | 0.78 | 0.79 | 0.98 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul_real` | 0.10 | 0.11 | 0.97 | 0.07 | 0.09 | 0.74 | volk_32f_x2_multiply_32f |
+| `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.76 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul_real_q15` | 0.06 | 0.34 | 0.16 | 0.06 | 0.26 | 0.22 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.34 | 0.27 | 1.26 | 0.26 | 0.39 | 0.65 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `interleave` | 0.13 | 0.27 | 0.50 | 0.13 | 0.52 | 0.25 | volk_32f_x2_interleave_32fc |
 | `interleave_cq15` | 0.07 | 0.13 | 0.54 | 0.13 | 0.13 | 0.99 | sdrk fallback |
 | `deinterleave` | 0.13 | 0.27 | 0.50 | 0.13 | 0.27 | 0.48 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.07 | 0.33 | 0.22 | 0.13 | 0.26 | 0.50 | volk_16ic_deinterleave_16i_x2 |
 | `oscillate` | 0.41 | 0.76 | 0.54 | 2.08 | 3.79 | 0.55 | sdrk fallback |
+| `oscillate_cq15` | 0.37 | 7.56 | 0.05 | 2.03 | 3.70 | 0.55 | sdrk fallback |
+| `oscillate_cq15_fallback` | 7.56 | 15.95 | 0.47 | 3.70 | 17.80 | 0.21 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fft_1024` | 2.03 | 2.73 | 0.74 | 1.95 | 3.27 | 0.60 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 17.02 | 18.65 | 0.91 | 16.75 | 26.92 | 0.62 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fft_4096` | 2.16 | 3.13 | 0.69 | 2.12 | 3.71 | 0.57 | rustfft (FftPlanner, forward, in place) |
@@ -1578,15 +1632,29 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `scale_cq15` | 0.70 | 1.52 | 0.46 | 0.58 | 1.39 | 0.41 | sdrk fallback |
 | `scale_cq15_fallback` | 1.52 | 1.80 | 0.84 | 1.39 | 1.55 | 0.90 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `scale_fallback` | 1.52 | 2.04 | 0.75 | 1.27 | 2.03 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `add` | 1.71 | 2.03 | 0.84 | 1.52 | 1.77 | 0.86 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.77 | 0.90 | 0.86 | 0.77 | 0.90 | 0.86 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15_fallback` | 0.76 | 1.79 | 0.42 | 0.76 | 1.53 | 0.50 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `add_fallback` | 1.77 | 2.54 | 0.70 | 1.52 | 2.04 | 0.75 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `add_real` | 0.86 | 1.02 | 0.84 | 0.77 | 0.90 | 0.86 | volk_32f_x2_add_32f |
+| `add_real_fallback` | 1.14 | 1.28 | 0.89 | 1.01 | 1.03 | 0.99 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `add_real_q15` | 0.39 | 0.46 | 0.85 | 0.39 | 0.46 | 0.86 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15_fallback` | 0.51 | 0.90 | 0.56 | 0.51 | 0.77 | 0.66 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `mul` | 3.11 | 3.29 | 0.95 | 2.01 | 2.53 | 0.80 | VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `mul_cq15` | 1.48 | 1.78 | 0.83 | 1.39 | 1.65 | 0.84 | sdrk fallback |
 | `mul_cq15_fallback` | 1.78 | 3.31 | 0.54 | 1.65 | 2.29 | 0.72 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `mul_fallback` | 3.30 | 3.54 | 0.93 | 2.03 | 3.03 | 0.67 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `mul_real` | 0.86 | 1.02 | 0.84 | 0.77 | 0.90 | 0.85 | volk_32f_x2_multiply_32f |
+| `mul_real_fallback` | 1.14 | 1.28 | 0.89 | 1.01 | 1.03 | 0.99 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `mul_real_q15` | 0.44 | 0.89 | 0.49 | 0.44 | 0.82 | 0.53 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.89 | 0.90 | 0.98 | 0.82 | 0.78 | 1.06 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `interleave` | 1.08 | 1.40 | 0.77 | 0.93 | 1.15 | 0.81 | volk_32f_x2_interleave_32fc |
 | `interleave_cq15` | 0.55 | 0.51 | 1.07 | 0.47 | 0.45 | 1.05 | sdrk fallback |
 | `deinterleave` | 1.05 | 1.28 | 0.82 | 1.11 | 1.40 | 0.79 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.53 | 0.65 | 0.82 | 0.57 | 0.71 | 0.80 | volk_16ic_deinterleave_16i_x2 |
 | `oscillate` | 5.55 | 8.11 | 0.68 | 3.28 | 10.06 | 0.33 | sdrk fallback |
+| `oscillate_cq15` | 3.82 | 7.74 | 0.49 | 3.29 | 9.05 | 0.36 | sdrk fallback |
+| `oscillate_cq15_fallback` | 7.74 | 51.51 | 0.15 | 9.05 | 45.00 | 0.20 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_1024` | 12.84 | 17.23 | 0.75 | 8.55 | 13.55 | 0.63 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 33.24 | 38.54 | 0.86 | 34.77 | 39.16 | 0.89 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_4096` | 15.06 | 20.37 | 0.74 | 10.02 | 16.16 | 0.62 | rustfft (FftPlanner, forward, in place) |

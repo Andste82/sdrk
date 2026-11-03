@@ -51,7 +51,7 @@ Classes: *bit-exact* (fallback equals the reference bit for bit; for `f32` value
 | `resample` | `kernels::decim::Resample` | `CQ15` | bit-exact | `Acc64` per component over the polyphase branch |
 | `resample_real` | `kernels::decim::ResampleReal` | `f32` | tolerance | same as complex `resample` |
 | `resample_real` | `kernels::decim::ResampleReal` | `Q15` | bit-exact | same as complex `resample` |
-| `quad_demod` | `kernels::demod::QuadDemod` | `C32` | tolerance | SNR >= 100 dB vs. the f64 reference; f32 product without FMA, `libm::atan2f` |
+| `quad_demod` | `kernels::demod::QuadDemod` | `C32` | tolerance | SNR >= 100 dB vs. the f64 reference; f32 product, fused (FMA) in the backend on AVX2, AVX-512 and NEON and unfused in the fallback and on the other levels (D319), `libm::atan2f` |
 | `quad_demod` | `kernels::demod::QuadDemod` | `CQ15` | tolerance | SNR >= 70 dB vs. the f64 reference (at most one LSB from the reference for any input); exact `i64` product, `libm::atan2` in f64, `q15_mul` with the gain |
 | `deemphasis` | `kernels::demod::Deemphasis` | `f32` | tolerance | SNR >= 100 dB; fallback: `y += alpha * (x - y)` without FMA, then `flush_denormal`; the SIMD backend runs an `f64` block scan whose bits differ from the fallback, between levels and between chunk plans (regression guard 144.4 dB on the golden case) |
 | `deemphasis` | `kernels::demod::Deemphasis` | `Q15` | bit-exact | `y = sat16(y + round_shift(alpha * (x - y), 15))` in `i64` |
@@ -165,7 +165,7 @@ The Q15 variants cannot hold a tap gain of `L` above 1; the golden case `resampl
 
 ### `quad_demod`
 
-`QuadDemodState<T>` keeps the previous sample (zero after `new`/`reset`). `output[n] = gain * arg(x[n] * conj(x[n-1]))` with `arg(0) = 0`; the first output after a reset is therefore 0. `C32`: the product in f32 without FMA, `libm::atan2f(im, re) * gain`, radians times the gain. `CQ15`: the product in exact `i64` (`re = ar*br + ai*bi`, `im = ai*br - ar*bi` with `a = x[n]`, `b = x[n-1]`), `phi = libm::atan2(im, re) / pi` in f64 rounded by the Q15 rule (unit: phase / pi, so a half turn is 32767), then `q15_mul(phi, gain)`; an accelerated variant may use CORDIC later. The reference does everything in f64 with a single rounding at the end; the Q15 fallback may differ from it by one LSB because it rounds twice. A typical gain for FM is `fs / (2 pi deviation)` (f32) so that full deviation maps to +-1. Timing: ratio `1/1`, group delay `Delay::new(1, 2)`.
+`QuadDemodState<T>` keeps the previous sample (zero after `new`/`reset`). `output[n] = gain * arg(x[n] * conj(x[n-1]))` with `arg(0) = 0`; the first output after a reset is therefore 0. `C32`: the product in f32 (the fallback without FMA; the backend fuses it on AVX2, AVX-512 and NEON, D319), `libm::atan2f(im, re) * gain`, radians times the gain. `CQ15`: the product in exact `i64` (`re = ar*br + ai*bi`, `im = ai*br - ar*bi` with `a = x[n]`, `b = x[n-1]`), `phi = libm::atan2(im, re) / pi` in f64 rounded by the Q15 rule (unit: phase / pi, so a half turn is 32767), then `q15_mul(phi, gain)`; an accelerated variant may use CORDIC later. The reference does everything in f64 with a single rounding at the end; the Q15 fallback may differ from it by one LSB because it rounds twice. A typical gain for FM is `fs / (2 pi deviation)` (f32) so that full deviation maps to +-1. Timing: ratio `1/1`, group delay `Delay::new(1, 2)`.
 
 ### `deemphasis`
 

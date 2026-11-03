@@ -14,6 +14,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Changed
 
+- `quad_demod` `C32` in the SIMD backend uses FMA on AVX2, AVX-512 and NEON (D319): faster on every FMA level and 1.2 dB more accurate (144.7 dB against 143.5 dB); the other levels, the fallback and `CQ15` are unchanged.
 - M26: the input and the output of `Block` are port types (`Ports`) instead of sample types: a stream of one sample type (`StreamElem`), a pair of streams (`Two<A, B>`) and frames (`Frame`, written through `FrameOut`). `FrameBlock` is removed; `SpectrumBlock` is a `Block<In = T, Out = Frame>`. In `sdrk-pipeline`, `NodeElem` is replaced by `StreamElem` (re-exported from `sdrk-blocks`) and the helper trait `NodeSlice`; `FrameNode<B>` requires `B: Block<Out = Frame>`. No block changes its output. Migration:
   - A stream block does not change: `type In = C32; type Out = C32;` and `fn process(&mut self, input: &[C32], output: &mut [C32]) -> Result<Progress>` still compile. Generic code over `B: Block` that needs slices names the element types, for example `fn run<I: StreamElem, O: StreamElem, B: Block<In = I, Out = O>>(block: &mut B, input: &[I], output: &mut [O])`.
   - A frame block changes from `let (used, meta) = block.push(input, &mut frame)?;` to `let mut meta = None; let used = block.process(input, FrameOut { values: &mut frame, meta: &mut meta })?.consumed;` (`meta` is `Some` when a frame completed; `Progress.produced` is 1 then).

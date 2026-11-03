@@ -166,13 +166,48 @@ fn q15_corners_follow_the_numeric_conventions() {
 }
 
 #[test]
+fn cq15_mul_equals_the_reference_on_every_corner_combination() {
+    // The fallback sums in `i32` with the imaginary part negated (D292): every combination of
+    // ten values at and next to the ends, zero and the rounding ties, in one call per `a`
+    // (so the vector loops and the rest of the fallback both see them).
+    let edge = [
+        -32768i16, -32767, -32766, -16384, -1, 0, 1, 16384, 32766, 32767,
+    ]
+    .map(Q15);
+    let mut b = Vec::new();
+    for &br in &edge {
+        for &bi in &edge {
+            b.push(CQ15 { re: br, im: bi });
+        }
+    }
+    for &ar in &edge {
+        for &ai in &edge {
+            let a = vec![CQ15 { re: ar, im: ai }; b.len()];
+            let (mut f, mut r) = (vec![CQ15::ZERO; b.len()], vec![CQ15::ZERO; b.len()]);
+            Fallback.mul(&a, &b, &mut f).unwrap();
+            Reference.mul(&a, &b, &mut r).unwrap();
+            assert_eq!(f, r, "a = ({}, {})", ar.0, ai.0);
+        }
+    }
+}
+
+#[test]
 fn f32_extremes_propagate_like_ieee() {
     let a = [C32::new(f32::NAN, 1.0), C32::new(f32::INFINITY, 0.0)];
     let b = [C32::new(1.0, 1.0), C32::new(0.0, 1.0)];
     let (mut f, mut r) = ([C32::ZERO; 2], [C32::ZERO; 2]);
     Fallback.mul(&a, &b, &mut f).unwrap();
     Reference.mul(&a, &b, &mut r).unwrap();
-    assert_eq!(bits(&f), bits(&r));
+    // NaN lanes agree by class, every other lane by bits: the sign and payload of a NaN are not
+    // part of the contract (D295; a constant-folded `inf * 0` gives `+NaN`, the hardware `-NaN`).
+    let lanes = |x: &[C32]| x.iter().flat_map(|v| [v.re, v.im]).collect::<Vec<f32>>();
+    for (i, (x, y)) in lanes(&f).into_iter().zip(lanes(&r)).enumerate() {
+        if x.is_nan() || y.is_nan() {
+            assert!(x.is_nan() && y.is_nan(), "lane {i}: {x} against {y}");
+        } else {
+            assert_eq!(x.to_bits(), y.to_bits(), "lane {i}");
+        }
+    }
     assert!(f[0].re.is_nan());
     Fallback.add(&a, &b, &mut f).unwrap();
     assert!(f[0].re.is_nan());

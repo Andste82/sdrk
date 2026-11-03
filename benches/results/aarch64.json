@@ -1651,7 +1651,7 @@
               "other_instr_per_sample": 1.15,
               "other_snr_db": 999.0,
               "ours_instr_per_sample": 0.9,
-              "ratio": 0.79
+              "ratio": 0.78
             },
             {
               "compared_with": "volk_32fc_deinterleave_32f_x2",
@@ -1659,12 +1659,12 @@
               "other_instr_per_sample": 1.15,
               "other_snr_db": null,
               "ours_instr_per_sample": 0.9,
-              "ratio": 0.79
+              "ratio": 0.78
             }
           ],
           "other_instr_per_sample": 1.15,
           "ours_instr_per_sample": 0.9,
-          "ratio": 0.79,
+          "ratio": 0.78,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1681,21 +1681,21 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 0.58,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 0.47,
-              "ratio": 0.8
+              "ours_instr_per_sample": 0.46,
+              "ratio": 0.78
             },
             {
               "compared_with": "volk_16ic_deinterleave_16i_x2",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.58,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.47,
-              "ratio": 0.8
+              "ours_instr_per_sample": 0.46,
+              "ratio": 0.78
             }
           ],
           "other_instr_per_sample": 0.58,
-          "ours_instr_per_sample": 0.47,
-          "ratio": 0.8,
+          "ours_instr_per_sample": 0.46,
+          "ratio": 0.78,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -3019,7 +3019,7 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 1.52,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 0.9,
+              "ours_instr_per_sample": 0.89,
               "ratio": 0.59
             },
             {
@@ -3027,13 +3027,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.9,
-              "ratio": 0.51
+              "ours_instr_per_sample": 0.89,
+              "ratio": 0.5
             }
           ],
           "other_instr_per_sample": 1.77,
-          "ours_instr_per_sample": 0.9,
-          "ratio": 0.51,
+          "ours_instr_per_sample": 0.89,
+          "ratio": 0.5,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -3051,12 +3051,12 @@
               "other_instr_per_sample": 0.77,
               "other_snr_db": null,
               "ours_instr_per_sample": 0.46,
-              "ratio": 0.6
+              "ratio": 0.59
             }
           ],
           "other_instr_per_sample": 0.77,
           "ours_instr_per_sample": 0.46,
-          "ratio": 0.6,
+          "ratio": 0.59,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -3273,35 +3273,43 @@
           "verdict": "pass"
         },
         "mul": {
-          "compared_with": "volk_32fc_x2_multiply_32fc",
+          "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
           "goal": true,
           "informational": [
+            {
+              "compared_with": "volk_32fc_x2_multiply_32fc",
+              "label": "information: volk",
+              "other_instr_per_sample": 3.52,
+              "other_snr_db": 150.11,
+              "ours_instr_per_sample": 3.08,
+              "ratio": 0.88
+            },
             {
               "compared_with": "volk_32fc_x2_multiply_32fc: neon",
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 3.27,
               "other_snr_db": 150.11,
-              "ours_instr_per_sample": 2.76,
-              "ratio": 0.85
+              "ours_instr_per_sample": 3.08,
+              "ratio": 0.94
             },
             {
-              "compared_with": "volk_32fc_x2_multiply_32fc",
+              "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 3.52,
+              "other_instr_per_sample": 3.26,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.76,
-              "ratio": 0.78
+              "ours_instr_per_sample": 3.08,
+              "ratio": 0.94
             }
           ],
-          "other_instr_per_sample": 3.52,
-          "ours_instr_per_sample": 2.76,
-          "ratio": 0.78,
+          "other_instr_per_sample": 3.26,
+          "ours_instr_per_sample": 3.08,
+          "ratio": 0.94,
           "snr_db": {
-            "other": 150.11,
+            "other": 148.5,
             "ours": 148.5
           },
           "status": "release",
-          "verdict": "fail"
+          "verdict": "pass"
         },
         "mul_cq15": {
           "compared_with": "sdrk fallback",
@@ -3310,15 +3318,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 9.51,
+              "other_instr_per_sample": 3.14,
               "other_snr_db": null,
               "ours_instr_per_sample": 2.55,
-              "ratio": 0.27
+              "ratio": 0.81
             }
           ],
-          "other_instr_per_sample": 9.51,
+          "other_instr_per_sample": 3.14,
           "ours_instr_per_sample": 2.55,
-          "ratio": 0.27,
+          "ratio": 0.81,
           "snr_db": {
             "other": 94.36,
             "ours": 94.36
@@ -3328,26 +3336,26 @@
         },
         "mul_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 5.52,
               "other_snr_db": null,
-              "ours_instr_per_sample": 9.51,
-              "ratio": 1.72
+              "ours_instr_per_sample": 3.14,
+              "ratio": 0.57
             }
           ],
           "other_instr_per_sample": 5.52,
-          "ours_instr_per_sample": 9.51,
-          "ratio": 1.72,
+          "ours_instr_per_sample": 3.14,
+          "ratio": 0.57,
           "snr_db": {
             "other": 19.61,
             "ours": 94.36
           },
           "status": "release",
-          "verdict": "fail"
+          "verdict": "pass"
         },
         "mul_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
@@ -3481,13 +3489,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 21.01,
               "other_snr_db": null,
-              "ours_instr_per_sample": 7.02,
-              "ratio": 0.33
+              "ours_instr_per_sample": 6.27,
+              "ratio": 0.3
             }
           ],
           "other_instr_per_sample": 21.01,
-          "ours_instr_per_sample": 7.02,
-          "ratio": 0.33,
+          "ours_instr_per_sample": 6.27,
+          "ratio": 0.3,
           "snr_db": {
             "other": 133.23,
             "ours": 133.23
@@ -4814,6 +4822,11 @@
       "volk": {
         "build": "CMake Release, ENABLE_ORC=OFF",
         "sha256": "89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628",
+        "version": "3.3.0"
+      },
+      "volk_nofma": {
+        "build": "volk-nofma.c over volk_32fc_x2_multiply_32fc.h (neon): -O3 -ffp-contract=off, per level neon:-march=armv8-a",
+        "sha256": "739127816a2afe22f5c39b0bbc9936a4ae44623d4117d86d344895d781f560c7",
         "version": "3.3.0"
       }
     },

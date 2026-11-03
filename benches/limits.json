@@ -3494,16 +3494,13 @@
       "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32fc_x2_multiply_32fc` is built with fused multiply-add at these levels, which the no-FMA contract of the fallback and SIMD paths forbids; its SNR against the f64 model is higher than ours"
+      "status": "release"
     },
     "avx512": {
-      "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32fc_x2_multiply_32fc` is built with fused multiply-add at these levels, which the no-FMA contract of the fallback and SIMD paths forbids; its SNR against the f64 model is higher than ours"
+      "status": "release"
     },
     "neon": {
-      "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32fc_x2_multiply_32fc` is built with fused multiply-add at these levels, which the no-FMA contract of the fallback and SIMD paths forbids; its SNR against the f64 model is higher than ours"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -3531,16 +3528,13 @@
   },
   "interleave": {
     "sse2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32f_x2_interleave_32fc` is 1.18 to 1.20 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32f_x2_interleave_32fc` is 1.18 to 1.20 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32f_x2_interleave_32fc` is 1.18 to 1.20 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -3554,16 +3548,13 @@
   },
   "deinterleave": {
     "sse2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: VOLK's deinterleave is 1.47 to 1.70 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: VOLK's deinterleave is 1.47 to 1.70 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: VOLK's deinterleave is 1.47 to 1.70 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -3672,8 +3663,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_add_q15` (generic C, saturating, no widening) is auto-vectorised by the compiler at `simd128` (1.83 instructions per sample against 3.04 of our fallback); the fallback keeps the exact saturating form of the golden vectors"
+      "status": "release"
     }
   },
   "mul_fallback": {
@@ -3681,12 +3671,10 @@
       "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: 1.19 and 1.12 against the planar CMSIS-DSP `arm_cmplx_mult_cmplx_f32` loop on x86 without SIMD; the aarch64 fallback is at 0.48"
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: 1.19 and 1.12 against the planar CMSIS-DSP `arm_cmplx_mult_cmplx_f32` loop on x86 without SIMD; the aarch64 fallback is at 0.48"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -3700,27 +3688,22 @@
   },
   "mul_cq15_fallback": {
     "sse2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
     },
     "neon": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+      "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+      "status": "release"
     }
   },
   "mul_real_fallback": {
@@ -3760,8 +3743,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_mult_q15` truncates and is auto-vectorised by the compiler at `simd128` (3.93 instructions per sample against 6.17 of our fallback, which rounds as the golden vectors demand)"
+      "status": "release"
     }
   },
   "oscillate_fallback": {

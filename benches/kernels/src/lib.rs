@@ -69,6 +69,9 @@ pub enum Impl {
     Fallback,
     /// VOLK, called as GNU Radio calls it.
     Volk,
+    /// VOLK's protokernel without fused multiply-add, compiled for the level with
+    /// `-ffp-contract=off` (`cref_sys::volk_nofma`, D287).
+    VolkNoFma,
     /// The loop of a GNU Radio block that is not a VOLK kernel (`agc_cc`, `pwr_squelch_cc`),
     /// compiled as GNU Radio compiles it.
     GnuRadio,
@@ -99,10 +102,11 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 14] = [
+    pub const ALL: [Impl; 15] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
+        Impl::VolkNoFma,
         Impl::GnuRadio,
         Impl::RustFft,
         Impl::Fftw,
@@ -122,6 +126,7 @@ impl Impl {
             Impl::Ours => "ours",
             Impl::Fallback => "fallback",
             Impl::Volk => "volk",
+            Impl::VolkNoFma => "volk-nofma",
             Impl::GnuRadio => "gnuradio",
             Impl::RustFft => "rustfft",
             Impl::Fftw => "fftw",

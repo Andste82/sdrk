@@ -14,12 +14,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 8.79,
               "other_snr_db": null,
-              "ours_instr_per_sample": 7.19,
+              "ours_instr_per_sample": 7.17,
               "ratio": 0.82
             }
           ],
           "other_instr_per_sample": 8.79,
-          "ours_instr_per_sample": 7.19,
+          "ours_instr_per_sample": 7.17,
           "ratio": 0.82,
           "snr_db": {
             "other": 150.98,
@@ -37,13 +37,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 10.78,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.63,
-              "ratio": 0.34
+              "ours_instr_per_sample": 3.61,
+              "ratio": 0.33
             }
           ],
           "other_instr_per_sample": 10.78,
-          "ours_instr_per_sample": 3.63,
-          "ratio": 0.34,
+          "ours_instr_per_sample": 3.61,
+          "ratio": 0.33,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -106,12 +106,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 6.04,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.63,
+              "ours_instr_per_sample": 3.61,
               "ratio": 0.6
             }
           ],
           "other_instr_per_sample": 6.04,
-          "ours_instr_per_sample": 3.63,
+          "ours_instr_per_sample": 3.61,
           "ratio": 0.6,
           "snr_db": {
             "other": 150.97,
@@ -152,12 +152,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 5.41,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.84,
+              "ours_instr_per_sample": 1.83,
               "ratio": 0.34
             }
           ],
           "other_instr_per_sample": 5.41,
-          "ours_instr_per_sample": 1.84,
+          "ours_instr_per_sample": 1.83,
           "ratio": 0.34,
           "snr_db": {
             "other": 999.0,

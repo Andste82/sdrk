@@ -14,13 +14,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.52,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.44,
-              "ratio": 0.29
+              "ours_instr_per_sample": 0.42,
+              "ratio": 0.28
             }
           ],
           "other_instr_per_sample": 1.52,
-          "ours_instr_per_sample": 0.44,
-          "ratio": 0.29,
+          "ours_instr_per_sample": 0.42,
+          "ratio": 0.28,
           "snr_db": {
             "other": 150.98,
             "ours": 150.98
@@ -37,13 +37,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.24,
-              "ratio": 0.3
+              "ours_instr_per_sample": 0.22,
+              "ratio": 0.29
             }
           ],
           "other_instr_per_sample": 0.77,
-          "ours_instr_per_sample": 0.24,
-          "ratio": 0.31,
+          "ours_instr_per_sample": 0.22,
+          "ratio": 0.29,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -106,13 +106,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.4,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.23,
-              "ratio": 0.59
+              "ours_instr_per_sample": 0.22,
+              "ratio": 0.56
             }
           ],
           "other_instr_per_sample": 0.4,
-          "ours_instr_per_sample": 0.23,
-          "ratio": 0.59,
+          "ours_instr_per_sample": 0.22,
+          "ratio": 0.56,
           "snr_db": {
             "other": 150.97,
             "ours": 150.97
@@ -152,13 +152,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.4,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.13,
-              "ratio": 0.34
+              "ours_instr_per_sample": 0.12,
+              "ratio": 0.3
             }
           ],
           "other_instr_per_sample": 0.4,
-          "ours_instr_per_sample": 0.13,
-          "ratio": 0.34,
+          "ours_instr_per_sample": 0.12,
+          "ratio": 0.3,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1545,13 +1545,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.96,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.26,
-              "ratio": 0.27
+              "ours_instr_per_sample": 0.25,
+              "ratio": 0.26
             }
           ],
           "other_instr_per_sample": 0.96,
-          "ours_instr_per_sample": 0.26,
-          "ratio": 0.27,
+          "ours_instr_per_sample": 0.25,
+          "ratio": 0.26,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -2813,12 +2813,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.4,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.48,
+              "ours_instr_per_sample": 0.49,
               "ratio": 0.35
             }
           ],
           "other_instr_per_sample": 1.4,
-          "ours_instr_per_sample": 0.48,
+          "ours_instr_per_sample": 0.49,
           "ratio": 0.35,
           "snr_db": {
             "other": 999.0,
@@ -2836,12 +2836,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.36,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.25,
+              "ours_instr_per_sample": 0.26,
               "ratio": 0.7
             }
           ],
           "other_instr_per_sample": 0.36,
-          "ours_instr_per_sample": 0.25,
+          "ours_instr_per_sample": 0.26,
           "ratio": 0.7,
           "snr_db": {
             "other": 999.0,
@@ -3089,20 +3089,20 @@
               "label": "information: volk",
               "other_instr_per_sample": 2.77,
               "other_snr_db": 150.12,
-              "ours_instr_per_sample": 1.18,
-              "ratio": 0.42
+              "ours_instr_per_sample": 1.19,
+              "ratio": 0.43
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 3.02,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.18,
+              "ours_instr_per_sample": 1.19,
               "ratio": 0.39
             }
           ],
           "other_instr_per_sample": 3.02,
-          "ours_instr_per_sample": 1.18,
+          "ours_instr_per_sample": 1.19,
           "ratio": 0.39,
           "snr_db": {
             "other": 148.5,
@@ -3189,13 +3189,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.4,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.23,
-              "ratio": 0.57
+              "ours_instr_per_sample": 0.22,
+              "ratio": 0.56
             }
           ],
           "other_instr_per_sample": 0.4,
-          "ours_instr_per_sample": 0.23,
-          "ratio": 0.57,
+          "ours_instr_per_sample": 0.22,
+          "ratio": 0.56,
           "snr_db": {
             "other": 151.79,
             "ours": 151.79

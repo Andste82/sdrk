@@ -1,5 +1,5 @@
 {
-  "_comment": "Release state per kernel and level (decision D14). `release` entries must stay within `_limits.release` times the instructions per sample of the comparison, `dev` entries within `_limits.dev`; `goal` marks the entries at or below it in the results. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged against our own `avx2` numbers with `_limits.runtime`; entries for it are needed only to relax that. See docs/performance.md.",
+  "_comment": "Release state per kernel and level (decision D14). `release` entries must stay within `_limits.release` times the instructions per sample of the comparison, `dev` entries within `_limits.dev`; `goal` marks the entries at or below it in the results. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged against our own `avx2` numbers with `_limits.runtime`; entries for it are needed only to relax that. A `cycle_waiver` on a SIMD entry and level exempts it from the gate of D321 (`cargo xtask check cycles`: in the simulated cycle tables of docs/performance.md the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. See docs/performance.md.",
   "_limits": {
     "release": 1.1,
     "dev": 1.5,
@@ -61,7 +61,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 2.15 / 1.55 cycles per sample of the fallback on `cortex-a72` (1.39; 1.08 / 1.29 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "simd128": {
       "status": "release"
@@ -75,7 +76,8 @@
       "status": "release"
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 0.22 / 0.21 cycles per sample of the fallback on `znver3` (1.05; 0.14 / 0.15 on `alderlake`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx512": {
       "status": "release"
@@ -364,7 +366,8 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 176.75 / 142.31 cycles per sample of the fallback on `skylake` (1.24; 119.09 / 187.71 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx2": {
       "status": "info",
@@ -415,7 +418,8 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 39.18 / 30.41 cycles per sample of the fallback on `skylake` (1.29; 27.75 / 45.20 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx2": {
       "status": "info",
@@ -462,7 +466,8 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 249.66 / 137.49 cycles per sample of the fallback on `skylake` (1.82; 144.54 / 207.97 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx2": {
       "status": "info",
@@ -474,7 +479,8 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 145.25 / 127.87 cycles per sample of the fallback on `cortex-a72` (1.14; 123.36 / 145.98 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "simd128": {
       "status": "info",
@@ -513,7 +519,8 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 249.52 / 168.56 cycles per sample of the fallback on `skylake` (1.48; 143.48 / 240.62 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx2": {
       "status": "info",
@@ -581,7 +588,8 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 136.89 / 74.97 cycles per sample of the fallback on `skylake` (1.83; 88.20 / 112.89 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx2": {
       "status": "info",
@@ -611,7 +619,8 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 136.55 / 103.68 cycles per sample of the fallback on `skylake` (1.32; 87.57 / 144.23 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx2": {
       "status": "info",
@@ -638,7 +647,8 @@
       "status": "release"
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 0.38 / 0.32 cycles per sample of the fallback on `alderlake` (1.19; 0.26 / 0.29 on `znver3`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "avx512": {
       "status": "release"
@@ -1299,7 +1309,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 8.58 / 8.56 cycles per sample of the fallback on `cortex-a72` (1.002; 1.77 / 1.77 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "simd128": {
       "status": "release"
@@ -1319,7 +1330,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 9.95 / 9.94 cycles per sample of the fallback on `cortex-a72` (1.001; 3.79 / 4.07 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "simd128": {
       "status": "release"
@@ -1339,7 +1351,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 47.07 / 39.90 cycles per sample of the fallback on `cortex-a72` (1.18; 22.46 / 21.76 on `cortex-a76`, 1.03); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "simd128": {
       "status": "release"
@@ -1578,7 +1591,8 @@
   "biquad_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 32.45 / 24.43 cycles per sample of the fallback on `skylake` (1.33; 20.44 / 31.16 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "sse4.2": {
       "status": "info",
@@ -1640,7 +1654,8 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)",
+      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 15.17 / 15.11 cycles per sample of the fallback on `cortex-a72` (1.004; 12.90 / 28.09 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
     },
     "simd128": {
       "status": "info",

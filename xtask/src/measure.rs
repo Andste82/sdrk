@@ -621,7 +621,62 @@ fn cycles_of_level(
             }
         }
     }
+    table.push_str(&fallback_verdicts(&value));
     Ok((table, Value::Object(value)))
+}
+
+/// The cycles per sample of ours of a simulated entry on `model` (`reference_model` or
+/// `counter_model`).
+fn ours_cycles(entry: &Value, model: &str) -> Option<f64> {
+    entry
+        .get(model)?
+        .get("ours")?
+        .get("cycles_per_sample")?
+        .as_f64()
+}
+
+/// The verdict of the gate of D321 (`cargo xtask check cycles`) for every simulated entry
+/// `<k>` whose `<k>_fallback` was simulated too: SIMD / fallback on both models, rounded to the
+/// two decimals of the published tables as the gate compares them.
+fn fallback_verdicts(entries: &serde_json::Map<String, Value>) -> String {
+    let mut text = String::new();
+    for (kernel, simd) in entries {
+        let Some(fallback) = entries.get(&format!("{kernel}_fallback")) else {
+            continue;
+        };
+        let models = ["reference_model", "counter_model"].map(|m| {
+            ours_cycles(simd, m)
+                .zip(ours_cycles(fallback, m))
+                .map(|(s, f)| ((s * 100.0).round(), (f * 100.0).round()))
+        });
+        let [Some(r), Some(c)] = models else {
+            continue;
+        };
+        let delegated = simd.get("compared_with").and_then(Value::as_str) == Some("sdrk fallback")
+            && ["reference_model", "counter_model"].iter().all(|m| {
+                simd.get(*m)
+                    .and_then(|v| v.get("ratio"))
+                    .and_then(Value::as_f64)
+                    .is_some_and(|x| (x * 100.0).round() == 100.0)
+            });
+        let ok = delegated || (r.0 <= r.1 && c.0 <= c.1);
+        let _ = writeln!(
+            text,
+            "SIMD vs fallback {kernel}: reference {:.2} / {:.2} ({:.2}), counter {:.2} / {:.2} ({:.2}): {}",
+            r.0 / 100.0,
+            r.1 / 100.0,
+            r.0 / r.1,
+            c.0 / 100.0,
+            c.1 / 100.0,
+            c.0 / c.1,
+            if ok {
+                "ok"
+            } else {
+                "SLOWER than the fallback (gate D321)"
+            }
+        );
+    }
+    text
 }
 
 /// The cycles of one entry in both modes (`both`, the judged one first); the rows go to
@@ -854,5 +909,46 @@ mod tests {
     fn the_host_platform_is_the_default() {
         assert_eq!(default_platforms("x86_64"), ["x86_64"]);
         assert_eq!(default_platforms("aarch64"), ["aarch64"]);
+    }
+
+    fn simulated(compared_with: &str, reference: (f64, f64), counter: (f64, f64)) -> Value {
+        let model = |(ours, other): (f64, f64)| {
+            json!({
+                "ours": { "cycles_per_sample": ours },
+                "other": { "cycles_per_sample": other },
+                "ratio": ours / other,
+            })
+        };
+        json!({
+            "compared_with": compared_with,
+            "reference_model": model(reference),
+            "counter_model": model(counter),
+        })
+    }
+
+    #[test]
+    fn the_fallback_verdict_compares_the_published_two_decimals_on_both_models() {
+        let mut m = serde_json::Map::new();
+        m.insert("k".into(), simulated("volk", (0.1966, 0.2), (0.132, 0.18)));
+        m.insert(
+            "k_fallback".into(),
+            simulated("cmsis", (0.1943, 0.2), (0.1368, 0.18)),
+        );
+        let text = fallback_verdicts(&m);
+        assert!(
+            text.contains("SIMD vs fallback k: reference 0.20 / 0.19"),
+            "{text}"
+        );
+        assert!(text.contains("SLOWER"), "{text}");
+        m.insert("k".into(), simulated("volk", (0.1949, 0.2), (0.132, 0.18)));
+        assert!(fallback_verdicts(&m).ends_with(": ok\n"));
+        // Delegated to the fallback: passes whatever the rounding of the two runs.
+        m.insert(
+            "k".into(),
+            simulated("sdrk fallback", (0.1960, 0.1961), (0.14, 0.1401)),
+        );
+        assert!(fallback_verdicts(&m).ends_with(": ok\n"));
+        m.remove("k_fallback");
+        assert_eq!(fallback_verdicts(&m), "");
     }
 }

@@ -111,6 +111,7 @@ mod filter;
 mod fused;
 mod halfband;
 mod interp;
+mod math;
 mod mix;
 mod modulate;
 mod preemph_limit;

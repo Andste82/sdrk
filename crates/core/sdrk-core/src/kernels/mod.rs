@@ -12,6 +12,7 @@ pub mod filter;
 pub mod fused;
 pub mod halfband;
 pub mod interp;
+pub mod math;
 pub mod mix;
 pub mod modulate;
 pub mod preemph_limit;

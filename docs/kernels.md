@@ -69,6 +69,17 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 | `preemph_limit` | `kernels::preemph_limit::PreemphLimit` | `Q15` | bit-exact | integer model: Q24 coefficients, the pre-emphasized value and the envelope in Q30 in `i64`, products in `i128` |
 | `stereo_matrix` | `kernels::stereo::StereoMatrix` | `C32` | bit-exact | `d2 = d + d`, `l = s + d2`, `r = s - d2` in f32, no FMA |
 | `stereo_matrix` | `kernels::stereo::StereoMatrix` | `CQ15` | bit-exact | `d2 = 2 d` in `i64`, `l = sat16(s + d2)`, `r = sat16(s - d2)` (one saturation) |
+| `add` | `kernels::math::Add` | `C32` | bit-exact | `a + b` per component in f32 |
+| `add` | `kernels::math::Add` | `CQ15` | bit-exact | `sat16(a + b)` per component in `i32` |
+| `add_real` | `kernels::math::AddReal` | `f32` | bit-exact | `a + b` |
+| `add_real` | `kernels::math::AddReal` | `Q15` | bit-exact | `sat16(a + b)` in `i32` |
+| `mul` | `kernels::math::Mul` | `C32` | bit-exact | `re = ar br - ai bi`, `im = ar bi + ai br` in f32, the four products first, no FMA |
+| `mul` | `kernels::math::Mul` | `CQ15` | bit-exact | `re = sat16(round_shift(ar br - ai bi, 15))`, `im = sat16(round_shift(ar bi + ai br, 15))` in `i64` (one rounding per component; `(-1)(-1) = 32767`) |
+| `mul_real` | `kernels::math::MulReal` | `f32` | bit-exact | `a b` |
+| `mul_real` | `kernels::math::MulReal` | `Q15` | bit-exact | `sat16(round_shift(a b, 15))`, the multiply of the numeric conventions |
+| `oscillate` | `kernels::mix::Oscillate` | `C32` | tolerance | SNR >= 120 dB vs. f64 `exp(j 2 pi k phase / 2^32)`; `COS_F32` with the interpolation of the `rotate` fallback at the phase `k phase` (wrapping `u32` multiply); harmonic 1 equals `rotate` of the constant `(1, 0)` bit for bit |
+| `oscillate` | `kernels::mix::Oscillate` | `CQ15` | bit-exact | `COS_Q15` with the interpolation of the `CQ15` `rotate` at `k phase` (integer table model) |
+| `interleave`, `deinterleave` | `kernels::math::Interleave` | `C32`, `CQ15` | bit-exact | copies; `im = None` gives 0, either output of `deinterleave` may be `None` |
 | `window` | `kernels::spectrum::Window` | `C32` | bit-exact | f32 multiply per component (equal to the f64 product rounded once) |
 | `window` | `kernels::spectrum::Window` | `CQ15` | bit-exact | `q15_mul` per component |
 | `mag_sq` | `kernels::spectrum::MagSq` | `C32` | tolerance | SNR >= 140 dB; `re * re + im * im` without FMA; the SIMD backend equals the fallback bit for bit in every build, the relaxed WASM build included |
@@ -114,6 +125,14 @@ Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance*
 - **SIMD backend `C32`:** a block oscillator instead of the table (see [backends.md](backends.md)); an output sample is a function of `(phase_n, inc)` and the input sample, so it does not depend on the split into calls, but after a retune its bits can depend on the increment as well as on the phase (decision D8, [timing.md](timing.md#block-size-invariance)). Contract: SNR >= 120 dB as above.
 - The table value at angle 0 is `32767/32768` (not 1.0), so `CQ15` rotation by zero is the identity only for `|x| <= 16384` and within one LSB for larger values. In `C32` the sine of angle 0 is the table entry for 3 pi / 2 (about -1.8e-16), so rotation by zero is exact whenever `|im| * 1.8e-16` is below half an ULP of `re` (always true for ordinary signals; an input with `re = 0` and `im != 0` receives a residue of about 1e-16).
 - A rotated `CQ15` sample whose magnitude exceeds 1 saturates one component; the golden cases clip their expected value the same way.
+
+### `add`, `add_real`, `mul`, `mul_real`, `oscillate`, `interleave` and `deinterleave`
+
+Basic math kernels (M30). The first four (`kernels::math`) are stateless element-wise operations of two streams; the formulas are in the table above. The three lengths must be equal, else `LengthMismatch` and nothing is written. The `CQ15` product accumulates in `i64` because the sum of two products reaches `2^31`; the real `Q15` product and the `Q15` sums fit `i32` (the fallback uses `i32` there and saturates once). `Reference` runs the formulas of the contract one sample at a time (`f32` in the written order for `C32`/`f32`, so the products are rounded before the difference).
+
+`Interleave<T>::interleave(re, im, out)` writes `out[n] = (re[n], im[n])` (`im = None`: `im = 0`); `deinterleave(input, re, im)` writes the components to whichever of the two outputs is given. All lengths that are given must match, checked before the first write.
+
+`Oscillate<T>::oscillate(nco, harmonic, out)` writes `out[n] = exp(j 2 pi (k phase_n) / 2^32)` with `phase_n` the phase of the oscillator before sample `n` and `k = harmonic`, 1 to 8, else `InvalidParameter` (nothing written, the oscillator unchanged). The oscillator advances by `out.len()` steps; the phase model and `Nco` are those of `rotate` ([timing.md](timing.md)). The product `k phase_n` wraps modulo `2^32`, so harmonic `k` is phase-locked to harmonic 1 (`k phase_n` is a function of `phase_n` only). The fallback keeps the scaled phase as its own accumulator (`k phase + k inc` per sample), which equals `k (phase + inc)` modulo `2^32`. The `Reference` computes `exp` in f64 (`C32`, rounded once) and the table model with the `i64` formula of the contract (`CQ15`).
 
 ### `fir`
 

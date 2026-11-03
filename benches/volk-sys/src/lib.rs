@@ -164,6 +164,27 @@ mod ffi {
         pub fn volk_32fc_deinterleave_32f_x2_get_func_desc() -> volk_func_desc_t;
         pub fn volk_32f_x2_interleave_32fc_get_func_desc() -> volk_func_desc_t;
     }
+
+    // The kernels of `add`, `add_real`, `mul`, `mul_real` and `deinterleave` (M30).
+    unsafe extern "C" {
+        pub static mut volk_32fc_x2_add_32fc: Option<
+            unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const lv_32fc_t, c_uint),
+        >;
+        pub static mut volk_32f_x2_multiply_32f: Option<super::AddSub>;
+        pub static mut volk_32fc_x2_multiply_32fc: Option<
+            unsafe extern "C" fn(*mut lv_32fc_t, *const lv_32fc_t, *const lv_32fc_t, c_uint),
+        >;
+        pub static mut volk_16i_x2_add_saturated_16i:
+            Option<unsafe extern "C" fn(*mut i16, *const i16, *const i16, c_uint)>;
+        pub static mut volk_16ic_deinterleave_16i_x2:
+            Option<unsafe extern "C" fn(*mut i16, *mut i16, *const lv_16sc_t, c_uint)>;
+
+        pub fn volk_32fc_x2_add_32fc_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32f_x2_multiply_32f_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_32fc_x2_multiply_32fc_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_16i_x2_add_saturated_16i_get_func_desc() -> volk_func_desc_t;
+        pub fn volk_16ic_deinterleave_16i_x2_get_func_desc() -> volk_func_desc_t;
+    }
 }
 
 macro_rules! wrappers {
@@ -246,6 +267,17 @@ wrappers! {
     fn volk_32fc_deinterleave_32f_x2(re: *mut f32, im: *mut f32, input: *const lv_32fc_t, n: u32);
     /// `out[i] = (re[i], im[i])`.
     fn volk_32f_x2_interleave_32fc(out: *mut lv_32fc_t, re: *const f32, im: *const f32, n: u32);
+    /// `out[i] = a[i] + b[i]` of complex vectors.
+    fn volk_32fc_x2_add_32fc(out: *mut lv_32fc_t, a: *const lv_32fc_t, b: *const lv_32fc_t, n: u32);
+    /// `out[i] = a[i] * b[i]`.
+    fn volk_32f_x2_multiply_32f(out: *mut f32, a: *const f32, b: *const f32, n: u32);
+    /// `out[i] = a[i] * b[i]` of complex vectors (the products of the real and imaginary parts
+    /// as `ar br - ai bi`, `ar bi + ai br`; the AVX2 form contracts them into FMA).
+    fn volk_32fc_x2_multiply_32fc(out: *mut lv_32fc_t, a: *const lv_32fc_t, b: *const lv_32fc_t, n: u32);
+    /// `out[i] = sat16(a[i] + b[i])`.
+    fn volk_16i_x2_add_saturated_16i(out: *mut i16, a: *const i16, b: *const i16, n: u32);
+    /// `re[i] = in[i].re`, `im[i] = in[i].im` of 16-bit complex samples.
+    fn volk_16ic_deinterleave_16i_x2(re: *mut i16, im: *mut i16, input: *const lv_16sc_t, n: u32);
 }
 
 /// The VOLK functions that the first rounds compared only against VOLK's own build
@@ -472,6 +504,11 @@ pub fn implementations(name: &str) -> Option<Vec<Implementation>> {
             "volk_32f_x2_subtract_32f" => ffi::volk_32f_x2_subtract_32f_get_func_desc,
             "volk_32fc_deinterleave_32f_x2" => ffi::volk_32fc_deinterleave_32f_x2_get_func_desc,
             "volk_32f_x2_interleave_32fc" => ffi::volk_32f_x2_interleave_32fc_get_func_desc,
+            "volk_32fc_x2_add_32fc" => ffi::volk_32fc_x2_add_32fc_get_func_desc,
+            "volk_32f_x2_multiply_32f" => ffi::volk_32f_x2_multiply_32f_get_func_desc,
+            "volk_32fc_x2_multiply_32fc" => ffi::volk_32fc_x2_multiply_32fc_get_func_desc,
+            "volk_16i_x2_add_saturated_16i" => ffi::volk_16i_x2_add_saturated_16i_get_func_desc,
+            "volk_16ic_deinterleave_16i_x2" => ffi::volk_16ic_deinterleave_16i_x2_get_func_desc,
             "volk_32fc_x2_dot_prod_32fc" => ffi::volk_32fc_x2_dot_prod_32fc_get_func_desc,
             _ => return None,
         };

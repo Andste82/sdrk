@@ -190,6 +190,15 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `interpolate` | Interpolation by an integer factor with an image-rejection low-pass. | `in`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | `factor` |
 | `mag` | Magnitude (envelope) of complex samples. | `in`: c32, cq15 | `out`: f32, q15 | - |
 | `delay` | Delays a signal by a whole number of samples. | `in`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | `samples` |
+| `add` | Adds two streams of the same type, sample by sample. | `a`: c32, cq15, f32, q15; `b`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | - |
+| `mul` | Multiplies two streams of the same type, sample by sample. | `a`: c32, cq15, f32, q15; `b`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | - |
+| `make_complex` | Combines a real and an imaginary stream into one complex stream. | `re`: f32, q15; `im`: f32, q15 | `out`: c32, cq15 | - |
+| `to_complex` | Turns a real stream into a complex stream with a zero imaginary part. | `in`: f32, q15 | `out`: c32, cq15 | - |
+| `real_part` | Outputs the real part of a complex stream as a real stream. | `in`: c32, cq15 | `out`: f32, q15 | - |
+| `imag_part` | Outputs the imaginary part of a complex stream as a real stream. | `in`: c32, cq15 | `out`: f32, q15 | - |
+| `nco` | Generates a complex tone at frequency_hz, one sample per input sample. | `clock`: c32, cq15, f32, q15 | `out`: c32, cq15 | `frequency_hz` |
+| `stereo_pll` | Locks a loop to the 19 kHz stereo pilot and demodulates the 38 kHz difference. | `mpx`: f32, q15; `pilot`: f32, q15 | `out`: c32, cq15 | - |
+| `stereo_matrix` | Turns sum and difference (S, D) into left and right: L = S + 2 D, R = S - 2 D. | `in`: c32, cq15 | `out`: c32, cq15 | - |
 
 | Block | Parameter | Unit | When | Type, range, default | Typical |
 | --- | --- | --- | --- | --- | --- |
@@ -285,6 +294,13 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `interpolate` | `attenuation_db` | dB | build | f64, 8 to 200, default 60 | 60 |
 | `interpolate` | `max_taps` | - | build | integer, 1 to 65536, default 1023 | 1023 |
 | `delay` | `samples` | samples | build | integer, 0 to 65536, no default | 63 to match the group delay of a 127-tap linear-phase filter |
+| `nco` | `frequency_hz` | Hz | runtime | f64, -1000000000000 to 1000000000000, no default | 19e3 for the stereo pilot at 192 kHz |
+| `nco` | `harmonic` | - | build | integer, 1 to 8, default 1 | 1; 2 for the 38 kHz subcarrier of a 19 kHz pilot |
+| `nco` | `phase_turns` | - | build | f64, 0 to 1, default 0 | 0; 0.25 starts at +j |
+| `stereo_pll` | `pilot_hz` | Hz | build | f64, 1 to 1000000000000, default 19000 | 19e3 for broadcast FM |
+| `stereo_pll` | `natural_hz` | Hz | build | f64, 1 to 190, default 20 | 20 |
+| `stereo_pll` | `pilot_level` | - | build | f64, 0.000001 to 1, default 0.1 | 0.1; for Q15 0.1 times the scale of the discriminator output |
+| `stereo_pll` | `stereo` | - | runtime | choice auto / mono, default auto | auto; mono for a weak station |
 
 <!-- blocks-table:end -->
 
@@ -316,9 +332,9 @@ The kinds that later milestones add have their names reserved here, so that ever
 
 | Kind | Purpose | Planned in |
 | --- | --- | --- |
-| `stereo_pll`, `stereo_matrix` | building blocks of `fm_stereo_demod` | M30 |
-| `to_complex`, `real_part`, `imag_part`, `make_complex` | domain changes: real → complex with imaginary part 0, complex → real part, complex → imaginary part, two real streams → one complex stream | M30 |
-| `nco`, `add`, `mul` | oscillator source, sum and product of two streams | M30 (pipeline kinds of `add`, `mul`, `make_complex`, `stereo_pll`: M34) |
+| `stereo_pll`, `stereo_matrix` | building blocks of `fm_stereo_demod` | M30 (delivered) |
+| `to_complex`, `real_part`, `imag_part`, `make_complex` | domain changes: real → complex with imaginary part 0, complex → real part, complex → imaginary part, two real streams → one complex stream | M30 (delivered) |
+| `nco`, `add`, `mul` | oscillator source, sum and product of two streams | M30 (delivered; pipeline kinds of `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_matrix` in M30, of `add`, `mul`, `make_complex`, `stereo_pll`: M34) |
 | `noise_blank`, `auto_notch` | impulse blanker, adaptive notch | M33 |
 | `am_mod`, `ssb_mod` | AM and SSB transmit | M35 |
 | `fm_stereo_mod` | FM stereo encoder (pilot, 38 kHz subcarrier) | M36 |
@@ -359,6 +375,11 @@ The kinds that later milestones add have their names reserved here, so that ever
 - **`interpolate`:** `InterpolateBlock<T>` and `InterpolateRealBlock<T>` around `fir_interpolate` and `fir_interpolate_real`: taps designed at the *output* rate and multiplied by `factor`, exactly as in `duc`; cutoff (default `0.4 fs`) and transition (default `0.1 fs`) are relative to the *input* rate and `cutoff_hz + transition_hz / 2` must not exceed half the input rate. Storage: the taps and `ceil(taps / factor)` history samples. Group delay `(taps - 1) / (2 factor)` input samples.
 - **`mag`:** `MagBlock<T>` (`C32` to `f32`, `CQ15` to `Q15`) around the kernel `mag`, the envelope detector of `am_demod`. No parameters, no state, no storage.
 - **`delay`:** `DelayBlock<T>` (`C32`, `CQ15`) and `DelayRealBlock<T>` (`f32`, `Q15`): output `n` is input `n - samples`, the first `samples` outputs are zero. `samples` (0 to 65536, required, build time) elements of ring buffer come from the storage; the block copies in segments and calls no kernel. The group delay is exactly `samples`. It aligns two paths before a block with two inputs.
+- **`add`, `mul`:** `AddBlock<T>`/`MulBlock<T>` (`C32`, `CQ15`) and `AddRealBlock<T>`/`MulRealBlock<T>` (`f32`, `Q15`) around the kernels `add`, `mul`, `add_real` and `mul_real`. The input is a `Two` port (lockstep): both slices have the same length, otherwise `LengthMismatch` and nothing changes; `Progress` counts pairs. The complex `mul` is the complex product. Q15 sums and products saturate (R7). No parameters, no storage, ratio 1, delay 0.
+- **`make_complex`, `to_complex`:** `MakeComplexBlock<T>` (`Two<f32, f32>` or `Two<Q15, Q15>` to `C32`/`CQ15`, lockstep) and `ToComplexBlock<T>` (`f32`/`Q15` to `C32`/`CQ15` with imaginary part 0) around the kernel `interleave`. `real_part` and `imag_part` (`RealPartBlock<T>`, `ImagPartBlock<T>`, `C32`/`CQ15` to `f32`/`Q15`) around `deinterleave` with one output undo them bit for bit. The type parameter `T` of these four is the complex type.
+- **`nco`:** `NcoBlock<T>` (clock is a `C32`/`CQ15` stream) and `NcoRealBlock<T>` (clock is an `f32`/`Q15` stream; `T` is the complex output type) around the kernel `oscillate`: one output sample `exp(j 2 pi k phase)` per input sample, the input values are ignored (the input is the clock, so a pipeline needs no source nodes). `frequency_hz` (runtime, required, strictly inside plus or minus half the rate; a change keeps the phase), `harmonic` (build, 1 to 8, the output is the harmonic `k` of the same phase, so harmonic 2 on the same clock is the square of harmonic 1) and `phase_turns` (build, 0 to 1, start phase; `reset` returns to it). `NcoConfig` is the config of both. No storage.
+- **`stereo_pll`:** `StereoPllBlock<T>` (`Two<f32, f32>` or `Two<Q15, Q15>`, multiplex signal and pilot band-pass output, to `C32`/`CQ15`) around the kernel `stereo_pll` with the same loop state as `fm_stereo_demod`: with the same parameters and the same two inputs its output equals the internal loop of `fm_stereo_demod` bit for bit. `pilot_hz` (19000), `natural_hz` (20), `pilot_level` (0.1; for Q15 0.1 times the scale of the discriminator output), `stereo` (`auto`/`mono`, runtime), `pilot_locked()`. No storage.
+- **`stereo_matrix`:** `StereoMatrixBlock<T>` (`C32`, `CQ15`) around the kernel `stereo_matrix`: `L = S + 2 D`, `R = S - 2 D` for sum in `re` and demodulated difference in `im`.
 - **`resample`:** see below.
 - **`spectrum`:** see below.
 
@@ -391,6 +412,8 @@ For every frame the block takes `fft_size` consecutive samples starting at the f
 
 ## Tests
 
+- `tests/two_port_blocks.rs` (the blocks of M30: equality with the kernels in one piece and in chunks for all four sample types, lockstep `LengthMismatch` of the `Two` inputs, `make_complex` to `real_part`/`imag_part` bit for bit with NaN, infinities and negative zero, `nco` against `oscillate`, frequency change keeps the phase, harmonic 2 is the square of harmonic 1, start phase and reset, parameter validation, `stereo_pll` against the kernel and, followed by the rest of the stereo decoder, against `fm_stereo_demod` bit for bit, zero storage).
+- Suite cases of M30: `block_nco_phase_lock` (10^6 samples, full tier) and `block_make_complex_roundtrip` (quick).
 - `tests/biquad.rs` (the block `biquad`: a 4th-order low-pass at 2 kHz of 48 kHz passes 1 kHz with less than 0.1 dB and stops 8 kHz by at least 48 dB in `f32` and Q15, both parts of the complex blocks, the notch at 1 kHz with q 10 (40 dB in `f32`, 34 dB in Q15, D23), runtime `cutoff_hz` and `q` against the kernel with `set_coefs`, invalid values, the Q15 cutoff limit at `fs / 500`, coefficients that do not fit Q2.14, odd orders, `order` other than 2 for band-pass and notch, 20-plan invariance for all four sample types, reset, NaN and infinity, the description); `construction.rs` adds the exact arena and the 512-byte limit, `describe.rs` the description checks.
 - `tests/halfband_decimate.rs` (the blocks `halfband_decimate` and `real_to_iq` and the real `convert`: the f32 taps are the taps of `halfband_taps` bit for bit, the Q15 zero taps stay zero, the group delay against an impulse within 0.5 sample, a stop-band tone attenuated by at least `attenuation_db - 3` dB (complex and real, `f32` and Q15), the pass band flat, `real_to_iq` maps `f` to `f - fs/4` and removes the mirror, 20-plan invariance for all sample types, `reset` restarts `n mod 4`, exact arena, 512-byte limit, `Send`/`Sync`, parameters, invalid designs, `convert` with `rs16` equals `convert_real`).
 - `tests/primitive_blocks.rs` (the seven blocks `quad_demod`, `deemphasis`, `rotate`, `decimate`, `interpolate`, `mag` and `delay`: every block equals the direct kernel call bit for bit for each sample type, whole and in 20 chunk plans (seeds 455 to 461; the chunked `f32` `deemphasis` is compared by SNR, D225); `rotate` then `decimate` equals `ddc`, `interpolate` then `rotate` equals `duc` and `mag` equals the first stage of `am_demod`, all bit for bit; the runtime `frequency_hz` of `rotate` with continuous phase; exact storage in an arena, small structs, timing and rates, validation errors).

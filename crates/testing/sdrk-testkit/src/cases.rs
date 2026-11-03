@@ -140,6 +140,18 @@
 //! | `extremes_m25` | full | about 6 KiB |
 //! | `block_preemph_limit_peak` | quick | about 18 KiB |
 //! | `chain_fm_receiver` | quick | about 30 KiB |
+//! | `add_c32` | quick | about 16 KiB |
+//! | `add_cq15` | quick | about 16 KiB |
+//! | `mul_c32` | quick | about 16 KiB |
+//! | `mul_cq15` | quick | about 16 KiB |
+//! | `mul_real_q15` | quick | about 16 KiB |
+//! | `oscillate_c32` | quick | about 16 KiB |
+//! | `oscillate_cq15` | quick | about 16 KiB |
+//! | `interleave_c32` | quick | about 16 KiB |
+//! | `interleave_cq15` | quick | about 16 KiB |
+//! | `extremes_m30` | full | about 16 KiB |
+//! | `block_nco_phase_lock` | full | about 6 KiB |
+//! | `block_make_complex_roundtrip` | quick | about 10 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -197,13 +209,14 @@ mod m24;
 mod m24_backend;
 mod m25;
 mod m27;
+mod m30;
 
 pub use m27::{
     CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 157] = [
+pub(crate) static CASES: [TestCase; 169] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -988,6 +1001,66 @@ pub(crate) static CASES: [TestCase; 157] = [
         name: "chain_fm_receiver",
         tier: Tier::Quick,
         run: m27::chain_fm_receiver,
+    },
+    TestCase {
+        name: "add_c32",
+        tier: Tier::Quick,
+        run: m30::add_c32,
+    },
+    TestCase {
+        name: "add_cq15",
+        tier: Tier::Quick,
+        run: m30::add_cq15,
+    },
+    TestCase {
+        name: "mul_c32",
+        tier: Tier::Quick,
+        run: m30::mul_c32,
+    },
+    TestCase {
+        name: "mul_cq15",
+        tier: Tier::Quick,
+        run: m30::mul_cq15,
+    },
+    TestCase {
+        name: "mul_real_q15",
+        tier: Tier::Quick,
+        run: m30::mul_real_q15,
+    },
+    TestCase {
+        name: "oscillate_c32",
+        tier: Tier::Quick,
+        run: m30::oscillate_c32,
+    },
+    TestCase {
+        name: "oscillate_cq15",
+        tier: Tier::Quick,
+        run: m30::oscillate_cq15,
+    },
+    TestCase {
+        name: "interleave_c32",
+        tier: Tier::Quick,
+        run: m30::interleave_c32,
+    },
+    TestCase {
+        name: "interleave_cq15",
+        tier: Tier::Quick,
+        run: m30::interleave_cq15,
+    },
+    TestCase {
+        name: "extremes_m30",
+        tier: Tier::Full,
+        run: m30::extremes_m30,
+    },
+    TestCase {
+        name: "block_nco_phase_lock",
+        tier: Tier::Full,
+        run: m30::block_nco_phase_lock,
+    },
+    TestCase {
+        name: "block_make_complex_roundtrip",
+        tier: Tier::Quick,
+        run: m30::block_make_complex_roundtrip,
     },
 ];
 

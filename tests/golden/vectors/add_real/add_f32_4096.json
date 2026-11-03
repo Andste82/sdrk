@@ -1,0 +1,35 @@
+{
+  "arrays": {
+    "a": {
+      "dtype": "f32",
+      "file": "add_f32_4096.a.bin",
+      "len": 4096
+    },
+    "b": {
+      "dtype": "f32",
+      "file": "add_f32_4096.b.bin",
+      "len": 4096
+    },
+    "expected": {
+      "dtype": "f32",
+      "file": "add_f32_4096.expected.bin",
+      "len": 4096
+    }
+  },
+  "case": "add_f32_4096",
+  "format_version": 1,
+  "kernel": "add_real",
+  "model": "float32",
+  "notes": "expected = a + b in float32; noise sigma 0.4",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 464,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

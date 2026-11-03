@@ -9,7 +9,7 @@
 #
 # | Library | Version | License | Platforms | Use |
 # | --- | --- | --- | --- | --- |
-# | VOLK | 3.3.0 | LGPL-3.0-or-later | x86_64, aarch64 (shared, CMake Release, no ORC); wasm32 (the `generic` protokernels, static, see volk-wasm.c; since the fallback round with the multiply, log2, scalar multiply and add, dot product and 8i-to-16i kernels) | the reference of the streaming kernels; VOLK's generic `multiply_conjugate` in gr-quad-demod.c |
+# | VOLK | 3.3.0 | LGPL-3.0-or-later | x86_64, aarch64 (shared, CMake Release, no ORC); wasm32 (the `generic` protokernels, static, see volk-wasm.c; since the fallback round with the multiply, log2, scalar multiply and add, dot product and 8i-to-16i kernels; since M30 also the complex and real adds, the real and complex multiplies, the saturated 16-bit add and the 16-bit complex deinterleave) | the reference of the streaming kernels; VOLK's generic `multiply_conjugate` in gr-quad-demod.c |
 # | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, information on `neon` |
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |

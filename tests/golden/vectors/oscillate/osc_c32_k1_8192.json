@@ -1,0 +1,33 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "osc_c32_k1_8192.expected.bin",
+      "len": 8192
+    }
+  },
+  "case": "osc_c32_k1_8192",
+  "format_version": 1,
+  "kernel": "oscillate",
+  "notes": "expected[n] = exp(j*2*pi*(k*phase[n] mod 2^32)/2^32) in float64, phase[n] = phase0 + n*inc, 19000 Hz at 192 kHz, k = harmonic",
+  "params": {
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "cos_q15_sha256": "13d98640724a421074b75c96c3ebe4b1421b69216e327d4a7ffda6437414306c",
+    "freq": 0.09895833333333333,
+    "harmonic": 1,
+    "inc": 425022805,
+    "phase0": 305419896
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 467,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 120.0
+  }
+}

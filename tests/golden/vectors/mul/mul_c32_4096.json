@@ -1,0 +1,35 @@
+{
+  "arrays": {
+    "a": {
+      "dtype": "cf32",
+      "file": "mul_c32_4096.a.bin",
+      "len": 4096
+    },
+    "b": {
+      "dtype": "cf32",
+      "file": "mul_c32_4096.b.bin",
+      "len": 4096
+    },
+    "expected": {
+      "dtype": "cf32",
+      "file": "mul_c32_4096.expected.bin",
+      "len": 4096
+    }
+  },
+  "case": "mul_c32_4096",
+  "format_version": 1,
+  "kernel": "mul",
+  "model": "float32",
+  "notes": "re = ar*br - ai*bi, im = ar*bi + ai*br with the products rounded to float32 first (no fused multiply-add); noise sigma 0.4, the first 64 samples are corner values",
+  "params": {},
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 465,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

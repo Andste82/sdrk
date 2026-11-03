@@ -3405,5 +3405,539 @@
       "status": "info",
       "waiver": "`preemph_limit` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
+  },
+  "add": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_cq15": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_real": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_real_q15": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mul": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32fc_x2_multiply_32fc` is built with fused multiply-add at these levels, which the no-FMA contract of the fallback and SIMD paths forbids; its SNR against the f64 model is higher than ours"
+    },
+    "avx512": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32fc_x2_multiply_32fc` is built with fused multiply-add at these levels, which the no-FMA contract of the fallback and SIMD paths forbids; its SNR against the f64 model is higher than ours"
+    },
+    "neon": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32fc_x2_multiply_32fc` is built with fused multiply-add at these levels, which the no-FMA contract of the fallback and SIMD paths forbids; its SNR against the f64 model is higher than ours"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mul_real": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "interleave": {
+    "sse2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32f_x2_interleave_32fc` is 1.18 to 1.20 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+    },
+    "sse4.2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32f_x2_interleave_32fc` is 1.18 to 1.20 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+    },
+    "avx2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: VOLK's `volk_32f_x2_interleave_32fc` is 1.18 to 1.20 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "deinterleave": {
+    "sse2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: VOLK's deinterleave is 1.47 to 1.70 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+    },
+    "sse4.2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: VOLK's deinterleave is 1.47 to 1.70 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+    },
+    "avx2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: VOLK's deinterleave is 1.47 to 1.70 times ahead in instructions per sample on the x86 levels up to `avx2`; the maintainer decides whether to tune further"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "deinterleave_cq15": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_real_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "add_real_q15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_add_q15` (generic C, saturating, no widening) is auto-vectorised by the compiler at `simd128` (1.83 instructions per sample against 3.04 of our fallback); the fallback keeps the exact saturating form of the golden vectors"
+    }
+  },
+  "mul_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: 1.19 and 1.12 against the planar CMSIS-DSP `arm_cmplx_mult_cmplx_f32` loop on x86 without SIMD; the aarch64 fallback is at 0.48"
+    },
+    "avx2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: 1.19 and 1.12 against the planar CMSIS-DSP `arm_cmplx_mult_cmplx_f32` loop on x86 without SIMD; the aarch64 fallback is at 0.48"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mul_cq15_fallback": {
+    "sse2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+    },
+    "sse4.2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+    },
+    "avx2": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+    },
+    "simd128": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: the fallback keeps the rounded Q15 product with an `i64` accumulator (D255) while CMSIS-DSP truncates the Q3.13 product; the extra work is the accuracy that the golden vectors demand"
+    }
+  },
+  "mul_real_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mul_real_q15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release",
+      "waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_mult_q15` truncates and is auto-vectorised by the compiler at `simd128` (3.93 instructions per sample against 6.17 of our fallback, which rounds as the golden vectors demand)"
+    }
+  },
+  "oscillate_fallback": {
+    "sse2": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+    },
+    "sse4.2": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+    },
+    "avx2": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+    },
+    "avx512": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+    },
+    "neon": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+    },
+    "simd128": {
+      "status": "release",
+      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+    }
+  },
+  "oscillate_cq15_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "mul_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional"
+    }
+  },
+  "mul_real_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional"
+    }
+  },
+  "interleave_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional"
+    }
+  },
+  "oscillate": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional"
+    }
+  },
+  "oscillate_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "provisional"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "provisional"
+    }
   }
 }

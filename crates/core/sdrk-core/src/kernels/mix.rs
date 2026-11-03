@@ -133,3 +133,37 @@ pub trait Rotate<T: ComplexSample> {
     /// The lengths must be equal; the oscillator phase advances by `input.len()`.
     fn rotate(&self, nco: &mut Nco, input: &[T], output: &mut [T]) -> Result<()>;
 }
+
+/// Oscillator output: a complex exponential at a multiple of the oscillator phase.
+///
+/// The phase model and the oscillator are those of [`Rotate`]. With `harmonic` 1 the output is
+/// what `rotate` makes of the constant input `(1, 0)` (`C32` bit for bit), so the oscillator and
+/// the mixer agree.
+///
+/// ```
+/// use sdrk_core::{kernels::mix::{Nco, Oscillate}, Fallback, C32};
+/// // A quarter turn per sample: 1, j, -1, -j (up to table rounding).
+/// let mut nco = Nco::from_increment(1 << 30);
+/// let mut out = [C32::default(); 4];
+/// Fallback.oscillate(&mut nco, 1, &mut out)?;
+/// assert!((out[1].im - 1.0).abs() < 1e-6);
+/// assert!((out[2].re + 1.0).abs() < 1e-6);
+/// assert!(Fallback.oscillate(&mut nco, 0, &mut out).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait Oscillate<T: ComplexSample> {
+    /// `out[n] = exp(j·2π·(k·phase_n)/2^32)` with `phase_n` the oscillator phase before sample
+    /// `n` and `k = harmonic` (the product is a wrapping `u32` multiply). The oscillator
+    /// advances by `out.len()` steps. `harmonic` must be 1 … 8, else `InvalidParameter` (and
+    /// nothing changes).
+    fn oscillate(&self, nco: &mut Nco, harmonic: u32, out: &mut [T]) -> Result<()>;
+}
+
+/// `Ok` for a harmonic of 1 … 8, else `InvalidParameter`.
+pub(crate) fn check_harmonic(harmonic: u32) -> Result<()> {
+    if (1..=8).contains(&harmonic) {
+        Ok(())
+    } else {
+        Err(Error::InvalidParameter("harmonic must be 1 to 8"))
+    }
+}

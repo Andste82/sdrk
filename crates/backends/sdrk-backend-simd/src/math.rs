@@ -4,9 +4,13 @@
 //! `C32` and `f32`: the sum and the product of every float in generic code (one operation per
 //! float, no fused operation, so NaN, infinities, `-0` and denormals give the bits of the
 //! fallback). The complex product loads the two operands deinterleaved (the [`Split`] of
-//! `rotate`: `shufps` and `unpcklps` within the 128-bit blocks on AVX2 and AVX-512, `ld2` and
+//! `rotate`: `shufps` and `unpcklps` within the 128-bit blocks on AVX-512, `ld2` and
 //! `st2` on NEON, the zips of the token elsewhere) and computes `ar br - ai bi` and
-//! `ar bi + ai br` as two multiplications and one subtraction or addition each.
+//! `ar bi + ai br` as two multiplications and one subtraction or addition each. SSE4.2 and AVX2
+//! multiply the interleaved pairs instead: `(ar, ar) (br, bi)` and `(ai, ai) (bi, br)` with
+//! `vmovsldup`, `vmovshdup` and `vpermilps`, then `vaddsubps` (the same products and sums in
+//! the same operand order, one rounding each; SSE4.2 with the 128-bit forms, D295). SSE4.2,
+//! AVX2, AVX-512 and NEON run the whole steps in the unrolled groups of `blocks3` (D288).
 //!
 //! `Q15`, sums: `saturating_add` of the token (`paddsw`, `sqadd`, `i16x8.add_sat_s`).
 //!
@@ -31,8 +35,11 @@
 //!   shift with saturation) and `st2`.
 //! - SIMD128 and SSE2: no path (the fallback runs).
 //!
-//! `interleave` and `deinterleave`: the zips and unzips of the token. The rest of a call (fewer
-//! samples than one step) and every level without a path run the plain loops of the fallback.
+//! `interleave` and `deinterleave`: the paths of `split_x86`, `split_neon` and `split_wasm` do the
+//! whole call (an overlapping last step; calls shorter than one step run the plain loops of the
+//! fallback). Without a path (SSE2 and SSE4.2 for `f32` and for the `Q15` interleave, and every
+//! call with one stream absent) the zips and unzips of the token run, and the rest of the call
+//! the plain loops of the fallback, inside the dispatched function.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
@@ -186,27 +193,6 @@ fn mul_split<S: SimdToken, L: Split<S>>(simd: S, split: L, a: &[f32], b: &[f32],
     }
 }
 
-/// [`mul_split`] with the [`Split`] of the level of `simd`.
-#[inline(always)]
-fn mul_c32<S: SimdToken>(simd: S, a: &[f32], b: &[f32], out: &mut [f32]) {
-    let level = simd.level();
-    #[cfg(target_arch = "x86_64")]
-    {
-        if let Some(t) = level.as_avx512() {
-            return mul_split(t, crate::mix::x86::InLane, a, b, out);
-        }
-        if let Some(t) = level.as_avx2() {
-            return mul_split(t, crate::mix::x86::InLane, a, b, out);
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    if let Some(t) = level.as_neon() {
-        return mul_split(t, crate::mix::neon::Ld2, a, b, out);
-    }
-    let _ = level;
-    mul_split(simd, Portable, a, b, out);
-}
-
 dispatch_fn!(fn run_mul_c32(a: &[f32], b: &[f32], out: &mut [f32]) => mul_c32);
 
 // Q15 and CQ15 products
@@ -317,7 +303,11 @@ macro_rules! blocks3 {
 }
 
 /// [`blocks3`] with the second stream written too (`deinterleave`).
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
 macro_rules! blocks3m {
     ($a:expr, $va:literal, $b:expr, $vb:literal, $c:expr, $vc:literal, |$x:ident, $y:ident, $z:ident| $body:block) => {{
         let n = ($a.len() / $va).min($b.len() / $vb).min($c.len() / $vc);
@@ -350,19 +340,128 @@ macro_rules! blocks3m {
     }};
 }
 
+/// The complex products of the whole steps of `$w` floats of `$a` and `$b` with the [`Split`]
+/// `$split` of the token `$t`, in the unrolled groups of [`blocks3`]; evaluates to the number
+/// of floats done.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+macro_rules! mul_split_blocks {
+    ($t:ident, $split:expr, $w:literal, $a:ident, $b:ident, $out:ident) => {{
+        let split = $split;
+        blocks3!($a, $w, $b, $w, $out, $w, |x, y, z| {
+            let (ar, ai) = split.load($t, x);
+            let (br, bi) = split.load($t, y);
+            let re = ar * br - ai * bi;
+            let im = ar * bi + ai * br;
+            split.store($t, re, im, z);
+        }) * $w
+    }};
+}
+
+/// The `C32` product at the level of `simd`: on SSE4.2 and AVX2 [`x86::mul_c32_sse4_2`] and
+/// [`x86::mul_c32_avx2`] (D295, D288), on AVX-512 and NEON
+/// [`mul_split`] with the [`Split`] of the level in the unrolled groups of [`blocks3`] (eight
+/// steps per iteration, independent of each other); the rest of the call by [`mul_split`]
+/// (D288).
+#[inline(always)]
+fn mul_c32<S: SimdToken>(simd: S, a: &[f32], b: &[f32], out: &mut [f32]) {
+    let level = simd.level();
+    #[cfg(target_arch = "x86_64")]
+    {
+        if let Some(t) = level.as_avx512() {
+            let k = mul_split_blocks!(t, crate::mix::x86::InLane, 32, a, b, out);
+            return mul_rest(t, crate::mix::x86::InLane, k, a, b, out);
+        }
+        if let Some(t) = level.as_avx2() {
+            let k = x86::mul_c32_avx2(t, a, b, out);
+            return mul_rest(t, crate::mix::x86::InLane, k, a, b, out);
+        }
+        if let Some(t) = level.as_sse4_2() {
+            let k = x86::mul_c32_sse4_2(t, a, b, out);
+            return mul_rest(t, Portable, k, a, b, out);
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = level.as_neon() {
+        let k = mul_split_blocks!(t, crate::mix::neon::Ld2, 8, a, b, out);
+        return mul_rest(t, crate::mix::neon::Ld2, k, a, b, out);
+    }
+    let _ = level;
+    mul_split(simd, Portable, a, b, out);
+}
+
+/// [`mul_split`] of the floats from `k` on.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[inline(always)]
+fn mul_rest<S: SimdToken, L: Split<S>>(
+    simd: S,
+    split: L,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    out: &mut [f32],
+) {
+    if let (Some(a), Some(b), Some(out)) = (a.get(k..), b.get(k..), out.get_mut(k..)) {
+        mul_split(simd, split, a, b, out);
+    }
+}
+
 #[cfg(target_arch = "x86_64")]
 mod x86 {
     use core::arch::x86_64::{
-        _mm_add_epi32, _mm_cmpeq_epi16, _mm_cmpeq_epi32, _mm_madd_epi16, _mm_mulhrs_epi16,
+        __m128, __m256, _mm_add_epi32, _mm_addsub_ps, _mm_cmpeq_epi16, _mm_cmpeq_epi32,
+        _mm_madd_epi16, _mm_movehdup_ps, _mm_moveldup_ps, _mm_mul_ps, _mm_mulhrs_epi16,
         _mm_packs_epi32, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128,
-        _mm_shuffle_epi8, _mm_srai_epi32, _mm_xor_si128, _mm256_add_epi32, _mm256_cmpeq_epi16,
-        _mm256_cmpeq_epi32, _mm256_madd_epi16, _mm256_mulhrs_epi16, _mm256_packs_epi32,
-        _mm256_set1_epi16, _mm256_set1_epi32, _mm256_setr_epi8, _mm256_setzero_si256,
-        _mm256_shuffle_epi8, _mm256_srai_epi32, _mm256_xor_si256, _mm512_cmpeq_epi16_mask,
-        _mm512_mask_blend_epi16, _mm512_mulhrs_epi16, _mm512_set1_epi16,
+        _mm_shuffle_epi8, _mm_shuffle_ps, _mm_srai_epi32, _mm_xor_si128, _mm256_add_epi32,
+        _mm256_addsub_ps, _mm256_cmpeq_epi16, _mm256_cmpeq_epi32, _mm256_madd_epi16,
+        _mm256_movehdup_ps, _mm256_moveldup_ps, _mm256_mul_ps, _mm256_mulhrs_epi16,
+        _mm256_packs_epi32, _mm256_permute_ps, _mm256_set1_epi16, _mm256_set1_epi32,
+        _mm256_setr_epi8, _mm256_setzero_si256, _mm256_shuffle_epi8, _mm256_srai_epi32,
+        _mm256_xor_si256, _mm512_cmpeq_epi16_mask, _mm512_mask_blend_epi16, _mm512_mulhrs_epi16,
+        _mm512_set1_epi16,
     };
     use fearless_simd::prelude::*;
-    use fearless_simd::{i16x8, i16x16, i16x32};
+    use fearless_simd::{f32x4, f32x8, i16x8, i16x16, i16x32};
+
+    fearless_simd::kernel!(
+        /// The `C32` product of AVX2 on the interleaved floats, four samples per vector:
+        /// `(ar, ar) * (br, bi)` and `(ai, ai) * (bi, br)` (`vmovsldup`, `vmovshdup`,
+        /// `vpermilps`), then `vaddsubps` gives `ar br - ai bi` and `ar bi + ai br`: the
+        /// products and the sums of the fallback in its operand order, one rounding each, no
+        /// FMA. In the unrolled
+        /// groups of [`blocks3`]; the number of floats done.
+        pub(super) fn mul_c32_avx2(t: Avx2, a: &[f32], b: &[f32], out: &mut [f32]) -> usize {
+            blocks3!(a, 8, b, 8, out, 8, |x, y, z| {
+                let x: __m256 = f32x8::from_slice(t, x).into();
+                let y: __m256 = f32x8::from_slice(t, y).into();
+                // The products (ar br, ar bi) and (ai bi, ai br) of every sample. The three
+                // shuffles come first: written that way LLVM gives the swap of `y` a register of
+                // its own; with each product written next to its shuffle it reuses the register
+                // of `y`, and `znver3` simulates 16.1 instead of 13.4 cycles per eight steps.
+                let ar = _mm256_moveldup_ps(x);
+                let ai = _mm256_movehdup_ps(x);
+                let ys = _mm256_permute_ps::<0xB1>(y);
+                let r = _mm256_addsub_ps(_mm256_mul_ps(ar, y), _mm256_mul_ps(ai, ys));
+                f32x8::simd_from(t, r).store_slice(z);
+            }) * 8
+        }
+    );
+
+    fearless_simd::kernel!(
+        /// The `C32` product of SSE4.2 in the form of [`mul_c32_avx2`] (`movsldup`, `movshdup`,
+        /// `shufps`, two `mulps`, `addsubps` of SSE3), two samples per vector, in the unrolled
+        /// groups of [`blocks3`]; the number of floats done (D295).
+        pub(super) fn mul_c32_sse4_2(t: Sse4_2, a: &[f32], b: &[f32], out: &mut [f32]) -> usize {
+            blocks3!(a, 4, b, 4, out, 4, |x, y, z| {
+                let x: __m128 = f32x4::from_slice(t, x).into();
+                let y: __m128 = f32x4::from_slice(t, y).into();
+                let ar = _mm_moveldup_ps(x);
+                let ai = _mm_movehdup_ps(x);
+                let ys = _mm_shuffle_ps::<0xB1>(y, y);
+                let r = _mm_addsub_ps(_mm_mul_ps(ar, y), _mm_mul_ps(ai, ys));
+                f32x4::simd_from(t, r).store_slice(z);
+            }) * 4
+        }
+    );
 
     fearless_simd::kernel!(
         pub(super) fn mul_real_sse4_2(t: Sse4_2, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
@@ -536,21 +635,120 @@ mod wasm {
     );
 }
 
+/// The plain loops of `interleave` and `deinterleave` with both streams, for the calls of the
+/// level paths shorter than one step (the fallback's loops, value for value).
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+mod split_scalar {
+    /// `out = (re[n], im[n])`.
+    #[inline(always)]
+    pub(super) fn int<E: Copy>(re: &[E], im: &[E], out: &mut [E]) {
+        let (out, _) = out.as_chunks_mut::<2>();
+        for ((o, &r), &i) in out.iter_mut().zip(re).zip(im) {
+            *o = [r, i];
+        }
+    }
+
+    /// `(re[n], im[n]) = input[n]`.
+    #[inline(always)]
+    pub(super) fn deint<E: Copy>(input: &[E], re: &mut [E], im: &mut [E]) {
+        let (input, _) = input.as_chunks::<2>();
+        for ((x, r), i) in input.iter().zip(re.iter_mut()).zip(im.iter_mut()) {
+            *r = x[0];
+            *i = x[1];
+        }
+    }
+}
+
+/// A whole `interleave` call by a level path: `$step` interleaves `$v` samples (`$w = 2 $v`
+/// values out). Groups of eight steps, single steps, and a last step that overlaps the one
+/// before it where the length is not a multiple of `$v` (the values it writes again are the
+/// same: the output is a copy of inputs that it cannot alias); calls shorter than one step run
+/// [`split_scalar::int`]. So the path does every sample and the caller has no rest to do.
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+macro_rules! whole_int {
+    ($re:expr, $im:expr, $out:expr, $v:literal, $w:literal, $step:expr) => {{
+        let n = $re.len().min($im.len()).min($out.len() / 2);
+        let ((re, _), (im, _), (out, _)) =
+            ($re.split_at(n), $im.split_at(n), $out.split_at_mut(2 * n));
+        if n < $v {
+            split_scalar::int(re, im, out);
+        } else {
+            let step = $step;
+            blocks3!(re, $v, im, $v, out, $w, |r, i, o| { step(r, i, o) });
+            if n % $v != 0 {
+                if let (Some(r), Some(i), Some(o)) = (
+                    re.last_chunk::<$v>(),
+                    im.last_chunk::<$v>(),
+                    out.last_chunk_mut::<$w>(),
+                ) {
+                    step(r, i, o);
+                }
+            }
+        }
+    }};
+}
+
+/// [`whole_int`] for `deinterleave`: `$step` splits `$w = 2 $v` values into `$v` real and `$v`
+/// imaginary parts.
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+macro_rules! whole_deint {
+    ($input:expr, $re:expr, $im:expr, $v:literal, $w:literal, $step:expr) => {{
+        let n = ($input.len() / 2).min($re.len()).min($im.len());
+        let ((input, _), (re, _), (im, _)) = (
+            $input.split_at(2 * n),
+            $re.split_at_mut(n),
+            $im.split_at_mut(n),
+        );
+        if n < $v {
+            split_scalar::deint(input, re, im);
+        } else {
+            let step = $step;
+            blocks3m!(input, $w, re, $v, im, $v, |c, r, i| { step(c, r, i) });
+            if n % $v != 0 {
+                if let (Some(c), Some(r), Some(i)) = (
+                    input.last_chunk::<$w>(),
+                    re.last_chunk_mut::<$v>(),
+                    im.last_chunk_mut::<$v>(),
+                ) {
+                    step(c, r, i);
+                }
+            }
+        }
+    }};
+}
+
 /// The x86 paths of `interleave` and `deinterleave`: the in-lane unpacks and shuffles of the
 /// level, with the cross-lane permutation of AVX2 where the lanes of 128 bits have to be put
-/// in order (`vpermpd`, one per vector). Each function returns the number of samples done (zero
-/// where the generic code of the token is as good).
+/// in order (`vperm2f128`/`vperm2i128` of two vectors for `interleave`, `vpermpd` of one for
+/// `deinterleave`); on AVX-512 one two-source permutation per output vector (`vpermt2ps`,
+/// `vpermt2w`). Each function does the whole call ([`whole_int`], [`whole_deint`]); a level
+/// without a function here runs the generic code of the token.
 #[cfg(target_arch = "x86_64")]
 mod split_x86 {
     use core::arch::x86_64::{
         __m128i, _mm_setr_epi8, _mm_shuffle_epi8, _mm_unpackhi_epi16, _mm_unpackhi_epi64,
-        _mm_unpacklo_epi16, _mm_unpacklo_epi64, _mm256_castpd_ps, _mm256_castps_pd,
-        _mm256_permute4x64_pd, _mm256_setr_epi8, _mm256_shuffle_epi8, _mm256_shuffle_ps,
-        _mm256_unpackhi_epi16, _mm256_unpackhi_epi64, _mm256_unpackhi_ps, _mm256_unpacklo_epi16,
-        _mm256_unpacklo_epi64, _mm256_unpacklo_ps,
+        _mm_unpacklo_epi16, _mm_unpacklo_epi64, _mm256_blend_epi32, _mm256_castpd_ps,
+        _mm256_castps_pd, _mm256_permute2f128_ps, _mm256_permute2x128_si256,
+        _mm256_permute4x64_epi64, _mm256_permute4x64_pd, _mm256_setr_epi8, _mm256_shuffle_epi8,
+        _mm256_shuffle_ps, _mm256_unpackhi_epi16, _mm256_unpackhi_ps, _mm256_unpacklo_epi16,
+        _mm256_unpacklo_ps, _mm512_permutex2var_epi16, _mm512_permutex2var_ps,
     };
     use fearless_simd::prelude::*;
-    use fearless_simd::{Sse2, Sse4_2, f32x8, i16x8, i16x16};
+    use fearless_simd::{f32x8, f32x16, i16x8, i16x16, i16x32, i32x16};
+
+    use super::split_scalar;
 
     pub(super) mod int_f32 {
         #[allow(
@@ -560,24 +758,203 @@ mod split_x86 {
         use super::*;
 
         fearless_simd::kernel!(
-            pub(crate) fn avx2(t: Avx2, re: &[f32], im: &[f32], out: &mut [f32]) -> usize {
-                blocks3!(re, 8, im, 8, out, 16, |r, i, o| {
-                    let r = f32x8::from_slice(t, r).into();
-                    let i = f32x8::from_slice(t, i).into();
-                    // Samples 0, 1, 4, 5 | 2, 3, 6, 7 of the real parts and of the imaginary
-                    // parts, so that the in-lane unpacks give the samples in order.
-                    let r = _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(r)));
-                    let i = _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(i)));
-                    let (o0, o1) = o.split_at_mut(8);
-                    f32x8::simd_from(t, _mm256_unpacklo_ps(r, i)).store_slice(o0);
-                    f32x8::simd_from(t, _mm256_unpackhi_ps(r, i)).store_slice(o1);
-                }) * 8
+            pub(crate) fn avx2(t: Avx2, re: &[f32], im: &[f32], out: &mut [f32]) {
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    8,
+                    16,
+                    |r: &[f32; 8], i: &[f32; 8], o: &mut [f32; 16]| {
+                        let r = f32x8::from_slice(t, r).into();
+                        let i = f32x8::from_slice(t, i).into();
+                        // The in-lane unpacks give samples 0, 1 | 4, 5 and 2, 3 | 6, 7; the lane
+                        // permutation of two sources puts them in order (`vperm2f128`, which the
+                        // `znver3` model runs faster than a `vpermpd` of each input).
+                        let (lo, hi) = (_mm256_unpacklo_ps(r, i), _mm256_unpackhi_ps(r, i));
+                        let (o0, o1) = o.split_at_mut(8);
+                        f32x8::simd_from(t, _mm256_permute2f128_ps::<0x20>(lo, hi)).store_slice(o0);
+                        f32x8::simd_from(t, _mm256_permute2f128_ps::<0x31>(lo, hi)).store_slice(o1);
+                    }
+                );
             }
         );
+    }
 
-        pub(crate) fn sse2(_t: Sse2, _re: &[f32], _im: &[f32], _out: &mut [f32]) -> usize {
-            0
-        }
+    pub(super) mod int_f32_512 {
+        #[allow(
+            clippy::wildcard_imports,
+            reason = "the intrinsics and vector types of the parent"
+        )]
+        use super::*;
+
+        // `vpermt2ps` indices: `r0, i0, r1, i1, ...` (index 16 + k is `i[k]`).
+        const LO: [i32; 16] = [0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23];
+        const HI: [i32; 16] = [8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31];
+
+        fearless_simd::kernel!(
+            #[allow(
+                clippy::large_stack_frames,
+                reason = "the lint counts the 64-byte temporaries of the eight inlined steps before \
+                          optimization; the loop keeps them in registers"
+            )]
+            pub(crate) fn avx512(t: Avx512, re: &[f32], im: &[f32], out: &mut [f32]) {
+                // One two-source permutation per output vector (`vpermt2ps`): the AVX2 unpacks
+                // and lane permutations compiled for AVX-512 become `vpmovzxdq` and a 256-bit
+                // `vpermt2ps` per output, which the `znver4` model runs at 2.4 times VOLK's AVX
+                // loop.
+                let (lo, hi) = (
+                    i32x16::from_slice(t, &LO).into(),
+                    i32x16::from_slice(t, &HI).into(),
+                );
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    16,
+                    32,
+                    |r: &[f32; 16], i: &[f32; 16], o: &mut [f32; 32]| {
+                        let r = f32x16::from_slice(t, r).into();
+                        let i = f32x16::from_slice(t, i).into();
+                        let (o0, o1) = o.split_at_mut(16);
+                        f32x16::simd_from(t, _mm512_permutex2var_ps(r, lo, i)).store_slice(o0);
+                        f32x16::simd_from(t, _mm512_permutex2var_ps(r, hi, i)).store_slice(o1);
+                    }
+                );
+            }
+        );
+    }
+
+    pub(super) mod deint_f32_512 {
+        #[allow(
+            clippy::wildcard_imports,
+            reason = "the intrinsics and vector types of the parent"
+        )]
+        use super::*;
+
+        // `vpermt2ps` indices: the even and the odd values of `a` and then `b` (16 + k is `b[k]`).
+        const EVEN: [i32; 16] = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+        const ODD: [i32; 16] = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31];
+
+        fearless_simd::kernel!(
+            #[allow(
+                clippy::large_stack_frames,
+                reason = "the lint counts the 64-byte temporaries of the eight inlined steps before \
+                          optimization; the loop keeps them in registers"
+            )]
+            pub(crate) fn avx512(t: Avx512, input: &[f32], re: &mut [f32], im: &mut [f32]) {
+                let (even, odd) = (
+                    i32x16::from_slice(t, &EVEN).into(),
+                    i32x16::from_slice(t, &ODD).into(),
+                );
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    16,
+                    32,
+                    |c: &[f32; 32], r: &mut [f32; 16], i: &mut [f32; 16]| {
+                        let (a, b) = c.split_at(16);
+                        let a = f32x16::from_slice(t, a).into();
+                        let b = f32x16::from_slice(t, b).into();
+                        f32x16::simd_from(t, _mm512_permutex2var_ps(a, even, b)).store_slice(r);
+                        f32x16::simd_from(t, _mm512_permutex2var_ps(a, odd, b)).store_slice(i);
+                    }
+                );
+            }
+        );
+    }
+
+    pub(super) mod int_i16_512 {
+        #[allow(
+            clippy::wildcard_imports,
+            reason = "the intrinsics and vector types of the parent"
+        )]
+        use super::*;
+
+        // `vpermt2w` indices, as for `f32` with 32 values per vector.
+        const LO: [i16; 32] = [
+            0, 32, 1, 33, 2, 34, 3, 35, 4, 36, 5, 37, 6, 38, 7, 39, 8, 40, 9, 41, 10, 42, 11, 43,
+            12, 44, 13, 45, 14, 46, 15, 47,
+        ];
+        const HI: [i16; 32] = [
+            16, 48, 17, 49, 18, 50, 19, 51, 20, 52, 21, 53, 22, 54, 23, 55, 24, 56, 25, 57, 26, 58,
+            27, 59, 28, 60, 29, 61, 30, 62, 31, 63,
+        ];
+
+        fearless_simd::kernel!(
+            #[allow(
+                clippy::large_stack_frames,
+                reason = "the lint counts the 64-byte temporaries of the eight inlined steps before \
+                          optimization; the loop keeps them in registers"
+            )]
+            pub(crate) fn avx512(t: Avx512, re: &[i16], im: &[i16], out: &mut [i16]) {
+                let (lo, hi) = (
+                    i16x32::from_slice(t, &LO).into(),
+                    i16x32::from_slice(t, &HI).into(),
+                );
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    32,
+                    64,
+                    |r: &[i16; 32], i: &[i16; 32], o: &mut [i16; 64]| {
+                        let r = i16x32::from_slice(t, r).into();
+                        let i = i16x32::from_slice(t, i).into();
+                        let (o0, o1) = o.split_at_mut(32);
+                        i16x32::simd_from(t, _mm512_permutex2var_epi16(r, lo, i)).store_slice(o0);
+                        i16x32::simd_from(t, _mm512_permutex2var_epi16(r, hi, i)).store_slice(o1);
+                    }
+                );
+            }
+        );
+    }
+
+    pub(super) mod deint_i16_512 {
+        #[allow(
+            clippy::wildcard_imports,
+            reason = "the intrinsics and vector types of the parent"
+        )]
+        use super::*;
+
+        // `vpermt2w` indices, as for `f32` with 32 values per vector.
+        const EVEN: [i16; 32] = [
+            0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44,
+            46, 48, 50, 52, 54, 56, 58, 60, 62,
+        ];
+        const ODD: [i16; 32] = [
+            1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45,
+            47, 49, 51, 53, 55, 57, 59, 61, 63,
+        ];
+
+        fearless_simd::kernel!(
+            #[allow(
+                clippy::large_stack_frames,
+                reason = "the lint counts the 64-byte temporaries of the eight inlined steps before \
+                          optimization; the loop keeps them in registers"
+            )]
+            pub(crate) fn avx512(t: Avx512, input: &[i16], re: &mut [i16], im: &mut [i16]) {
+                let (even, odd) = (
+                    i16x32::from_slice(t, &EVEN).into(),
+                    i16x32::from_slice(t, &ODD).into(),
+                );
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    32,
+                    64,
+                    |c: &[i16; 64], r: &mut [i16; 32], i: &mut [i16; 32]| {
+                        let (a, b) = c.split_at(32);
+                        let a = i16x32::from_slice(t, a).into();
+                        let b = i16x32::from_slice(t, b).into();
+                        i16x32::simd_from(t, _mm512_permutex2var_epi16(a, even, b)).store_slice(r);
+                        i16x32::simd_from(t, _mm512_permutex2var_epi16(a, odd, b)).store_slice(i);
+                    }
+                );
+            }
+        );
     }
 
     pub(super) mod deint_f32 {
@@ -588,29 +965,30 @@ mod split_x86 {
         use super::*;
 
         fearless_simd::kernel!(
-            pub(crate) fn avx2(t: Avx2, input: &[f32], re: &mut [f32], im: &mut [f32]) -> usize {
-                blocks3m!(input, 16, re, 8, im, 8, |c, r, i| {
-                    let (a, b) = c.split_at(8);
-                    let a = f32x8::from_slice(t, a).into();
-                    let b = f32x8::from_slice(t, b).into();
-                    // Samples 0, 1, 4, 5 | 2, 3, 6, 7, then the lanes in order.
-                    let lo = _mm256_shuffle_ps::<0x88>(a, b);
-                    let hi = _mm256_shuffle_ps::<0xDD>(a, b);
-                    let lo = _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(lo)));
-                    let hi = _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(hi)));
-                    f32x8::simd_from(t, lo).store_slice(r);
-                    f32x8::simd_from(t, hi).store_slice(i);
-                }) * 8
+            pub(crate) fn avx2(t: Avx2, input: &[f32], re: &mut [f32], im: &mut [f32]) {
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    8,
+                    16,
+                    |c: &[f32; 16], r: &mut [f32; 8], i: &mut [f32; 8]| {
+                        let (a, b) = c.split_at(8);
+                        let a = f32x8::from_slice(t, a).into();
+                        let b = f32x8::from_slice(t, b).into();
+                        // Samples 0, 1, 4, 5 | 2, 3, 6, 7, then the lanes in order.
+                        let lo = _mm256_shuffle_ps::<0x88>(a, b);
+                        let hi = _mm256_shuffle_ps::<0xDD>(a, b);
+                        let lo =
+                            _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(lo)));
+                        let hi =
+                            _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(hi)));
+                        f32x8::simd_from(t, lo).store_slice(r);
+                        f32x8::simd_from(t, hi).store_slice(i);
+                    }
+                );
             }
         );
-
-        pub(crate) fn sse4_2(_t: Sse4_2, _i: &[f32], _re: &mut [f32], _im: &mut [f32]) -> usize {
-            0
-        }
-
-        pub(crate) fn sse2(_t: Sse2, _i: &[f32], _re: &mut [f32], _im: &mut [f32]) -> usize {
-            0
-        }
     }
 
     pub(super) mod int_i16 {
@@ -621,28 +999,27 @@ mod split_x86 {
         use super::*;
 
         fearless_simd::kernel!(
-            pub(crate) fn avx2(t: Avx2, re: &[i16], im: &[i16], out: &mut [i16]) -> usize {
-                blocks3!(re, 16, im, 16, out, 32, |r, i, o| {
-                    let r = i16x16::from_slice(t, r).into();
-                    let i = i16x16::from_slice(t, i).into();
-                    let r =
-                        _mm256_permute4x64_pd::<0xD8>(core::arch::x86_64::_mm256_castsi256_pd(r));
-                    let i =
-                        _mm256_permute4x64_pd::<0xD8>(core::arch::x86_64::_mm256_castsi256_pd(i));
-                    let (r, i) = (
-                        core::arch::x86_64::_mm256_castpd_si256(r),
-                        core::arch::x86_64::_mm256_castpd_si256(i),
-                    );
-                    let (o0, o1) = o.split_at_mut(16);
-                    i16x16::simd_from(t, _mm256_unpacklo_epi16(r, i)).store_slice(o0);
-                    i16x16::simd_from(t, _mm256_unpackhi_epi16(r, i)).store_slice(o1);
-                }) * 16
+            pub(crate) fn avx2(t: Avx2, re: &[i16], im: &[i16], out: &mut [i16]) {
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    16,
+                    32,
+                    |r: &[i16; 16], i: &[i16; 16], o: &mut [i16; 32]| {
+                        let r = i16x16::from_slice(t, r).into();
+                        let i = i16x16::from_slice(t, i).into();
+                        // As `int_f32`: the in-lane unpacks, then `vperm2i128`.
+                        let (lo, hi) = (_mm256_unpacklo_epi16(r, i), _mm256_unpackhi_epi16(r, i));
+                        let (o0, o1) = o.split_at_mut(16);
+                        i16x16::simd_from(t, _mm256_permute2x128_si256::<0x20>(lo, hi))
+                            .store_slice(o0);
+                        i16x16::simd_from(t, _mm256_permute2x128_si256::<0x31>(lo, hi))
+                            .store_slice(o1);
+                    }
+                );
             }
         );
-
-        pub(crate) fn sse2(_t: Sse2, _re: &[i16], _im: &[i16], _out: &mut [i16]) -> usize {
-            0
-        }
     }
 
     pub(super) mod deint_i16 {
@@ -653,65 +1030,86 @@ mod split_x86 {
         use super::*;
 
         fearless_simd::kernel!(
-            pub(crate) fn avx2(t: Avx2, input: &[i16], re: &mut [i16], im: &mut [i16]) -> usize {
+            pub(crate) fn avx2(t: Avx2, input: &[i16], re: &mut [i16], im: &mut [i16]) {
+                // Per lane of the first vector: four real parts, then four imaginary parts; of
+                // the second: the imaginary parts first. A blend of the two vectors (`vpblendd`,
+                // no shuffle port) then holds the real parts of both and another the imaginary
+                // parts, and one `vpermq` each puts the four quarters in order: four shuffles
+                // per 16 samples where `vpunpck*qdq` needed six (eight as compiled).
                 let split = _mm256_setr_epi8(
                     0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15, 0, 1, 4, 5, 8, 9, 12, 13,
                     2, 3, 6, 7, 10, 11, 14, 15,
                 );
-                blocks3m!(input, 32, re, 16, im, 16, |c, r, i| {
-                    let (a, b) = c.split_at(16);
-                    // Per lane: four real parts, then four imaginary parts.
-                    let a = _mm256_shuffle_epi8(i16x16::from_slice(t, a).into(), split);
-                    let b = _mm256_shuffle_epi8(i16x16::from_slice(t, b).into(), split);
-                    let lo = core::arch::x86_64::_mm256_castsi256_pd(_mm256_unpacklo_epi64(a, b));
-                    let hi = core::arch::x86_64::_mm256_castsi256_pd(_mm256_unpackhi_epi64(a, b));
-                    let lo =
-                        core::arch::x86_64::_mm256_castpd_si256(_mm256_permute4x64_pd::<0xD8>(lo));
-                    let hi =
-                        core::arch::x86_64::_mm256_castpd_si256(_mm256_permute4x64_pd::<0xD8>(hi));
-                    i16x16::simd_from(t, lo).store_slice(r);
-                    i16x16::simd_from(t, hi).store_slice(i);
-                }) * 16
+                let swap = _mm256_setr_epi8(
+                    2, 3, 6, 7, 10, 11, 14, 15, 0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14,
+                    15, 0, 1, 4, 5, 8, 9, 12, 13,
+                );
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    16,
+                    32,
+                    |c: &[i16; 32], r: &mut [i16; 16], i: &mut [i16; 16]| {
+                        let (a, b) = c.split_at(16);
+                        let a = _mm256_shuffle_epi8(i16x16::from_slice(t, a).into(), split);
+                        let b = _mm256_shuffle_epi8(i16x16::from_slice(t, b).into(), swap);
+                        // Quarters (a re | b re), (a re | b re) and (b im | a im), (b im | a im).
+                        let lo = _mm256_blend_epi32::<0xCC>(a, b);
+                        let hi = _mm256_blend_epi32::<0x33>(a, b);
+                        i16x16::simd_from(t, _mm256_permute4x64_epi64::<0xD8>(lo)).store_slice(r);
+                        i16x16::simd_from(t, _mm256_permute4x64_epi64::<0x8D>(hi)).store_slice(i);
+                    }
+                );
             }
         );
 
         fearless_simd::kernel!(
-            pub(crate) fn sse4_2(
-                t: Sse4_2,
-                input: &[i16],
-                re: &mut [i16],
-                im: &mut [i16],
-            ) -> usize {
+            pub(crate) fn sse4_2(t: Sse4_2, input: &[i16], re: &mut [i16], im: &mut [i16]) {
                 let split = _mm_setr_epi8(0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15);
-                blocks3m!(input, 16, re, 8, im, 8, |c, r, i| {
-                    let (a, b) = c.split_at(8);
-                    let a = _mm_shuffle_epi8(i16x8::from_slice(t, a).into(), split);
-                    let b = _mm_shuffle_epi8(i16x8::from_slice(t, b).into(), split);
-                    i16x8::simd_from(t, _mm_unpacklo_epi64(a, b)).store_slice(r);
-                    i16x8::simd_from(t, _mm_unpackhi_epi64(a, b)).store_slice(i);
-                }) * 8
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    8,
+                    16,
+                    |c: &[i16; 16], r: &mut [i16; 8], i: &mut [i16; 8]| {
+                        let (a, b) = c.split_at(8);
+                        let a = _mm_shuffle_epi8(i16x8::from_slice(t, a).into(), split);
+                        let b = _mm_shuffle_epi8(i16x8::from_slice(t, b).into(), split);
+                        i16x8::simd_from(t, _mm_unpacklo_epi64(a, b)).store_slice(r);
+                        i16x8::simd_from(t, _mm_unpackhi_epi64(a, b)).store_slice(i);
+                    }
+                );
             }
         );
 
         fearless_simd::kernel!(
-            pub(crate) fn sse2(t: Sse2, input: &[i16], re: &mut [i16], im: &mut [i16]) -> usize {
-                blocks3m!(input, 16, re, 8, im, 8, |c, r, i| {
-                    let (a, b) = c.split_at(8);
-                    let a: __m128i = i16x8::from_slice(t, a).into();
-                    let b: __m128i = i16x8::from_slice(t, b).into();
-                    // Three rounds of unpacks sort the even and the odd values.
-                    let (t0, t1) = (_mm_unpacklo_epi16(a, b), _mm_unpackhi_epi16(a, b));
-                    let (u0, u1) = (_mm_unpacklo_epi16(t0, t1), _mm_unpackhi_epi16(t0, t1));
-                    i16x8::simd_from(t, _mm_unpacklo_epi16(u0, u1)).store_slice(r);
-                    i16x8::simd_from(t, _mm_unpackhi_epi16(u0, u1)).store_slice(i);
-                }) * 8
+            pub(crate) fn sse2(t: Sse2, input: &[i16], re: &mut [i16], im: &mut [i16]) {
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    8,
+                    16,
+                    |c: &[i16; 16], r: &mut [i16; 8], i: &mut [i16; 8]| {
+                        let (a, b) = c.split_at(8);
+                        let a: __m128i = i16x8::from_slice(t, a).into();
+                        let b: __m128i = i16x8::from_slice(t, b).into();
+                        // Three rounds of unpacks sort the even and the odd values.
+                        let (t0, t1) = (_mm_unpacklo_epi16(a, b), _mm_unpackhi_epi16(a, b));
+                        let (u0, u1) = (_mm_unpacklo_epi16(t0, t1), _mm_unpackhi_epi16(t0, t1));
+                        i16x8::simd_from(t, _mm_unpacklo_epi16(u0, u1)).store_slice(r);
+                        i16x8::simd_from(t, _mm_unpackhi_epi16(u0, u1)).store_slice(i);
+                    }
+                );
             }
         );
     }
 }
 
 /// The NEON paths of `interleave` and `deinterleave`: `ld2` and `st2` deinterleave and
-/// interleave while loading and storing.
+/// interleave while loading and storing; each does the whole call as on x86.
 #[cfg(target_arch = "aarch64")]
 #[allow(unsafe_code)]
 mod split_neon {
@@ -720,87 +1118,214 @@ mod split_neon {
         vst1q_s16, vst2q_f32, vst2q_s16,
     };
 
+    use super::split_scalar;
+
     fearless_simd::kernel!(
-        pub(super) fn int_f32(_t: Neon, re: &[f32], im: &[f32], out: &mut [f32]) -> usize {
-            blocks3!(re, 4, im, 4, out, 8, |r, i, o| {
-                // SAFETY: `r` and `i` are the 4 values that `vld1q_f32` reads and `o` the 8 that
-                // `vst2q_f32` writes.
-                unsafe {
-                    vst2q_f32(
-                        o.as_mut_ptr(),
-                        float32x4x2_t(vld1q_f32(r.as_ptr()), vld1q_f32(i.as_ptr())),
-                    );
+        pub(super) fn int_f32(_t: Neon, re: &[f32], im: &[f32], out: &mut [f32]) {
+            whole_int!(
+                re,
+                im,
+                out,
+                4,
+                8,
+                |r: &[f32; 4], i: &[f32; 4], o: &mut [f32; 8]| {
+                    // SAFETY: `r` and `i` are the 4 values that `vld1q_f32` reads and `o` the 8 that
+                    // `vst2q_f32` writes.
+                    unsafe {
+                        vst2q_f32(
+                            o.as_mut_ptr(),
+                            float32x4x2_t(vld1q_f32(r.as_ptr()), vld1q_f32(i.as_ptr())),
+                        );
+                    }
                 }
-            }) * 4
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn deint_f32(_t: Neon, input: &[f32], re: &mut [f32], im: &mut [f32]) -> usize {
-            blocks3m!(input, 8, re, 4, im, 4, |c, r, i| {
-                // SAFETY: `c` is the 8 values that `vld2q_f32` reads, `r` and `i` the 4 that
-                // `vst1q_f32` writes.
-                unsafe {
-                    let v = vld2q_f32(c.as_ptr());
-                    vst1q_f32(r.as_mut_ptr(), v.0);
-                    vst1q_f32(i.as_mut_ptr(), v.1);
+        pub(super) fn deint_f32(_t: Neon, input: &[f32], re: &mut [f32], im: &mut [f32]) {
+            whole_deint!(
+                input,
+                re,
+                im,
+                4,
+                8,
+                |c: &[f32; 8], r: &mut [f32; 4], i: &mut [f32; 4]| {
+                    // SAFETY: `c` is the 8 values that `vld2q_f32` reads, `r` and `i` the 4 that
+                    // `vst1q_f32` writes.
+                    unsafe {
+                        let v = vld2q_f32(c.as_ptr());
+                        vst1q_f32(r.as_mut_ptr(), v.0);
+                        vst1q_f32(i.as_mut_ptr(), v.1);
+                    }
                 }
-            }) * 4
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn int_i16(_t: Neon, re: &[i16], im: &[i16], out: &mut [i16]) -> usize {
-            blocks3!(re, 8, im, 8, out, 16, |r, i, o| {
-                // SAFETY: `r` and `i` are the 8 values that `vld1q_s16` reads and `o` the 16 that
-                // `vst2q_s16` writes.
-                unsafe {
-                    vst2q_s16(
-                        o.as_mut_ptr(),
-                        int16x8x2_t(vld1q_s16(r.as_ptr()), vld1q_s16(i.as_ptr())),
-                    );
+        pub(super) fn int_i16(_t: Neon, re: &[i16], im: &[i16], out: &mut [i16]) {
+            whole_int!(
+                re,
+                im,
+                out,
+                8,
+                16,
+                |r: &[i16; 8], i: &[i16; 8], o: &mut [i16; 16]| {
+                    // SAFETY: `r` and `i` are the 8 values that `vld1q_s16` reads and `o` the 16 that
+                    // `vst2q_s16` writes.
+                    unsafe {
+                        vst2q_s16(
+                            o.as_mut_ptr(),
+                            int16x8x2_t(vld1q_s16(r.as_ptr()), vld1q_s16(i.as_ptr())),
+                        );
+                    }
                 }
-            }) * 8
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn deint_i16(_t: Neon, input: &[i16], re: &mut [i16], im: &mut [i16]) -> usize {
-            blocks3m!(input, 16, re, 8, im, 8, |c, r, i| {
-                // SAFETY: `c` is the 16 values that `vld2q_s16` reads, `r` and `i` the 8 that
-                // `vst1q_s16` writes.
-                unsafe {
-                    let v = vld2q_s16(c.as_ptr());
-                    vst1q_s16(r.as_mut_ptr(), v.0);
-                    vst1q_s16(i.as_mut_ptr(), v.1);
+        pub(super) fn deint_i16(_t: Neon, input: &[i16], re: &mut [i16], im: &mut [i16]) {
+            whole_deint!(
+                input,
+                re,
+                im,
+                8,
+                16,
+                |c: &[i16; 16], r: &mut [i16; 8], i: &mut [i16; 8]| {
+                    // SAFETY: `c` is the 16 values that `vld2q_s16` reads, `r` and `i` the 8 that
+                    // `vst1q_s16` writes.
+                    unsafe {
+                        let v = vld2q_s16(c.as_ptr());
+                        vst1q_s16(r.as_mut_ptr(), v.0);
+                        vst1q_s16(i.as_mut_ptr(), v.1);
+                    }
                 }
-            }) * 8
+            );
         }
     );
 }
 
-/// The level-specific path of `interleave` with both inputs, for the current level: returns the
-/// number of leading samples done.
+/// The `simd128` paths of `interleave` and `deinterleave`: the zips and unzips of the token, in
+/// the unrolled loop with the overlapping last step of [`whole_int`] and [`whole_deint`] (the
+/// plain loop of the token keeps four pointers and a counter per vector; the engine counts every
+/// instruction).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+mod split_wasm {
+    use fearless_simd::prelude::*;
+    use fearless_simd::{f32x4, i16x8};
+
+    use super::split_scalar;
+
+    fearless_simd::kernel!(
+        pub(super) fn int_f32(t: WasmSimd128, re: &[f32], im: &[f32], out: &mut [f32]) {
+            whole_int!(
+                re,
+                im,
+                out,
+                4,
+                8,
+                |r: &[f32; 4], i: &[f32; 4], o: &mut [f32; 8]| {
+                    let (r, i) = (f32x4::from_slice(t, r), f32x4::from_slice(t, i));
+                    let (o0, o1) = o.split_at_mut(4);
+                    r.zip_low(i).store_slice(o0);
+                    r.zip_high(i).store_slice(o1);
+                }
+            );
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn deint_f32(t: WasmSimd128, input: &[f32], re: &mut [f32], im: &mut [f32]) {
+            whole_deint!(
+                input,
+                re,
+                im,
+                4,
+                8,
+                |c: &[f32; 8], r: &mut [f32; 4], i: &mut [f32; 4]| {
+                    let (a, b) = c.split_at(4);
+                    let (a, b) = (f32x4::from_slice(t, a), f32x4::from_slice(t, b));
+                    a.unzip_low(b).store_slice(r);
+                    a.unzip_high(b).store_slice(i);
+                }
+            );
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn int_i16(t: WasmSimd128, re: &[i16], im: &[i16], out: &mut [i16]) {
+            whole_int!(
+                re,
+                im,
+                out,
+                8,
+                16,
+                |r: &[i16; 8], i: &[i16; 8], o: &mut [i16; 16]| {
+                    let (r, i) = (i16x8::from_slice(t, r), i16x8::from_slice(t, i));
+                    let (o0, o1) = o.split_at_mut(8);
+                    r.zip_low(i).store_slice(o0);
+                    r.zip_high(i).store_slice(o1);
+                }
+            );
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn deint_i16(t: WasmSimd128, input: &[i16], re: &mut [i16], im: &mut [i16]) {
+            whole_deint!(
+                input,
+                re,
+                im,
+                8,
+                16,
+                |c: &[i16; 16], r: &mut [i16; 8], i: &mut [i16; 8]| {
+                    let (a, b) = c.split_at(8);
+                    let (a, b) = (i16x8::from_slice(t, a), i16x8::from_slice(t, b));
+                    a.unzip_low(b).store_slice(r);
+                    a.unzip_high(b).store_slice(i);
+                }
+            );
+        }
+    );
+}
+
+/// The level-specific paths of `interleave` with both inputs and of `deinterleave` with both
+/// outputs, for the current level: `true` where the level has a path, which then did the whole
+/// call; `false` where the generic code of the token runs. The kernel returns right after a
+/// path, so the dispatch of the run-time detection calls the path without keeping the
+/// arguments for a rest.
 macro_rules! level_paths {
-    ($int:ident, $deint:ident, $elem:ty, $x86_int:ident, $x86_deint:ident, $neon_int:ident, $neon_deint:ident) => {
+    (
+        $int:ident, $deint:ident, $elem:ty,
+        x86_int: [$($xi:ident => $xip:path),*],
+        x86_deint: [$($xd:ident => $xdp:path),*],
+        neon: $ni:path, $nd:path,
+        wasm: $wi:path, $wd:path
+    ) => {
         #[inline(always)]
-        fn $int<S: SimdToken>(simd: S, re: &[$elem], im: &[$elem], out: &mut [$elem]) -> usize {
+        fn $int<S: SimdToken>(simd: S, re: &[$elem], im: &[$elem], out: &mut [$elem]) -> bool {
             let level = simd.level();
             #[cfg(target_arch = "x86_64")]
             {
-                if let Some(t) = level.as_avx2() {
-                    return split_x86::$x86_int::avx2(t, re, im, out);
-                }
-                if let Some(t) = level.as_sse2() {
-                    return split_x86::$x86_int::sse2(t, re, im, out);
-                }
+                $(if let Some(t) = level.$xi() {
+                    $xip(t, re, im, out);
+                    return true;
+                })*
             }
             #[cfg(target_arch = "aarch64")]
             if let Some(t) = level.as_neon() {
-                return split_neon::$neon_int(t, re, im, out);
+                $ni(t, re, im, out);
+                return true;
+            }
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            if let Some(t) = level.as_wasm_simd128() {
+                $wi(t, re, im, out);
+                return true;
             }
             let _ = (level, re, im, out);
-            0
+            false
         }
 
         #[inline(always)]
@@ -809,70 +1334,76 @@ macro_rules! level_paths {
             input: &[$elem],
             re: &mut [$elem],
             im: &mut [$elem],
-        ) -> usize {
+        ) -> bool {
             let level = simd.level();
             #[cfg(target_arch = "x86_64")]
             {
-                if let Some(t) = level.as_avx2() {
-                    return split_x86::$x86_deint::avx2(t, input, re, im);
-                }
-                if let Some(t) = level.as_sse4_2() {
-                    return split_x86::$x86_deint::sse4_2(t, input, re, im);
-                }
-                if let Some(t) = level.as_sse2() {
-                    return split_x86::$x86_deint::sse2(t, input, re, im);
-                }
+                $(if let Some(t) = level.$xd() {
+                    $xdp(t, input, re, im);
+                    return true;
+                })*
             }
             #[cfg(target_arch = "aarch64")]
             if let Some(t) = level.as_neon() {
-                return split_neon::$neon_deint(t, input, re, im);
+                $nd(t, input, re, im);
+                return true;
+            }
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            if let Some(t) = level.as_wasm_simd128() {
+                $wd(t, input, re, im);
+                return true;
             }
             let _ = (level, input, re, im);
-            0
+            false
         }
     };
 }
 
 level_paths!(
-    int_f32_level,
-    deint_f32_level,
-    f32,
-    int_f32,
-    deint_f32,
-    int_f32,
-    deint_f32
+    int_f32_level, deint_f32_level, f32,
+    x86_int: [
+        as_avx512 => split_x86::int_f32_512::avx512,
+        as_avx2 => split_x86::int_f32::avx2
+    ],
+    x86_deint: [
+        as_avx512 => split_x86::deint_f32_512::avx512,
+        as_avx2 => split_x86::deint_f32::avx2
+    ],
+    neon: split_neon::int_f32, split_neon::deint_f32,
+    wasm: split_wasm::int_f32, split_wasm::deint_f32
 );
 level_paths!(
-    int_i16_level,
-    deint_i16_level,
-    i16,
-    int_i16,
-    deint_i16,
-    int_i16,
-    deint_i16
+    int_i16_level, deint_i16_level, i16,
+    x86_int: [
+        as_avx512 => split_x86::int_i16_512::avx512,
+        as_avx2 => split_x86::int_i16::avx2
+    ],
+    x86_deint: [
+        as_avx512 => split_x86::deint_i16_512::avx512,
+        as_avx2 => split_x86::deint_i16::avx2,
+        as_sse4_2 => split_x86::deint_i16::sse4_2,
+        as_sse2 => split_x86::deint_i16::sse2
+    ],
+    neon: split_neon::int_i16, split_neon::deint_i16,
+    wasm: split_wasm::int_i16, split_wasm::deint_i16
 );
 
-/// `out = (re[n], im[n])` of whole vectors of samples; `done` is the number of samples done.
-/// `im = None` gives zeros.
+/// `out = (re[n], im[n])`, `im = None` giving zeros: whole vectors of samples by the path of the
+/// level or the zips of the token, the rest (fewer samples than one step) by the plain loop of
+/// the fallback. The lengths are checked by the caller (`out` holds two values per sample of
+/// `re`, `im` as many as `re`). The whole call runs in the dispatched function, so that the
+/// caller keeps no arguments across it (the fixed cost per call of the run-time detection).
 macro_rules! interleave_kernel {
     ($name:ident, $vec:ident, $elem:ty, $zero:expr, $level:ident) => {
         #[inline(always)]
-        fn $name<S: SimdToken>(
-            simd: S,
-            re: &[$elem],
-            im: Option<&[$elem]>,
-            out: &mut [$elem],
-            done: &mut usize,
-        ) {
+        fn $name<S: SimdToken>(simd: S, re: &[$elem], im: Option<&[$elem]>, out: &mut [$elem]) {
             let l = S::$vec::LEN;
-            let blocks = re.len().min(out.len() / 2) / l;
-            match im {
+            let done = match im {
                 Some(im) => {
-                    let n = $level(simd, re, im, out);
-                    if n > 0 {
-                        *done = n;
+                    if $level(simd, re, im, out) {
                         return;
                     }
+                    let mut n = 0;
                     for ((r, i), o) in re
                         .chunks_exact(l)
                         .zip(im.chunks_exact(l))
@@ -882,19 +1413,40 @@ macro_rules! interleave_kernel {
                         let (o0, o1) = o.split_at_mut(l);
                         r.zip_low(i).store_slice(o0);
                         r.zip_high(i).store_slice(o1);
+                        n += l;
                     }
+                    n
                 }
                 None => {
                     let z = S::$vec::splat(simd, $zero);
+                    let mut n = 0;
                     for (r, o) in re.chunks_exact(l).zip(out.chunks_exact_mut(2 * l)) {
                         let r = S::$vec::from_slice(simd, r);
                         let (o0, o1) = o.split_at_mut(l);
                         r.zip_low(z).store_slice(o0);
                         r.zip_high(z).store_slice(o1);
+                        n += l;
+                    }
+                    n
+                }
+            };
+            let re = re.get(done..).unwrap_or_default();
+            let (out, _) = out
+                .get_mut(2 * done..)
+                .unwrap_or_default()
+                .as_chunks_mut::<2>();
+            match im.map(|im| im.get(done..).unwrap_or_default()) {
+                Some(im) => {
+                    for ((o, &r), &i) in out.iter_mut().zip(re).zip(im) {
+                        *o = [r, i];
+                    }
+                }
+                None => {
+                    for (o, &r) in out.iter_mut().zip(re) {
+                        *o = [r, $zero];
                     }
                 }
             }
-            *done = blocks * l;
         }
     };
 }
@@ -902,11 +1454,14 @@ macro_rules! interleave_kernel {
 interleave_kernel!(interleave_f32, f32s, f32, 0.0, int_f32_level);
 interleave_kernel!(interleave_i16, i16s, i16, 0, int_i16_level);
 
-dispatch_fn!(fn run_interleave_f32(re: &[f32], im: Option<&[f32]>, out: &mut [f32], done: &mut usize) => interleave_f32);
-dispatch_fn!(fn run_interleave_i16(re: &[i16], im: Option<&[i16]>, out: &mut [i16], done: &mut usize) => interleave_i16);
+dispatch_fn!(fn run_interleave_f32(re: &[f32], im: Option<&[f32]>, out: &mut [f32]) => interleave_f32);
+dispatch_fn!(fn run_interleave_i16(re: &[i16], im: Option<&[i16]>, out: &mut [i16]) => interleave_i16);
 
-/// The real and imaginary parts of whole vectors of samples; `done` is the number of samples
-/// done.
+/// The real and imaginary parts of `input` (two values per sample) into the outputs given:
+/// whole vectors of samples by the path of the level (both outputs) or the unzips of the token,
+/// the rest by the plain loops of the fallback. The lengths are checked by the caller (every
+/// output holds one value per sample of `input`); as [`interleave_kernel`], the whole call runs
+/// in the dispatched function.
 macro_rules! deinterleave_kernel {
     ($name:ident, $vec:ident, $elem:ty, $level:ident) => {
         #[inline(always)]
@@ -915,28 +1470,19 @@ macro_rules! deinterleave_kernel {
             input: &[$elem],
             re: Option<&mut [$elem]>,
             im: Option<&mut [$elem]>,
-            done: &mut usize,
         ) {
             let l = S::$vec::LEN;
-            let n = input.len() / 2;
-            let n = match (&re, &im) {
-                (Some(r), Some(i)) => n.min(r.len()).min(i.len()),
-                (Some(r), None) => n.min(r.len()),
-                (None, Some(i)) => n.min(i.len()),
-                (None, None) => 0,
-            };
-            let blocks = n / l;
             let load = |c: &[$elem]| {
                 let (c0, c1) = c.split_at(l);
                 (S::$vec::from_slice(simd, c0), S::$vec::from_slice(simd, c1))
             };
-            match (re, im) {
+            let (mut re, mut im) = (re, im);
+            let done = match (re.as_deref_mut(), im.as_deref_mut()) {
                 (Some(re), Some(im)) => {
-                    let k = $level(simd, input, re, im);
-                    if k > 0 {
-                        *done = k;
+                    if $level(simd, input, re, im) {
                         return;
                     }
+                    let mut k = 0;
                     for ((c, r), i) in input
                         .chunks_exact(2 * l)
                         .zip(re.chunks_exact_mut(l))
@@ -945,23 +1491,41 @@ macro_rules! deinterleave_kernel {
                         let (a, b) = load(c);
                         a.unzip_low(b).store_slice(r);
                         a.unzip_high(b).store_slice(i);
+                        k += l;
                     }
+                    k
                 }
                 (Some(re), None) => {
+                    let mut k = 0;
                     for (c, r) in input.chunks_exact(2 * l).zip(re.chunks_exact_mut(l)) {
                         let (a, b) = load(c);
                         a.unzip_low(b).store_slice(r);
+                        k += l;
                     }
+                    k
                 }
                 (None, Some(im)) => {
+                    let mut k = 0;
                     for (c, i) in input.chunks_exact(2 * l).zip(im.chunks_exact_mut(l)) {
                         let (a, b) = load(c);
                         a.unzip_high(b).store_slice(i);
+                        k += l;
                     }
+                    k
                 }
-                (None, None) => {}
+                (None, None) => return,
+            };
+            let (input, _) = input.get(2 * done..).unwrap_or_default().as_chunks::<2>();
+            if let Some(re) = re.and_then(|r| r.get_mut(done..)) {
+                for (o, x) in re.iter_mut().zip(input) {
+                    *o = x[0];
+                }
             }
-            *done = blocks * l;
+            if let Some(im) = im.and_then(|i| i.get_mut(done..)) {
+                for (o, x) in im.iter_mut().zip(input) {
+                    *o = x[1];
+                }
+            }
         }
     };
 }
@@ -969,8 +1533,8 @@ macro_rules! deinterleave_kernel {
 deinterleave_kernel!(deinterleave_f32, f32s, f32, deint_f32_level);
 deinterleave_kernel!(deinterleave_i16, i16s, i16, deint_i16_level);
 
-dispatch_fn!(fn run_deinterleave_f32(input: &[f32], re: Option<&mut [f32]>, im: Option<&mut [f32]>, done: &mut usize) => deinterleave_f32);
-dispatch_fn!(fn run_deinterleave_i16(input: &[i16], re: Option<&mut [i16]>, im: Option<&mut [i16]>, done: &mut usize) => deinterleave_i16);
+dispatch_fn!(fn run_deinterleave_f32(input: &[f32], re: Option<&mut [f32]>, im: Option<&mut [f32]>) => deinterleave_f32);
+dispatch_fn!(fn run_deinterleave_i16(input: &[i16], re: Option<&mut [i16]>, im: Option<&mut [i16]>) => deinterleave_i16);
 
 // The kernels
 
@@ -1085,14 +1649,8 @@ impl Interleave<C32> for Simd {
         if let Some(im) = im {
             check_len(re.len(), im.len())?;
         }
-        let mut done = 0;
-        run_interleave_f32(re, im, bytemuck::cast_slice_mut(out), &mut done);
-        <Fallback as Interleave<C32>>::interleave(
-            &Fallback,
-            re.get(done..).unwrap_or_default(),
-            im.map(|im| im.get(done..).unwrap_or_default()),
-            out.get_mut(done..).unwrap_or_default(),
-        )
+        run_interleave_f32(re, im, bytemuck::cast_slice_mut(out));
+        Ok(())
     }
 
     fn deinterleave(
@@ -1107,20 +1665,8 @@ impl Interleave<C32> for Simd {
         if let Some(im) = &im {
             check_len(input.len(), im.len())?;
         }
-        let mut done = 0;
-        let (mut re, mut im) = (re, im);
-        run_deinterleave_f32(
-            bytemuck::cast_slice(input),
-            re.as_deref_mut(),
-            im.as_deref_mut(),
-            &mut done,
-        );
-        <Fallback as Interleave<C32>>::deinterleave(
-            &Fallback,
-            input.get(done..).unwrap_or_default(),
-            re.and_then(|r| r.get_mut(done..)),
-            im.and_then(|i| i.get_mut(done..)),
-        )
+        run_deinterleave_f32(bytemuck::cast_slice(input), re, im);
+        Ok(())
     }
 }
 
@@ -1130,19 +1676,12 @@ impl Interleave<CQ15> for Simd {
         if let Some(im) = im {
             check_len(re.len(), im.len())?;
         }
-        let mut done = 0;
         run_interleave_i16(
             bytemuck::cast_slice(re),
             im.map(bytemuck::cast_slice),
             bytemuck::cast_slice_mut(out),
-            &mut done,
         );
-        <Fallback as Interleave<CQ15>>::interleave(
-            &Fallback,
-            re.get(done..).unwrap_or_default(),
-            im.map(|im| im.get(done..).unwrap_or_default()),
-            out.get_mut(done..).unwrap_or_default(),
-        )
+        Ok(())
     }
 
     fn deinterleave(
@@ -1157,20 +1696,12 @@ impl Interleave<CQ15> for Simd {
         if let Some(im) = &im {
             check_len(input.len(), im.len())?;
         }
-        let mut done = 0;
-        let (mut re, mut im) = (re, im);
         run_deinterleave_i16(
             bytemuck::cast_slice(input),
-            re.as_deref_mut().map(bytemuck::cast_slice_mut),
-            im.as_deref_mut().map(bytemuck::cast_slice_mut),
-            &mut done,
+            re.map(bytemuck::cast_slice_mut),
+            im.map(bytemuck::cast_slice_mut),
         );
-        <Fallback as Interleave<CQ15>>::deinterleave(
-            &Fallback,
-            input.get(done..).unwrap_or_default(),
-            re.and_then(|r| r.get_mut(done..)),
-            im.and_then(|i| i.get_mut(done..)),
-        )
+        Ok(())
     }
 }
 
@@ -1226,12 +1757,274 @@ dispatch_fn!(fn run_osc_q15(phase: u32, step: u32, out: &mut [i16], done: &mut u
 
 #[inline(always)]
 fn osc_f32_entry<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [f32], done: &mut usize) {
-    osc_f32(simd, phase, step, out, done);
+    match osc_f32_level(simd, phase, step, out) {
+        Some(n) => *done = n,
+        None => osc_f32(simd, phase, step, out, done),
+    }
+}
+
+/// The level-specific path of the `C32` oscillator for the current level: the number of
+/// samples done, `None` where the level has no path (the generic code runs).
+#[inline(always)]
+fn osc_f32_level<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [f32]) -> Option<usize> {
+    let level = simd.level();
+    #[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
+    {
+        if let Some(t) = level.as_avx512() {
+            return Some(osc_x86::f32_avx512(t, phase, step, out));
+        }
+        if let Some(t) = level.as_avx2() {
+            return Some(osc_x86::f32_avx2(t, phase, step, out));
+        }
+        if let Some(t) = level.as_sse4_2() {
+            return Some(osc_x86::f32_sse4_2(t, phase, step, out));
+        }
+        if let Some(t) = level.as_sse2() {
+            return Some(osc_x86::f32_sse2(t, phase, step, out));
+        }
+    }
+    #[cfg(all(feature = "nco-tables", target_arch = "aarch64"))]
+    if let Some(t) = level.as_neon() {
+        return Some(osc_neon::f32(t, phase, step, out));
+    }
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    if let Some(t) = level.as_wasm_simd128() {
+        return Some(osc_wasm::f32(t, phase, step, out));
+    }
+    let _ = (level, phase, step, out);
+    None
 }
 
 #[inline(always)]
 fn osc_q15_entry<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [i16], done: &mut usize) {
     osc_q15(simd, phase, step, out, done);
+}
+
+/// The level-specific paths of the `C32` oscillator: the vector lookups of `table.rs` that
+/// `fm_mod` uses (bit-exact with the fallback), on the phases `phase + n step` kept in a
+/// register and advanced by one vector add per vector.
+#[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
+mod osc_x86 {
+    use core::arch::x86_64::{
+        __m128, __m128i, __m256, __m256i, _mm_add_epi32, _mm_set1_epi32, _mm_setr_epi32,
+        _mm256_add_epi32, _mm256_add_ps, _mm256_and_si256, _mm256_castpd_ps, _mm256_castps_pd,
+        _mm256_castps128_ps256, _mm256_cvtepi32_ps, _mm256_extract_epi32, _mm256_insertf128_ps,
+        _mm256_mul_ps, _mm256_permutevar8x32_ps, _mm256_set1_epi32, _mm256_setr_epi32,
+        _mm256_srli_epi32, _mm256_unpackhi_pd, _mm256_unpacklo_pd, _mm512_add_epi32,
+        _mm512_set1_epi32, _mm512_setr_epi32,
+    };
+
+    use fearless_simd::{Simd as SimdToken, f32x4, f32x8, f32x16, prelude::*};
+
+    use crate::table::entry_f32_at;
+    use crate::table::x86::{cos_sin_f32_x4, cos_sin_f32_x16};
+
+    /// The phases `phase + k step` of the lanes `k = 0..4` and the step of one vector.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn ramp_x4(phase: u32, step: u32) -> (__m128i, __m128i) {
+        let s = |k: u32| phase.wrapping_add(k.wrapping_mul(step)) as i32;
+        (
+            _mm_setr_epi32(s(0), s(1), s(2), s(3)),
+            _mm_set1_epi32(step.wrapping_mul(4) as i32),
+        )
+    }
+
+    /// The oscillator over vectors of four samples (SSE2 and SSE4.2): the number of samples
+    /// done.
+    macro_rules! f32_x4 {
+        ($t:ident, $phase:ident, $step:ident, $out:ident) => {{
+            let (mut p, inc) = ramp_x4($phase, $step);
+            let (vectors, _) = $out.as_chunks_mut::<8>();
+            for y in vectors.iter_mut() {
+                let (o0, o1) = cos_sin_f32_x4($t, p);
+                let (d0, d1) = y.split_at_mut(4);
+                f32x4::simd_from($t, o0).store_slice(d0);
+                f32x4::simd_from($t, o1).store_slice(d1);
+                p = _mm_add_epi32(p, inc);
+            }
+            vectors.len() * 4
+        }};
+    }
+
+    fearless_simd::kernel!(
+        pub(super) fn f32_sse2(t: Sse2, phase: u32, step: u32, out: &mut [f32]) -> usize {
+            f32_x4!(t, phase, step, out)
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn f32_sse4_2(t: Sse4_2, phase: u32, step: u32, out: &mut [f32]) -> usize {
+            f32_x4!(t, phase, step, out)
+        }
+    );
+
+    /// The f32 table entry at the byte offset `o` as one vector.
+    #[inline(always)]
+    fn load_f32<S: SimdToken>(simd: S, o: i32) -> __m128 {
+        f32x4::simd_from(simd, entry_f32_at(o as u32)).into()
+    }
+
+    /// `[lo | hi]` of two 128-bit vectors.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn pair(lo: __m128, hi: __m128) -> __m256 {
+        _mm256_insertf128_ps::<1>(_mm256_castps128_ps256(lo), hi)
+    }
+
+    /// Interleaved `(cos, sin)` of eight phases (samples 0 to 3, samples 4 to 7): the lookups
+    /// of `cos_sin_f32_x4` with the interpolation on 256-bit vectors. The entries of samples
+    /// `j` and `j + 2` share a vector, so that the in-lane unpacks of two such vectors give
+    /// the values and the differences of four samples in output order.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn cos_sin_f32_x8<S: SimdToken>(simd: S, p: __m256i) -> (__m256, __m256) {
+        let f = _mm256_cvtepi32_ps(_mm256_and_si256(p, _mm256_set1_epi32(0xF_FFFF)));
+        let o = _mm256_and_si256(_mm256_srli_epi32::<16>(p), _mm256_set1_epi32(0xFFF0));
+        let e = |k: i32| load_f32(simd, k);
+        let (e0, e1) = (
+            e(_mm256_extract_epi32::<0>(o)),
+            e(_mm256_extract_epi32::<1>(o)),
+        );
+        let (e2, e3) = (
+            e(_mm256_extract_epi32::<2>(o)),
+            e(_mm256_extract_epi32::<3>(o)),
+        );
+        let (e4, e5) = (
+            e(_mm256_extract_epi32::<4>(o)),
+            e(_mm256_extract_epi32::<5>(o)),
+        );
+        let (e6, e7) = (
+            e(_mm256_extract_epi32::<6>(o)),
+            e(_mm256_extract_epi32::<7>(o)),
+        );
+        let interp = |x: __m256, y: __m256, idx: __m256i| {
+            let (x, y) = (_mm256_castps_pd(x), _mm256_castps_pd(y));
+            let a = _mm256_castpd_ps(_mm256_unpacklo_pd(x, y));
+            let d = _mm256_castpd_ps(_mm256_unpackhi_pd(x, y));
+            _mm256_add_ps(a, _mm256_mul_ps(d, _mm256_permutevar8x32_ps(f, idx)))
+        };
+        (
+            interp(
+                pair(e0, e2),
+                pair(e1, e3),
+                _mm256_setr_epi32(0, 0, 1, 1, 2, 2, 3, 3),
+            ),
+            interp(
+                pair(e4, e6),
+                pair(e5, e7),
+                _mm256_setr_epi32(4, 4, 5, 5, 6, 6, 7, 7),
+            ),
+        )
+    }
+
+    fearless_simd::kernel!(
+        pub(super) fn f32_avx2(t: Avx2, phase: u32, step: u32, out: &mut [f32]) -> usize {
+            let s = |k: u32| phase.wrapping_add(k.wrapping_mul(step)) as i32;
+            let mut p = _mm256_setr_epi32(s(0), s(1), s(2), s(3), s(4), s(5), s(6), s(7));
+            let inc = _mm256_set1_epi32(step.wrapping_mul(8) as i32);
+            let (vectors, _) = out.as_chunks_mut::<16>();
+            for y in vectors.iter_mut() {
+                let (o0, o1) = cos_sin_f32_x8(t, p);
+                let (d0, d1) = y.split_at_mut(8);
+                f32x8::simd_from(t, o0).store_slice(d0);
+                f32x8::simd_from(t, o1).store_slice(d1);
+                p = _mm256_add_epi32(p, inc);
+            }
+            vectors.len() * 8
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn f32_avx512(t: Avx512, phase: u32, step: u32, out: &mut [f32]) -> usize {
+            let s = |k: u32| phase.wrapping_add(k.wrapping_mul(step)) as i32;
+            let mut p = _mm512_setr_epi32(
+                s(0),
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+            );
+            let inc = _mm512_set1_epi32(step.wrapping_mul(16) as i32);
+            let (vectors, _) = out.as_chunks_mut::<32>();
+            for y in vectors.iter_mut() {
+                let (o0, o1) = cos_sin_f32_x16(p);
+                let (d0, d1) = y.split_at_mut(16);
+                f32x16::simd_from(t, o0).store_slice(d0);
+                f32x16::simd_from(t, o1).store_slice(d1);
+                p = _mm512_add_epi32(p, inc);
+            }
+            vectors.len() * 16
+        }
+    );
+}
+
+/// The NEON path of the `C32` oscillator (see [`osc_x86`]).
+#[cfg(all(feature = "nco-tables", target_arch = "aarch64"))]
+mod osc_neon {
+    use core::arch::aarch64::{uint32x4_t, vaddq_u32, vdupq_n_u32};
+
+    use fearless_simd::{f32x4, prelude::*, u32x4};
+
+    use crate::table::neon::cos_sin_f32_x4;
+
+    fearless_simd::kernel!(
+        pub(super) fn f32(t: Neon, phase: u32, step: u32, out: &mut [f32]) -> usize {
+            let s = |k: u32| phase.wrapping_add(k.wrapping_mul(step));
+            let mut p: uint32x4_t = u32x4::simd_from(t, [s(0), s(1), s(2), s(3)]).into();
+            let inc = vdupq_n_u32(step.wrapping_mul(4));
+            let (vectors, _) = out.as_chunks_mut::<8>();
+            for y in vectors.iter_mut() {
+                let (o0, o1) = cos_sin_f32_x4(t, p);
+                let (d0, d1) = y.split_at_mut(4);
+                f32x4::simd_from(t, o0).store_slice(d0);
+                f32x4::simd_from(t, o1).store_slice(d1);
+                p = vaddq_u32(p, inc);
+            }
+            vectors.len() * 4
+        }
+    );
+}
+
+/// The SIMD128 path of the `C32` oscillator (see [`osc_x86`]).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+mod osc_wasm {
+    use core::arch::wasm32::{i32x4_add, u32x4, u32x4_splat};
+
+    use fearless_simd::{f32x4, prelude::*};
+
+    use crate::table::wasm::cos_sin_f32_x4;
+
+    fearless_simd::kernel!(
+        pub(super) fn f32(t: WasmSimd128, phase: u32, step: u32, out: &mut [f32]) -> usize {
+            let s = |k: u32| phase.wrapping_add(k.wrapping_mul(step));
+            let mut p = u32x4(s(0), s(1), s(2), s(3));
+            let inc = u32x4_splat(step.wrapping_mul(4));
+            let (vectors, _) = out.as_chunks_mut::<8>();
+            for y in vectors.iter_mut() {
+                #[cfg(feature = "nco-tables")]
+                let (o0, o1) = cos_sin_f32_x4(t, p);
+                #[cfg(not(feature = "nco-tables"))]
+                let (o0, o1) = cos_sin_f32_x4(p);
+                let (d0, d1) = y.split_at_mut(4);
+                f32x4::simd_from(t, o0).store_slice(d0);
+                f32x4::simd_from(t, o1).store_slice(d1);
+                p = i32x4_add(p, inc);
+            }
+            vectors.len() * 4
+        }
+    );
 }
 
 /// The oscillator state after `done` samples, for the fallback to finish the call.

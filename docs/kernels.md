@@ -27,7 +27,7 @@ For every kernel `foo` there is:
 
 ## Numeric contract
 
-Classes: *bit-exact* (fallback equals the reference bit for bit) and *tolerance* (minimum SNR against the f64 reference). One exception to the f64 reference rule: a kernel whose output depends on a discrete decision (`squelch`, `stereo_pll`, `preemph_limit`) fixes its arithmetic in the specification, the reference follows it exactly and the golden cases come from an exact float32 model (see `squelch` below). Q15 rules: round half up, saturate, `-1 * -1 = 32767` (except the encoding rules of `convert_out`, which round half to even, see there). The SNR thresholds of the table are guaranteed floors, not accuracy targets; the target is the achievable optimum of the [accuracy policy](#accuracy-policy).
+Classes: *bit-exact* (fallback equals the reference bit for bit; for `f32` values a NaN output must be NaN where the reference gives NaN, its sign and payload are not part of the contract, D296) and *tolerance* (minimum SNR against the f64 reference). One exception to the f64 reference rule: a kernel whose output depends on a discrete decision (`squelch`, `stereo_pll`, `preemph_limit`) fixes its arithmetic in the specification, the reference follows it exactly and the golden cases come from an exact float32 model (see `squelch` below). Q15 rules: round half up, saturate, `-1 * -1 = 32767` (except the encoding rules of `convert_out`, which round half to even, see there). The SNR thresholds of the table are guaranteed floors, not accuracy targets; the target is the achievable optimum of the [accuracy policy](#accuracy-policy).
 
 | Kernel | Trait | Sample types | Class | Contract |
 | --- | --- | --- | --- | --- |

@@ -600,6 +600,10 @@ pub enum Reference {
     Volk,
     /// The cheapest VOLK implementation of the machine (informational).
     VolkCheapest,
+    /// VOLK's protokernel without fused multiply-add, compiled with `-ffp-contract=off` for
+    /// the level (`benches/refs/volk-nofma.c`, D287): the gate of a kernel whose contract
+    /// forbids FMA where VOLK's dispatcher picks a fused implementation.
+    VolkNoFma,
     /// The loop of a GNU Radio block that is no VOLK kernel (`agc_cc`, `pwr_squelch_cc`),
     /// compiled with the generic flags of GNU Radio's own build.
     GnuRadio,
@@ -640,6 +644,7 @@ impl Reference {
     pub fn implementation(self) -> &'static str {
         match self {
             Reference::Volk | Reference::VolkCheapest => "volk",
+            Reference::VolkNoFma => "volk-nofma",
             Reference::GnuRadio => "gnuradio",
             Reference::RustFft => "rustfft",
             Reference::Fftw => "fftw",
@@ -665,6 +670,12 @@ pub enum Family {
     /// holds only the generic kernels of the entries of [`Family::Volk`]): there our fallback is
     /// the comparison, as information (D12).
     VolkNative,
+    /// A VOLK kernel exists, but at the levels with FMA (`avx2`, `avx512`, `neon`) the
+    /// dispatcher picks a fused implementation (`volk_32fc_x2_multiply_32fc`: `a_avx2_fma`,
+    /// `neonv8`), which our no-FMA contract forbids (D5): there VOLK's protokernel without fused
+    /// operations ([`Reference::VolkNoFma`]) is the gate and VOLK's dispatch is information
+    /// (D287); at the other levels as [`Family::Volk`].
+    VolkNoFma,
     /// A VOLK kernel does the same work up to a constant offset (`convert_cu8`: VOLK converts
     /// signed bytes only): it is the gate, and our fallback is reported as information.
     VolkAndOwn,
@@ -1047,7 +1058,7 @@ pub static KERNELS: [KernelSpec; 172] = [
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
     spec("add_real_q15", Family::Volk, false),
-    spec("mul", Family::Volk, false),
+    spec("mul", Family::VolkNoFma, false),
     spec("mul_cq15", Family::Own, false),
     spec("mul_real", Family::Volk, false),
     spec("mul_real_q15", Family::Own, false),
@@ -1406,7 +1417,14 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
 fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     match spec.family {
         Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
-        Family::Volk | Family::VolkAndOwn | Family::VolkNative => {
+        Family::VolkNoFma if matches!(plan.level, "avx2" | "avx512" | "neon") => {
+            let mut extras = vec![Reference::Volk];
+            if plan.cheapest_volk {
+                extras.push(Reference::VolkCheapest);
+            }
+            (Reference::VolkNoFma, extras)
+        }
+        Family::Volk | Family::VolkAndOwn | Family::VolkNative | Family::VolkNoFma => {
             let mut extras = Vec::new();
             if plan.cheapest_volk {
                 extras.push(Reference::VolkCheapest);
@@ -4436,7 +4454,6 @@ mod tests {
             "add_cq15",
             "add_real",
             "add_real_q15",
-            "mul",
             "mul_real",
             "interleave",
             "deinterleave",
@@ -4448,6 +4465,17 @@ mod tests {
                     Reference::Volk,
                     "{k} at {level}"
                 );
+            }
+        }
+        // `mul`: VOLK's protokernel without FMA where the dispatcher fuses, VOLK's dispatch as
+        // information (D287); VOLK's dispatch elsewhere.
+        for level in levels {
+            let (gate, extras) = comparisons(plan(level), kernel("mul"));
+            if matches!(level, "avx2" | "avx512" | "neon") {
+                assert_eq!(gate, Reference::VolkNoFma, "mul at {level}");
+                assert_eq!(extras.first(), Some(&Reference::Volk), "mul at {level}");
+            } else {
+                assert_eq!(gate, Reference::Volk, "mul at {level}");
             }
         }
         // No library has the function: our fallback, as information.

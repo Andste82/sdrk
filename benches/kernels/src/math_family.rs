@@ -8,7 +8,7 @@
 //! | `add_cq15` | facade | `volk_16i_x2_add_saturated_16i` on the `2 n` values | our fallback |
 //! | `add_real` | facade | `volk_32f_x2_add_32f` | our fallback |
 //! | `add_real_q15` | facade | `volk_16i_x2_add_saturated_16i` | our fallback |
-//! | `mul` | facade | `volk_32fc_x2_multiply_32fc` | our fallback |
+//! | `mul` | facade | `volk_32fc_x2_multiply_32fc`; at `avx2`, `avx512` and `neon` its protokernel without FMA (`u_avx`, `neon`, compiled with `-ffp-contract=off`, D287) | VOLK's dispatch (fused there), our fallback |
 //! | `mul_real` | facade | `volk_32f_x2_multiply_32f` | our fallback |
 //! | `mul_cq15`, `mul_real_q15` | facade | our fallback (efficiency verdict) | |
 //! | `interleave` | facade | `volk_32f_x2_interleave_32fc` | our fallback |
@@ -374,6 +374,13 @@ impl Kernel for ComplexC32K {
                         Op::Mul => volk_sys::volk_32fc_x2_multiply_32fc(o, a, b, n),
                     }
                 },
+                Impl::VolkNoFma if self.op == Op::Mul => {
+                    cref_sys::volk_nofma::multiply_32fc(
+                        pairs(&self.a),
+                        pairs(&self.b),
+                        pairs_mut(&mut self.out),
+                    );
+                }
                 Impl::Cmsis => match self.op {
                     Op::Add => add_f32(floats(&self.a), floats(&self.b), floats_mut(&mut self.out)),
                     Op::Mul => {
@@ -405,6 +412,11 @@ impl Kernel for ComplexC32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::VolkNoFma {
+            return self.entry == BiquadEntry::Simd
+                && self.op == Op::Mul
+                && cref_sys::volk_nofma::AVAILABLE;
+        }
         dot_scale_supports(self.entry, which, volk_sys::FULL)
     }
 
@@ -412,6 +424,17 @@ impl Kernel for ComplexC32K {
         match (which, self.op) {
             (Impl::Volk, Op::Add) => "volk_32fc_x2_add_32fc",
             (Impl::Volk, Op::Mul) => "volk_32fc_x2_multiply_32fc",
+            (Impl::VolkNoFma, _) => match cref_sys::volk_nofma::protokernel() {
+                Some("u_avx") => {
+                    "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)"
+                }
+                Some("neon") => {
+                    "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)"
+                }
+                _ => {
+                    "VOLK 3.3.0 volk_32fc_x2_multiply_32fc without FMA (benches/refs/volk-nofma.c)"
+                }
+            },
             (Impl::Cmsis, Op::Add) => describe_cmsis("arm_add_f32 on the 2 n floats"),
             (Impl::Cmsis, Op::Mul) => describe_cmsis("arm_cmplx_mult_cmplx_f32"),
             (Impl::Fallback, _) => "sdrk fallback",

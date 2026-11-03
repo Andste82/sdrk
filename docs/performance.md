@@ -261,7 +261,7 @@ What each kernel is compared with:
 | `interleave` f32 to C32, `deinterleave` C32 and `CQ15` | VOLK `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2` (both outputs written) and `volk_16ic_deinterleave_16i_x2`; planar buffers are prepared once outside the counted region. VOLK has no 16-bit interleave, so `interleave` `CQ15` is our fallback as information with the efficiency verdict |
 | `oscillate` C32, `CQ15` | no library has an oscillator with this phase model (CMSIS-DSP has no NCO): our fallback as information with the efficiency verdict. The `C32` SIMD path is used only where it beats the fallback (M30 section 6); it does on every level (D289) |
 | `add_fallback`, `add_cq15_fallback`, `add_real_fallback`, `add_real_q15_fallback`, `mul_fallback`, `mul_cq15_fallback`, `mul_real_fallback`, `mul_real_q15_fallback` (the measured side is our fallback) | CMSIS-DSP 1.18.0 generic C: `arm_add_f32`, `arm_add_q15` (on the `2 n` values for `CQ15`), `arm_cmplx_mult_cmplx_f32`, `arm_cmplx_mult_cmplx_q15`, `arm_mult_f32`, `arm_mult_q15`. The CMSIS-DSP `Q15` products truncate (Q3.13 for the complex one), where ours round once, so their accuracy column is lower |
-| `oscillate_fallback` C32, `oscillate_cq15_fallback` | CMSIS-DSP `arm_sin_cos_f32` of the angle in degrees (a 360-entry table with linear interpolation) and `arm_cos_q15` plus `arm_sin_q15` (512 entries, linear interpolation) per sample, with the phase accumulator of our loop; a lower accuracy class for `Q15`; the f32 function is more accurate than our table at harmonic 1 (140.8 against 133.2 dB), so `oscillate_fallback` C32 carries an accuracy waiver (open item I30-1) |
+| `oscillate_fallback` C32, `oscillate_cq15_fallback` | CMSIS-DSP `arm_sin_cos_f32` of the angle in degrees (a 512-entry sine table with cubic Hermite interpolation, the derivative read from the table shifted by a quarter turn) and `arm_cos_q15` plus `arm_sin_q15` (512 entries, linear interpolation) per sample, with the phase accumulator of our loop; a lower accuracy class for `Q15`; the f32 function is more accurate than our table at harmonic 1 (140.8 against 133.2 dB), so `oscillate_fallback` C32 carries an accuracy waiver (open item I30-1) |
 
 VOLK's dispatcher is pinned per level by a `volk_config` that xtask writes (`benches/target/<level>/volk-pinned/volk/volk_config`), and the measured processes run without `VOLK_GENERIC` and without the variables that override single kernels:
 
@@ -337,7 +337,7 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `resample` CQ15, 3 / 2, 192 taps (fallback) | 1.00 info | 0.80 info | 1.00 info | 0.80 info | 0.61 info | 0.91 info |
 | `mag_sq` C32 | 0.71 | 0.62 | 0.61 | 0.39 | 0.52 | 0.60 |
 | `mag_sq` CQ15 | 0.37 info | 0.69 info | 0.72 info | 0.82 info | 0.54 info | 0.40 info |
-| `quad_demod` C32 | 0.13 info | 0.14 info | 0.68 | 0.50 | 0.62 | 0.18 info |
+| `quad_demod` C32 | 0.13 info | 0.14 info | 0.65 | 0.45 | 0.58 | 0.18 info |
 | `quad_demod` CQ15 | 0.19 info | 0.14 info | 0.07 info | 0.02 info | 0.10 info | 0.12 info |
 | `quad_demod_fallback` C32 (GNU Radio) | 1.32 info | 1.31 info | 1.14 info | 1.12 info | 2.14 info | 1.22 info |
 | `quad_demod_cq15_fallback` (CMSIS-DSP) | 0.64 | 0.65 | 0.64 | 0.65 | 0.70 | 0.55 |
@@ -510,7 +510,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `resample` CQ15, 3 / 2, 192 taps (fallback) | 635.23 / 635.23 | 506.50 / 635.23 | 373.40 / 373.40 | 316.59 | 237.44 / 295.89 | 296.92 / 490.10 | 977.01 / 1075.61 |
 | `mag_sq` C32 | 2.32 / 3.27 | 1.57 / 2.52 | 0.92 / 1.52 | 0.93 | 0.60 / 1.52 | 1.18 / 2.27 | 4.96 / 8.28 |
 | `mag_sq` CQ15 | 1.31 / 3.51 | 1.31 / 1.89 | 0.73 / 1.01 | 0.75 | 0.36 / 0.44 | 1.02 / 1.89 | 3.02 / 7.53 |
-| `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.43 / 10.92 | 7.44 | 3.36 / 6.73 | 12.30 / 19.79 | 36.15 / 201.21 |
+| `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.05 / 10.92 | 7.07 | 3.05 / 6.73 | 11.55 / 19.79 | 36.15 / 201.21 |
 | `quad_demod` CQ15 | 33.15 / 170.85 | 24.65 / 171.16 | 10.65 / 162.72 | 10.60 | 4.03 / 163.66 | 16.65 / 173.61 | 40.79 / 332.25 |
 | `quad_demod_fallback` C32 (GNU Radio) | 105.17 / 79.88 | 104.48 / 79.88 | 98.86 / 87.01 | - | 97.28 / 87.01 | 110.52 / 51.64 | 188.90 / 155.40 |
 | `quad_demod_cq15_fallback` (CMSIS-DSP) | 170.85 / 266.90 | 171.16 / 263.04 | 162.72 / 253.85 | - | 163.66 / 252.52 | 173.61 / 246.64 | 332.25 / 603.82 |
@@ -683,7 +683,7 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `resample` CQ15, 3 / 2, 192 taps (fallback) | exact | exact | exact | exact | exact | exact |
 | `mag_sq` C32 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 |
 | `mag_sq` CQ15 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 | 92.8 / 92.8 |
-| `quad_demod` C32 | 143.5 / 144.2 | 143.5 / 144.2 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 126.5 | 143.5 / 143.6 |
+| `quad_demod` C32 | 143.5 / 144.2 | 143.5 / 144.2 | 144.7 / 126.5 | 144.7 / 126.5 | 144.7 / 126.5 | 143.5 / 143.6 |
 | `quad_demod` CQ15 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 | 81.2 / 81.2 |
 | `quad_demod_fallback` C32 (GNU Radio) | 143.6 / 114.0 | 143.6 / 114.0 | 143.6 / 114.0 | 143.6 / 114.0 | 143.6 / 114.0 | 143.6 / 114.0 |
 | `quad_demod_cq15_fallback` (CMSIS-DSP) | 81.2 / 62.3 | 81.2 / 62.3 | 81.2 / 62.3 | 81.2 / 62.3 | 81.2 / 62.3 | 81.2 / 62.3 |
@@ -955,7 +955,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `oscillate` | 2.30 | 4.90 | 0.47 | 2.28 | 6.35 | 0.36 | sdrk fallback |
 | `oscillate_cq15` | 3.78 | 5.34 | 0.71 | 3.79 | 6.82 | 0.55 | sdrk fallback |
 | `oscillate_cq15_fallback` | 5.34 | 21.81 | 0.24 | 6.82 | 19.33 | 0.35 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `oscillate_fallback` | 4.90 | 56.29 | 0.09 | 6.35 | 51.64 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `oscillate_fallback` | 4.90 | 56.29 | 0.09 | 6.35 | 51.64 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_1024` | 7.20 | 6.91 | 1.04 | 6.39 | 6.78 | 0.94 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
 | `fft_1024_fallback` | 31.46 | 26.16 | 1.20 | 30.55 | 28.76 | 1.06 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_4096` | 8.15 | 10.41 | 0.78 | 7.34 | 8.86 | 0.83 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
@@ -1130,7 +1130,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `oscillate` | 2.29 | 4.90 | 0.47 | 2.57 | 6.35 | 0.40 | sdrk fallback |
 | `oscillate_cq15` | 2.61 | 8.08 | 0.32 | 3.04 | 7.08 | 0.43 | sdrk fallback |
 | `oscillate_cq15_fallback` | 8.08 | 21.81 | 0.37 | 7.08 | 19.33 | 0.37 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `oscillate_fallback` | 4.90 | 51.98 | 0.09 | 6.35 | 50.82 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `oscillate_fallback` | 4.90 | 51.98 | 0.09 | 6.35 | 50.82 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fft_1024` | 7.20 | 9.32 | 0.77 | 6.39 | 9.28 | 0.69 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 31.40 | 25.79 | 1.22 | 30.67 | 28.44 | 1.08 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fft_4096` | 8.15 | 10.68 | 0.76 | 7.34 | 10.64 | 0.69 | rustfft (FftPlanner, forward, in place) |
@@ -1233,7 +1233,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `mag_sq_fallback` | 0.29 | 0.52 | 0.55 | 0.32 | 0.53 | 0.61 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mag_sq_q15` | 0.14 | 0.20 | 0.70 | 0.18 | 0.23 | 0.80 | sdrk fallback |
 | `mag_sq_q15_fallback` | 0.20 | 2.17 | 0.09 | 0.23 | 1.84 | 0.12 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `quad_demod` | 3.22 | 3.61 | 0.89 | 2.66 | 3.70 | 0.72 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod` | 2.60 | 3.61 | 0.72 | 2.12 | 3.70 | 0.57 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
 | `quad_demod_cq15` | 4.40 | 71.20 | 0.06 | 4.01 | 66.50 | 0.06 | sdrk fallback |
 | `quad_demod_cq15_fallback` | 71.20 | 85.94 | 0.83 | 66.50 | 64.56 | 1.03 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
 | `quad_demod_fallback` | 39.05 | 865.81 | 0.05 | 32.76 | 131.57 | 0.25 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
@@ -1306,7 +1306,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `oscillate` | 1.40 | 2.27 | 0.62 | 1.45 | 4.03 | 0.36 | sdrk fallback |
 | `oscillate_cq15` | 1.90 | 5.84 | 0.33 | 1.49 | 3.34 | 0.45 | sdrk fallback |
 | `oscillate_cq15_fallback` | 5.84 | 16.77 | 0.35 | 3.34 | 17.80 | 0.19 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `oscillate_fallback` | 2.27 | 31.51 | 0.07 | 4.03 | 80.72 | 0.05 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `oscillate_fallback` | 2.27 | 31.51 | 0.07 | 4.03 | 80.72 | 0.05 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fft_1024` | 2.35 | 2.70 | 0.87 | 2.26 | 3.38 | 0.67 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 18.45 | 20.91 | 0.88 | 18.88 | 26.89 | 0.70 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fft_4096` | 2.60 | 3.37 | 0.77 | 2.52 | 3.83 | 0.66 | rustfft (FftPlanner, forward, in place) |
@@ -1409,7 +1409,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `mag_sq_fallback` | 0.30 | 0.31 | 0.97 | 0.26 | 0.27 | 0.94 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mag_sq_q15` | 0.20 | 0.22 | 0.89 | 0.14 | 0.19 | 0.71 | sdrk fallback |
 | `mag_sq_q15_fallback` | 0.22 | 0.98 | 0.22 | 0.19 | 1.87 | 0.10 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `quad_demod` | 1.73 | 2.00 | 0.87 | 1.62 | 2.11 | 0.77 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod` | 1.61 | 2.00 | 0.81 | 1.42 | 2.11 | 0.67 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
 | `quad_demod_cq15` | 2.20 | 77.19 | 0.03 | 2.87 | 75.60 | 0.04 | sdrk fallback |
 | `quad_demod_cq15_fallback` | 77.19 | 83.69 | 0.92 | 75.60 | 65.14 | 1.16 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
 | `quad_demod_fallback` | 41.29 | 868.77 | 0.05 | 42.59 | 131.57 | 0.32 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
@@ -1482,7 +1482,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `oscillate` | 0.41 | 0.76 | 0.54 | 2.08 | 3.79 | 0.55 | sdrk fallback |
 | `oscillate_cq15` | 0.37 | 7.56 | 0.05 | 2.03 | 3.70 | 0.55 | sdrk fallback |
 | `oscillate_cq15_fallback` | 7.56 | 15.95 | 0.47 | 3.70 | 17.80 | 0.21 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `oscillate_fallback` | 0.76 | 78.52 | 0.01 | 3.79 | 90.69 | 0.04 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `oscillate_fallback` | 0.76 | 78.52 | 0.01 | 3.79 | 90.69 | 0.04 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fft_1024` | 2.03 | 2.73 | 0.74 | 1.95 | 3.27 | 0.60 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 17.02 | 18.65 | 0.91 | 16.75 | 26.92 | 0.62 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fft_4096` | 2.16 | 3.13 | 0.69 | 2.12 | 3.71 | 0.57 | rustfft (FftPlanner, forward, in place) |
@@ -1585,7 +1585,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `mag_sq_fallback` | 1.52 | 2.29 | 0.67 | 1.14 | 1.53 | 0.75 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `mag_sq_q15` | 0.71 | 1.00 | 0.71 | 0.64 | 0.91 | 0.71 | sdrk fallback |
 | `mag_sq_q15_fallback` | 1.00 | 1.40 | 0.71 | 0.91 | 1.15 | 0.79 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `quad_demod` | 17.62 | 16.49 | 1.07 | 7.60 | 10.40 | 0.73 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod` | 15.92 | 16.49 | 0.97 | 6.91 | 10.40 | 0.66 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
 | `quad_demod_cq15` | 20.15 | 140.14 | 0.14 | 10.61 | 115.54 | 0.09 | sdrk fallback |
 | `quad_demod_cq15_fallback` | 140.14 | 138.91 | 1.01 | 115.54 | 136.18 | 0.85 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
 | `quad_demod_fallback` | 72.81 | 82.40 | 0.88 | 74.45 | 55.28 | 1.35 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
@@ -1658,7 +1658,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `oscillate` | 5.55 | 8.11 | 0.68 | 3.28 | 10.06 | 0.33 | sdrk fallback |
 | `oscillate_cq15` | 3.82 | 7.74 | 0.49 | 3.29 | 9.05 | 0.36 | sdrk fallback |
 | `oscillate_cq15_fallback` | 7.74 | 51.51 | 0.15 | 9.05 | 45.00 | 0.20 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `oscillate_fallback` | 8.11 | 56.79 | 0.14 | 10.06 | 46.15 | 0.22 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `oscillate_fallback` | 8.11 | 56.79 | 0.14 | 10.06 | 46.15 | 0.22 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_1024` | 12.84 | 17.23 | 0.75 | 8.55 | 13.55 | 0.63 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 33.24 | 38.54 | 0.86 | 34.77 | 39.16 | 0.89 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_4096` | 15.06 | 20.37 | 0.74 | 10.02 | 16.16 | 0.62 | rustfft (FftPlanner, forward, in place) |

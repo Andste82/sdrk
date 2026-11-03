@@ -39,6 +39,38 @@ const LO_PER_HI: f32 = (PI4_LO as f64 / PI4_HI as f64) as f32;
 /// The most lanes of an `f32` vector (AVX-512).
 const MAX_LANES: usize = 16;
 
+/// Whether the level has fused multiply-add for `C32` (decision D5: AVX2, AVX-512 and NEON;
+/// never on the levels without it, and never in the fallback).
+#[inline(always)]
+fn has_fma<S: SimdToken>(simd: S) -> bool {
+    let level = simd.level();
+    #[cfg(target_arch = "x86_64")]
+    {
+        level.as_avx2().is_some()
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        level.as_neon().is_some()
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        let _ = level;
+        false
+    }
+}
+
+/// `a b + c`, fused where `FMA`.
+#[inline(always)]
+fn madd<S: SimdToken, const FMA: bool>(a: S::f32s, b: S::f32s, c: S::f32s) -> S::f32s {
+    if FMA { a.mul_add(b, c) } else { a * b + c }
+}
+
+/// `c - a b`, fused where `FMA` (`vfnmadd`, `fmls`).
+#[inline(always)]
+fn nmadd<S: SimdToken, const FMA: bool>(a: S::f32s, b: S::f32s, c: S::f32s) -> S::f32s {
+    if FMA { (-a).mul_add(b, c) } else { c - a * b }
+}
+
 /// `atan2(y, x)` in radians; 0 where both are zero (`C32`, and `CQ15` from its products).
 ///
 /// One division: `t = lo / hi` with `lo = min(|x|, |y|)` and `hi = max(|x|, |y|)`, or
@@ -46,9 +78,10 @@ const MAX_LANES: usize = 16;
 /// `atan(lo / hi) = pi/4 + atan(t)`). The result is `m pi/4 +- atan(t)` with `m` in `0..=4`
 /// chosen by the octant; the offset is added in two parts (`PI4_HI`, `PI4_LO`, Cody and Waite),
 /// so that it carries no rounding of its own. Against the f64 reference this is within 1 dB of
-/// a correctly rounded `atan2f` of the same `f32` products.
+/// a correctly rounded `atan2f` of the same `f32` products. With `FMA` the polynomial and the
+/// term `p z t` are fused (`C32` on the levels with FMA only; `CQ15` passes `false`).
 #[inline(always)]
-fn atan2_c32<S: SimdToken>(simd: S, y: S::f32s, x: S::f32s) -> S::f32s {
+fn atan2_c32<S: SimdToken, const FMA: bool>(simd: S, y: S::f32s, x: S::f32s) -> S::f32s {
     let zero = S::f32s::splat(simd, 0.0);
     let sign = S::u32s::splat(simd, 0x8000_0000);
     // `v` where the mask is set, else 0, and `-v` where it is set, else `v`: bitwise with the
@@ -79,7 +112,16 @@ fn atan2_c32<S: SimdToken>(simd: S, y: S::f32s, x: S::f32s) -> S::f32s {
     // `lo - hi` and `lo + hi` where `big`, else `lo` and `hi`.
     let t = (lo - and(big, hi)) / (hi + and(big, lo));
     let z = t * t;
-    let p = ((z * 8.053_744_5e-2 - 1.387_768_6e-1) * z + 1.997_771_1e-1) * z - 3.333_295e-1;
+    let c = |v: f32| S::f32s::splat(simd, v);
+    let p = madd::<S, FMA>(
+        madd::<S, FMA>(
+            madd::<S, FMA>(z, c(8.053_744_5e-2), c(-1.387_768_6e-1)),
+            z,
+            c(1.997_771_1e-1),
+        ),
+        z,
+        c(-3.333_295e-1),
+    );
     // `swap` (|y| > |x|) reflects at pi/4, `neg` (x < 0, not -0, so that -0 / -0 gives 0) at
     // pi/2. `k = m PI4_HI`; in the first quadrant `m` is 0 or 1 below pi/4 (`big`) and 1 or 2
     // above it, and `m PI4_LO = k LO_PER_HI` (rounded, on a term below 1e-7).
@@ -93,7 +135,7 @@ fn atan2_c32<S: SimdToken>(simd: S, y: S::f32s, x: S::f32s) -> S::f32s {
     // `atan(t) = t + t z p(z)`, with the sign of the reflections; the small terms are summed
     // first and `t` added to them, which rounds less than adding `PI4_LO` to `atan(t)`.
     let st = negate_where(swap ^ neg, t);
-    let r = k + (st + (p * z * st + k * LO_PER_HI));
+    let r = k + (st + madd::<S, FMA>(p * z, st, k * LO_PER_HI));
     // `r` is at least 0, so the sign of `y` is or-ed in.
     (r.bitcast::<S::u32s>() | (y.bitcast::<S::u32s>() & sign)).bitcast::<S::f32s>()
 }
@@ -140,14 +182,26 @@ fn atan2_q15<S: SimdToken>(simd: S, y: S::f32s, x: S::f32s) -> S::f32s {
 
 /// `gain * arg(re + j im)` for one vector.
 #[inline(always)]
-fn discriminator<S: SimdToken>(simd: S, re: S::f32s, im: S::f32s, gain: f32) -> S::f32s {
-    atan2_c32(simd, im, re) * gain
+fn discriminator<S: SimdToken, const FMA: bool>(
+    simd: S,
+    re: S::f32s,
+    im: S::f32s,
+    gain: f32,
+) -> S::f32s {
+    atan2_c32::<S, FMA>(simd, im, re) * gain
 }
 
 /// `out[k] = gain * arg(x[k] * conj(p[k]))` for the interleaved samples `x` and their
 /// predecessors `p`, over the whole vectors of `out` (`x` and `p` hold two floats per output).
+/// `FMA` fuses the product and the polynomial (the levels with FMA: AVX2, AVX-512, NEON).
 #[inline(always)]
-fn discriminate_vectors<S: SimdToken>(simd: S, x: &[f32], p: &[f32], out: &mut [f32], gain: f32) {
+fn discriminate_vectors<S: SimdToken, const FMA: bool>(
+    simd: S,
+    x: &[f32],
+    p: &[f32],
+    out: &mut [f32],
+    gain: f32,
+) {
     #[cfg(target_arch = "x86_64")]
     {
         let level = simd.level();
@@ -167,13 +221,19 @@ fn discriminate_vectors<S: SimdToken>(simd: S, x: &[f32], p: &[f32], out: &mut [
         neon::discriminate_neon(t, x, p, out, gain);
         return;
     }
-    discriminate_generic(simd, x, p, out, gain);
+    discriminate_generic::<S, FMA>(simd, x, p, out, gain);
 }
 
 /// The portable code of [`discriminate_vectors`], and its only path on SSE2, AVX-512 and
 /// SIMD128.
 #[inline(always)]
-fn discriminate_generic<S: SimdToken>(simd: S, x: &[f32], p: &[f32], out: &mut [f32], gain: f32) {
+fn discriminate_generic<S: SimdToken, const FMA: bool>(
+    simd: S,
+    x: &[f32],
+    p: &[f32],
+    out: &mut [f32],
+    gain: f32,
+) {
     let h = S::f32s::LEN;
     for ((x, p), o) in x
         .chunks_exact(2 * h)
@@ -183,21 +243,24 @@ fn discriminate_generic<S: SimdToken>(simd: S, x: &[f32], p: &[f32], out: &mut [
         let ((x0, x1), (p0, p1)) = (x.split_at(h), p.split_at(h));
         let (xr, xi) = S::f32s::from_slice(simd, x0).deinterleave(S::f32s::from_slice(simd, x1));
         let (pr, pi) = S::f32s::from_slice(simd, p0).deinterleave(S::f32s::from_slice(simd, p1));
-        let (re, im) = (xr * pr + xi * pi, xi * pr - xr * pi);
-        discriminator(simd, re, im, gain).store_slice(o);
+        let re = madd::<S, FMA>(xr, pr, xi * pi);
+        let im = nmadd::<S, FMA>(xr, pi, xi * pr);
+        discriminator::<S, FMA>(simd, re, im, gain).store_slice(o);
     }
 }
 
-/// The paths of SSE4.2 and AVX2: the products stay interleaved, `x * p` gives
+/// The paths of SSE4.2 and AVX2. SSE4.2 (no FMA): the products stay interleaved, `x * p` gives
 /// `(xr pr, xi pi)` and `swap(x) * p` gives `(xi pr, xr pi)` per sample, and the horizontal sum
 /// and difference of the pairs are `re` and `im`, in the order of operations of the fallback.
+/// AVX2 (FMA): an in-lane shuffle deinterleaves both streams in the lane order of the horizontal
+/// operations, and `re = fma(xr, pr, xi pi)`, `im = fnma(xr, pi, xi pr)`.
 #[cfg(target_arch = "x86_64")]
 mod x86 {
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
         __m128, __m256, _mm_hadd_ps, _mm_hsub_ps, _mm_mul_ps, _mm_shuffle_ps, _mm256_castpd_ps,
-        _mm256_castps_pd, _mm256_hadd_ps, _mm256_hsub_ps, _mm256_mul_ps, _mm256_permute_ps,
-        _mm256_permute4x64_pd,
+        _mm256_castps_pd, _mm256_fmadd_ps, _mm256_fnmadd_ps, _mm256_mul_ps, _mm256_permute4x64_pd,
+        _mm256_shuffle_ps,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, f32x8};
@@ -206,6 +269,10 @@ mod x86 {
 
     /// Lane order `1, 0, 3, 2`: the two floats of every sample swapped.
     const SWAP: i32 = 0b10_11_00_01;
+    /// Lanes `0, 2` of the first and `0, 2` of the second operand (the real parts).
+    const EVEN: i32 = 0b10_00_10_00;
+    /// Lanes `1, 3` of the first and `1, 3` of the second operand (the imaginary parts).
+    const ODD: i32 = 0b11_01_11_01;
 
     fearless_simd::kernel!(
         pub(super) fn discriminate_avx2(t: Avx2, x: &[f32], p: &[f32], out: &mut [f32], gain: f32) {
@@ -221,12 +288,18 @@ mod x86 {
                 let p1: __m256 = f32x8::from_slice(t, p1).into();
                 // Within each 128-bit half: samples 0, 1 of `x0`, then 0, 1 of `x1` (low
                 // half), 2, 3 of `x0`, then 2, 3 of `x1` (high half).
-                let re = _mm256_hadd_ps(_mm256_mul_ps(x0, p0), _mm256_mul_ps(x1, p1));
-                let im = _mm256_hsub_ps(
-                    _mm256_mul_ps(_mm256_permute_ps::<SWAP>(x0), p0),
-                    _mm256_mul_ps(_mm256_permute_ps::<SWAP>(x1), p1),
+                let (xr, xi) = (
+                    _mm256_shuffle_ps::<EVEN>(x0, x1),
+                    _mm256_shuffle_ps::<ODD>(x0, x1),
                 );
-                let r: __m256 = discriminator(t, re.simd_into(t), im.simd_into(t), gain).into();
+                let (pr, pi) = (
+                    _mm256_shuffle_ps::<EVEN>(p0, p1),
+                    _mm256_shuffle_ps::<ODD>(p0, p1),
+                );
+                let re = _mm256_fmadd_ps(xr, pr, _mm256_mul_ps(xi, pi));
+                let im = _mm256_fnmadd_ps(xr, pi, _mm256_mul_ps(xi, pr));
+                let r: __m256 =
+                    discriminator::<_, true>(t, re.simd_into(t), im.simd_into(t), gain).into();
                 // Back to sample order: swap the middle two 64-bit quarters.
                 let r =
                     _mm256_castpd_ps(_mm256_permute4x64_pd::<0b11_01_10_00>(_mm256_castps_pd(r)));
@@ -258,21 +331,22 @@ mod x86 {
                     _mm_mul_ps(_mm_shuffle_ps::<SWAP>(x0, x0), p0),
                     _mm_mul_ps(_mm_shuffle_ps::<SWAP>(x1, x1), p1),
                 );
-                discriminator(t, re.simd_into(t), im.simd_into(t), gain).store_slice(o);
+                discriminator::<_, false>(t, re.simd_into(t), im.simd_into(t), gain).store_slice(o);
             }
         }
     );
 }
 
-/// The path of NEON: `ld2` loads and deinterleaves two vectors in one instruction.
+/// The path of NEON: `ld2` loads and deinterleaves two vectors in one instruction; the product
+/// is fused (`fmla`, `fmls`).
 #[cfg(target_arch = "aarch64")]
 #[allow(unsafe_code)]
 mod neon {
     use core::arch::aarch64::{float32x4x2_t, vld2q_f32};
-    use fearless_simd::f32x4;
     use fearless_simd::prelude::*;
+    use fearless_simd::{Neon, f32x4};
 
-    use super::discriminator;
+    use super::{discriminator, madd, nmadd};
 
     fearless_simd::kernel!(
         pub(super) fn discriminate_neon(t: Neon, x: &[f32], p: &[f32], out: &mut [f32], gain: f32) {
@@ -287,8 +361,9 @@ mod neon {
                     unsafe { (vld2q_f32(x.as_ptr()), vld2q_f32(p.as_ptr())) };
                 let (xr, xi) = (f32x4::simd_from(t, xr), f32x4::simd_from(t, xi));
                 let (pr, pi) = (f32x4::simd_from(t, pr), f32x4::simd_from(t, pi));
-                let (re, im) = (xr * pr + xi * pi, xi * pr - xr * pi);
-                discriminator(t, re, im, gain).store_slice(o);
+                let re = madd::<Neon, true>(xr, pr, xi * pi);
+                let im = nmadd::<Neon, true>(xr, pi, xi * pr);
+                discriminator::<_, true>(t, re, im, gain).store_slice(o);
             }
         }
     );
@@ -300,6 +375,22 @@ mod neon {
 /// code, so every sample goes through the same arithmetic whatever the block size.
 #[inline(always)]
 fn quad_demod_f32<S: SimdToken>(simd: S, prev: C32, gain: f32, input: &[f32], out: &mut [f32]) {
+    if has_fma(simd) {
+        quad_demod_f32_v::<S, true>(simd, prev, gain, input, out);
+    } else {
+        quad_demod_f32_v::<S, false>(simd, prev, gain, input, out);
+    }
+}
+
+/// [`quad_demod_f32`] with the product and the polynomial fused where `FMA`.
+#[inline(always)]
+fn quad_demod_f32_v<S: SimdToken, const FMA: bool>(
+    simd: S,
+    prev: C32,
+    gain: f32,
+    input: &[f32],
+    out: &mut [f32],
+) {
     let h = S::f32s::LEN;
     let n = out.len().min(input.len() / 2);
     let mut x = [0f32; 2 * MAX_LANES];
@@ -322,7 +413,7 @@ fn quad_demod_f32<S: SimdToken>(simd: S, prev: C32, gain: f32, input: &[f32], ou
         return;
     }
     if let (Some(vx), Some(vp), Some(vo)) = (x.get(..2 * h), p.get(..2 * h), o.get_mut(..h)) {
-        discriminate_vectors(simd, vx, vp, vo, gain);
+        discriminate_vectors::<S, FMA>(simd, vx, vp, vo, gain);
     }
     if let (Some(d), Some(s)) = (out.get_mut(..first), o.get(..first)) {
         d.copy_from_slice(s);
@@ -336,7 +427,7 @@ fn quad_demod_f32<S: SimdToken>(simd: S, prev: C32, gain: f32, input: &[f32], ou
             out.get_mut(h..whole),
         )
     {
-        discriminate_vectors(simd, vx, vp, vo, gain);
+        discriminate_vectors::<S, FMA>(simd, vx, vp, vo, gain);
     }
     // The last partial vector.
     let rest = n - whole;
@@ -353,7 +444,7 @@ fn quad_demod_f32<S: SimdToken>(simd: S, prev: C32, gain: f32, input: &[f32], ou
             dp.copy_from_slice(sp);
         }
         if let (Some(vx), Some(vp), Some(vo)) = (x.get(..2 * h), p.get(..2 * h), o.get_mut(..h)) {
-            discriminate_vectors(simd, vx, vp, vo, gain);
+            discriminate_vectors::<S, FMA>(simd, vx, vp, vo, gain);
         }
         if let (Some(d), Some(s)) = (out.get_mut(whole..n), o.get(..rest)) {
             d.copy_from_slice(s);
@@ -404,7 +495,7 @@ fn discriminate<S: SimdToken>(
     let arg = if S::f32s::LEN == 16 {
         atan2_q15(simd, im, re)
     } else {
-        atan2_c32(simd, im, re)
+        atan2_c32::<S, false>(simd, im, re)
     };
     // `phi = atan2 / pi` in units of 2^-15, rounded half up, saturated.
     let v = arg * c.k + 0.5;
@@ -513,7 +604,7 @@ mod tests {
     use sdrk_core::kernels::demod::{QuadDemod, QuadDemodState};
     use sdrk_core::{CQ15, Fallback, Q15};
 
-    use super::{discriminate_generic, discriminate_vectors};
+    use super::{discriminate_generic, discriminate_vectors, has_fma};
     use crate::Simd;
     use crate::level::dispatch;
 
@@ -521,8 +612,13 @@ mod tests {
     #[inline(always)]
     fn both<S: SimdToken>(simd: S, x: &[f32], p: &[f32], n: usize) -> ([f32; 64], [f32; 64]) {
         let (mut level, mut generic) = ([0f32; 64], [0f32; 64]);
-        discriminate_vectors(simd, x, p, &mut level[..n], -1.75);
-        discriminate_generic(simd, x, p, &mut generic[..n], -1.75);
+        if has_fma(simd) {
+            discriminate_vectors::<S, true>(simd, x, p, &mut level[..n], -1.75);
+            discriminate_generic::<S, true>(simd, x, p, &mut generic[..n], -1.75);
+        } else {
+            discriminate_vectors::<S, false>(simd, x, p, &mut level[..n], -1.75);
+            discriminate_generic::<S, false>(simd, x, p, &mut generic[..n], -1.75);
+        }
         (level, generic)
     }
 

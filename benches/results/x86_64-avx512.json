@@ -3250,11 +3250,11 @@
           "verdict": "pass"
         },
         "oscillate_fallback": {
-          "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
           "goal": true,
           "informational": [
             {
-              "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+              "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 87.51,
               "other_snr_db": null,
@@ -3419,16 +3419,16 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 6.73,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.36,
-              "ratio": 0.5
+              "ours_instr_per_sample": 3.05,
+              "ratio": 0.45
             }
           ],
           "other_instr_per_sample": 6.73,
-          "ours_instr_per_sample": 3.36,
-          "ratio": 0.5,
+          "ours_instr_per_sample": 3.05,
+          "ratio": 0.45,
           "snr_db": {
             "other": 126.49,
-            "ours": 143.5
+            "ours": 144.65
           },
           "status": "release",
           "verdict": "pass"

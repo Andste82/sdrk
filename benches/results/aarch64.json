@@ -3550,11 +3550,11 @@
           "verdict": "pass"
         },
         "oscillate_fallback": {
-          "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
           "goal": true,
           "informational": [
             {
-              "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 83.51,
               "other_snr_db": null,
@@ -3727,24 +3727,24 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 19.29,
               "other_snr_db": 126.48,
-              "ours_instr_per_sample": 12.3,
-              "ratio": 0.64
+              "ours_instr_per_sample": 11.55,
+              "ratio": 0.6
             },
             {
               "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 19.79,
               "other_snr_db": null,
-              "ours_instr_per_sample": 12.3,
-              "ratio": 0.62
+              "ours_instr_per_sample": 11.55,
+              "ratio": 0.58
             }
           ],
           "other_instr_per_sample": 19.79,
-          "ours_instr_per_sample": 12.3,
-          "ratio": 0.62,
+          "ours_instr_per_sample": 11.55,
+          "ratio": 0.58,
           "snr_db": {
             "other": 126.48,
-            "ours": 143.5
+            "ours": 144.65
           },
           "status": "release",
           "verdict": "pass"

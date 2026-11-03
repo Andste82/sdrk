@@ -924,7 +924,7 @@ impl Kernel for OscC32K {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Cmsis => describe_cmsis(
-                "arm_sin_cos_f32 of the angle in degrees per sample (360-entry table, linear interpolation)",
+                "arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation)",
             ),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",

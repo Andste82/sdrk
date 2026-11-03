@@ -3749,27 +3749,27 @@
   "oscillate_fallback": {
     "sse2": {
       "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
     },
     "sse4.2": {
       "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
     },
     "avx2": {
       "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
     },
     "avx512": {
       "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
     },
     "neon": {
       "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
     },
     "simd128": {
       "status": "release",
-      "accuracy_waiver": "open item I30-1 in docs/open-items.md: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our table interpolation at harmonic 1 (SNR against the f64 model)"
+      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
     }
   },
   "oscillate_cq15_fallback": {

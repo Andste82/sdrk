@@ -326,6 +326,16 @@ The returned `BlockMeta.start` is the output index of the first sample. A block 
 
 `pull` does not allocate; `end_burst` does (the zero samples).
 
+### Clock drift
+
+```rust
+let config = DriftConfig::new(44_100.0, 4_410.0);
+let mut drift = PipelineDrift::new(&pipeline, "audio_out", "to_cd", config)?;
+let ppm = drift.update(&mut pipeline, now_s, extra_fill)?;   // now_s: monotonic seconds
+```
+
+`sdrk_pipeline::drift::PipelineDrift` keeps the queue of a stream output at a target fill by steering the `ppm` parameter of a tunable `resample` node with the `DriftController` of `sdrk-blocks` (the control law and the configuration are in [blocks.md](blocks.md), section "Clock drift"). `new(pipeline, output, node, config)` requires a stream output and a `resample` node with `tunable = true` on the path to it; otherwise it returns `Error::Build` with one `invalid_value` diagnostic (an unknown output or node is `UnknownOutput` or `UnknownNode`, an invalid configuration is `Error::Block`). `update(pipeline, now_s, extra_fill)` reads `available(output) + extra_fill`, runs the controller and calls `set_param(node, "ppm", ..)`; it returns the value set and does not allocate (tested with a counting allocator). `controller()` and `controller_mut()` give access to the controller (for example `set_initial_ppm`). A `resample` node delivers whole output blocks, so with a large block (for example 441 samples) the fill moves in steps of one block and the controller answers each step with a spike; use a target of several blocks and a longer `smoothing_s` (D313). The application decides where the buffer is and when to call `update`; the pipeline never inserts the controller by itself.
+
 ### Latency
 
 `latency(output)` returns `Latency { group_delay, max_buffered }`, also reported per output in `Report.outputs`. [timing.md](timing.md#latency) explains how both add up.

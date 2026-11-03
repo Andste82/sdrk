@@ -373,6 +373,22 @@ The kinds that later milestones add have their names reserved here, so that ever
 
 For every frame the block takes `fft_size` consecutive samples starting at the frame position, multiplies them by a periodic window (`hann`, `blackman_harris` or `kaiser` with `kaiser_beta`), transforms them (`C32`: unnormalised; `CQ15`: block floating point), computes the power per bin, averages the power over `averaging` windows and converts it with `power_db` and the reference `(fft_size * coherent_gain)^2`, so that a full-scale complex tone at a bin centre reads 0 dBFS. The `CQ15` power is *not* `mag_sq` of Q15 (it saturates for large bins and rounds weak bins to zero) but `(re^2 + im^2) 2^(2 exponent - 30)` in `f32` with the exponent of the FFT. The frame is shifted so that the bins run from `-fs/2` to `+fs/2` with DC at index `fft_size / 2`. Consecutive windows start `interval_samples` apart (default `fft_size`; overlapping when smaller, samples are skipped when larger); both `averaging` and `interval_samples` are runtime parameters. `FrameMeta.first_sample` is the input index of the first sample of the first averaged window, counted since construction or the last `reset`.
 
+## Clock drift
+
+`DriftController` (`sdrk-blocks`, module `drift`, heap-free, f64 arithmetic with `libm::exp`) keeps the buffer between two clock domains (an SDR and a sound card, a file player and a transmitter) at a target fill by steering `ppm` of the tunable `resample` block. The buffer sits between the producer (the `resample` node at its output rate `fs`, corrected by `ppm`) and the consumer. A positive `ppm` makes the resampler produce more output per input, so a buffer that fills needs a lower `ppm`. The application calls `update(now_s, fill)` at roughly regular moments (for example in every audio callback) with a monotonic time in seconds and the fill level in samples.
+
+`DriftConfig`: `rate_hz` (`fs`, greater than 0), `target` (samples, greater than 0), `time_constant_s` (default 30, 1 to 600), `max_ppm` (default 500, greater than 0 and at most 1000), `slew_ppm_per_s` (default 20, greater than 0), `smoothing_s` (default 1, greater than 0). `DriftController::new` returns `InvalidParameter` for a value outside its range (or NaN). Per call, with `dt = now_s - last` (a call with `dt <= 0` changes nothing and returns the current output; the first call only initialises the state and returns `initial_ppm`):
+
+1. `e = (fill - target) / rate_hz` (seconds).
+2. `a = 1 - exp(-dt / smoothing_s)`, `es = es + a (e - es)`.
+3. `wn = 1 / time_constant_s`, `kp = 2 wn / 1e-6`, `ki = wn^2 / 1e-6` (a critically damped second-order loop for the plant `de/dt = 1e-6 ppm + drift`).
+4. `integ = clamp(integ + ki es dt, +-max_ppm)` (anti-windup).
+5. `u = clamp(initial_ppm - (kp es + integ), +-max_ppm)`.
+6. The output moves towards `u` by at most `slew_ppm_per_s dt`.
+7. The output is stored and returned.
+
+`set_initial_ppm` sets a known offset (for example a measured device error), clamped to `max_ppm`; `reset` forgets the history and keeps the config and the initial ppm. This is a control loop, not a signal kernel: it has no SIMD variant and no golden vectors.
+
 ## Tests
 
 - `tests/biquad.rs` (the block `biquad`: a 4th-order low-pass at 2 kHz of 48 kHz passes 1 kHz with less than 0.1 dB and stops 8 kHz by at least 48 dB in `f32` and Q15, both parts of the complex blocks, the notch at 1 kHz with q 10 (40 dB in `f32`, 34 dB in Q15, D23), runtime `cutoff_hz` and `q` against the kernel with `set_coefs`, invalid values, the Q15 cutoff limit at `fs / 500`, coefficients that do not fit Q2.14, odd orders, `order` other than 2 for band-pass and notch, 20-plan invariance for all four sample types, reset, NaN and infinity, the description); `construction.rs` adds the exact arena and the 512-byte limit, `describe.rs` the description checks.

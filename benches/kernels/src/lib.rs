@@ -72,6 +72,9 @@ pub enum Impl {
     /// VOLK's protokernel without fused multiply-add, compiled for the level with
     /// `-ffp-contract=off` (`cref_sys::volk_nofma`, D287).
     VolkNoFma,
+    /// VOLK's portable `generic` protokernel, compiled for the level with `-O3
+    /// -ffp-contract=off` (`cref_sys::volk_generic`): the scalar reference of a fallback entry.
+    VolkGeneric,
     /// The loop of a GNU Radio block that is not a VOLK kernel (`agc_cc`, `pwr_squelch_cc`),
     /// compiled as GNU Radio compiles it.
     GnuRadio,
@@ -102,11 +105,12 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 15] = [
+    pub const ALL: [Impl; 16] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
         Impl::VolkNoFma,
+        Impl::VolkGeneric,
         Impl::GnuRadio,
         Impl::RustFft,
         Impl::Fftw,
@@ -127,6 +131,7 @@ impl Impl {
             Impl::Fallback => "fallback",
             Impl::Volk => "volk",
             Impl::VolkNoFma => "volk-nofma",
+            Impl::VolkGeneric => "volk-generic",
             Impl::GnuRadio => "gnuradio",
             Impl::RustFft => "rustfft",
             Impl::Fftw => "fftw",
@@ -338,7 +343,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 172] = [
+pub const KERNELS: [&str; 176] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -511,6 +516,10 @@ pub const KERNELS: [&str; 172] = [
     "oscillate_cq15",
     "oscillate_fallback",
     "oscillate_cq15_fallback",
+    "interleave_fallback",
+    "interleave_cq15_fallback",
+    "deinterleave_fallback",
+    "deinterleave_cq15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -713,10 +722,18 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "oscillate" | "oscillate_fallback" => Box::new(OscC32K::new(layout, entry)),
         "oscillate_cq15" | "oscillate_cq15_fallback" => Box::new(OscCq15K::new(layout, entry)),
-        "interleave" => Box::new(SplitC32K::new(rng, layout, false)),
-        "interleave_cq15" => Box::new(SplitCq15K::new(rng, layout, false)),
-        "deinterleave" => Box::new(SplitC32K::new(rng, layout, true)),
-        "deinterleave_cq15" => Box::new(SplitCq15K::new(rng, layout, true)),
+        "interleave" | "interleave_fallback" => {
+            Box::new(SplitC32K::new(rng, layout, entry, false))
+        }
+        "interleave_cq15" | "interleave_cq15_fallback" => {
+            Box::new(SplitCq15K::new(rng, layout, entry, false))
+        }
+        "deinterleave" | "deinterleave_fallback" => {
+            Box::new(SplitC32K::new(rng, layout, entry, true))
+        }
+        "deinterleave_cq15" | "deinterleave_cq15_fallback" => {
+            Box::new(SplitCq15K::new(rng, layout, entry, true))
+        }
         "scale" => Box::new(ScaleK::new(rng, layout, simd)),
         "scale_cq15" => Box::new(ScaleCq15K::new(rng, layout, simd)),
         "dot_fallback" => Box::new(DotC32K::new(rng, layout, fallback)),

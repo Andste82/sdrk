@@ -296,6 +296,25 @@ mod oscillate {
         }
     }
 
+    /// Two turns of the phase in steps of `2^16 + 7`: every table index of the cosine and the
+    /// sine with about 16 fractions each, so every lookup of a level path meets every pair of
+    /// neighbouring table entries.
+    #[test]
+    fn cq15_is_bit_exact_over_the_whole_table() {
+        let n = 2 * 65_536;
+        let (mut a, mut b) = (
+            Nco::from_increment(0x0001_0007),
+            Nco::from_increment(0x0001_0007),
+        );
+        a.set_phase(0x0000_1234);
+        b.set_phase(0x0000_1234);
+        let (mut want, mut got) = (vec![CQ15::default(); n], vec![CQ15::default(); n]);
+        Fallback.oscillate(&mut a, 1, &mut want).unwrap();
+        Simd.oscillate(&mut b, 1, &mut got).unwrap();
+        assert!(want == got, "cq15 over the whole table");
+        assert_eq!(a.phase(), b.phase());
+    }
+
     #[test]
     fn chunked_calls_equal_one_call() {
         let inc = 0x0123_4567;

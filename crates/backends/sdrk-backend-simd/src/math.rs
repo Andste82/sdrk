@@ -1797,7 +1797,23 @@ fn osc_f32_level<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [f32]) 
 
 #[inline(always)]
 fn osc_q15_entry<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [i16], done: &mut usize) {
-    osc_q15(simd, phase, step, out, done);
+    match osc_q15_level(simd, phase, step, out) {
+        Some(n) => *done = n,
+        None => osc_q15(simd, phase, step, out, done),
+    }
+}
+
+/// The level-specific path of the `CQ15` oscillator for the current level (SIMD128 only): the
+/// number of samples done, `None` where the level has no path (the generic code runs).
+#[inline(always)]
+fn osc_q15_level<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [i16]) -> Option<usize> {
+    let level = simd.level();
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    if let Some(t) = level.as_wasm_simd128() {
+        return Some(osc_wasm::q15(t, phase, step, out));
+    }
+    let _ = (level, phase, step, out);
+    None
 }
 
 /// The level-specific paths of the `C32` oscillator: the vector lookups of `table.rs` that
@@ -1997,14 +2013,15 @@ mod osc_neon {
     );
 }
 
-/// The SIMD128 path of the `C32` oscillator (see [`osc_x86`]).
+/// The SIMD128 paths of the oscillator (see [`osc_x86`]): `C32` and `CQ15`, four samples per
+/// step on the phases kept in a register.
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 mod osc_wasm {
     use core::arch::wasm32::{i32x4_add, u32x4, u32x4_splat};
 
-    use fearless_simd::{f32x4, prelude::*};
+    use fearless_simd::{f32x4, i16x8, prelude::*};
 
-    use crate::table::wasm::cos_sin_f32_x4;
+    use crate::table::wasm::{cos_sin_f32_x4, cos_sin_q15_x4};
 
     fearless_simd::kernel!(
         pub(super) fn f32(t: WasmSimd128, phase: u32, step: u32, out: &mut [f32]) -> usize {
@@ -2020,6 +2037,20 @@ mod osc_wasm {
                 let (d0, d1) = y.split_at_mut(4);
                 f32x4::simd_from(t, o0).store_slice(d0);
                 f32x4::simd_from(t, o1).store_slice(d1);
+                p = i32x4_add(p, inc);
+            }
+            vectors.len() * 4
+        }
+    );
+
+    fearless_simd::kernel!(
+        pub(super) fn q15(t: WasmSimd128, phase: u32, step: u32, out: &mut [i16]) -> usize {
+            let s = |k: u32| phase.wrapping_add(k.wrapping_mul(step));
+            let mut p = u32x4(s(0), s(1), s(2), s(3));
+            let inc = u32x4_splat(step.wrapping_mul(4));
+            let (vectors, _) = out.as_chunks_mut::<8>();
+            for y in vectors.iter_mut() {
+                i16x8::simd_from(t, cos_sin_q15_x4(p)).store_slice(y);
                 p = i32x4_add(p, inc);
             }
             vectors.len() * 4

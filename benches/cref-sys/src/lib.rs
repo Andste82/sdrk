@@ -31,6 +31,8 @@
 //! - [`volk_nofma`]: VOLK 3.3.0's complex product without fused multiply-add, the protokernel
 //!   compiled with `-ffp-contract=off` for the levels `avx2`, `avx512` and `neon`
 //!   (LGPL-3.0-or-later).
+//! - [`volk_generic`]: VOLK 3.3.0's portable `generic` interleave and deinterleave
+//!   protokernels, compiled with `-O3 -ffp-contract=off` for every level (LGPL-3.0-or-later).
 //!
 //! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
 //! constructor returns `None` when its library is not linked. All of them use the interleaved
@@ -42,6 +44,7 @@ pub mod gnuradio;
 mod halfband;
 pub mod liquid;
 mod liquid_nco;
+pub mod volk_generic;
 pub mod volk_nofma;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};

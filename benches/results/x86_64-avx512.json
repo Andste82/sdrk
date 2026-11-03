@@ -1559,6 +1559,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "deinterleave_cq15_fallback": {
+          "compared_with": "VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 0.59,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.36,
+              "ratio": 0.61
+            }
+          ],
+          "other_instr_per_sample": 0.59,
+          "ours_instr_per_sample": 0.36,
+          "ratio": 0.61,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "deinterleave_fallback": {
+          "compared_with": "VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.15,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.95,
+              "ratio": 0.83
+            }
+          ],
+          "other_instr_per_sample": 1.15,
+          "ours_instr_per_sample": 0.95,
+          "ratio": 0.83,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "dot": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
           "goal": true,
@@ -2803,6 +2849,52 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "interleave_cq15_fallback": {
+          "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 0.65,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.36,
+              "ratio": 0.56
+            }
+          ],
+          "other_instr_per_sample": 0.65,
+          "ours_instr_per_sample": 0.36,
+          "ratio": 0.56,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "interleave_fallback": {
+          "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 0.71,
+              "ratio": 0.55
+            }
+          ],
+          "other_instr_per_sample": 1.27,
+          "ours_instr_per_sample": 0.71,
+          "ratio": 0.55,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
@@ -4426,6 +4518,11 @@
       "volk": {
         "build": "CMake Release, ENABLE_ORC=OFF",
         "sha256": "89d11c8c8d4213b1b780354cfdbda1fed0c0b65c82847e710638eb3e21418628",
+        "version": "3.3.0"
+      },
+      "volk_generic": {
+        "build": "volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h and volk_16ic_deinterleave_16i_x2.h: -O3 -ffp-contract=off, per level sse2:-march=x86-64 sse4.2:-march=x86-64-v2 avx2:-march=x86-64-v3 avx512:-march=sapphirerapids",
+        "sha256": "db670210e145eb963cbc30a6ccc8ab03941e3db1397ecf9d12120beedf65d9c9",
         "version": "3.3.0"
       },
       "volk_nofma": {

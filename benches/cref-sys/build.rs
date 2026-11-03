@@ -2,7 +2,7 @@
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
 //! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_grrotator`,
 //! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_liquiddc`, `has_kfr`, `has_cmsis`,
-//! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`) unset, and its wrapper then reports that the library is not available.
+//! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`, `has_volkgeneric`) unset, and its wrapper then reports that the library is not available.
 //!
 //! The biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
 //! (liquid-dsp, libairspy) exist once per SIMD
@@ -28,13 +28,14 @@ const LIBRARIES: [(&str, &str, &str); 11] = [
 ];
 
 /// The per-level libraries: cfg name, link name without the level.
-const LEVEL_LIBRARIES: [(&str, &str); 6] = [
+const LEVEL_LIBRARIES: [(&str, &str); 7] = [
     ("has_kfr", "kfrbq"),
     ("has_cmsis", "cmsisbq"),
     ("has_cmsisdsp", "cmsisdsp"),
     ("has_liquidhb", "liquidhb"),
     ("has_airspy", "airspy"),
     ("has_volknofma", "volknofma"),
+    ("has_volkgeneric", "volkgeneric"),
 ];
 
 /// The SIMD level of the target, from the target features cargo passes to build scripts.

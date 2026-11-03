@@ -15,6 +15,8 @@
 //! | `deinterleave`, `deinterleave_cq15` | facade | `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2` | our fallback |
 //! | `interleave_cq15` | facade | our fallback (efficiency verdict) | |
 //! | `add_fallback` ... `mul_real_q15_fallback` | our fallback | CMSIS-DSP generic C | |
+//! | `interleave_fallback`, `deinterleave_fallback`, `deinterleave_cq15_fallback` | our fallback | VOLK's `generic` protokernel (`volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`), compiled for the level | |
+//! | `interleave_cq15_fallback` | our fallback | the loop of VOLK's `generic` `volk_32f_x2_interleave_32fc` on 16-bit values (VOLK has no 16-bit interleave) | |
 //!
 //! VOLK's `volk_16ic_x2_multiply_16ic` is not the comparison of `mul_cq15`: it multiplies the
 //! 16-bit integers (the low halves of the products wrap, there is no shift by 15), a different
@@ -27,6 +29,7 @@
 use std::hint::black_box;
 
 use cref_sys::cmsis_dsp::{self, add_f32, add_q15, cmplx_mult_cmplx_f32, cmplx_mult_cmplx_q15};
+use cref_sys::volk_generic;
 use sdrk::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
 use sdrk::{C32, CQ15, ComplexSample, Fallback, Q15, Sdrk};
 use sdrk_core::RealSample;
@@ -585,17 +588,24 @@ impl Kernel for ComplexCq15K {
 /// `deinterleave` of `n` samples.
 pub(crate) struct SplitC32K {
     deinterleave: bool,
+    entry: BiquadEntry,
     re: Aligned<f32>,
     im: Aligned<f32>,
     packed: Aligned<C32>,
 }
 
 impl SplitC32K {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, deinterleave: bool) -> Self {
+    pub(crate) fn new(
+        rng: &mut Pcg32,
+        layout: Layout,
+        entry: BiquadEntry,
+        deinterleave: bool,
+    ) -> Self {
         let n = layout.n;
         let packed = noise_c32(rng, n, 0.9, layout.skew(8));
         let mut k = SplitC32K {
             deinterleave,
+            entry,
             re: Aligned::skewed(n, layout.skew(4)),
             im: Aligned::skewed(n, layout.skew(4)),
             packed,
@@ -609,6 +619,30 @@ impl SplitC32K {
         }
         k
     }
+}
+
+/// The implementations an `interleave` or `deinterleave` entry runs: the SIMD entry ours, our
+/// fallback and VOLK (if `volk`); the fallback entry our fallback and VOLK's `generic`
+/// protokernel.
+fn split_supports(entry: BiquadEntry, which: Impl, volk: bool) -> bool {
+    match (entry, which) {
+        (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
+        (BiquadEntry::Simd, Impl::Volk) => volk,
+        (BiquadEntry::Fallback, Impl::VolkGeneric) => volk_generic::AVAILABLE,
+        _ => false,
+    }
+}
+
+/// The description of VOLK's `generic` protokernel `function` (with its suffix) as built for
+/// this level.
+fn describe_volk_generic(function: &str) -> &'static str {
+    Box::leak(
+        format!(
+            "VOLK 3.3.0 {function}, benches/refs/volk-generic.c (-O3 -ffp-contract=off, {})",
+            cref_sys::BIQUAD_REF_LEVEL
+        )
+        .into_boxed_str(),
+    )
 }
 
 #[inline(never)]
@@ -664,6 +698,16 @@ impl Kernel for SplitC32K {
                         n,
                     );
                 },
+                (Impl::VolkGeneric, false) => {
+                    volk_generic::interleave_32fc(&self.re, &self.im, pairs_mut(&mut self.packed));
+                }
+                (Impl::VolkGeneric, true) => {
+                    volk_generic::deinterleave_32fc(
+                        pairs(&self.packed),
+                        &mut self.re,
+                        &mut self.im,
+                    );
+                }
                 (other, _) => unreachable!("interleave has no {other:?}"),
             }
             black_box(&self.packed);
@@ -695,22 +739,24 @@ impl Kernel for SplitC32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback) || (which == Impl::Volk && volk_sys::FULL)
+        split_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.deinterleave) {
             (Impl::Volk, false) => "volk_32f_x2_interleave_32fc",
             (Impl::Volk, true) => "volk_32fc_deinterleave_32f_x2",
+            (Impl::VolkGeneric, false) => describe_volk_generic("volk_32f_x2_interleave_32fc_generic"),
+            (Impl::VolkGeneric, true) => describe_volk_generic("volk_32fc_deinterleave_32f_x2_generic"),
             (Impl::Fallback, _) => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        match (volk_sys::FULL, self.deinterleave) {
-            (true, false) => &["volk_32f_x2_interleave_32fc"],
-            (true, true) => &["volk_32fc_deinterleave_32f_x2"],
+        match (self.entry, volk_sys::FULL, self.deinterleave) {
+            (BiquadEntry::Simd, true, false) => &["volk_32f_x2_interleave_32fc"],
+            (BiquadEntry::Simd, true, true) => &["volk_32fc_deinterleave_32f_x2"],
             _ => &[],
         }
     }
@@ -719,17 +765,24 @@ impl Kernel for SplitC32K {
 /// [`SplitC32K`] for `CQ15` and `Q15`.
 pub(crate) struct SplitCq15K {
     deinterleave: bool,
+    entry: BiquadEntry,
     re: Aligned<Q15>,
     im: Aligned<Q15>,
     packed: Aligned<CQ15>,
 }
 
 impl SplitCq15K {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, deinterleave: bool) -> Self {
+    pub(crate) fn new(
+        rng: &mut Pcg32,
+        layout: Layout,
+        entry: BiquadEntry,
+        deinterleave: bool,
+    ) -> Self {
         let n = layout.n;
         let packed = noise_cq15_full(rng, n, layout.skew(4));
         let mut k = SplitCq15K {
             deinterleave,
+            entry,
             re: Aligned::skewed(n, layout.skew(2)),
             im: Aligned::skewed(n, layout.skew(2)),
             packed,
@@ -769,6 +822,20 @@ impl Kernel for SplitCq15K {
                         n,
                     );
                 },
+                (Impl::VolkGeneric, false) => {
+                    volk_generic::interleave_16ic(
+                        q15_raw(&self.re),
+                        q15_raw(&self.im),
+                        pairs_q15_mut(&mut self.packed),
+                    );
+                }
+                (Impl::VolkGeneric, true) => {
+                    volk_generic::deinterleave_16ic(
+                        pairs_q15(&self.packed),
+                        q15_raw_mut(&mut self.re),
+                        q15_raw_mut(&mut self.im),
+                    );
+                }
                 (other, _) => unreachable!("interleave_cq15 has no {other:?}"),
             }
             black_box(&self.packed);
@@ -798,20 +865,23 @@ impl Kernel for SplitCq15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
-            || (which == Impl::Volk && volk_sys::FULL && self.deinterleave)
+        split_supports(self.entry, which, volk_sys::FULL && self.deinterleave)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
-        match which {
-            Impl::Volk => "volk_16ic_deinterleave_16i_x2",
-            Impl::Fallback => "sdrk fallback",
+        match (which, self.deinterleave) {
+            (Impl::Volk, _) => "volk_16ic_deinterleave_16i_x2",
+            (Impl::VolkGeneric, false) => describe_volk_generic(
+                "volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave)",
+            ),
+            (Impl::VolkGeneric, true) => describe_volk_generic("volk_16ic_deinterleave_16i_x2_generic"),
+            (Impl::Fallback, _) => "sdrk fallback",
             _ => "sdrk",
         }
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        if volk_sys::FULL && self.deinterleave {
+        if self.entry == BiquadEntry::Simd && volk_sys::FULL && self.deinterleave {
             &["volk_16ic_deinterleave_16i_x2"]
         } else {
             &[]

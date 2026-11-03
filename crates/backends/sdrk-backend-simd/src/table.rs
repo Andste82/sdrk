@@ -635,20 +635,21 @@ pub(crate) mod neon {
 /// each sample with two 8-byte loads.
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 pub(crate) mod wasm {
+    #[cfg(feature = "nco-tables")]
+    use core::arch::wasm32::i64x2_shuffle;
     use core::arch::wasm32::{
         f32x4_add, f32x4_convert_i32x4, f32x4_mul, i32x4_shuffle, u32x4_extract_lane, u32x4_shr,
         u32x4_splat, u64x2, v128, v128_and,
     };
     #[cfg(not(feature = "nco-tables"))]
-    use core::arch::wasm32::{f32x4_splat, f32x4_sub, i32x4_sub};
-    #[cfg(feature = "nco-tables")]
-    use core::arch::wasm32::{i16x8_add, i16x8_q15mulr_sat, i32x4_shl, i64x2_shuffle, v128_or};
+    use core::arch::wasm32::{f32x4_splat, f32x4_sub, i16x8_shuffle, i16x8_sub, i32x4_sub, u32x4};
+    use core::arch::wasm32::{i16x8_add, i16x8_q15mulr_sat, i32x4_shl, v128_or};
 
     #[cfg(feature = "nco-tables")]
     use fearless_simd::{WasmSimd128, f32x4, prelude::*};
 
     #[cfg(not(feature = "nco-tables"))]
-    use super::COS_F32;
+    use super::{COS_F32, COS_Q15};
     #[cfg(feature = "nco-tables")]
     use super::{entry_f32_at, entry_q15_at};
 
@@ -712,6 +713,46 @@ pub(crate) mod wasm {
             interp(e0, e1, i32x4_shuffle::<0, 0, 1, 1>(f, f)),
             interp(e2, e3, i32x4_shuffle::<2, 2, 3, 3>(f, f)),
         )
+    }
+
+    /// `(cos, sin)` as a `CQ15` pair per lane of four phases from `COS_Q15` itself: the pairs
+    /// `[c[i], c[i + 1]]` of the cosine and the sine of every phase as one 32-bit value each,
+    /// `a` and `b` apart by two shuffles (`a` in output order), then the interpolation of the
+    /// fallback with `i16x8.q15mulr_sat_s` (see the module documentation: `|b - a| <= 51` and
+    /// `f15 < 2^15`, so the product never saturates and the 16-bit sums are exact).
+    #[cfg(not(feature = "nco-tables"))]
+    #[inline(always)]
+    pub(crate) fn cos_sin_q15_x4(p: v128) -> v128 {
+        // `[c[i], c[i + 1]]` at the byte offset `o = 2 * i`; the index is at most 4095, so both
+        // values are inside the 4097 entries of the table.
+        let pair = |o: u32| -> u32 {
+            let i = (o / 2) as usize;
+            match COS_Q15.get(i..i + 2) {
+                Some(&[a, b]) => u32::from(a as u16) | u32::from(b as u16) << 16,
+                _ => 0,
+            }
+        };
+        let offsets = |p: v128| v128_and(u32x4_shr(p, 19), u32x4_splat(0x1FFE));
+        let cos = offsets(p);
+        let sin = offsets(i32x4_sub(p, u32x4_splat(1 << 30)));
+        // [c a, c b, s a, s b] of samples 0 and 1, then of samples 2 and 3.
+        let e01 = u32x4(
+            pair(u32x4_extract_lane::<0>(cos)),
+            pair(u32x4_extract_lane::<0>(sin)),
+            pair(u32x4_extract_lane::<1>(cos)),
+            pair(u32x4_extract_lane::<1>(sin)),
+        );
+        let e23 = u32x4(
+            pair(u32x4_extract_lane::<2>(cos)),
+            pair(u32x4_extract_lane::<2>(sin)),
+            pair(u32x4_extract_lane::<3>(cos)),
+            pair(u32x4_extract_lane::<3>(sin)),
+        );
+        let a = i16x8_shuffle::<0, 2, 4, 6, 8, 10, 12, 14>(e01, e23);
+        let b = i16x8_shuffle::<1, 3, 5, 7, 9, 11, 13, 15>(e01, e23);
+        let f = v128_and(u32x4_shr(p, 5), u32x4_splat(0x7FFF));
+        let f = v128_or(f, i32x4_shl(f, 16));
+        i16x8_add(a, i16x8_q15mulr_sat(i16x8_sub(b, a), f))
     }
 
     /// `(cos, sin)` as a `CQ15` pair per lane of four phases, with `i16x8.q15mulr_sat_s`.

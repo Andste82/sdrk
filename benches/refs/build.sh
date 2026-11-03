@@ -13,6 +13,7 @@
 # | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, information on `neon` |
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
+# | VOLK generic | 3.3.0 (the `generic` protokernels of `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`, and their 16-bit interleave loop), see volk-generic.c | LGPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one library per level) | the scalar references of the `interleave` and `deinterleave` fallbacks |
 # | VOLK without FMA | 3.3.0 (the protokernel of `volk_32fc_x2_multiply_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | the gate of `mul` `C32` at the levels where VOLK's dispatcher picks a fused implementation (D287) |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 # | GNU Radio `pwr_squelch_cc` | main at ec1bf15 (squelch_base_cc_impl.cc and pwr_squelch_cc_impl of gr-analog), see gr-squelch.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `squelch` |
@@ -149,7 +150,7 @@ stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/airspy-iqconv.c" \
-    "$here/volk-nofma.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/volk-nofma.c" "$here/volk-generic.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -617,6 +618,21 @@ build_volk_nofma() {
     done
 }
 
+# VOLK's generic interleave and deinterleave protokernels (volk-generic.c), one library per level:
+# libvolkgeneric-<level>.a. From the unpacked VOLK release (so it runs after build_volk or
+# build_volk_wasm), compiled with the flags of the other per-level scalar references.
+build_volk_generic() {
+    local entry level march
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        march=${march//,/ }
+        $cc $BIQUAD_OPT $march -I "$work/volk/include" -I "$work/volk/kernels" \
+            -c "$here/volk-generic.c" -o "$work/volk-generic-$level.o"
+        $ar rcs "$prefix/lib/libvolkgeneric-$level.a" "$work/volk-generic-$level.o"
+    done
+}
+
 KISSFFT_FLAGS=""
 GR_AGC_FLAGS=""
 libraries=()
@@ -636,7 +652,8 @@ case $platform in
         build_liquid_halfband
         build_airspy
         build_volk_nofma
-        libraries=(volk fftw kissfft gragc grsquelch grfallback liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma)
+        build_volk_generic
+        libraries=(volk fftw kissfft gragc grsquelch grfallback liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     aarch64)
         build_volk
@@ -654,7 +671,8 @@ case $platform in
         build_liquid_halfband
         build_airspy
         build_volk_nofma
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma)
+        build_volk_generic
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     wasm32)
         build_volk_wasm
@@ -669,7 +687,8 @@ case $platform in
         build_cmsis_dsp
         build_liquid_halfband
         build_airspy
-        libraries=(volk kissfft gragc grsquelch grfallback liquiddc liquidnco kfr wasisysroot emscripten cmsisdsp liquidhb airspy)
+        build_volk_generic
+        libraries=(volk kissfft gragc grsquelch grfallback liquiddc liquidnco kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -704,6 +723,7 @@ esac
             cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c and cmsis-dsp.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
             volknofma) entry="\"volk_nofma\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-nofma.c" | cut -d ' ' -f 1)\", \"build\": \"volk-nofma.c over volk_32fc_x2_multiply_32fc.h ($([ "$platform" = aarch64 ] && echo neon || echo u_avx)): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ' | tr ' ' '\n' | grep -E '^(avx2|avx512|neon):' | tr '\n' ' ' | sed 's/ $//')\" }" ;;
+            volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h and volk_16ic_deinterleave_16i_x2.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
         printf '%s    %s' "$sep" "$entry"

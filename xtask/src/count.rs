@@ -604,6 +604,9 @@ pub enum Reference {
     /// the level (`benches/refs/volk-nofma.c`, D287): the gate of a kernel whose contract
     /// forbids FMA where VOLK's dispatcher picks a fused implementation.
     VolkNoFma,
+    /// VOLK's portable `generic` protokernel, compiled with `-O3 -ffp-contract=off` for the
+    /// level (`benches/refs/volk-generic.c`): the scalar reference of a fallback entry.
+    VolkGeneric,
     /// The loop of a GNU Radio block that is no VOLK kernel (`agc_cc`, `pwr_squelch_cc`),
     /// compiled with the generic flags of GNU Radio's own build.
     GnuRadio,
@@ -645,6 +648,7 @@ impl Reference {
         match self {
             Reference::Volk | Reference::VolkCheapest => "volk",
             Reference::VolkNoFma => "volk-nofma",
+            Reference::VolkGeneric => "volk-generic",
             Reference::GnuRadio => "gnuradio",
             Reference::RustFft => "rustfft",
             Reference::Fftw => "fftw",
@@ -709,6 +713,11 @@ pub enum Family {
     /// for the level, and the gate is CMSIS-DSP's generic C. Not measured at a level with
     /// run-time detection, whose fallback is the baseline build.
     FallbackVsCmsis,
+    /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is VOLK's portable `generic`
+    /// protokernel compiled for the level (`interleave` and `deinterleave`; CMSIS-DSP has no
+    /// interleave). For the `CQ15` interleave, which VOLK lacks, the loop of the `f32` kernel
+    /// on 16-bit values.
+    FallbackVsVolkGeneric,
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is the scalar loop of a GNU
     /// Radio block (`rotate`: `gr::blocks::rotator`, `fm_mod`: `frequency_modulator_fc`,
     /// `deemphasis_fallback`: the IIR loop of `fm_deemph`, `agc`: `agc_cc`, `quad_demod`:
@@ -771,6 +780,7 @@ impl Family {
         matches!(
             self,
             Family::FallbackVsCmsis
+                | Family::FallbackVsVolkGeneric
                 | Family::FallbackVsGnuRadio
                 | Family::FallbackVsLiquid
                 | Family::FallbackHilbert
@@ -854,7 +864,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 172] = [
+pub static KERNELS: [KernelSpec; 176] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1078,6 +1088,22 @@ pub static KERNELS: [KernelSpec; 172] = [
     spec("oscillate_cq15", Family::Own, false),
     spec("oscillate_fallback", Family::FallbackVsCmsis, false),
     spec("oscillate_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("interleave_fallback", Family::FallbackVsVolkGeneric, false),
+    spec(
+        "interleave_cq15_fallback",
+        Family::FallbackVsVolkGeneric,
+        false,
+    ),
+    spec(
+        "deinterleave_fallback",
+        Family::FallbackVsVolkGeneric,
+        false,
+    ),
+    spec(
+        "deinterleave_cq15_fallback",
+        Family::FallbackVsVolkGeneric,
+        false,
+    ),
     fft("fft_64", Family::FftC32, 64),
     fft("fft_1024", Family::FftC32, 1024),
     fft("fft_4096", Family::FftC32, 4096),
@@ -1445,6 +1471,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
             (Reference::Cmsis, Vec::new())
         }
         Family::FftCq15FallbackVsCmsis => (Reference::Cmsis, vec![Reference::KissFft]),
+        Family::FallbackVsVolkGeneric => (Reference::VolkGeneric, Vec::new()),
         Family::Q15Own => (Reference::Fallback, vec![Reference::Cmsis]),
         Family::FallbackVsGnuRadio => (Reference::GnuRadio, vec![Reference::Cmsis]),
         // libairspy's SSE2 converter is the second gate at the level it is written for: the
@@ -4512,6 +4539,24 @@ mod tests {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
                     (Reference::Cmsis, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+            assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        // The `interleave` and `deinterleave` fallbacks against VOLK's `generic` protokernels,
+        // not at `avx2-runtime`.
+        for k in [
+            "interleave_fallback",
+            "interleave_cq15_fallback",
+            "deinterleave_fallback",
+            "deinterleave_cq15_fallback",
+        ] {
+            assert_eq!(kernel(k).family.measured(), "fallback", "{k}");
+            for level in levels {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::VolkGeneric, Vec::new()),
                     "{k} at {level}"
                 );
             }

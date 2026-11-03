@@ -28,6 +28,17 @@ impl Add<C32> for Fallback {
 impl Add<CQ15> for Fallback {
     fn add(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> {
         check3(a, b, out)?;
+        // On wasm32 the `2 n` components run as one real `Q15` stream through `zip_q15` and its
+        // groups of eight (D294); elsewhere the plain loop over the samples. The same saturating
+        // sum of the same components, so the same bits.
+        #[cfg(target_arch = "wasm32")]
+        zip_q15(
+            bytemuck::cast_slice(a),
+            bytemuck::cast_slice(b),
+            bytemuck::cast_slice_mut(out),
+            i16::saturating_add,
+        );
+        #[cfg(not(target_arch = "wasm32"))]
         for ((o, x), y) in out.iter_mut().zip(a).zip(b) {
             *o = CQ15 {
                 re: Q15(x.re.0.saturating_add(y.re.0)),
@@ -219,7 +230,8 @@ impl MulReal<Q15> for Fallback {
     }
 }
 
-fn interleave_impl<T: ComplexSample>(
+/// `interleave` of `G` samples per group where groups are used (see [`interleave_pairs`]).
+fn interleave_impl<T: ComplexSample, const G: usize>(
     re: &[T::Real],
     im: Option<&[T::Real]>,
     out: &mut [T],
@@ -228,9 +240,7 @@ fn interleave_impl<T: ComplexSample>(
     match im {
         Some(im) => {
             check_len(re.len(), im.len())?;
-            for ((o, &r), &i) in out.iter_mut().zip(re).zip(im) {
-                *o = T::new(r, i);
-            }
+            interleave_pairs::<T, G>(re, im, out);
         }
         None => {
             for (o, &r) in out.iter_mut().zip(re) {
@@ -239,6 +249,36 @@ fn interleave_impl<T: ComplexSample>(
         }
     }
     Ok(())
+}
+
+/// `out[i] = (re[i], im[i])` for the common length.
+///
+/// On x86-64 below AVX2 (the levels `sse2` and `sse4.2`) the samples first run in groups of `G`
+/// (eight `C32`, sixteen `CQ15`): LLVM then unrolls the loop over the groups with constant
+/// offsets (`movsd`/`movq` loads, `unpcklps`/`punpcklwd`, 16-byte stores), where the plain loop
+/// interleaves four or eight samples per iteration with the loop overhead on each. The rest,
+/// and every sample on the other targets, goes through the plain loop. Copies, so the same bits.
+#[inline]
+fn interleave_pairs<T: ComplexSample, const G: usize>(
+    re: &[T::Real],
+    im: &[T::Real],
+    out: &mut [T],
+) {
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    let (re, im, out) = {
+        let (re_groups, re_rest) = re.as_chunks::<G>();
+        let (im_groups, im_rest) = im.as_chunks::<G>();
+        let (out_groups, out_rest) = out.as_chunks_mut::<G>();
+        for ((o, r), i) in out_groups.iter_mut().zip(re_groups).zip(im_groups) {
+            for ((o, &r), &i) in o.iter_mut().zip(r).zip(i) {
+                *o = T::new(r, i);
+            }
+        }
+        (re_rest, im_rest, out_rest)
+    };
+    for ((o, &r), &i) in out.iter_mut().zip(re).zip(im) {
+        *o = T::new(r, i);
+    }
 }
 
 fn deinterleave_impl<T: ComplexSample>(
@@ -252,22 +292,32 @@ fn deinterleave_impl<T: ComplexSample>(
     if let Some(im) = &im {
         check_len(input.len(), im.len())?;
     }
-    if let Some(re) = re {
-        for (o, x) in re.iter_mut().zip(input) {
-            *o = x.re();
+    match (re, im) {
+        // One pass over the input for both outputs, as VOLK's `generic` protokernels.
+        (Some(re), Some(im)) => {
+            for ((r, i), x) in re.iter_mut().zip(im.iter_mut()).zip(input) {
+                *r = x.re();
+                *i = x.im();
+            }
         }
-    }
-    if let Some(im) = im {
-        for (o, x) in im.iter_mut().zip(input) {
-            *o = x.im();
+        (Some(re), None) => {
+            for (o, x) in re.iter_mut().zip(input) {
+                *o = x.re();
+            }
         }
+        (None, Some(im)) => {
+            for (o, x) in im.iter_mut().zip(input) {
+                *o = x.im();
+            }
+        }
+        (None, None) => {}
     }
     Ok(())
 }
 
 impl Interleave<C32> for Fallback {
     fn interleave(&self, re: &[f32], im: Option<&[f32]>, out: &mut [C32]) -> Result<()> {
-        interleave_impl(re, im, out)
+        interleave_impl::<C32, 8>(re, im, out)
     }
 
     fn deinterleave(
@@ -282,7 +332,7 @@ impl Interleave<C32> for Fallback {
 
 impl Interleave<CQ15> for Fallback {
     fn interleave(&self, re: &[Q15], im: Option<&[Q15]>, out: &mut [CQ15]) -> Result<()> {
-        interleave_impl(re, im, out)
+        interleave_impl::<CQ15, 16>(re, im, out)
     }
 
     fn deinterleave(
@@ -291,6 +341,28 @@ impl Interleave<CQ15> for Fallback {
         re: Option<&mut [Q15]>,
         im: Option<&mut [Q15]>,
     ) -> Result<()> {
+        // x86-64 below AVX2 (the levels `sse2` and `sse4.2`): both components from one 32-bit
+        // load per sample (the real part the low half, the imaginary part the high half,
+        // little endian). LLVM then takes the imaginary parts with a shift and one pack per
+        // eight samples (`psrad`/`packssdw`, `psrld`/`packusdw`) instead of a chain of shuffles;
+        // on the 32-bit values it cannot fold the halves back into the 16-bit loads of the plain
+        // loop. At AVX2 this form simulates slower (`znver3` 0.26 against 0.23 cycles per
+        // sample) and is not used. An input that is not 4-byte aligned runs the plain loop.
+        // Copies, so the same bits.
+        #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+        let (re, im) = match (re, im, bytemuck::try_cast_slice::<CQ15, u32>(input)) {
+            (Some(re), Some(im), Ok(words)) => {
+                check_len(input.len(), re.len())?;
+                check_len(input.len(), im.len())?;
+                for ((r, i), &w) in re.iter_mut().zip(im.iter_mut()).zip(words) {
+                    let w = w as i32;
+                    *r = Q15(w as i16);
+                    *i = Q15((w >> 16) as i16);
+                }
+                return Ok(());
+            }
+            (re, im, _) => (re, im),
+        };
         deinterleave_impl(input, re, im)
     }
 }

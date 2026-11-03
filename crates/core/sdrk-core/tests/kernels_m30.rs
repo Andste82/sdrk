@@ -307,6 +307,67 @@ fn interleave_and_deinterleave_copy() {
     interleave_roundtrip::<CQ15, _>(&Reference, &re, &im);
 }
 
+/// The grouped and 32-bit forms of the fallbacks (D298) at every length up to three groups and
+/// at every start offset of a buffer, the `CQ15` input also at an odd 2-byte offset (not 4-byte
+/// aligned): the same copies as the reference.
+#[test]
+fn interleave_and_deinterleave_equal_the_reference_at_every_length_and_offset() {
+    let mut rng = Rng(123);
+    let re: Vec<f32> = (0..60).map(|_| rng.f32()).collect();
+    let im: Vec<f32> = (0..60).map(|_| rng.f32()).collect();
+    let qre: Vec<Q15> = (0..60).map(|_| rng.q15()).collect();
+    let qim: Vec<Q15> = (0..60).map(|_| rng.q15()).collect();
+    let packed: Vec<CQ15> = qre
+        .iter()
+        .zip(&qim)
+        .map(|(&r, &i)| CQ15::new(r, i))
+        .collect();
+    // The raw values once more, one `i16` later, so that a pair starts at an odd `i16` index.
+    let raw: Vec<i16> = core::iter::once(0)
+        .chain(packed.iter().flat_map(|c| [c.re.0, c.im.0]))
+        .collect();
+    for off in 0..4 {
+        for n in 0..=(56 - off) {
+            let (r, m) = (&re[off..off + n], &im[off..off + n]);
+            let (mut a, mut b) = (vec![C32::ZERO; n], vec![C32::ZERO; n]);
+            Fallback.interleave(r, Some(m), &mut a).unwrap();
+            Reference.interleave(r, Some(m), &mut b).unwrap();
+            assert_eq!(a, b, "c32 interleave n={n} off={off}");
+            let (mut fr, mut fi) = (vec![0.0f32; n], vec![0.0f32; n]);
+            Fallback
+                .deinterleave(&a, Some(&mut fr), Some(&mut fi))
+                .unwrap();
+            assert_eq!(
+                (&fr[..], &fi[..]),
+                (r, m),
+                "c32 deinterleave n={n} off={off}"
+            );
+
+            let (r, m) = (&qre[off..off + n], &qim[off..off + n]);
+            let (mut a, mut b) = (vec![CQ15::ZERO; n], vec![CQ15::ZERO; n]);
+            Fallback.interleave(r, Some(m), &mut a).unwrap();
+            Reference.interleave(r, Some(m), &mut b).unwrap();
+            assert_eq!(a, b, "cq15 interleave n={n} off={off}");
+            let (mut fr, mut fi) = (vec![Q15(0); n], vec![Q15(0); n]);
+            Fallback
+                .deinterleave(&packed[off..off + n], Some(&mut fr), Some(&mut fi))
+                .unwrap();
+            assert_eq!(
+                (&fr[..], &fi[..]),
+                (r, m),
+                "cq15 deinterleave n={n} off={off}"
+            );
+            // The same pairs read from `raw` at an odd `i16` offset.
+            let odd: &[CQ15] = bytemuck::cast_slice(&raw[2 * off + 1..][..2 * n]);
+            let (mut fr, mut fi) = (vec![Q15(0); n], vec![Q15(0); n]);
+            Fallback
+                .deinterleave(odd, Some(&mut fr), Some(&mut fi))
+                .unwrap();
+            assert_eq!((&fr[..], &fi[..]), (r, m), "cq15 odd n={n} off={off}");
+        }
+    }
+}
+
 fn rate() -> sdrk_core::Rate {
     sdrk_core::Rate::hz(192_000).unwrap()
 }

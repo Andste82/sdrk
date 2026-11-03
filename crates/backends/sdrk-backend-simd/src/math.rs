@@ -14,6 +14,9 @@
 //!
 //! `Q15`, sums: `saturating_add` of the token (`paddsw`, `sqadd`, `i16x8.add_sat_s`).
 //!
+//! Sums and real products run in `whole_zip` (D322): groups of eight vectors, single vectors and
+//! an overlapping last vector; NEON stores each pair of vectors with one `st1` of two registers.
+//!
 //! `Q15`, products of real streams: the rounding high multiplication (`pmulhrsw`, `sqrdmulh`,
 //! `i16x8.q15mulr_sat`) as in `scale`; `pmulhrsw` wraps `-32768 * -32768` to `-32768`, which is
 //! the only lane that gives `0x8000`, so a compare and an exclusive or (a masked blend on
@@ -37,9 +40,13 @@
 //!
 //! `interleave` and `deinterleave`: the paths of `split_x86`, `split_neon` and `split_wasm` do the
 //! whole call (an overlapping last step; calls shorter than one step run the plain loops of the
-//! fallback). Without a path (SSE2 and SSE4.2 for `f32` and for the `Q15` interleave, and every
-//! call with one stream absent) the zips and unzips of the token run, and the rest of the call
-//! the plain loops of the fallback, inside the dispatched function.
+//! fallback) on every level. With one stream absent the zips and unzips of the token run, and
+//! the rest of the call the plain loops of the fallback, inside the dispatched function.
+//!
+//! The element-wise sums and products and the entries of `interleave` and `deinterleave` are
+//! `#[inline]` down to the level paths, and the dispatched function does the whole call: a SIMD
+//! path must be at least as fast as the fallback in simulated cycles on both core models of its
+//! level (D321), and the fallback's loop is inlined into its caller.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
@@ -59,104 +66,249 @@ fn check3(a: usize, b: usize, out: usize) -> Result<()> {
     check_len(a, out)
 }
 
-// f32 sums and products (also the components of C32 sums)
+// f32 sums and products (also the components of C32 sums) and Q15 sums
 
-/// One vector of `a + b` or `a * b`.
+/// A whole element-wise call `out[i] = f(a[i], b[i])` of `l` lanes per vector (`group` does
+/// eight vectors, `vector` one, `scalar` one value): groups of eight vectors with constant
+/// offsets from one index, single vectors, and a last vector that overlaps the one before it
+/// where the length is not a multiple of `l` (the values it writes again are the same: `out`
+/// cannot alias the inputs); calls shorter than one vector run `scalar`, value for value as the
+/// fallback. The whole call runs here, so the remainder costs a few compares instead of a loop
+/// of its own (D322: the fixed cost per call decided whether the path beat the fallback's loop
+/// in simulated cycles).
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the lint counts the slices and closures of the inlined body before optimization; \
+              the loops keep them in registers"
+)]
 #[inline(always)]
-fn vop<S: SimdToken, const MUL: bool>(simd: S, a: &[f32], b: &[f32], o: &mut [f32]) {
-    let (x, y) = (S::f32s::from_slice(simd, a), S::f32s::from_slice(simd, b));
-    if MUL { x * y } else { x + y }.store_slice(o);
+fn whole_zip<E: Copy>(
+    l: usize,
+    a: &[E],
+    b: &[E],
+    out: &mut [E],
+    group: impl Fn(&[E], &[E], &mut [E]),
+    vector: impl Fn(&[E], &[E], &mut [E]),
+    scalar: impl Fn(E, E) -> E,
+) {
+    let n = out.len().min(a.len()).min(b.len());
+    let ((a, _), (b, _), (out, _)) = (a.split_at(n), b.split_at(n), out.split_at_mut(n));
+    if n < l {
+        for ((o, &x), &y) in out.iter_mut().zip(a).zip(b) {
+            *o = scalar(x, y);
+        }
+        return;
+    }
+    let step = 8 * l;
+    let g = n / step * step;
+    let k = n / l * l;
+    {
+        let ((ag, ar), (bg, br), (og, or)) = (a.split_at(g), b.split_at(g), out.split_at_mut(g));
+        for ((a, b), o) in ag
+            .chunks_exact(step)
+            .zip(bg.chunks_exact(step))
+            .zip(og.chunks_exact_mut(step))
+        {
+            group(a, b, o);
+        }
+        let ((ar, _), (br, _), (or, _)) = (
+            ar.split_at(k - g),
+            br.split_at(k - g),
+            or.split_at_mut(k - g),
+        );
+        for ((a, b), o) in ar
+            .chunks_exact(l)
+            .zip(br.chunks_exact(l))
+            .zip(or.chunks_exact_mut(l))
+        {
+            vector(a, b, o);
+        }
+    }
+    if k < n {
+        let ((_, a), (_, b), (_, o)) = (
+            a.split_at(n - l),
+            b.split_at(n - l),
+            out.split_at_mut(n - l),
+        );
+        vector(a, b, o);
+    }
+}
+
+/// [`whole_zip`] with the vectors of the token: a group is eight single vectors.
+#[inline(always)]
+fn whole_zip_token<E: Copy>(
+    l: usize,
+    a: &[E],
+    b: &[E],
+    out: &mut [E],
+    vector: impl Fn(&[E], &[E], &mut [E]),
+    scalar: impl Fn(E, E) -> E,
+) {
+    whole_zip(
+        l,
+        a,
+        b,
+        out,
+        |a, b, o| {
+            for ((a, b), o) in a
+                .chunks_exact(l)
+                .zip(b.chunks_exact(l))
+                .zip(o.chunks_exact_mut(l))
+            {
+                vector(a, b, o);
+            }
+        },
+        &vector,
+        scalar,
+    );
 }
 
 /// `out = a + b` (`MUL = false`) or `a * b` (`MUL = true`) of every float.
 #[inline(always)]
 fn zip_f32<S: SimdToken, const MUL: bool>(simd: S, a: &[f32], b: &[f32], out: &mut [f32]) {
-    let l = S::f32s::LEN;
-    let step = 8 * l;
-    let n = a.len().min(b.len()).min(out.len());
-    let k = n / step * step;
-    let (ah, at) = a.split_at(k);
-    let (bh, bt) = b.split_at(k);
-    let (oh, ot) = out.split_at_mut(k);
-    for ((a, b), o) in ah
-        .chunks_exact(step)
-        .zip(bh.chunks_exact(step))
-        .zip(oh.chunks_exact_mut(step))
-    {
-        for ((a, b), o) in a
-            .chunks_exact(l)
-            .zip(b.chunks_exact(l))
-            .zip(o.chunks_exact_mut(l))
-        {
-            vop::<S, MUL>(simd, a, b, o);
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = simd.level().as_neon() {
+        if MUL {
+            zip_neon::mul_f32(t, a, b, out);
+        } else {
+            zip_neon::add_f32(t, a, b, out);
         }
+        return;
     }
-    let mut at = at.chunks_exact(l);
-    let mut bt = bt.chunks_exact(l);
-    let mut ot = ot.chunks_exact_mut(l);
-    for ((a, b), o) in (&mut at).zip(&mut bt).zip(&mut ot) {
-        vop::<S, MUL>(simd, a, b, o);
-    }
-    for ((a, b), o) in at
-        .remainder()
-        .iter()
-        .zip(bt.remainder())
-        .zip(ot.into_remainder())
-    {
-        *o = if MUL { *a * *b } else { *a + *b };
-    }
+    whole_zip_token(
+        S::f32s::LEN,
+        a,
+        b,
+        out,
+        |a, b, o| {
+            let (x, y) = (S::f32s::from_slice(simd, a), S::f32s::from_slice(simd, b));
+            if MUL { x * y } else { x + y }.store_slice(o);
+        },
+        |x, y| if MUL { x * y } else { x + y },
+    );
 }
 
-dispatch_fn!(fn run_add_f32(a: &[f32], b: &[f32], out: &mut [f32]) => zip_f32::<_, false>);
-dispatch_fn!(fn run_mul_f32(a: &[f32], b: &[f32], out: &mut [f32]) => zip_f32::<_, true>);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_add_f32(a: &[f32], b: &[f32], out: &mut [f32]) => zip_f32::<_, false>);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_mul_f32(a: &[f32], b: &[f32], out: &mut [f32]) => zip_f32::<_, true>);
 
-// Q15 sums
-
-#[inline(always)]
-fn vadd_i16<S: SimdToken>(simd: S, a: &[i16], b: &[i16], o: &mut [i16]) {
-    let (x, y) = (S::i16s::from_slice(simd, a), S::i16s::from_slice(simd, b));
-    x.saturating_add(y).store_slice(o);
-}
-
+/// `out = a + b` of every `Q15` value, saturating (`saturating_add` of the token: `paddsw`,
+/// `sqadd`, `i16x8.add_sat_s`).
 #[inline(always)]
 fn add_i16<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) {
-    let l = S::i16s::LEN;
-    let step = 8 * l;
-    let n = a.len().min(b.len()).min(out.len());
-    let k = n / step * step;
-    let (ah, at) = a.split_at(k);
-    let (bh, bt) = b.split_at(k);
-    let (oh, ot) = out.split_at_mut(k);
-    for ((a, b), o) in ah
-        .chunks_exact(step)
-        .zip(bh.chunks_exact(step))
-        .zip(oh.chunks_exact_mut(step))
-    {
-        for ((a, b), o) in a
-            .chunks_exact(l)
-            .zip(b.chunks_exact(l))
-            .zip(o.chunks_exact_mut(l))
-        {
-            vadd_i16(simd, a, b, o);
-        }
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = simd.level().as_neon() {
+        zip_neon::add_i16(t, a, b, out);
+        return;
     }
-    let mut at = at.chunks_exact(l);
-    let mut bt = bt.chunks_exact(l);
-    let mut ot = ot.chunks_exact_mut(l);
-    for ((a, b), o) in (&mut at).zip(&mut bt).zip(&mut ot) {
-        vadd_i16(simd, a, b, o);
-    }
-    for ((a, b), o) in at
-        .remainder()
-        .iter()
-        .zip(bt.remainder())
-        .zip(ot.into_remainder())
-    {
-        *o = a.saturating_add(*b);
-    }
+    whole_zip_token(
+        S::i16s::LEN,
+        a,
+        b,
+        out,
+        |a, b, o| {
+            let (x, y) = (S::i16s::from_slice(simd, a), S::i16s::from_slice(simd, b));
+            x.saturating_add(y).store_slice(o);
+        },
+        i16::saturating_add,
+    );
 }
 
-dispatch_fn!(fn run_add_i16(a: &[i16], b: &[i16], out: &mut [i16]) => add_i16);
+/// The NEON paths of the element-wise sums and products: [`whole_zip`] with the groups taken in
+/// pairs of vectors, each operand loaded by two plain loads (which LLVM pairs into one `ldp`)
+/// and the pair stored by one `st1` of two registers (`vst1q_f32_x2`, `vst1q_s16_x2`). LLVM stores the token's pairs with
+/// single `str` (or `stp`), which the `cortex-a76` model (`neoverse-n1`) rates at four (six)
+/// micro-ops against four of `st1`; the plain loop of the fallback was faster there (D322).
+/// The same `fadd`, `fmul` and `sqadd` of the same lanes, so the same bits.
+#[cfg(target_arch = "aarch64")]
+#[allow(unsafe_code)]
+mod zip_neon {
+    use core::arch::aarch64::{
+        float32x4x2_t, int16x8x2_t, vaddq_f32, vld1q_f32, vld1q_s16, vmulq_f32, vqaddq_s16,
+        vst1q_f32, vst1q_f32_x2, vst1q_s16, vst1q_s16_x2,
+    };
+
+    use super::whole_zip;
+
+    /// One kernel: `$op` on `$v` lanes of `$e` loaded by `$ld`, stored by `$st` (one vector)
+    /// and `$st2` (two vectors).
+    macro_rules! zip_kernel {
+        ($name:ident, $e:ty, $v:literal, $ld:ident, $st:ident, $st2:ident, $pair:ident, $op:ident, $scalar:expr) => {
+            fearless_simd::kernel!(
+                #[inline(always)]
+                pub(super) fn $name(_t: Neon, a: &[$e], b: &[$e], out: &mut [$e]) {
+                    whole_zip(
+                        $v,
+                        a,
+                        b,
+                        out,
+                        |a: &[$e], b: &[$e], o: &mut [$e]| {
+                            for ((a, b), o) in a
+                                .chunks_exact(2 * $v)
+                                .zip(b.chunks_exact(2 * $v))
+                                .zip(o.chunks_exact_mut(2 * $v))
+                            {
+                                // SAFETY: `a` and `b` are the `2 $v` values that the four loads
+                                // read and `o` the `2 $v` that the store writes (chunks of
+                                // exactly that length).
+                                unsafe {
+                                    let (pa, pb) = (a.as_ptr(), b.as_ptr());
+                                    let x0 = $ld(pa);
+                                    let x1 = $ld(pa.add($v));
+                                    let y0 = $ld(pb);
+                                    let y1 = $ld(pb.add($v));
+                                    $st2(o.as_mut_ptr(), $pair($op(x0, y0), $op(x1, y1)));
+                                }
+                            }
+                        },
+                        |a: &[$e], b: &[$e], o: &mut [$e]| {
+                            assert!(a.len() >= $v && b.len() >= $v && o.len() >= $v);
+                            // SAFETY: `a` and `b` hold the `$v` values that the loads read and
+                            // `o` the `$v` that the store writes (asserted above).
+                            unsafe { $st(o.as_mut_ptr(), $op($ld(a.as_ptr()), $ld(b.as_ptr()))) }
+                        },
+                        $scalar,
+                    );
+                }
+            );
+        };
+    }
+
+    zip_kernel!(
+        add_f32,
+        f32,
+        4,
+        vld1q_f32,
+        vst1q_f32,
+        vst1q_f32_x2,
+        float32x4x2_t,
+        vaddq_f32,
+        |x: f32, y: f32| x + y
+    );
+    zip_kernel!(
+        mul_f32,
+        f32,
+        4,
+        vld1q_f32,
+        vst1q_f32,
+        vst1q_f32_x2,
+        float32x4x2_t,
+        vmulq_f32,
+        |x: f32, y: f32| x * y
+    );
+    zip_kernel!(
+        add_i16,
+        i16,
+        8,
+        vld1q_s16,
+        vst1q_s16,
+        vst1q_s16_x2,
+        int16x8x2_t,
+        vqaddq_s16,
+        i16::saturating_add
+    );
+}
+
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_add_i16(a: &[i16], b: &[i16], out: &mut [i16]) => add_i16);
 
 // C32 product
 
@@ -670,7 +822,6 @@ mod split_scalar {
 /// [`split_scalar::int`]. So the path does every sample and the caller has no rest to do.
 #[cfg(any(
     target_arch = "x86_64",
-    target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 macro_rules! whole_int {
@@ -738,15 +889,16 @@ macro_rules! whole_deint {
 #[cfg(target_arch = "x86_64")]
 mod split_x86 {
     use core::arch::x86_64::{
-        __m128i, _mm_setr_epi8, _mm_shuffle_epi8, _mm_unpackhi_epi16, _mm_unpackhi_epi64,
-        _mm_unpacklo_epi16, _mm_unpacklo_epi64, _mm256_blend_epi32, _mm256_castpd_ps,
-        _mm256_castps_pd, _mm256_permute2f128_ps, _mm256_permute2x128_si256,
+        __m128i, _mm_madd_epi16, _mm_packs_epi32, _mm_set1_epi32, _mm_setr_epi8, _mm_shuffle_epi8,
+        _mm_shuffle_ps, _mm_srai_epi32, _mm_unpackhi_epi16, _mm_unpackhi_epi64, _mm_unpackhi_ps,
+        _mm_unpacklo_epi16, _mm_unpacklo_epi64, _mm_unpacklo_ps, _mm256_blend_epi32,
+        _mm256_castpd_ps, _mm256_castps_pd, _mm256_permute2f128_ps, _mm256_permute2x128_si256,
         _mm256_permute4x64_epi64, _mm256_permute4x64_pd, _mm256_setr_epi8, _mm256_shuffle_epi8,
         _mm256_shuffle_ps, _mm256_unpackhi_epi16, _mm256_unpackhi_ps, _mm256_unpacklo_epi16,
         _mm256_unpacklo_ps, _mm512_permutex2var_epi16, _mm512_permutex2var_ps,
     };
     use fearless_simd::prelude::*;
-    use fearless_simd::{f32x8, f32x16, i16x8, i16x16, i16x32, i32x16};
+    use fearless_simd::{f32x4, f32x8, f32x16, i16x8, i16x16, i16x32, i32x16};
 
     use super::split_scalar;
 
@@ -775,6 +927,25 @@ mod split_x86 {
                         let (o0, o1) = o.split_at_mut(8);
                         f32x8::simd_from(t, _mm256_permute2f128_ps::<0x20>(lo, hi)).store_slice(o0);
                         f32x8::simd_from(t, _mm256_permute2f128_ps::<0x31>(lo, hi)).store_slice(o1);
+                    }
+                );
+            }
+        );
+
+        fearless_simd::kernel!(
+            pub(crate) fn sse2(t: Sse2, re: &[f32], im: &[f32], out: &mut [f32]) {
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    4,
+                    8,
+                    |r: &[f32; 4], i: &[f32; 4], o: &mut [f32; 8]| {
+                        let r = f32x4::from_slice(t, r).into();
+                        let i = f32x4::from_slice(t, i).into();
+                        let (o0, o1) = o.split_at_mut(4);
+                        f32x4::simd_from(t, _mm_unpacklo_ps(r, i)).store_slice(o0);
+                        f32x4::simd_from(t, _mm_unpackhi_ps(r, i)).store_slice(o1);
                     }
                 );
             }
@@ -989,6 +1160,25 @@ mod split_x86 {
                 );
             }
         );
+
+        fearless_simd::kernel!(
+            pub(crate) fn sse2(t: Sse2, input: &[f32], re: &mut [f32], im: &mut [f32]) {
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    4,
+                    8,
+                    |c: &[f32; 8], r: &mut [f32; 4], i: &mut [f32; 4]| {
+                        let (a, b) = c.split_at(4);
+                        let a = f32x4::from_slice(t, a).into();
+                        let b = f32x4::from_slice(t, b).into();
+                        f32x4::simd_from(t, _mm_shuffle_ps::<0x88>(a, b)).store_slice(r);
+                        f32x4::simd_from(t, _mm_shuffle_ps::<0xDD>(a, b)).store_slice(i);
+                    }
+                );
+            }
+        );
     }
 
     pub(super) mod int_i16 {
@@ -1016,6 +1206,25 @@ mod split_x86 {
                             .store_slice(o0);
                         i16x16::simd_from(t, _mm256_permute2x128_si256::<0x31>(lo, hi))
                             .store_slice(o1);
+                    }
+                );
+            }
+        );
+
+        fearless_simd::kernel!(
+            pub(crate) fn sse2(t: Sse2, re: &[i16], im: &[i16], out: &mut [i16]) {
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    8,
+                    16,
+                    |r: &[i16; 8], i: &[i16; 8], o: &mut [i16; 16]| {
+                        let r = i16x8::from_slice(t, r).into();
+                        let i = i16x8::from_slice(t, i).into();
+                        let (o0, o1) = o.split_at_mut(8);
+                        i16x8::simd_from(t, _mm_unpacklo_epi16(r, i)).store_slice(o0);
+                        i16x8::simd_from(t, _mm_unpackhi_epi16(r, i)).store_slice(o1);
                     }
                 );
             }
@@ -1086,6 +1295,13 @@ mod split_x86 {
 
         fearless_simd::kernel!(
             pub(crate) fn sse2(t: Sse2, input: &[i16], re: &mut [i16], im: &mut [i16]) {
+                // `pmaddwd` with `(1, 0)` per pair is the real part sign-extended to 32 bits
+                // (`re * 1 + im * 0`, exact), the arithmetic shift by 16 the imaginary part;
+                // `packssdw` packs both back without saturating anything. Two multiplications,
+                // two shifts and two packs per eight samples: the three rounds of unpacks, which
+                // LLVM turns into shifts and packs of both parts, kept the one shift pipe of
+                // `znver2` busy (0.76 cycles per sample against 0.64 of the fallback; D323).
+                let real = _mm_set1_epi32(1);
                 whole_deint!(
                     input,
                     re,
@@ -1096,11 +1312,10 @@ mod split_x86 {
                         let (a, b) = c.split_at(8);
                         let a: __m128i = i16x8::from_slice(t, a).into();
                         let b: __m128i = i16x8::from_slice(t, b).into();
-                        // Three rounds of unpacks sort the even and the odd values.
-                        let (t0, t1) = (_mm_unpacklo_epi16(a, b), _mm_unpackhi_epi16(a, b));
-                        let (u0, u1) = (_mm_unpacklo_epi16(t0, t1), _mm_unpackhi_epi16(t0, t1));
-                        i16x8::simd_from(t, _mm_unpacklo_epi16(u0, u1)).store_slice(r);
-                        i16x8::simd_from(t, _mm_unpackhi_epi16(u0, u1)).store_slice(i);
+                        let (ra, rb) = (_mm_madd_epi16(a, real), _mm_madd_epi16(b, real));
+                        i16x8::simd_from(t, _mm_packs_epi32(ra, rb)).store_slice(r);
+                        let (ia, ib) = (_mm_srai_epi32::<16>(a), _mm_srai_epi32::<16>(b));
+                        i16x8::simd_from(t, _mm_packs_epi32(ia, ib)).store_slice(i);
                     }
                 );
             }
@@ -1109,7 +1324,11 @@ mod split_x86 {
 }
 
 /// The NEON paths of `interleave` and `deinterleave`: `ld2` and `st2` deinterleave and
-/// interleave while loading and storing; each does the whole call as on x86.
+/// interleave while loading and storing; each does the whole call as on x86. The groups of eight
+/// steps of `interleave` are one `asm!` block of plain loads and `st2` (D324): from the
+/// intrinsics LLVM pairs the loads of neighbouring steps into `ldp`, three micro-ops each on the
+/// `cortex-a72` model against one per `ldr`, and the group then took 1.06 cycles per sample
+/// against 1.01 of the fallback's loop (which reuses its registers, so LLVM pairs nothing there).
 #[cfg(target_arch = "aarch64")]
 #[allow(unsafe_code)]
 mod split_neon {
@@ -1117,17 +1336,117 @@ mod split_neon {
         float32x4x2_t, int16x8x2_t, vld1q_f32, vld1q_s16, vld2q_f32, vld2q_s16, vst1q_f32,
         vst1q_s16, vst2q_f32, vst2q_s16,
     };
+    use core::arch::asm;
 
     use super::split_scalar;
 
+    /// Eight steps of `interleave` in one block: from `$r` and `$i` 128 bytes each (eight
+    /// vectors), to `$o` 256 bytes, `$t` the arrangement of the lanes (`4s`, `8h`). Plain `ldr`
+    /// with the offset in the instruction, `st2` at the address of the step (one `add` each),
+    /// the registers `v16` to `v23` in turn.
+    macro_rules! group_st2 {
+        ($t:literal, $r:expr, $i:expr, $o:expr) => {
+            asm!(
+                "ldr q16, [{r}]",
+                "ldr q17, [{i}]",
+                concat!("st2 {{ v16.", $t, ", v17.", $t, " }}, [{o}]"),
+                "ldr q18, [{r}, #16]",
+                "ldr q19, [{i}, #16]",
+                "add {a}, {o}, #32",
+                concat!("st2 {{ v18.", $t, ", v19.", $t, " }}, [{a}]"),
+                "ldr q20, [{r}, #32]",
+                "ldr q21, [{i}, #32]",
+                "add {a}, {o}, #64",
+                concat!("st2 {{ v20.", $t, ", v21.", $t, " }}, [{a}]"),
+                "ldr q22, [{r}, #48]",
+                "ldr q23, [{i}, #48]",
+                "add {a}, {o}, #96",
+                concat!("st2 {{ v22.", $t, ", v23.", $t, " }}, [{a}]"),
+                "ldr q16, [{r}, #64]",
+                "ldr q17, [{i}, #64]",
+                "add {a}, {o}, #128",
+                concat!("st2 {{ v16.", $t, ", v17.", $t, " }}, [{a}]"),
+                "ldr q18, [{r}, #80]",
+                "ldr q19, [{i}, #80]",
+                "add {a}, {o}, #160",
+                concat!("st2 {{ v18.", $t, ", v19.", $t, " }}, [{a}]"),
+                "ldr q20, [{r}, #96]",
+                "ldr q21, [{i}, #96]",
+                "add {a}, {o}, #192",
+                concat!("st2 {{ v20.", $t, ", v21.", $t, " }}, [{a}]"),
+                "ldr q22, [{r}, #112]",
+                "ldr q23, [{i}, #112]",
+                "add {a}, {o}, #224",
+                concat!("st2 {{ v22.", $t, ", v23.", $t, " }}, [{a}]"),
+                r = in(reg) $r,
+                i = in(reg) $i,
+                o = in(reg) $o,
+                a = out(reg) _,
+                out("v16") _,
+                out("v17") _,
+                out("v18") _,
+                out("v19") _,
+                out("v20") _,
+                out("v21") _,
+                out("v22") _,
+                out("v23") _,
+                options(nostack, preserves_flags),
+            )
+        };
+    }
+
+    /// `whole_int` with the groups of eight steps of `group_st2`: `$v` samples per step
+    /// (16 bytes of each input), `$step` one step by the intrinsics.
+    macro_rules! whole_int_st2 {
+        ($re:expr, $im:expr, $out:expr, $v:literal, $t:literal, $step:expr) => {{
+            let n = $re.len().min($im.len()).min($out.len() / 2);
+            let ((re, _), (im, _), (out, _)) =
+                ($re.split_at(n), $im.split_at(n), $out.split_at_mut(2 * n));
+            if n < $v {
+                split_scalar::int(re, im, out);
+            } else {
+                let step = $step;
+                let g = n / (8 * $v) * (8 * $v);
+                let ((rg, rr), (ig, ir), (og, or)) =
+                    (re.split_at(g), im.split_at(g), out.split_at_mut(2 * g));
+                for ((r, i), o) in rg
+                    .chunks_exact(8 * $v)
+                    .zip(ig.chunks_exact(8 * $v))
+                    .zip(og.chunks_exact_mut(16 * $v))
+                {
+                    // SAFETY: `r` and `i` are the eight vectors (128 bytes) that the block reads
+                    // and `o` the 256 bytes that it writes; the block touches no other memory,
+                    // no stack and no flags, and clobbers only the registers it names.
+                    unsafe { group_st2!($t, r.as_ptr(), i.as_ptr(), o.as_mut_ptr()) }
+                }
+                let (rs, _) = rr.as_chunks::<$v>();
+                let (is, _) = ir.as_chunks::<$v>();
+                let (os, _) = or.as_chunks_mut::<{ 2 * $v }>();
+                for ((r, i), o) in rs.iter().zip(is).zip(os) {
+                    step(r, i, o);
+                }
+                if n % $v != 0 {
+                    if let (Some(r), Some(i), Some(o)) = (
+                        re.last_chunk::<$v>(),
+                        im.last_chunk::<$v>(),
+                        out.last_chunk_mut::<{ 2 * $v }>(),
+                    ) {
+                        step(r, i, o);
+                    }
+                }
+            }
+        }};
+    }
+
     fearless_simd::kernel!(
+        #[inline]
         pub(super) fn int_f32(_t: Neon, re: &[f32], im: &[f32], out: &mut [f32]) {
-            whole_int!(
+            whole_int_st2!(
                 re,
                 im,
                 out,
                 4,
-                8,
+                "4s",
                 |r: &[f32; 4], i: &[f32; 4], o: &mut [f32; 8]| {
                     // SAFETY: `r` and `i` are the 4 values that `vld1q_f32` reads and `o` the 8 that
                     // `vst2q_f32` writes.
@@ -1164,13 +1483,14 @@ mod split_neon {
     );
 
     fearless_simd::kernel!(
+        #[inline]
         pub(super) fn int_i16(_t: Neon, re: &[i16], im: &[i16], out: &mut [i16]) {
-            whole_int!(
+            whole_int_st2!(
                 re,
                 im,
                 out,
                 8,
-                16,
+                "8h",
                 |r: &[i16; 8], i: &[i16; 8], o: &mut [i16; 16]| {
                     // SAFETY: `r` and `i` are the 8 values that `vld1q_s16` reads and `o` the 16 that
                     // `vst2q_s16` writes.
@@ -1363,11 +1683,13 @@ level_paths!(
     int_f32_level, deint_f32_level, f32,
     x86_int: [
         as_avx512 => split_x86::int_f32_512::avx512,
-        as_avx2 => split_x86::int_f32::avx2
+        as_avx2 => split_x86::int_f32::avx2,
+        as_sse2 => split_x86::int_f32::sse2
     ],
     x86_deint: [
         as_avx512 => split_x86::deint_f32_512::avx512,
-        as_avx2 => split_x86::deint_f32::avx2
+        as_avx2 => split_x86::deint_f32::avx2,
+        as_sse2 => split_x86::deint_f32::sse2
     ],
     neon: split_neon::int_f32, split_neon::deint_f32,
     wasm: split_wasm::int_f32, split_wasm::deint_f32
@@ -1376,7 +1698,8 @@ level_paths!(
     int_i16_level, deint_i16_level, i16,
     x86_int: [
         as_avx512 => split_x86::int_i16_512::avx512,
-        as_avx2 => split_x86::int_i16::avx2
+        as_avx2 => split_x86::int_i16::avx2,
+        as_sse2 => split_x86::int_i16::sse2
     ],
     x86_deint: [
         as_avx512 => split_x86::deint_i16_512::avx512,
@@ -1454,8 +1777,8 @@ macro_rules! interleave_kernel {
 interleave_kernel!(interleave_f32, f32s, f32, 0.0, int_f32_level);
 interleave_kernel!(interleave_i16, i16s, i16, 0, int_i16_level);
 
-dispatch_fn!(fn run_interleave_f32(re: &[f32], im: Option<&[f32]>, out: &mut [f32]) => interleave_f32);
-dispatch_fn!(fn run_interleave_i16(re: &[i16], im: Option<&[i16]>, out: &mut [i16]) => interleave_i16);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_interleave_f32(re: &[f32], im: Option<&[f32]>, out: &mut [f32]) => interleave_f32);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_interleave_i16(re: &[i16], im: Option<&[i16]>, out: &mut [i16]) => interleave_i16);
 
 /// The real and imaginary parts of `input` (two values per sample) into the outputs given:
 /// whole vectors of samples by the path of the level (both outputs) or the unzips of the token,
@@ -1533,8 +1856,8 @@ macro_rules! deinterleave_kernel {
 deinterleave_kernel!(deinterleave_f32, f32s, f32, deint_f32_level);
 deinterleave_kernel!(deinterleave_i16, i16s, i16, deint_i16_level);
 
-dispatch_fn!(fn run_deinterleave_f32(input: &[f32], re: Option<&mut [f32]>, im: Option<&mut [f32]>) => deinterleave_f32);
-dispatch_fn!(fn run_deinterleave_i16(input: &[i16], re: Option<&mut [i16]>, im: Option<&mut [i16]>) => deinterleave_i16);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_deinterleave_f32(input: &[f32], re: Option<&mut [f32]>, im: Option<&mut [f32]>) => deinterleave_f32);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_deinterleave_i16(input: &[i16], re: Option<&mut [i16]>, im: Option<&mut [i16]>) => deinterleave_i16);
 
 // The kernels
 
@@ -1551,7 +1874,13 @@ macro_rules! finish3 {
     }};
 }
 
+// The entries whose whole call runs in the dispatched function are `#[inline]`: inlined into
+// the caller, the call to the dispatched function takes its six arguments in registers and
+// no frame of the entry is built around it (D322). Not on wasm32, where the engine counts the
+// inlined dispatch as more instructions per call (`simd128` fuel).
+
 impl Add<C32> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn add(&self, a: &[C32], b: &[C32], out: &mut [C32]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
         run_add_f32(
@@ -1564,6 +1893,7 @@ impl Add<C32> for Simd {
 }
 
 impl Add<CQ15> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn add(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
         run_add_i16(
@@ -1576,6 +1906,7 @@ impl Add<CQ15> for Simd {
 }
 
 impl AddReal<f32> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn add_real(&self, a: &[f32], b: &[f32], out: &mut [f32]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
         run_add_f32(a, b, out);
@@ -1584,6 +1915,7 @@ impl AddReal<f32> for Simd {
 }
 
 impl AddReal<Q15> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn add_real(&self, a: &[Q15], b: &[Q15], out: &mut [Q15]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
         run_add_i16(
@@ -1596,6 +1928,7 @@ impl AddReal<Q15> for Simd {
 }
 
 impl Mul<C32> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn mul(&self, a: &[C32], b: &[C32], out: &mut [C32]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
         run_mul_c32(
@@ -1622,6 +1955,7 @@ impl Mul<CQ15> for Simd {
 }
 
 impl MulReal<f32> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn mul_real(&self, a: &[f32], b: &[f32], out: &mut [f32]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
         run_mul_f32(a, b, out);
@@ -1644,6 +1978,7 @@ impl MulReal<Q15> for Simd {
 }
 
 impl Interleave<C32> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn interleave(&self, re: &[f32], im: Option<&[f32]>, out: &mut [C32]) -> Result<()> {
         check_len(re.len(), out.len())?;
         if let Some(im) = im {
@@ -1653,6 +1988,7 @@ impl Interleave<C32> for Simd {
         Ok(())
     }
 
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn deinterleave(
         &self,
         input: &[C32],
@@ -1671,6 +2007,7 @@ impl Interleave<C32> for Simd {
 }
 
 impl Interleave<CQ15> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn interleave(&self, re: &[Q15], im: Option<&[Q15]>, out: &mut [CQ15]) -> Result<()> {
         check_len(re.len(), out.len())?;
         if let Some(im) = im {
@@ -1684,6 +2021,7 @@ impl Interleave<CQ15> for Simd {
         Ok(())
     }
 
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn deinterleave(
         &self,
         input: &[CQ15],

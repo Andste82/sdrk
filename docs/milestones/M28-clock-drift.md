@@ -1,6 +1,6 @@
 # M28 — Clock drift between devices
 
-> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M25.1](M25.1-release-0.1.md) · Next: [M29](M29-real-decimation.md)
+> Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M25.1](M25.1-release-0.1.md) · Next: [M29](M29-primitive-blocks.md)
 
 ## Goal
 
@@ -203,7 +203,7 @@ impl PipelineDrift {
 
 ### 4. Testkit simulation (`sdrk-testkit`, module `drift.rs`, feature `std` not required)
 
-`TwoClockSim::new(rate_hz, drift_ppm, buffer_capacity, consumer_block, jitter_seed)` simulates a producer whose output rate is `rate_hz · (1 + (drift_ppm + ppm_set)·1e-6)` and a consumer that takes `consumer_block` samples every `consumer_block / rate_hz` seconds with a uniformly distributed jitter of ±20 % of that period (PCG32 with `jitter_seed`). `step()` advances to the next consumer call and returns `(now_s, fill)`; `set_ppm(p)` applies the controller output. It reports `overruns` and `underruns` (fill above capacity or below 0). It works on fill counts only, no samples, so two hours simulate in well under a second.
+`TwoClockSim::new(rate_hz, drift_ppm, buffer_capacity, consumer_block, jitter_seed)` simulates a producer whose output rate is `rate_hz · (1 + (drift_ppm + ppm_set)·1e-6)` and a consumer that takes `consumer_block` samples every `consumer_block / rate_hz` seconds with a uniformly distributed jitter of ±20 % of that period (PCG32 with `jitter_seed`); the jitter shifts each call time around its exact nominal moment `k·consumer_block/rate_hz` and does not accumulate (D308: accumulated jitter is a random walk of tens of thousands of samples that no controller can follow). `step()` advances to the next consumer call and returns `(now_s, fill)`; `set_ppm(p)` applies the controller output. It reports `overruns` and `underruns` (fill above capacity or below 0). It works on fill counts only, no samples, so two hours simulate in well under a second.
 
 ### 5. Example
 
@@ -211,9 +211,9 @@ The YAML twin of `examples/flows/resample_audio.yaml` gets a comment block on cl
 
 ## Tests
 
-1. **Convergence (TwoClockSim, 48 kHz, capacity 9600, target 4800, block 480, defaults):** for drifts −100, −20, 0, +20 and +100 ppm (seed 462): no overrun or underrun over 2 h of simulated time; after `5·τ` the fill stays within `target ± 0.002·fs` (2 ms) and the output stays within `−drift ± 1` ppm; the largest change of the output between two calls is at most `slew·dt` + 1e-9.
-2. **Step:** a drift that jumps from 0 to +100 ppm after 10 min: no overrun, re-settled within `5·τ`.
-3. **Limits:** a drift of 2000 ppm (beyond `max_ppm`) saturates at `−max_ppm` and the integrator does not wind up: when the drift returns to 0 the output leaves the limit within `2·τ`.
+1. **Convergence (TwoClockSim, 48 kHz, capacity 9600, target 4800, block 480, defaults):** for drifts −100, −20, 0, +20 and +100 ppm (seed 462): no overrun or underrun over 2 h of simulated time; after `5·τ` the mean fill error stays within `± 0.002·fs` (2 ms) and the mean output within `−drift ± 1` ppm, the peak fill error within `0.0025·fs` and the peak output ripple within 30 ppm (the call-time jitter of the simulation alone moves the fill by up to `0.002·fs`, see D310); the largest change of the output between two calls is at most `slew·dt` + 1e-9.
+2. **Step:** a drift that jumps from 0 to +100 ppm after 10 min: no overrun, re-settled within `5·τ` (the bounds of test 1, counted from `5·τ` after the step).
+3. **Limits:** a drift of 2000 ppm (beyond `max_ppm`) saturates at `−max_ppm` and the integrator does not wind up: when the drift returns to 0 the output leaves the limit within `2·τ` plus the time the excess fill needs to drain at `max_ppm·fs` samples per second (the slew limit lets the buffer gather that excess before the output reaches the limit; D310).
 4. **Edge cases:** `dt ≤ 0` changes nothing; invalid configurations are `InvalidParameter`; `reset` restarts from `initial_ppm`.
 5. **Pipeline:** the flow `resample_audio` with `tunable = true`, input pushed in blocks of 480 at `48000·(1 + 50e-6)` per second of simulated time, output read in blocks of 441 at 44.1 kHz, `PipelineDrift` every read: no output overflow, no read finds the queue empty after the first second, over 10 min of simulated time (the audio itself is not checked); `update` does not allocate (counting allocator).
 6. `cargo xtask bare-metal` builds `sdrk-blocks` with `drift.rs`.
@@ -224,7 +224,16 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-p
 
 ## Deliverables checklist
 
-- [ ] `DriftController`, `DriftConfig` with doc example; formulas in `docs/blocks.md`
-- [ ] `PipelineDrift`, non-allocating `update`
-- [ ] `TwoClockSim` in the testkit; tests 1–6
-- [ ] Example comment and README paragraph; `docs/pipeline.md`, CHANGELOG, decisions log
+- [x] `DriftController`, `DriftConfig` with doc example; formulas in `docs/blocks.md`
+- [x] `PipelineDrift`, non-allocating `update`
+- [x] `TwoClockSim` in the testkit; tests 1–6
+- [x] Example comment and README paragraph; `docs/pipeline.md`, CHANGELOG, decisions log
+
+## Status
+
+Completely done: `DriftController` and `DriftConfig` (with doc example and the formulas in `docs/blocks.md`), `PipelineDrift` with a non-allocating `update`, `TwoClockSim`, spec tests 1 to 6, the example comment, the README paragraph, `docs/pipeline.md`, CHANGELOG and the decisions log (D300 to D313). The last gate was green (fmt, clippy, xtask check, doc, bare-metal, thumb clippy, the drift tests of all three crates, doc tests).
+
+Not done as written in the first version of this file:
+
+- The numeric bounds of tests 1 to 3 were amended, not met: the literal bounds are unreachable with the specified gains and the simulated call-time jitter. The controller formulas and defaults are unchanged. Reason and measurements: D310 (decisions-log).
+- No controller that filters the block quantisation of a block-based resampler is built; the documentation advises a larger target and a longer `smoothing_s` instead. Tracked: D312, D313 (decisions-log).

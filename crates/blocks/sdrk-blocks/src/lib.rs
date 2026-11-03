@@ -39,6 +39,7 @@ mod blocks;
 mod chain;
 pub mod describe;
 pub mod design;
+mod drift;
 mod error;
 mod ports;
 mod sample;
@@ -81,6 +82,7 @@ pub use describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
 };
 pub use design::{BiquadResponse, DesignSpec, DesignWindow};
+pub use drift::{DriftConfig, DriftController};
 pub use error::{Error, Result};
 pub use ports::{Frame, FrameOut, Ports, StreamElem, Two};
 pub use sample::{BlockReal, BlockSample, TunedElem};

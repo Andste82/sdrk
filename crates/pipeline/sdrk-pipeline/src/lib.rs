@@ -38,6 +38,7 @@
 
 mod analysis;
 mod build;
+pub mod drift;
 mod error;
 mod groups;
 mod kinds;

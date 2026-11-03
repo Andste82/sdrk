@@ -216,7 +216,13 @@ fn update_does_not_allocate() {
 }
 
 /// M28 test 5: input at 48 kHz * (1 + 50 ppm) in blocks of 480, output read in blocks of 441
-/// at 44.1 kHz, `PipelineDrift` after every read, 10 minutes of simulated time.
+/// at 44.1 kHz, `PipelineDrift::update` before every push and before every read (the calling
+/// contract of `update`), 10 minutes of simulated time.
+///
+/// Measured (D314): from 180 s on the ppm stays within -51.74 ..= -49.72 (at most 1.74 ppm from
+/// -50), the mean from 300 s on is -50.09, and the queue never exceeds 4410 samples. The bounds
+/// (10 ppm from 180 s, 5 ppm from 300 s, 1 ppm for the mean) keep a margin of about three to
+/// more than five times the measured deviation.
 #[test]
 fn keeps_the_queue_between_two_clocks_for_ten_minutes() {
     const IN_PERIOD: f64 = 480.0 / (48_000.0 * (1.0 + 50e-6));
@@ -233,18 +239,35 @@ fn keeps_the_queue_between_two_clocks_for_ten_minutes() {
     let mut reads = 0u64;
     let mut short_reads_after_1s = 0u64;
     let mut worst_queue = 0usize;
+    let mut worst_after_180s = 0.0f64;
+    let mut worst_after_300s = 0.0f64;
+    let mut sum_after_300s = 0.0f64;
+    let mut count_after_300s = 0u64;
     loop {
         if next_in <= next_out {
+            let now = next_in;
+            let ppm = drift.update(&mut p, now, 0).unwrap();
+            if now >= 180.0 {
+                worst_after_180s = worst_after_180s.max((ppm + 50.0).abs());
+            }
             // An overflowing output (drop = error) makes `push` fail.
             p.push("audio_in", InputData::F32(&block)).unwrap();
             next_in += IN_PERIOD;
         } else {
             let now = next_out;
+            let ppm = drift.update(&mut p, now, 0).unwrap();
+            if now >= 180.0 {
+                worst_after_180s = worst_after_180s.max((ppm + 50.0).abs());
+            }
+            if now >= 300.0 {
+                worst_after_300s = worst_after_300s.max((ppm + 50.0).abs());
+                sum_after_300s += ppm;
+                count_after_300s += 1;
+            }
             let n = p.read_stream("audio_out", &mut out).unwrap();
             if now > 1.0 && n < out.len() {
                 short_reads_after_1s += 1;
             }
-            drift.update(&mut p, now, 0).unwrap();
             worst_queue = worst_queue.max(p.available("audio_out").unwrap());
             reads += 1;
             next_out += OUT_PERIOD;
@@ -256,4 +279,9 @@ fn keeps_the_queue_between_two_clocks_for_ten_minutes() {
     assert!(reads > 59_000);
     assert_eq!(short_reads_after_1s, 0);
     assert!(worst_queue < 16_384, "{worst_queue}");
+    // No spike: the former call pattern (after every read only) swung to -496 ppm here.
+    assert!(worst_after_180s <= 10.0, "{worst_after_180s}");
+    assert!(worst_after_300s <= 5.0, "{worst_after_300s}");
+    let mean = sum_after_300s / count_after_300s as f64;
+    assert!((mean + 50.0).abs() <= 1.0, "{mean}");
 }

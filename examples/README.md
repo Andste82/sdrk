@@ -31,15 +31,20 @@ When the audio of a flow goes to a sound card (or a transmitter) with its own cl
 ```rust
 use sdrk_blocks::DriftConfig;
 use sdrk_pipeline::drift::PipelineDrift;
+use sdrk_pipeline::InputData;
 
 // `pipeline` was built from `resample_audio` with `tunable: true` on `to_cd`.
 let config = DriftConfig::new(44_100.0, 4_410.0); // 100 ms target fill
 let mut drift = PipelineDrift::new(&pipeline, "audio_out", "to_cd", config)?;
-loop {
-    // ... in the audio callback, after reading `n` samples with `read_stream`:
-    let ppm = drift.update(&mut pipeline, now_s, sound_card_queued)?;
-}
+// Before every `push` to `audio_in`:
+drift.update(&mut pipeline, now_s, sound_card_queued)?;
+pipeline.push("audio_in", InputData::F32(&block))?;
+// In the audio callback, before every `read_stream` of `audio_out`:
+drift.update(&mut pipeline, now_s, sound_card_queued)?;
+let n = pipeline.read_stream("audio_out", &mut out)?;
 ```
+
+Call `update` before every push and before every read: the controller then averages the queue over time. Calling it only after each read lets the fill jump by a whole block whenever the input and output clocks slip by one period, and the controller answers each jump with a spike of several hundred ppm (D314).
 
 ## Flows
 

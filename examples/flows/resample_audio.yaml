@@ -24,10 +24,11 @@ nodes:
 #      makes the resampler accept a runtime `ppm` of plus or minus 1000).
 #   2. Create a `PipelineDrift` for the output `audio_out` and the node `to_cd`
 #      with a `DriftConfig::new(44100.0, target_samples)`.
-#   3. Call `drift.update(&mut pipeline, now_s, extra_fill)` at roughly regular
-#      moments, for example in every audio callback. It sets `ppm` of `to_cd`
-#      from the fill level of `audio_out` plus `extra_fill` (samples held outside
-#      the pipeline). The defaults (30 s time constant, at most 500 ppm, at most
+#   3. Call `drift.update(&mut pipeline, now_s, extra_fill)` immediately before
+#      every push to `audio_in` and immediately before every read of `audio_out`
+#      (calling it only after each read makes the fill jump by a whole block when
+#      the two clocks slip). It sets `ppm` of `to_cd` from the fill level of
+#      `audio_out` plus `extra_fill` (samples held outside the pipeline). The defaults (30 s time constant, at most 500 ppm, at most
 #      20 ppm per second) change the pitch too slowly to hear.
 # See docs/blocks.md (section "Clock drift").
 # Audio in, one resampler, audio out.

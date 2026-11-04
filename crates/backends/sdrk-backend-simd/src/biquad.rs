@@ -1812,6 +1812,14 @@ impl Biquad<CQ15> for Simd {
         C: AsRef<[[<CQ15 as BiquadSample>::Coef; 5]]>,
         H: AsRef<[CQ15]> + AsMut<[CQ15]>,
     {
+        // Plain SSE2 runs the fallback, as for `Q15` (decision D341): its `f64` path is bound by
+        // the latency of the recursion (seven dependent `f64` operations per step), which made
+        // it slower than the fallback's integer chain on Skylake (32.45 against 24.43 cycles per
+        // sample in `llvm-mca`; 20.44 against 31.16 on Zen 2).
+        #[cfg(target_arch = "x86_64")]
+        if crate::level::sse2_only(crate::level::current()).is_some() {
+            return Fallback.biquad(s, input, output);
+        }
         check_len(input.len(), output.len())?;
         let (coefs, hist) = s.parts_mut();
         let hist: &mut [[i16; 2]] = bytemuck::cast_slice_mut(hist);

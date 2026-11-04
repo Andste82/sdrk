@@ -364,8 +364,7 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 176.75 / 142.31 cycles per sample of the fallback on `skylake` (1.24; 119.09 / 187.71 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -416,8 +415,7 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 39.18 / 30.41 cycles per sample of the fallback on `skylake` (1.29; 27.75 / 45.20 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -464,8 +462,7 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 249.66 / 137.49 cycles per sample of the fallback on `skylake` (1.82; 144.54 / 207.97 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -516,8 +513,7 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 249.52 / 168.56 cycles per sample of the fallback on `skylake` (1.48; 143.48 / 240.62 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -585,8 +581,7 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 136.89 / 74.97 cycles per sample of the fallback on `skylake` (1.83; 88.20 / 112.89 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -616,8 +611,7 @@
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 136.55 / 103.68 cycles per sample of the fallback on `skylake` (1.32; 87.57 / 144.23 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -1587,8 +1581,7 @@
   "biquad_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 32.45 / 24.43 cycles per sample of the fallback on `skylake` (1.33; 20.44 / 31.16 on `znver2`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
     "sse4.2": {
       "status": "info",

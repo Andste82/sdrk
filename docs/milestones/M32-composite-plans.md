@@ -187,7 +187,17 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `RUSTFLAGS="--cfg sdr
 
 ## Deliverables checklist
 
-- [ ] `tests/block_equals_kernel.rs` with the six blocks of §1, shared test helpers
-- [ ] `DcBlockRealBlock` and the real variant of the `dc_block` kind, schema
-- [ ] `docs/blocks.md` with the kernel sequence of each composite block, the `am_demod` exception and the test table
-- [ ] CHANGELOG, decisions log
+- [x] `tests/block_equals_kernel.rs` with the six blocks of §1, shared test helpers
+- [x] `DcBlockRealBlock` and the real variant of the `dc_block` kind, schema
+- [x] `docs/blocks.md` with the kernel sequence of each composite block, the `am_demod` exception and the test table
+- [x] CHANGELOG, decisions log
+
+## Status
+
+Done: `tests/block_equals_kernel.rs` tests `fir`, `biquad` (complex and real, every response type and order), `real_to_iq`, `convert` and `convert_out` (`cu8`, `cs8`, `cs16`, `packed12`, `packed10`, cut plans inside sample groups), `fm_mod` and `DcBlockRealBlock` against the direct kernel call through `Sdrk`, for both precisions and at least two configurations each, whole and in 20 cut plans of seed 470, with the runtime changes of `biquad` (`cutoff_hz`, `q`) and `fm_mod` (`deviation_hz`) at the same sample as in the kernel call (D361). The expected taps of `fir` and `real_to_iq` are quantized by the rounding rule R7, not by the blocks' own conversion (D362). The shared helpers moved into `tests/common/mod.rs` (D360). `DcBlockRealBlock<T>` (`f32`, `Q15`) and the real variant of the pipeline kind `dc_block` (chosen by the input type, cost 3, kernels `dc_block` and `dc_block_real`), its description and the schema (D359); the block also has the invariance, reset and extreme-input tests (`tests/behaviour.rs`), timing (`tests/timing.rs`), storage (`tests/construction.rs`), description (`tests/describe.rs`) and the pipeline flow (`crates/pipeline/sdrk-pipeline/tests/dc_block.rs`). `docs/blocks.md` has the kernel sequence of each composite block, the `am_demod` exception and the test table; `docs/pipeline.md`, `docs/architecture.md`, CHANGELOG and decisions log (D359 to D362) are updated. No block differed from its kernel; no kernel and no golden vector changed, and the composite blocks are unchanged (`am_demod` keeps its own pole function, D359).
+
+Gate (2026-11-04, after the review fixes): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo xtask check`, `cargo xtask schema --check`, `cargo test -p sdrk-blocks --all-features` (460 passed, 1 ignored), `RUSTFLAGS="--cfg sdrk_fallback_only" cargo test -p sdrk-blocks` (460 passed, 1 ignored), `cargo test -p sdrk-pipeline` (295 passed), `cargo test -p xtask`, `cargo doc -p sdrk-blocks --no-deps --all-features` with `-D warnings`, `cargo xtask bare-metal` and the `thumbv7em-none-eabihf` clippy of `tree.yml` pass.
+
+Not done:
+- `cargo xtask bare-metal` builds `sdrk-blocks` for `thumbv7em-none-eabihf` but, as for every generic block, does not instantiate `DcBlockRealBlock<f32>` or `<Q15>`; the `thumbv7em-none-eabihf` clippy of `tree.yml` checks the same code.
+- `cargo test --workspace --all-features`, the emulator and the WebAssembly tests were not part of the gate and are left to CI; M32 adds no kernel, so nothing is measured in cycles.

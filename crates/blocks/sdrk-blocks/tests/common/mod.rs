@@ -23,7 +23,9 @@
 
 use num_complex::Complex64;
 use sdrk::{ComplexSample, Rate};
-use sdrk_blocks::{ArenaStorage, Block, Error, Frame, FrameMeta, FrameOut, StreamElem};
+use sdrk_blocks::{
+    ArenaStorage, Block, DesignSpec, Error, Frame, FrameMeta, FrameOut, StreamElem, TunedElem,
+};
 use sdrk_testkit::{ChunkPlan, Pcg32};
 
 pub fn rate(hz: u64) -> Rate {
@@ -173,4 +175,86 @@ pub fn arg(c: Complex64) -> f64 {
 /// Magnitude of a complex number.
 pub fn norm(c: Complex64) -> f64 {
     c.re.hypot(c.im)
+}
+
+/// 20 chunk plans for one block: sizes from 1 to 700, the seed of the block plus the index.
+pub fn twenty_plans(seed: u64) -> Vec<ChunkPlan> {
+    let max = [
+        1, 2, 3, 5, 7, 11, 16, 33, 64, 100, 128, 255, 256, 257, 300, 512, 700, 1000, 1500, 4000,
+    ];
+    max.iter()
+        .enumerate()
+        .map(|(i, m)| ChunkPlan::new(seed * 100 + i as u64, *m))
+        .collect()
+}
+
+/// `a` and `b` are equal element for element; the panic names the first difference.
+pub fn same_bits<T: PartialEq + core::fmt::Debug>(a: &[T], b: &[T], what: &str) {
+    assert_eq!(a.len(), b.len(), "{what}: lengths differ");
+    if let Some(i) = a.iter().zip(b).position(|(x, y)| x != y) {
+        panic!("{what}: first difference at {i}: {:?} vs {:?}", a[i], b[i]);
+    }
+}
+
+/// Whole-buffer output equals `want`, and every chunk plan gives the same bits.
+pub fn check_block<B, F>(want: &[B::Out], input: &[B::In], seed: u64, make: F, what: &str)
+where
+    B: Block,
+    B::Out: PartialEq + core::fmt::Debug + sdrk_blocks::StreamElem,
+    B::In: sdrk_blocks::StreamElem,
+    F: Fn() -> B,
+{
+    check_block_with(want, input, seed, make, what, true);
+}
+
+/// As `check_block`; with `exact_chunks` false the chunked runs of `f32` or `C32` output only
+/// need an SNR of 120 dB against `want` (for kernels whose `f32` bits on a SIMD level depend on
+/// the split, such as the `f32` `deemphasis`, see docs/kernels.md).
+pub fn check_block_with<B, F>(
+    want: &[B::Out],
+    input: &[B::In],
+    seed: u64,
+    make: F,
+    what: &str,
+    exact_chunks: bool,
+) where
+    B: Block,
+    B::Out: PartialEq + core::fmt::Debug + sdrk_blocks::StreamElem,
+    B::In: sdrk_blocks::StreamElem,
+    F: Fn() -> B,
+{
+    let whole = run_block(&mut make(), input, None);
+    same_bits(want, &whole, &format!("{what} whole"));
+    for plan in twenty_plans(seed) {
+        let chunked = run_block(&mut make(), input, Some(plan));
+        if exact_chunks {
+            same_bits(want, &chunked, &format!("{what} {plan:?}"));
+        } else {
+            let bytes_w: &[u8] = bytemuck::cast_slice(want);
+            let bytes_c: &[u8] = bytemuck::cast_slice(&chunked);
+            if bytes_w != bytes_c {
+                let w: &[f32] = bytemuck::cast_slice(want);
+                let c: &[f32] = bytemuck::cast_slice(&chunked);
+                assert_eq!(w.len(), c.len(), "{what} {plan:?}");
+                let sig: f64 = w.iter().map(|x| f64::from(*x).powi(2)).sum();
+                let err: f64 = w
+                    .iter()
+                    .zip(c)
+                    .map(|(a, b)| (f64::from(*a) - f64::from(*b)).powi(2))
+                    .sum();
+                assert!(10.0 * (sig / err).log10() >= 120.0, "{what} {plan:?}");
+            }
+        }
+    }
+}
+
+/// The taps of `spec` at the rate `fs` (at most 1023), scaled and converted as the tuned
+/// resampler converts them.
+pub fn taps_for<T: TunedElem>(spec: &DesignSpec, fs: f64, scale: f64) -> Vec<T::Tap> {
+    let mut design = vec![0.0f64; spec.num_taps(fs, 1023).unwrap()];
+    spec.design(fs, 1023, &mut design).unwrap();
+    design
+        .iter()
+        .map(|v| <T as TunedElem>::tap(*v * scale).unwrap())
+        .collect()
 }

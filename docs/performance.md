@@ -330,12 +330,12 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `resample` C32, 3 / 2, 192 taps | 0.51 | 0.50 | 0.24 | 0.19 | 0.49 | 0.15 info |
 | `fir_interpolate_real` f32, L = 2, 128 taps | 0.43 | 0.41 | 0.17 | 0.12 | 0.34 | 0.16 info |
 | `resample_real` f32, 3 / 2, 192 taps | 0.50 | 0.47 | 0.26 | 0.24 | 0.39 | 0.19 info |
-| `fir_interpolate_real` Q15, L = 2, 128 taps | 1.00 info | 0.98 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
-| `resample_real` Q15, 3 / 2, 192 taps | 1.00 info | 0.74 info | 0.61 info | 0.57 info | 0.65 info | 0.68 info |
-| `fir` CQ15, 64 taps (fallback) | 1.00 info | 0.79 info | 1.00 info | 1.00 info | 1.08 info | 0.90 info |
-| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 1.00 info | 0.74 info | 1.00 info | 0.63 info | 0.62 info | 0.91 info |
-| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 1.00 info | 0.86 info | 1.00 info | 1.00 info | 0.69 info | 1.00 info |
-| `resample` CQ15, 3 / 2, 192 taps (fallback) | 1.00 info | 0.80 info | 1.00 info | 0.80 info | 0.61 info | 0.91 info |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | 1.00 info | 0.36 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `resample_real` Q15, 3 / 2, 192 taps | 1.00 info | 0.26 info | 0.61 info | 0.57 info | 0.65 info | 0.68 info |
+| `fir` CQ15, 64 taps (fallback) | 1.00 info | 0.35 info | 1.00 info | 1.00 info | 1.08 info | 0.90 info |
+| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 1.00 info | 0.30 info | 1.00 info | 0.63 info | 0.62 info | 0.91 info |
+| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 1.00 info | 0.34 info | 1.00 info | 1.00 info | 0.69 info | 1.00 info |
+| `resample` CQ15, 3 / 2, 192 taps (fallback) | 1.00 info | 0.31 info | 1.00 info | 0.80 info | 0.61 info | 0.91 info |
 | `mag_sq` C32 | 0.71 | 0.62 | 0.78 | 0.39 | 0.52 | 0.60 |
 | `mag_sq` CQ15 | 0.37 info | 0.69 info | 0.72 info | 0.82 info | 0.54 info | 0.40 info |
 | `quad_demod` C32 | 0.13 info | 0.14 info | 0.65 | 0.45 | 0.58 | 0.18 info |
@@ -375,7 +375,7 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `deemphasis_fallback` f32 (GNU Radio) | 0.37 (accuracy waiver) | 0.33 (accuracy waiver) | 0.22 (accuracy waiver) | 0.25 (accuracy waiver) | 0.31 (accuracy waiver) | 0.18 (accuracy waiver) |
 | `dc_block_fallback` C32 (liquid-dsp) | 0.12 | 0.10 | 0.07 | 0.06 | 0.14 | 0.10 |
 | `biquad` C32, 2 sections (KFR) | 0.21 | 0.23 | 0.25 | 0.18 | 0.27 | 0.44 |
-| `biquad` CQ15, 2 sections (fallback) | 0.52 info | 0.51 info | 0.18 info | 0.18 info | 0.43 info | 0.35 info |
+| `biquad` CQ15, 2 sections (fallback) | 1.00 info | 0.51 info | 0.18 info | 0.18 info | 0.43 info | 0.35 info |
 | `biquad_real` f32, 2 sections (KFR) | 0.45 | 0.47 | 0.52 | 0.36 | 0.59 | 0.80 |
 | `biquad_real` Q15, 2 sections (fallback) | 1.00 info | 0.46 info | 0.40 info | 0.40 info | 0.46 info | 0.43 info |
 | `biquad_fallback` C32 (CMSIS-DSP) | 0.56 | 0.56 | 0.53 | 0.53 | 0.52 | 0.58 |
@@ -507,12 +507,12 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `resample` C32, 3 / 2, 192 taps | 135.44 / 266.35 | 134.82 / 269.35 | 52.57 / 215.52 | 53.09 | 42.35 / 218.42 | 84.58 / 174.35 | 309.31 / 2026.03 |
 | `fir_interpolate_real` f32, L = 2, 128 taps | 70.60 / 164.02 | 70.26 / 171.02 | 26.25 / 153.27 | 24.99 | 19.00 / 165.15 | 45.67 / 134.77 | 147.91 / 947.03 |
 | `resample_real` f32, 3 / 2, 192 taps | 82.87 / 166.19 | 82.23 / 173.19 | 40.99 / 155.85 | 39.79 | 40.14 / 167.33 | 53.45 / 136.68 | 179.99 / 949.03 |
-| `fir_interpolate_real` Q15, L = 2, 128 taps | 321.33 / 321.33 | 315.00 / 321.33 | 125.89 / 125.89 | 225.72 | 96.97 / 96.97 | 110.37 / 110.37 | 451.84 / 451.84 |
-| `resample_real` Q15, 3 / 2, 192 taps | 423.58 / 423.58 | 313.14 / 423.58 | 225.31 / 371.06 | 224.46 | 186.78 / 329.03 | 192.59 / 297.56 | 598.41 / 875.74 |
-| `fir` CQ15, 64 taps (fallback) | 530.46 / 530.46 | 417.99 / 530.46 | 214.08 / 214.08 | 237.75 | 153.06 / 153.06 | 227.65 / 211.54 | 841.39 / 934.94 |
-| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 118.11 / 118.11 | 87.46 / 118.11 | 68.42 / 68.42 | 50.14 | 33.82 / 53.59 | 50.04 / 80.46 | 186.45 / 204.82 |
-| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 593.52 / 593.52 | 510.19 / 593.50 | 268.38 / 268.38 | 318.91 | 205.58 / 205.58 | 178.71 / 259.40 | 638.42 / 638.42 |
-| `resample` CQ15, 3 / 2, 192 taps (fallback) | 635.23 / 635.23 | 506.50 / 635.23 | 373.40 / 373.40 | 316.59 | 237.44 / 295.89 | 296.92 / 490.10 | 977.01 / 1075.61 |
+| `fir_interpolate_real` Q15, L = 2, 128 taps | 321.33 / 321.33 | 114.51 / 321.33 | 125.89 / 125.89 | 225.72 | 96.97 / 96.97 | 110.37 / 110.37 | 451.84 / 451.84 |
+| `resample_real` Q15, 3 / 2, 192 taps | 423.58 / 423.58 | 111.86 / 423.58 | 225.31 / 371.06 | 224.46 | 186.78 / 329.03 | 192.59 / 297.56 | 598.41 / 875.74 |
+| `fir` CQ15, 64 taps (fallback) | 530.46 / 530.46 | 187.33 / 530.46 | 214.08 / 214.08 | 237.75 | 153.06 / 153.06 | 227.65 / 211.54 | 841.39 / 934.94 |
+| `fir_decimate` CQ15, 127 taps, M = 10 (fallback) | 118.11 / 118.11 | 35.72 / 118.11 | 68.42 / 68.42 | 50.15 | 33.82 / 53.59 | 50.04 / 80.46 | 185.86 / 204.82 |
+| `fir_interpolate` CQ15, L = 2, 128 taps (fallback) | 593.52 / 593.52 | 201.70 / 593.50 | 268.38 / 268.38 | 318.91 | 205.58 / 205.58 | 178.71 / 259.40 | 638.42 / 638.42 |
+| `resample` CQ15, 3 / 2, 192 taps (fallback) | 635.23 / 635.23 | 196.06 / 635.23 | 373.40 / 373.40 | 316.59 | 237.44 / 295.89 | 299.95 / 490.10 | 977.01 / 1075.61 |
 | `mag_sq` C32 | 2.32 / 3.27 | 1.57 / 2.52 | 1.18 / 1.52 | 1.20 | 0.60 / 1.52 | 1.18 / 2.27 | 4.96 / 8.28 |
 | `mag_sq` CQ15 | 1.31 / 3.51 | 1.31 / 1.89 | 0.73 / 1.01 | 0.75 | 0.36 / 0.44 | 1.02 / 1.89 | 3.02 / 7.53 |
 | `quad_demod` C32 | 18.80 / 149.03 | 18.30 / 131.54 | 7.05 / 10.92 | 7.07 | 3.05 / 6.73 | 11.55 / 19.79 | 36.15 / 201.21 |
@@ -552,7 +552,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `deemphasis_fallback` f32 (GNU Radio) | 22.01 / 60.03 | 20.01 / 60.03 | 13.01 / 60.03 | - | 14.76 / 60.03 | 14.01 / 45.03 | 27.53 / 150.07 |
 | `dc_block_fallback` C32 (liquid-dsp) | 14.01 / 121.03 | 11.51 / 121.03 | 8.77 / 121.03 | - | 7.76 / 121.03 | 11.01 / 81.04 | 26.53 / 277.07 |
 | `biquad` C32, 2 sections (KFR) | 17.43 / 81.59 | 17.37 / 76.59 | 13.17 / 53.61 | 13.18 | 13.23 / 72.00 | 12.61 / 46.63 | 43.04 / 96.78 |
-| `biquad` CQ15, 2 sections (fallback) | 51.81 / 100.07 | 50.56 / 100.07 | 18.30 / 104.07 | 18.06 | 17.73 / 99.08 | 25.16 / 58.06 | 70.53 / 203.11 |
+| `biquad` CQ15, 2 sections (fallback) | 98.08 / 98.08 | 50.56 / 100.07 | 18.30 / 104.07 | 18.07 | 17.73 / 99.08 | 25.16 / 58.06 | 70.53 / 203.11 |
 | `biquad_real` f32, 2 sections (KFR) | 18.19 / 40.80 | 18.17 / 38.30 | 14.04 / 26.81 | 14.04 | 13.04 / 36.00 | 13.66 / 23.32 | 38.93 / 48.39 |
 | `biquad_real` Q15, 2 sections (fallback) | 46.05 / 46.05 | 21.25 / 46.05 | 18.56 / 46.05 | 17.88 | 17.87 / 45.05 | 11.87 / 26.05 | 41.21 / 96.08 |
 | `biquad_fallback` C32 (CMSIS-DSP) | 31.97 / 57.54 | 32.10 / 57.54 | 23.91 / 45.04 | - | 23.78 / 45.04 | 21.71 / 41.53 | 68.47 / 118.83 |

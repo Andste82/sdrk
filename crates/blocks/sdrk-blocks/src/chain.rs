@@ -1,6 +1,5 @@
-//! `Chain`: two blocks in a row with one intermediate buffer from caller storage.
-
-use core::mem::size_of;
+//! `Chain`: two blocks in a row with an intermediate buffer (two for a pair) from caller
+//! storage.
 
 use sdrk::{Progress, Ratio, RatioKind};
 use sdrk_core::timing::ceil_div;
@@ -8,7 +7,7 @@ use sdrk_core::timing::ceil_div;
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::BlockDescription;
 use crate::error::{Error, Result};
-use crate::ports::{Ports, StreamElem};
+use crate::ports::{ChainItem, Ports, sealed::ChainBufs};
 use crate::storage::Storage;
 
 /// Description of a [`Chain`]: kind `chain`, no ports (they depend on the stages). A chain is a
@@ -38,9 +37,11 @@ pub static CHAIN_DESCRIPTION: BlockDescription = BlockDescription {
 /// from a [`Storage`]. A chain is a [`Block`] itself, so chains nest (the [`chain!`](crate::chain)
 /// macro writes longer ones).
 ///
-/// `A::Out` must be a stream element ([`StreamElem`]): a chain cannot pass a pair of streams
-/// or frames between its stages. `A::In` and `B::Out` may be any port type, so a chain can end
-/// in a frame block. A port type that is not a stream element is rejected at compile time.
+/// `A::Out` must be a [`ChainItem`]: a stream element ([`StreamElem`](crate::StreamElem)) or a
+/// pair of streams ([`Two`](crate::Two)). For a pair the chain holds two buffers of `chunk`
+/// samples that are written and consumed in lockstep. Frames (and any other port type that is
+/// not a stream element) cannot pass between the stages and are rejected at compile time.
+/// `A::In` and `B::Out` may be any port type, so a chain can end in a frame block.
 ///
 /// `Progress::consumed` is what `A` consumed, `Progress::produced` what `B` produced. The
 /// output does not depend on how the caller cuts input and output.
@@ -63,15 +64,76 @@ pub static CHAIN_DESCRIPTION: BlockDescription = BlockDescription {
 /// assert_eq!((p.consumed, p.produced), (256, 32));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+///
+/// A pair between the stages: a block that writes `Two<f32, f32>` (here a small one written
+/// for the example) feeds [`MakeComplexBlock`](crate::MakeComplexBlock).
+///
+/// ```
+/// use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, C32};
+/// use sdrk_blocks::{
+///     AlignedBytes, ArenaStorage, Block, BlockDescription, BlockTiming, Chain, Error,
+///     MakeComplexBlock, ParamValue, Two, CHAIN_DESCRIPTION,
+/// };
+///
+/// /// Writes each input sample to both streams, the second one negated.
+/// struct Mirror;
+/// impl Block for Mirror {
+///     type In = f32;
+///     type Out = Two<f32, f32>;
+///     fn description(&self) -> &'static BlockDescription { &CHAIN_DESCRIPTION }
+///     fn process(
+///         &mut self,
+///         input: &[f32],
+///         (re, im): (&mut [f32], &mut [f32]),
+///     ) -> Result<Progress, Error> {
+///         let mut n = 0;
+///         for ((x, r), i) in input.iter().zip(re.iter_mut()).zip(im.iter_mut()) {
+///             (*r, *i) = (*x, -*x);
+///             n += 1;
+///         }
+///         Ok(Progress { consumed: n, produced: n })
+///     }
+///     fn timing(&self) -> BlockTiming {
+///         BlockTiming {
+///             ratio: Ratio::ONE,
+///             kind: RatioKind::Constant,
+///             delay: Delay::ZERO,
+///         }
+///     }
+///     fn reset(&mut self) {}
+///     fn set_param(&mut self, _: &str, _: ParamValue) -> Result<(), Error> {
+///         Err(Error::UnknownParameter)
+///     }
+///     fn param(&self, _: &str) -> Result<ParamValue, Error> { Err(Error::UnknownParameter) }
+///     fn min_input(&self) -> usize { 1 }
+/// }
+///
+/// let rate = Rate::hz(48_000)?;
+/// let mut mem = AlignedBytes([0u8; 1024]);
+/// let mut arena = ArenaStorage::new(&mut mem.0);
+/// let join = MakeComplexBlock::<C32, _>::new(rate, &mut arena)?;
+/// // Two buffers of 16 `f32` samples.
+/// type S = ArenaStorage<'static>;
+/// assert_eq!(Chain::<Mirror, MakeComplexBlock<C32, S>, S>::storage_bytes(16), 2 * 16 * 4);
+/// let before = arena.used();
+/// let mut chain = Chain::new(Mirror, join, 16, &mut arena)?;
+/// assert_eq!(arena.used() - before, 2 * 16 * 4);
+/// let input = [1.0f32, 2.0, 3.0];
+/// let mut out = [C32::default(); 3];
+/// let p = chain.process(&input, &mut out)?;
+/// assert_eq!((p.consumed, p.produced), (3, 3));
+/// assert_eq!(out[2], C32::new(3.0, -3.0));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub struct Chain<A, B, S: Storage>
 where
     A: Block,
     B: Block<In = A::Out>,
-    A::Out: StreamElem,
+    A::Out: ChainItem,
 {
     a: A,
     b: B,
-    buf: S::Buf<A::Out>,
+    buf: <A::Out as ChainBufs>::Bufs<S>,
     /// End of the valid samples in `buf`.
     fill: usize,
     /// Start of the samples `B` has not consumed yet.
@@ -84,7 +146,7 @@ impl<A, B, S: Storage> core::fmt::Debug for Chain<A, B, S>
 where
     A: Block,
     B: Block<In = A::Out>,
-    A::Out: StreamElem,
+    A::Out: ChainItem,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Chain")
@@ -99,11 +161,12 @@ impl<A, B, S: Storage> Chain<A, B, S>
 where
     A: Block,
     B: Block<In = A::Out>,
-    A::Out: StreamElem,
+    A::Out: ChainItem,
 {
     /// Joins `a` and `b`. `chunk` is the capacity of the intermediate buffer in samples of
-    /// `A::Out`; it is raised to at least `b.min_input()` and at least 1 (a smaller buffer
-    /// could never hold what `b` needs). The buffer comes from `storage`.
+    /// `A::Out` (for a pair: of each of the two buffers); it is raised to at least
+    /// `b.min_input()` and at least 1 (a smaller buffer could never hold what `b` needs). The
+    /// buffers come from `storage`.
     ///
     /// # Errors
     /// `Storage` if the storage cannot provide the buffer; an error if the combined timing
@@ -127,7 +190,7 @@ where
         let chunk = chunk.max(b.min_input()).max(1);
         // Reject timing that does not fit the exact arithmetic now, not in `timing()`.
         combined_timing(&a, &b)?;
-        let buf = storage.alloc::<A::Out>(chunk)?;
+        let buf = <A::Out as ChainBufs>::alloc(storage, chunk)?;
         Ok(Self {
             a,
             b,
@@ -138,14 +201,16 @@ where
         })
     }
 
-    /// Bytes `new` takes from the storage for this `chunk`: `chunk * size_of::<A::Out>()`,
-    /// without padding.
+    /// Bytes `new` takes from the storage for this `chunk`: `chunk * size_of::<A::Out>()` for
+    /// a stream; for a pair `Two<X, Y>` both buffers, `chunk * size_of::<X>()` and
+    /// `chunk * size_of::<Y>()`, plus the padding that aligns the second buffer behind the
+    /// first (saturating).
     ///
     /// On an arena that starts at an address aligned to [`ARENA_ALIGN`](crate::ARENA_ALIGN)
     /// (an [`AlignedBytes`](crate::AlignedBytes)) and is still empty, `new` takes exactly this.
-    /// At a position that is not aligned for `A::Out`, up to `align_of::<A::Out>() - 1` bytes
-    /// of padding come on top. `chunk` must be at least `b.min_input()` and 1, otherwise `new`
-    /// raises it and takes more.
+    /// At a position that is not aligned for the element, up to `align_of - 1` bytes of
+    /// padding per buffer come on top. `chunk` must be at least `b.min_input()` and 1,
+    /// otherwise `new` raises it and takes more.
     ///
     /// ```
     /// use sdrk::{CQ15, C32};
@@ -155,8 +220,10 @@ where
     /// assert_eq!(Chain::<A, B, ArenaStorage<'static>>::storage_bytes(256), 256 * 8);
     /// # let _ = CQ15::default();
     /// ```
+    ///
+    /// The example of [`Chain`] with a pair between its stages shows the size of two buffers.
     pub fn storage_bytes(chunk: usize) -> usize {
-        chunk.saturating_mul(size_of::<A::Out>())
+        <A::Out as ChainBufs>::bytes(chunk)
     }
 
     /// The first stage.
@@ -197,7 +264,7 @@ impl<A, B, S: Storage> Block for Chain<A, B, S>
 where
     A: Block,
     B: Block<In = A::Out>,
-    A::Out: StreamElem,
+    A::Out: ChainItem,
 {
     type In = A::In;
     type Out = B::Out;
@@ -216,7 +283,7 @@ where
         let mut input = input;
         let mut output = output;
         let mut total = Progress::default();
-        let capacity = self.buf.as_ref().len();
+        let capacity = <A::Out as ChainBufs>::capacity::<S>(&self.buf);
         loop {
             let mut moved = false;
             // 1. Feed B from the buffer.
@@ -226,15 +293,11 @@ where
                 if avail < min_b && !exhausted {
                     break;
                 }
-                let pending = self
-                    .buf
-                    .as_ref()
-                    .get(self.start..self.fill)
+                let pending = <A::Out as ChainBufs>::view::<S>(&self.buf, self.start, self.fill)
                     .ok_or_else(internal)?;
-                let p = self.b.process(
-                    <A::Out as StreamElem>::view(pending),
-                    <B::Out as Ports>::mut_reborrow(&mut output),
-                )?;
+                let p = self
+                    .b
+                    .process(pending, <B::Out as Ports>::mut_reborrow(&mut output))?;
                 if p.consumed == 0 && p.produced == 0 {
                     break;
                 }
@@ -251,24 +314,20 @@ where
             }
             // 2. Move what B has not consumed to the front.
             if self.start > 0 {
-                if self.start > self.fill || self.fill > capacity {
+                if self.fill > capacity {
                     return Err(internal());
                 }
-                self.buf.as_mut().copy_within(self.start..self.fill, 0);
+                <A::Out as ChainBufs>::move_to_front::<S>(&mut self.buf, self.start, self.fill)
+                    .ok_or_else(internal)?;
                 self.fill -= self.start;
                 self.start = 0;
             }
             // 3. Feed the buffer from A.
             let room = capacity.checked_sub(self.fill).ok_or_else(internal)?;
             if room > 0 && (<A::In as Ports>::ref_len(&input) > 0 || self.a_full) {
-                let free = self
-                    .buf
-                    .as_mut()
-                    .get_mut(self.fill..)
+                let free = <A::Out as ChainBufs>::view_mut_from::<S>(&mut self.buf, self.fill)
                     .ok_or_else(internal)?;
-                let p = self
-                    .a
-                    .process(input, <A::Out as StreamElem>::view_mut(free))?;
+                let p = self.a.process(input, free)?;
                 self.a_full = p.produced >= room;
                 if p.consumed > 0 || p.produced > 0 {
                     moved = true;

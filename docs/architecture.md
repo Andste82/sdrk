@@ -28,6 +28,8 @@ The folder of a crate is its layer. A crate may depend only on crates in lower l
 
 Port types: the input and the output of a block are not sample types but port types (`Ports` in `sdrk-blocks`, see [blocks.md](blocks.md#the-block-interface)). They are resolved at compile time: a stream of one sample type (`StreamElem`: `C32`, `CQ15`, `f32`, `Q15`, `u8`), a pair of streams that advance together (`Two<A, B>`) and frames of `f32` values (`Frame`). One `Block` trait therefore covers stream blocks, blocks with two inputs or outputs (M30, M33) and the spectrum; a later milestone adds packets as a further port type (`Packets`, M38).
 
+Compositions: blocks combine into blocks in Rust, without the pipeline and without a heap. `Chain` (M27, macro `chain!`) puts two blocks in a row and passes a stream or, since M31, a pair of streams (`Two`) between them; `Fork` (M31) sends one stream into two branches and joins their outputs as a pair, with automatic delay alignment; `ParamMap` (M31) maps the flat parameter names of a composite block to the paths of its inner blocks. `Chain` and `Fork` take their buffers from the block's `Storage`, are themselves `Block`s and nest; `ParamMap` is a const table that holds no state. None of them is a pipeline kind. A *composite block* is a Rust block that computes exactly what such a composition of primitive blocks computes (M32). See [blocks.md](blocks.md#composite-blocks).
+
 See [PLAN.md](PLAN.md) for the full list and the reasoning.
 
 ## Extensibility rules

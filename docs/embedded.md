@@ -44,14 +44,17 @@ The suite on the MCUs is the whole testkit suite: kernels in both directions, fu
 
 ## Sizing the arena of a chain
 
-A chain (`Chain`, `chain!`; [blocks.md](blocks.md#chains)) takes one buffer per joint from the arena, after the buffers of its blocks. Sum the sizes for the arena:
+A chain (`Chain`, `chain!`; [blocks.md](blocks.md#chains)) takes one buffer per joint from the arena (two when the joint passes a pair of streams `Two<X, Y>`), after the buffers of its blocks. Sum the sizes for the arena:
 
 ```text
 arena bytes >= sum of storage_bytes(config, rate) of every block
              + sum of Chain::storage_bytes(chunk) of every joint     // chunk * size_of::<A::Out>()
+             + sum of Fork::storage_bytes(&a, &b, chunk) of every fork
 ```
 
-`Chain::storage_bytes(chunk)` is `chunk * size_of::<A::Out>()` (8 for `C32`, 4 for `CQ15` and `f32`, 2 for `Q15`, 1 for `u8`) without padding. On a fresh arena that starts at an aligned address (`AlignedBytes`) and is used by the blocks in construction order, each buffer starts at the next multiple of its element alignment, as for the blocks. A chain of `convert -> ddc -> fm_demod` with `chunk` 256 on `C32` takes two buffers of 2048 bytes. Add `ARENA_ALIGN - 1` bytes when the arena does not start at an aligned address. A `chunk` below `b.min_input()` is raised to it; give at least that, or size the arena from the stage's `min_input()`.
+`Chain::storage_bytes(chunk)` is `chunk * size_of::<A::Out>()` (8 for `C32`, 4 for `CQ15` and `f32`, 2 for `Q15`, 1 for `u8`) without padding; for a pair it is `chunk * size_of::<X>()`, the padding that aligns the second buffer, and `chunk * size_of::<Y>()`. On a fresh arena that starts at an aligned address (`AlignedBytes`) and is used by the blocks in construction order, each buffer starts at the next multiple of its element alignment, as for the blocks. A chain of `convert -> ddc -> fm_demod` with `chunk` 256 on `C32` takes two buffers of 2048 bytes. Add `ARENA_ALIGN - 1` bytes when the arena does not start at an aligned address. A `chunk` below `b.min_input()` is raised to it; give at least that, or size the arena from the stage's `min_input()`.
+
+A fork (`Fork`, M31; [blocks.md](blocks.md#composite-blocks)) takes, after the buffers of its two branches, an input buffer of `chunk` samples of `A::In`, an output buffer of `chunk` samples per branch and, when the branch delays differ, an alignment ring of `k` samples of the delayed branch's output type. `Fork::storage_bytes(&a, &b, chunk)` takes the built branches and returns this sum with the padding between the buffers, exact on a fresh aligned arena like `Chain::storage_bytes`; it returns the errors of `Fork::new` (other than `Storage`), so it also tells whether the branches can be forked at all. A fork does not raise `chunk`: a `chunk` below the `min_input()` of a branch is `InvalidParameter`. Two `f32` branches with `chunk` 256 and no alignment take three buffers of 1024 bytes.
 
 ## Memory maps and linker scripts
 

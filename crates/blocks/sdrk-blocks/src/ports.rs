@@ -4,14 +4,71 @@
 //! together ([`Two`]) or frames of `f32` values ([`Frame`]). The types exist only at compile
 //! time; a stream block keeps the signature it had before ports were introduced.
 
+use core::mem::{align_of, size_of};
+
 use sdrk::{C32, CQ15, Q15};
 
 use crate::block::FrameMeta;
 use crate::describe::PortType;
+use crate::error::Result;
+use crate::storage::Storage;
 
-mod sealed {
+pub(crate) mod sealed {
+    use super::Ports;
+    use crate::error::Result;
+    use crate::storage::Storage;
+
     /// Seals [`StreamElem`](super::StreamElem): only the five sample types implement it.
     pub trait Sealed {}
+
+    /// Seals [`ChainItem`](super::ChainItem) and holds its machinery, which stays private to
+    /// the crate: the intermediate buffer(s) of a chain and their views.
+    pub trait ChainBufs: Ports {
+        /// The buffer(s) that hold `len` items: one buffer for a stream, two for a pair.
+        type Bufs<S: Storage>: Send;
+
+        /// Bytes [`ChainBufs::alloc`] takes for `len` items on an empty arena that starts at
+        /// an [`ARENA_ALIGN`](crate::ARENA_ALIGN)-aligned address, including the padding
+        /// between the buffers of a pair (saturating).
+        fn bytes(len: usize) -> usize;
+
+        /// Allocates the buffer(s) of `len` items from `storage`.
+        fn alloc<S: Storage>(storage: &mut S, len: usize) -> Result<Self::Bufs<S>>;
+
+        /// Number of items the buffer(s) hold.
+        fn capacity<S: Storage>(bufs: &Self::Bufs<S>) -> usize;
+
+        /// Read-only view of the items `start..end`; `None` if the range is out of bounds.
+        fn view<S: Storage>(
+            bufs: &Self::Bufs<S>,
+            start: usize,
+            end: usize,
+        ) -> Option<Self::Ref<'_>>;
+
+        /// Writable view of the items from `start` to the end; `None` if `start` is out of
+        /// bounds.
+        fn view_mut_from<S: Storage>(
+            bufs: &mut Self::Bufs<S>,
+            start: usize,
+        ) -> Option<Self::Mut<'_>>;
+
+        /// Moves the items `start..end` to the front (of every buffer, in lockstep); `None` if
+        /// the range is out of bounds.
+        fn move_to_front<S: Storage>(
+            bufs: &mut Self::Bufs<S>,
+            start: usize,
+            end: usize,
+        ) -> Option<()>;
+    }
+}
+
+/// Moves `s[start..end]` to the front of `s`; `None` if the range is out of bounds.
+fn move_front<T: Copy>(s: &mut [T], start: usize, end: usize) -> Option<()> {
+    if start > end || end > s.len() {
+        return None;
+    }
+    s.copy_within(start..end, 0);
+    Some(())
 }
 
 macro_rules! stream_elem {
@@ -24,6 +81,9 @@ macro_rules! stream_elem {
             }
             fn view_mut(samples: &mut [Self]) -> <Self as Ports>::Mut<'_> {
                 samples
+            }
+            fn slice(view: <Self as Ports>::Ref<'_>) -> &[Self] {
+                view
             }
         }
     )*};
@@ -69,9 +129,116 @@ pub trait StreamElem: Copy + Send + Default + bytemuck::Pod + 'static + sealed::
 
     /// A mutable slice as the writable port view of this element (the identity).
     fn view_mut(samples: &mut [Self]) -> <Self as Ports>::Mut<'_>;
+
+    /// The read-only port view of this element as a slice (the identity; the inverse of
+    /// [`StreamElem::view`]).
+    ///
+    /// ```
+    /// use sdrk_blocks::StreamElem;
+    /// let data = [1.0f32, 2.0];
+    /// assert_eq!(<f32 as StreamElem>::slice(<f32 as StreamElem>::view(&data)), &data);
+    /// ```
+    fn slice(view: <Self as Ports>::Ref<'_>) -> &[Self];
 }
 
 stream_elem!(C32 => C32, CQ15 => CQ15, f32 => F32, Q15 => Q15, u8 => Raw);
+
+/// A port type that a [`Chain`](crate::Chain) can pass between its stages: a stream element
+/// ([`StreamElem`]) or a pair of streams ([`Two`]) of stream elements. Sealed.
+///
+/// The chain keeps the intermediate items in buffers from a [`Storage`]: one buffer of
+/// `chunk` samples for a stream, two buffers of `chunk` samples for a pair, written and read
+/// in lockstep (the rule of [`Two`]).
+///
+/// ```
+/// use sdrk::C32;
+/// use sdrk_blocks::{ChainItem, Two};
+/// fn passable<T: ChainItem>() {}
+/// passable::<C32>();
+/// passable::<Two<f32, C32>>();
+/// ```
+///
+/// Frames (and the packet ports of a later milestone, which are not stream elements) cannot
+/// be passed between the stages of a chain:
+///
+/// ```compile_fail,E0277
+/// use sdrk_blocks::{ChainItem, Frame};
+/// fn passable<T: ChainItem>() {}
+/// passable::<Frame>();
+/// ```
+pub trait ChainItem: Ports + sealed::ChainBufs {}
+
+impl<T: StreamElem> sealed::ChainBufs for T {
+    type Bufs<S: Storage> = S::Buf<T>;
+
+    fn bytes(len: usize) -> usize {
+        len.saturating_mul(size_of::<T>())
+    }
+    fn alloc<S: Storage>(storage: &mut S, len: usize) -> Result<Self::Bufs<S>> {
+        storage.alloc::<T>(len)
+    }
+    fn capacity<S: Storage>(bufs: &Self::Bufs<S>) -> usize {
+        bufs.as_ref().len()
+    }
+    fn view<S: Storage>(
+        bufs: &Self::Bufs<S>,
+        start: usize,
+        end: usize,
+    ) -> Option<<T as Ports>::Ref<'_>> {
+        bufs.as_ref().get(start..end).map(T::view)
+    }
+    fn view_mut_from<S: Storage>(
+        bufs: &mut Self::Bufs<S>,
+        start: usize,
+    ) -> Option<<T as Ports>::Mut<'_>> {
+        bufs.as_mut().get_mut(start..).map(T::view_mut)
+    }
+    fn move_to_front<S: Storage>(bufs: &mut Self::Bufs<S>, start: usize, end: usize) -> Option<()> {
+        move_front(bufs.as_mut(), start, end)
+    }
+}
+
+impl<T: StreamElem> ChainItem for T {}
+
+impl<X: StreamElem, Y: StreamElem> sealed::ChainBufs for Two<X, Y> {
+    type Bufs<S: Storage> = (S::Buf<X>, S::Buf<Y>);
+
+    fn bytes(len: usize) -> usize {
+        let first = len.saturating_mul(size_of::<X>());
+        let align = align_of::<Y>();
+        let pad = (align - first % align) % align;
+        first
+            .saturating_add(pad)
+            .saturating_add(len.saturating_mul(size_of::<Y>()))
+    }
+    fn alloc<S: Storage>(storage: &mut S, len: usize) -> Result<Self::Bufs<S>> {
+        let x = storage.alloc::<X>(len)?;
+        let y = storage.alloc::<Y>(len)?;
+        Ok((x, y))
+    }
+    fn capacity<S: Storage>(bufs: &Self::Bufs<S>) -> usize {
+        bufs.0.as_ref().len().min(bufs.1.as_ref().len())
+    }
+    fn view<S: Storage>(bufs: &Self::Bufs<S>, start: usize, end: usize) -> Option<(&[X], &[Y])> {
+        Some((
+            bufs.0.as_ref().get(start..end)?,
+            bufs.1.as_ref().get(start..end)?,
+        ))
+    }
+    fn view_mut_from<S: Storage>(
+        bufs: &mut Self::Bufs<S>,
+        start: usize,
+    ) -> Option<(&mut [X], &mut [Y])> {
+        let (x, y) = bufs;
+        Some((x.as_mut().get_mut(start..)?, y.as_mut().get_mut(start..)?))
+    }
+    fn move_to_front<S: Storage>(bufs: &mut Self::Bufs<S>, start: usize, end: usize) -> Option<()> {
+        move_front(bufs.0.as_mut(), start, end)?;
+        move_front(bufs.1.as_mut(), start, end)
+    }
+}
+
+impl<X: StreamElem, Y: StreamElem> ChainItem for Two<X, Y> {}
 
 /// What a block reads and writes in one `process` call.
 ///

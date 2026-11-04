@@ -910,11 +910,11 @@ fn the_calls_per_process_are_bounded() {
     assert!(c.first().1 < 100, "A is called per buffer, not per sample");
 }
 
-fn assert_send<T: Send>() {}
+fn assert_send_sync<T: Send + Sync>() {}
 
 #[test]
-fn chains_are_send_and_describe_themselves() {
-    assert_send::<Chain<Join, Split, Vs>>();
+fn chains_are_send_sync_and_describe_themselves() {
+    assert_send_sync::<Chain<Join, Split, Vs>>();
     let c = build((Join, Split), 4);
     assert_eq!(c.description().kind, "chain");
     assert!(
@@ -922,4 +922,270 @@ fn chains_are_send_and_describe_themselves() {
             .iter()
             .any(|d| d.kind == "chain")
     );
+}
+
+// ---------------------------------------------------------------------------------------
+// a fork as the first stage, a block that reads the pair as the second (M31 test 4)
+
+mod with_fork {
+    use super::*;
+    use common::{check_exact_storage, real_signal};
+    use sdrk_blocks::design::BiquadResponse;
+    use sdrk_blocks::{
+        BiquadConfig, BiquadRealBlock, DelayConfig, DelayRealBlock, Fork, MakeComplexBlock,
+        StereoPllBlock, StereoPllConfig, Storage,
+    };
+
+    type As = ArenaStorage<'static>;
+
+    const FS_PLL: u64 = 192_000;
+
+    fn delay_real<S: Storage>(samples: usize, fs: u64, st: &mut S) -> DelayRealBlock<f32, S> {
+        DelayRealBlock::new(&DelayConfig { samples }, rate(fs), st).unwrap()
+    }
+
+    fn lowpass_cfg() -> BiquadConfig {
+        BiquadConfig {
+            response: BiquadResponse::Lowpass,
+            cutoff_hz: 2_000.0,
+            order: 4,
+            ..BiquadConfig::default()
+        }
+    }
+
+    fn pilot_cfg() -> BiquadConfig {
+        BiquadConfig {
+            response: BiquadResponse::Bandpass,
+            cutoff_hz: 19_000.0,
+            order: 2,
+            q: 5.0,
+        }
+    }
+
+    fn biquad_real<S: Storage>(cfg: &BiquadConfig, fs: u64, st: &mut S) -> BiquadRealBlock<f32, S> {
+        BiquadRealBlock::new(cfg, rate(fs), st).unwrap()
+    }
+
+    /// `fork(delay(k), biquad) -> make_complex` at 48 kHz.
+    fn fork_make_complex(
+        k: usize,
+    ) -> (
+        Fork<DelayRealBlock<f32, Vs>, BiquadRealBlock<f32, Vs>, Vs>,
+        MakeComplexBlock<C32, Vs>,
+    ) {
+        let st = &mut VecStorage;
+        let fork = Fork::new(
+            delay_real(k, 48_000, st),
+            biquad_real(&lowpass_cfg(), 48_000, st),
+            64,
+            st,
+        )
+        .unwrap();
+        (fork, MakeComplexBlock::new(rate(48_000), st).unwrap())
+    }
+
+    /// `fork(delay(0), pilot band-pass) -> stereo_pll` at 192 kHz.
+    fn fork_stereo_pll() -> (
+        Fork<DelayRealBlock<f32, Vs>, BiquadRealBlock<f32, Vs>, Vs>,
+        StereoPllBlock<C32, Vs>,
+    ) {
+        let st = &mut VecStorage;
+        let fork = Fork::new(
+            delay_real(0, FS_PLL, st),
+            biquad_real(&pilot_cfg(), FS_PLL, st),
+            64,
+            st,
+        )
+        .unwrap();
+        let pll = StereoPllBlock::new(&StereoPllConfig::default(), rate(FS_PLL), st).unwrap();
+        (fork, pll)
+    }
+
+    /// A multiplex-like signal: a 1 kHz tone, a 19 kHz pilot of level 0.1 and noise.
+    fn mpx(n: usize) -> Vec<f32> {
+        let noise = real_signal::<f32>(n, 476, 0.0);
+        (0..n)
+            .map(|i| {
+                let t = i as f64 / FS_PLL as f64;
+                let tone = 0.4 * (std::f64::consts::TAU * 1_000.0 * t).sin();
+                let pilot = 0.1 * (std::f64::consts::TAU * 19_000.0 * t).sin();
+                (tone + pilot) as f32 + 0.05 * noise[i]
+            })
+            .collect()
+    }
+
+    /// The 20 random cut plans (input, output) of seed 469.
+    fn cut_plans() -> Vec<(ChunkPlan, ChunkPlan)> {
+        let mut rng = Pcg32::new(469, 32);
+        (0..20)
+            .map(|_| {
+                let input = ChunkPlan::new(rng.next_u64(), 1 + rng.below(400) as usize);
+                let output = ChunkPlan::new(rng.next_u64(), 1 + rng.below(64) as usize);
+                (input, output)
+            })
+            .collect()
+    }
+
+    /// The chain of `mk()` equals the step-by-step computation `want` bit for bit, for five
+    /// intermediate buffer sizes and the 20 cut plans.
+    fn check<A, B>(mk: impl Fn() -> (A, B), input: &[f32], want: &[B::Out])
+    where
+        A: Block<In = f32>,
+        B: Block<In = A::Out>,
+        A::Out: sdrk_blocks::ChainItem,
+        B::Out: StreamElem,
+    {
+        assert!(want.len() > 100);
+        for chunk in [1, 7, 64, 256, 4096] {
+            let (a, b) = mk();
+            let mut c = Chain::new(a, b, chunk, &mut VecStorage).unwrap();
+            let got = run_chain(&mut c, input, None, None);
+            assert_eq!(got.len(), want.len(), "chunk {chunk}");
+            assert!(bits(&got) == bits(want), "chunk {chunk}");
+        }
+        let (a, b) = mk();
+        let mut c = Chain::new(a, b, 32, &mut VecStorage).unwrap();
+        for (i, (pi, po)) in cut_plans().into_iter().enumerate() {
+            let got = run_chain(&mut c, input, Some(pi), Some(po));
+            assert_eq!(got.len(), want.len(), "plan {i}");
+            assert!(bits(&got) == bits(want), "plan {i}");
+            c.reset();
+        }
+    }
+
+    #[test]
+    fn fork_then_make_complex_equals_the_steps() {
+        let input = real_signal::<f32>(4_000, 477, 0.013);
+        for k in [0usize, 3] {
+            // Step by step: each branch alone, the earlier one (the IIR filter, delay 0)
+            // behind k zeros, then the pairs joined.
+            let re = common::run_block(&mut delay_real(k, 48_000, &mut VecStorage), &input, None);
+            let lp = common::run_block(
+                &mut biquad_real(&lowpass_cfg(), 48_000, &mut VecStorage),
+                &input,
+                None,
+            );
+            let im: Vec<f32> = core::iter::repeat_n(0.0, k)
+                .chain(lp)
+                .take(re.len())
+                .collect();
+            let mut want = vec![C32::default(); re.len()];
+            let p = MakeComplexBlock::<C32, Vs>::new(rate(48_000), &mut VecStorage)
+                .unwrap()
+                .process((&re, &im), &mut want)
+                .unwrap();
+            assert_eq!(p.produced, re.len());
+            check(|| fork_make_complex(k), &input, &want);
+        }
+    }
+
+    #[test]
+    fn fork_then_stereo_pll_equals_the_steps() {
+        let input = mpx(40_000);
+        let pilot = common::run_block(
+            &mut biquad_real(&pilot_cfg(), FS_PLL, &mut VecStorage),
+            &input,
+            None,
+        );
+        let mut pll = StereoPllBlock::<C32, Vs>::new(
+            &StereoPllConfig::default(),
+            rate(FS_PLL),
+            &mut VecStorage,
+        )
+        .unwrap();
+        let mut want = vec![C32::default(); input.len()];
+        let p = pll.process((&input, &pilot), &mut want).unwrap();
+        assert_eq!(p.produced, input.len());
+        assert!(
+            pll.pilot_locked(),
+            "the loop did not lock on the test signal"
+        );
+        check(fork_stereo_pll, &input, &want);
+        // The chain locks as the block alone does.
+        let (a, b) = fork_stereo_pll();
+        let mut c = Chain::new(a, b, 64, &mut VecStorage).unwrap();
+        run_chain(&mut c, &input, None, None);
+        assert!(c.second().pilot_locked());
+    }
+
+    /// Bytes of all stages and the buffers of fork and chain, from their `storage_bytes`.
+    fn total_bytes(
+        k: usize,
+        fs: u64,
+        bp: &BiquadConfig,
+        fork_chunk: usize,
+        chain_chunk: usize,
+    ) -> usize {
+        let a = delay_real(k, fs, &mut VecStorage);
+        let b = biquad_real(bp, fs, &mut VecStorage);
+        DelayRealBlock::<f32, As>::storage_bytes(&DelayConfig { samples: k }, rate(fs)).unwrap()
+            + BiquadRealBlock::<f32, As>::storage_bytes(bp, rate(fs)).unwrap()
+            + Fork::<_, _, Vs>::storage_bytes(&a, &b, fork_chunk).unwrap()
+            + Chain::<
+                Fork<DelayRealBlock<f32, As>, BiquadRealBlock<f32, As>, As>,
+                MakeComplexBlock<C32, As>,
+                As,
+            >::storage_bytes(chain_chunk)
+    }
+
+    #[test]
+    fn storage_of_fork_and_chain_is_exact() {
+        for (k, fork_chunk, chain_chunk) in [(0usize, 1usize, 1usize), (3, 64, 32), (17, 5, 256)] {
+            for (fs, bp, pll) in [(48_000, lowpass_cfg(), false), (FS_PLL, pilot_cfg(), true)] {
+                let total = total_bytes(k, fs, &bp, fork_chunk, chain_chunk);
+                // Two f32 buffers between the stages of the chain.
+                assert!(total >= 2 * 4 * chain_chunk + 3 * 4 * fork_chunk + 4 * k);
+                let build = |arena: &mut ArenaStorage<'_>| -> Result<(), Error> {
+                    let a = DelayRealBlock::<f32, _>::new(
+                        &DelayConfig { samples: k },
+                        rate(fs),
+                        arena,
+                    )?;
+                    let b = BiquadRealBlock::<f32, _>::new(&bp, rate(fs), arena)?;
+                    let fork = Fork::new(a, b, fork_chunk, arena)?;
+                    if pll {
+                        let j = StereoPllBlock::<C32, _>::new(
+                            &StereoPllConfig::default(),
+                            rate(fs),
+                            arena,
+                        )?;
+                        Chain::new(fork, j, chain_chunk, arena).map(|_| ())
+                    } else {
+                        let j = MakeComplexBlock::<C32, _>::new(rate(fs), arena)?;
+                        Chain::new(fork, j, chain_chunk, arena).map(|_| ())
+                    }
+                };
+                // Fresh aligned arena: exactly the sum.
+                check_exact_storage(total, build);
+                // Shifted by one byte: padding of at most align_of - 1 = 3 bytes per buffer on
+                // top (all buffers hold f32 here, so only the first one is padded).
+                let mut mem = Aligned::new(total + 64);
+                let mut arena = ArenaStorage::new(mem.bytes(total + 64).split_at_mut(1).1);
+                build(&mut arena).unwrap();
+                assert!(
+                    arena.used() > total && arena.used() <= total + 3,
+                    "k {k}, chunks {fork_chunk}/{chain_chunk}: {} of {total}",
+                    arena.used()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn chains_with_a_fork_are_send_and_sync() {
+        assert_send_sync::<
+            Chain<
+                Fork<DelayRealBlock<f32, Vs>, BiquadRealBlock<f32, Vs>, Vs>,
+                StereoPllBlock<C32, Vs>,
+                Vs,
+            >,
+        >();
+        assert_send_sync::<
+            Chain<
+                Fork<DelayRealBlock<f32, As>, BiquadRealBlock<f32, As>, As>,
+                MakeComplexBlock<C32, As>,
+                As,
+            >,
+        >();
+    }
 }

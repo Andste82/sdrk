@@ -19,10 +19,16 @@ use anyhow::Context;
 use crate::scan::Finding;
 
 /// Kinds that cannot follow the file and type rules, with the reason.
-const EXCEPTIONS: &[(&str, &str)] = &[(
-    "chain",
-    "a Rust-only construct in `chain.rs` (M27), not a pipeline kind and not in `all_descriptions()`",
-)];
+const EXCEPTIONS: &[(&str, &str)] = &[
+    (
+        "chain",
+        "a Rust-only construct in `chain.rs` (M27), not a pipeline kind and not in `all_descriptions()`",
+    ),
+    (
+        "fork",
+        "a Rust-only construct in `fork.rs` (M31), not a pipeline kind and not in `all_descriptions()`",
+    ),
+];
 
 /// Kinds that have a description but no pipeline kind yet, with the reason (D271). They have two
 /// inputs and a pipeline node has one incoming edge. Remove the entries in M34.

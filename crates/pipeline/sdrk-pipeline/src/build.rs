@@ -7,8 +7,8 @@ use sdrk_blocks::{FrameMeta, ParamValue, PortType};
 use sdrk::{Delay, Rate};
 
 use crate::analysis::{
-    OutPath, OutSource, Plan, PlanDst, PlanInput, PlanNode, PlanOutput, PlanStream, elem_size,
-    output_paths, output_unit_rate,
+    OutPath, OutSource, Plan, PlanDst, PlanInput, PlanNode, PlanOutput, PlanStream, chain_to,
+    elem_size, output_paths, output_tree, output_unit_rate,
 };
 use crate::latency::{PathNode, path_latency};
 use crate::model::{PipelineSpec, UnderrunPolicy};
@@ -16,7 +16,7 @@ use crate::node::{NodeInput, NodeOutput};
 use crate::registry::Registry;
 use crate::runner::{
     Buffer, Burst, Dst, FrameQueue, InRt, NodeRt, NodeStats, OutKind, OutRt, Pipeline, QUEUE_MARKS,
-    Queue, Reach, Stream,
+    Queue, Reach, Side, Stream,
 };
 use crate::storage::{VecStorage, alloc_vec};
 use crate::structure::join;
@@ -86,14 +86,18 @@ fn build_nodes(
         if let (Some(t), Some(r)) = (node.timing(), report.nodes.get_mut(i)) {
             r.delay_samples_in = t.delay;
         }
-        if let Some(s) = streams.get_mut(pn.src) {
-            s.min_input = s.min_input.max(node.min_input());
+        for sid in [Some(pn.src), pn.src_b].into_iter().flatten() {
+            if let Some(s) = streams.get_mut(sid) {
+                s.min_input = s.min_input.max(node.min_input());
+            }
         }
         nodes.push(NodeRt {
             name: pn.name.clone(),
             node,
             src: pn.src,
             slot: 0,
+            src_b: pn.src_b,
+            slot_b: 0,
             dst: match pn.dst {
                 PlanDst::Stream(s) => Dst::Stream(s),
                 PlanDst::Frames { output } => Dst::Frames(output),
@@ -141,6 +145,12 @@ fn build_streams(
     for n in nodes {
         if let Some(s) = rt.get_mut(n.src) {
             n.slot = s.readers.len();
+            s.readers.push(0);
+        }
+        if let Some(sb) = n.src_b
+            && let Some(s) = rt.get_mut(sb)
+        {
+            n.slot_b = s.readers.len();
             s.readers.push(0);
         }
     }
@@ -230,6 +240,8 @@ fn build_output(
         kind,
         input: 0,
         path: Vec::new(),
+        sides: Vec::new(),
+        tree: Vec::new(),
         rate,
         anchor: None,
         lead: Delay::ZERO,
@@ -288,7 +300,8 @@ fn build_inputs(
         let readers: Vec<usize> = plan_nodes
             .iter()
             .enumerate()
-            .filter(|(_, n)| n.src == pi.stream)
+            // A two-input node reads from the buffers, never from the caller's slice.
+            .filter(|(_, n)| n.src == pi.stream && n.src_b.is_none())
             .map(|(i, _)| i)
             .collect();
         let mut reach = Vec::new();
@@ -532,6 +545,18 @@ fn connect_paths(
     for (oi, ((out, path), po)) in outputs.iter_mut().zip(paths).zip(plan_outputs).enumerate() {
         out.input = path.input;
         out.path.clone_from(&path.nodes);
+        out.tree = output_tree(plan_nodes, po, oi);
+        out.sides = path
+            .nodes
+            .iter()
+            .filter_map(|k| plan_nodes.get(*k).map(|n| (*k, n)))
+            .filter_map(|(k, n)| {
+                n.src_b.map(|sb| Side {
+                    join: k,
+                    chain: chain_to(plan_nodes, sb),
+                })
+            })
+            .collect();
         if let Some(i) = inputs.get_mut(path.input) {
             i.outputs.push(oi);
         }

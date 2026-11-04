@@ -6,6 +6,7 @@
 //! stage 1 found no error, so that a single mistake does not produce a flood of follow-up
 //! diagnostics.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use sdrk::{Delay, Rate};
@@ -13,10 +14,13 @@ use sdrk_blocks::PortType;
 use sdrk_device::SampleFormat;
 use serde_json::{Map, Value};
 
-use crate::latency::{PathNode, path_latency};
+use crate::latency::{
+    Frac, PathNode, delay_seconds, frac_abs_diff, frac_add, frac_cmp, path_latency,
+    seconds_to_samples,
+};
 use crate::model::{
-    BackendSpec, InputType, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, OutputSpec,
-    OutputType, PipelineSpec, Precision, is_valid_name,
+    AlignMode, BackendSpec, InputType, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS,
+    OutputSpec, OutputType, PipelineSpec, PortName, Precision, is_valid_name,
 };
 use crate::params::check_params;
 use crate::registry::{BlockFactory, BuildOptions, Checked, PortKind, Registry};
@@ -51,7 +55,10 @@ pub(crate) struct PlanNode {
     pub kind: String,
     pub auto: bool,
     pub checked: Checked,
+    /// The stream of port `a`.
     pub src: usize,
+    /// The stream of port `b` of a two-input node.
+    pub src_b: Option<usize>,
     pub dst: PlanDst,
     pub rate_in: Rate,
 }
@@ -66,6 +73,8 @@ pub(crate) struct PlanStream {
     pub elems: (u64, u64),
     /// Largest `min_input` of the readers.
     pub min_input: usize,
+    /// Group delay from the pipeline input to this stream, in seconds (exact).
+    pub delay_s: Frac,
 }
 
 /// An input of the pipeline.
@@ -208,6 +217,24 @@ fn describe_types(types: &[PortType]) -> String {
         .join(", ")
 }
 
+/// A rate for messages: an integer or `num/den`.
+fn rate_text(rate: Rate) -> String {
+    if rate.den() == 1 {
+        rate.num().to_string()
+    } else {
+        format!("{}/{}", rate.num(), rate.den())
+    }
+}
+
+/// A non-negative fraction for messages: an integer or `num/den`.
+fn format_delay(value: Frac) -> String {
+    if value.1 == 1 {
+        value.0.to_string()
+    } else {
+        format!("{}/{}", value.0, value.1)
+    }
+}
+
 /// Runs both stages.
 pub(crate) fn analyze(registry: &Registry, spec: &PipelineSpec, opts: &BuildOptions) -> Analysis {
     let mut report = Report::default();
@@ -257,15 +284,41 @@ fn stage1(registry: &Registry, spec: &PipelineSpec, report: &mut Report) {
             ),
         );
     }
-    check_names(spec, report);
+    check_names(registry, spec, report);
     check_groups(spec, report);
     check_inputs(spec, report);
     check_nodes(registry, spec, report);
     check_outputs(spec, report);
 }
 
+/// The names of the automatic nodes with the path of the part that owns them: the converters of
+/// the inputs (`<input>__convert`) and outputs (`<output>__convert_out`) and, for the nodes with
+/// two inputs, the delay that aligns them (`<node>__align`).
+fn automatic_names(registry: &Registry, spec: &PipelineSpec) -> Vec<(String, String)> {
+    let inputs = spec
+        .inputs
+        .iter()
+        .filter(|(_, i)| i.format.is_some())
+        .map(|(n, _)| (format!("{n}__convert"), join("inputs", n)));
+    let outputs = spec
+        .outputs
+        .iter()
+        .filter(|(_, o)| o.format.is_some() && o.output_type == OutputType::Stream)
+        .map(|(n, _)| (format!("{n}__convert_out"), join("outputs", n)));
+    let nodes = spec
+        .nodes
+        .iter()
+        .filter(|(_, n)| {
+            registry
+                .factory(&n.kind)
+                .is_some_and(|f| f.inputs().len() > 1)
+        })
+        .map(|(n, _)| (format!("{n}__align"), join("nodes", n)));
+    inputs.chain(outputs).chain(nodes).collect()
+}
+
 /// Name pattern, then uniqueness across the three sections and the automatic nodes.
-fn check_names(spec: &PipelineSpec, report: &mut Report) {
+fn check_names(registry: &Registry, spec: &PipelineSpec, report: &mut Report) {
     let mut seen: BTreeMap<&str, &'static str> = BTreeMap::new();
     let sections: [(&'static str, Vec<&String>); 3] = [
         ("inputs", spec.inputs.keys().collect()),
@@ -292,18 +345,7 @@ fn check_names(spec: &PipelineSpec, report: &mut Report) {
             }
         }
     }
-    // Automatic nodes take the names `<input>__convert` and `<output>__convert_out`.
-    let inputs = spec
-        .inputs
-        .iter()
-        .filter(|(_, i)| i.format.is_some())
-        .map(|(n, _)| (format!("{n}__convert"), join("inputs", n)));
-    let outputs = spec
-        .outputs
-        .iter()
-        .filter(|(_, o)| o.format.is_some() && o.output_type == OutputType::Stream)
-        .map(|(n, _)| (format!("{n}__convert_out"), join("outputs", n)));
-    for (auto, owner) in inputs.chain(outputs) {
+    for (auto, owner) in automatic_names(registry, spec) {
         if let Some(section) = seen.get(auto.as_str()) {
             report.error(
                 join(section, &auto),
@@ -480,6 +522,65 @@ pub(crate) struct OutPath {
     pub nodes: Vec<usize>,
 }
 
+/// The node that writes the stream `sid`.
+pub(crate) fn producer_of(nodes: &[PlanNode], sid: usize) -> Option<usize> {
+    nodes.iter().position(|n| n.dst == PlanDst::Stream(sid))
+}
+
+/// The nodes from the pipeline input to the stream `sid` in processing order, following port
+/// `a` of every node.
+pub(crate) fn chain_to(nodes: &[PlanNode], sid: usize) -> Vec<usize> {
+    let mut chain = Vec::new();
+    let mut cur = Some(sid);
+    while let Some(s) = cur {
+        match producer_of(nodes, s) {
+            Some(k) => {
+                chain.push(k);
+                cur = nodes.get(k).map(|n| n.src);
+            }
+            None => break,
+        }
+    }
+    chain.reverse();
+    chain
+}
+
+/// Adds every node that the stream `sid` depends on (both ports of the two-input nodes).
+fn collect_tree(nodes: &[PlanNode], sid: usize, tree: &mut BTreeSet<usize>) {
+    if let Some(k) = producer_of(nodes, sid)
+        && tree.insert(k)
+        && let Some(n) = nodes.get(k)
+    {
+        collect_tree(nodes, n.src, tree);
+        if let Some(sb) = n.src_b {
+            collect_tree(nodes, sb, tree);
+        }
+    }
+}
+
+/// Every node that output `oi` depends on, in processing order.
+pub(crate) fn output_tree(nodes: &[PlanNode], out: &PlanOutput, oi: usize) -> Vec<usize> {
+    let mut tree = BTreeSet::new();
+    match out.source {
+        OutSource::Stream(sid) => collect_tree(nodes, sid, &mut tree),
+        OutSource::Frames { .. } => {
+            if let Some(k) = nodes
+                .iter()
+                .position(|n| n.dst == PlanDst::Frames { output: oi })
+            {
+                tree.insert(k);
+                if let Some(n) = nodes.get(k) {
+                    collect_tree(nodes, n.src, &mut tree);
+                    if let Some(sb) = n.src_b {
+                        collect_tree(nodes, sb, &mut tree);
+                    }
+                }
+            }
+        }
+    }
+    tree.into_iter().collect()
+}
+
 /// The path of every output.
 pub(crate) fn output_paths(
     nodes: &[PlanNode],
@@ -573,6 +674,61 @@ fn latency_report(
     reports
 }
 
+/// One node of each cycle among the `leftover` nodes (those that Kahn's algorithm could not
+/// order): the first by `prio`, then by name. Walks the feeders depth first; a node behind a
+/// cycle finds the cycle in front of it.
+fn cycle_nodes<'a>(
+    parents: &BTreeMap<&'a str, Vec<&'a str>>,
+    leftover: &BTreeSet<&'a str>,
+    prio: &dyn Fn(&str) -> usize,
+) -> Vec<&'a str> {
+    let mut state: BTreeMap<&str, u8> = BTreeMap::new();
+    let mut found: Vec<&str> = Vec::new();
+    for &start in leftover {
+        if state.contains_key(start) {
+            continue;
+        }
+        state.insert(start, 1);
+        let mut stack: Vec<(&str, usize)> = vec![(start, 0)];
+        while let Some(&(n, i)) = stack.last() {
+            let feeder = parents.get(n).and_then(|f| f.get(i)).copied();
+            let Some(feeder) = feeder else {
+                state.insert(n, 2);
+                stack.pop();
+                continue;
+            };
+            if let Some(top) = stack.last_mut() {
+                top.1 += 1;
+            }
+            if !leftover.contains(feeder) {
+                continue;
+            }
+            match state.get(feeder) {
+                None => {
+                    state.insert(feeder, 1);
+                    stack.push((feeder, 0));
+                }
+                Some(1) => {
+                    // A cycle: the walk from `feeder` onwards.
+                    if let Some(pos) = stack.iter().position(|(w, _)| *w == feeder)
+                        && let Some(best) = stack
+                            .iter()
+                            .skip(pos)
+                            .map(|(w, _)| *w)
+                            .min_by_key(|w| (prio(w), *w))
+                    {
+                        found.push(best);
+                    }
+                }
+                Some(_) => {}
+            }
+        }
+    }
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
 // ------------------------------------------------------------------ stage 2
 
 struct Stage2<'a> {
@@ -584,8 +740,8 @@ struct Stage2<'a> {
     nodes: Vec<PlanNode>,
     inputs: Vec<PlanInput>,
     outputs: Vec<PlanOutput>,
-    /// Index of the edge that feeds each node or output.
-    incoming: BTreeMap<&'a str, usize>,
+    /// Index of the edge that feeds each input port of each node, and each output (port `a`).
+    incoming: BTreeMap<(&'a str, PortName), usize>,
     produced: BTreeMap<String, Produced>,
 }
 
@@ -665,7 +821,7 @@ impl<'a> Stage2<'a> {
     fn graph(&mut self) {
         let spec = self.spec;
         let mut outgoing: BTreeSet<&str> = BTreeSet::new();
-        let mut extra: Vec<(usize, &str)> = Vec::new();
+        let mut extra: Vec<(usize, &str, PortName)> = Vec::new();
         for (k, edge) in spec.edges.iter().enumerate() {
             let from_ok = self.endpoint_ok(k, "from", &edge.from);
             let to_ok = self.endpoint_ok(k, "to", &edge.to);
@@ -673,39 +829,99 @@ impl<'a> Stage2<'a> {
                 outgoing.insert(edge.from.as_str());
             }
             if from_ok && to_ok {
-                if self.incoming.contains_key(edge.to.as_str()) {
-                    extra.push((k, edge.to.as_str()));
-                } else {
-                    self.incoming.insert(edge.to.as_str(), k);
+                let port = self.edge_port(k, edge);
+                match self.incoming.entry((edge.to.as_str(), port)) {
+                    Entry::Occupied(_) => extra.push((k, edge.to.as_str(), port)),
+                    Entry::Vacant(slot) => {
+                        slot.insert(k);
+                    }
                 }
             }
         }
-        for (k, to) in extra {
+        for (k, to, port) in extra {
+            // Port `b` has its own path; `a` and the outputs keep `edges[k].to`.
+            let path = match port {
+                PortName::A => format!("edges[{k}].to"),
+                PortName::B => format!("edges[{k}].port"),
+            };
             self.report.error(
-                format!("edges[{k}].to"),
+                path,
                 DiagCode::MultipleInputs,
-                format!("`{to}` already has an incoming edge; a node or output has exactly one"),
+                format!(
+                    "the port `{}` of `{to}` already has an incoming edge; an input port of a node or an output has exactly one",
+                    port.as_str()
+                ),
             );
         }
         self.unconnected(&outgoing);
     }
 
-    /// Nodes and outputs without an incoming edge, nodes and inputs that go nowhere.
+    /// The port an edge feeds. An edge to a port that the destination does not have is reported
+    /// (`unknown_port`) and counts for port `a` so that it does not also show up as a missing
+    /// input.
+    fn edge_port(&mut self, k: usize, edge: &'a crate::model::EdgeSpec) -> PortName {
+        let spec = self.spec;
+        let port = edge.port_or_default();
+        let ports = spec
+            .nodes
+            .get(&edge.to)
+            .and_then(|n| self.registry.factory(&n.kind))
+            .map(|f| f.inputs().len());
+        let bad = match (edge.port, ports) {
+            (Some(_), None) => Some(format!(
+                "`{}` is an output and has no input ports; leave `port` out",
+                edge.to
+            )),
+            (Some(_), Some(count)) if port.index() >= count => Some(format!(
+                "`{}` has no input port `{}`; its kind has {count} input{}",
+                edge.to,
+                port.as_str(),
+                if count == 1 { "" } else { "s" }
+            )),
+            _ => None,
+        };
+        match bad {
+            Some(message) => {
+                self.report
+                    .error(format!("edges[{k}].port"), DiagCode::UnknownPort, message);
+                PortName::A
+            }
+            None => port,
+        }
+    }
+
+    /// Ports of a node (or the one port of an output) without an incoming edge, nodes and
+    /// inputs that go nowhere.
     fn unconnected(&mut self, outgoing: &BTreeSet<&str>) {
         let spec = self.spec;
-        let sections: [(&str, Vec<&String>); 2] = [
-            ("nodes", spec.nodes.keys().collect()),
-            ("outputs", spec.outputs.keys().collect()),
-        ];
-        for (section, names) in sections {
-            for name in names {
-                if !self.incoming.contains_key(name.as_str()) {
-                    self.report.error(
-                        join(section, name),
-                        DiagCode::MissingInput,
-                        format!("`{name}` has no incoming edge"),
-                    );
+        for (name, node) in &spec.nodes {
+            let count = self
+                .registry
+                .factory(&node.kind)
+                .map_or(1, |f| f.inputs().len());
+            for port in [PortName::A, PortName::B].into_iter().take(count) {
+                if !self.incoming.contains_key(&(name.as_str(), port)) {
+                    let (path, message) = match port {
+                        PortName::A => (
+                            join("nodes", name),
+                            format!("`{name}` has no incoming edge"),
+                        ),
+                        PortName::B => (
+                            join(&join("nodes", name), "ports.b"),
+                            format!("the port `b` of `{name}` has no incoming edge"),
+                        ),
+                    };
+                    self.report.error(path, DiagCode::MissingInput, message);
                 }
+            }
+        }
+        for name in spec.outputs.keys() {
+            if !self.incoming.contains_key(&(name.as_str(), PortName::A)) {
+                self.report.error(
+                    join("outputs", name),
+                    DiagCode::MissingInput,
+                    format!("`{name}` has no incoming edge"),
+                );
             }
         }
         for name in spec.nodes.keys() {
@@ -740,25 +956,35 @@ impl<'a> Stage2<'a> {
             first_seen.entry(edge.to.as_str()).or_insert(next);
         }
         let prio = |n: &str| first_seen.get(n).copied().unwrap_or(usize::MAX);
-        // parent[node] = the node feeding it, if the source is a node
-        let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
+        // parents[node] = the nodes feeding it (one per port, in the order of the ports)
+        let mut parents: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for name in spec.nodes.keys() {
-            if let Some(&k) = self.incoming.get(name.as_str())
-                && let Some(edge) = spec.edges.get(k)
-                && spec.nodes.contains_key(&edge.from)
-            {
-                parent.insert(name.as_str(), edge.from.as_str());
-                children
-                    .entry(edge.from.as_str())
-                    .or_default()
-                    .push(name.as_str());
+            for port in [PortName::A, PortName::B] {
+                if let Some(&k) = self.incoming.get(&(name.as_str(), port))
+                    && let Some(edge) = spec.edges.get(k)
+                    && spec.nodes.contains_key(&edge.from)
+                {
+                    parents
+                        .entry(name.as_str())
+                        .or_default()
+                        .push(edge.from.as_str());
+                    children
+                        .entry(edge.from.as_str())
+                        .or_default()
+                        .push(name.as_str());
+                }
             }
         }
+        // A node is ready when every edge from a node into it has been passed.
+        let mut waiting: BTreeMap<&str, usize> = parents
+            .iter()
+            .map(|(n, feeders)| (*n, feeders.len()))
+            .collect();
         let mut ready: BTreeSet<(usize, &str)> = spec
             .nodes
             .keys()
-            .filter(|n| !parent.contains_key(n.as_str()))
+            .filter(|n| !waiting.contains_key(n.as_str()))
             .map(|n| (prio(n), n.as_str()))
             .collect();
         let mut order = Vec::with_capacity(spec.nodes.len());
@@ -769,48 +995,23 @@ impl<'a> Stage2<'a> {
             done.insert(n);
             if let Some(kids) = children.get(n) {
                 for kid in kids {
-                    ready.insert((prio(kid), kid));
+                    if let Some(left) = waiting.get_mut(kid) {
+                        *left = left.saturating_sub(1);
+                        if *left == 0 {
+                            ready.insert((prio(kid), kid));
+                        }
+                    }
                 }
             }
         }
         if order.len() < spec.nodes.len() {
-            // Leftover nodes lie on a cycle or behind one. Follow the parent pointers.
-            let mut state: BTreeMap<&str, u8> = BTreeMap::new();
-            let leftover: Vec<&str> = spec
+            let leftover: BTreeSet<&str> = spec
                 .nodes
                 .keys()
                 .map(String::as_str)
                 .filter(|n| !done.contains(n))
                 .collect();
-            let mut found: Vec<&str> = Vec::new();
-            for &start in &leftover {
-                let mut walk: Vec<&str> = Vec::new();
-                let mut cur = Some(start);
-                while let Some(n) = cur {
-                    match state.get(n) {
-                        Some(1) => {
-                            // A cycle: the walk from `n` onwards.
-                            if let Some(pos) = walk.iter().position(|w| *w == n)
-                                && let Some(best) =
-                                    walk.iter().skip(pos).min_by_key(|w| (prio(w), **w))
-                            {
-                                found.push(best);
-                            }
-                            break;
-                        }
-                        Some(_) => break,
-                        None => {
-                            state.insert(n, 1);
-                            walk.push(n);
-                            cur = parent.get(n).copied();
-                        }
-                    }
-                }
-                for w in walk {
-                    state.insert(w, 2);
-                }
-            }
-            for n in found {
+            for n in cycle_nodes(&parents, &leftover, &prio) {
                 self.report.error(
                     join("nodes", n),
                     DiagCode::Cycle,
@@ -828,6 +1029,7 @@ impl<'a> Stage2<'a> {
             origin,
             elems,
             min_input: 0,
+            delay_s: (0, 1),
         });
         self.streams.len() - 1
     }
@@ -867,6 +1069,7 @@ impl<'a> Stage2<'a> {
                     auto,
                     checked,
                     src,
+                    src_b: None,
                     dst: PlanDst::Stream(usize::MAX),
                     rate_in,
                 });
@@ -897,7 +1100,13 @@ impl<'a> Stage2<'a> {
             (n.checked.output, n.checked.rate_out, n.rate_in, n.src)
         };
         let origin = self.streams.get(src)?.origin;
-        let _ = rate_in;
+        // The group delay from the input: that of the source (port `a`) plus the node's own.
+        let before = self.streams.get(src)?.delay_s;
+        let own = self
+            .nodes
+            .get(idx)
+            .and_then(|n| delay_seconds(n.checked.delay, rate_in));
+        let delay_s = own.and_then(|d| frac_add(before, d)).unwrap_or(before);
         match output {
             PortKind::Stream(ty) => {
                 let elems = if ty == PortType::Raw {
@@ -906,6 +1115,9 @@ impl<'a> Stage2<'a> {
                     (1, 1)
                 };
                 let s = self.new_stream(ty, rate_out, origin, elems);
+                if let Some(stream) = self.streams.get_mut(s) {
+                    stream.delay_s = delay_s;
+                }
                 self.nodes.get_mut(idx)?.dst = PlanDst::Stream(s);
                 Some(Produced::Stream(s))
             }
@@ -1028,63 +1240,232 @@ impl<'a> Stage2<'a> {
         }
     }
 
-    /// Type and rate check of one node.
-    fn node(&mut self, name: &str) {
+    /// The stream that arrives at a port of a node, with the checks that belong to the edge:
+    /// the producer must not have failed or produce frames, and the type must be accepted.
+    /// `None` after reporting (or when a failure was reported earlier).
+    fn port_stream(
+        &mut self,
+        node: &str,
+        kind: &str,
+        k: usize,
+        accepted: &[PortType],
+    ) -> Option<usize> {
         let spec = self.spec;
-        let (Some(node), Some(&k)) = (spec.nodes.get(name), self.incoming.get(name)) else {
-            return;
-        };
-        let Some(edge) = spec.edges.get(k) else {
-            return;
-        };
-        let path = join("nodes", name);
-        let produced = self
+        let edge = spec.edges.get(k)?;
+        match self
             .produced
             .get(&edge.from)
             .copied()
-            .unwrap_or(Produced::Failed);
-        let src = match produced {
-            Produced::Failed => {
-                self.produced.insert(name.to_string(), Produced::Failed);
-                return;
-            }
+            .unwrap_or(Produced::Failed)
+        {
+            Produced::Failed => None,
             Produced::Frames { .. } => {
                 self.report.error(
                     format!("edges[{k}].to"),
                     DiagCode::TypeMismatch,
                     format!(
-                        "`{}` produces frames, which only an output can take; `{name}` needs a stream",
+                        "`{}` produces frames, which only an output can take; `{node}` needs a stream",
                         edge.from
                     ),
                 );
-                self.produced.insert(name.to_string(), Produced::Failed);
-                return;
+                None
             }
-            Produced::Stream(s) => s,
+            Produced::Stream(s) => {
+                let ty = self.streams.get(s).map_or(PortType::Raw, |x| x.ty);
+                if accepted.contains(&ty) {
+                    Some(s)
+                } else {
+                    self.report.error(
+                        format!("edges[{k}].to"),
+                        DiagCode::TypeMismatch,
+                        format!(
+                            "`{node}` ({kind}) takes {}, but `{}` delivers {}",
+                            describe_types(accepted),
+                            edge.from,
+                            port_name(ty)
+                        ),
+                    );
+                    None
+                }
+            }
+        }
+    }
+
+    /// The rate, clock and type checks of the two inputs of a node; true if they pass. The
+    /// diagnostics sit at the `to` of the edge of port `b`.
+    fn pair_ok(&mut self, name: &str, kb: usize, a: usize, b: usize) -> bool {
+        let (Some(sa), Some(sb)) = (self.streams.get(a), self.streams.get(b)) else {
+            return false;
+        };
+        let (ta, tb, ra, rb, oa, ob) = (sa.ty, sb.ty, sa.rate, sb.rate, sa.origin, sb.origin);
+        let path = format!("edges[{kb}].to");
+        let mut ok = true;
+        if ta != tb {
+            self.report.error(
+                path.clone(),
+                DiagCode::TypeMismatch,
+                format!(
+                    "the ports of `{name}` take the same type, but port `a` has {} and port `b` has {}",
+                    port_name(ta),
+                    port_name(tb)
+                ),
+            );
+            ok = false;
+        }
+        if ra != rb {
+            self.report.error(
+                path.clone(),
+                DiagCode::RateMismatch,
+                format!(
+                    "the ports of `{name}` need the same sample rate, but port `a` has {} Hz and port `b` has {} Hz; resample or decimate one path",
+                    rate_text(ra),
+                    rate_text(rb)
+                ),
+            );
+            ok = false;
+        }
+        if oa != ob {
+            let (na, nb) = (self.input_name(oa), self.input_name(ob));
+            self.report.error(
+                path,
+                DiagCode::ClockDomain,
+                format!(
+                    "the inputs `{na}` and `{nb}` of `{name}` are different clocks; resample one with a tunable `resample` node driven by a drift controller, or use one input"
+                ),
+            );
+            ok = false;
+        }
+        ok
+    }
+
+    fn input_name(&self, origin: usize) -> String {
+        self.inputs
+            .get(origin)
+            .map_or_else(String::new, |i| i.name.clone())
+    }
+
+    /// Lines up the two paths of a node with a `delay` node in front of the faster one.
+    /// Returns the sources of the ports after the alignment, `None` after an error.
+    fn align(&mut self, name: &str, mode: AlignMode, a: usize, b: usize) -> Option<(usize, usize)> {
+        let (Some(sa), Some(sb)) = (self.streams.get(a), self.streams.get(b)) else {
+            return None;
+        };
+        let (da, db, rate) = (sa.delay_s, sb.delay_s, sa.rate);
+        let path = join("nodes", name);
+        let overflow = || "the group delays are too large to compare".to_string();
+        let Some(order) = frac_cmp(da, db) else {
+            self.report
+                .error(&path, DiagCode::MisalignedInputs, overflow());
+            return None;
+        };
+        if order == core::cmp::Ordering::Equal {
+            return Some((a, b));
+        }
+        let Some(samples) = frac_abs_diff(da, db).and_then(|d| seconds_to_samples(d, rate)) else {
+            self.report
+                .error(&path, DiagCode::MisalignedInputs, overflow());
+            return None;
+        };
+        let text = format_delay(samples);
+        let (first, second) = (
+            format_delay(seconds_to_samples(da, rate).unwrap_or((0, 1))),
+            format_delay(seconds_to_samples(db, rate).unwrap_or((0, 1))),
+        );
+        let whole = samples.1 == 1;
+        if mode == AlignMode::None {
+            self.report.warning(
+                &path,
+                DiagCode::MisalignedInputs,
+                format!(
+                    "the paths into `{name}` differ by {text} samples (port `a` {first}, port `b` {second}); `align` is `none`, so nothing is inserted"
+                ),
+            );
+            return Some((a, b));
+        }
+        if !whole {
+            self.report.error(
+                &path,
+                DiagCode::MisalignedInputs,
+                format!(
+                    "the group delays of the paths into `{name}` are {first} samples (port `a`) and {second} samples (port `b`); they differ by {text} samples, which is not a whole number. Change a filter so that the delays fit"
+                ),
+            );
+            return None;
+        }
+        let k = usize::try_from(samples.0).unwrap_or(usize::MAX);
+        let config = sdrk_blocks::DelayConfig { samples: k };
+        if config.validate(rate).is_err() {
+            self.report.error(
+                &path,
+                DiagCode::MisalignedInputs,
+                format!(
+                    "the paths into `{name}` differ by {text} samples; a delay that long cannot be inserted automatically"
+                ),
+            );
+            return None;
+        }
+        // The path with the smaller delay is the faster one and gets the delay.
+        let a_is_faster = order == core::cmp::Ordering::Less;
+        let slow_src = if a_is_faster { a } else { b };
+        let auto_name = format!("{name}__align");
+        let mut params = Map::new();
+        params.insert("samples".to_string(), Value::from(k));
+        let node_path = path.clone();
+        let remap = move |_: &str| node_path.clone();
+        let idx = self.check_node(&auto_name, "delay", true, &params, slow_src, "", &remap)?;
+        let Some(Produced::Stream(aligned)) = self.finish_node(idx) else {
+            return None;
+        };
+        Some(if a_is_faster {
+            (aligned, b)
+        } else {
+            (a, aligned)
+        })
+    }
+
+    /// Type, rate, clock and alignment checks of one node, then the node itself.
+    fn node(&mut self, name: &str) {
+        let spec = self.spec;
+        let Some(node) = spec.nodes.get(name) else {
+            return;
         };
         let Some(factory) = self.registry.factory(&node.kind) else {
             return;
         };
-        let ty = self.streams.get(src).map_or(PortType::Raw, |s| s.ty);
-        let accepted = factory
-            .description()
-            .inputs
-            .first()
-            .map_or(&[][..], |p| p.types);
-        if !accepted.contains(&ty) {
-            self.report.error(
-                format!("edges[{k}].to"),
-                DiagCode::TypeMismatch,
-                format!(
-                    "`{name}` ({}) takes {}, but `{}` delivers {}",
-                    node.kind,
-                    describe_types(accepted),
-                    edge.from,
-                    port_name(ty)
-                ),
-            );
+        let ports = factory.inputs();
+        let path = join("nodes", name);
+        let mut feeds: Vec<(usize, usize)> = Vec::with_capacity(ports.len());
+        let mut failed = false;
+        for port in &ports {
+            // A missing edge was reported by the graph check.
+            let Some(&k) = self.incoming.get(&(name, port.name)) else {
+                return;
+            };
+            match self.port_stream(name, &node.kind, k, port.accepts) {
+                Some(s) => feeds.push((k, s)),
+                None => failed = true,
+            }
+        }
+        if failed {
             self.produced.insert(name.to_string(), Produced::Failed);
             return;
+        }
+        let (Some(&(_, mut src)), second) = (feeds.first(), feeds.get(1).copied()) else {
+            return;
+        };
+        let mut src_b = None;
+        if let Some((kb, b)) = second {
+            if !self.pair_ok(name, kb, src, b) {
+                self.produced.insert(name.to_string(), Produced::Failed);
+                return;
+            }
+            let mode = node.align.unwrap_or_default();
+            let Some((a2, b2)) = self.align(name, mode, src, b) else {
+                self.produced.insert(name.to_string(), Produced::Failed);
+                return;
+            };
+            src = a2;
+            src_b = Some(b2);
         }
         if let Some(backend) = &node.backend {
             self.check_backend(&path, factory, backend);
@@ -1092,6 +1473,15 @@ impl<'a> Stage2<'a> {
         let params = Self::params_map(&node.params);
         let id = |p: &str| p.to_string();
         let idx = self.check_node(name, &node.kind, false, &params, src, &path, &id);
+        if let (Some(i), Some(b)) = (idx, src_b) {
+            let min_input = self.nodes.get(i).map_or(0, |n| n.checked.min_input);
+            if let Some(n) = self.nodes.get_mut(i) {
+                n.src_b = Some(b);
+            }
+            if let Some(s) = self.streams.get_mut(b) {
+                s.min_input = s.min_input.max(min_input);
+            }
+        }
         let result = idx.and_then(|i| self.finish_node(i));
         self.produced
             .insert(name.to_string(), result.unwrap_or(Produced::Failed));
@@ -1149,7 +1539,7 @@ impl<'a> Stage2<'a> {
         for (name, output) in &spec.outputs {
             let Some(edge) = self
                 .incoming
-                .get(name.as_str())
+                .get(&(name.as_str(), PortName::A))
                 .and_then(|&k| spec.edges.get(k))
             else {
                 continue;
@@ -1365,6 +1755,10 @@ impl<'a> Stage2<'a> {
                 rate_out: n.checked.rate_out,
                 delay_samples_in: n.checked.delay,
                 auto: n.auto,
+                clock_domain: self
+                    .streams
+                    .get(n.src)
+                    .map_or_else(String::new, |s| self.input_name(s.origin)),
             })
             .collect();
         self.report.group_edges = group_edges(self.spec).into_boxed_slice();

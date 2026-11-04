@@ -111,6 +111,7 @@ fn node_schema(desc: &BlockDescription) -> Value {
                 "description": "The group of the node (a key of `groups`); nodes without one are in `main`."
             },
             "backend": { "$ref": "#/$defs/BackendSpec" },
+            "align": { "$ref": "#/$defs/AlignMode" },
             "description": { "type": "string", "maxLength": MAX_DESCRIPTION_CHARS }
         },
         "required": required

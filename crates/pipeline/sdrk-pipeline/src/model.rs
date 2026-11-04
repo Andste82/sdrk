@@ -563,6 +563,11 @@ pub struct NodeSpec {
     /// Backend preference of the node.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend: Option<BackendSpec>,
+    /// Alignment of the inputs of a two-input node: `"auto"` (default) inserts a `delay` node
+    /// where the group delays of the two paths differ, `"none"` does not. It has no effect on
+    /// a one-input node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<AlignMode>,
     /// Free text (at most 2000 characters).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -607,12 +612,73 @@ pub struct GroupSpec {
     pub description: Option<String>,
 }
 
+/// The input port of a node that an edge feeds: `a` (the default) or `b`.
+///
+/// A node of a one-input kind has the port `a` only; the two-input kinds (`add`, `mul`,
+/// `make_complex`, `stereo_pll`) need one edge per port.
+///
+/// ```
+/// use sdrk_pipeline::PortName;
+/// assert_eq!(PortName::B.as_str(), "b");
+/// assert_eq!(serde_json::to_string(&PortName::A)?, "\"a\"");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum PortName {
+    /// The first (and for one-input kinds only) input port.
+    A,
+    /// The second input port of a two-input kind.
+    B,
+}
+
+impl PortName {
+    /// The name as written in the JSON.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::A => "a",
+            Self::B => "b",
+        }
+    }
+
+    /// The position of the port in the inputs of a block: `a` is 0, `b` is 1.
+    pub const fn index(self) -> usize {
+        match self {
+            Self::A => 0,
+            Self::B => 1,
+        }
+    }
+}
+
+/// What the build does when the two inputs of a node differ in group delay.
+///
+/// ```
+/// use sdrk_pipeline::AlignMode;
+/// assert_eq!(AlignMode::default(), AlignMode::Auto);
+/// assert_eq!(serde_json::to_string(&AlignMode::None)?, "\"none\"");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum AlignMode {
+    /// Insert a `delay` node in front of the faster path (the default).
+    #[default]
+    Auto,
+    /// Insert nothing; the difference is reported as the warning `misaligned_inputs`.
+    None,
+}
+
 /// A connection from an input or node to a node or output.
 ///
 /// ```
-/// use sdrk_pipeline::EdgeSpec;
+/// use sdrk_pipeline::{EdgeSpec, PortName};
 /// let e: EdgeSpec = serde_json::from_str(r#"{"from":"rf","to":"tune"}"#)?;
 /// assert_eq!((e.from.as_str(), e.to.as_str()), ("rf", "tune"));
+/// assert_eq!(e.port, None);
+/// let e: EdgeSpec = serde_json::from_str(r#"{"from":"pilot","to":"pll","port":"b"}"#)?;
+/// assert_eq!(e.port, Some(PortName::B));
 /// # Ok::<(), serde_json::Error>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -622,6 +688,23 @@ pub struct EdgeSpec {
     pub from: String,
     /// Name of the destination (a node or an output).
     pub to: String,
+    /// The input port of the destination node: `"a"` (the default when omitted) or `"b"`.
+    /// Not allowed when the destination is an output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<PortName>,
+}
+
+impl EdgeSpec {
+    /// The port the edge feeds, with the default `a` applied.
+    ///
+    /// ```
+    /// use sdrk_pipeline::{EdgeSpec, PortName};
+    /// let e = EdgeSpec { from: "x".into(), to: "y".into(), port: None };
+    /// assert_eq!(e.port_or_default(), PortName::A);
+    /// ```
+    pub fn port_or_default(&self) -> PortName {
+        self.port.unwrap_or(PortName::A)
+    }
 }
 
 /// The kind of an output.

@@ -201,6 +201,7 @@ impl Splitter<'_> {
         self.part(from_group).edges.push(EdgeSpec {
             from: edge.from.clone(),
             to: name.clone(),
+            port: None,
         });
         let consumer = self.part(to_group);
         consumer.inputs.insert(
@@ -215,6 +216,7 @@ impl Splitter<'_> {
         consumer.edges.push(EdgeSpec {
             from: name,
             to: edge.to.clone(),
+            port: edge.port,
         });
     }
 

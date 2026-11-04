@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "path": "edges[0].port",
+      "code": "unknown_port"
+    }
+  ]
+}

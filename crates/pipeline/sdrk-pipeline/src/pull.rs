@@ -552,9 +552,10 @@ impl Pipeline {
             let end = s.end;
             *at_mut(&mut s.readers, slot)? = end;
         }
-        let path_len = at(&self.outputs, oi)?.path.len();
-        for k in 0..path_len {
-            let ni = *at(&at(&self.outputs, oi)?.path, k)?;
+        // Every node the output depends on, the branches of two-input nodes included.
+        let tree_len = at(&self.outputs, oi)?.tree.len();
+        for k in 0..tree_len {
+            let ni = *at(&at(&self.outputs, oi)?.tree, k)?;
             let (s, d) = {
                 let n = at(&self.nodes, ni)?;
                 (n.src, n.dst)

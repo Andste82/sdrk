@@ -3,13 +3,41 @@
 use sdrk::{C32, CQ15, Progress, Q15};
 use sdrk_blocks::{
     Block, BlockDescription, BlockTiming, Error as BlockError, Frame, FrameMeta, FrameOut,
-    ParamValue, StreamElem,
+    ParamValue, StreamElem, Two,
 };
+
+/// One typed, borrowed stream: the data of one input port of a node.
+///
+/// ```
+/// use sdrk_pipeline::NodeElem;
+/// let samples = [1.0f32, 2.0];
+/// assert!(matches!(NodeElem::F32(&samples), NodeElem::F32(s) if s.len() == 2));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub enum NodeElem<'a> {
+    /// Raw bytes in a sample format.
+    Raw(&'a [u8]),
+    /// Complex `f32`.
+    C32(&'a [C32]),
+    /// Complex Q15.
+    CQ15(&'a [CQ15]),
+    /// Real `f32`.
+    F32(&'a [f32]),
+    /// Real Q15.
+    Q15(&'a [Q15]),
+}
 
 /// Typed, borrowed input views used by the type-erased runner. The variant always matches the
 /// input port type of the node (checked at build).
 #[derive(Debug)]
 pub enum NodeInput<'a> {
+    /// The two input ports of a two-input node, in lockstep (`a`, then `b`).
+    Two {
+        /// The stream of port `a`.
+        a: NodeElem<'a>,
+        /// The stream of port `b`.
+        b: NodeElem<'a>,
+    },
     /// Raw bytes in a sample format.
     Raw(&'a [u8]),
     /// Complex `f32`.
@@ -44,6 +72,8 @@ pub enum NodeOutput<'a> {
 pub trait NodeSlice: StreamElem {
     /// The slice of this type, if the view has the matching variant.
     fn input(i: NodeInput<'_>) -> Option<&[Self]>;
+    /// The slice of this type out of one stream of a pair, if it has the matching variant.
+    fn elem(e: NodeElem<'_>) -> Option<&[Self]>;
     /// The mutable slice of this type, if the view has the matching variant.
     fn output(o: NodeOutput<'_>) -> Option<&mut [Self]>;
 }
@@ -54,6 +84,12 @@ macro_rules! elem {
             fn input(i: NodeInput<'_>) -> Option<&[Self]> {
                 match i {
                     NodeInput::$v(s) => Some(s),
+                    _ => None,
+                }
+            }
+            fn elem(e: NodeElem<'_>) -> Option<&[Self]> {
+                match e {
+                    NodeElem::$v(s) => Some(s),
                     _ => None,
                 }
             }
@@ -148,6 +184,91 @@ where
         let input = <I as NodeSlice>::input(input).ok_or_else(mismatch)?;
         let output = <O as NodeSlice>::output(output).ok_or_else(mismatch)?;
         self.block.process(input, output)
+    }
+
+    fn reset(&mut self) {
+        self.block.reset();
+    }
+
+    fn set_param(&mut self, name: &str, value: ParamValue) -> Result<(), BlockError> {
+        self.block.set_param(name, value)
+    }
+
+    fn param(&self, name: &str) -> Result<ParamValue, BlockError> {
+        self.block.param(name)
+    }
+
+    fn timing(&self) -> Option<BlockTiming> {
+        Some(self.block.timing())
+    }
+
+    fn min_input(&self) -> usize {
+        self.block.min_input()
+    }
+
+    fn description(&self) -> &'static BlockDescription {
+        self.block.description()
+    }
+
+    fn map_index(&self, rel_in: u64) -> u64 {
+        self.block.map_index(rel_in)
+    }
+}
+
+/// A [`Node`] around a [`Block`] with two stream inputs (`In = Two<X, Y>`): the node of a
+/// two-input kind. The runner passes both ports in [`NodeInput::Two`].
+///
+/// ```
+/// use sdrk::{Rate, C32};
+/// use sdrk_blocks::{AddBlock};
+/// use sdrk_pipeline::{Node, NodeElem, NodeInput, NodeOutput, PairNode, VecStorage};
+/// let block = AddBlock::<C32, _>::new(Rate::hz(1000)?, &mut VecStorage)?;
+/// let mut node = PairNode::new(block);
+/// let a = [C32::new(1.0, 0.0); 4];
+/// let b = [C32::new(0.0, 2.0); 4];
+/// let mut out = [C32::default(); 4];
+/// let mut meta = None;
+/// let p = node.process(
+///     NodeInput::Two { a: NodeElem::C32(&a), b: NodeElem::C32(&b) },
+///     NodeOutput::C32(&mut out),
+///     &mut meta,
+/// )?;
+/// assert_eq!((p.consumed, p.produced), (4, 4));
+/// assert_eq!(out[0], C32::new(1.0, 2.0));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct PairNode<B: Block> {
+    block: B,
+}
+
+impl<B: Block> PairNode<B> {
+    /// Wraps a block with a [`Two`] input.
+    pub fn new(block: B) -> Self {
+        Self { block }
+    }
+}
+
+impl<B, X, Y, O> Node for PairNode<B>
+where
+    B: Block<In = Two<X, Y>, Out = O>,
+    X: NodeSlice,
+    Y: NodeSlice,
+    O: NodeSlice,
+{
+    fn process(
+        &mut self,
+        input: NodeInput<'_>,
+        output: NodeOutput<'_>,
+        _meta: &mut Option<FrameMeta>,
+    ) -> Result<Progress, BlockError> {
+        let NodeInput::Two { a, b } = input else {
+            return Err(mismatch());
+        };
+        let a = <X as NodeSlice>::elem(a).ok_or_else(mismatch)?;
+        let b = <Y as NodeSlice>::elem(b).ok_or_else(mismatch)?;
+        let output = <O as NodeSlice>::output(output).ok_or_else(mismatch)?;
+        self.block.process((a, b), output)
     }
 
     fn reset(&mut self) {

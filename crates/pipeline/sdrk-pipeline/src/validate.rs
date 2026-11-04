@@ -27,6 +27,10 @@ use serde::{Serialize, Serializer};
 /// | `RateUnsupported` | the block rejects its configuration for the sample rate at its input |
 /// | `LimitExceeded` | a resource limit is exceeded |
 /// | `UnknownGroup` | a node names a group that `groups` does not declare |
+/// | `UnknownPort` | an edge names an input port that the destination does not have (`port` on an output, `b` on a one-input node) |
+/// | `RateMismatch` | the two inputs of a node have different sample rates |
+/// | `ClockDomain` | the two inputs of a node derive from different pipeline inputs (different clocks) |
+/// | `MisalignedInputs` | the group delays of the two paths into a node differ by a fraction of a sample (an error), or differ and `align` is `none` (a warning) |
 /// | `BackendUnavailable` | a backend preference names a backend that does not implement the kernels of the node (an error for `require`, a warning for `prefer`) |
 ///
 /// ```
@@ -81,6 +85,14 @@ pub enum DiagCode {
     UnknownGroup,
     /// A required (or, as a warning, preferred) backend does not implement the kernels.
     BackendUnavailable,
+    /// An edge names an input port the destination does not have.
+    UnknownPort,
+    /// The two inputs of a node have different sample rates.
+    RateMismatch,
+    /// The two inputs of a node come from different clocks.
+    ClockDomain,
+    /// The two paths into a node differ in group delay and cannot be aligned.
+    MisalignedInputs,
 }
 
 impl DiagCode {
@@ -108,6 +120,10 @@ impl DiagCode {
             Self::LimitExceeded => "limit_exceeded",
             Self::UnknownGroup => "unknown_group",
             Self::BackendUnavailable => "backend_unavailable",
+            Self::UnknownPort => "unknown_port",
+            Self::RateMismatch => "rate_mismatch",
+            Self::ClockDomain => "clock_domain",
+            Self::MisalignedInputs => "misaligned_inputs",
         }
     }
 }
@@ -143,7 +159,7 @@ pub struct Diagnostic {
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct NodeReport {
-    /// Node name (automatic nodes: `<input>__convert`, `<output>__convert_out`).
+    /// Node name (automatic nodes: `<input>__convert`, `<output>__convert_out`, `<node>__align`).
     pub name: String,
     /// Block kind.
     pub kind: String,
@@ -156,8 +172,10 @@ pub struct NodeReport {
     /// Group delay of the node in its input samples.
     #[serde(serialize_with = "serialize_delay")]
     pub delay_samples_in: Delay,
-    /// Whether the pipeline inserted the node (conversion).
+    /// Whether the pipeline inserted the node (conversion or alignment).
     pub auto: bool,
+    /// The clock domain of the node: the name of the pipeline input its data derives from.
+    pub clock_domain: String,
 }
 
 /// An edge between two nodes of different groups: an interface of the partitioning.

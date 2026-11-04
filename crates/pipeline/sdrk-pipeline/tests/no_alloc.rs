@@ -288,3 +288,52 @@ fn burst_cycles_do_not_allocate() {
     });
     assert_eq!(allocations, 0, "allocations in burst cycles");
 }
+
+#[test]
+fn nodes_with_two_inputs_do_not_allocate() {
+    // The proof flow joins two paths in `stereo_pll`; an `add` behind a filter gets an automatic
+    // delay node. Neither allocates after the build.
+    let doc = json!({
+        "sdrk": 1, "name": "joins", "settings": { "max_chunk": 4096 },
+        "inputs": { "x": { "type": "c32", "rate_hz": 48000 } },
+        "nodes": {
+            "lp": { "kind": "fir", "params": {
+                "cutoff_hz": 4000, "transition_hz": 2500, "attenuation_db": 30
+            } },
+            "sum": { "kind": "add" }
+        },
+        "edges": [
+            { "from": "x", "to": "sum", "port": "a" },
+            { "from": "x", "to": "lp" },
+            { "from": "lp", "to": "sum", "port": "b" },
+            { "from": "sum", "to": "out" }
+        ],
+        "outputs": { "out": { "type": "stream", "drop": "drop_oldest" } }
+    });
+    let mut pipeline = common::build(&doc.to_string());
+    assert!(
+        pipeline
+            .report()
+            .nodes
+            .iter()
+            .any(|n| n.name == "sum__align")
+    );
+    let input = vec![sdrk::C32::new(0.25, -0.5); 4096];
+    let mut out = vec![sdrk::C32::default(); 8192];
+    pipeline.push("x", InputData::C32(&input[..100])).unwrap();
+    let (produced, allocations) = count_allocations(|| {
+        let mut produced = 0usize;
+        for i in 0..1000usize {
+            pipeline
+                .push("x", InputData::C32(&input[..=(i * 37) % 4000]))
+                .unwrap();
+            produced += pipeline.read_stream("out", &mut out).unwrap();
+        }
+        produced
+    });
+    assert!(produced > 10_000, "the pipeline did work: {produced}");
+    assert_eq!(
+        allocations, 0,
+        "allocations between 1000 pushes after build"
+    );
+}

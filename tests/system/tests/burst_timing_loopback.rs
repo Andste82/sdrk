@@ -77,6 +77,7 @@ fn burst_timing_loopback() {
     spec.edges.push(EdgeSpec {
         from: "tune".into(),
         to: "iq".into(),
+        port: None,
     });
     spec.outputs.insert(
         "iq".into(),

@@ -62,7 +62,11 @@ fn two_stations_no_crosstalk() {
             (format!("tune_{name}"), format!("demod_{name}")),
             (format!("demod_{name}"), format!("audio_{name}")),
         ] {
-            spec.edges.push(EdgeSpec { from, to });
+            spec.edges.push(EdgeSpec {
+                from,
+                to,
+                port: None,
+            });
         }
         spec.outputs
             .insert(format!("audio_{name}"), stream_output());

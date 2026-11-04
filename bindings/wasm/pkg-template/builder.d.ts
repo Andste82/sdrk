@@ -36,6 +36,8 @@ export type ParamValue = number | boolean | string | Record<string, unknown>;
 export interface NodeOptions {
   group?: string;
   backend?: { prefer?: string; require?: string };
+  /** Alignment of the inputs of a node with two inputs: "auto" (default) or "none". */
+  align?: "auto" | "none";
   description?: string;
 }
 
@@ -47,8 +49,8 @@ export interface FlowObject {
   settings?: FlowSettings;
   inputs: Record<string, InputSpec>;
   groups?: Record<string, { description?: string }>;
-  nodes: Record<string, { kind: string; params?: Record<string, ParamValue>; group?: string; backend?: object; description?: string }>;
-  edges: { from: string; to: string }[];
+  nodes: Record<string, { kind: string; params?: Record<string, ParamValue>; group?: string; backend?: object; align?: "auto" | "none"; description?: string }>;
+  edges: { from: string; to: string; port?: "a" | "b" }[];
   outputs: Record<string, OutputSpec>;
 }
 
@@ -60,7 +62,8 @@ export class FlowBuilder {
   input(name: string, spec: InputSpec): this;
   node(name: string, kind: string, params?: Record<string, ParamValue>, options?: NodeOptions): this;
   group(name: string, spec?: { description?: string }): this;
-  edge(from: string, to: string): this;
+  /** `port` is the input port of a node with two inputs: "a" (the default) or "b". */
+  edge(from: string, to: string, port?: "a" | "b"): this;
   output(name: string, spec: OutputSpec): this;
   /** The description as a plain object in canonical key order. */
   toObject(): FlowObject;

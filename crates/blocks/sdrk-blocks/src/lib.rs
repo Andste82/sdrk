@@ -57,7 +57,7 @@ pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
 pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig, DcBlockRealBlock};
 pub use blocks::ddc::{DdcBlock, DdcConfig};
 pub use blocks::decimate::{DecimateBlock, DecimateConfig, DecimateRealBlock};
-pub use blocks::deemphasis::{DeemphasisConfig, DeemphasisRealBlock};
+pub use blocks::deemphasis::{DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock};
 pub use blocks::delay::{DelayBlock, DelayConfig, DelayRealBlock};
 pub use blocks::duc::{DucBlock, DucConfig};
 pub use blocks::fir::{FirBlock, FirConfig};

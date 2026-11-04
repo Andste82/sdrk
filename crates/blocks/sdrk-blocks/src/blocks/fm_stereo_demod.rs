@@ -347,7 +347,7 @@ where
 }
 
 /// `[alpha, 0, 0, -(1 - alpha), 0]` of the one-pole de-emphasis as a biquad section.
-fn deemphasis_section(tau_us: f64, fs_audio: f64) -> [f64; 5] {
+pub(super) fn deemphasis_section(tau_us: f64, fs_audio: f64) -> [f64; 5] {
     let alpha = 1.0 - libm::exp(-1.0 / (fs_audio * tau_us * 1e-6));
     [alpha, 0.0, 0.0, -(1.0 - alpha), 0.0]
 }

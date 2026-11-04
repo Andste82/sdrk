@@ -158,7 +158,7 @@ fn the_proof_flow_needs_no_alignment_and_has_a_clock_domain_per_node() {
 #[test]
 fn fm_stereo_primitives_equal() {
     let bytes = stereo_cs16(120_000);
-    let want = run_cs16(&mut build(&kind_flow(0).to_string()), &bytes, None);
+    let want = run_cs16(&mut build(&kind_flow(50).to_string()), &bytes, None);
     assert!(want.len() > 11_000, "{} samples", want.len());
     let proof = proof_flow().to_string();
     let whole = run_cs16(&mut build(&proof), &bytes, None);
@@ -176,47 +176,16 @@ fn fm_stereo_primitives_equal() {
 }
 
 #[test]
-fn a_de_emphasis_from_primitives_follows_the_kind_closely() {
-    // The de-emphasis of `fm_stereo_demod` is a complex biquad section with explicit
-    // coefficients; the pipeline has the one-pole kernel `deemphasis` for real streams, so the
-    // two channels are split, de-emphasised and joined again with `make_complex` (D388).
+fn without_the_de_emphasis_node_the_flow_equals_the_kind_with_the_de_emphasis_off() {
     let mut doc = proof_flow();
-    let nodes = doc["nodes"].as_object_mut().unwrap();
-    nodes.insert("left".into(), json!({ "kind": "real_part" }));
-    nodes.insert("right".into(), json!({ "kind": "imag_part" }));
-    for side in ["l", "r"] {
-        nodes.insert(
-            format!("deemph_{side}"),
-            json!({ "kind": "deemphasis", "params": { "tau_us": 50 } }),
-        );
-    }
-    nodes.insert("stereo".into(), json!({ "kind": "make_complex" }));
+    doc["nodes"].as_object_mut().unwrap().remove("deemph");
     let edges = doc["edges"].as_array_mut().unwrap();
-    edges.retain(|e| e["to"] != "audio");
-    edges.extend([
-        json!({ "from": "matrix", "to": "left" }),
-        json!({ "from": "matrix", "to": "right" }),
-        json!({ "from": "left", "to": "deemph_l" }),
-        json!({ "from": "right", "to": "deemph_r" }),
-        json!({ "from": "deemph_l", "to": "stereo", "port": "a" }),
-        json!({ "from": "deemph_r", "to": "stereo", "port": "b" }),
-        json!({ "from": "stereo", "to": "audio" }),
-    ]);
-    let report = validate(&doc);
-    assert!(report.is_ok(), "{}", report.to_json());
-    assert!(report.warnings.is_empty(), "{}", report.to_json());
-    let bytes = stereo_cs16(120_000);
-    let want = run_cs16(&mut build(&kind_flow(50).to_string()), &bytes, None);
+    edges.retain(|e| e["to"] != "deemph" && e["from"] != "deemph");
+    edges.push(json!({ "from": "matrix", "to": "audio" }));
+    let bytes = stereo_cs16(60_000);
+    let want = run_cs16(&mut build(&kind_flow(0).to_string()), &bytes, None);
     let got = run_cs16(&mut build(&doc.to_string()), &bytes, None);
-    assert_eq!(got.len(), want.len());
-    let worst = got
-        .iter()
-        .zip(&want)
-        .map(|(a, b)| (a.re - b.re).abs().max((a.im - b.im).abs()))
-        .fold(0.0f32, f32::max);
-    assert!(worst < 1e-6, "largest difference {worst}");
-    let peak = want.iter().map(|s| s.re.abs()).fold(0.0f32, f32::max);
-    assert!(peak > 0.1, "the audio is not silent: {peak}");
+    assert!(!want.is_empty() && got == want);
 }
 
 // ------------------------------------------------------------------ the model

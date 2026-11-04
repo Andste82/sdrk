@@ -27,11 +27,12 @@ use common::{
 };
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio, RatioKind, Sample, Sdrk};
 use sdrk_blocks::{
-    AmDemodBlock, AmDemodConfig, ArenaStorage, Block, BlockReal, BlockSample, DdcBlock, DdcConfig,
-    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisConfig, DeemphasisRealBlock,
-    DelayBlock, DelayConfig, DelayRealBlock, DucBlock, DucConfig, Error, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, ParamValue, QuadDemodBlock,
-    QuadDemodConfig, RotateBlock, RotateConfig,
+    AmDemodBlock, AmDemodConfig, ArenaStorage, BiquadElem, Block, BlockReal, BlockSample, DdcBlock,
+    DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
+    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DucBlock, DucConfig, Error,
+    FmStereoDemodBlock, FmStereoDemodConfig, InterpolateBlock, InterpolateConfig,
+    InterpolateRealBlock, MagBlock, MagConfig, ParamValue, QuadDemodBlock, QuadDemodConfig,
+    RotateBlock, RotateConfig,
 };
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate, ResampleReal, ResampleRealState};
 use sdrk_core::kernels::demod::{Deemphasis, DeemphasisState, QuadDemod, QuadDemodState};
@@ -101,6 +102,93 @@ where
 fn deemphasis_equals_the_kernel() {
     deemphasis_equals_kernel::<f32>(456);
     deemphasis_equals_kernel::<Q15>(456);
+}
+
+/// The complex `deemphasis` (stereo audio) equals the de-emphasis inside `fm_stereo_demod` bit
+/// for bit: the block after the decoder with its de-emphasis off gives the samples of the
+/// decoder with it on.
+fn complex_deemphasis_equals_the_stereo_decoder<T: BlockSample + BiquadElem>(seed: u64)
+where
+    T::Real: BiquadElem,
+    Sdrk: sdrk_core::kernels::biquad::Biquad<T>
+        + sdrk_core::kernels::biquad::BiquadReal<T::Real>
+        + sdrk_core::kernels::demod::QuadDemod<T>
+        + sdrk_core::kernels::stereo::StereoPll<T::Real>
+        + sdrk_core::kernels::stereo::StereoMatrix<T>
+        + sdrk_core::kernels::decim::FirDecimate<T>,
+{
+    let fs = rate(480_000);
+    let with = FmStereoDemodConfig::default();
+    let without = FmStereoDemodConfig {
+        deemphasis_us: 0.0,
+        ..with
+    };
+    let input = signal::<T>(24_000, seed, 0.05);
+    let decode = |cfg: &FmStereoDemodConfig| {
+        let mut block = FmStereoDemodBlock::<T, _>::new(cfg, fs, &mut VecStorage).unwrap();
+        run_block(&mut block, &input, None)
+    };
+    let want = decode(&with);
+    let plain = decode(&without);
+    assert!(
+        want.len() > 2000 && want != plain,
+        "the filter does something"
+    );
+    let cfg = DeemphasisConfig { tau_us: 50.0 };
+    let audio = rate(48_000);
+    check_block_with(
+        &want,
+        &plain,
+        seed,
+        || DeemphasisBlock::<T, _>::new(&cfg, audio, &mut VecStorage).unwrap(),
+        "complex deemphasis",
+        true,
+    );
+}
+
+#[test]
+fn the_complex_deemphasis_equals_the_stereo_decoder() {
+    complex_deemphasis_equals_the_stereo_decoder::<C32>(457);
+    complex_deemphasis_equals_the_stereo_decoder::<CQ15>(457);
+}
+
+#[test]
+fn the_complex_deemphasis_filters_both_channels_alike() {
+    // Left and right with the same samples give the same filtered samples; a step settles.
+    let cfg = DeemphasisConfig { tau_us: 50.0 };
+    let mut block = DeemphasisBlock::<C32, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let input: Vec<C32> = (0..500)
+        .map(|i| C32::new(0.25 * (i % 7) as f32, 0.25 * (i % 7) as f32))
+        .collect();
+    let out = run_block(&mut block, &input, None);
+    assert!(out.iter().all(|s| s.re == s.im));
+    let step = run_block(&mut block, &[C32::new(1.0, -1.0); 500], None);
+    assert!((step[499].re - 1.0).abs() < 1e-3 && (step[499].im + 1.0).abs() < 1e-3);
+    // Reset clears the state; a bad time constant is refused.
+    block.reset();
+    assert!(
+        DeemphasisBlock::<C32, _>::new(
+            &DeemphasisConfig { tau_us: 0.0 },
+            rate(48_000),
+            &mut VecStorage
+        )
+        .is_err()
+    );
+    assert!(matches!(
+        block.set_param("tau_us", ParamValue::F64(75.0)),
+        Err(Error::ReadOnlyParameter)
+    ));
+}
+
+#[test]
+fn the_complex_deemphasis_storage_is_exact() {
+    let cfg = DeemphasisConfig::default();
+    let bytes =
+        DeemphasisBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate(48_000)).unwrap();
+    let mut mem = vec![0u8; bytes + 16];
+    let mut arena = ArenaStorage::new(&mut mem);
+    DeemphasisBlock::<C32, _>::new(&cfg, rate(48_000), &mut arena).unwrap();
+    assert!(arena.remaining() <= 16, "{} bytes left", arena.remaining());
 }
 
 // ---- rotate -----------------------------------------------------------------------------

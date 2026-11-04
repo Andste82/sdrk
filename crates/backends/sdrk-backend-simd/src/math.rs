@@ -14,8 +14,9 @@
 //!
 //! `Q15`, sums: `saturating_add` of the token (`paddsw`, `sqadd`, `i16x8.add_sat_s`).
 //!
-//! Sums and real products run in `whole_zip` (D322): groups of eight vectors, single vectors and
-//! an overlapping last vector; NEON stores each pair of vectors with one `st1` of two registers.
+//! Sums and products other than the `C32` product run in `whole_zip` (D322, D332): groups of
+//! eight vectors, single vectors and an overlapping last vector; NEON stores each pair of vectors
+//! of the sums and real products with one `st1` of two registers.
 //!
 //! `Q15`, products of real streams: the rounding high multiplication (`pmulhrsw`, `sqrdmulh`,
 //! `i16x8.q15mulr_sat`) as in `scale`; `pmulhrsw` wraps `-32768 * -32768` to `-32768`, which is
@@ -218,13 +219,15 @@ fn add_i16<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) {
 /// and the pair stored by one `st1` of two registers (`vst1q_f32_x2`, `vst1q_s16_x2`). LLVM stores the token's pairs with
 /// single `str` (or `stp`), which the `cortex-a76` model (`neoverse-n1`) rates at four (six)
 /// micro-ops against four of `st1`; the plain loop of the fallback was faster there (D322).
-/// The same `fadd`, `fmul` and `sqadd` of the same lanes, so the same bits.
+/// The `Q15` product of real streams runs here too (D332: 0.41 instead of 0.44 cycles per
+/// sample on both models; the token's loop inlined into the entry took 0.46 on `cortex-a76`).
+/// The same `fadd`, `fmul`, `sqadd` and `sqrdmulh` of the same lanes, so the same bits.
 #[cfg(target_arch = "aarch64")]
 #[allow(unsafe_code)]
 mod zip_neon {
     use core::arch::aarch64::{
         float32x4x2_t, int16x8x2_t, vaddq_f32, vld1q_f32, vld1q_s16, vmulq_f32, vqaddq_s16,
-        vst1q_f32, vst1q_f32_x2, vst1q_s16, vst1q_s16_x2,
+        vqrdmulhq_s16, vst1q_f32, vst1q_f32_x2, vst1q_s16, vst1q_s16_x2,
     };
 
     use super::whole_zip;
@@ -306,9 +309,23 @@ mod zip_neon {
         vqaddq_s16,
         i16::saturating_add
     );
+    zip_kernel!(
+        mul_i16,
+        i16,
+        8,
+        vld1q_s16,
+        vst1q_s16,
+        vst1q_s16_x2,
+        int16x8x2_t,
+        vqrdmulhq_s16,
+        super::mul_q15
+    );
 }
 
 dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_add_i16(a: &[i16], b: &[i16], out: &mut [i16]) => add_i16);
+// `add_real` `Q15` has a dispatched function of its own: with one caller each, LLVM inlines
+// both into their entries (D332).
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_add_real_i16(a: &[i16], b: &[i16], out: &mut [i16]) => add_i16);
 
 // C32 product
 
@@ -413,10 +430,40 @@ dispatch_fn!(fn run_mul_c32(a: &[f32], b: &[f32], out: &mut [f32]) => mul_c32);
 
 // Q15 and CQ15 products
 
-/// The level-specific path of the `Q15` product of real streams for the current level: returns
-/// the number of leading values done.
+/// The `Q15` product of the numeric conventions for the values outside whole vectors
+/// ([`sdrk_core::num::q15_mul`], bit for bit the fallback's).
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
 #[inline(always)]
-fn mul_q15_level<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+fn mul_q15(x: i16, y: i16) -> i16 {
+    sdrk_core::num::q15_mul(Q15(x), Q15(y)).0
+}
+
+/// The `CQ15` product of the numeric conventions for one sample `[re, im]` outside whole
+/// vectors ([`sdrk_core::num::cq15_mul`], bit for bit the fallback's).
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[inline(always)]
+fn mul_cq15_sample([ar, ai]: [i16; 2], [br, bi]: [i16; 2]) -> [i16; 2] {
+    let p = sdrk_core::num::cq15_mul(
+        CQ15 {
+            re: Q15(ar),
+            im: Q15(ai),
+        },
+        CQ15 {
+            re: Q15(br),
+            im: Q15(bi),
+        },
+    );
+    [p.re.0, p.im.0]
+}
+
+/// The `Q15` product of real streams at the level of `simd`: the whole call by the path of the
+/// level ([`whole_zip`], D322 and D332), or by the fallback where the level has none (SSE2).
+#[inline(always)]
+fn mul_real_q15<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) {
     let level = simd.level();
     #[cfg(target_arch = "x86_64")]
     {
@@ -432,25 +479,26 @@ fn mul_q15_level<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) -
     }
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = level.as_neon() {
-        return neon::mul_real(t, a, b, out);
+        return zip_neon::mul_i16(t, a, b, out);
     }
     #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
     if let Some(t) = level.as_wasm_simd128() {
         return wasm::mul_real(t, a, b, out);
     }
-    let _ = (level, a, b, out);
-    0
+    let _ = level;
+    let (a, b, out) = (
+        bytemuck::cast_slice(a),
+        bytemuck::cast_slice(b),
+        bytemuck::cast_slice_mut(out),
+    );
+    let _ = <Fallback as MulReal<Q15>>::mul_real(&Fallback, a, b, out);
 }
 
+/// The `CQ15` complex product at the level of `simd` (samples as `[re, im]`): the whole call by
+/// the path of the level ([`whole_zip`], D322 and D332), or by the fallback where the level
+/// has none (SSE2, SIMD128).
 #[inline(always)]
-fn mul_real_q15<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16], done: &mut usize) {
-    *done = mul_q15_level(simd, a, b, out);
-}
-
-/// The level-specific path of the `CQ15` complex product for the current level: returns the
-/// number of leading values done (a multiple of two).
-#[inline(always)]
-fn mul_cq15_level<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+fn mul_cq15<S: SimdToken>(simd: S, a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i16; 2]]) {
     let level = simd.level();
     #[cfg(target_arch = "x86_64")]
     {
@@ -465,17 +513,17 @@ fn mul_cq15_level<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) 
     if let Some(t) = level.as_neon() {
         return neon::mul_cq15(t, a, b, out);
     }
-    let _ = (level, a, b, out);
-    0
+    let _ = level;
+    let (a, b, out) = (
+        bytemuck::cast_slice(a),
+        bytemuck::cast_slice(b),
+        bytemuck::cast_slice_mut(out),
+    );
+    let _ = <Fallback as Mul<CQ15>>::mul(&Fallback, a, b, out);
 }
 
-#[inline(always)]
-fn mul_cq15<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16], done: &mut usize) {
-    *done = mul_cq15_level(simd, a, b, out);
-}
-
-dispatch_fn!(fn run_mul_real_q15(a: &[i16], b: &[i16], out: &mut [i16], done: &mut usize) => mul_real_q15);
-dispatch_fn!(fn run_mul_cq15(a: &[i16], b: &[i16], out: &mut [i16], done: &mut usize) => mul_cq15);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_mul_real_q15(a: &[i16], b: &[i16], out: &mut [i16]) => mul_real_q15);
+dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_mul_cq15(a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i16; 2]]) => mul_cq15);
 
 /// `$body` with `$x`, `$y` and `$z` the blocks of `$va`, `$vb` and `$vc` values of `$a`, `$b` and
 /// `$c`: groups of eight blocks first (unrolled), then single blocks. Evaluates to the number of
@@ -640,6 +688,8 @@ mod x86 {
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, f32x8, i16x8, i16x16, i16x32};
 
+    use super::{mul_cq15_sample, mul_q15, whole_zip_token};
+
     fearless_simd::kernel!(
         /// The `C32` product of AVX2 on the interleaved floats, four samples per vector:
         /// `(ai, ai) * (bi, br)` (`vmovshdup`, `vpermilps`), then `vfmaddsub` with
@@ -681,49 +731,84 @@ mod x86 {
     );
 
     fearless_simd::kernel!(
-        pub(super) fn mul_real_sse4_2(t: Sse4_2, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+        /// The `Q15` product of real streams of SSE4.2 (`pmulhrsw`, then the fix-up of
+        /// `-32768 * -32768`), the whole call in [`whole_zip_token`].
+        #[inline]
+        pub(super) fn mul_real_sse4_2(t: Sse4_2, a: &[i16], b: &[i16], out: &mut [i16]) {
             let min = _mm_set1_epi16(i16::MIN);
-            blocks3!(a, 8, b, 8, out, 8, |a, b, o| {
-                let r = _mm_mulhrs_epi16(
-                    i16x8::from_slice(t, a).into(),
-                    i16x8::from_slice(t, b).into(),
-                );
-                i16x8::simd_from(t, _mm_xor_si128(r, _mm_cmpeq_epi16(r, min))).store_slice(o);
-            }) * 8
+            whole_zip_token(
+                8,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let r = _mm_mulhrs_epi16(
+                        i16x8::from_slice(t, a).into(),
+                        i16x8::from_slice(t, b).into(),
+                    );
+                    i16x8::simd_from(t, _mm_xor_si128(r, _mm_cmpeq_epi16(r, min))).store_slice(o);
+                },
+                mul_q15,
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn mul_real_avx2(t: Avx2, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+        /// [`mul_real_sse4_2`] on 256 bits.
+        #[inline]
+        pub(super) fn mul_real_avx2(t: Avx2, a: &[i16], b: &[i16], out: &mut [i16]) {
             let min = _mm256_set1_epi16(i16::MIN);
-            blocks3!(a, 16, b, 16, out, 16, |a, b, o| {
-                let r = _mm256_mulhrs_epi16(
-                    i16x16::from_slice(t, a).into(),
-                    i16x16::from_slice(t, b).into(),
-                );
-                i16x16::simd_from(t, _mm256_xor_si256(r, _mm256_cmpeq_epi16(r, min)))
-                    .store_slice(o);
-            }) * 16
+            whole_zip_token(
+                16,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let r = _mm256_mulhrs_epi16(
+                        i16x16::from_slice(t, a).into(),
+                        i16x16::from_slice(t, b).into(),
+                    );
+                    i16x16::simd_from(t, _mm256_xor_si256(r, _mm256_cmpeq_epi16(r, min)))
+                        .store_slice(o);
+                },
+                mul_q15,
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn mul_real_avx512(t: Avx512, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+        /// [`mul_real_sse4_2`] on 512 bits, the fix-up as a masked blend.
+        #[inline]
+        pub(super) fn mul_real_avx512(t: Avx512, a: &[i16], b: &[i16], out: &mut [i16]) {
             let min = _mm512_set1_epi16(i16::MIN);
             let max = _mm512_set1_epi16(i16::MAX);
-            blocks3!(a, 32, b, 32, out, 32, |a, b, o| {
-                let r = _mm512_mulhrs_epi16(
-                    i16x32::from_slice(t, a).into(),
-                    i16x32::from_slice(t, b).into(),
-                );
-                let m = _mm512_cmpeq_epi16_mask(r, min);
-                i16x32::simd_from(t, _mm512_mask_blend_epi16(m, r, max)).store_slice(o);
-            }) * 32
+            whole_zip_token(
+                32,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let r = _mm512_mulhrs_epi16(
+                        i16x32::from_slice(t, a).into(),
+                        i16x32::from_slice(t, b).into(),
+                    );
+                    let m = _mm512_cmpeq_epi16_mask(r, min);
+                    i16x32::simd_from(t, _mm512_mask_blend_epi16(m, r, max)).store_slice(o);
+                },
+                mul_q15,
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn mul_cq15_sse4_2(t: Sse4_2, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+        /// The `CQ15` complex product of SSE4.2 on the `(I, Q)` pairs (`pmaddwd`, see the module
+        /// documentation), four samples per vector, the whole call in [`whole_zip_token`].
+        pub(super) fn mul_cq15_sse4_2(
+            t: Sse4_2,
+            a: &[[i16; 2]],
+            b: &[[i16; 2]],
+            out: &mut [[i16; 2]],
+        ) {
             let not_im = _mm_set1_epi32(!0xFFFF);
             let swap = _mm_setr_epi8(2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13);
             let weave = _mm_setr_epi8(0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15);
@@ -732,30 +817,45 @@ mod x86 {
                 _mm_set1_epi32(1 << 14),
                 _mm_setzero_si128(),
             );
-            blocks3!(a, 8, b, 8, out, 8, |a, b, o| {
-                let x = i16x8::from_slice(t, a).into();
-                let y = i16x8::from_slice(t, b).into();
-                let re = _mm_add_epi32(
-                    _mm_madd_epi16(x, _mm_xor_si128(y, not_im)),
-                    _mm_srai_epi32::<16>(x),
-                );
-                let im = _mm_madd_epi16(x, _mm_shuffle_epi8(y, swap));
-                let ovf = _mm_cmpeq_epi32(im, min);
-                let re = _mm_srai_epi32::<15>(_mm_add_epi32(re, round));
-                let im = _mm_srai_epi32::<15>(_mm_add_epi32(im, round));
-                let p = _mm_xor_si128(_mm_packs_epi32(re, im), _mm_packs_epi32(zero, ovf));
-                i16x8::simd_from(t, _mm_shuffle_epi8(p, weave)).store_slice(o);
-            }) * 8
+            whole_zip_token(
+                4,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let x = i16x8::from_slice(t, a.as_flattened()).into();
+                    let y = i16x8::from_slice(t, b.as_flattened()).into();
+                    let re = _mm_add_epi32(
+                        _mm_madd_epi16(x, _mm_xor_si128(y, not_im)),
+                        _mm_srai_epi32::<16>(x),
+                    );
+                    let im = _mm_madd_epi16(x, _mm_shuffle_epi8(y, swap));
+                    let ovf = _mm_cmpeq_epi32(im, min);
+                    let re = _mm_srai_epi32::<15>(_mm_add_epi32(re, round));
+                    let im = _mm_srai_epi32::<15>(_mm_add_epi32(im, round));
+                    let p = _mm_xor_si128(_mm_packs_epi32(re, im), _mm_packs_epi32(zero, ovf));
+                    i16x8::simd_from(t, _mm_shuffle_epi8(p, weave))
+                        .store_slice(o.as_flattened_mut());
+                },
+                mul_cq15_sample,
+            );
         }
     );
 
     fearless_simd::kernel!(
-        pub(super) fn mul_cq15_avx2(t: Avx2, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
+        /// [`mul_cq15_sse4_2`] on 256 bits, eight samples per vector (AVX-512 runs it too).
+        /// The `vpshufb` control that swaps the halves of every pair passes through
+        /// `core::hint::black_box`, as `swap_x8` of `mix.rs`: in the build with run-time
+        /// detection (generic tuning) LLVM lowers the visible constant to `vpshuflw` and
+        /// `vpshufhw`, one instruction more per vector (D332). Out of line, so that the
+        /// constants stay in registers across the loop (inlined into the caller, LLVM loaded
+        /// three of them again in every group).
+        pub(super) fn mul_cq15_avx2(t: Avx2, a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i16; 2]]) {
             let not_im = _mm256_set1_epi32(!0xFFFF);
-            let swap = _mm256_setr_epi8(
+            let swap = core::hint::black_box(_mm256_setr_epi8(
                 2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13, 2, 3, 0, 1, 6, 7, 4, 5, 10,
                 11, 8, 9, 14, 15, 12, 13,
-            );
+            ));
             let weave = _mm256_setr_epi8(
                 0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15, 0, 1, 8, 9, 2, 3, 10, 11, 4,
                 5, 12, 13, 6, 7, 14, 15,
@@ -765,20 +865,29 @@ mod x86 {
                 _mm256_set1_epi32(1 << 14),
                 _mm256_setzero_si256(),
             );
-            blocks3!(a, 16, b, 16, out, 16, |a, b, o| {
-                let x = i16x16::from_slice(t, a).into();
-                let y = i16x16::from_slice(t, b).into();
-                let re = _mm256_add_epi32(
-                    _mm256_madd_epi16(x, _mm256_xor_si256(y, not_im)),
-                    _mm256_srai_epi32::<16>(x),
-                );
-                let im = _mm256_madd_epi16(x, _mm256_shuffle_epi8(y, swap));
-                let ovf = _mm256_cmpeq_epi32(im, min);
-                let re = _mm256_srai_epi32::<15>(_mm256_add_epi32(re, round));
-                let im = _mm256_srai_epi32::<15>(_mm256_add_epi32(im, round));
-                let p = _mm256_xor_si256(_mm256_packs_epi32(re, im), _mm256_packs_epi32(zero, ovf));
-                i16x16::simd_from(t, _mm256_shuffle_epi8(p, weave)).store_slice(o);
-            }) * 16
+            whole_zip_token(
+                8,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let x = i16x16::from_slice(t, a.as_flattened()).into();
+                    let y = i16x16::from_slice(t, b.as_flattened()).into();
+                    let re = _mm256_add_epi32(
+                        _mm256_madd_epi16(x, _mm256_xor_si256(y, not_im)),
+                        _mm256_srai_epi32::<16>(x),
+                    );
+                    let im = _mm256_madd_epi16(x, _mm256_shuffle_epi8(y, swap));
+                    let ovf = _mm256_cmpeq_epi32(im, min);
+                    let re = _mm256_srai_epi32::<15>(_mm256_add_epi32(re, round));
+                    let im = _mm256_srai_epi32::<15>(_mm256_add_epi32(im, round));
+                    let p =
+                        _mm256_xor_si256(_mm256_packs_epi32(re, im), _mm256_packs_epi32(zero, ovf));
+                    i16x16::simd_from(t, _mm256_shuffle_epi8(p, weave))
+                        .store_slice(o.as_flattened_mut());
+                },
+                mul_cq15_sample,
+            );
         }
     );
 }
@@ -788,47 +897,48 @@ mod x86 {
 mod neon {
     use core::arch::aarch64::{
         int16x8x2_t, vcombine_s16, vget_low_s16, vld2q_s16, vmlsl_high_s16, vmlsl_s16,
-        vmull_high_s16, vmull_s16, vqaddq_s32, vqrdmulhq_s16, vqrshrn_n_s32, vst2q_s16,
+        vmull_high_s16, vmull_s16, vqaddq_s32, vqrshrn_n_s32, vst2q_s16,
     };
-    use fearless_simd::i16x8;
-    use fearless_simd::prelude::*;
+
+    use super::{mul_cq15_sample, whole_zip_token};
 
     fearless_simd::kernel!(
-        pub(super) fn mul_real(t: Neon, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
-            blocks3!(a, 8, b, 8, out, 8, |a, b, o| {
-                let r = vqrdmulhq_s16(
-                    i16x8::from_slice(t, a).into(),
-                    i16x8::from_slice(t, b).into(),
-                );
-                i16x8::simd_from(t, r).store_slice(o);
-            }) * 8
-        }
-    );
-
-    fearless_simd::kernel!(
-        pub(super) fn mul_cq15(_t: Neon, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
-            blocks3!(a, 16, b, 16, out, 16, |a, b, o| {
-                // SAFETY: `a` and `b` are the 16 values that `vld2q_s16` reads and `o` the 16
-                // values that `vst2q_s16` writes.
-                unsafe {
-                    let (x, y) = (vld2q_s16(a.as_ptr()), vld2q_s16(b.as_ptr()));
-                    let (ar, ai, br, bi) = (x.0, x.1, y.0, y.1);
-                    let re_lo = vmlsl_s16(
-                        vmull_s16(vget_low_s16(ar), vget_low_s16(br)),
-                        vget_low_s16(ai),
-                        vget_low_s16(bi),
-                    );
-                    let re_hi = vmlsl_high_s16(vmull_high_s16(ar, br), ai, bi);
-                    let im_lo = vqaddq_s32(
-                        vmull_s16(vget_low_s16(ar), vget_low_s16(bi)),
-                        vmull_s16(vget_low_s16(ai), vget_low_s16(br)),
-                    );
-                    let im_hi = vqaddq_s32(vmull_high_s16(ar, bi), vmull_high_s16(ai, br));
-                    let re = vcombine_s16(vqrshrn_n_s32::<15>(re_lo), vqrshrn_n_s32::<15>(re_hi));
-                    let im = vcombine_s16(vqrshrn_n_s32::<15>(im_lo), vqrshrn_n_s32::<15>(im_hi));
-                    vst2q_s16(o.as_mut_ptr(), int16x8x2_t(re, im));
-                }
-            }) * 16
+        /// The `CQ15` complex product (`ld2`, widening products, `sqrshrn`, `st2`; see the
+        /// module documentation), eight samples per vector, the whole call in
+        /// [`whole_zip_token`].
+        pub(super) fn mul_cq15(_t: Neon, a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i16; 2]]) {
+            whole_zip_token(
+                8,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    assert!(a.len() >= 8 && b.len() >= 8 && o.len() >= 8);
+                    // SAFETY: `a` and `b` hold the eight samples (16 values) that `vld2q_s16` reads
+                    // and `o` the eight that `vst2q_s16` writes (asserted above).
+                    unsafe {
+                        let (x, y) = (vld2q_s16(a.as_ptr().cast()), vld2q_s16(b.as_ptr().cast()));
+                        let (ar, ai, br, bi) = (x.0, x.1, y.0, y.1);
+                        let re_lo = vmlsl_s16(
+                            vmull_s16(vget_low_s16(ar), vget_low_s16(br)),
+                            vget_low_s16(ai),
+                            vget_low_s16(bi),
+                        );
+                        let re_hi = vmlsl_high_s16(vmull_high_s16(ar, br), ai, bi);
+                        let im_lo = vqaddq_s32(
+                            vmull_s16(vget_low_s16(ar), vget_low_s16(bi)),
+                            vmull_s16(vget_low_s16(ai), vget_low_s16(br)),
+                        );
+                        let im_hi = vqaddq_s32(vmull_high_s16(ar, bi), vmull_high_s16(ai, br));
+                        let re =
+                            vcombine_s16(vqrshrn_n_s32::<15>(re_lo), vqrshrn_n_s32::<15>(re_hi));
+                        let im =
+                            vcombine_s16(vqrshrn_n_s32::<15>(im_lo), vqrshrn_n_s32::<15>(im_hi));
+                        vst2q_s16(o.as_mut_ptr().cast(), int16x8x2_t(re, im));
+                    }
+                },
+                mul_cq15_sample,
+            );
         }
     );
 }
@@ -839,15 +949,26 @@ mod wasm {
     use fearless_simd::i16x8;
     use fearless_simd::prelude::*;
 
+    use super::{mul_q15, whole_zip_token};
+
     fearless_simd::kernel!(
-        pub(super) fn mul_real(t: WasmSimd128, a: &[i16], b: &[i16], out: &mut [i16]) -> usize {
-            blocks3!(a, 8, b, 8, out, 8, |a, b, o| {
-                let r = i16x8_q15mulr_sat(
-                    i16x8::from_slice(t, a).into(),
-                    i16x8::from_slice(t, b).into(),
-                );
-                i16x8::simd_from(t, r).store_slice(o);
-            }) * 8
+        /// The `Q15` product of real streams (`i16x8.q15mulr_sat`), the whole call in
+        /// [`whole_zip_token`].
+        pub(super) fn mul_real(t: WasmSimd128, a: &[i16], b: &[i16], out: &mut [i16]) {
+            whole_zip_token(
+                8,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let r = i16x8_q15mulr_sat(
+                        i16x8::from_slice(t, a).into(),
+                        i16x8::from_slice(t, b).into(),
+                    );
+                    i16x8::simd_from(t, r).store_slice(o);
+                },
+                mul_q15,
+            );
         }
     );
 }
@@ -1926,19 +2047,6 @@ dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_deinterleav
 
 // The kernels
 
-/// The samples from `done` on of an element-wise call, by the fallback.
-macro_rules! finish3 {
-    ($tr:ident :: $m:ident, $ty:ty, $a:expr, $b:expr, $out:expr, $done:expr) => {{
-        let d = $done;
-        match ($a.get(d..), $b.get(d..), $out.get_mut(d..)) {
-            (Some(a), Some(b), Some(o)) if !a.is_empty() => {
-                <Fallback as $tr<$ty>>::$m(&Fallback, a, b, o)
-            }
-            _ => Ok(()),
-        }
-    }};
-}
-
 // The entries whose whole call runs in the dispatched function are `#[inline]`: inlined into
 // the caller, the call to the dispatched function takes its six arguments in registers and
 // no frame of the entry is built around it (D322). Not on wasm32, where the engine counts the
@@ -1960,6 +2068,11 @@ impl Add<C32> for Simd {
 impl Add<CQ15> for Simd {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn add(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> {
+        // On wasm32 the fallback (its groups of eight, D318) takes fewer instructions than the
+        // SIMD path, the measure of that target: 2.33 against 3.61 per sample at `simd128`.
+        if cfg!(target_family = "wasm") {
+            return Fallback.add(a, b, out);
+        }
         check3(a.len(), b.len(), out.len())?;
         run_add_i16(
             bytemuck::cast_slice(a),
@@ -1982,8 +2095,13 @@ impl AddReal<f32> for Simd {
 impl AddReal<Q15> for Simd {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn add_real(&self, a: &[Q15], b: &[Q15], out: &mut [Q15]) -> Result<()> {
+        // On wasm32 the fallback (its groups of eight, D294) takes fewer instructions than the
+        // SIMD path, the measure of that target: 1.19 against 1.83 per sample at `simd128`.
+        if cfg!(target_family = "wasm") {
+            return Fallback.add_real(a, b, out);
+        }
         check3(a.len(), b.len(), out.len())?;
-        run_add_i16(
+        run_add_real_i16(
             bytemuck::cast_slice(a),
             bytemuck::cast_slice(b),
             bytemuck::cast_slice_mut(out),
@@ -2006,16 +2124,15 @@ impl Mul<C32> for Simd {
 }
 
 impl Mul<CQ15> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn mul(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
-        let mut done = 0;
         run_mul_cq15(
             bytemuck::cast_slice(a),
             bytemuck::cast_slice(b),
             bytemuck::cast_slice_mut(out),
-            &mut done,
         );
-        finish3!(Mul::mul, CQ15, a, b, out, done / 2)
+        Ok(())
     }
 }
 
@@ -2029,16 +2146,15 @@ impl MulReal<f32> for Simd {
 }
 
 impl MulReal<Q15> for Simd {
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
     fn mul_real(&self, a: &[Q15], b: &[Q15], out: &mut [Q15]) -> Result<()> {
         check3(a.len(), b.len(), out.len())?;
-        let mut done = 0;
         run_mul_real_q15(
             bytemuck::cast_slice(a),
             bytemuck::cast_slice(b),
             bytemuck::cast_slice_mut(out),
-            &mut done,
         );
-        finish3!(MulReal::mul_real, Q15, a, b, out, done)
+        Ok(())
     }
 }
 

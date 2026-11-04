@@ -232,6 +232,25 @@ fn q15_extreme_values_are_bit_exact() {
     Fallback.mul_real(&ra, &rb, &mut want).unwrap();
     Simd.mul_real(&ra, &rb, &mut got).unwrap();
     assert_eq!(want, got);
+    // The same values in calls shorter than one vector, which the scalar code of the whole call
+    // does.
+    for n in 1..8 {
+        for (i, (x, y)) in a.chunks(n).zip(b.chunks(n)).enumerate() {
+            let (mut want, mut got) = (
+                vec![CQ15::default(); x.len()],
+                vec![CQ15::default(); x.len()],
+            );
+            Fallback.mul(x, y, &mut want).unwrap();
+            Simd.mul(x, y, &mut got).unwrap();
+            assert_eq!(want, got, "mul n={n} chunk={i}");
+        }
+        for (i, (x, y)) in ra.chunks(n).zip(rb.chunks(n)).enumerate() {
+            let (mut want, mut got) = (vec![Q15(0); x.len()], vec![Q15(0); x.len()]);
+            Fallback.mul_real(x, y, &mut want).unwrap();
+            Simd.mul_real(x, y, &mut got).unwrap();
+            assert_eq!(want, got, "mul_real n={n} chunk={i}");
+        }
+    }
     // (-1) * (-1) = 32767 in every path.
     let m = [CQ15 {
         re: Q15::MIN,

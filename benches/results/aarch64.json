@@ -3535,13 +3535,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.64,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.41,
-              "ratio": 0.25
+              "ours_instr_per_sample": 0.45,
+              "ratio": 0.28
             }
           ],
           "other_instr_per_sample": 1.64,
-          "ours_instr_per_sample": 0.41,
-          "ratio": 0.25,
+          "ours_instr_per_sample": 0.45,
+          "ratio": 0.28,
           "snr_db": {
             "other": 91.62,
             "ours": 91.62

@@ -312,12 +312,51 @@ dispatch_fn!(#[cfg_attr(not(target_arch = "wasm32"), inline)] fn run_add_i16(a: 
 
 // C32 product
 
-/// The complex products of `a` and `b` (interleaved floats), `re = ar br - ai bi` and
-/// `im = ar bi + ai br` with separate multiplications.
+/// The most floats of one step of [`mul_split`] (two vectors of AVX-512).
+const MAX_STEP: usize = 32;
+
+/// `(ar + j ai) (br + j bi)` for one vector of each part. Without `FMA` (SSE2, SSE4.2,
+/// SIMD128) `re = ar br - ai bi` and `im = ar bi + ai br`: the products and the difference or
+/// sum of the fallback, one rounding each. With `FMA` (AVX2, AVX-512 and NEON, D326) the complex
+/// product of `rotate` ([`crate::mix::cmul`]): on `x86_64` `re = fms(ar, br, ai bi)` and
+/// `im = fma(ar, bi, ai br)`, the lanes of `vfmaddsub` in [`x86::mul_c32_avx2`]; on AArch64
+/// `re = fnma(ai, bi, ar br)` (`fmls`).
 #[inline(always)]
-fn mul_split<S: SimdToken, L: Split<S>>(simd: S, split: L, a: &[f32], b: &[f32], out: &mut [f32]) {
+fn cmul<S: SimdToken, const FMA: bool>(
+    simd: S,
+    ar: S::f32s,
+    ai: S::f32s,
+    br: S::f32s,
+    bi: S::f32s,
+) -> (S::f32s, S::f32s) {
+    let _ = simd;
+    if FMA {
+        crate::mix::cmul::<S>(ar, ai, br, bi)
+    } else {
+        (ar * br - ai * bi, ar * bi + ai * br)
+    }
+}
+
+/// The complex products of `a` and `b` (interleaved floats) with [`cmul`]. Without `FMA` the
+/// floats after the last whole step go through the scalar arithmetic of the fallback (the same
+/// bits). With `FMA` they are copied into one zero-padded step instead, as `quad_demod` does with
+/// its last partial vector: `core` has no scalar fused multiply-add, and so every sample gets
+/// the arithmetic of the vectors whatever its position in the call.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the lint counts the slices and closures of the inlined body before optimization; \
+              the padded step holds three arrays of 128 bytes"
+)]
+#[inline(always)]
+fn mul_split<S: SimdToken, L: Split<S>, const FMA: bool>(
+    simd: S,
+    split: L,
+    a: &[f32],
+    b: &[f32],
+    out: &mut [f32],
+) {
     let step = 2 * S::f32s::LEN;
-    let n = a.len().min(b.len()).min(out.len());
+    let n = a.len().min(b.len()).min(out.len()) / 2 * 2;
     let k = n / step * step;
     let (ah, at) = a.split_at(k);
     let (bh, bt) = b.split_at(k);
@@ -329,9 +368,34 @@ fn mul_split<S: SimdToken, L: Split<S>>(simd: S, split: L, a: &[f32], b: &[f32],
     {
         let (ar, ai) = split.load(simd, a);
         let (br, bi) = split.load(simd, b);
-        let re = ar * br - ai * bi;
-        let im = ar * bi + ai * br;
+        let (re, im) = cmul::<S, FMA>(simd, ar, ai, br, bi);
         split.store(simd, re, im, o);
+    }
+    if FMA {
+        let rest = n - k;
+        if rest == 0 {
+            return;
+        }
+        let (mut x, mut y, mut z) = ([0f32; MAX_STEP], [0f32; MAX_STEP], [0f32; MAX_STEP]);
+        if let (Some(dx), Some(sx), Some(dy), Some(sy)) = (
+            x.get_mut(..rest),
+            at.get(..rest),
+            y.get_mut(..rest),
+            bt.get(..rest),
+        ) {
+            dx.copy_from_slice(sx);
+            dy.copy_from_slice(sy);
+        }
+        if let (Some(x), Some(y), Some(z)) = (x.get(..step), y.get(..step), z.get_mut(..step)) {
+            let (ar, ai) = split.load(simd, x);
+            let (br, bi) = split.load(simd, y);
+            let (re, im) = cmul::<S, FMA>(simd, ar, ai, br, bi);
+            split.store(simd, re, im, z);
+        }
+        if let (Some(d), Some(s)) = (ot.get_mut(..rest), z.get(..rest)) {
+            d.copy_from_slice(s);
+        }
+        return;
     }
     for ((a, b), o) in at
         .chunks_exact(2)
@@ -493,8 +557,11 @@ macro_rules! blocks3m {
 }
 
 /// The complex products of the whole steps of `$w` floats of `$a` and `$b` with the [`Split`]
-/// `$split` of the token `$t`, in the unrolled groups of [`blocks3`]; evaluates to the number
-/// of floats done.
+/// `$split` of the token `$t`, in the unrolled groups of [`blocks3`], fused ([`cmul`] with
+/// `FMA`: the macro runs on AVX-512 and NEON only); evaluates to the number of floats done.
+/// AVX-512 keeps this split form: the form of [`x86::mul_c32_avx2`] on 512 bits (`vfmaddsub`
+/// after `vmovsldup`, `vmovshdup`, `vpermilps`) simulates 0.51 instead of 0.47 cycles per sample
+/// on `znver4` and 0.39 on `sapphirerapids` either way (D326).
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 macro_rules! mul_split_blocks {
     ($t:ident, $split:expr, $w:literal, $a:ident, $b:ident, $out:ident) => {{
@@ -502,8 +569,7 @@ macro_rules! mul_split_blocks {
         blocks3!($a, $w, $b, $w, $out, $w, |x, y, z| {
             let (ar, ai) = split.load($t, x);
             let (br, bi) = split.load($t, y);
-            let re = ar * br - ai * bi;
-            let im = ar * bi + ai * br;
+            let (re, im) = cmul::<_, true>($t, ar, ai, br, bi);
             split.store($t, re, im, z);
         }) * $w
     }};
@@ -513,7 +579,7 @@ macro_rules! mul_split_blocks {
 /// [`x86::mul_c32_avx2`] (D295, D288), on AVX-512 and NEON
 /// [`mul_split`] with the [`Split`] of the level in the unrolled groups of [`blocks3`] (eight
 /// steps per iteration, independent of each other); the rest of the call by [`mul_split`]
-/// (D288).
+/// (D288). AVX2, AVX-512 and NEON fuse the products (D326), SSE2, SSE4.2 and SIMD128 do not.
 #[inline(always)]
 fn mul_c32<S: SimdToken>(simd: S, a: &[f32], b: &[f32], out: &mut [f32]) {
     let level = simd.level();
@@ -521,30 +587,30 @@ fn mul_c32<S: SimdToken>(simd: S, a: &[f32], b: &[f32], out: &mut [f32]) {
     {
         if let Some(t) = level.as_avx512() {
             let k = mul_split_blocks!(t, crate::mix::x86::InLane, 32, a, b, out);
-            return mul_rest(t, crate::mix::x86::InLane, k, a, b, out);
+            return mul_rest::<_, _, true>(t, crate::mix::x86::InLane, k, a, b, out);
         }
         if let Some(t) = level.as_avx2() {
             let k = x86::mul_c32_avx2(t, a, b, out);
-            return mul_rest(t, crate::mix::x86::InLane, k, a, b, out);
+            return mul_rest::<_, _, true>(t, crate::mix::x86::InLane, k, a, b, out);
         }
         if let Some(t) = level.as_sse4_2() {
             let k = x86::mul_c32_sse4_2(t, a, b, out);
-            return mul_rest(t, Portable, k, a, b, out);
+            return mul_rest::<_, _, false>(t, Portable, k, a, b, out);
         }
     }
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = level.as_neon() {
         let k = mul_split_blocks!(t, crate::mix::neon::Ld2, 8, a, b, out);
-        return mul_rest(t, crate::mix::neon::Ld2, k, a, b, out);
+        return mul_rest::<_, _, true>(t, crate::mix::neon::Ld2, k, a, b, out);
     }
     let _ = level;
-    mul_split(simd, Portable, a, b, out);
+    mul_split::<_, _, false>(simd, Portable, a, b, out);
 }
 
 /// [`mul_split`] of the floats from `k` on.
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[inline(always)]
-fn mul_rest<S: SimdToken, L: Split<S>>(
+fn mul_rest<S: SimdToken, L: Split<S>, const FMA: bool>(
     simd: S,
     split: L,
     k: usize,
@@ -553,7 +619,7 @@ fn mul_rest<S: SimdToken, L: Split<S>>(
     out: &mut [f32],
 ) {
     if let (Some(a), Some(b), Some(out)) = (a.get(k..), b.get(k..), out.get_mut(k..)) {
-        mul_split(simd, split, a, b, out);
+        mul_split::<S, L, FMA>(simd, split, a, b, out);
     }
 }
 
@@ -564,7 +630,7 @@ mod x86 {
         _mm_madd_epi16, _mm_movehdup_ps, _mm_moveldup_ps, _mm_mul_ps, _mm_mulhrs_epi16,
         _mm_packs_epi32, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128,
         _mm_shuffle_epi8, _mm_shuffle_ps, _mm_srai_epi32, _mm_xor_si128, _mm256_add_epi32,
-        _mm256_addsub_ps, _mm256_cmpeq_epi16, _mm256_cmpeq_epi32, _mm256_madd_epi16,
+        _mm256_cmpeq_epi16, _mm256_cmpeq_epi32, _mm256_fmaddsub_ps, _mm256_madd_epi16,
         _mm256_movehdup_ps, _mm256_moveldup_ps, _mm256_mul_ps, _mm256_mulhrs_epi16,
         _mm256_packs_epi32, _mm256_permute_ps, _mm256_set1_epi16, _mm256_set1_epi32,
         _mm256_setr_epi8, _mm256_setzero_si256, _mm256_shuffle_epi8, _mm256_srai_epi32,
@@ -576,10 +642,9 @@ mod x86 {
 
     fearless_simd::kernel!(
         /// The `C32` product of AVX2 on the interleaved floats, four samples per vector:
-        /// `(ar, ar) * (br, bi)` and `(ai, ai) * (bi, br)` (`vmovsldup`, `vmovshdup`,
-        /// `vpermilps`), then `vaddsubps` gives `ar br - ai bi` and `ar bi + ai br`: the
-        /// products and the sums of the fallback in its operand order, one rounding each, no
-        /// FMA. In the unrolled
+        /// `(ai, ai) * (bi, br)` (`vmovshdup`, `vpermilps`), then `vfmaddsub` with
+        /// `(ar, ar)` (`vmovsldup`) and `(br, bi)` gives `fms(ar, br, ai bi)` and
+        /// `fma(ar, bi, ai br)` (D326, the form of [`super::cmul`] with FMA). In the unrolled
         /// groups of [`blocks3`]; the number of floats done.
         pub(super) fn mul_c32_avx2(t: Avx2, a: &[f32], b: &[f32], out: &mut [f32]) -> usize {
             blocks3!(a, 8, b, 8, out, 8, |x, y, z| {
@@ -592,7 +657,7 @@ mod x86 {
                 let ar = _mm256_moveldup_ps(x);
                 let ai = _mm256_movehdup_ps(x);
                 let ys = _mm256_permute_ps::<0xB1>(y);
-                let r = _mm256_addsub_ps(_mm256_mul_ps(ar, y), _mm256_mul_ps(ai, ys));
+                let r = _mm256_fmaddsub_ps(ar, y, _mm256_mul_ps(ai, ys));
                 f32x8::simd_from(t, r).store_slice(z);
             }) * 8
         }

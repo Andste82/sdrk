@@ -73,7 +73,7 @@ Classes: *bit-exact* (fallback equals the reference bit for bit; for `f32` value
 | `add` | `kernels::math::Add` | `CQ15` | bit-exact | `sat16(a + b)` per component in `i32` |
 | `add_real` | `kernels::math::AddReal` | `f32` | bit-exact | `a + b` |
 | `add_real` | `kernels::math::AddReal` | `Q15` | bit-exact | `sat16(a + b)` in `i32` |
-| `mul` | `kernels::math::Mul` | `C32` | bit-exact | `re = ar br - ai bi`, `im = ar bi + ai br` in f32, the four products first, no FMA |
+| `mul` | `kernels::math::Mul` | `C32` | tolerance | SNR >= 140 dB vs. the float32 model `re = ar br - ai bi`, `im = ar bi + ai br` (the four products first, no FMA), which the fallback and the reference give bit for bit; the SIMD backend fuses one product of each part on AVX2, AVX-512 and NEON (D326; 149.5 dB on the golden case) |
 | `mul` | `kernels::math::Mul` | `CQ15` | bit-exact | `re = sat16(round_shift(ar br - ai bi, 15))`, `im = sat16(round_shift(ar bi + ai br, 15))` in `i64` (one rounding per component; `(-1)(-1) = 32767`) |
 | `mul_real` | `kernels::math::MulReal` | `f32` | bit-exact | `a b` |
 | `mul_real` | `kernels::math::MulReal` | `Q15` | bit-exact | `sat16(round_shift(a b, 15))`, the multiply of the numeric conventions |

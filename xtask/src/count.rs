@@ -601,8 +601,8 @@ pub enum Reference {
     /// The cheapest VOLK implementation of the machine (informational).
     VolkCheapest,
     /// VOLK's protokernel without fused multiply-add, compiled with `-ffp-contract=off` for
-    /// the level (`benches/refs/volk-nofma.c`, D287): the gate of a kernel whose contract
-    /// forbids FMA where VOLK's dispatcher picks a fused implementation.
+    /// the level (`benches/refs/volk-nofma.c`): information next to VOLK's fused dispatch where
+    /// that dispatch fuses (the gate of `mul` `C32` from D287 until D326 fused ours as well).
     VolkNoFma,
     /// VOLK's portable `generic` protokernel, compiled with `-O3 -ffp-contract=off` for the
     /// level (`benches/refs/volk-generic.c`): the scalar reference of a fallback entry.
@@ -674,11 +674,11 @@ pub enum Family {
     /// holds only the generic kernels of the entries of [`Family::Volk`]): there our fallback is
     /// the comparison, as information (D12).
     VolkNative,
-    /// A VOLK kernel exists, but at the levels with FMA (`avx2`, `avx512`, `neon`) the
+    /// A VOLK kernel exists, and at the levels with FMA (`avx2`, `avx512`, `neon`) the
     /// dispatcher picks a fused implementation (`volk_32fc_x2_multiply_32fc`: `a_avx2_fma`,
-    /// `neonv8`), which our no-FMA contract forbids (D5): there VOLK's protokernel without fused
-    /// operations ([`Reference::VolkNoFma`]) is the gate and VOLK's dispatch is information
-    /// (D287); at the other levels as [`Family::Volk`].
+    /// `neonv8`), as ours does there (D326): VOLK's dispatch is the gate as in [`Family::Volk`],
+    /// and VOLK's protokernel without fused operations ([`Reference::VolkNoFma`], the gate of
+    /// D287) is information at those levels.
     VolkNoFma,
     /// A VOLK kernel does the same work up to a constant offset (`convert_cu8`: VOLK converts
     /// signed bytes only): it is the gate, and our fallback is reported as information.
@@ -1444,11 +1444,11 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
     match spec.family {
         Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
         Family::VolkNoFma if matches!(plan.level, "avx2" | "avx512" | "neon") => {
-            let mut extras = vec![Reference::Volk];
+            let mut extras = vec![Reference::VolkNoFma];
             if plan.cheapest_volk {
                 extras.push(Reference::VolkCheapest);
             }
-            (Reference::VolkNoFma, extras)
+            (Reference::Volk, extras)
         }
         Family::Volk | Family::VolkAndOwn | Family::VolkNative | Family::VolkNoFma => {
             let mut extras = Vec::new();
@@ -4494,15 +4494,19 @@ mod tests {
                 );
             }
         }
-        // `mul`: VOLK's protokernel without FMA where the dispatcher fuses, VOLK's dispatch as
-        // information (D287); VOLK's dispatch elsewhere.
+        // `mul`: VOLK's dispatch, fused where ours is (D326); its protokernel without FMA as
+        // information at those levels.
         for level in levels {
             let (gate, extras) = comparisons(plan(level), kernel("mul"));
+            assert_eq!(gate, Reference::Volk, "mul at {level}");
             if matches!(level, "avx2" | "avx512" | "neon") {
-                assert_eq!(gate, Reference::VolkNoFma, "mul at {level}");
-                assert_eq!(extras.first(), Some(&Reference::Volk), "mul at {level}");
+                assert_eq!(
+                    extras.first(),
+                    Some(&Reference::VolkNoFma),
+                    "mul at {level}"
+                );
             } else {
-                assert_eq!(gate, Reference::Volk, "mul at {level}");
+                assert!(!extras.contains(&Reference::VolkNoFma), "mul at {level}");
             }
         }
         // No library has the function: our fallback, as information.

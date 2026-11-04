@@ -698,7 +698,8 @@ fn backend_table_lists_the_m30_kernels() {
     }
     assert_eq!(backend_for("add", SampleType::F32), "none");
 
-    // The facade gives the results of the fallback (these kernels are bit-exact).
+    // The facade gives the results of the fallback (bit-exact kernels; the products of these
+    // `C32` values are exact, so the fused `mul` of D326 gives the same bits).
     let a = [C32::new(1.0, 2.0), C32::new(-0.5, 0.25)];
     let b = [C32::new(0.5, -1.0), C32::new(2.0, 2.0)];
     let (mut x, mut y) = ([C32::default(); 2], [C32::default(); 2]);

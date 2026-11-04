@@ -3081,32 +3081,32 @@
           "verdict": "pass"
         },
         "mul": {
-          "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "compared_with": "volk_32fc_x2_multiply_32fc",
           "goal": true,
           "informational": [
             {
-              "compared_with": "volk_32fc_x2_multiply_32fc",
-              "label": "information: volk",
-              "other_instr_per_sample": 2.77,
-              "other_snr_db": 150.12,
-              "ours_instr_per_sample": 2.38,
-              "ratio": 0.86
+              "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "information: volk-nofma",
+              "other_instr_per_sample": 3.02,
+              "other_snr_db": 148.5,
+              "ours_instr_per_sample": 2.12,
+              "ratio": 0.7
             },
             {
-              "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "compared_with": "volk_32fc_x2_multiply_32fc",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 3.02,
+              "other_instr_per_sample": 2.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.38,
-              "ratio": 0.79
+              "ours_instr_per_sample": 2.12,
+              "ratio": 0.77
             }
           ],
-          "other_instr_per_sample": 3.02,
-          "ours_instr_per_sample": 2.38,
-          "ratio": 0.79,
+          "other_instr_per_sample": 2.77,
+          "ours_instr_per_sample": 2.12,
+          "ratio": 0.77,
           "snr_db": {
-            "other": 148.5,
-            "ours": 148.5
+            "other": 150.12,
+            "ours": 150.12
           },
           "status": "release",
           "verdict": "pass"
@@ -5247,12 +5247,12 @@
         "mul": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 2.38,
-          "ours_instr_per_sample": 2.38,
+          "other_instr_per_sample": 2.12,
+          "ours_instr_per_sample": 2.13,
           "ratio": 1.0,
           "snr_db": {
-            "other": 148.5,
-            "ours": 148.5
+            "other": 150.12,
+            "ours": 150.12
           },
           "status": "release",
           "verdict": "pass"

@@ -228,7 +228,12 @@ fn lane_phases<S: SimdToken, L: Split<S>>(simd: S, inc: u32) -> S::u32s {
 /// multiplication and a subtraction), on AArch64 as `-ai bi + ar br`, which is `fmls` (its
 /// multiply-subtract would be a negation and an `fmla`).
 #[inline(always)]
-fn cmul<S: SimdToken>(ar: S::f32s, ai: S::f32s, br: S::f32s, bi: S::f32s) -> (S::f32s, S::f32s) {
+pub(crate) fn cmul<S: SimdToken>(
+    ar: S::f32s,
+    ai: S::f32s,
+    br: S::f32s,
+    bi: S::f32s,
+) -> (S::f32s, S::f32s) {
     #[cfg(target_arch = "aarch64")]
     let re = (-ai).mul_add(bi, ar * br);
     #[cfg(not(target_arch = "aarch64"))]

@@ -60,7 +60,7 @@ impl<T, S: Storage> Foo<T, S> {
 
 `validate` applies the limits that depend on the input rate (`frequency_hz` within plus or minus half the rate, a stop band below half the rate). Parameters with a rate-dependent default (`cutoff_hz` and `transition_hz` of `ddc`, `duc` and `resample`) are `Option<f64>` in the config: `None` selects the default. `FooConfig::get` of an unset one is an error; the block reports the resolved value. `set` and `get` work on build and runtime parameters and check kind and range with the same table (`ParamDesc::check`) that the description publishes.
 
-Blocks exist for the complex sample types `C32` and `CQ15` (`ConvertBlock<T, S>`, `ConvertOutBlock`, `ScaleBlock`, `DcBlockBlock`, `FirBlock`, `DdcBlock`, `DucBlock`, `FmDemodBlock` (`C32`/`CQ15` in, `f32`/`Q15` out), `FmModBlock` (`f32`/`Q15` in, `C32`/`CQ15` out), `ResampleBlock`, `SpectrumBlock`, `SquelchBlock`, `AgcBlock`, `AmDemodBlock` (`C32`/`CQ15` in, `f32`/`Q15` out)) and for the real types in `ResampleRealBlock<R, S>` (`f32`, `Q15`), which is the resampler for audio.
+Blocks exist for the complex sample types `C32` and `CQ15` (`ConvertBlock<T, S>`, `ConvertOutBlock`, `ScaleBlock`, `DcBlockBlock`, `FirBlock`, `DdcBlock`, `DucBlock`, `FmDemodBlock` (`C32`/`CQ15` in, `f32`/`Q15` out), `FmModBlock` (`f32`/`Q15` in, `C32`/`CQ15` out), `ResampleBlock`, `SpectrumBlock`, `SquelchBlock`, `AgcBlock`, `AmDemodBlock` (`C32`/`CQ15` in, `f32`/`Q15` out)) and for the real types in `ResampleRealBlock<R, S>` (`f32`, `Q15`), which is the resampler for audio, and `DcBlockRealBlock<R, S>` (`f32`, `Q15`, the kernel `dc_block_real`; the kind `dc_block` runs it for real input).
 
 ## Storage
 
@@ -130,7 +130,7 @@ fn receiver() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Composite blocks
 
-A *composite block* is a block whose result is exactly that of a small graph of primitive blocks (M29, M30). M31 gives the tools to write such a graph as one Rust expression of existing blocks, without buffers or loops of its own: `Chain` for blocks in a row (also with a pair of streams between two stages), `Fork` for one input into two branches, automatic delay alignment of the branches, parameter paths and `ParamMap` for flat parameter names. `Chain` and `Fork` are themselves `Block`s, so they nest; they are heap-free and take their buffers from the same `Storage` as the blocks. `ParamMap` is a const table that holds no state. None of them is a pipeline kind. M32 rebuilds the existing composite blocks (`fm_stereo_demod` and others) from these tools.
+A *composite block* is a block whose result is exactly that of a small graph of primitive blocks (M29, M30). M31 gives the tools to write such a graph as one Rust expression of existing blocks, without buffers or loops of its own: `Chain` for blocks in a row (also with a pair of streams between two stages), `Fork` for one input into two branches, automatic delay alignment of the branches, parameter paths and `ParamMap` for flat parameter names. `Chain` and `Fork` are themselves `Block`s, so they nest; they are heap-free and take their buffers from the same `Storage` as the blocks. `ParamMap` is a const table that holds no state. None of them is a pipeline kind. Rebuilding the existing composite blocks (`fm_stereo_demod` and others) from these tools moved to the backlog (D358); those blocks keep their own loops, and [the kernels each of them runs](#kernels-of-the-composite-blocks) are listed below.
 
 ### Chain with a pair between its stages
 
@@ -169,7 +169,7 @@ See [embedded.md](embedded.md#sizing-the-arena-of-a-chain) for sizing a whole ar
 
 ### Example: the stereo decoder
 
-The stereo decoder of `fm_stereo_demod` (M24) as a composition: the multiplex signal goes straight on (`delay` 0) and through the 19 kHz band-pass, and the pair meets in the pilot loop. The listing is an illustration with the real constructor signatures; it is **not compiled** here (M32 builds it as a test). `qd`, `zero`, `pilot_bp`, `pll`, `audio_lp` and `deemph` are the configurations (`QuadDemodConfig`, `DelayConfig { samples: 0 }`, a `BiquadConfig` band-pass at 19 kHz, `StereoPllConfig`, a `DecimateConfig` and a `BiquadConfig` low-pass), `fs` the input rate and `fs_audio` the rate after the decimation; `st` is a `&mut` storage.
+The stereo decoder of `fm_stereo_demod` (M24) as a composition: the multiplex signal goes straight on (`delay` 0) and through the 19 kHz band-pass, and the pair meets in the pilot loop. The listing is an illustration with the real constructor signatures; it is **not compiled** here (building it as a test moved to the backlog with the plans, D358). `qd`, `zero`, `pilot_bp`, `pll`, `audio_lp` and `deemph` are the configurations (`QuadDemodConfig`, `DelayConfig { samples: 0 }`, a `BiquadConfig` band-pass at 19 kHz, `StereoPllConfig`, a `DecimateConfig` and a `BiquadConfig` low-pass), `fs` the input rate and `fs_audio` the rate after the decimation; `st` is a `&mut` storage.
 
 ```rust
 let decoder = chain!(st, 256;
@@ -190,6 +190,17 @@ let decoder = chain!(st, 256;
 - **Alignment:** both branches have the ratio 1 and the delay 0 (`delay` 0 and an IIR band-pass), so the fork inserts nothing.
 - **Parameter paths:** `chain!` nests to the right, so the stages are `0` (`quad_demod`), `1.0` (the fork, with branches `1.0.0` and `1.0.1`), `1.1.0` (`stereo_pll`), `1.1.1.0` (`decimate`), `1.1.1.1.0` (`stereo_matrix`) and `1.1.1.1.1` (de-emphasis). A composite block over this expression can offer flat names with `ParamMap::new(&[("stereo", "1.1.0.stereo"), ("pilot_q", "1.0.1.q")])`.
 - **Storage of the tools:** the fork takes three buffers of 256 `f32` (3072 bytes, no ring); the five joints of the chain take 256 `f32`, 2 x 256 `f32`, and three times 256 `C32` (1024 + 2048 + 3 x 2048 bytes).
+
+### Kernels of the composite blocks
+
+The six composite blocks call their kernels through the facade `Sdrk` in this order, once per piece of input (`ddc` and `duc` per piece that fits their scratch buffer of `max_chunk` samples, the other four per piece of at most 256 input samples, fewer when the output buffer is short). For `CQ15` the result is bit for bit independent of the piece size. For `C32`, the `f32`/`C32` tolerance kernels of the SIMD backend (for example `dc_block_real`, `fir_decimate`) may change the last bits, within the 120 dB bound of the invariance tests. Taps come from `DesignSpec::lowpass` (`kaiserord` and a Kaiser `firwin`, [Filter design](#filter-design)) and are quantized per tap to `f32` (`C32`) or rounded to Q15 (`CQ15`).
+
+- **`ddc`:** the fused kernel `ddc`, that is `rotate` (NCO `Nco::new(-frequency_hz, fs)` at the input rate) then `fir_decimate` (factor `decimation`). Derived: the low-pass at the input rate with `cutoff_hz` (default `0.4 * fs / decimation`), `transition_hz` (default `0.1 * fs / decimation`), `attenuation_db` and `max_taps`.
+- **`duc`:** the fused kernel `duc`, that is `fir_interpolate` (factor `interpolation`) then `rotate` (NCO `Nco::new(frequency_hz, fs_out)` at the output rate `fs_out = interpolation * fs`). Derived: the low-pass designed at `fs_out` with `cutoff_hz` (default `0.4 * fs`) and `transition_hz` (default `0.1 * fs`) relative to the input rate, every tap multiplied by `interpolation` before the quantization.
+- **`fm_demod`:** the fused kernel `fm_demod`, that is `quad_demod` then `deemphasis` (`DeemphasisState::new(deemphasis_us * 1e-6, fs)`; with `deemphasis_us` 0 the kernel `quad_demod` alone), then `resample_real` with L = 1 and M = `audio_decimation` (none with `audio_decimation` 1). Derived: the discriminator gain `fs / (2 pi deviation_hz)` (`C32`) or raw 32767 (`CQ15`); the audio low-pass at the input rate with the cutoff `audio_cutoff_hz`, the transition `audio_cutoff_hz / 4`, 60 dB and at most 1023 taps.
+- **`am_demod`:** `mag` then `dc_block_real` then `resample_real` with L = 1 and M = `audio_decimation`. Derived: the pole `r = exp(-2 pi dc_cutoff_hz / fs)`, the same function as `dc_block`, rounded to `f32` or Q15 (no DC blocker with `dc_cutoff_hz` 0); the audio low-pass designed as in `fm_demod` (none with `audio_decimation` 1). **Exception:** the block does not hand every envelope sample to `dc_block_real`. An envelope sample of exactly zero (a closed squelch, digital silence) gives zero audio and clears the state of the DC blocker (M20); only the runs of non-zero envelope between such samples go through the kernel. So `am_demod` equals the plain chain `mag` -> `dc_block_real` -> `resample_real` only for an input without exact zeros.
+- **`ssb_demod`:** `rotate` (NCO `Nco::new(-s * c, fs)`) then `fir_decimate` (factor `audio_decimation`) then `rotate` (NCO `Nco::new(s * c, fs_out)`), then the real part of every sample (a copy, no kernel). Derived: `c = (low_hz + high_hz) / 2`, `s = +1` for USB and `-1` for LSB; the low-pass at the input rate with the cutoff `(high_hz - low_hz) / 2`, `transition_hz`, `attenuation_db` and `max_taps`.
+- **`fm_stereo_demod`:** `quad_demod` then `biquad_real` (pilot band-pass) then `stereo_pll` then `fir_decimate` (complex, factor `audio_decimation`, also with 1) then `stereo_matrix` then `biquad` (de-emphasis; skipped with `deemphasis_us` 0). Derived: the discriminator gain of `fm_demod`; the band-pass `biquad_coefs(Bandpass, 19000, 5, fs)`; the loop with `pilot_hz` 19000, `natural_hz` = `pll_natural_hz` and the pilot level 0.1 (`CQ15`: `0.1 * 2 * deviation_hz / fs`); the audio low-pass designed as in `fm_demod`; the de-emphasis section `[alpha, 0, 0, -(1 - alpha), 0]` with `alpha = 1 - exp(-1 / (fs_audio * deemphasis_us * 1e-6))` at the output rate `fs_audio`.
 
 ## Filter design
 
@@ -229,7 +240,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `convert` | Converts raw device bytes in a sample format to complex or real samples. | `in`: raw | `out`: c32, cq15, f32, q15 | `format` |
 | `convert_out` | Converts complex samples to raw device bytes in a sample format. | `in`: c32, cq15 | `out`: raw | `format` |
 | `scale` | Multiplies a complex signal by a gain given in decibels. | `in`: c32, cq15 | `out`: c32, cq15 | - |
-| `dc_block` | Removes the DC offset of a complex signal with a one-pole high-pass. | `in`: c32, cq15 | `out`: c32, cq15 | - |
+| `dc_block` | Removes the DC offset of a complex or real signal with a one-pole high-pass. | `in`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | - |
 | `fir` | Low-pass FIR filter designed from cutoff, transition width and attenuation. | `in`: c32, cq15 | `out`: c32, cq15 | `cutoff_hz`, `transition_hz` |
 | `ddc` | Shifts a signal to 0 Hz, low-pass filters it and decimates it. | `in`: c32, cq15 | `out`: c32, cq15 | `decimation` |
 | `duc` | Interpolates a signal, removes the images and shifts it up to a carrier frequency. | `in`: c32, cq15 | `out`: c32, cq15 | `interpolation` |
@@ -416,7 +427,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 
 - **`convert` / `convert_out`:** raw device bytes to `C32`/`CQ15` and back (all interleaved complex formats of [device.md](device.md)). The block works on whole packing groups only (for example 5 bytes for two 10-bit complex samples); `Progress` counts bytes on the raw side and samples on the other. `convert` also accepts the formats with `Layout::Real` (`rs16`, `rf32`, ...): `ConvertRealBlock<T>` (`f32`, `Q15`) calls `convert_real` and has the same parameter `format`; `ConvertBlock` refuses a real format and `ConvertRealBlock` a complex one, the pipeline kind and the automatic conversion of a raw input choose the block by the layout of the format (the port type of the node is then `f32`/`q15`). For a real format a packing group counts real samples (`rs16`: 2 bytes per sample). `convert_out` has no real variant. Planar formats cannot be streamed.
 - **`scale`:** `gain_db` (runtime) as a real gain, `-120` to `+40` dB for `C32` and `-120` to `0` dB for `CQ15` (0 dB is the largest Q15 value, about -0.0003 dB).
-- **`dc_block`:** `r = exp(-2 pi cutoff / fs)` (rounded to Q15 for `CQ15`).
+- **`dc_block`:** `r = exp(-2 pi cutoff / fs)` (rounded to Q15 for `CQ15` and `Q15`); complex input runs `DcBlockBlock` (kernel `dc_block`), real input `DcBlockRealBlock` (kernel `dc_block_real`) with the same pole.
 - **`fir`:** a Kaiser-window low-pass from `cutoff_hz`, `transition_hz`, `attenuation_db` (60) and `max_taps` (1023); `cutoff_hz` and `transition_hz` are required.
 - **`ddc`:** an NCO at `-frequency_hz` shifts a signal at `+frequency_hz` to 0 Hz, the designed low-pass (default cutoff `0.4 * fs / decimation`, transition `0.1 * fs / decimation`) and the fused `ddc` kernel with a scratch buffer of `max_chunk` samples (default 4096). `frequency_hz` is a runtime parameter and keeps the oscillator phase continuous.
 - **`duc`:** the fused `duc` kernel with taps designed at the *output* rate and multiplied by `L`, the NCO at `+frequency_hz` at the output rate; defaults relative to the input rate (cutoff `0.4`, transition `0.1`). `max_chunk` is counted in output samples and must be at least `interpolation`.
@@ -475,6 +486,32 @@ For every frame the block takes `fft_size` consecutive samples starting at the f
 
 ## Tests
 
+How the output of each block kind is checked against a reference. *Golden*: a case under `tests/golden/vectors/blocks/` computed by the Python generator; *block equals kernel*: the block's output equals, bit for bit, the direct call of its kernel through `Sdrk` with the parameters the block derives, in one piece and in 20 cut plans; *chain*: the block equals the hand-wired chain of its kernels or of primitive blocks; *property*: pass and stop bands, levels, loops, closed forms. Test files are in `crates/blocks/sdrk-blocks/tests/` unless a path is given; `golden_m09.rs` is `crates/testing/sdrk-testkit/tests/golden_m09.rs`. Every kind also has the invariance, reset, extreme-input, storage and description tests listed below.
+
+| Kind | Reference test | Test files |
+| --- | --- | --- |
+| `convert`, `convert_out` | block equals kernel (M32) | `block_equals_kernel.rs`; property: `behaviour.rs`, `halfband_decimate.rs` (`rs16` equals `convert_real`) |
+| `fir` | block equals kernel (M32) | `block_equals_kernel.rs`; property: `functional.rs`; the design functions against SciPy: `golden_m09.rs`, `design.rs` |
+| `biquad` | block equals kernel (M32) | `block_equals_kernel.rs`; property and runtime changes against the kernel: `biquad.rs`; design: `biquad_design.rs` |
+| `real_to_iq` | block equals kernel (M32) | `block_equals_kernel.rs`; property: `halfband_decimate.rs` |
+| `fm_mod` | block equals kernel (M32) | `block_equals_kernel.rs`; property (modulator-demodulator loop): `functional.rs` |
+| `dc_block` | real input: block equals kernel (M32); complex input: property | `block_equals_kernel.rs`; `functional.rs`, `behaviour.rs` (both variants: invariance, reset, extreme inputs), `timing.rs` |
+| `scale` | property | `behaviour.rs`, `params.rs` |
+| `halfband_decimate` | property (the taps equal `halfband_taps`, stop band, group delay) | `halfband_decimate.rs` |
+| `squelch` | property (closed form of the gate) | `squelch.rs` |
+| `agc`, `preemph_limit` | block equals kernel | `agc.rs`, `preemph_limit.rs` |
+| `quad_demod`, `deemphasis`, `rotate`, `decimate`, `interpolate`, `mag`, `delay` | block equals kernel | `primitive_blocks.rs` |
+| `add`, `mul`, `make_complex`, `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_pll`, `stereo_matrix` | block equals kernel | `two_port_blocks.rs` |
+| `ddc` | golden (130 dB); chain (`rotate` then `decimate`) | `golden_m09.rs`; `primitive_blocks.rs`; suite case `block_ddc_vs_chain` |
+| `duc` | chain (`interpolate` then `rotate`); property (DUC-DDC loop) | `primitive_blocks.rs`; `functional.rs` |
+| `fm_demod` | golden (133 dB); property (modulator-demodulator loop, SINAD) | `golden_m09.rs`; `functional.rs`; suite case `block_fm_demod_sinad` |
+| `am_demod` | golden (four cases); chain | `golden_m09.rs`; `am_demod.rs`, `primitive_blocks.rs` (`mag` equals the first stage) |
+| `ssb_demod` | golden (four cases); chain | `golden_m09.rs`; `ssb_demod.rs` |
+| `fm_stereo_demod` | chain (kernels; `stereo_pll` block with the rest of the decoder) | `fm_stereo_demod.rs`, `two_port_blocks.rs`; separation and SINAD: `crates/testing/sdrk-testkit/tests/e2e_stereo_m24.rs` |
+| `resample` | golden (rational and tuned) | `golden_m09.rs`; `ppm.rs`, `functional.rs` |
+| `spectrum` | golden | `golden_m09.rs`; `functional.rs` |
+
+- `tests/block_equals_kernel.rs` (M32: `fir`, `biquad`, `real_to_iq`, `convert`, `convert_out`, `fm_mod` and `DcBlockRealBlock` against the direct kernel call with the parameters the block derives from its configuration, for both sample types and at least two configurations each, in one piece and in 20 cut plans (seed 470), and, where the block has a runtime parameter, a change of it at the same sample as in the kernel call; the cut plans of `C32` `fir`, `C32` `real_to_complex` and `f32` `dc_block_real` (SIMD variants whose bits may depend on the split) are compared by SNR, 120 dB (D360, D361); everything else, `fm_mod` included, bit for bit; the taps of `fir` and `real_to_iq` are quantized in the test by the rounding rule R7, not by the blocks' own conversion, D362).
 - `tests/two_port_blocks.rs` (the blocks of M30: equality with the kernels in one piece and in chunks for all four sample types, lockstep `LengthMismatch` of the `Two` inputs, `make_complex` to `real_part`/`imag_part` bit for bit with NaN, infinities and negative zero, `nco` against `oscillate`, frequency change keeps the phase, harmonic 2 is the square of harmonic 1, start phase and reset, parameter validation, `stereo_pll` against the kernel and, followed by the rest of the stereo decoder, against `fm_stereo_demod` bit for bit, zero storage).
 - Suite cases of M30: `block_nco_phase_lock` (10^6 samples, full tier) and `block_make_complex_roundtrip` (quick).
 - `tests/biquad.rs` (the block `biquad`: a 4th-order low-pass at 2 kHz of 48 kHz passes 1 kHz with less than 0.1 dB and stops 8 kHz by at least 48 dB in `f32` and Q15, both parts of the complex blocks, the notch at 1 kHz with q 10 (40 dB in `f32`, 34 dB in Q15, D23), runtime `cutoff_hz` and `q` against the kernel with `set_coefs`, invalid values, the Q15 cutoff limit at `fs / 500`, coefficients that do not fit Q2.14, odd orders, `order` other than 2 for band-pass and notch, 20-plan invariance for all four sample types, reset, NaN and infinity, the description); `construction.rs` adds the exact arena and the 512-byte limit, `describe.rs` the description checks.

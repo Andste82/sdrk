@@ -27,10 +27,10 @@ use common::{plans, rate, real_signal, run_block, run_frames, signal};
 use sdrk::{C32, CQ15, Q15, Sdrk};
 use sdrk_blocks::{
     Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample,
-    SpectrumWindow, StreamElem,
+    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DucBlock, DucConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
+    SpectrumSample, SpectrumWindow, StreamElem,
 };
 use sdrk_core::kernels::{
     basic::Scale,
@@ -266,6 +266,23 @@ where
         invariant("real resample", &x, make);
         resets("real resample", &x, make);
     }
+}
+
+fn real_dc_blocks<R: sdrk_blocks::BlockReal + sdrk::Sample + bytemuck::Pod>(seed: u64)
+where
+    Sdrk: sdrk_core::kernels::demod::DcBlockReal<R>,
+{
+    let x = real_signal::<R>(3000, seed, 0.03);
+    let cfg = DcBlockConfig { cutoff_hz: 50.0 };
+    let make = || DcBlockRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    invariant_close("real dc_block", &x, make);
+    resets("real dc_block", &x, make);
+}
+
+#[test]
+fn real_dc_blocks_are_invariant_and_reset() {
+    real_dc_blocks::<f32>(5);
+    real_dc_blocks::<Q15>(6);
 }
 
 #[test]
@@ -549,6 +566,18 @@ fn silence_and_full_scale_do_not_break_the_q15_blocks() {
         );
         assert!(frames.iter().all(|(f, _)| f.iter().all(|v| v.is_finite())));
     }
+    // The real DC blocker on silence and on alternating full scale.
+    let real_silence = vec![Q15::default(); 3000];
+    let real_full: Vec<Q15> = (0..3000)
+        .map(|i| Q15(if i % 2 == 0 { 32767 } else { -32768 }))
+        .collect();
+    for x in [&real_silence, &real_full] {
+        let cfg = DcBlockConfig::default();
+        let out = finite_or_nan_is_fine("real dc_block", x, || {
+            DcBlockRealBlock::<Q15, _>::new(&cfg, r, &mut VecStorage).unwrap()
+        });
+        assert_eq!(out.len(), x.len());
+    }
     // Silence stays silent (apart from the filters' exact zero).
     let cfg = FirConfig {
         cutoff_hz: 5_000.0,
@@ -659,6 +688,33 @@ fn f32_blocks_survive_nan_and_infinity() {
     block.reset();
     let out = run_block(&mut block, &[C32::new(1.0, 0.0)], None);
     assert!(out[0].re.is_finite());
+}
+
+#[test]
+fn the_real_dc_block_survives_nan_and_infinity() {
+    let r = rate(48_000);
+    let mut x = real_signal::<f32>(3000, 7, 0.03);
+    for (i, s) in [
+        f32::NAN,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        0.0,
+        1e38,
+        -1e38,
+        1e-45,
+    ]
+    .iter()
+    .enumerate()
+    {
+        x[100 + 7 * i] = *s;
+    }
+    let mut block = DcBlockRealBlock::<f32, _>::new(&cfg_dc(), r, &mut VecStorage).unwrap();
+    assert_eq!(run_block(&mut block, &x, None).len(), x.len());
+    // After a NaN the feedback state recovers only through a reset.
+    let _ = run_block(&mut block, &[f32::NAN], None);
+    block.reset();
+    let out = run_block(&mut block, &[1.0f32, 0.5], None);
+    assert!(out.iter().all(|v| v.is_finite()), "{out:?}");
 }
 
 fn cfg_dc() -> DcBlockConfig {

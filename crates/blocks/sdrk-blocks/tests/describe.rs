@@ -33,15 +33,15 @@ use sdrk::{C32, CQ15};
 use sdrk_blocks::{
     AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock,
     BiquadConfig, BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig,
-    DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability,
-    NcoBlock, NcoConfig, NcoRealBlock, ParamKind, ParamValue, PortType, PreemphLimitBlock,
-    PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock, StereoPllBlock,
-    StereoPllConfig, ToComplexBlock, all_descriptions,
+    ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock,
+    DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock,
+    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock,
+    MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, ParamKind, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock,
+    StereoPllBlock, StereoPllConfig, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -527,6 +527,14 @@ fn blocks_accept_and_report_every_described_parameter() {
         "dc_block",
         &mut DcBlockBlock::<CQ15, _>::new(&DcBlockConfig::default(), r, &mut s).unwrap(),
     );
+    check_block_params(
+        "dc_block",
+        &mut DcBlockRealBlock::<f32, _>::new(&DcBlockConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "dc_block",
+        &mut DcBlockRealBlock::<sdrk::Q15, _>::new(&DcBlockConfig::default(), r, &mut s).unwrap(),
+    );
     let fir = FirConfig {
         cutoff_hz: 10e3,
         transition_hz: 5e3,
@@ -600,6 +608,26 @@ fn blocks_accept_and_report_every_described_parameter() {
         }
     }
     assert_eq!(Block::description(&block).kind, "spectrum");
+}
+
+/// The kind `dc_block` takes complex and real samples (M32): the complex block and the real
+/// block share one description, whose ports list all four types in the order of `biquad`.
+#[test]
+fn dc_block_describes_the_complex_and_the_real_variant() {
+    let d = find("dc_block");
+    let four = [PortType::C32, PortType::CQ15, PortType::F32, PortType::Q15];
+    assert_eq!(d.inputs.len(), 1);
+    assert_eq!(d.outputs.len(), 1);
+    assert_eq!(d.inputs[0].types, four);
+    assert_eq!(d.outputs[0].types, four);
+    assert_eq!(d.inputs[0].types, find("biquad").inputs[0].types);
+    let r = rate(48_000);
+    let cfg = DcBlockConfig::default();
+    let complex = DcBlockBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap();
+    let real = DcBlockRealBlock::<f32, _>::new(&cfg, r, &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(complex.description(), d));
+    assert!(std::ptr::eq(real.description(), d));
+    assert!(d.details.contains("dc_block_real"));
 }
 
 #[test]

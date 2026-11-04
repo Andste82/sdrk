@@ -26,12 +26,12 @@ mod common;
 
 use common::{norm, rate, run_block, signal};
 use num_complex::Complex64;
-use sdrk::{C32, CQ15, ComplexSample, Delay, Ratio, RatioKind, Sdrk};
+use sdrk::{C32, CQ15, ComplexSample, Delay, Q15, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::{
     Block, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DdcBlock, DdcConfig, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, ScaleBlock, ScaleConfig, StreamElem,
+    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DucBlock, DucConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, StreamElem,
 };
 use sdrk_core::kernels::{
     decim::Resample,
@@ -278,6 +278,19 @@ fn same_rate_blocks_have_ratio_one_and_no_delay() {
         (t.ratio, t.kind, t.delay),
         (Ratio::ONE, RatioKind::Constant, Delay::ZERO)
     );
+    for t in [
+        DcBlockRealBlock::<f32, _>::new(&DcBlockConfig::default(), r, &mut VecStorage)
+            .unwrap()
+            .timing(),
+        DcBlockRealBlock::<Q15, _>::new(&DcBlockConfig::default(), r, &mut VecStorage)
+            .unwrap()
+            .timing(),
+    ] {
+        assert_eq!(
+            (t.ratio, t.kind, t.delay),
+            (Ratio::ONE, RatioKind::Constant, Delay::ZERO)
+        );
+    }
     let t = FmModBlock::<C32, _>::new(&FmModConfig::default(), rate(240_000), &mut VecStorage)
         .unwrap()
         .timing();

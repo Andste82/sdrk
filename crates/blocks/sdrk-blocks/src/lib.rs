@@ -41,6 +41,8 @@ pub mod describe;
 pub mod design;
 mod drift;
 mod error;
+mod fork;
+mod param_map;
 mod ports;
 mod sample;
 mod storage;
@@ -93,6 +95,8 @@ pub use describe::{
 pub use design::{BiquadResponse, DesignSpec, DesignWindow};
 pub use drift::{DriftConfig, DriftController};
 pub use error::{Error, Result};
-pub use ports::{Frame, FrameOut, Ports, StreamElem, Two};
+pub use fork::{FORK_DESCRIPTION, Fork};
+pub use param_map::ParamMap;
+pub use ports::{ChainItem, Frame, FrameOut, Ports, StreamElem, Two};
 pub use sample::{BlockReal, BlockSample, TunedElem};
 pub use storage::{ARENA_ALIGN, AlignedBytes, ArenaStorage, Storage};

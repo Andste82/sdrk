@@ -207,6 +207,18 @@ R1.2 commands; `cargo test -p sdrk-blocks --all-features`.
 
 ## Deliverables checklist
 
-- [ ] `Chain` with `Two` intermediates; `Fork` with alignment; `ParamMap`
-- [ ] Tests 1–6
-- [ ] `docs/blocks.md` (section "Composite blocks" with the rules of §2–§4 and the example), `docs/architecture.md`, CHANGELOG, decisions log
+- [x] `Chain` with `Two` intermediates; `Fork` with alignment; `ParamMap`
+- [x] Tests 1–6
+- [x] `docs/blocks.md` (section "Composite blocks" with the rules of §2–§4 and the example), `docs/architecture.md`, CHANGELOG, decisions log
+
+## Status
+
+Done: `Chain` with a pair `Two<X, Y>` between its stages (sealed trait `ChainItem`, two lockstep buffers, `storage_bytes` counting both with the padding between them; D343, D344), `Fork<A, B, S>` with automatic delay alignment, `storage_bytes(&a, &b, chunk)`, `FORK_DESCRIPTION` and the `fork` exception of the name check (D345 to D347, D349), `StreamElem::slice` (D348) and `ParamMap` (D350). Tests 1 to 6 are in `tests/fork.rs`, `tests/fork_basic.rs`, `tests/fork_no_alloc.rs`, `tests/chain_pair.rs` and `tests/chain.rs` (cut plans from seed 469). The section "Composite blocks" of `docs/blocks.md` (rules of §2 to §4 and the stereo decoder of §5 as an illustration that is not compiled, D351), `docs/architecture.md`, `docs/embedded.md`, CHANGELOG and decisions log (D343 to D353) are updated. Gate (2026-11-04): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo xtask check`, `cargo test -p sdrk-blocks --all-features`, `cargo test -p xtask`, `cargo doc -p sdrk-blocks --no-deps --all-features` with `-D warnings`, `cargo xtask bare-metal` and the `thumbv7em-none-eabihf` clippy of `tree.yml` pass.
+
+Deviations from the specification, recorded in the decisions log:
+- Test 2 (D352): the literal case, a 32-tap `decimate` x2 against `delay(0)`, cannot be built (the decimator design gives odd tap counts) and would fail the ratio check first. The misalignment is tested with a 31-tap against a 33-tap `decimate` x2 and with a test-only block that has the specification's numbers (delay 31/2 at ratio 1/2) against delay 0; a decimator against `delay(0)` is asserted to fail with "fork branches have different ratios".
+- Nesting (D353): forks nest only through a join (a branch can be `Chain<Fork<..>, J>`); a three-way output by nesting two forks, as the *Out* line suggests, is not supported, because the branch outputs of `Fork` must be stream elements. No block of M32 needs it.
+
+Not done:
+- `cargo test --workspace --all-features` was not part of the recorded gate (only `sdrk-blocks` and `xtask` were tested); CI runs the rest.
+- Open item I31-1 (`docs/open-items.md`): whether forks with more than two branches are needed (D353).

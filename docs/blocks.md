@@ -95,7 +95,7 @@ fir.process(&[C32::new(1.0, 0.0)], &mut out)?;
 
 ## Chains
 
-`Chain<A, B, S>` (M27, module `chain.rs`) is two blocks in a row, itself a `Block`, so chains nest. It needs no pipeline, no JSON and no heap: the one intermediate buffer comes from the same `Storage` as the blocks. It is for programs that know their chain at compile time, a microcontroller receiver above all.
+`Chain<A, B, S>` (M27, module `chain.rs`) is two blocks in a row, itself a `Block`, so chains nest. It needs no pipeline, no JSON and no heap: the intermediate buffer (two for a pair of streams) comes from the same `Storage` as the blocks. It is for programs that know their chain at compile time, a microcontroller receiver above all.
 
 ```rust
 use sdrk::{Rate, C32};
@@ -120,13 +120,76 @@ fn receiver() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-- **Types:** `A::Out` must be a stream element (`StreamElem`), because the intermediate buffer is a slice of it: a chain cannot pass `Two` or `Frame` between its stages, and a port type that is not a stream element (the packets of M37) does not compile. `A::In` and `B::Out` may be any port type, so a chain can end in a frame block (`convert -> spectrum`) or start with a pair of streams. `S` is the storage of the buffer; it is the storage type of the blocks in the usual case.
+- **Types:** `A::Out` must be a `ChainItem` (sealed): a stream element (`StreamElem`, one intermediate buffer) or, since M31, a pair of streams `Two<X, Y>` of stream elements (two buffers of `chunk` samples each, written by `A` and consumed by `B` in lockstep, M26 §1). A chain cannot pass `Frame` between its stages, and a port type that is not a stream element (the packets of M37) does not compile. `A::In` and `B::Out` may be any port type, so a chain can end in a frame block (`convert -> spectrum`) or start with a pair of streams. `S` is the storage of the buffer; it is the storage type of the blocks in the usual case.
 - **`process`:** the buffer holds what `A` produced and `B` has not consumed. One call feeds `B` while the buffer holds `b.min_input()` samples (or the input is used up and the buffer is not empty), moves the rest to the front, fills the buffer from `A`, and repeats until the output is full or neither stage progresses. `Progress.consumed` is what `A` consumed, `Progress.produced` what `B` produced. Each stage is called at most `2 + input.len() / chunk + output.len()` times per call, never per sample. The result is the same as running `A` over the whole input and then `B` over the whole result, for any cut of input and output, as far as the stages are invariant themselves (the `f32` `fm_demod` is invariant up to the tolerance of its SIMD kernels, the Q15 blocks to the bit). The buffer is raised to `b.min_input()` and at least 1. A chain does not check the lengths of a call itself: a pair of unequal streams or a wrong frame length is reported by the stage that sees it.
 - **Timing:** `ratio = ratio_a * ratio_b`; `kind` is `Variable` if either is; `delay = delay_a + delay_b / ratio_a` in input samples of `A`, exact (`Delay::add`, `Delay::div_ratio`); `min_input() = max(a.min_input(), ceil(b.min_input() / ratio_a))`; `map_index(n) = b.map_index(a.map_index(n))`; `frame_len()` is that of `B`; `reset()` resets both stages and empties the buffer.
 - **Parameters:** `"<stage>.<name>"`, stage `0` for `A`, `1` for `B`; nested chains add prefixes. `chain!(storage, chunk; a, b, c)` nests to the right, so the names read `0.`, `1.0.` and `1.1.` (`"1.0.frequency_hz"` above). A name without prefix or with another stage is `UnknownParameter`; the error of a stage is returned unchanged.
 - **`chain!`:** two to eight blocks, one `chunk` for all buffers. The macro expands to `Chain::new(...)?`: the calling function returns a `Result` whose error type is built from `sdrk_blocks::Error`.
-- **Storage:** `Chain::storage_bytes(chunk)` is `chunk * size_of::<A::Out>()`: exactly what `new` takes from an arena that starts at an aligned address (`AlignedBytes`) and is still empty. At an unaligned position up to `align_of::<A::Out>() - 1` bytes of padding come on top. See [embedded.md](embedded.md#sizing-the-arena-of-a-chain).
-- **Description:** `CHAIN_DESCRIPTION` has the kind `chain` and empty port lists (they follow from the stages and cannot be written down statically). A chain is a Rust construct: it is not a pipeline kind and not in `all_descriptions()`, and `cargo xtask check` (names) lists `chain` as the one exception to the rule that a kind lives in `blocks/<kind>.rs` with a `<Kind>Block`.
+- **Storage:** `Chain::storage_bytes(chunk)` is `chunk * size_of::<A::Out>()` for a stream; for a pair `Two<X, Y>` it counts both buffers, `chunk * size_of::<X>()`, the padding that aligns the second buffer behind the first, and `chunk * size_of::<Y>()`. It is exactly what `new` takes from an arena that starts at an aligned address (`AlignedBytes`) and is still empty. At an unaligned position up to `align_of - 1` bytes of padding per buffer come on top. See [embedded.md](embedded.md#sizing-the-arena-of-a-chain).
+- **Description:** `CHAIN_DESCRIPTION` has the kind `chain` and empty port lists (they follow from the stages and cannot be written down statically). A chain is a Rust construct: it is not a pipeline kind and not in `all_descriptions()`, and `cargo xtask check` (names) lists `chain` and `fork` (M31) as the exceptions to the rule that a kind lives in `blocks/<kind>.rs` with a `<Kind>Block`.
+
+## Composite blocks
+
+A *composite block* is a block whose result is exactly that of a small graph of primitive blocks (M29, M30). M31 gives the tools to write such a graph as one Rust expression of existing blocks, without buffers or loops of its own: `Chain` for blocks in a row (also with a pair of streams between two stages), `Fork` for one input into two branches, automatic delay alignment of the branches, parameter paths and `ParamMap` for flat parameter names. `Chain` and `Fork` are themselves `Block`s, so they nest; they are heap-free and take their buffers from the same `Storage` as the blocks. `ParamMap` is a const table that holds no state. None of them is a pipeline kind. M32 rebuilds the existing composite blocks (`fm_stereo_demod` and others) from these tools.
+
+### Chain with a pair between its stages
+
+`Chain<A, B, S>` (see [Chains](#chains)) also accepts `A::Out = Two<X, Y>` with `X` and `Y` stream elements, and then `B::In = Two<X, Y>`. The bound is the sealed trait `ChainItem`, implemented for every `StreamElem` (one buffer) and for `Two<X, Y>` (two buffers of `chunk` samples each, written by `A` and consumed by `B` in lockstep, M26 §1). Everything else of the chain is unchanged: `process`, timing, parameters and `chain!`. `Frame` and port types that are not stream elements (`Packets`, M37) still do not compile as an intermediate. `Chain::storage_bytes(chunk)` counts both buffers of a pair, with the padding between them (see [Storage](#storage-of-compositions)).
+
+### Fork
+
+`Fork<A, B, S>` (module `fork.rs`) has one input and two branches: `A` and `B` read the same stream (`B::In = A::In`, a stream element), and the output is the pair `Two<A::Out, B::Out>` (both stream elements). A fork is usually followed in a `Chain` by a block that reads a pair, such as `make_complex` or `stereo_pll`. Forks nest only through such a join: a branch can be `Chain<Fork<..>, J>` with a joining block `J`, because the output of each branch must be a stream element and the fork's own output `Two<..>` is not one. A true three-way output (`Two<X, Two<Y, Z>>`) is not supported (D353).
+
+- **Construction:** `Fork::new(a, b, chunk, storage)`. `chunk` is the capacity in samples of the fork's input buffer and of each branch's output buffer. `new` fails with `InvalidParameter` if `chunk` is 0 or smaller than the `min_input` of a branch (name `chunk`; unlike `Chain`, a fork does not raise `chunk`), if a branch has a ratio of kind `Variable`, if the two ratios differ, or if the delays differ by a fraction of an output sample (name `fork`, see [Delay alignment](#delay-alignment)); `Storage` if the storage cannot provide the buffers. `first()`, `second()`, `first_mut()` and `second_mut()` give access to the branches.
+- **`process(input, (out_a, out_b))`:** the two outputs must have the same length (lockstep, M26 §1); otherwise the call is `LengthMismatch` and changes nothing. The fork copies input into its own input buffer and remembers how far each branch has read it. One pass of the loop (1) moves pairs to `(out_a, out_b)` while both branch buffers hold samples, (2) drops the input both branches have read and copies new input behind the rest, (3) calls each branch once on its unread part with the free part of its own output buffer (if it has room and either unread input or output it may still owe). The loop stops when the output is full or nothing moved. `Progress.consumed` is what the fork copied into its input buffer, `Progress.produced` the number of pairs written. The result does not depend on how the caller cuts input and output (R6.2), as far as the branches are invariant themselves.
+- **Timing:** `ratio` that of either branch (they are equal); `kind` `Constant` (a `Variable` branch is rejected by `new`); `delay` the larger of the two delays, in input samples (after the alignment both outputs carry this delay); `min_input` the larger of the two; `map_index` that of the branch with the larger delay (the first branch on a tie); `reset` resets both branches, empties the buffers and fills the delay line with zeros.
+- **Description:** `FORK_DESCRIPTION` has the kind `fork` and empty port and parameter lists, like `CHAIN_DESCRIPTION`. It is not a pipeline kind and not in `all_descriptions()`; `cargo xtask check` (names) lists `fork` as an exception next to `chain`.
+
+### Delay alignment
+
+With the common ratio `r` (output samples per input sample), the delays of the branches in output samples are `da = delay_a * r` and `db = delay_b * r`, computed exactly (`Delay` arithmetic). If `da == db`, nothing is inserted. If `da - db` is a positive integer `k`, the fork delays the output of branch `b` by `k` samples with an internal ring of `k` elements whose initial content is zero, so that both outputs are aligned; the other way round for `db > da`. At most one branch is delayed.
+
+- A difference that is not a whole number of output samples is rejected with `InvalidParameter { name: "fork", reason: "fork branches are misaligned by a fraction of a sample" }`. Example: two `decimate` by 2 with 31 and 33 taps (delay 15 and 16 input samples, 7.5 and 8 output samples). In general, two branches with ratio 1/2 whose input delays differ by an odd number of samples are misaligned. A branch with a different ratio (for example a decimator against `delay` 0) is rejected earlier, with `"fork branches have different ratios"`. Such branches need an explicit `delay` stage in a branch that makes the difference whole, or a different design (for example, the decimation before the fork).
+- IIR stages (`biquad`, `deemphasis`, `dc_block`) report a delay of 0 (M09), so they never cause an alignment: their group delay is not compensated. A branch with a FIR of 31 taps (delay 15) against `delay` 0 gets 15 samples of alignment on the `delay` branch.
+
+### Parameter paths and `ParamMap`
+
+Compositions name the parameters of inner blocks by path. A chain uses `0.` for its first and `1.` for its second stage, a fork `0.` for branch `a` and `1.` for branch `b`; nested chains and forks add their prefixes from the outside in (`"1.0.frequency_hz"` is parameter `frequency_hz` of branch `a` of a fork that is the second stage of a chain). A name without a valid prefix is `UnknownParameter`; the error of an inner block is returned unchanged.
+
+A composite block that offers flat public names (like `audio_cutoff_hz` of `fm_stereo_demod`) keeps its own `set_param` and `param` and maps the flat name to a path with `ParamMap`: a `Copy` table of `(flat name, path)` entries, `&'static [(&'static str, &'static str)]`, built with `const fn ParamMap::new`. `path(flat)` returns the path (the first entry of a name wins), `set(&mut block, flat, value)` and `get(&block, flat)` forward the mapped path to the block's `set_param` and `param`, and a flat name that is not in the map is `UnknownParameter`. The composite's `description()` stays its own and lists the flat names, not the paths.
+
+### Storage of compositions
+
+All buffers come from the `Storage` given to `new`, after the buffers of the blocks that were built before. On an arena that starts at an aligned address (`AlignedBytes`) and is still empty, `new` takes exactly what `storage_bytes` returns; at a position that is not aligned for an element, up to `align_of - 1` bytes of padding per buffer come on top.
+
+- `Chain::storage_bytes(chunk)`: `chunk * size_of::<A::Out>()` for a stream intermediate; for a pair `Two<X, Y>`, `chunk * size_of::<X>()`, the padding that aligns the second buffer behind the first, and `chunk * size_of::<Y>()`.
+- `Fork::storage_bytes(&a, &b, chunk) -> Result<usize>`: in the order of allocation, an input buffer of `chunk` samples of `A::In`, an output buffer of `chunk` samples per branch (`A::Out`, then `B::Out`) and the alignment ring of `k` samples of the delayed branch's output type, with the padding between them. It returns the errors of `Fork::new` except `Storage`. Example: two `f32` branches, `chunk` 32, branch `b` delayed by 5: `(3 * 32 + 5) * 4` = 404 bytes.
+
+See [embedded.md](embedded.md#sizing-the-arena-of-a-chain) for sizing a whole arena.
+
+### Example: the stereo decoder
+
+The stereo decoder of `fm_stereo_demod` (M24) as a composition: the multiplex signal goes straight on (`delay` 0) and through the 19 kHz band-pass, and the pair meets in the pilot loop. The listing is an illustration with the real constructor signatures; it is **not compiled** here (M32 builds it as a test). `qd`, `zero`, `pilot_bp`, `pll`, `audio_lp` and `deemph` are the configurations (`QuadDemodConfig`, `DelayConfig { samples: 0 }`, a `BiquadConfig` band-pass at 19 kHz, `StereoPllConfig`, a `DecimateConfig` and a `BiquadConfig` low-pass), `fs` the input rate and `fs_audio` the rate after the decimation; `st` is a `&mut` storage.
+
+```rust
+let decoder = chain!(st, 256;
+    QuadDemodBlock::<C32, _>::new(&qd, fs, st)?,                 // C32 -> f32
+    Fork::new(
+        DelayRealBlock::<f32, _>::new(&zero, fs, st)?,           // multiplex, delay 0
+        BiquadRealBlock::<f32, _>::new(&pilot_bp, fs, st)?,      // pilot band-pass, IIR: delay 0
+        256,
+        st,
+    )?,                                                          // f32 -> Two<f32, f32>
+    StereoPllBlock::<C32, _>::new(&pll, fs, st)?,                // Two<f32, f32> -> C32
+    DecimateBlock::<C32, _>::new(&audio_lp, fs, st)?,            // C32 at fs -> fs_audio
+    StereoMatrixBlock::<C32, _>::new(fs_audio, st)?,             // C32 -> C32 (left, right)
+    BiquadBlock::<C32, _>::new(&deemph, fs_audio, st)?);         // de-emphasis of both channels
+```
+
+- **Types:** the chain between `quad_demod` and the fork passes `f32`; the chain between the fork and `stereo_pll` passes the pair `Two<f32, f32>` (two buffers of 256 `f32`).
+- **Alignment:** both branches have the ratio 1 and the delay 0 (`delay` 0 and an IIR band-pass), so the fork inserts nothing.
+- **Parameter paths:** `chain!` nests to the right, so the stages are `0` (`quad_demod`), `1.0` (the fork, with branches `1.0.0` and `1.0.1`), `1.1.0` (`stereo_pll`), `1.1.1.0` (`decimate`), `1.1.1.1.0` (`stereo_matrix`) and `1.1.1.1.1` (de-emphasis). A composite block over this expression can offer flat names with `ParamMap::new(&[("stereo", "1.1.0.stereo"), ("pilot_q", "1.0.1.q")])`.
+- **Storage of the tools:** the fork takes three buffers of 256 `f32` (3072 bytes, no ring); the five joints of the chain take 256 `f32`, 2 x 256 `f32`, and three times 256 `C32` (1024 + 2048 + 3 x 2048 bytes).
 
 ## Filter design
 

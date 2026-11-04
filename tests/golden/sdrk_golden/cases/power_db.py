@@ -25,7 +25,7 @@ def f32_4096(rng):
     )
 
 
-@case(kernel="power_db", name="q15_4096", seed=470)
+@case(kernel="power_db", name="q15_4096", seed=621)
 def q15_4096(rng):
     # Log-uniform magnitudes from 1 LSB to full scale, with random signs.
     mag = np.rint(10.0 ** rng.uniform(0.0, np.log10(32767.0), 4096))

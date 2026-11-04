@@ -99,7 +99,7 @@ def l1m5_n121_f32(rng):
     )
 
 
-@case(kernel="resample_real", name="l1m5_n121_q15_10000", seed=469)
+@case(kernel="resample_real", name="l1m5_n121_q15_10000", seed=620)
 def l1m5_n121_q15(rng):
     x = q15.from_float(rng.standard_normal(10000) * 0.3)
     h = q15.from_float(scipy.signal.firwin(121, 0.18))

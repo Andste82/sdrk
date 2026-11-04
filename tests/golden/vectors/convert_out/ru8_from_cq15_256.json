@@ -32,7 +32,7 @@
     "python": "3.12",
     "scipy": "1.18.1"
   },
-  "seed": 474,
+  "seed": 625,
   "tolerance": {
     "class": "bit_exact"
   }

@@ -1,18 +1,20 @@
-# M32 — Plans of the existing composite blocks
+# M32 — Reference tests of six blocks and the real `dc_block`
 
 > Plan: [PLAN.md › Phase 9](../PLAN.md#phase-9--stabilization-and-extensions) · Depends on: [M31](M31-composite-tools.md) · Next: [M33](M33-noise-reduction.md)
 
+> Rescoped by maintainer decision D358 (2026-11-04). The original M32 ("plans": the six composite blocks rebuilt from primitive blocks with `Chain` and `Fork`, equal bit for bit) moved to the backlog ([BACKLOG.md › Phase 9](BACKLOG.md#phase-9--stabilization-and-extensions)); the file name is kept so that the links stay valid.
+
 ## Goal
 
-For each of the six blocks that combine several kernels (`ddc`, `duc`, `fm_demod`, `am_demod`, `ssb_demod`, `fm_stereo_demod`), a *plan*: the same computation written as a composition of primitive blocks with `Chain` and `Fork` (M27, M31), in the public module `sdrk_blocks::plans`, and a test that the block and its plan give bit-identical output on every backend. The hand-written blocks stay the implementation; the plans are their executable specification.
+Every block whose output is not yet checked against a reference gets a test that it computes exactly what its kernel computes with the parameters the block derives from its configuration: `fir`, `biquad`, `real_to_iq`, `convert`, `convert_out` and `fm_mod`. A new block `DcBlockRealBlock` makes the kernel `dc_block_real` usable in flows. `docs/blocks.md` states for each composite block the kernels it runs, in order.
 
 ## Why
 
-The rule of the architecture decision is that a composite block computes exactly what its graph of primitives computes. Without a test, that rule is a wish: a later optimisation of one block could change its result unnoticed. The plans also document each block better than prose (which kernels, in which order, with which parameters), and they are the starting point for every new composite block (M35 onwards), which is written as a plan first.
+The kernels are all tested against their golden cases and their reference on every backend. A block adds its own logic on top: it derives the kernel parameters from its configuration (filter design, tap quantization, format construction, deviation to phase step), carries state across buffers and handles partial output. For the six blocks above only coarse properties are checked today (a pass band and a stop band, a byte count, a SINAD), so a slightly wrong coefficient or a phase step at a buffer boundary would go unnoticed. The newer blocks of M29 and M30 already have such tests (`tests/primitive_blocks.rs`, `tests/two_port_blocks.rs`); this milestone closes the gap for the older ones.
 
 ## Order
 
-M32 depends on M31 (and through it on M27, M29 and M30). It can run in parallel with M28, M33 and M34.
+M32 depends on M31 only through the order of the plan; technically it needs M26 (port types). It can run in parallel with M33 and M34.
 
 ## Ground rules (identical in every milestone — read them completely before you start)
 
@@ -140,69 +142,52 @@ Additional rules:
 
 ## Scope
 
-**In:** the module `plans` in `sdrk-blocks` with one function per block (§2); the block `dc_block` for real samples (`DcBlockRealBlock`, §3), which the plan of `am_demod` needs; the equality tests (§4); `docs/blocks.md` (each block's paragraph gets its plan), `CHANGELOG.md`, `docs/decisions-log.md`.
+**In:** the reference tests of §1 in `crates/blocks/sdrk-blocks/tests/block_equals_kernel.rs`, with the helpers of `tests/primitive_blocks.rs` moved to a shared test module; the block `DcBlockRealBlock` and the real variant of the pipeline kind `dc_block` (§2); `docs/blocks.md` (§3), `CHANGELOG.md`, `docs/decisions-log.md`.
 
-**Out:** changing any of the six blocks (if a plan and a block differ, the plan is wrong, see §4), replacing a block by its plan, plans for `squelch`, `agc`, `spectrum`, `convert` (single kernels), a pipeline representation of plans (backlog).
+**Out:** new kernels, SIMD work, measurements; changes of the composite blocks; the plans of the original M32 (backlog); reference tests for `scale` and `dc_block` (one formula each; their property tests stay).
 
 ## Specification
 
-### 1. Form
+### 1. Block equals kernel
 
-```rust
-pub mod plans {
-    /// The plan of `FmDemodBlock` for this configuration: a `Block` with the same ports, timing and output.
-    pub fn fm_demod<T, S: Storage>(config: &FmDemodConfig, rate_in: Rate, storage: &mut S) -> Result<impl Block<In = T, Out = T::Real>>;
-    // likewise ddc, duc, am_demod, ssb_demod, fm_stereo_demod
-    /// Bytes the plan takes from the storage (for sizing an arena).
-    pub fn fm_demod_storage_bytes(config: &FmDemodConfig, rate_in: Rate) -> Result<usize>;
-}
-```
+For each block below, both precisions (`C32` and `CQ15`, or `f32` and `Q15`, as the block exists), at least two configurations (the defaults and one taken from an example flow or with extreme but valid values):
 
-Each function builds the primitives with the parameters the block derives from its configuration (the same design functions, the same quantization, the same gains), and composes them with `chain!` and `Fork`, chunk 256. A plan contains exactly the stages the block runs for the given configuration: for example no `deemphasis` when `deemphasis_us` is 0, and no audio filter where the block skips it.
+1. The expected output is computed by calling the kernel through the facade `Sdrk` directly, with the parameters the block must derive from its configuration. The test derives them with the same public design functions the block's documentation names (`sdrk_core::design`, `sdrk_blocks::design`, the format constructors of `sdrk-device`); where the derivation is private to the block, the test writes the documented formula out.
+2. The block runs over the same input once in one piece and once for 20 random cut plans (seed 470); its output must equal the expected output bit for bit. Where the kernel's contract allows a tolerance for `f32`/`C32` on SIMD levels, the existing helper `check_block_with` and its SNR bound of 120 dB apply, as in `tests/primitive_blocks.rs`.
+3. A runtime parameter change (where the block has one) in the middle of the signal gives the same output as the kernel with the parameter changed at the same sample.
 
-### 2. The six plans
+| Block | Kernel | What the test fixes |
+| --- | --- | --- |
+| `fir` | `fir` | the taps the block designs from its configuration and their quantization for `CQ15` |
+| `biquad` | `biquad`, `biquad_real` | the sections the block designs for every response type (low-pass, high-pass, band-pass, notch) and order, complex and real, `f32`/`C32` and `Q15`/`CQ15`; the existing single bit-exact case stays |
+| `real_to_iq` | `real_to_complex` | the halfband taps the block designs, `f32` → `C32` and `Q15` → `CQ15` |
+| `convert` | `convert` (complex) | the formats `cu8`, `cs8`, `cs16` and one packed format, bytes fed in cut plans that split sample groups |
+| `convert_out` | `convert_out` | the same formats; output bytes equal the kernel's (today only the byte count is checked) |
+| `fm_mod` | `fm_mod` | the phase step derived from `deviation_hz` and the rate, the phase carried across buffers |
 
-| Block | Plan |
-| --- | --- |
-| `ddc` | `rotate(−frequency_hz)` → `decimate(decimation, the block's filter)` |
-| `duc` | `interpolate(interpolation, the block's filter)` → `rotate(+frequency_hz)` at the output rate |
-| `fm_demod` | `quad_demod(deviation_hz)` → `deemphasis(deemphasis_us)` → `decimate` real (`audio_decimation`, the audio filter of the block) |
-| `am_demod` | `mag` → `dc_block` real (`dc_cutoff_hz`) → `decimate` real (`audio_decimation`) |
-| `ssb_demod` | `rotate(−s·c)` → `decimate(audio_decimation, cutoff b)` → `rotate(+s·c)` at the output rate → `real_part` |
-| `fm_stereo_demod` | `quad_demod` → `Fork(delay(0), biquad_real band-pass 19 kHz)` → `stereo_pll` → `decimate` complex (audio filter) → `stereo_matrix` → `biquad` complex de-emphasis |
+If a block differs from its kernel, the block is wrong: fix the block, record the cause in the decisions log, and keep the kernel and its golden cases unchanged. If the fix would change documented behaviour, stop and report it (decisions log, open item).
 
-Runtime parameters (`ddc`/`duc` `frequency_hz`, `ssb_demod` `sideband`, `fm_stereo_demod` `stereo`) are reachable through a `ParamMap` (M31 §4) with the block's own names.
+### 2. `dc_block` for real samples
 
-**Known exception, `am_demod`:** the block treats an envelope sample of exactly zero specially (zero audio, the DC blocker cleared, M20). The plan does not; it equals the block for inputs without exactly-zero envelope samples. Record this in `docs/blocks.md` and in the plan's documentation, and keep the block as it is.
+`DcBlockRealBlock<T>` (`f32`, `Q15`) around the kernel `dc_block_real`, with the parameter `cutoff_hz` of the complex `dc_block` and the same pole `r = exp(−2π·cutoff_hz / fs)`; the pipeline kind `dc_block` chooses the variant by the input type (as `biquad` does). Cost 3. Description, schema (`cargo xtask schema`), WebAssembly bindings if they list kinds by type.
 
-### 3. `dc_block` for real samples
+### 3. Documentation
 
-`DcBlockRealBlock<T>` (`f32`, `Q15`) around the kernel `dc_block_real`, with the parameter `cutoff_hz` of the complex `dc_block` and the same pole `r = exp(−2π·cutoff_hz / fs)`; the pipeline kind `dc_block` chooses the variant by the input type (as `biquad` does). Cost 3.
-
-### 4. Equality tests
-
-For each plan, both precisions, on the backend the facade selects (the CI jobs with fixed SIMD levels run them on every level, and `--cfg sdrk_fallback_only` on the fallback):
-
-- three configurations (the defaults, the parameters of the corresponding example flow, and one with extreme but valid values such as decimation 1 or the largest filter), the test signals of the block's existing tests (for `am_demod` without exactly-zero envelope samples), whole buffers and 20 cut plans (seed 470);
-- output bit-identical, `timing()`, `min_input()` and `map_index()` equal;
-- runtime parameter changes in the middle of the signal give identical outputs too.
-
-If a plan and its block differ, the fault is in the plan (a missed stage, a different design or quantization): fix the plan. If the difference cannot be removed without changing the block, stop and report it (decisions log, open item); do not change the block or its goldens.
+`docs/blocks.md`: for each composite block (`ddc`, `duc`, `fm_demod`, `am_demod`, `ssb_demod`, `fm_stereo_demod`) one line with the kernels it runs in order and the parameters it derives (for example `am_demod`: `mag` → `dc_block_real` → `resample_real` with L = 1), and the exception of `am_demod` (an envelope sample of exactly zero gives zero audio and clears the DC blocker, M20); a short table of how each block is tested (golden, kernel, chain, property).
 
 ## Tests
 
-1. The equality tests of §4 for all six plans.
-2. `DcBlockRealBlock`: equals the kernel; description rules; pipeline kind with the real variant.
-3. Storage functions match what the plans take from an arena.
-4. The plans build on `thumbv7em-none-eabihf` (`cargo xtask bare-metal`).
+1. The tests of §1 for the six blocks.
+2. `DcBlockRealBlock`: equals the kernel (as §1); description rules (`tests/describe.rs`); the pipeline kind with a real input.
+3. `cargo xtask bare-metal` builds `DcBlockRealBlock` for `thumbv7em-none-eabihf`.
 
 ## Acceptance
 
-R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `RUSTFLAGS="--cfg sdrk_fallback_only" cargo test -p sdrk-blocks`; `cargo xtask schema --check`.
+R1.2 commands; `cargo test -p sdrk-blocks --all-features`; `RUSTFLAGS="--cfg sdrk_fallback_only" cargo test -p sdrk-blocks`; `cargo test -p sdrk-pipeline`; `cargo xtask schema --check`.
 
 ## Deliverables checklist
 
-- [ ] `plans` module with six plans and storage functions
-- [ ] `DcBlockRealBlock` and the real variant of the `dc_block` kind
-- [ ] Equality tests on every backend level of CI
-- [ ] `docs/blocks.md` with each plan and the `am_demod` exception, CHANGELOG, decisions log
+- [ ] `tests/block_equals_kernel.rs` with the six blocks of §1, shared test helpers
+- [ ] `DcBlockRealBlock` and the real variant of the `dc_block` kind, schema
+- [ ] `docs/blocks.md` with the kernel sequence of each composite block, the `am_demod` exception and the test table
+- [ ] CHANGELOG, decisions log

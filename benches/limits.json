@@ -3495,6 +3495,10 @@
     },
     "simd128": {
       "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "release",
+      "waiver": "the run-time-detection build counts 0.23 instructions per sample against 0.23 of the fixed `avx2` build (1.022): the same loop, and the whole call runs in the dispatched function (D332); what remains is the fixed cost of the run-time dispatch, about 21 instructions per call on the 4096 samples of the count against about 19 that the limit allows (the two loads and compares of the detected level, the argument moves, the call, `vzeroupper` and the return, two minimum computations of the lengths). Cutting it needs a cheaper dispatch for every kernel with a new use of `unsafe` (D1); accepted with decision D339, open item I30-2"
     }
   },
   "mul": {

@@ -4514,7 +4514,7 @@
             "ours": 999.0
           },
           "status": "release",
-          "verdict": "fail"
+          "verdict": "waived"
         },
         "agc": {
           "compared_with": "ours at avx2",

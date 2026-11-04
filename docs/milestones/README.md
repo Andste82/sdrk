@@ -46,7 +46,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M29 | [M29-primitive-blocks.md](M29-primitive-blocks.md) | 9 | Primitive blocks `quad_demod`, `deemphasis`, `rotate`, `decimate`, `interpolate`, `mag`, `delay` with kinds |
 | M30 | [M30-two-port-blocks.md](M30-two-port-blocks.md) | 9 | Kernels `add`, `mul`, `oscillate`, `interleave`; blocks `add`, `mul`, `make_complex`, `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_pll`, `stereo_matrix` |
 | M31 | [M31-composite-tools.md](M31-composite-tools.md) | 9 | `Chain` with `Two` intermediates, `Fork` with delay alignment, `ParamMap` |
-| M32 | [M32-composite-plans.md](M32-composite-plans.md) | 9 | `sdrk_blocks::plans`: the six specific blocks as compositions of primitives, equal bit for bit; real `dc_block` |
+| M32 | [M32-composite-plans.md](M32-composite-plans.md) | 9 | reference tests of six blocks (`fir`, `biquad`, `real_to_iq`, `convert`, `convert_out`, `fm_mod`: block equals kernel); real `dc_block`; the plans moved to the backlog (D358) |
 | M33 | [M33-noise-reduction.md](M33-noise-reduction.md) | 9 | Noise blanker and automatic notch (kernels, blocks, kinds), flow `hf_am_receiver` |
 | M34 | [M34-multi-input.md](M34-multi-input.md) | 9 | Two-input nodes in the pipeline: edge `port`, lockstep runner, `rate_mismatch`/`clock_domain`/`misaligned_inputs`, automatic alignment, proof flow `fm_stereo_receiver_primitives` |
 | M35 | [M35-am-ssb-tx.md](M35-am-ssb-tx.md) | 9 | AM and SSB transmit: kernel and block `am_mod`, block `ssb_mod`, flows `am_transmitter`, `ssb_transmitter`, loop tests |
@@ -83,7 +83,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M29 Primitive blocks | M26 | M27, M28, M30, M33 |
 | M30 Two-port blocks | M26 | M27, M28, M29, M33 |
 | M31 Composite tools | M27, M29, M30 | M33, M34, M35, M36 |
-| M32 Composite plans | M31 | M33–M36 |
+| M32 Block reference tests | M31 | M33–M36 |
 | M33 Noise reduction | M26 | M27–M32, M34–M36 |
 | M34 Multi-input pipeline | M26, M29, M30 | M27, M28, M31–M33, M35, M36 |
 | M35 AM/SSB transmit | M29, M30 | M31–M34, M36 |
@@ -160,7 +160,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 580–589 | M42 |
 | 590–599 | M43 |
 | 600–619 | M44 |
-| 620–999 | free, for backlog milestones |
+| 620–625 | the golden gap cases of D356 (`resample_real` and `power_db` `Q15`, `convert_out` `rs8`/`ru8`; first numbered 469 to 474, which collided with M31 to M33, D357) |
+| 626–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

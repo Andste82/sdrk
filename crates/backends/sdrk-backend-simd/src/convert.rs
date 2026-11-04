@@ -20,7 +20,8 @@
 //!   and one subtraction of a constant in the same binade gives the result exactly (Sterbenz).
 //! - **NEON:** the fixed-point conversion `scvtf #n`, which is exactly `x * 2^-n`; `I8` places
 //!   each byte at the top of a 32-bit lane with one table lookup (`x << 24`, then `#31`), `U8`
-//!   builds the float bits with a two-register table lookup.
+//!   builds the float bits with a widening shift and a widening addition of the exponent
+//!   half-word, and stores the four vectors of each 16 bytes with one `st1`.
 //! - **SIMD128:** `I8` and `U8` build the float bits with one shuffle per vector, `I16` widens
 //!   and converts; the blocks are written out in a function of their own, where the addresses
 //!   fold into the offsets of the loads and stores.
@@ -28,7 +29,7 @@
 //! The generic `fearless_simd` code runs on a level without a path, and the values after the
 //! last whole vector go through the scalar formulas. To `CQ15` the generic code widens and
 //! shifts (`I16` is a copy). `convert_real` of the same formats with `Layout::Real` converts the
-//! values in pairs through `convert`.
+//! values one by one in the code of `convert` to `f32`, and in pairs through `convert` to `Q15`.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::convert::{Convert, ConvertReal};
@@ -330,8 +331,11 @@ fn level_path<S: SimdToken>(simd: S, kind: Kind, bytes: &[u8], out: &mut [f32]) 
 }
 
 // The entries of the paths, one function per level (see `dispatch_fn!`): with the level
-// detected at run time they cost fewer instructions per call than `dispatch!`.
+// detected at run time they cost fewer instructions per call than `dispatch!`. `convert` and
+// `convert_real` of `f32` have one each, so that each has one caller (with two, LLVM calls it
+// out of line from both).
 dispatch_fn!(fn f32_run(kind: Kind, input: &[u8], out: &mut [f32]) => f32_in);
+dispatch_fn!(fn f32_real_run(kind: Kind, input: &[u8], out: &mut [f32]) => f32_in);
 dispatch_fn!(fn i8_q15_run(input: &[u8], out: &mut [i16]) => i8_to_q15);
 dispatch_fn!(fn u8_q15_run(input: &[u8], out: &mut [i16]) => u8_to_q15);
 
@@ -546,11 +550,13 @@ mod x86 {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[allow(unsafe_code)]
 mod arm {
     use core::arch::aarch64::{
-        float32x4x2_t, float32x4x4_t, uint8x16_t, uint8x16x2_t, vcvtq_n_f32_s32, vdupq_n_f32,
-        vget_low_s16, vmovl_high_s16, vmovl_s16, vqtbl1q_u8, vqtbl2q_u8, vreinterpretq_f32_u8,
-        vreinterpretq_s16_u8, vreinterpretq_s32_u8, vsubq_f32,
+        float32x4x2_t, float32x4x4_t, uint8x16_t, vaddw_high_u16, vaddw_u16, vcvtq_n_f32_s32,
+        vdupq_n_f32, vdupq_n_u32, vget_low_s16, vget_low_u8, vget_low_u16, vmovl_high_s16,
+        vmovl_s16, vqtbl1q_u8, vreinterpretq_f32_u32, vreinterpretq_s16_u8, vreinterpretq_s32_u8,
+        vshll_high_n_u8, vshll_n_u8, vst1q_f32_x4, vsubq_f32,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x8, f32x16, u8x16};
@@ -571,25 +577,6 @@ mod arm {
         [Z, Z, Z, 8, Z, Z, Z, 9, Z, Z, Z, 10, Z, Z, Z, 11],
         [Z, Z, Z, 12, Z, Z, Z, 13, Z, Z, Z, 14, Z, Z, Z, 15],
     ];
-    /// The second table register of `U8`: zero and the bytes of the half-word `0x4380`.
-    const MAGIC_BYTES: [u8; 16] = {
-        let [lo, hi] = HIGH_U8_I16.to_le_bytes();
-        [0, lo, hi, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    };
-    /// The indices of `MAGIC_BYTES` in the two-register table: zero, the low and the high
-    /// byte of `0x4380`.
-    const O: u8 = 16;
-    const L: u8 = 17;
-    const H: u8 = 18;
-    /// `U8`: the table indices that put byte `4g + k` into byte 1 of 32-bit lane `k` for the
-    /// group `g`, with zero below and `0x4380` above (`0x4380_uu00`).
-    const U8_INDEX: [[u8; 16]; 4] = [
-        [O, 0, L, H, O, 1, L, H, O, 2, L, H, O, 3, L, H],
-        [O, 4, L, H, O, 5, L, H, O, 6, L, H, O, 7, L, H],
-        [O, 8, L, H, O, 9, L, H, O, 10, L, H, O, 11, L, H],
-        [O, 12, L, H, O, 13, L, H, O, 14, L, H, O, 15, L, H],
-    ];
-
     /// [`run`] for `unit` (16 bytes to 16 values) with eight units per iteration written out:
     /// LLVM does not unroll a loop over table lookups (`tbl`) by itself. Returns the number of
     /// values done.
@@ -646,14 +633,28 @@ mod arm {
                     })
                 }
                 Kind::U8 => {
-                    let [i0, i1, i2, i3]: [uint8x16_t; 4] =
-                        U8_INDEX.map(|i| u8x16::simd_from(t, i).into());
-                    let c = u8x16::simd_from(t, MAGIC_BYTES).into();
+                    // Through `black_box`: with the constant visible LLVM proves the bits of
+                    // the sum disjoint and turns each `uaddw` into `uxtl` and `orr`.
+                    let high = core::hint::black_box(vdupq_n_u32(u32::from(HIGH_U8_I16) << 16));
                     let magic = vdupq_n_f32(U8_MAGIC);
                     unrolled8(bytes, out, |q, p| {
-                        let table = uint8x16x2_t(load(q), c);
-                        let f = |i| vsubq_f32(vreinterpretq_f32_u8(vqtbl2q_u8(table, i)), magic);
-                        store4(p, f(i0), f(i1), f(i2), f(i3));
+                        let v = load(q);
+                        // `u << 8` in 16-bit lanes (`shll`), added to `0x4380_0000` in 32-bit
+                        // lanes (`uaddw`): the bits `0x4380_uu00`. The two-register `tbl` that
+                        // built them in one step costs five micro-ops on `cortex-a72`, and
+                        // the four results go out with one `st1`, which costs fewer
+                        // micro-ops than the two `stp` LLVM makes of a store of the four.
+                        let lo = vshll_n_u8::<8>(vget_low_u8(v));
+                        let hi = vshll_high_n_u8::<8>(v);
+                        let f = |w| vsubq_f32(vreinterpretq_f32_u32(w), magic);
+                        let r = float32x4x4_t(
+                            f(vaddw_u16(high, vget_low_u16(lo))),
+                            f(vaddw_high_u16(high, lo)),
+                            f(vaddw_u16(high, vget_low_u16(hi))),
+                            f(vaddw_high_u16(high, hi)),
+                        );
+                        // SAFETY: `p` is the 16 floats that the store writes.
+                        unsafe { vst1q_f32_x4(p.as_mut_ptr(), r) };
                     })
                 }
             }
@@ -937,7 +938,7 @@ fn complex_of(kind: Kind) -> &'static SampleFormat {
     }
 }
 
-/// `convert_real` of a real format with a vector path: the values in pairs through `convert`
+/// `convert_real` to `Q15` of a real format with a vector path: the values in pairs through `convert`
 /// of the interleaved format (so that each level path has one call site, which LLVM inlines;
 /// with two it calls them out of line, about 25 instructions more per call at SSE4.2), an odd
 /// last value through the fallback.
@@ -974,13 +975,28 @@ where
 }
 
 impl ConvertReal<f32> for Simd {
+    // Every value converts on its own, so the whole call goes to the values path of `convert`
+    // (`f32_in`, the scalar formulas after the last whole vector), an odd count included.
+    // Through `convert` of the interleaved format (`real_in`) the call paid for a second test
+    // of the format and the frame that keeps the odd last value for the fallback: `RS16` at
+    // `avx2` took 0.22 against 0.21 simulated cycles per sample of the fallback on `znver3`.
     fn convert_real(
         &self,
         format: &SampleFormat,
         input: &[u8],
         output: &mut [f32],
     ) -> Result<usize> {
-        real_in::<C32>(format, input, output)
+        let Some(kind) = fast_kind_real(format) else {
+            return Fallback.convert_real(format, input, output);
+        };
+        let Some(samples) = fast_samples_real(kind, input.len(), output.len()) else {
+            return Fallback.convert_real(format, input, output);
+        };
+        let Some(out) = output.get_mut(..samples) else {
+            return Fallback.convert_real(format, input, output);
+        };
+        f32_real_run(kind, input, out);
+        Ok(samples)
     }
 }
 

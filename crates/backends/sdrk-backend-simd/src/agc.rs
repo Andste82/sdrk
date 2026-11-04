@@ -7,11 +7,12 @@
 //! level and the sums have no fused multiply-add, so the values are those of the fallback bit
 //! for bit.
 //!
-//! `CQ15` stays with the fallback in the facade.
+//! AArch64 runs the fallback (decision D335): its plain loop simulated faster than the blocks
+//! on both core models of `neon`. `CQ15` stays with the fallback in the facade.
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
 use sdrk_core::kernels::agc::{Agc, AgcState};
-use sdrk_core::{C32, Result};
+use sdrk_core::{C32, Fallback, Result};
 
 use crate::Simd;
 use crate::level::dispatch;
@@ -134,22 +135,15 @@ fn products<S: SimdToken>(simd: S, gains: &[f32], x: &[f32], out: &mut [f32]) {
     }
 }
 
-/// The recursion with the minimum and maximum of the current level: on NEON the bare
-/// `fminnm`/`fmaxnm` (see `neon`), elsewhere a compare and a select (shorter than `f32::min`
-/// and `f32::max` there, whose NaN rule the operands do not need).
+/// The recursion with the minimum and maximum as a compare and a select (shorter than
+/// `f32::min` and `f32::max`, whose NaN rule the operands do not need).
 #[inline(always)]
-fn gains_level<S: SimdToken>(
-    simd: S,
+fn gains_level(
     state: &mut AgcState<C32>,
     mag: &[f32],
     gains: &mut [f32],
     positive: bool,
 ) -> Result<()> {
-    #[cfg(target_arch = "aarch64")]
-    if simd.level().as_neon().is_some() {
-        return neon::gains(state, mag, gains, positive);
-    }
-    let _ = simd;
     state.gains_with(
         mag,
         gains,
@@ -173,7 +167,7 @@ fn agc_f32<S: SimdToken>(
         let (mag, _) = mag.split_at_mut(n);
         let (gains, _) = gains.split_at_mut(n);
         let positive = magnitudes(simd, x, mag);
-        gains_level(simd, state, mag, gains, positive)?;
+        gains_level(state, mag, gains, positive)?;
         products(simd, gains, x, o);
     }
     Ok(())
@@ -181,71 +175,15 @@ fn agc_f32<S: SimdToken>(
 
 impl Agc<C32> for Simd {
     fn agc(&self, state: &mut AgcState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> {
+        // On AArch64 the plain loop of the fallback is faster (`neon`, simulated cycles per
+        // sample on `cortex-a72` / `cortex-a76`: 39.90 / 21.76 against 47.07 / 22.46 for the
+        // blocks with `fminnm`/`fmaxnm`), and its bits are the same.
+        if cfg!(target_arch = "aarch64") {
+            return Fallback.agc(state, input, output);
+        }
         check_len(input.len(), output.len())?;
         let x: &[f32] = bytemuck::cast_slice(input);
         let y: &mut [f32] = bytemuck::cast_slice_mut(output);
         dispatch!(simd => agc_f32(simd, state, x, y))
-    }
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    //! The minimum and the maximum of the recursion as the single instructions `fminnm` and
-    //! `fmaxnm`, written as `asm!`. `f32::min` and `f32::max` compile to the same
-    //! instructions, but the compiler adds an `fminnm` of each operand with itself that it
-    //! cannot prove to be no signalling NaN (any value from another basic block: the limits,
-    //! the result of a branch). With the intrinsics (`vminnm_f32`) that step is gone, but the
-    //! compiler then evaluates every branch of the step and selects (`fcsel`), about twice
-    //! the instructions of the branch that is taken; an `asm!` block it does not move out of
-    //! its branch. The operands are never NaN (see `AgcState::<C32>::gains_with`), so the
-    //! values are those of every other minimum and maximum.
-    #![allow(unsafe_code)]
-
-    use core::arch::asm;
-
-    use sdrk_core::kernels::agc::AgcState;
-    use sdrk_core::{C32, Result};
-
-    /// `fminnm`: the smaller of `a` and `b`.
-    #[inline(always)]
-    fn min(mut a: f32, b: f32) -> f32 {
-        // SAFETY: `fminnm` reads two FP registers and writes one; it touches no memory, no
-        // stack and no flags, and is part of the AArch64 baseline. Not `pure`, so that the
-        // compiler keeps it in its branch.
-        unsafe {
-            asm!(
-                "fminnm {a:s}, {a:s}, {b:s}",
-                a = inout(vreg) a,
-                b = in(vreg) b,
-                options(nomem, nostack, preserves_flags)
-            );
-        }
-        a
-    }
-
-    /// `fmaxnm`: the larger of `a` and `b`.
-    #[inline(always)]
-    fn max(mut a: f32, b: f32) -> f32 {
-        // SAFETY: as in `min`.
-        unsafe {
-            asm!(
-                "fmaxnm {a:s}, {a:s}, {b:s}",
-                a = inout(vreg) a,
-                b = in(vreg) b,
-                options(nomem, nostack, preserves_flags)
-            );
-        }
-        a
-    }
-
-    /// The recursion of `sdrk_core` with [`min`] and [`max`].
-    #[inline(always)]
-    pub(super) fn gains(
-        state: &mut AgcState<C32>,
-        mag: &[f32],
-        gains: &mut [f32],
-        positive: bool,
-    ) -> Result<()> {
-        state.gains_with(mag, gains, positive, min, max)
     }
 }

@@ -29,7 +29,9 @@
 //!   prepare the taps of all branches at once; a filter that does not fit, and every `CQ15`
 //!   filter with more than [`PREP_TAPS`] taps, runs on the fallback. `Q15` `resample_real` and
 //!   `fir_interpolate_real` do the same with one lane per tap. Where the grouped fallback is
-//!   faster, these kernels run it instead ([`runs_fallback`], a table of kernel and level).
+//!   faster, these kernels run it instead ([`runs_fallback`], a table of kernel and level). On
+//!   NEON `fir_interpolate` `CQ15` computes four outputs of a branch per pass of its taps
+//!   ([`drive_interpolate`]).
 //!
 //! `C32` and `f32` results are within the contract of `docs/kernels.md` (110 dB) but not
 //! bit-identical with the fallback, because the sums are formed in a different order (and fused on
@@ -1483,6 +1485,75 @@ impl<S: SimdToken, const C: usize> Q15Engine<'_, S, C> {
     }
 }
 
+/// Outputs of one branch that [`drive_interpolate`] computes together: their windows are one
+/// sample apart, so each vector of taps is loaded once for the group.
+const GROUP: usize = 4;
+
+impl<S: SimdToken, const C: usize> Q15Engine<'_, S, C> {
+    /// The [`GROUP`] outputs `j, j + up, ...` of one branch with the taps at `tap_offset`,
+    /// `chunks` vectors long (the padding of the prepared branch is zero), whose windows begin
+    /// at the consecutive samples of `win` (`C (GROUP - 1)` more values than the chunks of one
+    /// window). The sums are those of [`Q15Engine::dot`] in another order: the products go into
+    /// two `i64` accumulators per output, so that independent chains share each vector of taps.
+    #[inline(always)]
+    fn group(&mut self, j: usize, up: usize, win: &[i16], chunks: usize, tap_offset: usize) {
+        let simd = self.simd;
+        let l = S::i16s::LEN;
+        let td = self
+            .td
+            .get(tap_offset..tap_offset + l * chunks)
+            .unwrap_or(&[]);
+        let window = |g: usize| win.get(C * g..C * g + l * chunks).unwrap_or(&[]);
+        let zero = S::i64s::splat(simd, 0);
+        let mut acc = [[zero; 2]; GROUP];
+        let mac = |acc: &mut [S::i64s; 2], d: &[i16], t: (S::i32s, S::i32s)| {
+            let (dl, dh) = S::i16s::from_slice(simd, d).widen();
+            let (p0, p1) = (dl * t.0).widen();
+            let (p2, p3) = (dh * t.1).widen();
+            acc[0] += p0;
+            acc[1] += p1;
+            acc[0] += p2;
+            acc[1] += p3;
+        };
+        let [a0, a1, a2, a3] = &mut acc;
+        for ((((t, d0), d1), d2), d3) in td
+            .chunks_exact(l)
+            .zip(window(0).chunks_exact(l))
+            .zip(window(1).chunks_exact(l))
+            .zip(window(2).chunks_exact(l))
+            .zip(window(3).chunks_exact(l))
+        {
+            let t = S::i16s::from_slice(simd, t).widen();
+            mac(a0, d0, t);
+            mac(a1, d1, t);
+            mac(a2, d2, t);
+            mac(a3, d3, t);
+        }
+        for (g, [x, y]) in acc.into_iter().enumerate() {
+            let sum = x + y;
+            let k = j + g * up;
+            if C == 1 {
+                let total: i64 = sum.as_slice().iter().sum();
+                if let Some(o) = self.out.get_mut(k) {
+                    *o = Acc64(total).finish().0;
+                }
+                continue;
+            }
+            let (mut re, mut im) = (0i64, 0i64);
+            for pair in sum.as_slice().chunks_exact(2) {
+                if let [r, i] = *pair {
+                    re += r;
+                    im += i;
+                }
+            }
+            if let Some([o_re, o_im]) = self.out.get_mut(2 * k..2 * k + 2) {
+                *o_re = Acc64(re).finish().0;
+                *o_im = Acc64(im).finish().0;
+            }
+        }
+    }
+}
+
 /// Outputs `j = 0..count` of a contiguous `CQ15` filter; the window of output `j` begins at
 /// sample `first + j * step` (the history holds `n - 1` samples, so that is its oldest sample).
 #[inline(always)]
@@ -1521,6 +1592,72 @@ fn drive_polyphase<S: SimdToken, const C: usize>(
             .checked_sub(count)
             .ok_or_else(|| internal("resampler window"))?;
         e.dot(k, start, count, geom.offset(phase));
+    }
+    Ok(())
+}
+
+/// Whether [`polyphase_q15`] runs [`drive_interpolate`]: `fir_interpolate` `CQ15` (`C = 2`,
+/// `down = 1`) on NEON.
+#[inline(always)]
+fn interpolates_by_branch<S: SimdToken>(simd: S, c: usize, down: usize) -> bool {
+    #[cfg(target_arch = "aarch64")]
+    {
+        c == 2 && down == 1 && simd.level().as_neon().is_some()
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let _ = (simd, c, down);
+        false
+    }
+}
+
+/// [`drive_polyphase`] with `down = 1` (`fir_interpolate`) branch by branch: the
+/// outputs `r, r + L, r + 2 L, ...` share the phase of output `r`, and their windows begin one
+/// sample apart. The outputs whose windows lie in the input go in groups of [`GROUP`]
+/// ([`Q15Engine::group`]), the others one at a time ([`Q15Engine::dot`]); both give the exact
+/// integer sums, so the bits of [`drive_polyphase`]. Only NEON runs it: the per-output
+/// bookkeeping of [`drive_polyphase`] (a division by `L` per output) and the latency of its four
+/// accumulators made it slower than the fallback on `cortex-a72` (145.25 against 127.87
+/// simulated cycles per sample; this form 75.82, decision D336).
+#[inline(always)]
+fn drive_interpolate<S: SimdToken, const C: usize>(
+    e: &mut Q15Engine<'_, S, C>,
+    geom: Branches,
+    hist_len: usize,
+    q: i64,
+    produced: usize,
+) -> Result<()> {
+    let window_err = || internal("resampler window");
+    e.prepare_branches(geom.up);
+    let up = geom.up;
+    let l = i128::try_from(up).map_err(|_| window_err())?;
+    let lanes = S::i16s::LEN;
+    for r in 0..up.min(produced) {
+        // `usize` to `i128` is lossless.
+        let (c, phase) = polyphase_output(i128::from(q) + r as i128, l)?;
+        let count = geom.len(phase);
+        let offset = geom.offset(phase);
+        let chunks = geom.padded(count) / geom.g;
+        let first = (hist_len + c).checked_sub(count).ok_or_else(window_err)?;
+        let n = (produced - r).div_ceil(up);
+        let mut j = 0;
+        while j < n && first + j < hist_len {
+            e.dot(r + j * up, first + j, count, offset);
+            j += 1;
+        }
+        let input = e.win.input;
+        while j + GROUP <= n {
+            let o = C * (first + j - hist_len);
+            let Some(win) = input.get(o..o + C * (GROUP - 1) + lanes * chunks) else {
+                break;
+            };
+            e.group(r + j * up, up, win, chunks, offset);
+            j += GROUP;
+        }
+        while j < n {
+            e.dot(r + j * up, first + j, count, offset);
+            j += 1;
+        }
     }
     Ok(())
 }
@@ -1796,7 +1933,11 @@ fn polyphase_q15<S: SimdToken, const C: usize>(
         out,
         td: &mut storage,
     };
-    drive_polyphase(&mut e, geom, hist_len, down, *q, produced)?;
+    if interpolates_by_branch(simd, C, down) {
+        drive_interpolate(&mut e, geom, hist_len, *q, produced)?;
+    } else {
+        drive_polyphase(&mut e, geom, hist_len, down, *q, produced)?;
+    }
     *q = new_q;
     Ok(Some((consumed, produced)))
 }

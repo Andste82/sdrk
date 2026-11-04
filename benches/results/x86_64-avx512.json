@@ -1253,29 +1253,29 @@
               "label": "n = 64",
               "other_instr_per_sample": 1.63,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.77,
-              "ratio": 2.32
+              "ours_instr_per_sample": 2.92,
+              "ratio": 1.8
             },
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "label": "n = 100",
               "other_instr_per_sample": 1.6,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.06,
-              "ratio": 1.91
+              "ours_instr_per_sample": 2.43,
+              "ratio": 1.52
             },
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 0.46,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.31,
-              "ratio": 0.69
+              "ours_instr_per_sample": 0.3,
+              "ratio": 0.66
             }
           ],
           "other_instr_per_sample": 0.46,
-          "ours_instr_per_sample": 0.31,
-          "ratio": 0.69,
+          "ours_instr_per_sample": 0.3,
+          "ratio": 0.66,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0

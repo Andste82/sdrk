@@ -230,27 +230,27 @@
               "label": "information: fallback",
               "other_instr_per_sample": 22.42,
               "other_snr_db": 119.85,
-              "ours_instr_per_sample": 17.61,
-              "ratio": 0.79
+              "ours_instr_per_sample": 22.42,
+              "ratio": 1.0
             },
             {
               "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 17.03,
               "other_snr_db": null,
-              "ours_instr_per_sample": 17.61,
-              "ratio": 1.03
+              "ours_instr_per_sample": 22.42,
+              "ratio": 1.32
             }
           ],
           "other_instr_per_sample": 17.03,
-          "ours_instr_per_sample": 17.61,
-          "ratio": 1.03,
+          "ours_instr_per_sample": 22.42,
+          "ratio": 1.32,
           "snr_db": {
             "other": 118.88,
             "ours": 119.85
           },
-          "status": "release",
-          "verdict": "pass"
+          "status": "dev",
+          "verdict": "warn"
         },
         "agc_cq15": {
           "compared_with": "sdrk fallback",
@@ -875,45 +875,45 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 2.46,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 1.53,
-              "ratio": 0.62
+              "ours_instr_per_sample": 1.65,
+              "ratio": 0.67
             },
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
               "other_instr_per_sample": 2.17,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 1.53,
-              "ratio": 0.71
+              "ours_instr_per_sample": 1.65,
+              "ratio": 0.76
             },
             {
               "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
               "label": "n = 64",
               "other_instr_per_sample": 3.67,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.48,
-              "ratio": 0.95
+              "ours_instr_per_sample": 3.91,
+              "ratio": 1.06
             },
             {
               "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
               "label": "n = 100",
               "other_instr_per_sample": 3.79,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.35,
-              "ratio": 0.88
+              "ours_instr_per_sample": 3.59,
+              "ratio": 0.95
             },
             {
               "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 2.46,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.53,
-              "ratio": 0.62
+              "ours_instr_per_sample": 1.65,
+              "ratio": 0.67
             }
           ],
           "other_instr_per_sample": 2.46,
-          "ours_instr_per_sample": 1.53,
-          "ratio": 0.62,
+          "ours_instr_per_sample": 1.65,
+          "ratio": 0.67,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1373,37 +1373,37 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 1.27,
               "other_snr_db": 999.0,
-              "ours_instr_per_sample": 0.76,
-              "ratio": 0.6
+              "ours_instr_per_sample": 0.75,
+              "ratio": 0.59
             },
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "label": "n = 64",
               "other_instr_per_sample": 2.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.25,
-              "ratio": 1.18
+              "ours_instr_per_sample": 2.56,
+              "ratio": 0.93
             },
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "label": "n = 100",
               "other_instr_per_sample": 2.31,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.68,
-              "ratio": 1.16
+              "ours_instr_per_sample": 2.26,
+              "ratio": 0.98
             },
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.52,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.76,
-              "ratio": 0.5
+              "ours_instr_per_sample": 0.75,
+              "ratio": 0.49
             }
           ],
           "other_instr_per_sample": 1.52,
-          "ours_instr_per_sample": 0.76,
-          "ratio": 0.5,
+          "ours_instr_per_sample": 0.75,
+          "ratio": 0.49,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -2469,20 +2469,20 @@
         },
         "fir_interpolate_cq15": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 259.4,
               "other_snr_db": null,
-              "ours_instr_per_sample": 300.49,
-              "ratio": 1.16
+              "ours_instr_per_sample": 178.71,
+              "ratio": 0.69
             }
           ],
           "other_instr_per_sample": 259.4,
-          "ours_instr_per_sample": 300.49,
-          "ratio": 1.16,
+          "ours_instr_per_sample": 178.71,
+          "ratio": 0.69,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0

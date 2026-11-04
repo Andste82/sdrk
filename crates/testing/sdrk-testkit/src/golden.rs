@@ -802,6 +802,50 @@ pub fn block_float_optimum_db(expected: &Array, skip: usize) -> Option<f64> {
 
 /// `x` rounded to Q15 by the rules of the numeric contract (round half up, saturate),
 /// as an f64 value.
+/// Compares the bytes `actual` of a kernel with a byte output (`convert_out`) with the bytes
+/// `expected` of a `bit_exact` case, and appends the report line like [`assert_matches`];
+/// `sample_type` is the type of the encoded samples, so the line carries it.
+///
+/// Returns a [`Comparison`] with an infinite SNR when the bytes are equal and
+/// [`GoldenError::Mismatch`] (with the first differing byte) otherwise.
+pub fn assert_bytes_match(
+    case: &GoldenCase,
+    sample_type: SampleType,
+    expected: &[u8],
+    actual: &[u8],
+) -> Result<Comparison> {
+    let first = expected
+        .iter()
+        .zip(actual)
+        .position(|(a, b)| a != b)
+        .or_else(|| (expected.len() != actual.len()).then(|| expected.len().min(actual.len())));
+    let result = match first {
+        None => Ok(Comparison {
+            snr_db: f64::INFINITY,
+            max_abs_err: 0.0,
+            rms_err: 0.0,
+            first_mismatch: None,
+            compared: expected.len(),
+        }),
+        Some(i) => Err(GoldenError::Mismatch {
+            case: format!("{}/{}", case.kernel, case.case),
+            snr_db: f64::NAN,
+            first_mismatch: Some(i),
+            detail: format!(
+                "bytes differ ({} bytes, {} expected)",
+                actual.len(),
+                expected.len()
+            ),
+        }),
+    };
+    if let Some(path) = std::env::var_os(REPORT_ENV) {
+        let line = report_line_as(case, sample_type, |_| None, &result);
+        // A report that cannot be written must not hide the outcome of the comparison.
+        let _ = append_line(Path::new(&path), &line);
+    }
+    result
+}
+
 fn round_q15(x: f64) -> f64 {
     let raw = libm::floor(x * 32768.0 + 0.5).clamp(-32768.0, 32767.0);
     raw / 32768.0

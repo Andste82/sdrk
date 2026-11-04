@@ -228,7 +228,7 @@ R1.2 commands; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema
 - [x] Port model of the registry; four two-input kinds
 - [x] Diagnostics `unknown_port`, `rate_mismatch`, `clock_domain`, `misaligned_inputs` with corpus files
 - [x] Automatic alignment with `delay`; lockstep runner in push and pull mode
-- [ ] Proof flow `fm_stereo_receiver_primitives` with YAML twin and equality test (seed 478)
+- [x] Proof flow `fm_stereo_receiver_primitives` with YAML twin and equality test (seed 478)
 - [x] `docs/pipeline.md`, `docs/blocks.md`, `docs/timing.md`, `examples/README.md`, CHANGELOG, decisions log (D380 to D395; D166 is taken)
 
 ## Status
@@ -236,7 +236,7 @@ R1.2 commands; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema
 Done: the edge field `port` and the node field `align` in the model, the structure check, the schema, the TypeScript types and `FlowBuilder` of the WebAssembly package (D380 to D382); the port model of the registry (`BlockFactory::inputs`, D383) and the four pipeline kinds `add`, `mul`, `make_complex` and `stereo_pll` for `f32` and Q15; the diagnostics `unknown_port`, `rate_mismatch`, `clock_domain` and `misaligned_inputs` with one corpus file each, and `multiple_inputs` and `missing_input` per port (D384, D386); the exact delay arithmetic and the automatic node `<node>__align` with `"align": "none"` (D387); the lockstep runner in push mode and in pull mode with `PairNode` and `NodeInput::Two` (D385), bursts, gaps and timed parameters through the branches of a join (D390, D391); `NodeReport.clock_domain` (D392); the fuzz target (D393); the groups (D394); the removal of the exception list for the four kinds in the name check of `xtask` (D395); the flow `fm_stereo_receiver_primitives` with its YAML twin; the tests of the specification in `crates/pipeline/sdrk-pipeline/tests/multi_input.rs`, the corpus, `no_alloc` and `property`, and `tests/engine.rs` of the binding.
 
 Deviations from the specification, recorded in the decisions log:
-- The proof flow has no de-emphasis (D388). The specification ends it with `deemph = biquad`, the de-emphasis of `fm_stereo_demod`; the kind `biquad` cannot express that section (it has explicit coefficients), so the flow ends at `stereo_matrix` and `fm_stereo_primitives_equal` compares it with `fm_stereo_demod` with `deemphasis_us` 0, bit for bit, whole and with 20 chunk plans of seed 478. A de-emphasis built from `real_part`, `imag_part`, `deemphasis` and `make_complex` agrees within 2e-7. For this reason the checklist box of the proof flow is not ticked; open item I34-1 asks for the missing piece.
+- The proof flow had no de-emphasis when M34 was delivered (D388): no kind could express the section of `fm_stereo_demod`. The follow-up D396 to D398 (open item I34-1, closed) gives the kind `deemphasis` complex input; the flow ends with it now and `fm_stereo_primitives_equal` compares it with `fm_stereo_demod` bit for bit as the specification asks (D397).
 - `port` is written exactly when the description had it, an explicit `"a"` included (D381); the specification writes it only for `b`.
 - The wrapper of a node with two inputs is `PairNode`, a new struct, not a variant of `StreamNode` (D385), and the ports come from the block description (D383).
 - The specification records the missing short form in D166, a number that is taken; it is D380.
@@ -246,4 +246,3 @@ Verified locally on Linux x86-64: `cargo fmt --all -- --check`, `cargo clippy --
 
 Not done or not run:
 - The whole workspace test suite, the Cortex-M emulator and the benchmarks (M34 adds no kernel); CI runs the rest, the Windows and Linux arm64 hosts included, and the browsers of `wasm-test`.
-- Open item I34-1.

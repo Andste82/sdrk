@@ -1,7 +1,7 @@
 {
   "sdrk": 1,
   "name": "fm-stereo-receiver-primitives",
-  "description": "The FM stereo receiver built from primitives: the same audio as fm_stereo_demod with the de-emphasis switched off, bit for bit.",
+  "description": "The FM stereo receiver built from primitives: the same audio as fm_stereo_demod, bit for bit.",
   "settings": {
     "precision": "f32",
     "max_chunk": 4096
@@ -14,6 +14,12 @@
     }
   },
   "nodes": {
+    "deemph": {
+      "kind": "deemphasis",
+      "params": {
+        "tau_us": 50
+      }
+    },
     "lpf": {
       "kind": "decimate",
       "params": {
@@ -85,6 +91,10 @@
     },
     {
       "from": "matrix",
+      "to": "deemph"
+    },
+    {
+      "from": "deemph",
       "to": "audio"
     }
   ],

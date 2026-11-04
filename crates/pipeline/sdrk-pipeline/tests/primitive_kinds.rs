@@ -54,7 +54,7 @@ fn the_kinds_are_registered_with_their_kernels() {
     let registry = Registry::standard();
     for (kind, kernels) in [
         ("quad_demod", &["quad_demod"][..]),
-        ("deemphasis", &["deemphasis"]),
+        ("deemphasis", &["deemphasis", "biquad"]),
         ("rotate", &["rotate"]),
         ("decimate", &["fir_decimate", "resample_real"]),
         ("interpolate", &["fir_interpolate", "fir_interpolate_real"]),
@@ -74,6 +74,8 @@ fn fixed_costs_and_rates() {
         ("quad_demod", "c32", "f32", json!({}), 12.0, 48_000),
         ("quad_demod", "cq15", "q15", json!({}), 12.0, 48_000),
         ("deemphasis", "f32", "f32", json!({}), 3.0, 48_000),
+        ("deemphasis", "c32", "f32", json!({}), 10.0, 48_000),
+        ("deemphasis", "cq15", "q15", json!({}), 10.0, 48_000),
         (
             "deemphasis",
             "q15",
@@ -210,7 +212,9 @@ fn types_and_parameters_are_checked() {
         "f32",
         json!({ "frequency_hz": 100 })
     ));
-    assert!(invalid("deemphasis", "c32", "f32", json!({})));
+    // Complex samples (stereo audio) are accepted since I34-1 (D396); raw bytes are not.
+    assert!(!invalid("deemphasis", "c32", "f32", json!({})));
+    assert!(!invalid("deemphasis", "cq15", "q15", json!({})));
     // Required parameters and ranges.
     assert!(invalid("rotate", "c32", "f32", json!({})));
     assert!(invalid(

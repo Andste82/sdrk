@@ -15,16 +15,17 @@ use sdrk_blocks::{
     BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample, ConvertBlock, ConvertConfig,
     ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig,
     DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
-    DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec,
-    DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
-    HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock, InterpolateConfig,
-    InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock,
-    NcoConfig, NcoRealBlock, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
-    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig,
+    DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock,
+    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
+    InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
+    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, ParamValue,
+    PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock,
+    StereoPllBlock, StereoPllConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -1355,7 +1356,7 @@ impl Kind for DeemphasisKind {
 
     const KIND: &'static str = "deemphasis";
     fn kernels() -> &'static [&'static str] {
-        &["deemphasis"]
+        &["deemphasis", "biquad"]
     }
     fn default_cfg() -> DeemphasisConfig {
         DeemphasisConfig::default()
@@ -1369,37 +1370,62 @@ impl Kind for DeemphasisKind {
         rate: Rate,
         p: Precision,
     ) -> BlockResult<Figures> {
-        if is_complex(input) {
-            return Err(mismatch("deemphasis needs real samples"));
-        }
-        with_real!(
-            p,
-            R,
-            Ok(Figures {
-                rate_out: DeemphasisRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
-                memory_bytes: DeemphasisRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
-                cost: 3.0,
-                taps: 0,
-                delay: Delay::ZERO,
-                min_input: 1,
-                output: stream(input),
-            })
-        )
+        let (rate_out, memory_bytes, cost) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    DeemphasisBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    DeemphasisBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                    // Two recursions (left and right) of 5 multiplications.
+                    10.0
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    DeemphasisRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    DeemphasisRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
+                    3.0
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            cost,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(input),
+        })
     }
     fn build(
         cfg: &DeemphasisConfig,
-        _input: PortType,
+        input: PortType,
         rate: Rate,
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
-        with_real!(
-            p,
-            R,
-            Ok(Box::new(StreamNode::new(DeemphasisRealBlock::<R, _>::new(
-                cfg, rate, st
-            )?)))
-        )
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(DeemphasisBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(DeemphasisRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 

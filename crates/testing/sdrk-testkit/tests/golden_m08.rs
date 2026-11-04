@@ -21,7 +21,7 @@ use sdrk_core::kernels::interp::{
     FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
 };
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
-use sdrk_core::{C32, CQ15, Progress, Q15, Rate, Reference, Sample};
+use sdrk_core::{C32, CQ15, Progress, Q15, Rate, Reference, Sample, SampleType};
 use sdrk_device::{Align, Container, Endian, FullScale, Layout, SampleFormat};
 use sdrk_testkit::golden::{self, Array, GoldenCase};
 use sdrk_testkit::{ChunkPlan, bit_exact};
@@ -127,6 +127,8 @@ fn all_cases_are_present() {
         "packed10",
         "i2s32_msb",
         "rs16",
+        "rs8",
+        "ru8",
         "cu8_swapiq",
         "cs16_bigendian",
     ] {
@@ -146,7 +148,7 @@ fn all_cases_are_present() {
             "missing convert_out/{name}"
         );
     }
-    assert_eq!(names.len(), 28);
+    assert_eq!(names.len(), 32);
     assert_eq!(
         golden::list("fir_interpolate").unwrap(),
         ["l5_n241_c32_4000", "l5_n241_cq15_4000"]
@@ -185,9 +187,9 @@ fn convert_out_golden() {
                         }
                     };
                     let (w, c) = encode_both(&format, x, case.seed, &enc);
-                    assert_eq!(w, want, "{name} backend {backend}: bytes differ");
+                    golden::assert_bytes_match(&case, SampleType::C32, want, &w).unwrap();
                     if let Some(c) = c {
-                        assert_eq!(c, want, "{name} backend {backend}: chunking changed bytes");
+                        golden::assert_bytes_match(&case, SampleType::C32, want, &c).unwrap();
                     }
                 }
                 continue;
@@ -203,9 +205,9 @@ fn convert_out_golden() {
                         }
                     };
                     let (w, c) = encode_both(&format, x, case.seed, &enc);
-                    assert_eq!(w, want, "{name} backend {backend}: bytes differ");
+                    golden::assert_bytes_match(&case, SampleType::F32, want, &w).unwrap();
                     if let Some(c) = c {
-                        assert_eq!(c, want, "{name} backend {backend}: chunking changed bytes");
+                        golden::assert_bytes_match(&case, SampleType::F32, want, &c).unwrap();
                     }
                 }
                 continue;
@@ -236,9 +238,13 @@ fn convert_out_golden() {
             }
             other => panic!("unexpected input type {} in {name}", other.dtype()),
         };
-        assert_eq!(whole, want, "{name}: bytes differ");
+        let ty = match case.array("input").unwrap() {
+            Array::CI16(_) => SampleType::CQ15,
+            _ => SampleType::Q15,
+        };
+        golden::assert_bytes_match(&case, ty, want, &whole).unwrap();
         if let Some(c) = chunked {
-            assert_eq!(c, want, "{name}: chunking changed the bytes");
+            golden::assert_bytes_match(&case, ty, want, &c).unwrap();
         }
     }
 }

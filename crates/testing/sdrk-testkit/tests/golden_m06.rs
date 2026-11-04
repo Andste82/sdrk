@@ -156,7 +156,10 @@ fn all_cases_are_present() {
                 "l3m2_n96_cq15_6000",
             ],
         ),
-        ("resample_real", &["l1m5_n121_f32_10000"]),
+        (
+            "resample_real",
+            &["l1m5_n121_f32_10000", "l1m5_n121_q15_10000"],
+        ),
         ("quad_demod", &["fm_tone_c32_20000", "fm_tone_cq15_20000"]),
         (
             "deemphasis",
@@ -175,7 +178,7 @@ fn all_cases_are_present() {
             ],
         ),
         ("mag_sq", &["c32_4096", "cq15_4096"]),
-        ("power_db", &["f32_4096"]),
+        ("power_db", &["f32_4096", "q15_4096"]),
         ("fir", &[]),
         ("rotate", &[]),
     ];
@@ -290,27 +293,50 @@ fn resample_real_golden() {
         let want = case.array("expected").unwrap();
         let (up, down) = (usize_param(&case, "up"), usize_param(&case, "down"));
         assert_eq!(want.len(), usize_param(&case, "outputs"));
-        let (Array::F32(x), Array::F32(h)) =
-            (case.array("input").unwrap(), case.array("taps").unwrap())
-        else {
-            panic!("unexpected array types in {name}");
-        };
-        let new = || {
-            ResampleRealState::<f32, _, _>::new(
-                h.clone(),
-                vec![0.0f32; h.len().div_ceil(up)],
-                up,
-                down,
-            )
-            .unwrap()
-        };
-        let mut step =
-            |s: &mut ResampleRealState<f32, Vec<f32>, Vec<f32>>, i: &[f32], o: &mut [f32]| {
-                ResampleReal::<f32>::resample_real(&Sdrk, s, i, o).unwrap()
-            };
-        let whole = run_whole(&mut new(), x, want.len() + 5, &mut step);
-        let chunked = run_chunked(&mut new(), x, ChunkPlan::new(case.seed, 900), &mut step);
-        check_both(&case, want, &whole, &chunked);
+        let plan = ChunkPlan::new(case.seed, 900);
+        match (case.array("input").unwrap(), case.array("taps").unwrap()) {
+            (Array::F32(x), Array::F32(h)) => {
+                let new = || {
+                    ResampleRealState::<f32, _, _>::new(
+                        h.clone(),
+                        vec![0.0f32; h.len().div_ceil(up)],
+                        up,
+                        down,
+                    )
+                    .unwrap()
+                };
+                let mut step = |s: &mut ResampleRealState<f32, Vec<f32>, Vec<f32>>,
+                                i: &[f32],
+                                o: &mut [f32]| {
+                    ResampleReal::<f32>::resample_real(&Sdrk, s, i, o).unwrap()
+                };
+                let whole = run_whole(&mut new(), x, want.len() + 5, &mut step);
+                let chunked = run_chunked(&mut new(), x, plan, &mut step);
+                check_both(&case, want, &whole, &chunked);
+            }
+            (Array::I16(_), Array::I16(_)) => {
+                let x = case.array("input").unwrap().as_q15().unwrap();
+                let h = case.array("taps").unwrap().as_q15().unwrap();
+                let new = || {
+                    ResampleRealState::<Q15, _, _>::new(
+                        h.clone(),
+                        vec![Q15(0); h.len().div_ceil(up)],
+                        up,
+                        down,
+                    )
+                    .unwrap()
+                };
+                let mut step = |s: &mut ResampleRealState<Q15, Vec<Q15>, Vec<Q15>>,
+                                i: &[Q15],
+                                o: &mut [Q15]| {
+                    ResampleReal::<Q15>::resample_real(&Sdrk, s, i, o).unwrap()
+                };
+                let whole = run_whole(&mut new(), &x, want.len() + 5, &mut step);
+                let chunked = run_chunked(&mut new(), &x, plan, &mut step);
+                check_both(&case, want, &whole, &chunked);
+            }
+            _ => panic!("unexpected array types in {name}"),
+        }
     }
 }
 
@@ -495,5 +521,12 @@ fn power_db_golden() {
     let offset = case.param_f64("offset_db").unwrap() as f32;
     let mut out = vec![0f32; p.len()];
     PowerDb::<f32>::power_db(&Sdrk, p, &mut out, offset).unwrap();
+    golden::assert_matches(&case, case.array("expected").unwrap(), &out).unwrap();
+
+    let case = golden::load("power_db", "q15_4096").unwrap();
+    let p = case.array("input").unwrap().as_q15().unwrap();
+    let offset = case.param_f64("offset_db").unwrap() as f32;
+    let mut out = vec![0f32; p.len()];
+    PowerDb::<Q15>::power_db(&Sdrk, &p, &mut out, offset).unwrap();
     golden::assert_matches(&case, case.array("expected").unwrap(), &out).unwrap();
 }

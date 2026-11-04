@@ -97,3 +97,17 @@ def l1m5_n121_f32(rng):
         tolerance={"class": "tolerance", "snr_db_min": 110.0, "skip": 0},
         notes="real signal, decimation by 5",
     )
+
+
+@case(kernel="resample_real", name="l1m5_n121_q15_10000", seed=469)
+def l1m5_n121_q15(rng):
+    x = q15.from_float(rng.standard_normal(10000) * 0.3)
+    h = q15.from_float(scipy.signal.firwin(121, 0.18))
+    k = out_count(len(x), 1, 5)
+    y = polyphase_q15(x, h, 1, 5)
+    return dict(
+        params={"taps": 121, "up": 1, "down": 5, "outputs": k},
+        arrays={"input": Array("i16", x), "taps": Array("i16", h), "expected": Array("i16", y)},
+        tolerance={"class": "bit_exact"},
+        notes="real Q15 signal, decimation by 5; integer polyphase model; K = floor((n * L - 1) / M) + 1",
+    )

@@ -142,7 +142,7 @@ Additional rules:
 
 **In:** `Chain` with a `Two` intermediate (`chain.rs`); `Fork<A, B, S>` (`fork.rs`); delay alignment; the parameter naming of compositions; storage sizing; tests; `docs/blocks.md` (section "Composite blocks"), `docs/architecture.md`, `CHANGELOG.md`.
 
-**Out:** the plans of the existing blocks (M32), a procedural macro (backlog), a pipeline representation of compositions (`expand_composites`, backlog), forks with more than two branches (nest two forks), joins of streams with different rates.
+**Out:** the plans of the existing blocks (M32), a procedural macro (backlog), a pipeline representation of compositions (`expand_composites`, backlog), forks with more than two branches (not supported: `Fork` branches must output stream elements, so forks nest only through a join, D353; a wider fork is built when a block needs one, D354), joins of streams with different rates.
 
 ## Specification
 
@@ -221,4 +221,4 @@ Deviations from the specification, recorded in the decisions log:
 
 Not done:
 - `cargo test --workspace --all-features` was not part of the recorded gate (only `sdrk-blocks` and `xtask` were tested); CI runs the rest.
-- Open item I31-1 (`docs/open-items.md`): whether forks with more than two branches are needed (D353).
+- Forks with more than two branches: the maintainer decided to build them only when a block needs one (D354, 2026-11-04); open item I31-1 is closed.

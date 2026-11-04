@@ -2,9 +2,10 @@
 //! `interleave`/`deinterleave` through the facade `Sdrk`, `Fallback` and `Reference`.
 //!
 //! Every case is run in one piece and in chunks of random size (the plan seed is the case seed);
-//! both runs must match the golden file, so they match each other as well. The oscillator cases
-//! also check that the NCO advanced by the number of samples and that the cosine tables of
-//! `sdrk-core` are the ones of the generator.
+//! both runs must match the golden file. `mul_c32_4096` has an SNR floor (D326) and is also
+//! checked bit for bit for the fallback and the reference. The oscillator cases also check that
+//! the NCO advanced by the number of samples and that the cosine tables of `sdrk-core` are the
+//! ones of the generator.
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -200,6 +201,19 @@ fn add_real_golden() {
 fn mul_golden() {
     let case = golden::load("mul", "mul_c32_4096").unwrap();
     for_each_kernel!(mul_c32, &case);
+    // The case has an SNR floor for the SIMD backend, which fuses the product on AVX2, AVX-512
+    // and NEON (D326); the fallback and the reference give the float32 model bit for bit.
+    let (a, b) = (
+        raw_c32(case.array("a").unwrap()),
+        raw_c32(case.array("b").unwrap()),
+    );
+    let want = raw_c32(case.array("expected").unwrap());
+    let impls: [&dyn Mul<C32>; 2] = [&Fallback, &Reference];
+    for k in impls {
+        let mut out = vec![C32::ZERO; a.len()];
+        k.mul(&a, &b, &mut out).unwrap();
+        assert_eq!(bit_exact(&out, &want), None);
+    }
     let case = golden::load("mul", "mul_cq15_4096").unwrap();
     for_each_kernel!(mul_cq15, &case);
 }

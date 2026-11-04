@@ -4,7 +4,9 @@
 //! Every kernel case compares `Fallback` with `Reference`, the facade with `Fallback` and runs
 //! the facade in 20 chunk plans; no files are read, so the cases run on microcontrollers too.
 //! All kernels are bit-exact in both types except the `C32` oscillator, which is judged by its
-//! SNR against the float64 `exp` (at least 120 dB, like `rotate`). The block cases
+//! SNR against the float64 `exp` (at least 120 dB, like `rotate`), and the facade's `C32`
+//! product, which the SIMD backend fuses on AVX2, AVX-512 and NEON (D326: at least 140 dB
+//! against the fallback, and the same bits whatever the block size). The block cases
 //! `block_nco_phase_lock` and `block_make_complex_roundtrip` run the blocks of the milestone.
 
 #![allow(
@@ -41,12 +43,17 @@ const N: usize = 500;
 const PLANS: u64 = 20;
 
 type Binary<T> = fn(&[T], &[T], &mut [T]) -> CoreResult<()>;
+/// Whether the facade's output (second) is close enough to the fallback's (first).
+type Close<T> = fn(&[T], &[T]) -> bool;
 
 /// The three implementations of an element-wise kernel.
 struct Impls<T> {
     fallback: Binary<T>,
     reference: Binary<T>,
     facade: Binary<T>,
+    /// How the facade's output (second) is compared with the fallback's (first); `None`: bit
+    /// for bit.
+    close: Option<Close<T>>,
 }
 
 fn random_q15(rng: &mut Pcg32) -> Q15 {
@@ -77,9 +84,9 @@ fn range_mut<'a, X>(
         .ok_or_else(|| Failure::new(case, "slice range"))
 }
 
-/// Fallback and Reference agree bit for bit, the facade equals the fallback, unequal lengths
-/// are `LengthMismatch` and change nothing, and the facade does not depend on the block size
-/// (20 plans).
+/// Fallback and Reference agree bit for bit, the facade equals the fallback (or is close to it,
+/// `Impls::close`), unequal lengths are `LengthMismatch` and change nothing, and the facade does
+/// not depend on the block size (20 plans).
 fn binary_case<T: Sample>(
     arena: &mut Arena<'_>,
     case: &'static str,
@@ -102,9 +109,14 @@ fn binary_case<T: Sample>(
     })?;
     rf.fill(T::ZERO);
     (impls.facade)(a, b, rf)?;
-    ensure(bit_exact(fb, rf).is_none(), || {
+    let close = impls
+        .close
+        .map_or_else(|| bit_exact(fb, rf).is_none(), |close| close(fb, rf));
+    ensure(close, || {
         Failure::new(case, "facade differs from the fallback")
     })?;
+    // From here on the facade is compared with its own output in one call.
+    fb.copy_from_slice(rf);
     // Unequal lengths: an error, and the output stays as it was.
     for f in [impls.fallback, impls.reference, impls.facade] {
         let short_b = range(b, 0, N - 1, case)?;
@@ -144,6 +156,22 @@ fn binary_case<T: Sample>(
     Ok(())
 }
 
+/// The SNR of `got` against `want` in dB.
+fn snr_db_c32(want: &[C32], got: &[C32]) -> f64 {
+    let (mut signal, mut noise) = (0.0f64, 0.0f64);
+    for (w, g) in want.iter().zip(got) {
+        let (wr, wi) = (f64::from(w.re), f64::from(w.im));
+        let (er, ei) = (wr - f64::from(g.re), wi - f64::from(g.im));
+        signal += wr * wr + wi * wi;
+        noise += er * er + ei * ei;
+    }
+    if noise == 0.0 {
+        f64::INFINITY
+    } else {
+        10.0 * libm::log10(signal / noise)
+    }
+}
+
 pub(super) fn add_c32(arena: &mut Arena<'_>) -> Result<(), Failure> {
     binary_case::<C32>(
         arena,
@@ -154,6 +182,7 @@ pub(super) fn add_c32(arena: &mut Arena<'_>) -> Result<(), Failure> {
             fallback: |a, b, o| Add::<C32>::add(&Fallback, a, b, o),
             reference: |a, b, o| Add::<C32>::add(&Reference, a, b, o),
             facade: |a, b, o| Add::<C32>::add(&Sdrk, a, b, o),
+            close: None,
         },
     )
 }
@@ -168,6 +197,7 @@ pub(super) fn add_cq15(arena: &mut Arena<'_>) -> Result<(), Failure> {
             fallback: |a, b, o| Add::<CQ15>::add(&Fallback, a, b, o),
             reference: |a, b, o| Add::<CQ15>::add(&Reference, a, b, o),
             facade: |a, b, o| Add::<CQ15>::add(&Sdrk, a, b, o),
+            close: None,
         },
     )
 }
@@ -182,6 +212,8 @@ pub(super) fn mul_c32(arena: &mut Arena<'_>) -> Result<(), Failure> {
             fallback: |a, b, o| Mul::<C32>::mul(&Fallback, a, b, o),
             reference: |a, b, o| Mul::<C32>::mul(&Reference, a, b, o),
             facade: |a, b, o| Mul::<C32>::mul(&Sdrk, a, b, o),
+            // The SIMD backend fuses the product on AVX2, AVX-512 and NEON (D326).
+            close: Some(|fb, fac| snr_db_c32(fb, fac) >= 140.0),
         },
     )
 }
@@ -196,6 +228,7 @@ pub(super) fn mul_cq15(arena: &mut Arena<'_>) -> Result<(), Failure> {
             fallback: |a, b, o| Mul::<CQ15>::mul(&Fallback, a, b, o),
             reference: |a, b, o| Mul::<CQ15>::mul(&Reference, a, b, o),
             facade: |a, b, o| Mul::<CQ15>::mul(&Sdrk, a, b, o),
+            close: None,
         },
     )
 }
@@ -210,6 +243,7 @@ pub(super) fn mul_real_q15(arena: &mut Arena<'_>) -> Result<(), Failure> {
             fallback: |a, b, o| MulReal::<Q15>::mul_real(&Fallback, a, b, o),
             reference: |a, b, o| MulReal::<Q15>::mul_real(&Reference, a, b, o),
             facade: |a, b, o| MulReal::<Q15>::mul_real(&Sdrk, a, b, o),
+            close: None,
         },
     )
 }

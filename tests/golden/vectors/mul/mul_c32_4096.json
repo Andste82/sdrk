@@ -20,7 +20,7 @@
   "format_version": 1,
   "kernel": "mul",
   "model": "float32",
-  "notes": "re = ar*br - ai*bi, im = ar*bi + ai*br with the products rounded to float32 first (no fused multiply-add); noise sigma 0.4, the first 64 samples are corner values",
+  "notes": "re = ar*br - ai*bi, im = ar*bi + ai*br with the products rounded to float32 first (no fused multiply-add), which the fallback and the reference give bit for bit; the SIMD backend fuses one product of each part on AVX2, AVX-512 and NEON (D326), hence the SNR floor; noise sigma 0.4, the first 64 samples are corner values",
   "params": {},
   "provenance": {
     "generator": "tests/golden/generate.py",
@@ -30,6 +30,8 @@
   },
   "seed": 465,
   "tolerance": {
-    "class": "bit_exact"
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 140.0
   }
 }

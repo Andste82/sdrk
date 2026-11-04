@@ -8,7 +8,7 @@
 //! | `add_cq15` | facade | `volk_16i_x2_add_saturated_16i` on the `2 n` values | our fallback |
 //! | `add_real` | facade | `volk_32f_x2_add_32f` | our fallback |
 //! | `add_real_q15` | facade | `volk_16i_x2_add_saturated_16i` | our fallback |
-//! | `mul` | facade | `volk_32fc_x2_multiply_32fc`; at `avx2`, `avx512` and `neon` its protokernel without FMA (`u_avx`, `neon`, compiled with `-ffp-contract=off`, D287) | VOLK's dispatch (fused there), our fallback |
+//! | `mul` | facade | `volk_32fc_x2_multiply_32fc` (VOLK's dispatch, fused at `avx2`, `avx512` and `neon` as ours, D326) | at `avx2`, `avx512` and `neon` its protokernel without FMA (`u_avx`, `neon`, compiled with `-ffp-contract=off`, the gate of D287), our fallback |
 //! | `mul_real` | facade | `volk_32f_x2_multiply_32f` | our fallback |
 //! | `mul_cq15`, `mul_real_q15` | facade | our fallback (efficiency verdict) | |
 //! | `interleave` | facade | `volk_32f_x2_interleave_32fc` | our fallback |

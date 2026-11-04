@@ -1,12 +1,14 @@
 //! `add`, `add_real`, `mul`, `mul_real`, `interleave` and `deinterleave` against the fallback:
 //! bit-exact at every length from 0 to 300, at every start offset within a vector, for random
-//! samples and for the extreme and special values, and the errors of unequal lengths.
+//! samples and for the extreme and special values, and the errors of unequal lengths. `mul` `C32`
+//! is fused at `avx2`, `avx512` and `neon` (D326): there it is within a few roundings of the
+//! fallback and does not depend on the position of a sample in the call.
 #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
 
 mod common;
 
 use common::{Rng, c32_noise, cq15_noise};
-use sdrk_backend_simd::Simd;
+use sdrk_backend_simd::{Simd, level_name};
 use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
 use sdrk_core::{C32, CQ15, Error, Fallback, Q15};
 
@@ -22,6 +24,34 @@ fn same_c32(a: &[C32], b: &[C32]) -> bool {
         && a.iter()
             .zip(b)
             .all(|(x, y)| same_f32(x.re, y.re) && same_f32(x.im, y.im))
+}
+
+/// Whether the level fuses the `C32` product (D326).
+fn fused_mul() -> bool {
+    matches!(level_name(), "avx2" | "avx512" | "neon")
+}
+
+/// The fused product `got` against the fallback's `want` of `a b`: the same bits where either is
+/// not finite, else `|want - got| <= 1.5 eps (|p| + |q|)` for each part `p -+ q`. The fallback
+/// rounds both products and the result (`want` within `u |p| + u |want|` of `p -+ fl(q)`, `u` the
+/// unit roundoff `eps / 2`), the fused part rounds once (`got` within `u |got|` of it), and
+/// `|want|`, `|got|` are about `|p| + |q|` at most. Below the normal range the bound is the
+/// smallest subnormal.
+fn close_mul(a: C32, b: C32, want: C32, got: C32) -> bool {
+    let near = |w: f32, g: f32, p: f64, q: f64| {
+        if !(w.is_finite() && g.is_finite()) {
+            return same_f32(w, g);
+        }
+        let bound = 1.5 * f64::from(f32::EPSILON) * (p.abs() + q.abs());
+        (f64::from(w) - f64::from(g)).abs() <= bound + 1e-45
+    };
+    let (ar, ai, br, bi) = (
+        f64::from(a.re),
+        f64::from(a.im),
+        f64::from(b.re),
+        f64::from(b.im),
+    );
+    near(want.re, got.re, ar * br, ai * bi) && near(want.im, got.im, ar * bi, ai * br)
 }
 
 fn q15_noise(rng: &mut Rng, n: usize) -> Vec<Q15> {
@@ -59,7 +89,7 @@ fn extreme_pairs() -> (Vec<CQ15>, Vec<CQ15>) {
 }
 
 #[test]
-fn c32_sum_and_product_are_bit_exact() {
+fn c32_sum_and_product_match_the_fallback() {
     let mut rng = Rng::new(470);
     let mut a = c32_noise(&mut rng, MAX_LEN + 4, 3.0);
     let mut b = c32_noise(&mut rng, MAX_LEN + 4, 3.0);
@@ -79,6 +109,7 @@ fn c32_sum_and_product_are_bit_exact() {
         a[13 * i + 1].im = v;
         b[5 * i + 2].re = v;
     }
+    let mut fused = 0;
     for n in 0..=MAX_LEN {
         let off = OFFSETS[n % OFFSETS.len()];
         let (x, y) = (&a[off..off + n], &b[off..off + n]);
@@ -88,8 +119,37 @@ fn c32_sum_and_product_are_bit_exact() {
         assert!(same_c32(&want, &got), "add n={n} offset={off}");
         Fallback.mul(x, y, &mut want).unwrap();
         Simd.mul(x, y, &mut got).unwrap();
-        assert!(same_c32(&want, &got), "mul n={n} offset={off}");
+        if fused_mul() {
+            fused += usize::from(!same_c32(&want, &got));
+            for (i, (w, g)) in want.iter().zip(&got).enumerate() {
+                assert!(
+                    close_mul(x[i], y[i], *w, *g),
+                    "mul n={n} offset={off} i={i}: {w:?} {g:?}"
+                );
+            }
+            // The product of a sample does not depend on where the call starts or ends.
+            for s in [1, n / 2] {
+                if s < n {
+                    let mut part = vec![C32::default(); n - s];
+                    Simd.mul(&x[s..], &y[s..], &mut part).unwrap();
+                    assert!(
+                        same_c32(&got[s..], &part),
+                        "mul n={n} offset={off} from {s}"
+                    );
+                    Simd.mul(&x[..n - s], &y[..n - s], &mut part).unwrap();
+                    assert!(
+                        same_c32(&got[..n - s], &part),
+                        "mul n={n} offset={off} to {}",
+                        n - s
+                    );
+                }
+            }
+        } else {
+            assert!(same_c32(&want, &got), "mul n={n} offset={off}");
+        }
     }
+    // The fused path runs: it rounds differently from the fallback in most calls.
+    assert!(!fused_mul() || fused > MAX_LEN / 2, "{fused} calls differ");
 }
 
 #[test]

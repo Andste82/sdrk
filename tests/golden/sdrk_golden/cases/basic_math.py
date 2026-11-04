@@ -1,8 +1,10 @@
 """Cases for the element-wise kernels ``add``, ``add_real``, ``mul``, ``mul_real`` and ``interleave``.
 
-All cases are bit-exact: the float32 results are the single IEEE operations of NumPy ``float32``
-arrays (a product is rounded before the difference or sum, nothing is fused) and the Q15 results
-come from the integer model in ``q15.py`` (rule R7).
+The float32 results are the single IEEE operations of NumPy ``float32`` arrays (a product is
+rounded before the difference or sum, nothing is fused) and the Q15 results come from the integer
+model in ``q15.py`` (rule R7). All cases are bit-exact except ``mul_c32_4096``: the SIMD backend
+fuses the complex product on AVX2, AVX-512 and NEON (D326), so that case has an SNR floor against
+the float32 model, which the fallback and the reference meet bit for bit.
 """
 
 import numpy as np
@@ -148,10 +150,12 @@ def mul_c32(rng):
     return dict(
         params={},
         arrays={"a": Array("cf32", a), "b": Array("cf32", b), "expected": Array("cf32", c32_mul(a, b))},
-        tolerance={"class": "bit_exact"},
+        tolerance={"class": "tolerance", "snr_db_min": 140.0, "skip": 0},
         model="float32",
         notes="re = ar*br - ai*bi, im = ar*bi + ai*br with the products rounded to float32 first "
-        "(no fused multiply-add); noise sigma 0.4, the first 64 samples are corner values",
+        "(no fused multiply-add), which the fallback and the reference give bit for bit; the SIMD "
+        "backend fuses one product of each part on AVX2, AVX-512 and NEON (D326), hence the SNR "
+        "floor; noise sigma 0.4, the first 64 samples are corner values",
     )
 
 

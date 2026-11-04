@@ -3365,40 +3365,40 @@
           "verdict": "pass"
         },
         "mul": {
-          "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "compared_with": "volk_32fc_x2_multiply_32fc",
           "goal": true,
           "informational": [
             {
-              "compared_with": "volk_32fc_x2_multiply_32fc",
-              "label": "information: volk",
-              "other_instr_per_sample": 3.52,
-              "other_snr_db": 150.11,
-              "ours_instr_per_sample": 3.09,
-              "ratio": 0.88
+              "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "information: volk-nofma",
+              "other_instr_per_sample": 3.26,
+              "other_snr_db": 148.5,
+              "ours_instr_per_sample": 2.59,
+              "ratio": 0.79
             },
             {
               "compared_with": "volk_32fc_x2_multiply_32fc: neon",
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 3.27,
               "other_snr_db": 150.11,
-              "ours_instr_per_sample": 3.09,
-              "ratio": 0.94
+              "ours_instr_per_sample": 2.59,
+              "ratio": 0.79
             },
             {
-              "compared_with": "VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "compared_with": "volk_32fc_x2_multiply_32fc",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 3.26,
+              "other_instr_per_sample": 3.52,
               "other_snr_db": null,
-              "ours_instr_per_sample": 3.09,
-              "ratio": 0.95
+              "ours_instr_per_sample": 2.59,
+              "ratio": 0.74
             }
           ],
-          "other_instr_per_sample": 3.26,
-          "ours_instr_per_sample": 3.09,
-          "ratio": 0.95,
+          "other_instr_per_sample": 3.52,
+          "ours_instr_per_sample": 2.59,
+          "ratio": 0.74,
           "snr_db": {
-            "other": 148.5,
-            "ours": 148.5
+            "other": 150.11,
+            "ours": 150.11
           },
           "status": "release",
           "verdict": "pass"

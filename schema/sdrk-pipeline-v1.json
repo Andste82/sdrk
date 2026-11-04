@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "AlignMode": {
+      "description": "What the build does when the two inputs of a node differ in group delay.\n\n```\nuse sdrk_pipeline::AlignMode;\nassert_eq!(AlignMode::default(), AlignMode::Auto);\nassert_eq!(serde_json::to_string(&AlignMode::None)?, \"\\\"none\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Insert a `delay` node in front of the faster path (the default).",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Insert nothing; the difference is reported as the warning `misaligned_inputs`.",
+          "type": "string"
+        }
+      ]
+    },
     "AlignSpec": {
       "description": "Bit position of a custom raw format.",
       "oneOf": [
@@ -158,11 +173,22 @@
     },
     "EdgeSpec": {
       "additionalProperties": false,
-      "description": "A connection from an input or node to a node or output.\n\n```\nuse sdrk_pipeline::EdgeSpec;\nlet e: EdgeSpec = serde_json::from_str(r#\"{\"from\":\"rf\",\"to\":\"tune\"}\"#)?;\nassert_eq!((e.from.as_str(), e.to.as_str()), (\"rf\", \"tune\"));\n# Ok::<(), serde_json::Error>(())\n```",
+      "description": "A connection from an input or node to a node or output.\n\n```\nuse sdrk_pipeline::{EdgeSpec, PortName};\nlet e: EdgeSpec = serde_json::from_str(r#\"{\"from\":\"rf\",\"to\":\"tune\"}\"#)?;\nassert_eq!((e.from.as_str(), e.to.as_str()), (\"rf\", \"tune\"));\nassert_eq!(e.port, None);\nlet e: EdgeSpec = serde_json::from_str(r#\"{\"from\":\"pilot\",\"to\":\"pll\",\"port\":\"b\"}\"#)?;\nassert_eq!(e.port, Some(PortName::B));\n# Ok::<(), serde_json::Error>(())\n```",
       "properties": {
         "from": {
           "description": "Name of the source (an input or a node).",
           "type": "string"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PortName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The input port of the destination node: `\"a\"` (the default when omitted) or `\"b\"`.\nNot allowed when the destination is an output."
         },
         "to": {
           "description": "Name of the destination (a node or an output).",
@@ -482,6 +508,21 @@
         }
       ]
     },
+    "PortName": {
+      "description": "The input port of a node that an edge feeds: `a` (the default) or `b`.\n\nA node of a one-input kind has the port `a` only; the two-input kinds (`add`, `mul`,\n`make_complex`, `stereo_pll`) need one edge per port.\n\n```\nuse sdrk_pipeline::PortName;\nassert_eq!(PortName::B.as_str(), \"b\");\nassert_eq!(serde_json::to_string(&PortName::A)?, \"\\\"a\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
+      "oneOf": [
+        {
+          "const": "a",
+          "description": "The first (and for one-input kinds only) input port.",
+          "type": "string"
+        },
+        {
+          "const": "b",
+          "description": "The second input port of a two-input kind.",
+          "type": "string"
+        }
+      ]
+    },
     "Precision": {
       "description": "Numeric precision of the whole pipeline.\n\n```\nuse sdrk_pipeline::Precision;\nassert_eq!(serde_json::to_string(&Precision::Q15)?, \"\\\"q15\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
       "oneOf": [
@@ -616,8 +657,44 @@
         "oneOf": [
           {
             "additionalProperties": false,
+            "description": "Adds two streams of the same type, sample by sample.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "add"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Automatic gain control: scales a complex signal to a constant output amplitude.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -691,6 +768,9 @@
             "additionalProperties": false,
             "description": "Demodulates an AM signal to audio: envelope, DC removal and decimation.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -743,6 +823,9 @@
             "additionalProperties": false,
             "description": "Filters with a Butterworth low-pass or high-pass, a band-pass or a notch (IIR).",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -809,6 +892,9 @@
             "additionalProperties": false,
             "description": "Converts raw device bytes in a sample format to complex or real samples.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -870,6 +956,9 @@
             "additionalProperties": false,
             "description": "Converts complex samples to raw device bytes in a sample format.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -931,6 +1020,9 @@
             "additionalProperties": false,
             "description": "Removes the DC offset of a complex or real signal with a one-pole high-pass.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -969,6 +1061,9 @@
             "additionalProperties": false,
             "description": "Shifts a signal to 0 Hz, low-pass filters it and decimates it.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1050,6 +1145,9 @@
             "additionalProperties": false,
             "description": "Low-pass filter and decimation by an integer factor.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1117,6 +1215,9 @@
             "additionalProperties": false,
             "description": "Single-pole low-pass that undoes the pre-emphasis of FM broadcast audio.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1155,6 +1256,9 @@
             "additionalProperties": false,
             "description": "Delays a signal by a whole number of samples.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1196,6 +1300,9 @@
             "additionalProperties": false,
             "description": "Interpolates a signal, removes the images and shifts it up to a carrier frequency.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1277,6 +1384,9 @@
             "additionalProperties": false,
             "description": "Low-pass FIR filter designed from cutoff, transition width and attenuation.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1339,6 +1449,9 @@
             "additionalProperties": false,
             "description": "Demodulates an FM signal to audio with de-emphasis and decimation.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1398,6 +1511,9 @@
             "additionalProperties": false,
             "description": "Frequency-modulates a real signal onto a complex baseband carrier.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1436,6 +1552,9 @@
             "additionalProperties": false,
             "description": "Demodulates a broadcast FM signal to stereo audio (left in re, right in im).",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1511,6 +1630,9 @@
             "additionalProperties": false,
             "description": "Halfband low-pass filter and decimation by 2.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1562,6 +1684,9 @@
             "additionalProperties": false,
             "description": "Outputs the imaginary part of a complex stream as a real stream.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1592,6 +1717,9 @@
             "additionalProperties": false,
             "description": "Interpolation by an integer factor with an image-rejection low-pass.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1659,6 +1787,9 @@
             "additionalProperties": false,
             "description": "Magnitude (envelope) of complex samples.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1687,8 +1818,77 @@
           },
           {
             "additionalProperties": false,
+            "description": "Combines a real and an imaginary stream into one complex stream.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "make_complex"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Multiplies two streams of the same type, sample by sample.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "mul"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Generates a complex tone at frequency_hz, one sample per input sample.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1744,6 +1944,9 @@
             "additionalProperties": false,
             "description": "Pre-emphasis and peak limiter for the audio of an FM transmitter.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1803,6 +2006,9 @@
             "additionalProperties": false,
             "description": "Quadrature (FM) discriminator: the phase step between consecutive samples.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1841,6 +2047,9 @@
             "additionalProperties": false,
             "description": "Outputs the real part of a complex stream as a real stream.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1871,6 +2080,9 @@
             "additionalProperties": false,
             "description": "Turns a real signal into a complex one at half the rate (fs/4 shift and halfband).",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -1922,6 +2134,9 @@
             "additionalProperties": false,
             "description": "Changes the sample rate by a rational factor, optionally tunable in ppm.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2001,6 +2216,9 @@
             "additionalProperties": false,
             "description": "Shifts the spectrum of a complex signal by a frequency.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2042,6 +2260,9 @@
             "additionalProperties": false,
             "description": "Multiplies a complex signal by a gain given in decibels.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2080,6 +2301,9 @@
             "additionalProperties": false,
             "description": "Computes averaged power spectra in dB relative to full scale as frames.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2148,6 +2372,9 @@
             "additionalProperties": false,
             "description": "Passes a complex signal only while its average power is above a threshold.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2200,6 +2427,9 @@
             "additionalProperties": false,
             "description": "Demodulates a single-sideband signal (USB or LSB) to audio.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2282,6 +2512,9 @@
             "additionalProperties": false,
             "description": "Turns sum and difference (S, D) into left and right: L = S + 2 D, R = S - 2 D.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },
@@ -2310,8 +2543,75 @@
           },
           {
             "additionalProperties": false,
+            "description": "Locks a loop to the 19 kHz stereo pilot and demodulates the 38 kHz difference.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "stereo_pll"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "natural_hz": {
+                    "default": 20.0,
+                    "description": "Natural frequency of the loop in Hz, 1 to 190 and at most a hundredth of pilot_hz. Unit: Hz. Typical: 20. Build-time.",
+                    "maximum": 190.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "pilot_hz": {
+                    "default": 19000.0,
+                    "description": "Nominal pilot frequency in Hz; below a quarter of the sample rate. Unit: Hz. Typical: 19e3 for broadcast FM. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "pilot_level": {
+                    "default": 0.1,
+                    "description": "Nominal pilot amplitude in units of the input signal, above 0 and at most 1; sets the loop gain and the lock thresholds. Typical: 0.1; for Q15 0.1 times the scale of the discriminator output. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "stereo": {
+                    "default": "auto",
+                    "description": "auto outputs the difference while the pilot is locked; mono forces the difference to 0. Takes effect from the next call. Typical: auto; mono for a weak station. Runtime.",
+                    "enum": [
+                      "auto",
+                      "mono"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Turns a real stream into a complex stream with a zero imaginary part.",
             "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
               "backend": {
                 "$ref": "#/$defs/BackendSpec"
               },

@@ -72,3 +72,21 @@ test("the builder does not share state with the objects passed in", async () => 
   assert.equal(builder.toObject().nodes.a.params.frequency_hz, 1);
   assert.throws(() => new module.FlowBuilder(5), TypeError);
 });
+
+test("the ports of a node with two inputs and its alignment are written", async () => {
+  const { module } = await installedPackage();
+  const file = JSON.parse(readFileSync(join(FLOWS, "fm_stereo_receiver_primitives.json"), "utf8"));
+  const builder = new module.FlowBuilder(file.name, { description: file.description });
+  builder.settings(file.settings);
+  for (const [name, spec] of Object.entries(file.inputs)) builder.input(name, spec);
+  for (const [name, node] of Object.entries(file.nodes)) {
+    const { kind, params, ...options } = node;
+    builder.node(name, kind, params, options);
+  }
+  for (const edge of file.edges) builder.edge(edge.from, edge.to, edge.port);
+  for (const [name, spec] of Object.entries(file.outputs)) builder.output(name, spec);
+  assert.deepStrictEqual(JSON.parse(builder.toJson()), file);
+  // `align` is a node option.
+  const plain = new module.FlowBuilder("t").node("sum", "add", {}, { align: "none" });
+  assert.equal(plain.toObject().nodes.sum.align, "none");
+});

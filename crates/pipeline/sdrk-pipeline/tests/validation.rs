@@ -112,7 +112,7 @@ fn every_invalid_flow_of_the_corpus_is_rejected_with_the_expected_diagnostic() {
             assert_eq!(codes(&err), want, "{name}: build");
         }
     }
-    assert_eq!(files, 21, "one file per diagnostic code");
+    assert_eq!(files, 25, "one file per diagnostic code");
     let all = [
         DiagCode::Syntax,
         DiagCode::SchemaVersion,
@@ -135,6 +135,10 @@ fn every_invalid_flow_of_the_corpus_is_rejected_with_the_expected_diagnostic() {
         DiagCode::LimitExceeded,
         DiagCode::UnknownGroup,
         DiagCode::BackendUnavailable,
+        DiagCode::UnknownPort,
+        DiagCode::RateMismatch,
+        DiagCode::ClockDomain,
+        DiagCode::MisalignedInputs,
     ];
     for code in all {
         assert!(seen_codes.contains(&code), "no corpus file for {code:?}");

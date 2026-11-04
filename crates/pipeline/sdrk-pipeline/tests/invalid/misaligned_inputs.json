@@ -1,0 +1,56 @@
+{
+  "sdrk": 1,
+  "name": "t",
+  "inputs": {
+    "iq": {
+      "type": "f32",
+      "rate_hz": 48000
+    }
+  },
+  "nodes": {
+    "out_64k": {
+      "kind": "resample",
+      "params": {
+        "rate_out_hz": 64000
+      }
+    },
+    "back": {
+      "kind": "resample",
+      "params": {
+        "rate_out_hz": 48000
+      }
+    },
+    "sum": {
+      "kind": "add"
+    }
+  },
+  "edges": [
+    {
+      "from": "iq",
+      "to": "sum",
+      "port": "a"
+    },
+    {
+      "from": "iq",
+      "to": "out_64k"
+    },
+    {
+      "from": "out_64k",
+      "to": "back"
+    },
+    {
+      "from": "back",
+      "to": "sum",
+      "port": "b"
+    },
+    {
+      "from": "sum",
+      "to": "out"
+    }
+  ],
+  "outputs": {
+    "out": {
+      "type": "stream"
+    }
+  }
+}

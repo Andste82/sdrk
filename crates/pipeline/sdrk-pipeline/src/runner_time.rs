@@ -649,13 +649,35 @@ impl Pipeline {
             ..
         } = self;
         for (oi, o) in outputs.iter().enumerate() {
-            let Some(pos) = o.path.iter().position(|k| *k == ni) else {
+            let index = if let Some(pos) = o.path.iter().position(|k| *k == ni) {
+                map_along(nodes, streams, o.path.get(pos..).unwrap_or_default(), cur)
+            } else if let Some((side, pos)) = o
+                .sides
+                .iter()
+                .find_map(|s| s.chain.iter().position(|k| *k == ni).map(|p| (s, p)))
+                && let Some(join) = o.path.iter().position(|k| *k == side.join)
+            {
+                // A branch into port `b` of a two-input node: carry the index to the end of
+                // the branch, take it as the index at the node (both ports run in lockstep and
+                // the branch is aligned with the path) and follow the path from there.
+                let at_join = map_along(
+                    nodes,
+                    streams,
+                    side.chain.get(pos..).unwrap_or_default(),
+                    cur,
+                );
+                map_along(
+                    nodes,
+                    streams,
+                    o.path.get(join..).unwrap_or_default(),
+                    at_join,
+                )
+            } else {
                 continue;
             };
-            let tail = o.path.get(pos..).unwrap_or_default();
             events.push(Event {
                 output: OutputId::new(oi),
-                index: map_along(nodes, streams, tail, cur),
+                index,
                 kind: EventKind::ParamApplied {
                     node: NodeId::new(ni),
                     param,

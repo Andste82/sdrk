@@ -10,13 +10,14 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind,
+    AddKind, AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind,
     DecimateKind, DeemphasisKind, DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind,
-    FmStereoDemodKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind, NcoKind,
-    PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind,
-    ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, StereoMatrixKind, ToComplexKind,
+    FmStereoDemodKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind,
+    MakeComplexKind, MulKind, NcoKind, PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind,
+    ResampleKind, RotateKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, StereoMatrixKind,
+    StereoPllKind, ToComplexKind,
 };
-use crate::model::{PipelineSpec, Precision};
+use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
 use crate::runner::Pipeline;
 use crate::storage::VecStorage;
@@ -38,6 +39,31 @@ pub enum PortKind {
         /// Number of values in a frame.
         len: usize,
     },
+}
+
+/// An input port of a block kind: its name in the flow (`a` or `b`) and the port types it
+/// accepts.
+///
+/// The ports come from the description of the block: the first input of the description is
+/// port `a`, the second (the two-input kinds `add`, `mul`, `make_complex` and `stereo_pll`) is
+/// port `b`.
+///
+/// ```
+/// use sdrk_blocks::PortType;
+/// use sdrk_pipeline::{PortName, Registry};
+/// let registry = Registry::standard();
+/// let ports = registry.factory("stereo_pll").unwrap().inputs();
+/// assert_eq!(ports.len(), 2);
+/// assert_eq!(ports[1].name, PortName::B);
+/// assert!(ports[1].accepts.contains(&PortType::F32));
+/// assert_eq!(registry.factory("ddc").unwrap().inputs().len(), 1);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PortInfo {
+    /// The name of the port in the flow.
+    pub name: PortName,
+    /// The port types the port accepts.
+    pub accepts: &'static [PortType],
 }
 
 /// The result of checking the parameters of one node: the figures the build needs and the
@@ -105,6 +131,18 @@ pub trait BlockFactory: Send + Sync {
         rate_in: Rate,
         precision: Precision,
     ) -> Result<Checked, Vec<Diagnostic>>;
+    /// The input ports of the kind, `a` first. A one-input kind has the port `a` only.
+    fn inputs(&self) -> Vec<PortInfo> {
+        self.description()
+            .inputs
+            .iter()
+            .zip([PortName::A, PortName::B])
+            .map(|(port, name)| PortInfo {
+                name,
+                accepts: port.types,
+            })
+            .collect()
+    }
     /// Names of the kernels the block calls (used by backend preferences in a later milestone).
     fn kernels(&self) -> &'static [&'static str];
     /// Builds the node from a checked configuration.
@@ -164,7 +202,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 32);
+/// assert_eq!(registry.descriptions().count(), 36);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -224,6 +262,10 @@ impl Registry {
         register::<ImagPartKind>(&mut factories);
         register::<NcoKind>(&mut factories);
         register::<StereoMatrixKind>(&mut factories);
+        register::<AddKind>(&mut factories);
+        register::<MulKind>(&mut factories);
+        register::<MakeComplexKind>(&mut factories);
+        register::<StereoPllKind>(&mut factories);
         Self { factories }
     }
 

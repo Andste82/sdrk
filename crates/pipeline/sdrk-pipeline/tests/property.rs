@@ -453,6 +453,43 @@ proptest! {
         }
     }
 
+    /// The same for a flow with a node of two inputs: corrupted ports, names and numbers.
+    #[test]
+    fn corrupted_two_input_flows_never_panic(index in 0usize..4000, byte in any::<u8>(), count in 1usize..4) {
+        let registry = Registry::standard();
+        let mut bytes = common::flow("fm_stereo_receiver_primitives").into_bytes();
+        for k in 0..count {
+            let at = (index + 53 * k) % bytes.len();
+            bytes[at] = byte.wrapping_add(k as u8);
+        }
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        let opts = BuildOptions::default();
+        let report = registry.validate_json(&text, &opts);
+        if report.is_ok() {
+            prop_assert!(registry.build_json(&text, &opts).is_ok());
+        }
+    }
+
+    /// Random values in the `port` and `align` fields of a flow with a two-input node.
+    #[test]
+    fn random_ports_and_alignments_never_panic(
+        a in arb_json(), b in arb_json(), c in arb_json()
+    ) {
+        let doc = json!({
+            "sdrk": 1, "name": "x",
+            "inputs": { "i": { "type": "f32", "rate_hz": 48000 } },
+            "nodes": { "n": { "kind": "add", "align": a } },
+            "edges": [
+                { "from": "i", "to": "n", "port": b },
+                { "from": "i", "to": "n", "port": c },
+                { "from": "n", "to": "out" }
+            ],
+            "outputs": { "out": { "type": "stream" } }
+        });
+        let report = Registry::standard().validate_json(&doc.to_string(), &BuildOptions::default());
+        prop_assert!(report.is_ok() || !report.errors.is_empty());
+    }
+
     /// A random object with the right keys but random content.
     #[test]
     fn random_values_in_the_right_places_never_panic(

@@ -294,3 +294,77 @@ fn fir_interpolate_real_matches_the_fallback() {
         }
     }
 }
+
+#[test]
+fn resample_real_q15_is_bit_exact_in_blocks_at_full_scale() {
+    // The SSE4.2 path (decision D340) sums split taps in 32-bit lanes, four outputs of a branch
+    // at a time where their windows lie in the input and one at a time elsewhere: calls of
+    // every size with little output room, the most chunks per window (768 taps at `L = 1`) and
+    // full-scale taps and samples.
+    let mut rng = Rng::new(67);
+    for kind in 0..4 {
+        for &(up, down, n) in &[
+            (2usize, 1usize, 128usize),
+            (3, 2, 192),
+            (1, 1, 768),
+            (2, 1, 1536),
+            (3, 1, 5),
+            (5, 7, 64),
+            (4, 3, 255),
+            (160, 147, 600),
+        ] {
+            let taps: Vec<Q15> = match kind {
+                0 => vec![Q15(-32768); n],
+                1 => vec![Q15(32767); n],
+                2 => (0..n)
+                    .map(|i| Q15(if i % 2 == 0 { -32768 } else { 32767 }))
+                    .collect(),
+                _ => taps_q15(&mut rng, n, true),
+            };
+            let x: Vec<Q15> = match kind {
+                0 | 1 => vec![Q15(-32768); 1500],
+                2 => (0..1500)
+                    .map(|i| Q15(if i % 2 == 0 { -32768 } else { 32767 }))
+                    .collect(),
+                _ => q15_noise(&mut rng, 1500, true),
+            };
+            let (mut a, mut b) = (state(&taps, up, down), state(&taps, up, down));
+            let mut at = 0;
+            while at < x.len() {
+                let len = (1 + rng.below(400)).min(x.len() - at);
+                let room = 1 + rng.below(up * len / down + 8);
+                let (mut want, mut got) = (vec![Q15(0); room], vec![Q15(0); room]);
+                let pw = Fallback
+                    .resample_real(&mut a, &x[at..at + len], &mut want)
+                    .unwrap();
+                let pg = Simd
+                    .resample_real(&mut b, &x[at..at + len], &mut got)
+                    .unwrap();
+                assert_eq!(pw, pg, "kind={kind} L={up} M={down} taps={n}");
+                assert_eq!(want, got, "kind={kind} L={up} M={down} taps={n} at={at}");
+                at += pw.consumed;
+            }
+            if down == 1 {
+                let new = || {
+                    FirInterpRealState::new(taps.clone(), vec![Q15(0); n.div_ceil(up)], up).unwrap()
+                };
+                let (mut a, mut b) = (new(), new());
+                let mut at = 0;
+                while at < x.len() {
+                    let len = (1 + rng.below(400)).min(x.len() - at);
+                    let room = 1 + rng.below(up * len + 8);
+                    let (mut want, mut got) = (vec![Q15(0); room], vec![Q15(0); room]);
+                    let pw = Fallback
+                        .fir_interpolate_real(&mut a, &x[at..at + len], &mut want)
+                        .unwrap();
+                    let pg = Simd
+                        .fir_interpolate_real(&mut b, &x[at..at + len], &mut got)
+                        .unwrap();
+                    assert_eq!(pw, pg, "interpolate kind={kind} L={up} taps={n}");
+                    assert_eq!(want, got, "interpolate kind={kind} L={up} taps={n} at={at}");
+                    at += pw.consumed;
+                }
+            }
+        }
+    }
+}

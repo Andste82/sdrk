@@ -31,7 +31,8 @@
 //!   `fir_interpolate_real` do the same with one lane per tap. Where the grouped fallback is
 //!   faster, these kernels run it instead ([`runs_fallback`], a table of kernel and level). On
 //!   NEON `fir_interpolate` `CQ15` computes four outputs of a branch per pass of its taps
-//!   ([`drive_interpolate`]).
+//!   ([`drive_interpolate`]). At SSE4.2 all six run in progressions of four outputs with taps
+//!   split for `pmaddwd` (the module `x86`, decision D340).
 //!
 //! `C32` and `f32` results are within the contract of `docs/kernels.md` (110 dB) but not
 //! bit-identical with the fallback, because the sums are formed in a different order (and fused on
@@ -106,8 +107,9 @@ enum Q15Kernel {
 ///
 /// The `neon` and `simd128` rows of `fir_interpolate` and `fir_interpolate_real` compare with
 /// the scalar ring loop of the fallback (`fallback/interp.rs`), the other rows with the grouped
-/// engine. Every other kernel and level keeps its SIMD branch, which is faster on at least one
-/// model (at `sse4.2` all six on `znver2`, at `neon` the other five on `cortex-a76` or both). The fallback is
+/// engine. Every other kernel and level keeps its SIMD branch: at `sse4.2` the progressions of
+/// the module `x86` (decision D340), faster than the fallback on both models, at `neon` the other
+/// five, faster on `cortex-a76` or both. The fallback is
 /// outside the dispatched kernels and compiled for the level of the build, so the switch applies
 /// only at that level ([`crate::level::compiled_for`]): in a build that detects a higher level
 /// at run time the fallback would be the code of the lower level (`fir` `CQ15` at `avx2`
@@ -1380,6 +1382,35 @@ impl<S: SimdToken> Q15Acc<S> {
     }
 }
 
+/// The taps of a contiguous filter in `td` as [`Q15Engine::prepare`] stores them (sample `m` of
+/// the window pairs with `h[n - 1 - m]`, stored `C` times), for [`split_in_place`].
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn prepare_taps<const C: usize>(taps: &[i16], td: &mut [i16]) {
+    for (pair, &h) in td.chunks_exact_mut(C).zip(taps.iter().rev()) {
+        pair.fill(h);
+    }
+}
+
+/// The taps of all branches of a polyphase filter `h[phase + up * i]` in `td` as
+/// [`Q15Engine::prepare_branches`] stores them (each branch at its [`Branches::offset`], padded
+/// with the zeros already in `td` to whole chunks), for [`split_in_place`].
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn prepare_branch_taps(taps: &[i16], geom: Branches, td: &mut [i16]) {
+    let (up, c) = (geom.up, geom.c);
+    for phase in 0..up.min(geom.n) {
+        let t = geom.len(phase);
+        let off = geom.offset(phase);
+        for m in 0..t {
+            let h = taps.get(phase + up * (t - 1 - m)).copied().unwrap_or(0);
+            if let Some(lanes) = td.get_mut(off + c * m..off + c * m + c) {
+                lanes.fill(h);
+            }
+        }
+    }
+}
+
 impl<S: SimdToken, const C: usize> Q15Engine<'_, S, C> {
     /// Prepares the taps of the contiguous filter: sample `m` of the window pairs with
     /// `h[n - 1 - m]`.
@@ -1663,6 +1694,365 @@ fn drive_interpolate<S: SimdToken, const C: usize>(
 }
 
 // ---------------------------------------------------------------------------------------------
+// CQ15 and Q15 at SSE4.2: split taps and `pmaddwd`
+
+/// Storage for the split taps of [`x86::progression_c1`] and [`x86::progression_c2`]: per
+/// chunk of 8 lanes of the prepared taps, the 8 high parts and then the 8 low parts. The upper
+/// half holds the prepared taps before [`split_in_place`] expands them.
+#[cfg(target_arch = "x86_64")]
+type SplitStorage = [i16; 4 * CAPACITY];
+
+/// The SSE4.2 token of a level that is SSE4.2 and not more: the levels above keep their own
+/// branches (or the fallback, [`runs_fallback`]).
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn sse4_2_only<S: SimdToken>(simd: S) -> Option<fearless_simd::Sse4_2> {
+    let level = simd.level();
+    if level.as_avx2().is_some() {
+        None
+    } else {
+        level.as_sse4_2()
+    }
+}
+
+/// Expands the first `chunks` chunks of prepared taps (8 lanes each, `C` lanes per sample) in
+/// the upper half of `s` into split taps at the start of `s`. For `C = 2` the lanes of each
+/// chunk are put in the order of the samples after `x86::PAIR` (`h0 h1 h0 h1 h2 h3 h2 h3`). A
+/// tap `t` becomes `256 hi + lo` with `lo` the low byte as a signed value (`-128..=127`) and `hi
+/// = (t - lo) / 256` (`-128..=128`). Chunk `k` is read before it is written, and its 16 lanes
+/// end at or before the chunks not read yet (`16 k + 16 <= 2 CAPACITY + 8 (k + 1)` for
+/// `k < 96`), so the expansion runs in place.
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn split_in_place<const C: usize>(s: &mut SplitStorage, chunks: usize) {
+    const HALF: usize = 2 * CAPACITY;
+    for k in 0..chunks.min(HALF / 8) {
+        let mut v = [0i16; 8];
+        if let Some(src) = s.get(HALF + 8 * k..HALF + 8 * k + 8) {
+            v.copy_from_slice(src);
+        }
+        if C == 2 {
+            let [a0, a1, b0, b1, c0, c1, d0, d1] = v;
+            v = [a0, b0, a1, b1, c0, d0, c1, d1];
+        }
+        if let Some(dst) = s.get_mut(16 * k..16 * k + 16) {
+            let (hi, lo) = dst.split_at_mut(8);
+            for ((h, l), &t) in hi.iter_mut().zip(lo.iter_mut()).zip(&v) {
+                let low = i16::from(t as i8);
+                *l = low;
+                *h = ((i32::from(t) - i32::from(low)) >> 8) as i16;
+            }
+        }
+    }
+}
+
+/// `fir` `CQ15` (`step = 1`) and `fir_decimate` `CQ15` at SSE4.2: outputs `j = 0..count` with
+/// the window of output `j` at sample `first + j step` (decision D340).
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+fn contiguous_split(
+    t: fearless_simd::Sse4_2,
+    taps: &[i16],
+    hist: &[i16],
+    input: &[i16],
+    out: &mut [i16],
+    first: usize,
+    step: usize,
+    count: usize,
+) {
+    let mut s: SplitStorage = [0; 4 * CAPACITY];
+    if let Some(td) = s.get_mut(2 * CAPACITY..) {
+        prepare_taps::<2>(taps, td);
+    }
+    let chunks = (2 * taps.len()).div_ceil(8);
+    split_in_place::<2>(&mut s, chunks);
+    x86::progression_c2(
+        t,
+        x86::Progression {
+            hist,
+            input,
+            split: &s,
+            chunks,
+            first,
+            stride: step,
+            n: count,
+            out,
+            o0: 0,
+            ostride: 1,
+        },
+    );
+}
+
+/// `resample` and `fir_interpolate` `CQ15` (`C = 2`), `resample_real` and `fir_interpolate_real`
+/// `Q15` (`C = 1`) at SSE4.2 (decision D340): the outputs `r, r + L, r + 2 L, ...` of a call
+/// share the phase of output `r` and their windows are `M` samples apart, so each branch runs as
+/// one progression of [`x86::progression_c2`] or [`x86::progression_c1`].
+#[cfg(target_arch = "x86_64")]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the lint counts the temporaries of the inlined progressions before optimization; \
+              the one array is the split taps (3072 bytes)"
+)]
+#[inline(always)]
+fn polyphase_split<const C: usize>(
+    t: fearless_simd::Sse4_2,
+    taps: &[i16],
+    hist: &[i16],
+    input: &[i16],
+    out: &mut [i16],
+    geom: Branches,
+    down: usize,
+    q: i64,
+    produced: usize,
+) -> Result<()> {
+    let window_err = || internal("resampler window");
+    let mut s: SplitStorage = [0; 4 * CAPACITY];
+    if let Some(td) = s.get_mut(2 * CAPACITY..) {
+        prepare_branch_taps(taps, geom, td);
+    }
+    let up = geom.up;
+    split_in_place::<C>(&mut s, geom.offset(up.min(geom.n)) / 8);
+    let l = i128::try_from(up).map_err(|_| window_err())?;
+    let hist_len = hist.len() / C;
+    for r in 0..up.min(produced) {
+        // `usize` to `i128` is lossless.
+        let (c, phase) = polyphase_output(i128::from(q) + r as i128 * down as i128, l)?;
+        let count = geom.len(phase);
+        let p = x86::Progression {
+            hist,
+            input,
+            split: s.get(2 * geom.offset(phase)..).unwrap_or(&[]),
+            chunks: geom.padded(count) / geom.g,
+            first: (hist_len + c).checked_sub(count).ok_or_else(window_err)?,
+            stride: down,
+            n: (produced - r).div_ceil(up),
+            out: &mut *out,
+            o0: r,
+            ostride: up,
+        };
+        if C == 2 {
+            x86::progression_c2(t, p);
+        } else {
+            x86::progression_c1(t, p);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_arch = "x86_64")]
+mod x86 {
+    //! The `CQ15` and `Q15` filters at SSE4.2 (decision D340). `pmaddwd` multiplies 16-bit lanes
+    //! and adds adjacent products into 32-bit lanes; a pair of full-range products does not fit
+    //! (`2 * 2^30`), so every tap is split once per call into `256 hi + lo` ([`super::split_in_place`],
+    //! `|hi|, |lo| <= 128`): a pair of products of a sample with `hi` or `lo` is at most `2^23`
+    //! in magnitude, and a window of at most 96 chunks sums in 32-bit lanes without overflow
+    //! (`96 * 2^23 < 2^30`). The output is `256 sum hi + sum lo` in `i64`, the exact sum, so the
+    //! bits of the fallback. `CQ15` pairs two consecutive samples of the same component
+    //! ([`PAIR`]: `re0 re1 im0 im1 re2 re3 im2 im3`), so the 32-bit lanes alternate between the
+    //! real and the imaginary sums.
+    //!
+    //! [`GROUP`] outputs whose windows lie in the input are computed together, so that each
+    //! vector of taps is loaded once for them and the four pairs of sums are independent chains;
+    //! the outputs whose windows reach into the history or past the end of the input are
+    //! computed one at a time, a window that does not lie in one slice assembled chunk by chunk.
+
+    use core::arch::x86_64::{
+        __m128i, _mm_add_epi32, _mm_madd_epi16, _mm_setr_epi8, _mm_setzero_si128, _mm_shuffle_epi8,
+    };
+    use core::hint::black_box;
+    use fearless_simd::prelude::*;
+    use fearless_simd::{i16x8, i32x4};
+    use sdrk_core::num::Acc64;
+
+    use super::{Win, fill_window};
+
+    /// Outputs computed together.
+    const GROUP: usize = 4;
+
+    /// The byte order of `pshufb` that reorders a vector of interleaved `CQ15` samples to
+    /// `re0 re1 im0 im1 re2 re3 im2 im3`.
+    const PAIR: [i8; 16] = [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15];
+
+    /// One progression of outputs: output `j < n` has the window that begins at sample
+    /// `first + j stride` of `hist ++ input` and goes to the output with index `o0 + j ostride`;
+    /// `split` holds `chunks` chunks of split taps.
+    pub(super) struct Progression<'a> {
+        pub(super) hist: &'a [i16],
+        pub(super) input: &'a [i16],
+        pub(super) split: &'a [i16],
+        pub(super) chunks: usize,
+        pub(super) first: usize,
+        pub(super) stride: usize,
+        pub(super) n: usize,
+        pub(super) out: &'a mut [i16],
+        pub(super) o0: usize,
+        pub(super) ostride: usize,
+    }
+
+    /// Writes the output with index `k` from the high-part sums `hi` and the low-part sums `lo`
+    /// (for `C = 2` the even lanes real, the odd lanes imaginary).
+    #[inline(always)]
+    fn store<const C: usize>(out: &mut [i16], k: usize, hi: &[i32], lo: &[i32]) {
+        let (mut even, mut odd) = (0i64, 0i64);
+        for (h, l) in hi.chunks_exact(2).zip(lo.chunks_exact(2)) {
+            if let (&[h0, h1], &[l0, l1]) = (h, l) {
+                even += 256 * i64::from(h0) + i64::from(l0);
+                odd += 256 * i64::from(h1) + i64::from(l1);
+            }
+        }
+        if C == 1 {
+            if let Some(o) = out.get_mut(k) {
+                *o = Acc64(even + odd).finish().0;
+            }
+        } else if let Some([re, im]) = out.get_mut(2 * k..2 * k + 2) {
+            *re = Acc64(even).finish().0;
+            *im = Acc64(odd).finish().0;
+        }
+    }
+
+    macro_rules! progression {
+        ($name:ident, $c:literal) => {
+            fearless_simd::kernel!(
+                #[allow(
+                    clippy::large_stack_frames,
+                    reason = "the lint counts the 16-byte temporaries of the inlined steps before \
+                              optimization; the loops keep them in registers"
+                )]
+                #[inline(always)]
+                pub(super) fn $name(t: Sse4_2, p: Progression<'_>) {
+                    let Progression {
+                        hist,
+                        input,
+                        split,
+                        chunks,
+                        first,
+                        stride,
+                        n,
+                        out,
+                        o0,
+                        ostride,
+                    } = p;
+                    let win = Win::<i16, $c>::new(hist, input);
+                    let h = win.h;
+                    let [
+                        b0,
+                        b1,
+                        b2,
+                        b3,
+                        b4,
+                        b5,
+                        b6,
+                        b7,
+                        b8,
+                        b9,
+                        b10,
+                        b11,
+                        b12,
+                        b13,
+                        b14,
+                        b15,
+                    ] = PAIR;
+                    let order = black_box(_mm_setr_epi8(
+                        b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15,
+                    ));
+                    let pair = |v: __m128i| {
+                        if $c == 2 {
+                            _mm_shuffle_epi8(v, order)
+                        } else {
+                            v
+                        }
+                    };
+                    let load = |s: &[i16; 8]| -> __m128i { i16x8::from_slice(t, s).into() };
+                    let (lanes, _) = split.get(..16 * chunks).unwrap_or(&[]).as_chunks::<8>();
+                    let (taps, _) = lanes.as_chunks::<2>();
+                    let zero = _mm_setzero_si128();
+                    let lanes_of = |v: __m128i| i32x4::simd_from(t, v);
+                    let one = |j: usize, out: &mut [i16]| {
+                        let start = first + j * stride;
+                        let (mut hi, mut lo) = (zero, zero);
+                        for (k, [th, tl]) in taps.iter().enumerate() {
+                            let pos = start + k * (8 / $c);
+                            let mut tmp = [0i16; 8];
+                            match win.direct(pos, 8) {
+                                Some(d) => tmp.copy_from_slice(d),
+                                None => {
+                                    fill_window::<_, $c>(hist, input, pos, pos + 8 / $c, &mut tmp)
+                                }
+                            }
+                            let d = pair(load(&tmp));
+                            hi = _mm_add_epi32(hi, _mm_madd_epi16(d, load(th)));
+                            lo = _mm_add_epi32(lo, _mm_madd_epi16(d, load(tl)));
+                        }
+                        store::<$c>(
+                            out,
+                            o0 + j * ostride,
+                            lanes_of(hi).as_slice(),
+                            lanes_of(lo).as_slice(),
+                        );
+                    };
+                    let mut j = 0;
+                    while j < n && first + j * stride < h {
+                        one(j, out);
+                        j += 1;
+                    }
+                    let (span, gap) = (8 * chunks, $c * stride);
+                    while j + GROUP <= n {
+                        let o = $c * (first + j * stride - h);
+                        let Some(w) = input.get(o..o + gap * (GROUP - 1) + span) else {
+                            break;
+                        };
+                        let window = |g: usize| {
+                            w.get(gap * g..gap * g + span)
+                                .unwrap_or(&[])
+                                .as_chunks::<8>()
+                                .0
+                        };
+                        let mut acc = [[zero; 2]; GROUP];
+                        let mac =
+                            |acc: &mut [__m128i; 2], d: &[i16; 8], th: __m128i, tl: __m128i| {
+                                let d = pair(load(d));
+                                acc[0] = _mm_add_epi32(acc[0], _mm_madd_epi16(d, th));
+                                acc[1] = _mm_add_epi32(acc[1], _mm_madd_epi16(d, tl));
+                            };
+                        let [a0, a1, a2, a3] = &mut acc;
+                        for ((((tk, d0), d1), d2), d3) in taps
+                            .iter()
+                            .zip(window(0))
+                            .zip(window(1))
+                            .zip(window(2))
+                            .zip(window(3))
+                        {
+                            let [th, tl] = tk;
+                            let (th, tl) = (load(th), load(tl));
+                            mac(a0, d0, th, tl);
+                            mac(a1, d1, th, tl);
+                            mac(a2, d2, th, tl);
+                            mac(a3, d3, th, tl);
+                        }
+                        for (g, [hi, lo]) in acc.into_iter().enumerate() {
+                            store::<$c>(
+                                out,
+                                o0 + (j + g) * ostride,
+                                lanes_of(hi).as_slice(),
+                                lanes_of(lo).as_slice(),
+                            );
+                        }
+                        j += GROUP;
+                    }
+                    while j < n {
+                        one(j, out);
+                        j += 1;
+                    }
+                }
+            );
+        };
+    }
+    progression!(progression_c1, 1);
+    progression!(progression_c2, 2);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Bookkeeping shared by both sample types
 
 /// `hist` becomes the last `hist.len()` samples of `hist ++ input`.
@@ -1797,6 +2187,11 @@ fn polyphase_outputs(
 #[inline(always)]
 fn fir_cq15<S: SimdToken>(simd: S, taps: &[i16], hist: &[i16], input: &[i16], out: &mut [i16]) {
     let len = input.len() / 2;
+    #[cfg(target_arch = "x86_64")]
+    if let Some(t) = sse4_2_only(simd) {
+        contiguous_split(t, taps, hist, input, out, 0, 1, len);
+        return;
+    }
     let mut storage: TapStorageQ15 = [0i16; 2 * CAPACITY];
     let n = taps.len();
     let mut e = Q15Engine {
@@ -1836,6 +2231,11 @@ fn decimate_cq15<S: SimdToken>(
     factor: usize,
     count: usize,
 ) {
+    #[cfg(target_arch = "x86_64")]
+    if let Some(t) = sse4_2_only(simd) {
+        contiguous_split(t, taps, hist, input, out, first, factor, count);
+        return;
+    }
     let mut storage: TapStorageQ15 = [0i16; 2 * CAPACITY];
     let n = taps.len();
     let mut e = Q15Engine {
@@ -1924,6 +2324,12 @@ fn polyphase_q15<S: SimdToken, const C: usize>(
     }
     let (consumed, produced, new_q) = polyphase_plan(*q, up, down, input.len() / C, out.len() / C)
         .ok_or_else(|| internal("resampler window"))?;
+    #[cfg(target_arch = "x86_64")]
+    if let Some(t) = sse4_2_only(simd) {
+        polyphase_split::<C>(t, taps, hist, input, out, geom, down, *q, produced)?;
+        *q = new_q;
+        return Ok(Some((consumed, produced)));
+    }
     let hist_len = hist.len() / C;
     let mut storage: TapStorageQ15 = [0i16; 2 * CAPACITY];
     let mut e = Q15Engine {

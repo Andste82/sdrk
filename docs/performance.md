@@ -829,6 +829,8 @@ The M30 kernels have cycle rows for `interleave` and `deinterleave` (both sample
 
 Open item I30-3 (maintainer decisions D333 to D338, 2026-11-04): the rows of the eight entries decided in this round were measured again and merged with their fallbacks (`cargo measure mag`, `biquad_real_q15`, `convert_cu8`, `agc` and `fir_interpolate_cq15 --platform aarch64`; `cargo measure mag_sq --level avx2`; `cargo measure convert_real_rs16` on all three platforms). `mag`, `mag_q15` and `biquad_real_q15` at `neon` kept their values and stay above their fallbacks on `cortex-a72` by 0.2 %, 0.1 % and 0.4 %, accepted ties with a `cycle_waiver` (D333). SIMD before / after, reference model / counter-model: `convert_cu8` at `neon` 2.15 / 1.08 to 1.18 / 0.94 (D334), `agc` at `neon` 47.07 / 22.46 to the fallback's 39.90 / 21.76 (D335, delegated), `fir_interpolate_cq15` at `neon` 145.25 / 123.36 to 75.82 / 76.00 (D336), `mag_sq` at `avx2` 0.26 / 0.38 to 0.22 / 0.26 (D337), `convert_real_rs16` at `avx2` 0.22 / 0.14 to 0.21 / 0.14 (D338: 0.2148 against 0.2132 of the fallback on `znver3`, equal as published, which is what the gate compares); the other levels of `convert_real_rs16` changed with D338 to at most their values before.
 
+Open item I30-3, the seven filter entries (maintainer decision 1b, D340, D341, 2026-11-04): `cargo measure biquad_cq15 --level sse2` and `cargo measure <kernel> --level sse4.2` for `fir_cq15`, `fir_decimate_cq15` and `fir_interpolate_cq15` re-measured the committed rows first (unchanged); after the change the rows of all seven entries and their fallbacks were measured again and merged. SIMD before / after, reference model / counter-model: at `sse4.2` (D340, the outputs of a branch four at a time with taps split for `pmaddwd`) `fir_cq15` 176.75 / 119.09 to 47.80 / 49.03, `fir_decimate_cq15` 39.18 / 27.75 to 8.90 / 9.34, `fir_interpolate_cq15` 249.66 / 144.54 to 51.51 / 53.45, `fir_interpolate_real_q15` 136.89 / 88.20 to 26.86 / 32.49, `resample_cq15` 249.52 / 143.48 to 50.01 / 51.67, `resample_real_q15` 136.55 / 87.57 to 26.11 / 31.59, each now 0.21 to 0.37 of its fallback; at `sse2` `biquad_cq15` 32.45 / 20.44 to the fallback's 24.94 / 31.17 (D341, delegated; the row of `biquad_cq15_fallback` moved from 24.43 / 31.16 to 24.94 / 31.17 with the same source, the code of the new build). Instructions per sample (`cargo xtask count --platform x86_64 --level <level> --kernel <entry> --merge` for the seven entries and `biquad_cq15_fallback`): at `sse4.2` `fir_cq15` 417.99 to 187.33, `fir_decimate_cq15` 87.46 to 35.72, `fir_interpolate_cq15` 510.19 to 201.70, `fir_interpolate_real_q15` 315.00 to 114.51, `resample_cq15` 506.50 to 196.06, `resample_real_q15` 313.14 to 111.86; at `sse2` `biquad_cq15` 51.81 to 98.08 (the fallback's) and `biquad_cq15_fallback` 100.07 to 98.08; `avx2` unchanged and `avx2-runtime` within 0.01 (`biquad_cq15` and `fir_decimate_cq15` 18.06 to 18.07 and 50.14 to 50.15, the test of the level in the entry), `avx512` unchanged in the counts of the six filters, `neon` and `simd128` source-identical (recounted: `fir_cq15` 227.65 and 841.39 as committed).
+
 <!-- cycle-tables:begin -->
 
 #### Simulated cycles at `sse2` (`x86_64`)
@@ -928,8 +930,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `deemphasis_fallback` | 15.09 | 13.15 | 1.15 | 12.09 | 17.10 | 0.71 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
 | `deemphasis_q15` | 7.03 | 7.03 | 1.00 | 8.53 | 8.53 | 1.00 | sdrk fallback |
 | `biquad` | 12.69 | 28.36 | 0.45 | 9.42 | 27.58 | 0.34 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
-| `biquad_cq15` | 32.45 | 24.43 | 1.33 | 20.44 | 31.16 | 0.66 | sdrk fallback |
-| `biquad_cq15_fallback` | 24.43 | 60.21 | 0.41 | 31.16 | 52.19 | 0.60 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `biquad_cq15` | 24.94 | 24.94 | 1.00 | 31.17 | 31.17 | 1.00 | sdrk fallback |
+| `biquad_cq15_fallback` | 24.94 | 60.21 | 0.41 | 31.17 | 52.19 | 0.60 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `biquad_fallback` | 25.00 | 32.54 | 0.77 | 18.60 | 24.54 | 0.76 | CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `biquad_real` | 12.31 | 14.18 | 0.87 | 9.05 | 13.79 | 0.66 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse2, -ffp-contract=off) |
 | `biquad_real_fallback` | 14.27 | 24.04 | 0.59 | 11.38 | 18.03 | 0.63 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
@@ -1045,28 +1047,28 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `rotate_cq15_fallback` | 9.55 | 34.89 | 0.27 | 10.37 | 33.66 | 0.31 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `rotate_fallback` | 7.15 | 15.46 | 0.46 | 8.62 | 16.79 | 0.51 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
 | `fir` | 33.43 | 86.68 | 0.39 | 29.72 | 87.46 | 0.34 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 176.75 | 142.31 | 1.24 | 119.09 | 187.71 | 0.63 | sdrk fallback |
+| `fir_cq15` | 47.80 | 142.31 | 0.34 | 49.03 | 187.71 | 0.26 | sdrk fallback |
 | `fir_cq15_fallback` | 142.31 | 177.24 | 0.80 | 187.71 | 220.40 | 0.85 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_decimate` | 6.90 | 14.45 | 0.48 | 6.03 | 14.17 | 0.43 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
-| `fir_decimate_cq15` | 39.18 | 30.41 | 1.29 | 27.75 | 45.20 | 0.61 | sdrk fallback |
+| `fir_decimate_cq15` | 8.90 | 30.41 | 0.29 | 9.34 | 45.20 | 0.21 | sdrk fallback |
 | `fir_decimate_cq15_fallback` | 30.41 | 27.95 | 1.09 | 45.20 | 22.79 | 1.98 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_decimate_fallback` | 15.09 | 38.81 | 0.39 | 15.81 | 23.69 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_fallback` | 42.70 | 132.97 | 0.32 | 51.69 | 110.95 | 0.47 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate` | 36.28 | 95.13 | 0.38 | 33.64 | 96.70 | 0.35 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 249.66 | 137.49 | 1.82 | 144.54 | 207.97 | 0.70 | sdrk fallback |
+| `fir_interpolate_cq15` | 51.51 | 137.49 | 0.37 | 53.45 | 207.97 | 0.26 | sdrk fallback |
 | `fir_interpolate_cq15_fallback` | 137.49 | 137.61 | 1.00 | 207.97 | 164.30 | 1.27 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate_fallback` | 69.81 | 141.75 | 0.49 | 71.56 | 114.81 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate_real` | 19.43 | 72.80 | 0.27 | 18.11 | 62.85 | 0.29 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 42.43 | 70.88 | 0.60 | 44.53 | 57.41 | 0.78 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_interpolate_real_q15` | 136.89 | 74.97 | 1.83 | 88.20 | 112.89 | 0.78 | sdrk fallback |
+| `fir_interpolate_real_q15` | 26.86 | 74.97 | 0.36 | 32.49 | 112.89 | 0.29 | sdrk fallback |
 | `fir_interpolate_real_q15_fallback` | 74.97 | 68.81 | 1.09 | 112.89 | 82.15 | 1.37 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `resample` | 38.71 | 96.79 | 0.40 | 35.44 | 97.79 | 0.36 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 249.52 | 168.56 | 1.48 | 143.48 | 240.62 | 0.60 | sdrk fallback |
+| `resample_cq15` | 50.01 | 168.56 | 0.30 | 51.67 | 240.62 | 0.21 | sdrk fallback |
 | `resample_cq15_fallback` | 168.56 | 136.68 | 1.23 | 240.62 | 163.47 | 1.47 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `resample_fallback` | 84.56 | 141.22 | 0.60 | 86.78 | 113.81 | 0.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `resample_real` | 22.44 | 73.99 | 0.30 | 21.74 | 63.40 | 0.34 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 84.65 | 70.61 | 1.20 | 75.06 | 56.90 | 1.32 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `resample_real_q15` | 136.55 | 103.68 | 1.32 | 87.57 | 144.23 | 0.61 | sdrk fallback |
+| `resample_real_q15` | 26.11 | 103.68 | 0.25 | 31.59 | 144.23 | 0.22 | sdrk fallback |
 | `resample_real_q15_fallback` | 103.68 | 68.34 | 1.52 | 144.23 | 81.74 | 1.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mag` | 0.76 | 0.79 | 0.96 | 1.77 | 1.80 | 0.98 | volk_32fc_magnitude_32f |
 | `mag_fallback` | 0.79 | 0.85 | 0.93 | 1.79 | 1.86 | 0.96 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |

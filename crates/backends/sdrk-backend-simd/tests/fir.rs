@@ -13,7 +13,7 @@
 
 mod common;
 
-use common::{Rng, bits, c32_noise, chunks, cq15_noise, snr_db, taps_f32};
+use common::{Rng, bits, c32_noise, chunks, cq, cq15_noise, snr_db, taps_f32};
 use sdrk_backend_simd::Simd;
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate, Resample, ResampleState};
 use sdrk_core::kernels::filter::{Fir, FirState};
@@ -376,6 +376,126 @@ fn fir_interpolate_cq15_is_bit_exact_in_blocks_and_with_little_room() {
                     assert_eq!(a.phase(), b.phase());
                     at += pw.consumed;
                 }
+            }
+        }
+    }
+}
+
+/// Full-scale `Q15` taps: all `-32768`, all `32767`, alternating, or the random taps of
+/// [`taps_q15`] with every third tap `-32768`.
+fn full_scale_taps(rng: &mut Rng, n: usize, kind: usize) -> Vec<Q15> {
+    match kind {
+        0 => vec![Q15(-32768); n],
+        1 => vec![Q15(32767); n],
+        2 => (0..n)
+            .map(|i| Q15(if i % 2 == 0 { -32768 } else { 32767 }))
+            .collect(),
+        _ => taps_q15(rng, n, true),
+    }
+}
+
+/// Full-scale `CQ15` samples for the taps of [`full_scale_taps`] (`kind` 0 to 2), or noise.
+fn full_scale_cq15(rng: &mut Rng, n: usize, kind: usize) -> Vec<CQ15> {
+    match kind {
+        0 => vec![cq(-32768, 32767); n],
+        1 => vec![cq(-32768, -32768); n],
+        2 => (0..n)
+            .map(|i| {
+                if i % 2 == 0 {
+                    cq(-32768, 32767)
+                } else {
+                    cq(32767, -32768)
+                }
+            })
+            .collect(),
+        _ => cq15_noise(rng, n),
+    }
+}
+
+#[test]
+fn cq15_filters_are_bit_exact_in_blocks_at_full_scale() {
+    // The SSE4.2 paths (decision D340) sum split taps in 32-bit lanes, four outputs at a time
+    // where their windows lie in the input and one at a time elsewhere: calls of every size,
+    // little output room, the longest filters (the most chunks per window) and full-scale taps
+    // and samples cross every boundary between the two and reach the largest lane sums.
+    let mut rng = Rng::new(41);
+    for kind in 0..4 {
+        for &n in &[1usize, 3, 4, 5, 63, 64, 127, 256] {
+            let taps = full_scale_taps(&mut rng, n, kind);
+            let x = full_scale_cq15(&mut rng, 900, kind);
+            let mut a =
+                FirState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); n - 1]).unwrap();
+            let mut b = a.clone();
+            let mut at = 0;
+            while at < x.len() {
+                let len = (1 + rng.below(300)).min(x.len() - at);
+                let (mut want, mut got) = (vec![cq(0, 0); len], vec![cq(0, 0); len]);
+                Fallback.fir(&mut a, &x[at..at + len], &mut want).unwrap();
+                Simd.fir(&mut b, &x[at..at + len], &mut got).unwrap();
+                assert_eq!(want, got, "fir kind={kind} taps={n} at={at}");
+                at += len;
+            }
+            for factor in [1usize, 2, 10] {
+                let mut a =
+                    FirDecimState::<CQ15, _, _>::new(taps.clone(), vec![cq(0, 0); n - 1], factor)
+                        .unwrap();
+                let mut b = a.clone();
+                let mut at = 0;
+                while at < x.len() {
+                    let len = (1 + rng.below(300)).min(x.len() - at);
+                    let room = 1 + rng.below(len / factor + 3);
+                    let (mut want, mut got) = (vec![cq(0, 0); room], vec![cq(0, 0); room]);
+                    let pw = Fallback
+                        .fir_decimate(&mut a, &x[at..at + len], &mut want)
+                        .unwrap();
+                    let pg = Simd
+                        .fir_decimate(&mut b, &x[at..at + len], &mut got)
+                        .unwrap();
+                    assert_eq!(pw, pg, "decimate kind={kind} taps={n} m={factor}");
+                    assert_eq!(
+                        want, got,
+                        "decimate kind={kind} taps={n} m={factor} at={at}"
+                    );
+                    at += pw.consumed;
+                }
+            }
+        }
+        // Polyphase: up to 768 lanes of prepared branches (`2 * 384` taps at `L = 1`).
+        for &(up, down, n) in &[
+            (2usize, 1usize, 128usize),
+            (3, 2, 192),
+            (1, 1, 384),
+            (3, 1, 7),
+            (5, 7, 64),
+            (4, 3, 255),
+            (160, 147, 300),
+        ] {
+            let taps = full_scale_taps(&mut rng, n, kind);
+            let x = full_scale_cq15(&mut rng, 700, kind);
+            let mut a = ResampleState::<CQ15, _, _>::new(
+                taps.clone(),
+                vec![cq(0, 0); n.div_ceil(up)],
+                up,
+                down,
+            )
+            .unwrap();
+            let mut b = a.clone();
+            let mut at = 0;
+            while at < x.len() {
+                let len = (1 + rng.below(200)).min(x.len() - at);
+                let room = 1 + rng.below(up * len / down + 8);
+                let (mut want, mut got) = (vec![cq(0, 0); room], vec![cq(0, 0); room]);
+                let pw = Fallback
+                    .resample(&mut a, &x[at..at + len], &mut want)
+                    .unwrap();
+                let pg = Simd.resample(&mut b, &x[at..at + len], &mut got).unwrap();
+                assert_eq!(pw, pg, "resample kind={kind} L={up} M={down} taps={n}");
+                assert_eq!(
+                    want, got,
+                    "resample kind={kind} L={up} M={down} taps={n} at={at}"
+                );
+                assert_eq!(a.phase(), b.phase());
+                at += pw.consumed;
             }
         }
     }

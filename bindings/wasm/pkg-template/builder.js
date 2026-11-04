@@ -15,7 +15,7 @@ const TOP_ORDER = [
 ];
 const SETTINGS_ORDER = ["precision", "max_chunk", "event_queue", "pending_params"];
 const INPUT_ORDER = ["format", "type", "rate_hz", "description"];
-const NODE_ORDER = ["kind", "params", "group", "backend", "description"];
+const NODE_ORDER = ["kind", "params", "group", "backend", "align", "description"];
 const OUTPUT_ORDER = [
   "type",
   "format",
@@ -25,7 +25,7 @@ const OUTPUT_ORDER = [
   "underrun",
   "description",
 ];
-const EDGE_ORDER = ["from", "to"];
+const EDGE_ORDER = ["from", "to", "port"];
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -103,13 +103,14 @@ export class FlowBuilder {
    * @param {string} name
    * @param {string} kind block kind, for example "ddc"
    * @param {Record<string, number | boolean | string | object>} [params]
-   * @param {{ group?: string, backend?: object, description?: string }} [options]
+   * @param {{ group?: string, backend?: object, align?: "auto" | "none", description?: string }} [options]
    */
   node(name, kind, params = {}, options = {}) {
     const node = { kind };
     if (params && Object.keys(params).length > 0) node.params = clone(params);
     if (options.group !== undefined) node.group = options.group;
     if (options.backend !== undefined) node.backend = clone(options.backend);
+    if (options.align !== undefined) node.align = options.align;
     if (options.description !== undefined) node.description = options.description;
     this.#nodes[name] = node;
     return this;
@@ -121,9 +122,12 @@ export class FlowBuilder {
     return this;
   }
 
-  /** Connects `from` (an input or a node) to `to` (a node or an output). */
-  edge(from, to) {
-    this.#edges.push({ from, to });
+  /**
+   * Connects `from` (an input or a node) to `to` (a node or an output). `port` names the input
+   * port of a node with two inputs ("a", the default, or "b").
+   */
+  edge(from, to, port) {
+    this.#edges.push(port === undefined ? { from, to } : { from, to, port });
     return this;
   }
 

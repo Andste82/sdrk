@@ -62,16 +62,16 @@ mod yaml;
 pub use error::{Error, Result};
 pub use groups::split_by_groups;
 pub use model::{
-    AlignSpec, BackendSpec, ContainerSpec, CustomFormat, DEFAULT_EVENT_QUEUE, DEFAULT_MAX_CHUNK,
-    DEFAULT_PENDING_PARAMS, DEFAULT_QUEUE, DropPolicy, EdgeSpec, EndianSpec, FORMAT_NAMES,
-    FORMAT_VERSION, FormatName, FormatSpec, FullScaleSpec, GroupSpec, InputSpec, InputType,
-    LayoutSpec, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, MAX_EVENT_QUEUE,
-    MAX_PENDING_PARAMS, NAME_PATTERN, NodeSpec, OutputSpec, OutputType, PipelineSpec, Precision,
-    RateHz, Settings, UnderrunPolicy, is_valid_name,
+    AlignMode, AlignSpec, BackendSpec, ContainerSpec, CustomFormat, DEFAULT_EVENT_QUEUE,
+    DEFAULT_MAX_CHUNK, DEFAULT_PENDING_PARAMS, DEFAULT_QUEUE, DropPolicy, EdgeSpec, EndianSpec,
+    FORMAT_NAMES, FORMAT_VERSION, FormatName, FormatSpec, FullScaleSpec, GroupSpec, InputSpec,
+    InputType, LayoutSpec, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, MAX_EVENT_QUEUE,
+    MAX_PENDING_PARAMS, NAME_PATTERN, NodeSpec, OutputSpec, OutputType, PipelineSpec, PortName,
+    Precision, RateHz, Settings, UnderrunPolicy, is_valid_name,
 };
-pub use node::{FrameNode, Node, NodeInput, NodeOutput, NodeSlice, StreamNode};
+pub use node::{FrameNode, Node, NodeElem, NodeInput, NodeOutput, NodeSlice, PairNode, StreamNode};
 pub use pull::{PullError, PullSource};
-pub use registry::{BlockFactory, BuildOptions, Checked, Limits, PortKind, Registry};
+pub use registry::{BlockFactory, BuildOptions, Checked, Limits, PortInfo, PortKind, Registry};
 pub use runner::{InputData, NodeStats, Pipeline};
 pub use schema::{SCHEMA_FILE, SCHEMA_ID};
 pub use sdrk_blocks::StreamElem;

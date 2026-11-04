@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::model::{DropPolicy, PipelineSpec, UnderrunPolicy};
-use crate::node::{Node, NodeInput, NodeOutput};
+use crate::node::{Node, NodeElem, NodeInput, NodeOutput};
 use crate::params::{to_json, to_param};
 use crate::time::EventQueue;
 use crate::validate::Report;
@@ -225,6 +225,17 @@ impl Buffer {
             Self::CQ15(v) => NodeInput::CQ15(v.get(r)?),
             Self::F32(v) => NodeInput::F32(v.get(r)?),
             Self::Q15(v) => NodeInput::Q15(v.get(r)?),
+        })
+    }
+
+    /// The same view as [`Buffer::view`], for one port of a two-input node.
+    pub(crate) fn elem_view(&self, r: Range<usize>) -> Option<NodeElem<'_>> {
+        Some(match self {
+            Self::Raw(v) => NodeElem::Raw(v.get(r)?),
+            Self::C32(v) => NodeElem::C32(v.get(r)?),
+            Self::CQ15(v) => NodeElem::CQ15(v.get(r)?),
+            Self::F32(v) => NodeElem::F32(v.get(r)?),
+            Self::Q15(v) => NodeElem::Q15(v.get(r)?),
         })
     }
 
@@ -573,8 +584,13 @@ pub(crate) struct OutRt {
     pub(crate) kind: OutKind,
     /// The pipeline input this output depends on.
     pub(crate) input: usize,
-    /// The nodes from the input to the output in processing order (a frame node comes last).
+    /// The nodes from the input to the output in processing order (a frame node comes last),
+    /// following port `a` of every two-input node.
     pub(crate) path: Vec<usize>,
+    /// The branches that join the path at port `b` of a two-input node.
+    pub(crate) sides: Vec<Side>,
+    /// Every node that the output depends on (the path and the branches), in processing order.
+    pub(crate) tree: Vec<usize>,
     /// Rate of the samples of this output (frames: rate at the input of the frame node).
     pub(crate) rate: Rate,
     /// The latest anchor of this output (delay-compensated).
@@ -589,6 +605,15 @@ pub(crate) struct OutRt {
     pub(crate) burst: Burst,
     /// One packing group of silence for a raw output (empty otherwise).
     pub(crate) silence: Vec<u8>,
+}
+
+/// A branch that joins the path of an output at port `b` of the two-input node `join`.
+pub(crate) struct Side {
+    /// The two-input node on the path of the output.
+    pub(crate) join: usize,
+    /// The nodes from the input to port `b` of `join` in processing order, following port `a`
+    /// of every node on the way.
+    pub(crate) chain: Vec<usize>,
 }
 
 impl OutRt {
@@ -616,8 +641,12 @@ pub(crate) enum Dst {
 pub(crate) struct NodeRt {
     pub(crate) name: String,
     pub(crate) node: Box<dyn Node>,
+    /// The stream of port `a`, and the reader slot of the node in it.
     pub(crate) src: usize,
     pub(crate) slot: usize,
+    /// The stream of port `b` of a two-input node, and the reader slot of the node in it.
+    pub(crate) src_b: Option<usize>,
+    pub(crate) slot_b: usize,
     pub(crate) dst: Dst,
     /// Output elements per input element (`num`, `den`).
     pub(crate) ratio: (u64, u64),
@@ -810,6 +839,74 @@ fn step_stream(
         *at_mut(&mut ss.readers, n.slot)? += p.consumed;
         p
     };
+    Ok(Some((p, 0)))
+}
+
+/// Runs a two-input node once on `avail` samples of each port. `None` if its output buffer has
+/// no room.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+)]
+fn step_pair(
+    n: &mut NodeRt,
+    streams: &mut [Stream],
+    d: usize,
+    avail: usize,
+) -> Result<Option<(Progress, usize)>> {
+    let sb = n
+        .src_b
+        .ok_or_else(|| internal("pair node without a second source"))?;
+    let needed = (avail as u128)
+        .saturating_mul(u128::from(n.ratio.0))
+        .div_ceil(u128::from(n.ratio.1.max(1)))
+        .saturating_add(4);
+    let needed = usize::try_from(needed).unwrap_or(usize::MAX);
+    {
+        let ds = at_mut(streams, d)?;
+        if ds.cap().saturating_sub(ds.end) < needed {
+            ds.compact();
+        }
+        if ds.end >= ds.cap() {
+            return Ok(None);
+        }
+    }
+    // The sources are written before the destination, so they lie in front of it.
+    let (head, tail) = streams
+        .split_at_mut_checked(d)
+        .ok_or_else(|| internal("stream split"))?;
+    let ds = tail
+        .first_mut()
+        .ok_or_else(|| internal("destination stream"))?;
+    let mut meta: Option<FrameMeta> = None;
+    let p = {
+        let (sa, sbs) = (at(head, n.src)?, at(head, sb)?);
+        let pos_a = *at(&sa.readers, n.slot)?;
+        let pos_b = *at(&sbs.readers, n.slot_b)?;
+        let a = sa
+            .buf
+            .elem_view(pos_a..pos_a + avail)
+            .ok_or_else(|| internal("input view"))?;
+        let b = sbs
+            .buf
+            .elem_view(pos_b..pos_b + avail)
+            .ok_or_else(|| internal("input view"))?;
+        let out = ds
+            .buf
+            .view_mut(ds.end..ds.cap())
+            .ok_or_else(|| internal("output view"))?;
+        n.node
+            .process(NodeInput::Two { a, b }, out, &mut meta)
+            .map_err(|e| block_error(&n.name, e))?
+    };
+    if p.consumed > avail || ds.end + p.produced > ds.cap() {
+        return Err(internal("block reported impossible progress"));
+    }
+    ds.end += p.produced;
+    ds.total_el += p.produced as u64;
+    n.consumed += p.consumed as u64;
+    *at_mut(&mut at_mut(head, n.src)?.readers, n.slot)? += p.consumed;
+    *at_mut(&mut at_mut(head, sb)?.readers, n.slot_b)? += p.consumed;
     Ok(Some((p, 0)))
 }
 
@@ -1025,7 +1122,21 @@ impl Pipeline {
                 data.len().saturating_sub(off)
             } else {
                 let s = at(&self.streams, n.src)?;
-                s.end.saturating_sub(*at(&s.readers, n.slot)?)
+                let a = s.end.saturating_sub(*at(&s.readers, n.slot)?);
+                match n.src_b {
+                    // The two ports advance together: as much as both hold.
+                    Some(sb) => {
+                        let sbs = at(&self.streams, sb)?;
+                        let b = sbs.end.saturating_sub(*at(&sbs.readers, n.slot_b)?);
+                        debug_assert!(
+                            a.abs_diff(b) <= s.cap().max(sbs.cap()),
+                            "the buffers of the two ports of `{}` drifted apart",
+                            n.name
+                        );
+                        a.min(b)
+                    }
+                    None => a,
+                }
             }
         };
         if avail == 0 {
@@ -1043,6 +1154,7 @@ impl Pipeline {
         let n = at_mut(nodes, ni)?;
         let st = at_mut(stats, ni)?;
         let progress = match n.dst {
+            Dst::Stream(d) if n.src_b.is_some() => step_pair(n, streams, d, avail)?,
             Dst::Stream(d) => step_stream(n, streams, d, avail, direct)?,
             Dst::Frames(oi) => step_frames(n, streams, at_mut(outputs, oi)?, avail, direct)?,
         };

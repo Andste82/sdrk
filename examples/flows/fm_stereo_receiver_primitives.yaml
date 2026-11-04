@@ -1,0 +1,76 @@
+# SDRk pipeline: the FM stereo receiver built from primitives (YAML twin of
+# fm_stereo_receiver_primitives.json). YAML is accepted as input; JSON stays the canonical format.
+#
+# The kind fm_stereo_demod does the same inside one block. Here every step is a node of its own,
+# and the two paths into stereo_pll are joined with the edge field "port": the multiplex signal
+# goes to port "a" and the same signal through the 19 kHz band-pass to port "b". The result is
+# the same audio as fm_stereo_demod with the de-emphasis switched off (deemphasis_us: 0), bit for
+# bit; a test compares the two. To add the de-emphasis, split the stereo output with real_part
+# and imag_part, put a "deemphasis" node (tau_us 50) behind each and join the two channels again
+# with make_complex.
+sdrk: 1
+name: fm-stereo-receiver-primitives
+description: "The FM stereo receiver built from primitives: the same audio as fm_stereo_demod with the de-emphasis switched off, bit for bit."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# The station at 0 Hz, 16-bit IQ at 480 kHz (for example the output of another flow).
+inputs:
+  rf:
+    format: cs16
+    rate_hz: 480000
+    description: "FM broadcast baseband, 16-bit IQ, the station at 0 Hz"
+nodes:
+  # Audio low-pass with decimation by 5 (240 kHz -> 48 kHz): the filter that fm_stereo_demod
+  # designs for 15 kHz, a transition of a quarter of that and 60 dB.
+  lpf:
+    kind: decimate
+    params:
+      attenuation_db: 60
+      cutoff_hz: 15000
+      factor: 5
+      transition_hz: 3750
+  # Left and right from the sum (re) and the difference (im).
+  matrix:
+    kind: stereo_matrix
+  # The multiplex signal through a band-pass at the 19 kHz pilot. A biquad has no group delay
+  # in the delay model, so the two paths into the loop need no automatic delay node.
+  pilot:
+    kind: biquad
+    params:
+      cutoff_hz: 19000
+      q: 5
+      response: bandpass
+  # Locks a loop to the pilot (port b) and demodulates the 38 kHz difference of the multiplex
+  # signal (port a). The output is complex: re is the sum, im the difference.
+  pll:
+    kind: stereo_pll
+  # FM discriminator: the multiplex signal at 240 kHz.
+  quad:
+    kind: quad_demod
+    params:
+      deviation_hz: 75000
+  # Channel filter: decimate by 2 to 240 kHz.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 100000
+      decimation: 2
+      frequency_hz: 0
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: quad }
+  # The two inputs of the loop: the multiplex signal and the pilot.
+  - { from: quad, to: pll, port: a }
+  - { from: quad, to: pilot }
+  - { from: pilot, to: pll, port: b }
+  - { from: pll, to: lpf }
+  - { from: lpf, to: matrix }
+  - { from: matrix, to: audio }
+# Stereo audio samples (errors when full): re is the left channel, im the right channel.
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

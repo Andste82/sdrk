@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "path": "edges[1].to",
+      "code": "clock_domain"
+    }
+  ]
+}

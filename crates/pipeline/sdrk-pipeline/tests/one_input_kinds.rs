@@ -56,9 +56,12 @@ fn the_kinds_are_registered_with_their_kernels() {
         assert_eq!(f.kernels(), kernels, "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    // The blocks with two inputs wait for M34.
+    // The blocks with two inputs (M34) have a port `b`; the others have only `a`.
     for kind in ["add", "mul", "make_complex", "stereo_pll"] {
-        assert!(registry.factory(kind).is_none(), "{kind}");
+        assert_eq!(registry.factory(kind).unwrap().inputs().len(), 2, "{kind}");
+    }
+    for kind in ["to_complex", "real_part", "nco"] {
+        assert_eq!(registry.factory(kind).unwrap().inputs().len(), 1, "{kind}");
     }
 }
 

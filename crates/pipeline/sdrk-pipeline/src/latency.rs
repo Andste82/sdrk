@@ -69,3 +69,50 @@ pub(crate) fn ceil_delay(delay: Delay) -> u64 {
     let d = delay.reduced();
     d.num().div_ceil(d.den().max(1))
 }
+
+/// An exact non-negative fraction `(numerator, denominator)`, reduced.
+pub(crate) type Frac = (u128, u128);
+
+/// The delay of a node in seconds: `delay / rate_in`. `None` on overflow.
+pub(crate) fn delay_seconds(delay: Delay, rate_in: Rate) -> Option<Frac> {
+    convert(
+        u128::from(delay.num()),
+        u128::from(delay.den()),
+        Rate::hz(1).ok()?,
+        rate_in,
+    )
+}
+
+/// `lhs + rhs`, `None` on overflow.
+pub(crate) fn frac_add(lhs: Frac, rhs: Frac) -> Option<Frac> {
+    add(lhs, rhs)
+}
+
+/// `|lhs - rhs|`, `None` on overflow.
+pub(crate) fn frac_abs_diff(lhs: Frac, rhs: Frac) -> Option<Frac> {
+    let (big, small) = if frac_cmp(lhs, rhs)? == core::cmp::Ordering::Less {
+        (rhs, lhs)
+    } else {
+        (lhs, rhs)
+    };
+    let a = big.0.checked_mul(small.1)?;
+    let b = small.0.checked_mul(big.1)?;
+    let den = big.1.checked_mul(small.1)?;
+    let num = a.checked_sub(b)?;
+    let div = gcd(num, den).max(1);
+    Some((num / div, den / div))
+}
+
+/// Compares two fractions, `None` on overflow.
+pub(crate) fn frac_cmp(lhs: Frac, rhs: Frac) -> Option<core::cmp::Ordering> {
+    Some(lhs.0.checked_mul(rhs.1)?.cmp(&rhs.0.checked_mul(lhs.1)?))
+}
+
+/// `value * rate`, the samples that a time of `value` seconds holds at `rate`, `None` on
+/// overflow.
+pub(crate) fn seconds_to_samples(value: Frac, rate: Rate) -> Option<Frac> {
+    let num = value.0.checked_mul(u128::from(rate.num()))?;
+    let den = value.1.checked_mul(u128::from(rate.den()))?;
+    let div = gcd(num, den).max(1);
+    Some((num / div, den / div))
+}

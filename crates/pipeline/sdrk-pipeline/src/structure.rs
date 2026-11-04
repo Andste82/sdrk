@@ -351,10 +351,13 @@ impl Checker {
             let Some(map) = self.object(
                 entry,
                 &path,
-                &["kind", "params", "group", "backend", "description"],
+                &["kind", "params", "group", "backend", "align", "description"],
             ) else {
                 continue;
             };
+            if let Some(v) = map.get("align") {
+                self.one_of(v, &join(&path, "align"), &["auto", "none"]);
+            }
             if let Some(v) = map.get("group") {
                 self.string(v, &join(&path, "group"));
             }
@@ -428,13 +431,16 @@ impl Checker {
         };
         for (i, item) in items.iter().enumerate() {
             let path = format!("edges[{i}]");
-            let Some(map) = self.object(item, &path, &["from", "to"]) else {
+            let Some(map) = self.object(item, &path, &["from", "to", "port"]) else {
                 continue;
             };
             for key in ["from", "to"] {
                 if let Some(v) = self.required(map, key, &path) {
                     self.string(v, &join(&path, key));
                 }
+            }
+            if let Some(v) = map.get("port") {
+                self.one_of(v, &join(&path, "port"), &["a", "b"]);
             }
         }
     }

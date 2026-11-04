@@ -590,3 +590,36 @@ fn public_types_are_send() {
     assert_send::<OutLayout>();
     assert_send::<sdrk_wasm::Pipeline>();
 }
+
+#[test]
+fn a_flow_with_a_node_of_two_inputs_runs_in_the_engine() {
+    // `port` and the automatic delay are part of the JSON model, so the engine needs nothing
+    // else: the two paths of the `add` come from the one input.
+    let flow = json!({
+        "sdrk": 1, "name": "joins",
+        "settings": { "max_chunk": 256 },
+        "inputs": { "x": { "type": "f32", "rate_hz": 48000 } },
+        "nodes": {
+            "d": { "kind": "delay", "params": { "samples": 2 } },
+            "sum": { "kind": "add" }
+        },
+        "edges": [
+            { "from": "x", "to": "sum", "port": "a" },
+            { "from": "x", "to": "d" },
+            { "from": "d", "to": "sum", "port": "b" },
+            { "from": "sum", "to": "out" }
+        ],
+        "outputs": { "out": { "type": "stream" } }
+    })
+    .to_string();
+    let report = Engine::validate(&flow);
+    assert!(report.errors.is_empty(), "{report:?}");
+    let mut e = Engine::from_json(&flow).unwrap();
+    // Port b is delayed by 2 samples; an automatic node delays port a by the same, so the
+    // output is the input delayed by 2 samples, twice.
+    e.push_f32("x", &[1.0, 2.0, 3.0, 4.0], None).unwrap();
+    match e.read_chunk("out", 10).unwrap() {
+        Lanes::F32(s) => assert_eq!(s, [0.0, 0.0, 2.0, 4.0]),
+        other => panic!("{other:?}"),
+    }
+}

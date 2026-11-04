@@ -88,7 +88,11 @@ export type DiagCode =
   | "rate_unsupported"
   | "limit_exceeded"
   | "unknown_group"
-  | "backend_unavailable";
+  | "backend_unavailable"
+  | "unknown_port"
+  | "rate_mismatch"
+  | "clock_domain"
+  | "misaligned_inputs";
 
 /** One problem of a pipeline description. */
 export interface Diagnostic {
@@ -107,8 +111,10 @@ export interface NodeReport {
   rate_out: number | string;
   /** Group delay in input samples, "num/den". */
   delay_samples_in: string;
-  /** True for nodes that the pipeline inserted (conversions). */
+  /** True for nodes that the pipeline inserted (conversions and delays that align two paths). */
   auto: boolean;
+  /** The pipeline input that the data of the node derives from. */
+  clock_domain: string;
 }
 
 /** Latency figures of one output. */

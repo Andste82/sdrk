@@ -102,9 +102,11 @@ fn every_platform_counts_agc_against_gnu_radio() {
                 );
                 continue;
             }
+            // `neon` runs the fallback (D335): `dev` in instructions, faster in cycles.
+            let expected = if *level == "neon" { "dev" } else { "release" };
             assert_eq!(
                 entry["status"].as_str(),
-                Some("release"),
+                Some(expected),
                 "{platform}/{level}: {entry}"
             );
             assert!(
@@ -118,9 +120,16 @@ fn every_platform_counts_agc_against_gnu_radio() {
 #[test]
 fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
     let limits = bench_file("limits.json");
-    for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+    for level in ["sse2", "sse4.2", "avx2", "avx512", "simd128"] {
         assert_eq!(limits["agc"][level]["status"].as_str(), Some("release"));
     }
+    // `neon` runs the fallback (D335) and is judged like `agc_fallback` there.
+    assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("dev"));
+    assert!(
+        limits["agc"]["neon"]["waiver"]
+            .as_str()
+            .is_some_and(|w| w.contains("D335"))
+    );
     // The run-time detection is judged with the default limit against `avx2`.
     assert!(limits["agc"]["avx2-runtime"].is_null());
 }

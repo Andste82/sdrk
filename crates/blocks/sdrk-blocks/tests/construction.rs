@@ -29,12 +29,12 @@ use sdrk::{C32, CQ15, Q15, Rate};
 use sdrk_blocks::{
     AgcBlock, AgcConfig, AlignedBytes, AmDemodBlock, AmDemodConfig, ArenaStorage, BiquadBlock,
     BiquadConfig, BiquadElem, BiquadRealBlock, BiquadResponse, Block, BlockSample, ConvertBlock,
-    ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DdcBlock,
-    DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
-    FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, Frame, PreemphLimitBlock,
-    PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig,
-    SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig,
+    ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig,
+    DcBlockRealBlock, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    Frame, PreemphLimitBlock, PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -292,6 +292,22 @@ fn preemph_limit_exact<R: sdrk_blocks::BlockReal>() {
     }
 }
 
+fn dc_block_real_exact<R: sdrk_blocks::BlockReal>() {
+    let r = rate(48_000);
+    let cfg = DcBlockConfig::default();
+    let bytes = DcBlockRealBlock::<R, A<'_>>::storage_bytes(&cfg, r).unwrap();
+    assert_eq!(bytes, 0);
+    check_exact_storage(bytes, |a| {
+        DcBlockRealBlock::<R, _>::new(&cfg, r, a).map(|_| ())
+    });
+}
+
+#[test]
+fn dc_block_real_blocks() {
+    dc_block_real_exact::<f32>();
+    dc_block_real_exact::<Q15>();
+}
+
 #[test]
 fn preemph_limit_blocks() {
     preemph_limit_exact::<f32>();
@@ -385,6 +401,8 @@ fn no_block_is_larger_than_512_bytes() {
     check::<PreemphLimitBlock<f32, A<'static>>>("PreemphLimitBlock<f32>");
     check::<PreemphLimitBlock<Q15, A<'static>>>("PreemphLimitBlock<Q15>");
     check::<PreemphLimitBlock<Q15, sdrk_testkit::VecStorage>>("PreemphLimitBlock<Q15, Vec>");
+    check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
+    check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
     check::<BiquadRealBlock<Q15, A<'static>>>("BiquadRealBlock<Q15>");
     check::<BiquadRealBlock<f32, sdrk_testkit::VecStorage>>("BiquadRealBlock<f32, Vec>");
@@ -429,6 +447,9 @@ fn public_types_are_send() {
     assert_send::<PreemphLimitBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_sync::<PreemphLimitBlock<Q15, A<'static>>>();
     assert_send::<PreemphLimitConfig>();
+    assert_send::<DcBlockRealBlock<f32, A<'static>>>();
+    assert_send::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>();
+    assert_sync::<DcBlockRealBlock<Q15, A<'static>>>();
     assert_send::<BiquadRealBlock<f32, A<'static>>>();
     assert_send::<BiquadRealBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_sync::<BiquadRealBlock<Q15, A<'static>>>();

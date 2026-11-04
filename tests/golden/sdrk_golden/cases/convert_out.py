@@ -224,8 +224,8 @@ def rf32_from_cq15(rng):
 # The 8-bit real formats of `convert_out_real` (D356); seeds of their own, because 200 + index
 # would collide with the float containers above.
 for _spec, _seed in [
-    (("rs8", "i8", 8, True, "real", "lsb", "little", False, None), 471),
-    (("ru8", "u8", 8, False, "real", "lsb", "little", False, None), 473),
+    (("rs8", "i8", 8, True, "real", "lsb", "little", False, None), 622),
+    (("ru8", "u8", 8, False, "real", "lsb", "little", False, None), 624),
 ]:
     case(kernel="convert_out", name=f"{_spec[0]}_from_c32_{N}", seed=_seed)(
         lambda rng, spec=_spec: build_c32(rng, spec)

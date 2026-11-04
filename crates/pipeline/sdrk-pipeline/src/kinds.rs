@@ -13,18 +13,18 @@ use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
     AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock,
     BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig, DdcBlock,
-    DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisConfig,
-    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
-    ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
-    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, ParamValue,
-    PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig,
+    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
+    DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec,
+    DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
+    FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
+    HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock, InterpolateConfig,
+    InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock,
+    NcoConfig, NcoRealBlock, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
+    ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -505,7 +505,7 @@ impl Kind for DcBlockKind {
 
     const KIND: &'static str = "dc_block";
     fn kernels() -> &'static [&'static str] {
-        &["dc_block"]
+        &["dc_block", "dc_block_real"]
     }
     fn default_cfg() -> DcBlockConfig {
         DcBlockConfig::default()
@@ -519,33 +519,59 @@ impl Kind for DcBlockKind {
         rate: Rate,
         p: Precision,
     ) -> BlockResult<Figures> {
-        if !is_complex(input) {
-            return Err(mismatch("dc_block needs complex samples"));
-        }
+        let (rate_out, memory_bytes) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    DcBlockBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    DcBlockBlock::<T, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    DcBlockRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    DcBlockRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?
+                )
+            )
+        };
         Ok(Figures {
-            rate_out: DcBlockBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
-            memory_bytes: DcBlockBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+            rate_out,
+            memory_bytes,
             cost: 3.0,
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,
-            output: stream(complex_port(p)),
+            output: stream(input),
         })
     }
     fn build(
         cfg: &DcBlockConfig,
-        _input: PortType,
+        input: PortType,
         rate: Rate,
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
-        with_complex!(
-            p,
-            T,
-            Ok(Box::new(StreamNode::new(DcBlockBlock::<T, _>::new(
-                cfg, rate, st
-            )?)))
-        )
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(DcBlockBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(DcBlockRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 

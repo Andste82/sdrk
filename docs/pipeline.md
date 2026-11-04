@@ -67,7 +67,7 @@ An input is either raw bytes in a sample `format` or already converted samples o
 
 **Format names:** `cu8`, `cs8`, `cs16`, `cs12_lsb16`, `sc16_q11`, `cs16_planar`, `packed12`, `packed10`, `i2s32_msb`, `cf32`, `rf32`, `rs16` map to the constants of `sdrk_device::formats`. A custom format is an object `{ "container": "i16", "bits": 12, "align": "lsb", "layout": "interleaved", "endian": "le", "full_scale": "power_of_two" }` with `container` one of `u8 i8 i16 i32 f32 packed12 packed10 bits1`, `align` `lsb`/`msb`, `layout` `interleaved`/`planar`/`real`, `endian` `le`/`be`, `full_scale` `"power_of_two"` or `{"explicit": 2048}` (optional) and an optional `swap_iq` flag. The object is validated by `sdrk-device`.
 
-A raw input must be a streamable format: interleaved complex or real layout, no 1-bit container. Planar formats (`cs16_planar`) are rejected at `inputs.<name>.format`. A **real** format (`rs16`, `rf32`: Airspy R2 and Mini, direct-sampling front ends, sound cards) gets the real variant of the automatic `convert` node (`convert_real`, `ConvertRealBlock`): the converted stream is `f32` (`q15` in a Q15 pipeline), a real stream, which only the real-aware kinds accept (`halfband_decimate`, `real_to_iq`, `biquad`, `resample`, `fm_mod`); put `real_to_iq` behind it to get a complex stream at half the rate (see `real_input_fm_receiver.json`). Real audio that is already converted can still be given as `"type": "f32"`.
+A raw input must be a streamable format: interleaved complex or real layout, no 1-bit container. Planar formats (`cs16_planar`) are rejected at `inputs.<name>.format`. A **real** format (`rs16`, `rf32`: Airspy R2 and Mini, direct-sampling front ends, sound cards) gets the real variant of the automatic `convert` node (`convert_real`, `ConvertRealBlock`): the converted stream is `f32` (`q15` in a Q15 pipeline), a real stream, which only the real-aware kinds accept (`halfband_decimate`, `real_to_iq`, `biquad`, `dc_block`, `resample`, `fm_mod`, `preemph_limit`, `deemphasis`, `decimate`, `interpolate`, `delay`, `to_complex`, `nco`); put `real_to_iq` behind it to get a complex stream at half the rate (see `real_input_fm_receiver.json`). Real audio that is already converted can still be given as `"type": "f32"`.
 
 ### Nodes
 
@@ -245,7 +245,7 @@ The cost is an estimate, in multiply-accumulates (a complex tap counts like the 
 | --- | --- |
 | `convert`, `convert_out` | 2 |
 | `scale` | 1 |
-| `dc_block`, `squelch` | 3 |
+| `dc_block` (complex or real input), `squelch` | 3 |
 | `agc` | 6 |
 | `fir` | `taps` |
 | `ddc` | `4 + 4 * taps / decimation` |

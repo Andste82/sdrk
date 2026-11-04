@@ -1018,7 +1018,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Removes the DC offset of a complex signal with a one-pole high-pass.",
+            "description": "Removes the DC offset of a complex or real signal with a one-pole high-pass.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"

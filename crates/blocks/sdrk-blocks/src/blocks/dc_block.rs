@@ -1,11 +1,11 @@
-//! `dc_block`: one-pole DC-blocking high-pass for complex signals.
+//! `dc_block`: one-pole DC-blocking high-pass for complex and real signals.
 
 use core::f64::consts::PI;
 use core::marker::PhantomData;
 
 use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::RealSample;
-use sdrk_core::kernels::demod::{DcBlock, DcBlockState};
+use sdrk_core::kernels::demod::{DcBlock, DcBlockReal, DcBlockRealState, DcBlockState};
 
 use super::{HZ_LIMIT, head, head_mut, hz, unit_timing, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -13,26 +13,27 @@ use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
 use crate::error::{Error, Result};
-use crate::sample::BlockSample;
+use crate::sample::{BlockReal, BlockSample};
 use crate::storage::{Plan, Storage};
 
 /// Description of the `dc_block` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "dc_block",
-    summary: "Removes the DC offset of a complex signal with a one-pole high-pass.",
+    summary: "Removes the DC offset of a complex or real signal with a one-pole high-pass.",
     details: "Implements y[n] = x[n] - x[n-1] + r y[n-1] per component with r = exp(-2 pi \
-        cutoff / fs). SDR receivers show a spike at 0 Hz (DC offset and LO leakage); this block \
+        cutoff / fs); complex input (C32, CQ15) runs the kernel dc_block, real input (f32, \
+        Q15) the kernel dc_block_real with the same pole. SDR receivers show a spike at 0 Hz (DC offset and LO leakage); this block \
         removes it. A lower cutoff removes less of the signal around DC but settles more \
         slowly. Pitfall: in Q15 the pole is rounded to a multiple of 2^-15, so for a cutoff \
         far below fs / 20000 the effective cutoff is larger than requested.",
     inputs: &[PortDesc {
         name: "in",
-        types: &[PortType::C32, PortType::CQ15],
-        description: "Complex samples.",
+        types: &[PortType::C32, PortType::CQ15, PortType::F32, PortType::Q15],
+        description: "Complex or real samples.",
     }],
     outputs: &[PortDesc {
         name: "out",
-        types: &[PortType::C32, PortType::CQ15],
+        types: &[PortType::C32, PortType::CQ15, PortType::F32, PortType::Q15],
         description: "The filtered samples, same type and rate as the input.",
     }],
     params: &[ParamDesc {
@@ -50,7 +51,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &[],
 };
 
-/// Configuration of [`DcBlockBlock`].
+/// The pole `r = exp(-2 pi cutoff_hz / fs)` of the DC blocker (shared by [`DcBlockBlock`] and
+/// [`DcBlockRealBlock`]).
+fn dc_pole(cutoff_hz: f64, fs: f64) -> f64 {
+    libm::exp(-2.0 * PI * cutoff_hz / fs)
+}
+
+/// Configuration of [`DcBlockBlock`] and [`DcBlockRealBlock`].
 ///
 /// ```
 /// use sdrk_blocks::DcBlockConfig;
@@ -133,7 +140,7 @@ impl<T: BlockSample, S: Storage> DcBlockBlock<T, S> {
     /// Creates the block; it needs no storage.
     pub fn new(config: &DcBlockConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
-        let r = libm::exp(-2.0 * PI * config.cutoff_hz / hz(rate_in));
+        let r = dc_pole(config.cutoff_hz, hz(rate_in));
         Ok(Self {
             config: *config,
             state: DcBlockState::new(T::Real::from_f64_round(r))?,
@@ -168,6 +175,107 @@ where
     fn process(&mut self, input: &[T], output: &mut [T]) -> Result<Progress> {
         let n = input.len().min(output.len());
         <Sdrk as DcBlock<T>>::dc_block(
+            &Sdrk,
+            &mut self.state,
+            head(input, n)?,
+            head_mut(output, n)?,
+        )?;
+        Ok(Progress {
+            consumed: n,
+            produced: n,
+        })
+    }
+
+    fn timing(&self) -> BlockTiming {
+        unit_timing()
+    }
+
+    fn reset(&mut self) {
+        self.state.reset();
+    }
+
+    fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
+        if DESCRIPTION.param(name).is_some() {
+            Err(Error::ReadOnlyParameter)
+        } else {
+            unknown()
+        }
+    }
+
+    fn param(&self, name: &str) -> Result<ParamValue> {
+        self.config.get(name)
+    }
+
+    fn min_input(&self) -> usize {
+        1
+    }
+}
+
+/// DC blocker for `f32` and `Q15`: the kernel `dc_block_real` with the pole of
+/// [`DcBlockBlock`].
+///
+/// ```
+/// use sdrk_blocks::{ArenaStorage, Block, DcBlockConfig, DcBlockRealBlock};
+/// use sdrk::{Q15, Rate};
+/// let mut arena = ArenaStorage::new(&mut []);
+/// let cfg = DcBlockConfig { cutoff_hz: 100.0 };
+/// let mut block = DcBlockRealBlock::<f32, _>::new(&cfg, Rate::hz(48_000)?, &mut arena)?;
+/// let input = [0.5f32; 2000];
+/// let mut out = [0.0f32; 2000];
+/// block.process(&input, &mut out)?;
+/// assert!(out[1999].abs() < 0.01); // a constant offset decays
+/// let mut q15 = DcBlockRealBlock::<Q15, _>::new(&cfg, Rate::hz(48_000)?, &mut arena)?;
+/// let mut out = [Q15(0); 4];
+/// q15.process(&[Q15(1000); 4], &mut out)?;
+/// assert_eq!(out[0], Q15(1000)); // the first sample passes unchanged
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct DcBlockRealBlock<R: BlockReal, S: Storage> {
+    config: DcBlockConfig,
+    state: DcBlockRealState<R>,
+    _storage: PhantomData<fn() -> S>,
+}
+
+impl<R: BlockReal, S: Storage> DcBlockRealBlock<R, S> {
+    /// Creates the block; it needs no storage.
+    pub fn new(config: &DcBlockConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
+        config.validate(rate_in)?;
+        let r = dc_pole(config.cutoff_hz, hz(rate_in));
+        Ok(Self {
+            config: *config,
+            state: DcBlockRealState::new(R::from_f64_round(r))?,
+            _storage: PhantomData,
+        })
+    }
+
+    /// Exact bytes of storage the block needs (zero).
+    pub fn storage_bytes(config: &DcBlockConfig, rate_in: Rate) -> Result<usize> {
+        config.validate(rate_in)?;
+        Ok(Plan::default().bytes())
+    }
+
+    /// Output rate for the configuration (equal to the input rate).
+    pub fn rate_out(config: &DcBlockConfig, rate_in: Rate) -> Result<Rate> {
+        config.validate(rate_in)?;
+        Ok(rate_in)
+    }
+}
+
+impl<R: BlockReal, S: Storage> Block for DcBlockRealBlock<R, S>
+where
+    Sdrk: DcBlockReal<R>,
+{
+    type In = R;
+    type Out = R;
+
+    fn description(&self) -> &'static BlockDescription {
+        &DESCRIPTION
+    }
+
+    fn process(&mut self, input: &[R], output: &mut [R]) -> Result<Progress> {
+        let n = input.len().min(output.len());
+        <Sdrk as DcBlockReal<R>>::dc_block_real(
             &Sdrk,
             &mut self.state,
             head(input, n)?,

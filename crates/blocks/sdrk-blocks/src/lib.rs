@@ -54,7 +54,7 @@ pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
-pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig};
+pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig, DcBlockRealBlock};
 pub use blocks::ddc::{DdcBlock, DdcConfig};
 pub use blocks::decimate::{DecimateBlock, DecimateConfig, DecimateRealBlock};
 pub use blocks::deemphasis::{DeemphasisConfig, DeemphasisRealBlock};

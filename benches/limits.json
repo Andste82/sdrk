@@ -61,8 +61,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "release",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 2.15 / 1.55 cycles per sample of the fallback on `cortex-a72` (1.39; 1.08 / 1.29 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -76,8 +75,7 @@
       "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 0.22 / 0.21 cycles per sample of the fallback on `znver3` (1.05; 0.14 / 0.15 on `alderlake`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -479,8 +477,7 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 145.25 / 127.87 cycles per sample of the fallback on `cortex-a72` (1.14; 123.36 / 145.98 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "simd128": {
       "status": "info",
@@ -647,8 +644,7 @@
       "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 0.38 / 0.32 cycles per sample of the fallback on `alderlake` (1.19; 0.26 / 0.29 on `znver3`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -1310,7 +1306,7 @@
     },
     "neon": {
       "status": "release",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 8.58 / 8.56 cycles per sample of the fallback on `cortex-a72` (1.002; 1.77 / 1.77 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 8.58 / 8.56 cycles per sample of the fallback on `cortex-a72` (8.576 / 8.562, 1.002; 1.77 / 1.77 on `cortex-a76`, 1.769 / 1.774), both loops bound by the throughput of the vector square root on that model; kept with open item I30-3"
     },
     "simd128": {
       "status": "release"
@@ -1331,7 +1327,7 @@
     },
     "neon": {
       "status": "release",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 9.95 / 9.94 cycles per sample of the fallback on `cortex-a72` (1.001; 3.79 / 4.07 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 9.95 / 9.94 cycles per sample of the fallback on `cortex-a72` (9.952 / 9.943, 1.001; 3.79 / 4.07 on `cortex-a76`), both loops bound by the throughput of the vector square root on that model; kept with open item I30-3"
     },
     "simd128": {
       "status": "release"
@@ -1351,8 +1347,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "release",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 47.07 / 39.90 cycles per sample of the fallback on `cortex-a72` (1.18; 22.46 / 21.76 on `cortex-a76`, 1.03); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "status": "dev",
+      "waiver": "this level runs the fallback (decision D335: its plain loop simulated faster than the SIMD blocks on both core models of `neon`, 39.90 / 21.76 against 47.07 / 22.46 cycles per sample on `cortex-a72` / `cortex-a76`), so the entry counts the instructions of `agc_fallback`: GNU Radio's `agc_cc` loop does less work than the `agc` contract (an additive update without the lower gain limit, the silence rule and the bounded attack and release) and GCC fuses it into `fmadd`; in simulated cycles the entry is below the GNU Radio loop on both models (0.86 / 0.77); accepted with decision D335"
     },
     "simd128": {
       "status": "release"
@@ -1655,7 +1651,7 @@
     "neon": {
       "status": "info",
       "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)",
-      "cycle_waiver": "slower than its own fallback in simulated cycles when the gate of D321 was introduced: 15.17 / 15.11 cycles per sample of the fallback on `cortex-a72` (1.004; 12.90 / 28.09 on `cortex-a76`); found by the first run of `cargo xtask check cycles` over every kernel, not tuned yet (open item I30-3)"
+      "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 15.17 / 15.11 cycles per sample of the fallback on `cortex-a72` (15.170 / 15.106, 1.004; 12.90 / 28.09 on `cortex-a76`), both bound by the latency of the recursion of the filter on that model; kept with open item I30-3"
     },
     "simd128": {
       "status": "info",

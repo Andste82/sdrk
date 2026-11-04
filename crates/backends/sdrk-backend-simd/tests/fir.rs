@@ -340,3 +340,43 @@ fn resample_and_interpolate_cq15_are_bit_exact() {
     Simd.fir_interpolate(&mut b, &x, &mut got).unwrap();
     assert_eq!(want, got);
 }
+
+#[test]
+fn fir_interpolate_cq15_is_bit_exact_in_blocks_and_with_little_room() {
+    // The NEON path computes the outputs of a branch in groups whose windows lie in the input
+    // and the others one at a time: calls of every size, with the output room cut short (a
+    // phase left over for the next call), with taps of -32768 and with branches longer and
+    // shorter than one vector cross every boundary between the two.
+    let mut rng = Rng::new(31);
+    for &up in &[2usize, 3, 5] {
+        for &n in &[3usize, 7, 33, 64, 128, 255] {
+            for extreme in [false, true] {
+                let taps = taps_q15(&mut rng, n, extreme);
+                let x = cq15_noise(&mut rng, 600);
+                let new_state = || {
+                    FirInterpState::<CQ15, _, _>::new(
+                        taps.clone(),
+                        vec![CQ15::default(); n.div_ceil(up)],
+                        up,
+                    )
+                    .unwrap()
+                };
+                let (mut a, mut b) = (new_state(), new_state());
+                let mut at = 0;
+                while at < x.len() {
+                    let len = (1 + rng.below(90)).min(x.len() - at);
+                    let input = &x[at..at + len];
+                    let room = 1 + rng.below(up * len + 8);
+                    let (mut want, mut got) =
+                        (vec![CQ15::default(); room], vec![CQ15::default(); room]);
+                    let pw = Fallback.fir_interpolate(&mut a, input, &mut want).unwrap();
+                    let pg = Simd.fir_interpolate(&mut b, input, &mut got).unwrap();
+                    assert_eq!(pw, pg, "L={up} taps={n}");
+                    assert_eq!(want, got, "L={up} taps={n} at={at}");
+                    assert_eq!(a.phase(), b.phase());
+                    at += pw.consumed;
+                }
+            }
+        }
+    }
+}

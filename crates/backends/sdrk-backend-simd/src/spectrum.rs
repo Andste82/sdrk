@@ -8,7 +8,8 @@
 //! Level-specific paths (see `level.rs`):
 //! - `C32` on NEON adds the squares with `faddp` and stores two registers per `stp`; on wasm32
 //!   it runs the generic arithmetic in the loop form of [`steps!`], which folds the load and
-//!   store offsets. The x86 levels use the generic code (`haddps` from SSE3 on).
+//!   store offsets. AVX2 (not AVX-512) unzips the squares with `vshufps`; the other x86 levels
+//!   use the generic code (`haddps` from SSE3 on).
 //! - `CQ15` uses the multiply-add of adjacent 16-bit pairs (`pmaddwd`, `i32x4.dot_i16x8_s`) on
 //!   x86 and wasm32, and `ld4`/`st2` with the saturating doubling multiply-accumulate
 //!   (`sqdmull`/`sqdmlal`, `sqrshrn`) on NEON.
@@ -242,6 +243,12 @@ fn mag_sq_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32]) {
 /// of leading samples done.
 #[inline(always)]
 fn mag_sq_f32_level<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32]) -> usize {
+    #[cfg(target_arch = "x86_64")]
+    if simd.level().as_avx512().is_none()
+        && let Some(t) = simd.level().as_avx2()
+    {
+        return x86::mag_sq_f32_avx2(t, input, out);
+    }
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = simd.level().as_neon() {
         return neon::mag_sq_f32(t, input, out);
@@ -1173,6 +1180,59 @@ mod x86 {
     sse!(mag_sq_q15_sse2, Sse2);
     sse!(mag_sq_q15_sse4_2, Sse4_2);
 
+    mod mag_sq_avx2 {
+        //! `mag_sq` of `C32` at AVX2: the squares unzipped with `vshufps` (0x88 the real parts,
+        //! 0xDD the imaginary ones, within each 128-bit half), added, and the halves put in order
+        //! with one `vpermpd`. The generic code adds the squares with `vhaddps`, whose two shuffle
+        //! micro-ops and the `vpermpd` all run on port 5 of the `alderlake` model (0.38 against 0.32
+        //! cycles per sample of the fallback there); `vshufps` also runs on port 1. LLVM folds the
+        //! sum of two such shuffles back into `vhaddps` (also with `vmovshdup` in place of the
+        //! second one), so the shuffle of the imaginary parts is an `asm!` block. The same
+        //! `re * re + im * im`, so the same bits (D337).
+        #![allow(unsafe_code)]
+
+        use core::arch::x86_64::{
+            __m256, _mm256_add_ps, _mm256_castpd_ps, _mm256_castps_pd, _mm256_mul_ps,
+            _mm256_permute4x64_pd, _mm256_shuffle_ps,
+        };
+        use fearless_simd::f32x8;
+        use fearless_simd::prelude::*;
+
+        use super::super::{Split, UNROLL, split};
+
+        fearless_simd::kernel!(
+            pub(in super::super) fn mag_sq_f32_avx2(
+                t: Avx2,
+                input: &[f32],
+                out: &mut [f32],
+            ) -> usize {
+                steps!(input, out, 8, UNROLL, |i, o| {
+                    let (a, b) = i.split_at(8);
+                    let a: __m256 = f32x8::from_slice(t, a).into();
+                    let b: __m256 = f32x8::from_slice(t, b).into();
+                    let (sa, sb) = (_mm256_mul_ps(a, a), _mm256_mul_ps(b, b));
+                    let mut odd = sa;
+                    // SAFETY: `vshufps` reads two `ymm` registers and writes one; it touches no
+                    // memory, no stack and no flags, and AVX is a target feature of this function.
+                    unsafe {
+                        core::arch::asm!(
+                            "vshufps {o}, {o}, {b}, 0xdd",
+                            o = inout(ymm_reg) odd,
+                            b = in(ymm_reg) sb,
+                            options(pure, nomem, nostack, preserves_flags)
+                        );
+                    }
+                    let sum = _mm256_add_ps(_mm256_shuffle_ps::<0x88>(sa, sb), odd);
+                    let sum = _mm256_castpd_ps(_mm256_permute4x64_pd::<0b11_01_10_00>(
+                        _mm256_castps_pd(sum),
+                    ));
+                    f32x8::simd_from(t, sum).store_array(o);
+                })
+            }
+        );
+    }
+    pub(super) use mag_sq_avx2::mag_sq_f32_avx2;
+
     fearless_simd::kernel!(
         pub(super) fn mag_sq_q15_avx2(t: Avx2, input: &[i16], out: &mut [i16]) -> usize {
             macro_rules! sums {
@@ -1648,9 +1708,9 @@ mod tests {
     /// the level has none.
     fn steps(level: &str) -> (usize, usize) {
         match level {
-            "avx512" | "avx2" => (0, 16),
+            "avx512" => (0, 16),
+            "avx2" | "neon" => (8, 16),
             "sse4.2" | "sse2" => (0, 8),
-            "neon" => (8, 16),
             "simd128" => (4, 8),
             _ => (0, 0),
         }

@@ -24,9 +24,9 @@
 //! - The paths of one kernel live in a module per architecture in the kernel's file. `unsafe`
 //!   is allowed there only for small helpers that the safe intrinsics cannot express (pointer
 //!   loads and stores, interleaving loads and stores such as `ld2`/`st2`, masked loads,
-//!   gathers, the `fminnm`/`fmaxnm` of `agc` as `asm!`, which the compiler keeps in its
-//!   branch, and the groups of plain `ldr` and `st2` of the NEON `interleave` as `asm!`, whose
-//!   loads the compiler would pair into `ldp`, D324), with `#[allow(unsafe_code)]` on that module and a `// SAFETY:` comment on every
+//!   gathers, the groups of plain `ldr` and `st2` of the NEON `interleave` as `asm!`, whose
+//!   loads the compiler would pair into `ldp`, D324, and the `vshufps` of the AVX2 `mag_sq` as
+//!   `asm!`, which the compiler would fold with its sum into `vhaddps`, D337), with `#[allow(unsafe_code)]` on that module and a `// SAFETY:` comment on every
 //!   block that names the bounds that make it sound.
 //! - Every path has a test that compares it with the generic code (bit-exact, or within the
 //!   tolerance of the kernel's contract) over all lengths and alignments it handles. CI runs the

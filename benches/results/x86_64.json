@@ -3235,13 +3235,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1.14,
               "other_snr_db": null,
-              "ours_instr_per_sample": 0.39,
-              "ratio": 0.35
+              "ours_instr_per_sample": 0.35,
+              "ratio": 0.31
             }
           ],
           "other_instr_per_sample": 1.14,
-          "ours_instr_per_sample": 0.39,
-          "ratio": 0.35,
+          "ours_instr_per_sample": 0.35,
+          "ratio": 0.31,
           "snr_db": {
             "other": 91.62,
             "ours": 91.62
@@ -4481,8 +4481,8 @@
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 0.44,
-          "ours_instr_per_sample": 0.45,
-          "ratio": 1.02,
+          "ours_instr_per_sample": 0.44,
+          "ratio": 1.01,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -4507,8 +4507,8 @@
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 0.23,
-          "ours_instr_per_sample": 0.24,
-          "ratio": 1.03,
+          "ours_instr_per_sample": 0.23,
+          "ratio": 1.02,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -5261,14 +5261,14 @@
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 2.32,
-          "ours_instr_per_sample": 2.46,
-          "ratio": 1.06,
+          "ours_instr_per_sample": 2.32,
+          "ratio": 1.0,
           "snr_db": {
             "other": 94.36,
             "ours": 94.36
           },
           "status": "release",
-          "verdict": "fail"
+          "verdict": "pass"
         },
         "mul_real": {
           "compared_with": "ours at avx2",
@@ -5286,15 +5286,15 @@
         "mul_real_q15": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 0.39,
-          "ours_instr_per_sample": 0.47,
-          "ratio": 1.2,
+          "other_instr_per_sample": 0.35,
+          "ours_instr_per_sample": 0.36,
+          "ratio": 1.01,
           "snr_db": {
             "other": 91.62,
             "ours": 91.62
           },
           "status": "release",
-          "verdict": "fail"
+          "verdict": "pass"
         },
         "oscillate": {
           "compared_with": "ours at avx2",
@@ -13294,12 +13294,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 8.77,
               "other_snr_db": null,
-              "ours_instr_per_sample": 5.37,
+              "ours_instr_per_sample": 5.36,
               "ratio": 0.61
             }
           ],
           "other_instr_per_sample": 8.77,
-          "ours_instr_per_sample": 5.37,
+          "ours_instr_per_sample": 5.36,
           "ratio": 0.61,
           "snr_db": {
             "other": 94.36,
@@ -13409,13 +13409,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 2.14,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1.14,
-              "ratio": 0.53
+              "ours_instr_per_sample": 0.94,
+              "ratio": 0.44
             }
           ],
           "other_instr_per_sample": 2.14,
-          "ours_instr_per_sample": 1.14,
-          "ratio": 0.53,
+          "ours_instr_per_sample": 0.94,
+          "ratio": 0.44,
           "snr_db": {
             "other": 91.62,
             "ours": 91.62

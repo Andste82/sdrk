@@ -4086,12 +4086,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 490.1,
               "other_snr_db": null,
-              "ours_instr_per_sample": 296.92,
+              "ours_instr_per_sample": 299.95,
               "ratio": 0.61
             }
           ],
           "other_instr_per_sample": 490.1,
-          "ours_instr_per_sample": 296.92,
+          "ours_instr_per_sample": 299.95,
           "ratio": 0.61,
           "snr_db": {
             "other": 999.0,

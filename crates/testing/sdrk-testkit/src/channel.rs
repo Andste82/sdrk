@@ -1,3 +1,16 @@
+//! Channel models: the [`Loopback`] channel simulator and the sample-stream impairments of
+//! the digital-mode tests.
+//!
+//! # Impairments (M38)
+//!
+//! [`Awgn`], [`FrequencyOffset`] and [`ClockDrift`] work on `Complex64` sample streams
+//! through the trait [`Impairment`]; [`ChannelChain`] applies a list of them in order. Each
+//! keeps its state between calls, so a stream processed in chunks gives the same samples as
+//! processed at once, and all randomness comes from a seeded [`Pcg32`]. A real signal is
+//! passed as the real part.
+//!
+//! # Loopback
+//!
 //! A loopback channel simulator: what a transmitter writes arrives at the receiver after a
 //! delay, an attenuation, a frequency offset and with additive noise.
 //!
@@ -29,6 +42,7 @@
 //! written after the receiver passed their time are not seen (transmit first, then receive).
 //! The first receive block carries the anchor `index 0 = t0_ns`.
 
+use std::boxed::Box;
 use std::sync::{Arc, Mutex};
 use std::vec;
 use std::vec::Vec;
@@ -485,5 +499,444 @@ impl RxStream for LoopbackRx {
         self.sent_anchor = true;
         self.next += n as u64;
         Ok((written, meta))
+    }
+}
+
+/// A sample-stream impairment of a test channel (M38).
+pub trait Impairment: Send {
+    /// Processes `input` and appends the resulting samples to `output` (the same number of
+    /// samples, except for [`ClockDrift`], which resamples). The state carries over to the
+    /// next call.
+    fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>);
+}
+
+/// PCG32 stream of [`Awgn`].
+const AWGN_STREAM: u64 = 0x6177_676e;
+
+/// Additive white Gaussian noise: each sample gets independent normal I and Q components of
+/// the standard deviation `sigma` (drawn in this order from a [`Pcg32`] with the seed).
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::channel::{Awgn, Impairment};
+/// let mut a = Awgn::new(0.1, 498)?;
+/// let mut out = Vec::new();
+/// a.process(&[Complex64::new(1.0, 0.0); 4], &mut out);
+/// assert_eq!(out.len(), 4);
+/// assert!((out[0].re - 1.0).abs() < 1.0);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone)]
+pub struct Awgn {
+    sigma: f64,
+    rng: Pcg32,
+}
+
+impl Awgn {
+    /// Noise of the standard deviation `sigma` per component.
+    ///
+    /// # Errors
+    /// `InvalidParameter` if `sigma` is negative or not finite.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::Awgn;
+    /// assert!(Awgn::new(-1.0, 1).is_err());
+    /// ```
+    pub fn new(sigma: f64, seed: u64) -> Result<Self, Error> {
+        if !(sigma.is_finite() && sigma >= 0.0) {
+            return Err(Error::InvalidParameter(
+                "the noise sigma must be finite and not negative",
+            ));
+        }
+        Ok(Self {
+            sigma,
+            rng: Pcg32::new(seed, AWGN_STREAM),
+        })
+    }
+
+    /// Noise for the bit energy to noise density ratio `ebn0_db` of a signal with
+    /// `bits_per_symbol` bits per symbol, `sps` samples per symbol and the mean power per
+    /// sample `signal_power`: `sigma^2 = signal_power sps / (2 bits_per_symbol 10^(ebn0_db / 10))`
+    /// per component (so `N0 = 2 sigma^2` is the complex noise power per sample).
+    ///
+    /// # Errors
+    /// `InvalidParameter` for a non-finite `ebn0_db`, `bits_per_symbol == 0`, a non-positive
+    /// or non-finite `sps`, or a negative or non-finite `signal_power`.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::Awgn;
+    /// let a = Awgn::from_ebn0(0.0, 1, 2.0, 1.0, 1)?;
+    /// assert!((a.sigma() - 1.0).abs() < 1e-15);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn from_ebn0(
+        ebn0_db: f64,
+        bits_per_symbol: u32,
+        sps: f64,
+        signal_power: f64,
+        seed: u64,
+    ) -> Result<Self, Error> {
+        let ok = ebn0_db.is_finite()
+            && bits_per_symbol > 0
+            && sps.is_finite()
+            && sps > 0.0
+            && signal_power.is_finite()
+            && signal_power >= 0.0;
+        if !ok {
+            return Err(Error::InvalidParameter(
+                "eb/n0 must be finite, bits per symbol and sps positive, the signal power not negative",
+            ));
+        }
+        let ebn0 = libm::pow(10.0, ebn0_db / 10.0);
+        let var = signal_power * sps / (2.0 * f64::from(bits_per_symbol) * ebn0);
+        Self::new(libm::sqrt(var), seed)
+    }
+
+    /// The standard deviation per component.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::Awgn;
+    /// assert_eq!(Awgn::new(0.5, 1)?.sigma(), 0.5);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn sigma(&self) -> f64 {
+        self.sigma
+    }
+}
+
+impl Impairment for Awgn {
+    fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>) {
+        output.reserve(input.len());
+        for x in input {
+            let re = self.rng.normal() * self.sigma;
+            let im = self.rng.normal() * self.sigma;
+            output.push(*x + Complex64::new(re, im));
+        }
+    }
+}
+
+/// A frequency offset: sample `n` (counted from the first sample processed) is multiplied by
+/// `exp(j 2 pi frac(offset_hz n / fs))`, the phase computed in f64 from the index.
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::channel::{FrequencyOffset, Impairment};
+/// let mut f = FrequencyOffset::new(250.0, 1000.0)?; // a quarter turn per sample
+/// let mut out = Vec::new();
+/// f.process(&[Complex64::new(1.0, 0.0); 2], &mut out);
+/// assert!((out[1] - Complex64::new(0.0, 1.0)).norm_sqr() < 1e-30);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone)]
+pub struct FrequencyOffset {
+    offset_hz: f64,
+    fs: f64,
+    index: u64,
+}
+
+impl FrequencyOffset {
+    /// An offset of `offset_hz` at the sample rate `fs` (both in hertz).
+    ///
+    /// # Errors
+    /// `InvalidParameter` if `offset_hz` is not finite or `fs` is not finite and positive.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::FrequencyOffset;
+    /// assert!(FrequencyOffset::new(10.0, 0.0).is_err());
+    /// ```
+    pub fn new(offset_hz: f64, fs: f64) -> Result<Self, Error> {
+        if !(offset_hz.is_finite() && fs.is_finite() && fs > 0.0) {
+            return Err(Error::InvalidParameter(
+                "the offset must be finite and the sample rate finite and positive",
+            ));
+        }
+        Ok(Self {
+            offset_hz,
+            fs,
+            index: 0,
+        })
+    }
+}
+
+impl Impairment for FrequencyOffset {
+    fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>) {
+        output.reserve(input.len());
+        for x in input {
+            let turns = self.offset_hz * self.index as f64 / self.fs;
+            let phase = 2.0 * core::f64::consts::PI * (turns - libm::floor(turns));
+            output.push(*x * Complex64::new(libm::cos(phase), libm::sin(phase)));
+            self.index = self.index.wrapping_add(1);
+        }
+    }
+}
+
+/// Taps per side of the [`ClockDrift`] interpolator.
+pub const DRIFT_TAPS_PER_SIDE: usize = 32;
+const DRIFT_TAPS: usize = 2 * DRIFT_TAPS_PER_SIDE;
+/// Coefficients of the 4-term Blackman–Harris window of the [`ClockDrift`] interpolator.
+const BLACKMAN_HARRIS: [f64; 4] = [0.35875, 0.48829, 0.14128, 0.01168];
+
+/// A sample-clock drift: the output sample `m` is the input signal at the position
+/// `p = m (1 + ppm 1e-6)` (input samples before index 0 are zero), interpolated in f64 with a
+/// windowed sinc of 32 taps per side (input indices `floor(p) - 31 ..= floor(p) + 32`, window
+/// 4-term Blackman–Harris over `|p - index| < 32`). A positive `ppm` compresses the signal in
+/// time: a tone of `f` cycles per sample comes out at `f (1 + ppm 1e-6)`, and an event at the
+/// input position `q` comes out at [`ClockDrift::output_position`]`(q) = q / (1 + ppm 1e-6)`.
+/// Output `m` is produced once input `floor(p) + 32` has arrived, so the output lags by 32
+/// input samples in processing (not in position).
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::channel::{ClockDrift, Impairment};
+/// let mut d = ClockDrift::new(0.0)?;
+/// let x: Vec<Complex64> = (0..100).map(|n| Complex64::new(n as f64, 0.0)).collect();
+/// let mut y = Vec::new();
+/// d.process(&x, &mut y);
+/// assert_eq!(y.len(), 100 - 32);
+/// assert_eq!(y[..], x[..68]); // zero drift is an exact identity
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone)]
+pub struct ClockDrift {
+    ratio: f64,
+    /// Input samples from the absolute index `base` on.
+    hist: Vec<Complex64>,
+    base: u64,
+    /// Next output index.
+    next: u64,
+    /// `cos` and `sin` of `q pi k / 32` for each tap `k = 0..64` and `q = 1..=3` (window
+    /// recurrences).
+    rot: Vec<[(f64, f64); 3]>,
+}
+
+impl ClockDrift {
+    /// A drift of `ppm` parts per million (`|ppm| < 1e5`).
+    ///
+    /// # Errors
+    /// `InvalidParameter` if `ppm` is not finite or `|ppm| >= 1e5`.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::ClockDrift;
+    /// assert!((ClockDrift::new(100.0)?.ratio() - 1.0001).abs() < 1e-15);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn new(ppm: f64) -> Result<Self, Error> {
+        if !(ppm.is_finite() && libm::fabs(ppm) < 1e5) {
+            return Err(Error::InvalidParameter(
+                "the drift must be finite and below 1e5 ppm",
+            ));
+        }
+        let mut rot = vec![[(0.0, 0.0); 3]; DRIFT_TAPS];
+        for (k, row) in rot.iter_mut().enumerate() {
+            for (q, e) in row.iter_mut().enumerate() {
+                let a =
+                    (q + 1) as f64 * core::f64::consts::PI * k as f64 / DRIFT_TAPS_PER_SIDE as f64;
+                *e = (libm::cos(a), libm::sin(a));
+            }
+        }
+        Ok(Self {
+            ratio: 1.0 + ppm * 1e-6,
+            hist: Vec::new(),
+            base: 0,
+            next: 0,
+            rot,
+        })
+    }
+
+    /// The resampling ratio `1 + ppm 1e-6` (input samples per output sample).
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::ClockDrift;
+    /// assert_eq!(ClockDrift::new(0.0)?.ratio(), 1.0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn ratio(&self) -> f64 {
+        self.ratio
+    }
+
+    /// The output position of the input position `q` (`q / ratio`).
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::ClockDrift;
+    /// assert!((ClockDrift::new(-50.0)?.output_position(1e6) - 1e6 / 0.99995).abs() < 1e-6);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn output_position(&self, q: f64) -> f64 {
+        q / self.ratio
+    }
+
+    /// The 64 taps for the fractional position `mu` in `[0, 1)`: tap `k` weights the input
+    /// `floor(p) - 31 + k`, at the distance `u = k - 31 - mu`.
+    fn taps(&self, mu: f64) -> [f64; DRIFT_TAPS] {
+        let mut taps = [0.0; DRIFT_TAPS];
+        let half = DRIFT_TAPS_PER_SIDE as f64;
+        // sin(pi u) = (-1)^k sin(pi mu) = (-1)^k sin(pi (1 - mu)); the smaller argument keeps
+        // the relative precision when mu is close to 1 (1 - mu is exact there)
+        let s = libm::sin(core::f64::consts::PI * if mu > 0.5 { 1.0 - mu } else { mu });
+        // window angle theta_k = pi u / 32 = theta_0 + pi k / 32
+        let theta0 = core::f64::consts::PI * (-(half - 1.0) - mu) / half;
+        let mut base = [(0.0, 0.0); 3];
+        for (q, b) in base.iter_mut().enumerate() {
+            let a = (q + 1) as f64 * theta0;
+            *b = (libm::cos(a), libm::sin(a));
+        }
+        let [w0, w1, w2, w3] = BLACKMAN_HARRIS;
+        for (k, (t, rk)) in taps.iter_mut().zip(self.rot.iter()).enumerate() {
+            let u = k as f64 - (half - 1.0) - mu;
+            if u == 0.0 {
+                *t = 1.0;
+                continue;
+            }
+            if libm::fabs(u) >= half {
+                *t = 0.0;
+                continue;
+            }
+            let mut w = w0;
+            for (((c0, s0), (ck, sk)), wq) in base.iter().zip(rk).zip([w1, w2, w3]) {
+                w += wq * (c0 * ck - s0 * sk);
+            }
+            let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
+            *t = sign * s / (core::f64::consts::PI * u) * w;
+        }
+        taps
+    }
+}
+
+impl Impairment for ClockDrift {
+    fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>) {
+        self.hist.extend_from_slice(input);
+        let end = self.base + self.hist.len() as u64; // one past the last input index
+        let half = DRIFT_TAPS_PER_SIDE as i64;
+        loop {
+            let p = self.next as f64 * self.ratio;
+            let i = libm::floor(p) as i64;
+            let needed = i + half; // last input index of the window
+            if needed < 0 || needed as u64 >= end {
+                break;
+            }
+            let taps = self.taps(p - i as f64);
+            let mut acc = Complex64::new(0.0, 0.0);
+            for (k, g) in taps.iter().enumerate() {
+                let idx = i - (half - 1) + k as i64;
+                if idx < 0 || *g == 0.0 {
+                    continue;
+                }
+                let rel = (idx as u64).wrapping_sub(self.base);
+                if let Some(x) = usize::try_from(rel).ok().and_then(|r| self.hist.get(r)) {
+                    acc += *x * *g;
+                }
+            }
+            output.push(acc);
+            self.next += 1;
+        }
+        // keep the inputs from the first index of the next window on
+        let p = self.next as f64 * self.ratio;
+        let keep_from = (libm::floor(p) as i64 - (half - 1)).max(0) as u64;
+        if keep_from > self.base {
+            let drop = usize::try_from(keep_from - self.base)
+                .unwrap_or(usize::MAX)
+                .min(self.hist.len());
+            self.hist.drain(..drop);
+            self.base += drop as u64;
+        }
+    }
+}
+
+/// A list of impairments applied in order (the output of one is the input of the next).
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::channel::{Awgn, ChannelChain, ClockDrift, FrequencyOffset, Impairment};
+/// let mut ch = ChannelChain::new()
+///     .with(ClockDrift::new(50.0)?)
+///     .with(FrequencyOffset::new(10.0, 48_000.0)?)
+///     .with(Awgn::from_ebn0(8.0, 1, 4.1, 1.0, 495)?);
+/// assert_eq!(ch.len(), 3);
+/// let mut out = Vec::new();
+/// ch.process(&[Complex64::new(1.0, 0.0); 100], &mut out);
+/// assert_eq!(out.len(), 100 - 32);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Default)]
+pub struct ChannelChain {
+    stages: Vec<Box<dyn Impairment>>,
+    scratch: Vec<Complex64>,
+}
+
+impl core::fmt::Debug for ChannelChain {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ChannelChain")
+            .field("stages", &self.stages.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl ChannelChain {
+    /// An empty chain (passes the input through).
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::ChannelChain;
+    /// assert!(ChannelChain::new().is_empty());
+    /// ```
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Appends a stage (builder form).
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::{Awgn, ChannelChain};
+    /// assert_eq!(ChannelChain::new().with(Awgn::new(0.1, 1)?).len(), 1);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    #[must_use]
+    pub fn with(mut self, stage: impl Impairment + 'static) -> Self {
+        self.push(stage);
+        self
+    }
+
+    /// Appends a stage.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::{ChannelChain, ClockDrift};
+    /// let mut ch = ChannelChain::new();
+    /// ch.push(ClockDrift::new(-20.0)?);
+    /// assert_eq!(ch.len(), 1);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn push(&mut self, stage: impl Impairment + 'static) {
+        self.stages.push(Box::new(stage));
+    }
+
+    /// Number of stages.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::ChannelChain;
+    /// assert_eq!(ChannelChain::new().len(), 0);
+    /// ```
+    pub fn len(&self) -> usize {
+        self.stages.len()
+    }
+
+    /// True if the chain has no stage.
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::ChannelChain;
+    /// assert!(ChannelChain::new().is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.stages.is_empty()
+    }
+}
+
+impl Impairment for ChannelChain {
+    fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>) {
+        let mut cur: Vec<Complex64> = input.to_vec();
+        for stage in &mut self.stages {
+            self.scratch.clear();
+            stage.process(&cur, &mut self.scratch);
+            core::mem::swap(&mut cur, &mut self.scratch);
+        }
+        output.extend_from_slice(&cur);
     }
 }

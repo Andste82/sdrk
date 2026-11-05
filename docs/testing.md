@@ -22,6 +22,26 @@ y[n] = g * x(n - d) * exp(j 2 pi f n / fs) + noise[n],     g = 10^(-attenuation_
 - The result is encoded into the raw format with saturation. The format must have a whole number of bytes per sample.
 - The receiver never ends. It produces what the transmitter has written so far: transmit first, then receive. The first receive block carries the anchor `index 0 = t0_ns` (source `Host`).
 
+## Channel impairments, PSK test signal and BER meter (M38)
+
+The digital-mode tests (M38 to M44) build their channel from sample-stream impairments in `channel` (feature `std`), next to `Loopback`. Each implements the trait `Impairment` (`process(&mut self, input, output)` appends to `output` and keeps the state, so chunked processing equals processing at once); all work on `Complex64` (a real signal is the real part).
+
+| Type | Model |
+| --- | --- |
+| `Awgn::new(sigma, seed)` | adds independent normal I and Q of the standard deviation `sigma` (Box-Muller from `Pcg32`, I first) |
+| `Awgn::from_ebn0(ebn0_db, bits_per_symbol, sps, signal_power, seed)` | `sigma^2 = signal_power sps / (2 bits_per_symbol 10^(ebn0_db / 10))` per component (`signal_power` is the mean power per sample; `N0 = 2 sigma^2`) |
+| `FrequencyOffset::new(offset_hz, fs)` | multiplies sample `n` by `exp(j 2 pi frac(offset_hz n / fs))` (phase in f64 from the index) |
+| `ClockDrift::new(ppm)` | output `m` is the input at the position `m (1 + ppm 1e-6)`, interpolated in f64 by a windowed sinc with 32 taps per side (4-term Blackman–Harris window; measured error below 1e-6 for tones up to 0.3 cycles per sample, the test requires 1e-5); an event at the input position `q` comes out at `output_position(q) = q / (1 + ppm 1e-6)`; zero drift is an exact identity |
+| `ChannelChain` | applies a list of impairments in order (`new().with(a).with(b)`) |
+
+`r#gen::PskTest` (and the shortcut `r#gen::psk_test`) makes the BPSK/QPSK test signal: symbol `k` (BPSK `2b - 1`; QPSK Gray, bit `2k` to the real and bit `2k + 1` to the imaginary part, each `(2b - 1) / sqrt(2)`) centred at the sample position `offset + k sps`, shaped with a raised-cosine (default) or root-raised-cosine pulse of roll-off `rolloff` truncated to `span` symbols per side (default 16), computed in f64 from the absolute sample index. `r#gen::pulse` evaluates the two pulses (for a matched filter in a test).
+
+The test bits come from `sdrk_proto::prbs` (M38): `Prbs::new(Poly::Prbs9 | Poly::Prbs15, seed)` is a Fibonacci LFSR (`x^9 + x^5 + 1`, `x^15 + x^14 + 1`) whose output bit is the feedback bit; `next_bit()` returns 0 or 1, a seed whose low 9 or 15 bits are zero is `InvalidArgument` (D538), and `Poly` gives `degree()`, `period()` (511, 32767), `feedback(state)` and `shift(state, bit)`. `sdrk-proto/tests/prbs.rs` checks the first 32 bits of both sequences from the all-ones seed and the maximal period.
+
+`ber::BerMeter::new(poly, seed)` (`no_std`) measures the bit error rate of a PRBS of `sdrk_proto::prbs` from hard bits: it locks to any phase of the sequence after 32 correct predictions in a row (self-synchronizing; the seed only gives the first prediction), then counts `bits()` and `errors()` with its own register; 64 errors within the last 128 counted bits count a `slips()` and restart the acquisition (the bits counted before stay counted). `push(bit)` and `push_bits(&[u8])` take hard bits (any non-zero value is 1), `is_locked()` tells the state, `ber()` and `confidence_95()` (Wilson score interval) give the result. `sdrk-testkit/tests/channel_ber_m38.rs` holds tests 5 and 6 of M38: the meter with injected errors (exact count) and with a slip (seed 497, D544), `Awgn::from_ebn0` within 0.1 dB of the requested Eb/N0 over 10^6 samples (seed 498), `FrequencyOffset` and `ClockDrift` against analytic tones (seed 499), the chunk invariance of the impairments and the mapping and power of `PskTest`.
+
+The end-to-end tests of `symbol_sync` use these models: `sdrk-testkit/tests/e2e_symbol_sync_m38.rs` holds the lock test (Gardner, raised cosine 0.35, start half a symbol off, ±100 ppm, sps 2, 4, 4.1 and 10.1; every strobe from 500 to 1499 within 0.05 symbols of the generator's symbol centre, seed 494) and the BER tests (PRBS-15 BPSK, root-raised-cosine transmitter and matched filter, 50 ppm, Eb/N0 6 and 8 dB, 10^6 counted bits each: Gardner at sps 4.1 within a factor 1.5 of `Q(sqrt(2 Eb/N0))`, seed 495; Mueller–Müller at sps 2 within a factor 2, seed 496). They set `ted_gain` to the detector slope per sample (D558). The BER tests are the slowest of the milestone in the unoptimized test profile (per test 2 x 10^6 counted bits, generated with the f64 pulse, the 64-tap drift interpolator and a matched filter of 131 taps at sps 4.1 or 65 taps at sps 2, D561); run them with `--nocapture` to see the measured BER, the theory and the 95 % interval. The flow test `sdrk-pipeline/tests/bpsk_sync.rs` decodes 100 `frame_encode` frames through the test flow `tests/flows/bpsk_sync_test.json` (`symbol_sync` -> `slice` -> `frame_decode`).
+
 ## System tests
 
 The workspace member `sdrk-system-tests` (`tests/system`) closes phase 3:

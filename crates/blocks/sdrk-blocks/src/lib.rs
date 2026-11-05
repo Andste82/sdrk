@@ -89,12 +89,14 @@ pub use blocks::resample::{
 };
 pub use blocks::rotate::{RotateBlock, RotateConfig};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
+pub use blocks::slice::{SliceBlock, SliceConfig, SliceConstellation, SliceElem};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
 pub use blocks::ssb_mod::{SSB_MOD_CHUNK, SsbModBlock, SsbModConfig};
 pub use blocks::stereo_matrix::StereoMatrixBlock;
 pub use blocks::stereo_pll::{StereoPllBlock, StereoPllConfig};
+pub use blocks::symbol_sync::{SymbolSyncBlock, SymbolSyncConfig};
 pub use blocks::to_complex::ToComplexBlock;
 pub use chain::{CHAIN_DESCRIPTION, Chain};
 pub use describe::{
@@ -107,5 +109,6 @@ pub use fork::{FORK_DESCRIPTION, Fork};
 pub use param_map::ParamMap;
 pub use ports::{ChainEnd, ChainItem, Clocked, Frame, FrameOut, Packets, Ports, StreamElem, Two};
 pub use sample::{BlockReal, BlockSample, TunedElem};
+pub use sdrk_core::kernels::symbol_sync::Ted;
 pub use sdrk_proto::{Packet, PacketFlags};
 pub use storage::{ARENA_ALIGN, AlignedBytes, ArenaStorage, Storage};

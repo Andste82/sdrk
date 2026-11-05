@@ -36,12 +36,14 @@ pub mod real_to_iq;
 pub mod resample;
 pub mod rotate;
 pub mod scale;
+pub mod slice;
 pub mod spectrum;
 pub mod squelch;
 pub mod ssb_demod;
 pub mod ssb_mod;
 pub mod stereo_matrix;
 pub mod stereo_pll;
+pub mod symbol_sync;
 pub mod to_complex;
 
 use sdrk::{Delay, Rate, Ratio, RatioKind};

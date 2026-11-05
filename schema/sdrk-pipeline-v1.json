@@ -2629,6 +2629,57 @@
           },
           {
             "additionalProperties": false,
+            "description": "Turns symbols into soft bits: f32 values whose sign is the bit and whose size is the confidence.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "slice"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit) or qpsk (C32, 2 bits, re then im). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK. Build-time.",
+                    "enum": [
+                      "real",
+                      "bpsk",
+                      "qpsk"
+                    ],
+                    "type": "string"
+                  },
+                  "scale": {
+                    "default": 1.0,
+                    "description": "Factor of every soft bit. Typical: 1.0; 2 / sigma^2 for log-likelihood ratios. Runtime.",
+                    "maximum": 1000000000.0,
+                    "minimum": 1e-9,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Computes averaged power spectra in dB relative to full scale as frames.",
             "properties": {
               "align": {
@@ -3010,6 +3061,87 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Recovers the symbol clock and outputs one interpolated sample per symbol.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "symbol_sync"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "damping": {
+                    "default": 0.7071,
+                    "description": "Damping factor of the loop. Typical: 0.7071. Build-time.",
+                    "maximum": 4.0,
+                    "minimum": 0.1,
+                    "type": "number"
+                  },
+                  "loop_bw": {
+                    "default": 0.01,
+                    "description": "Loop bandwidth normalized to the symbol rate. Typical: 0.01; 0.005 for weak signals, 0.02 for fast acquisition. Build-time.",
+                    "maximum": 0.1,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "max_deviation": {
+                    "default": 0.005,
+                    "description": "Largest deviation of the symbol period from its nominal value, as a fraction. Typical: 0.005 (5000 ppm). Build-time.",
+                    "maximum": 0.05,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "symbol_rate_hz": {
+                    "description": "Nominal symbol rate in Hz, rounded to 1/1000 Hz; the sample rate divided by it is the samples per symbol (2 to 1000000). Unit: Hz. Typical: 1187.5 for RDS, 9600 for packet radio. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "ted": {
+                    "default": "gardner",
+                    "description": "Timing error detector: gardner (two interpolations per symbol) or mm (Mueller-Mueller, decisions sign(y)). Typical: gardner; mm at 2 samples per symbol with a locked carrier. Build-time.",
+                    "enum": [
+                      "gardner",
+                      "mm"
+                    ],
+                    "type": "string"
+                  },
+                  "ted_gain": {
+                    "default": 1.0,
+                    "description": "Slope of the detector; the loop gains are divided by it. Typical: 1.0 (the detector slope per symbol: about 1.08 for gardner and 1.78 for mm on a raised-cosine 0.35 input of amplitude 1). Build-time.",
+                    "maximum": 1000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "symbol_rate_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
             ],
             "type": "object"
           },

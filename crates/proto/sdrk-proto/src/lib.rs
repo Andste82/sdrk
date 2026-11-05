@@ -1,5 +1,5 @@
-//! Protocol logic of SDRk without signal processing: the packet type, CRCs and a simple test
-//! framing.
+//! Protocol logic of SDRk without signal processing: the packet type, CRCs, a simple test
+//! framing and the PRBS generators of the bit error rate tests.
 //!
 //! Layer `crates/proto`, heap-free; depends on `sdrk-device` only. Digital modes end in bytes:
 //! a decoder turns bits into [`Packet`]s, an encoder turns packets back into bits. The blocks
@@ -29,6 +29,7 @@ pub mod crc;
 mod error;
 pub mod frame;
 mod packet;
+pub mod prbs;
 
 pub use error::{Error, ProtoError, Result};
 pub use packet::{MAX_PACKET_BYTES, Packet, PacketFlags};

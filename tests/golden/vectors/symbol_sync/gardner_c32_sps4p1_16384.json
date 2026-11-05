@@ -1,0 +1,50 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "gardner_c32_sps4p1_16384.expected.bin",
+      "len": 3996
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "gardner_c32_sps4p1_16384.input.bin",
+      "len": 16384
+    }
+  },
+  "case": "gardner_c32_sps4p1_16384",
+  "format_version": 1,
+  "kernel": "symbol_sync",
+  "model": "float32",
+  "notes": "BPSK +-1 shaped with a raised cosine (roll-off 0.35, p(0) = 1, 16 symbols per side), sps 4.1, symbol k at the transmit position offset + k sps, 40 ppm clock drift (receive sample n is the transmit position n (1 + 40e-6), D540), complex noise for Eb/N0 20 dB from the measured power per sample; Gardner with the block defaults (loop_bw 0.01, damping 0.7071, max_deviation 0.005, ted_gain 1); exact float32 model of D530 to D537 over the whole input in one call; produced is the output count; timing_error_last_256 is the largest distance of the last 256 strobes from a symbol centre in symbols (information); snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "damping": 0.7071,
+    "drift_ppm": 40.0,
+    "ebn0_db": 20.0,
+    "guard_skip": 0,
+    "ki_bits": 4564276639279966568,
+    "kp_bits": 4592438324831085815,
+    "loop_bw": 0.01,
+    "max_deviation": 0.005,
+    "max_integ_bits": 4581565944119534026,
+    "offset": 1.214024287734136,
+    "produced": 3996,
+    "rolloff": 0.35,
+    "sigma": 0.13709055282156482,
+    "snr_db_guard": 147.0,
+    "span": 16,
+    "sps": 4.1,
+    "ted": "gardner",
+    "ted_gain": 1.0,
+    "timing_error_last_256": 0.08981
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 490,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

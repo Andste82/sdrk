@@ -303,6 +303,78 @@ fn backend_table_lists_the_m33_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m38_kernels() {
+    // The timing loop is a recursion over the strobes: not accelerated.
+    for ty in [SampleType::C32, SampleType::F32] {
+        assert_eq!(backend_for("symbol_sync", ty), "fallback", "{ty:?}");
+    }
+    assert_eq!(backend_for("symbol_sync", SampleType::CQ15), "none");
+    assert_eq!(backend_for("symbol_sync", SampleType::Q15), "none");
+}
+
+#[test]
+fn m38_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::symbol_sync::{SymbolSync, SymbolSyncState, Ted};
+
+    let mut seed = 38u64;
+    let mut next = move || {
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        ((seed >> 40) as f32 / (1u64 << 24) as f32) * 0.2 - 0.1
+    };
+    // Symbols +-1 held for 4.1 samples on average, with noise.
+    let c32: Vec<C32> = (0..3000)
+        .map(|n| {
+            let k = (f64::from(n) / 4.1) as u32;
+            let s = |b: u32| {
+                if (k.wrapping_mul(2_654_435_761) >> b) & 1 == 1 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            };
+            C32::new(s(7) + next(), s(13) + next())
+        })
+        .collect();
+    let real: Vec<f32> = c32.iter().map(|x| x.re).collect();
+    for ted in [Ted::Gardner, Ted::MuellerMuller] {
+        let mut a = SymbolSyncState::<C32>::new(
+            4.1,
+            ted,
+            0.01,
+            core::f64::consts::FRAC_1_SQRT_2,
+            0.005,
+            1.0,
+        )?;
+        let mut b = a;
+        let (mut ya, mut yb) = (vec![C32::default(); 800], vec![C32::default(); 800]);
+        let pa = Sdrk.symbol_sync(&mut a, &c32, &mut ya)?;
+        let pb = Fallback.symbol_sync(&mut b, &c32, &mut yb)?;
+        assert_eq!(pa, pb);
+        assert_eq!(flat(&ya), flat(&yb));
+        assert_eq!(a, b);
+        let mut a = SymbolSyncState::<f32>::new(
+            4.1,
+            ted,
+            0.01,
+            core::f64::consts::FRAC_1_SQRT_2,
+            0.005,
+            1.0,
+        )?;
+        let mut b = a;
+        let (mut ya, mut yb) = (vec![0.0f32; 800], vec![0.0f32; 800]);
+        let pa = Sdrk.symbol_sync(&mut a, &real, &mut ya)?;
+        let pb = Fallback.symbol_sync(&mut b, &real, &mut yb)?;
+        assert_eq!(pa, pb);
+        assert!(pa.produced > 700);
+        assert_eq!(
+            ya.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+            yb.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn m33_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     use sdrk::Rate;
     use sdrk::kernels::auto_notch::{AutoNotch, AutoNotchState};

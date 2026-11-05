@@ -1,0 +1,46 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "gardner_f32_sps8_8192.expected.bin",
+      "len": 1025
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "gardner_f32_sps8_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "gardner_f32_sps8_8192",
+  "format_version": 1,
+  "kernel": "symbol_sync",
+  "model": "float32",
+  "notes": "real NRZ levels +-1 of random bits, symbol j covering the time [offset + (j - 1) 8, offset + 8 j), averaged over a sliding window of one symbol (sample n = the exact mean over [n - 8, n], the boxcar-filtered shape of a 2-FSK discriminator output; the symbol peaks at offset + 8 j), plus real noise of sigma 0.1; sps 8; Gardner with the block defaults; exact float32 model over the whole input in one call; timing_error_last_256 in symbols (information); snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "damping": 0.7071,
+    "guard_skip": 0,
+    "ki_bits": 4568618438507799879,
+    "kp_bits": 4596752317039726534,
+    "loop_bw": 0.01,
+    "max_deviation": 0.005,
+    "max_integ_bits": 4585925428558828667,
+    "offset": 6.11717834389581,
+    "produced": 1025,
+    "sigma": 0.1,
+    "snr_db_guard": 149.3,
+    "sps": 8.0,
+    "ted": "gardner",
+    "ted_gain": 1.0,
+    "timing_error_last_256": 0.041079
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 491,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

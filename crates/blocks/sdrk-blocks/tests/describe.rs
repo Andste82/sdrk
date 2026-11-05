@@ -42,8 +42,9 @@ use sdrk_blocks::{
     Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind,
     ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock,
     ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
+    StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock,
     all_descriptions,
 };
 use sdrk_testkit::VecStorage;
@@ -64,10 +65,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_forty_three_unique_kinds() {
+fn there_are_forty_five_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 43);
-    assert_eq!(all_descriptions().len(), 43);
+    assert_eq!(kinds.len(), 45);
+    assert_eq!(all_descriptions().len(), 45);
     for kind in [
         "convert",
         "convert_out",
@@ -112,6 +113,8 @@ fn there_are_forty_three_unique_kinds() {
         "fm_stereo_mod",
         "frame_encode",
         "frame_decode",
+        "symbol_sync",
+        "slice",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -319,6 +322,8 @@ fn config_defaults_match_the_descriptions() {
     );
     defaults_match("frame_encode", |n| FrameEncodeConfig::default().get(n), &[]);
     defaults_match("frame_decode", |n| FrameDecodeConfig::default().get(n), &[]);
+    defaults_match("symbol_sync", |n| SymbolSyncConfig::default().get(n), &[]);
+    defaults_match("slice", |n| SliceConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -414,6 +419,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("fm_stereo_mod", FmStereoModConfig);
     round_trip!("frame_encode", FrameEncodeConfig);
     round_trip!("frame_decode", FrameDecodeConfig);
+    round_trip!("symbol_sync", SymbolSyncConfig);
+    round_trip!("slice", SliceConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -650,6 +657,30 @@ fn blocks_accept_and_report_every_described_parameter() {
         "frame_decode",
         &mut FrameDecodeBlock::new(&FrameDecodeConfig::default(), r, &mut s).unwrap(),
     );
+    let sync = SymbolSyncConfig {
+        symbol_rate_hz: 2375.0,
+        ..SymbolSyncConfig::default()
+    };
+    check_block_params(
+        "symbol_sync",
+        &mut SymbolSyncBlock::<C32, _>::new(&sync, rate(19_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "symbol_sync",
+        &mut SymbolSyncBlock::<f32, _>::new(&sync, rate(19_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "slice",
+        &mut SliceBlock::<C32, _>::new(&SliceConfig::default(), r, &mut s).unwrap(),
+    );
+    let real = SliceConfig {
+        constellation: SliceConstellation::Real,
+        ..SliceConfig::default()
+    };
+    check_block_params(
+        "slice",
+        &mut SliceBlock::<f32, _>::new(&real, r, &mut s).unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -773,6 +804,82 @@ fn am_mod_and_ssb_mod_describe_their_ports_and_parameters() {
 /// The kinds of M36: `preemph_limit` takes `c32` (stereo) besides the real types and never
 /// `cq15`; `fm_stereo_mod` turns `c32` into `f32`, its only runtime parameter is `pilot`; both
 /// blocks of `preemph_limit` share the description.
+/// The kinds of M38: `symbol_sync` keeps the type (`c32` or `f32`) and requires the symbol
+/// rate, all its parameters are build parameters; `slice` takes `c32` or `f32` and outputs
+/// `f32` soft bits, its only runtime parameter is `scale`; the details state the soft-bit
+/// convention and the chain position.
+#[test]
+fn the_symbol_kinds_describe_their_ports_and_parameters() {
+    let sync = find("symbol_sync");
+    assert_eq!(sync.inputs[0].types, [PortType::C32, PortType::F32]);
+    assert_eq!(sync.outputs[0].types, [PortType::C32, PortType::F32]);
+    assert_eq!(sync.required, ["symbol_rate_hz"]);
+    let names: Vec<_> = sync.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("symbol_rate_hz", Mutability::Build),
+            ("ted", Mutability::Build),
+            ("loop_bw", Mutability::Build),
+            ("damping", Mutability::Build),
+            ("max_deviation", Mutability::Build),
+            ("ted_gain", Mutability::Build),
+        ]
+    );
+    assert_eq!(
+        sync.param("ted").unwrap().kind,
+        ParamKind::Choice {
+            options: &["gardner", "mm"],
+            default: 0
+        }
+    );
+    for word in ["matched filter", "agc", "variable", "ted_gain", "1/1000 Hz"] {
+        assert!(sync.details.contains(word), "symbol_sync details: {word}");
+    }
+    let slice = find("slice");
+    assert_eq!(slice.inputs[0].types, [PortType::C32, PortType::F32]);
+    assert_eq!(slice.outputs[0].types, [PortType::F32]);
+    assert!(slice.required.is_empty());
+    let names: Vec<_> = slice
+        .params
+        .iter()
+        .map(|p| (p.name, p.mutability))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("constellation", Mutability::Build),
+            ("scale", Mutability::Runtime),
+        ]
+    );
+    assert_eq!(
+        slice.param("constellation").unwrap().kind,
+        ParamKind::Choice {
+            options: &["real", "bpsk", "qpsk"],
+            default: 1
+        }
+    );
+    for word in [
+        "above 0 means bit 1",
+        "frame_decode",
+        "2 / sigma^2",
+        "symbol_sync",
+    ] {
+        assert!(slice.details.contains(word), "slice details: {word}");
+    }
+    let cfg = SymbolSyncConfig {
+        symbol_rate_hz: 1187.5,
+        ted: Ted::MuellerMuller,
+        ..SymbolSyncConfig::default()
+    };
+    let b = SymbolSyncBlock::<f32, _>::new(&cfg, rate(19_000), &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(b.description(), sync));
+    assert_eq!(b.param("ted"), Ok(ParamValue::Choice(1)));
+    let b =
+        SliceBlock::<C32, _>::new(&SliceConfig::default(), rate(1000), &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(b.description(), slice));
+}
+
 #[test]
 fn the_stereo_transmit_kinds_describe_their_ports_and_parameters() {
     let pl = find("preemph_limit");

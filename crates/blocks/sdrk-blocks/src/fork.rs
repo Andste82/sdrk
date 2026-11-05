@@ -145,7 +145,7 @@ fn layout<A: Block, B: Block>(a: &A, b: &B, chunk: usize) -> Result<Layout> {
         ));
     }
     let (ta, tb) = (a.timing(), b.timing());
-    if ta.kind == RatioKind::Variable || tb.kind == RatioKind::Variable {
+    if ta.kind != RatioKind::Constant || tb.kind != RatioKind::Constant {
         return Err(invalid(
             "fork",
             "fork branches need a ratio of kind constant",
@@ -536,7 +536,7 @@ where
 
     fn timing(&self) -> BlockTiming {
         let (ta, tb) = (self.a.timing(), self.b.timing());
-        let kind = if ta.kind == RatioKind::Variable || tb.kind == RatioKind::Variable {
+        let kind = if ta.kind != RatioKind::Constant || tb.kind != RatioKind::Constant {
             RatioKind::Variable
         } else {
             RatioKind::Constant

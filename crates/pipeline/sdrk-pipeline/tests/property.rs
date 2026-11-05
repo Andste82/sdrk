@@ -334,6 +334,8 @@ fn push_noise(p: &mut sdrk_pipeline::Pipeline, spec: &PipelineSpec, rng: &mut Pc
                         let v: Vec<Q15> = (0..n).map(|_| Q15(rng.next_u32() as i16)).collect();
                         p.push(name, InputData::Q15(&v))
                     }
+                    // The generated flows have no packet inputs.
+                    sdrk_pipeline::InputType::Packets => Ok(()),
                 }
             };
             result.unwrap_or_else(|e| panic!("push to {name} failed: {e}"));

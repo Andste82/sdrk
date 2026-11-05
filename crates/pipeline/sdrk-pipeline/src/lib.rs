@@ -3,7 +3,9 @@
 //! Layer `crates/pipeline` (heap allowed). A pipeline is a JSON document (inputs, nodes, edges,
 //! outputs). This crate parses and validates it with machine-readable diagnostics, builds it
 //! into a [`Pipeline`] of type-erased [`Node`]s over the heap-free blocks of `sdrk-blocks`, and
-//! runs it in push mode. Memory is allocated once, in `build`; processing does not allocate.
+//! runs it in push mode. Besides sample streams, inputs, outputs and edges can carry
+//! [`Packet`]s (byte messages with a sample index and flags). Memory is allocated once, in
+//! `build`; processing does not allocate.
 //!
 //! ```
 //! use sdrk_pipeline::{BuildOptions, InputData, Registry};
@@ -38,6 +40,8 @@
 
 mod analysis;
 mod build;
+#[cfg(test)]
+mod clocked_test;
 pub mod drift;
 mod error;
 mod groups;
@@ -63,18 +67,21 @@ pub use error::{Error, Result};
 pub use groups::split_by_groups;
 pub use model::{
     AlignMode, AlignSpec, BackendSpec, ContainerSpec, CustomFormat, DEFAULT_EVENT_QUEUE,
-    DEFAULT_MAX_CHUNK, DEFAULT_PENDING_PARAMS, DEFAULT_QUEUE, DropPolicy, EdgeSpec, EndianSpec,
-    FORMAT_NAMES, FORMAT_VERSION, FormatName, FormatSpec, FullScaleSpec, GroupSpec, InputSpec,
-    InputType, LayoutSpec, MAIN_GROUP, MAX_CHUNK_LIMIT, MAX_DESCRIPTION_CHARS, MAX_EVENT_QUEUE,
-    MAX_PENDING_PARAMS, NAME_PATTERN, NodeSpec, OutputSpec, OutputType, PipelineSpec, PortName,
-    Precision, RateHz, Settings, UnderrunPolicy, is_valid_name,
+    DEFAULT_MAX_CHUNK, DEFAULT_PACKET_QUEUE, DEFAULT_PENDING_PARAMS, DEFAULT_QUEUE, DropPolicy,
+    EdgeSpec, EndianSpec, FORMAT_NAMES, FORMAT_VERSION, FormatName, FormatSpec, FullScaleSpec,
+    GroupSpec, InputSpec, InputType, LayoutSpec, MAIN_GROUP, MAX_CHUNK_LIMIT,
+    MAX_DESCRIPTION_CHARS, MAX_EVENT_QUEUE, MAX_PENDING_PARAMS, NAME_PATTERN, NodeSpec, OutputSpec,
+    OutputType, PipelineSpec, PortName, Precision, RateHz, Settings, UnderrunPolicy, is_valid_name,
 };
-pub use node::{FrameNode, Node, NodeElem, NodeInput, NodeOutput, NodeSlice, PairNode, StreamNode};
+pub use node::{
+    ClockedNode, FrameNode, Node, NodeElem, NodeInput, NodeOutput, NodeSlice, PacketInNode,
+    PacketOutNode, PairNode, StreamNode,
+};
 pub use pull::{PullError, PullSource};
 pub use registry::{BlockFactory, BuildOptions, Checked, Limits, PortInfo, PortKind, Registry};
 pub use runner::{InputData, NodeStats, Pipeline};
 pub use schema::{SCHEMA_FILE, SCHEMA_ID};
-pub use sdrk_blocks::StreamElem;
+pub use sdrk_blocks::{Packet, PacketFlags, StreamElem};
 pub use storage::VecStorage;
 pub use time::{Event, EventKind, Latency, NodeId, OutputId, ParamTime};
 pub use validate::{DiagCode, Diagnostic, GroupEdge, NodeReport, OutputReport, Report};

@@ -1,5 +1,5 @@
-// The API of the package: validation, errors, events, timed parameters, pull mode, bursts and
-// the TypeScript declarations.
+// The API of the package: validation, errors, events, timed parameters, pull mode, bursts,
+// packets and the TypeScript declarations.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -205,7 +205,110 @@ test("index.d.ts declares every export and every method", async () => {
     if (method === "constructor" || method === "__destroy_into_raw") continue;
     assert.match(text, new RegExp(`\\b${method}\\(`), `method ${method}`);
   }
-  for (const name of ["Report", "Diagnostic", "SdrkEvent", "BlockMeta", "FrameMeta", "ParamTime", "PullResult", "NodeStats"]) {
+  for (const name of ["Report", "Diagnostic", "SdrkEvent", "BlockMeta", "FrameMeta", "ParamTime", "PullResult", "NodeStats", "Packet", "PacketIn"]) {
     assert.match(text, new RegExp(`export (type|interface) ${name}\\b`), name);
   }
+});
+
+/** The payload of a packet as lower-case hex. */
+const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+
+test("pushPackets and readPackets carry { index, flags, data } through frame_loop", async () => {
+  const { Pipeline, validate } = await api();
+  const { PacketFlags } = (await installedPackage()).module;
+  assert.deepEqual(validate(flow("frame_loop")).errors, []);
+  const p = Pipeline.fromJson(flow("frame_loop"));
+  assert.deepEqual(p.readPackets("out"), []);
+  const hello = hex(new TextEncoder().encode("hello"));
+  const long = hex(Uint8Array.from({ length: 253 }, (_, i) => (i * 7) & 0xff));
+  p.pushPackets("msg", [{ data: hello }, { index: 5n, flags: 0, data: "" }, { index: 9, data: long }]);
+  assert.equal(p.available("out"), 3);
+  const got = p.readPackets("out");
+  assert.deepEqual(got.map((q) => q.data), [hello, "", long]);
+  for (const q of got) {
+    assert.equal(typeof q.index, "bigint");
+    assert.equal(q.flags, PacketFlags.CrcOk);
+  }
+  assert.equal(got[0].index, 32n); // the first sync bit, after 4 preamble bytes
+  assert.ok(got[1].index > got[0].index && got[2].index > got[1].index);
+  assert.equal(p.available("out"), 0);
+  assert.deepEqual(p.readPackets("out"), []);
+  assert.equal(p.dropped("out"), 0n);
+
+  // Errors: nothing is taken from a failing push.
+  for (const bad of [
+    [{ data: "ABCD" }],
+    [{ data: "abc" }],
+    [{ data: "zz" }],
+    [{ data: "00".repeat(257) }],
+    [{ flags: 0 }],
+    [{ data: "00", index: -1 }],
+    [{ data: "00", flags: 1.5 }],
+    [42],
+    "00",
+    null,
+  ]) {
+    assert.throws(() => p.pushPackets("msg", bad), { kind: "InvalidArgument" }, JSON.stringify(bad));
+  }
+  assert.throws(() => p.pushPackets("msg", [{ data: hello }, { data: "0g" }]), { kind: "InvalidArgument" });
+  assert.equal(p.available("out"), 0);
+  assert.throws(() => p.push("msg", new Float32Array(4)), { kind: "InvalidArgument" });
+  assert.throws(() => p.readStream("out", new Float32Array(4)), { kind: "InvalidArgument" });
+  assert.throws(() => p.readPackets("nope"), { kind: "InvalidArgument" });
+  assert.throws(() => p.pushPackets("msg", Array(4097).fill({ data: "" })), { kind: "LengthMismatch" });
+  p.free();
+});
+
+test("a packet output with drop_oldest keeps the newest packets", async () => {
+  const { Pipeline } = await api();
+  const spec = JSON.parse(flow("frame_loop"));
+  spec.outputs.out = { type: "packets", queue: 2, drop: "drop_oldest" };
+  const p = Pipeline.fromJson(JSON.stringify(spec));
+  p.pushPackets("msg", ["01", "02", "03", "04"].map((data) => ({ data })));
+  assert.equal(p.dropped("out"), 2n);
+  assert.deepEqual(p.readPackets("out").map((q) => q.data), ["03", "04"]);
+  p.free();
+});
+
+test("pull mode with a packet source: null means idle, not the end", async () => {
+  const { Pipeline } = await api();
+  const tx = Pipeline.fromJson(JSON.stringify({
+    sdrk: 1, name: "tx",
+    inputs: { msg: { type: "packets", rate_hz: 48000 } },
+    nodes: { enc: { kind: "frame_encode", params: { idle: "preamble" } } },
+    edges: [{ from: "msg", to: "enc" }, { from: "enc", to: "tx" }],
+    outputs: { tx: { type: "stream" } },
+  }));
+  const rx = Pipeline.fromJson(JSON.stringify({
+    sdrk: 1, name: "rx",
+    inputs: { bits: { type: "f32", rate_hz: 48000 } },
+    nodes: { dec: { kind: "frame_decode" } },
+    edges: [{ from: "bits", to: "dec" }, { from: "dec", to: "out" }],
+    outputs: { out: { type: "packets", queue: 1024 } },
+  }));
+  const messages = ["c0ffee", "", "00ff00ff", "736472"];
+  let calls = 0;
+  let sent = 0;
+  const source = (input, max) => {
+    assert.equal(input, "msg");
+    assert.ok(max >= 1);
+    calls += 1;
+    if (calls % 2 === 0 || sent >= messages.length) return null; // idle
+    return [{ data: messages[sent++] }];
+  };
+  const out = new Float32Array(1024);
+  const got = [];
+  for (let i = 0; i < 40; i++) {
+    const { samples } = tx.pull("tx", out, source);
+    assert.equal(samples, out.length);
+    assert.ok(out.every((v) => v === 1 || v === -1)); // the idle signal is the preamble
+    rx.push("bits", out);
+    got.push(...rx.readPackets("out"));
+  }
+  assert.equal(sent, messages.length);
+  assert.deepEqual(got.map((q) => q.data), messages);
+  assert.throws(() => tx.pull("tx", out, () => [{ data: "00" }, { data: "00" }].concat(Array(5000).fill({ data: "" }))), { kind: "LengthMismatch" });
+  assert.throws(() => tx.pull("tx", out, () => new Float32Array(4)), { kind: "InvalidArgument" });
+  tx.free();
+  rx.free();
 });

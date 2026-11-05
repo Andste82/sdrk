@@ -36,6 +36,7 @@ const FM_TRANSMITTER: &str = include_str!("../../../examples/flows/fm_transmitte
 const NFM_TRANSMITTER: &str = include_str!("../../../examples/flows/nfm_transmitter.json");
 const RESAMPLE_AUDIO: &str = include_str!("../../../examples/flows/resample_audio.json");
 const SPECTRUM_ONLY: &str = include_str!("../../../examples/flows/spectrum_only.json");
+const FRAME_LOOP: &str = include_str!("../../../examples/flows/frame_loop.json");
 
 fn get(value: &JsValue, key: &str) -> JsValue {
     Reflect::get(value, &JsValue::from_str(key)).unwrap()
@@ -141,6 +142,7 @@ fn every_example_flow_validates_clean() {
         ),
         ("resample_audio", RESAMPLE_AUDIO),
         ("spectrum_only", SPECTRUM_ONLY),
+        ("frame_loop", FRAME_LOOP),
     ] {
         let report = validate(flow).unwrap();
         assert_eq!(array_len(&report, "errors"), 0, "{name}");
@@ -610,4 +612,43 @@ fn a_pipeline_is_freed_and_rebuilt() {
     drop(pipeline);
     let again = Pipeline::from_json(FM_RECEIVER).unwrap();
     assert_eq!(again.chunk_size("audio").unwrap(), 4096.0);
+}
+
+#[wasm_bindgen_test]
+fn packets_go_through_push_packets_and_read_packets() {
+    let mut p = Pipeline::from_json(FRAME_LOOP).unwrap();
+    let packets = js_sys::Array::new();
+    packets.push(&object(&[("data", JsValue::from_str("68656c6c6f"))]));
+    packets.push(&object(&[
+        ("index", JsValue::from(7u64)),
+        ("flags", JsValue::from_f64(0.0)),
+        ("data", JsValue::from_str("")),
+    ]));
+    p.push_packets("msg", &packets).unwrap();
+    assert_eq!(p.available("out").unwrap(), 2.0);
+    let got = p.read_packets("out").unwrap();
+    assert_eq!(got.length(), 2);
+    let first = got.get(0);
+    assert_eq!(string(&first, "data"), "68656c6c6f");
+    assert_eq!(number(&first, "flags"), 1.0);
+    assert_eq!(big(&get(&first, "index")), 32);
+    assert_eq!(string(&got.get(1), "data"), "");
+    assert_eq!(p.read_packets("out").unwrap().length(), 0);
+
+    let bad = js_sys::Array::new();
+    bad.push(&object(&[("data", JsValue::from_str("ABCD"))]));
+    expect_error(p.push_packets("msg", &bad), "InvalidArgument");
+    expect_error(
+        p.push_packets("msg", &JsValue::from_str("00")),
+        "InvalidArgument",
+    );
+    expect_error(
+        p.push(
+            "msg",
+            &Float32Array::new_with_length(4).into(),
+            &JsValue::UNDEFINED,
+        ),
+        "InvalidArgument",
+    );
+    expect_error(p.read_packets("nope"), "InvalidArgument");
 }

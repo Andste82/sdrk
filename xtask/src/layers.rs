@@ -19,6 +19,9 @@ pub enum Layer {
     Backend,
     /// `crates/facade/*`.
     Facade,
+    /// `crates/proto/*`: protocol logic without signal processing; depends on the device crate
+    /// only (M37).
+    Proto,
     /// `crates/blocks/*`.
     Blocks,
     /// `crates/pipeline/*` (heap allowed).
@@ -40,10 +43,11 @@ impl Layer {
             Layer::Core => 1,
             Layer::Backend => 2,
             Layer::Facade => 3,
-            Layer::Blocks => 4,
-            Layer::Pipeline | Layer::Io => 5,
-            Layer::Testing => 6,
-            Layer::App => 7,
+            Layer::Proto => 4,
+            Layer::Blocks => 5,
+            Layer::Pipeline | Layer::Io => 6,
+            Layer::Testing => 7,
+            Layer::App => 8,
         }
     }
 
@@ -56,6 +60,7 @@ impl Layer {
                 | Layer::Core
                 | Layer::Backend
                 | Layer::Facade
+                | Layer::Proto
                 | Layer::Blocks
                 | Layer::Testing
         )
@@ -75,10 +80,14 @@ impl Layer {
     }
 
     /// Whether a crate of this layer may use a normal or build dependency on `to`.
+    ///
+    /// The rank decides, with one exception: `crates/proto` sits above the facade only so that
+    /// nothing below `crates/blocks` may depend on it, and itself depends on `sdrk-device` only.
     #[must_use]
     pub fn may_depend_on(self, to: Layer) -> bool {
         match self {
             Layer::App => true,
+            Layer::Proto => to == Layer::Device,
             Layer::Testing => !matches!(to, Layer::App | Layer::Testing),
             _ => !matches!(to, Layer::Testing | Layer::App) && to.rank() < self.rank(),
         }
@@ -101,6 +110,7 @@ pub fn layer_of(rel_dir: &Path, name: &str) -> Layer {
         ["crates", "core", ..] => Layer::Core,
         ["crates", "backends", ..] => Layer::Backend,
         ["crates", "facade", ..] => Layer::Facade,
+        ["crates", "proto", ..] => Layer::Proto,
         ["crates", "blocks", ..] => Layer::Blocks,
         ["crates", "pipeline", ..] => Layer::Pipeline,
         ["crates", "io", ..] => Layer::Io,
@@ -295,6 +305,7 @@ mod tests {
             Layer::Backend
         );
         assert_eq!(l("crates/facade/sdrk", "sdrk"), Layer::Facade);
+        assert_eq!(l("crates/proto/sdrk-proto", "sdrk-proto"), Layer::Proto);
         assert_eq!(l("crates/blocks/sdrk-blocks", "sdrk-blocks"), Layer::Blocks);
         assert_eq!(
             l("crates/pipeline/sdrk-pipeline", "sdrk-pipeline"),
@@ -318,6 +329,7 @@ mod tests {
         assert_eq!(Layer::Device.std_policy(), StdPolicy::Forbidden);
         assert_eq!(Layer::Facade.std_policy(), StdPolicy::Forbidden);
         assert_eq!(Layer::Blocks.std_policy(), StdPolicy::Forbidden);
+        assert_eq!(Layer::Proto.std_policy(), StdPolicy::Forbidden);
     }
 
     #[test]
@@ -334,11 +346,30 @@ mod tests {
         assert!(Layer::Testing.may_depend_on(Layer::Pipeline));
         assert!(!Layer::Pipeline.may_depend_on(Layer::Testing));
         assert!(Layer::App.may_depend_on(Layer::Testing));
+        // `crates/proto` (M37): depends on the device crate only; blocks and above may use it,
+        // nothing below the blocks may.
+        assert!(Layer::Proto.may_depend_on(Layer::Device));
+        for lower in [Layer::Core, Layer::Backend, Layer::Facade, Layer::Proto] {
+            assert!(!Layer::Proto.may_depend_on(lower), "{lower:?}");
+        }
+        for upper in [
+            Layer::Blocks,
+            Layer::Pipeline,
+            Layer::Io,
+            Layer::Testing,
+            Layer::App,
+        ] {
+            assert!(upper.may_depend_on(Layer::Proto), "{upper:?}");
+        }
+        for below in [Layer::Device, Layer::Core, Layer::Backend, Layer::Facade] {
+            assert!(!below.may_depend_on(Layer::Proto), "{below:?}");
+        }
     }
 
     #[test]
     fn heap_free_layers() {
         assert!(Layer::Blocks.heap_free());
+        assert!(Layer::Proto.heap_free());
         assert!(Layer::Testing.heap_free());
         assert!(!Layer::Pipeline.heap_free());
         assert!(!Layer::Io.heap_free());

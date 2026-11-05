@@ -21,6 +21,8 @@ relaxed-simd = ["sdrk/relaxed-simd"]
 sdrk = { path = "../../crates/facade/sdrk", features = ["std"] }
 sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
 sdrk-device = { path = "../../crates/core/sdrk-device" }
+# Only for the hex form of packets (`sdrk_io::packets`), shared with the JSON Lines files.
+sdrk-io = { path = "../../crates/io/sdrk-io" }
 sdrk-pipeline = { path = "../../crates/pipeline/sdrk-pipeline", default-features = false }
 bytemuck.workspace = true
 serde_json = "1.0.154"

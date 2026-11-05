@@ -319,10 +319,10 @@ fn audio_group(
             );
             // The description matches the input of this group.
             let input = &spec.inputs[EDGE_NAME];
-            assert_eq!(
-                h.rate_hz,
-                format!("{}/{}", input.rate_hz.0.num(), input.rate_hz.0.den())
-            );
+            assert_eq!(h.rate_hz, {
+                let rate = input.rate_hz.unwrap().0;
+                format!("{}/{}", rate.num(), rate.den())
+            });
         }
         MessageType::Event => meta.event(&m.to_event(any).unwrap()),
         MessageType::Samples => {

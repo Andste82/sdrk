@@ -17,6 +17,8 @@ pub mod fir;
 pub mod fm_demod;
 pub mod fm_mod;
 pub mod fm_stereo_demod;
+pub mod frame_decode;
+pub mod frame_encode;
 pub mod halfband_decimate;
 pub mod imag_part;
 pub mod interpolate;

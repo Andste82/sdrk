@@ -852,6 +852,23 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
     }
 }
 
+/// A protocol entry of `sdrk-proto` or a packet block of M37: no backends, so ours and the
+/// fallback are the same code; a "sample" is a byte (CRCs), a bit (frame decoder) or a signal
+/// sample of one bit (the blocks `frame_encode` and `frame_decode`), and the buffers are plain
+/// vectors, so there is no misaligned variant. `family` is [`Family::GnuRadio`] for the CRCs
+/// (GNU Radio's `gr::digital::crc`, D466) and [`Family::Own`] (information only) for the
+/// framing, which no library has.
+const fn proto(name: &'static str, family: Family) -> KernelSpec {
+    KernelSpec {
+        name,
+        family,
+        samples: N,
+        small_n: false,
+        misaligned: false,
+        own: None,
+    }
+}
+
 const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
     KernelSpec {
         name,
@@ -864,7 +881,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 179] = [
+pub static KERNELS: [KernelSpec; 186] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1067,6 +1084,13 @@ pub static KERNELS: [KernelSpec; 179] = [
     spec("noise_blank", Family::Own, false),
     spec("noise_blank_cq15", Family::Own, false),
     spec("auto_notch", Family::Own, false),
+    proto("crc16_ccitt_false", Family::GnuRadio),
+    proto("crc16_x25", Family::GnuRadio),
+    proto("crc32", Family::GnuRadio),
+    proto("crc24_adsb", Family::GnuRadio),
+    proto("frame_decode", Family::Own),
+    proto("frame_encode_block", Family::Own),
+    proto("frame_decode_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4437,6 +4461,45 @@ mod tests {
         for k in names {
             let fallback = format!("{k}_fallback");
             assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
+        }
+    }
+
+    #[test]
+    fn the_protocol_entries_are_gated_against_gnu_radio_or_information() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let crcs = ["crc16_ccitt_false", "crc16_x25", "crc32", "crc24_adsb"];
+        let framing = ["frame_decode", "frame_encode_block", "frame_decode_block"];
+        let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            // The CRCs against GNU Radio's `gr::digital::crc` (D466), the framing against our
+            // own code (no library has it).
+            for k in crcs {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::GnuRadio, vec![Reference::Fallback]),
+                    "{k} at {level}"
+                );
+            }
+            for k in framing {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in names {
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(k)).0,
+                Reference::OwnLevel("avx2"),
+                "{k}"
+            );
+            assert!(!kernel(k).misaligned && !kernel(k).small_n, "{k}");
+            assert!(
+                KERNELS.iter().all(|s| s.name != format!("{k}_fallback")),
+                "{k}"
+            );
         }
     }
 

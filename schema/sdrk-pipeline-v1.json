@@ -335,7 +335,7 @@
     },
     "InputSpec": {
       "additionalProperties": false,
-      "description": "An input of the pipeline: raw bytes in a `format` or converted samples of a `type`.\n\n```\nuse sdrk_pipeline::InputSpec;\nlet i: InputSpec = serde_json::from_str(r#\"{\"format\":\"cu8\",\"rate_hz\":2400000}\"#)?;\nassert_eq!(i.rate_hz.0.num(), 2_400_000);\n# Ok::<(), serde_json::Error>(())\n```",
+      "description": "An input of the pipeline: raw bytes in a `format`, converted samples of a `type`, or\npackets (`\"type\": \"packets\"`).\n\n```\nuse sdrk_pipeline::InputSpec;\nlet i: InputSpec = serde_json::from_str(r#\"{\"format\":\"cu8\",\"rate_hz\":2400000}\"#)?;\nassert_eq!(i.rate_hz.map(|r| r.0.num()), Some(2_400_000));\n// A packet input that only feeds port `b` of a clocked encoder needs no rate.\nlet p: InputSpec = serde_json::from_str(r#\"{\"type\":\"packets\"}\"#)?;\nassert_eq!(p.rate_hz, None);\n# Ok::<(), serde_json::Error>(())\n```",
       "properties": {
         "description": {
           "description": "Free text (at most 2000 characters).",
@@ -356,8 +356,15 @@
           "description": "Raw sample format; an automatic `convert` node follows the input. Exactly one of\n`format` and `type` must be given."
         },
         "rate_hz": {
-          "$ref": "#/$defs/RateHz",
-          "description": "Sample rate in Hz."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateHz"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sample rate in Hz. Required for every sample input. A packet input needs it when an\nencoder of kind `Source` (e.g. `frame_encode`) reads it: it is the rate of the stream\nthe encoder produces. A packet input read only by port `b` of a clocked encoder ignores\nit (with a warning)."
         },
         "type": {
           "anyOf": [
@@ -371,13 +378,10 @@
           "description": "Type of already converted samples. Exactly one of `format` and `type` must be given."
         }
       },
-      "required": [
-        "rate_hz"
-      ],
       "type": "object"
     },
     "InputType": {
-      "description": "The type of an input that delivers already converted samples.",
+      "description": "The type of an input that delivers already converted samples, or packets.\n\n```\nuse sdrk_pipeline::InputType;\nassert_eq!(serde_json::to_string(&InputType::Packets)?, \"\\\"packets\\\"\");\n# Ok::<(), serde_json::Error>(())\n```",
       "oneOf": [
         {
           "const": "c32",
@@ -397,6 +401,11 @@
         {
           "const": "q15",
           "description": "Real Q15.",
+          "type": "string"
+        },
+        {
+          "const": "packets",
+          "description": "Packets ([`Packet`](crate::Packet)), pushed with `push_packets`. The input starts its\nown clock domain; `rate_hz` is the sample rate of the stream that an encoder of kind\n`Source` (e.g. `frame_encode`) produces from it.",
           "type": "string"
         }
       ]
@@ -464,7 +473,7 @@
           "description": "Stream outputs only: convert to this raw format (an automatic `convert_out` node)."
         },
         "queue": {
-          "description": "Frame outputs only: queue length in frames (default 4).",
+          "description": "Frame outputs: queue length in frames (default 4). Packet outputs: queue length in\npackets (default 64, 1 to 65 536).",
           "format": "uint",
           "minimum": 0,
           "type": [
@@ -474,7 +483,7 @@
         },
         "type": {
           "$ref": "#/$defs/OutputType",
-          "description": "`\"stream\"` or `\"frames\"`."
+          "description": "`\"stream\"`, `\"frames\"` or `\"packets\"`."
         },
         "underrun": {
           "anyOf": [
@@ -504,6 +513,11 @@
         {
           "const": "frames",
           "description": "Frames of `f32` values from a block with frame output.",
+          "type": "string"
+        },
+        {
+          "const": "packets",
+          "description": "Packets from a block with a packet output (e.g. `frame_decode`) or a packet input.",
           "type": "string"
         }
       ]
@@ -1671,6 +1685,102 @@
                       "mono"
                     ],
                     "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Finds frames of the test framing in a stream of soft bits and outputs their packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "frame_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "emit_bad": {
+                    "default": false,
+                    "description": "Also output frames whose CRC does not match, with the flag CRC_FAIL. Typical: false; true to count or inspect damaged frames. Build-time.",
+                    "type": "boolean"
+                  },
+                  "max_sync_errors": {
+                    "default": 0,
+                    "description": "Number of sync word bits that may differ. Typical: 0 for clean links, 2 for noisy ones. Build-time.",
+                    "maximum": 4,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Frames packets with preamble, sync word, length and CRC and outputs one +1/-1 sample per bit.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "frame_encode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "idle": {
+                    "default": "zero",
+                    "description": "What is sent between frames: zero sends 0.0, preamble the bits of 0x55 as +1/-1. Typical: zero; preamble to keep a receiver's clock recovery busy. Build-time.",
+                    "enum": [
+                      "zero",
+                      "preamble"
+                    ],
+                    "type": "string"
+                  },
+                  "preamble_bytes": {
+                    "default": 4,
+                    "description": "Bytes 0x55 sent before the sync word of every frame. Typical: 4; more for receivers that need time to settle. Build-time.",
+                    "maximum": 32,
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 },
                 "type": "object"

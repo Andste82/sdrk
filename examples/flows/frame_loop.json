@@ -1,0 +1,53 @@
+{
+  "sdrk": 1,
+  "name": "frame-loop",
+  "description": "Packets framed into one +1/-1 sample per bit and decoded again: the proof flow of the packet ports.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "msg": {
+      "type": "packets",
+      "rate_hz": 48000,
+      "description": "Packets to send, up to 253 bytes each"
+    }
+  },
+  "nodes": {
+    "dec": {
+      "kind": "frame_decode",
+      "params": {
+        "emit_bad": false,
+        "max_sync_errors": 0
+      }
+    },
+    "enc": {
+      "kind": "frame_encode",
+      "params": {
+        "idle": "zero",
+        "preamble_bytes": 4
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "msg",
+      "to": "enc"
+    },
+    {
+      "from": "enc",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "out"
+    }
+  ],
+  "outputs": {
+    "out": {
+      "type": "packets",
+      "queue": 4096,
+      "description": "The decoded packets with CRC_OK and the sample index of their sync word"
+    }
+  }
+}

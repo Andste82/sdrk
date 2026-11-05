@@ -1,6 +1,6 @@
 [package]
 name = "sdrk-io"
-description = "SDRk file I/O: raw, SigMF (with captures and annotations) and WAV as RX/TX streams."
+description = "SDRk file I/O: raw, SigMF (with captures and annotations) and WAV as RX/TX streams; JSON Lines packet files."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 sdrk-device = { path = "../../core/sdrk-device" }
+sdrk-proto = { path = "../../proto/sdrk-proto" }
 serde_json = "1.0.154"
 
 [dev-dependencies]

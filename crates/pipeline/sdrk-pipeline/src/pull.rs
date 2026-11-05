@@ -35,8 +35,10 @@ pub type PullError = crate::Error;
 /// # Ok::<(), PullError>(())
 /// ```
 pub trait PullSource {
-    /// Returns at most `max_samples` elements for the input `input` (bytes for a raw input).
-    /// An empty result means that the source is exhausted.
+    /// Returns at most `max_samples` elements for the input `input` (bytes for a raw input,
+    /// packets for a packet input). An empty result means that the source is exhausted; for a
+    /// packet input it means "nothing to send now": the encoder emits its idle signal for the
+    /// samples the output still needs, so a packet input never underruns.
     fn provide(&mut self, input: &str, max_samples: usize) -> Result<InputData<'_>, PullError>;
 }
 
@@ -54,6 +56,8 @@ pub(crate) fn zero_input(ty: PortType, samples: usize) -> ZeroInput {
         PortType::CQ15 => ZeroInput::CQ15(vec![sdrk::CQ15::default(); samples]),
         PortType::F32 => ZeroInput::F32(vec![0.0; samples]),
         PortType::Q15 => ZeroInput::Q15(vec![sdrk::Q15::default(); samples]),
+        // A packet input is never fed zeros: its encoder sends the idle signal instead.
+        PortType::Packets => ZeroInput::Packets,
         _ => ZeroInput::Raw(vec![0; samples]),
     }
 }
@@ -64,6 +68,7 @@ pub(crate) enum ZeroInput {
     CQ15(Vec<sdrk::CQ15>),
     F32(Vec<f32>),
     Q15(Vec<sdrk::Q15>),
+    Packets,
 }
 
 impl Default for ZeroInput {
@@ -80,6 +85,7 @@ impl ZeroInput {
             Self::CQ15(v) => InputData::CQ15(v.get(..n).unwrap_or(v)),
             Self::F32(v) => InputData::F32(v.get(..n).unwrap_or(v)),
             Self::Q15(v) => InputData::Q15(v.get(..n).unwrap_or(v)),
+            Self::Packets => InputData::Packets(&[]),
         }
     }
 }
@@ -351,6 +357,10 @@ impl Pipeline {
 
     /// Asks the source for input for `missing` more output elements and pushes it. Returns
     /// false if the source is exhausted.
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+    )]
     fn produce(&mut self, oi: usize, missing: usize, source: &mut dyn PullSource) -> Result<bool> {
         let ii = at(&self.outputs, oi)?.input;
         let inp = at(&self.inputs, ii)?;
@@ -367,8 +377,13 @@ impl Pipeline {
             .unwrap_or(usize::MAX)
             .min(inp.max_len)
             .max(1);
+        let packets = inp.ty == PortType::Packets;
         let data = source.provide(&inp.name, n)?;
         if data.is_empty() {
+            if packets {
+                self.idle(oi, missing)?;
+                return Ok(true);
+            }
             return Ok(false);
         }
         if data.len() > n {
@@ -381,6 +396,53 @@ impl Pipeline {
         self.ingest(ii, &data)?;
         self.run()?;
         Ok(true)
+    }
+
+    /// The packet source of output `oi` has nothing to send: the encoder at the start of the
+    /// path emits its idle signal for `missing` more output elements. Queued packets go first.
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+    )]
+    fn idle(&mut self, oi: usize, missing: usize) -> Result<()> {
+        let o = at(&self.outputs, oi)?;
+        let (ii, out_rate) = (o.input, o.rate);
+        let Some(&enc) = o.path.first() else {
+            return Err(internal("a packet input without an encoder"));
+        };
+        if at(&self.nodes, enc)?.src != at(&self.inputs, ii)?.stream {
+            return Err(internal("a packet input without an encoder"));
+        }
+        let before = self.produced_index_of(oi)?;
+        if self.packets_waiting(ii, enc)? {
+            // The encoder still has packets (its output was full); they continue first.
+            self.run()?;
+        } else {
+            let rate_out = at(&self.nodes, enc)?.rate_out;
+            // Output elements to samples of the encoder output.
+            let k = (missing as u128)
+                .saturating_mul(u128::from(rate_out.num()) * u128::from(out_rate.den()))
+                .div_ceil(u128::from(rate_out.den()) * u128::from(out_rate.num()))
+                .max(1);
+            let k = usize::try_from(k).unwrap_or(usize::MAX);
+            self.step_idle(enc, k)?;
+            self.run()?;
+        }
+        if self.produced_index_of(oi)? == before && self.queued(oi)? == 0 {
+            return Err(internal("the packet encoder of a pull made no progress"));
+        }
+        Ok(())
+    }
+
+    /// Whether node `ni` has unread packets in the stream of the packet input `ii`.
+    fn packets_waiting(&self, ii: usize, ni: usize) -> Result<bool> {
+        let sid = at(&self.inputs, ii)?.stream;
+        let n = at(&self.nodes, ni)?;
+        if n.src != sid {
+            return Ok(false);
+        }
+        let s = at(&self.streams, sid)?;
+        Ok(s.end > *at(&s.readers, n.slot)?)
     }
 
     /// Starts a burst: the next sample the output produces is its first sample.
@@ -493,6 +555,9 @@ impl Pipeline {
         let (ii, lead, lead_in) = (o.input, o.lead, o.lead_in);
         let inp = at(&self.inputs, ii)?;
         let (ty, max_len, stream) = (inp.ty, inp.max_len, inp.stream);
+        if ty == PortType::Packets {
+            return self.end_packet_burst(oi, lead, lead_in);
+        }
         let elems = at(&self.streams, stream)?.elems;
         let in_end = at(&self.streams, stream)?.next_idx();
         let mut left = ceil_delay(lead_in);
@@ -517,6 +582,53 @@ impl Pipeline {
         }
         let o = at(&self.outputs, oi)?;
         let mapped = map_along(&self.nodes, &self.streams, &o.path, in_end);
+        let end = mapped
+            .saturating_add(ceil_delay(lead))
+            .min(self.produced_index_of(oi)?);
+        at_mut(&mut self.outputs, oi)?.burst = Burst::Ending { end };
+        self.events.push(Event {
+            output: OutputId::new(oi),
+            index: end.saturating_sub(1),
+            kind: EventKind::BurstEnd,
+        });
+        Ok(())
+    }
+
+    /// `end_burst` behind a packet input: the encoder at the start of the path sends
+    /// `ceil(lead_in)` idle samples (`lead_in` counts samples of its output, whose rate is the
+    /// `rate_hz` of the input) so that the filter tails come out; the burst ends after the
+    /// samples that the encoder had produced when `end_burst` was called.
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+    )]
+    fn end_packet_burst(
+        &mut self,
+        oi: usize,
+        lead: sdrk::Delay,
+        lead_in: sdrk::Delay,
+    ) -> Result<()> {
+        // Only the encoder index is read up front; the rest of the path is borrowed after the
+        // loop, so no copy of the path is made (processing does not allocate, R3.6).
+        let Some(&enc) = at(&self.outputs, oi)?.path.first() else {
+            return Err(internal("a packet input without an encoder"));
+        };
+        let Dst::Stream(enc_out) = at(&self.nodes, enc)?.dst else {
+            return Err(internal("a packet encoder without a stream"));
+        };
+        let enc_end = at(&self.streams, enc_out)?.next_idx();
+        let mut left = ceil_delay(lead_in);
+        while left > 0 {
+            let chunk = usize::try_from(left).unwrap_or(usize::MAX);
+            let produced = self.step_idle(enc, chunk)?;
+            self.run()?;
+            if produced == 0 {
+                return Err(Error::OutputFull(at(&self.outputs, oi)?.name.clone()));
+            }
+            left = left.saturating_sub(produced as u64);
+        }
+        let rest = at(&self.outputs, oi)?.path.get(1..).unwrap_or_default();
+        let mapped = map_along(&self.nodes, &self.streams, rest, enc_end);
         let end = mapped
             .saturating_add(ceil_delay(lead))
             .min(self.produced_index_of(oi)?);

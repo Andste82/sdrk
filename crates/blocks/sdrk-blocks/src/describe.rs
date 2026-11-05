@@ -78,6 +78,9 @@ pub enum PortType {
         /// Name of the parameter that holds the frame length.
         len_param: &'static str,
     },
+    /// Packets ([`Packet`](sdrk_proto::Packet): bytes with a sample index and flags), named
+    /// `"packets"` in schemas and documentation.
+    Packets,
 }
 
 /// A parameter of a block.
@@ -274,11 +277,11 @@ pub enum ParamKind {
 ///
 /// ```
 /// let kinds: Vec<_> = sdrk_blocks::all_descriptions().iter().map(|d| d.kind).collect();
-/// assert_eq!(kinds.len(), 38);
+/// assert_eq!(kinds.len(), 40);
 /// assert!(kinds.contains(&"resample"));
 /// ```
 pub fn all_descriptions() -> &'static [&'static BlockDescription] {
-    static ALL: [&BlockDescription; 38] = [
+    static ALL: [&BlockDescription; 40] = [
         &crate::blocks::convert::DESCRIPTION,
         &crate::blocks::convert_out::DESCRIPTION,
         &crate::blocks::scale::DESCRIPTION,
@@ -317,6 +320,8 @@ pub fn all_descriptions() -> &'static [&'static BlockDescription] {
         &crate::blocks::stereo_matrix::DESCRIPTION,
         &crate::blocks::noise_blank::DESCRIPTION,
         &crate::blocks::auto_notch::DESCRIPTION,
+        &crate::blocks::frame_encode::DESCRIPTION,
+        &crate::blocks::frame_decode::DESCRIPTION,
     ];
     &ALL
 }

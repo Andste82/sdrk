@@ -9,11 +9,14 @@ The folder of a crate is its layer. A crate may depend only on crates in lower l
 | `crates/core` | `sdrk-device` (rank 0), `sdrk-core` (rank 1) | lower rank | yes |
 | `crates/backends` | `sdrk-backend-*` | `sdrk-core`, `sdrk-device` | yes |
 | `crates/facade` | `sdrk` | core, backends | yes |
-| `crates/blocks` | `sdrk-blocks` | facade, core | yes |
-| `crates/pipeline` | `sdrk-pipeline` | blocks, facade, core | no |
-| `crates/io` | `sdrk-io` | core (types only) | no |
+| `crates/proto` | `sdrk-proto` | `sdrk-device` | yes |
+| `crates/blocks` | `sdrk-blocks` | facade, core, proto | yes |
+| `crates/pipeline` | `sdrk-pipeline` | blocks, proto, facade, core | no |
+| `crates/io` | `sdrk-io` | `sdrk-device`, `sdrk-proto` (types only) | no |
 | `crates/testing` | `sdrk-testkit` | any library crate | `no_std` by default, feature `std` |
 | `bindings/*`, `examples/*`, `targets/*`, `benches/*`, `xtask` | — | anything | no |
+
+`sdrk-proto` (M37) holds protocol logic without signal processing: the packet type `Packet` with its flags, table-driven CRCs (CRC-16/CCITT-FALSE, CRC-16/X-25, CRC-32/ISO-HDLC, the Mode S CRC-24) and the test framing `frame`. It depends on `sdrk-device` only, and nothing below `crates/blocks` depends on it: `cargo xtask check layers` ranks the folder above the facade and below the blocks and allows it the device crate alone. It is heap-free, so `cargo xtask bare-metal` builds it for `thumbv7em-none-eabihf`. `sdrk-io` uses only its packet type, for the JSON Lines packet files ([io.md](io.md#packet-files-json-lines)); the rank rule of `check layers` allows this, as it allows every layer above the facade to use `crates/proto`.
 
 ## Principles
 

@@ -80,13 +80,13 @@ jobs:
           RUSTFLAGS: "-C target-feature=+simd128"
         run: >
           cargo clippy --target wasm32-wasip1 --target-dir target/wasm-clippy --all-targets
-          -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks -- -D warnings
+          -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-proto -p sdrk-blocks -- -D warnings
       - name: Clippy (sdrk-wasm on wasm32-unknown-unknown, tests included)
         run: cargo clippy -p sdrk-wasm --all-targets --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy (thumbv7em-none-eabihf, the heap-free crates)
         run: >
           cargo clippy --target thumbv7em-none-eabihf --no-default-features
-          -p sdrk-device -p sdrk-core -p sdrk -p sdrk-blocks -p sdrk-testkit -- -D warnings
+          -p sdrk-device -p sdrk-core -p sdrk -p sdrk-proto -p sdrk-blocks -p sdrk-testkit -- -D warnings
       - name: Architecture checks and cargo doc (-D warnings)
         run: cargo xtask check
       - name: Pipeline schema is up to date
@@ -541,7 +541,7 @@ jobs:
       - name: Without simd128 (scalar)
         env:
           SDRK_EXPECT_LEVEL: scalar
-        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
+        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-proto -p sdrk-blocks
       - name: With simd128
         env:
           RUSTFLAGS: "-C target-feature=+simd128"

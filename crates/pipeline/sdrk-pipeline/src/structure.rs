@@ -322,14 +322,24 @@ impl Checker {
             else {
                 continue;
             };
-            if let Some(v) = self.required(map, "rate_hz", &path) {
+            // A packet input may leave out its rate (stage 1 checks who reads it).
+            let packets = map.get("type").and_then(Value::as_str) == Some("packets");
+            if packets {
+                if let Some(v) = map.get("rate_hz") {
+                    self.rate(v, &join(&path, "rate_hz"));
+                }
+            } else if let Some(v) = self.required(map, "rate_hz", &path) {
                 self.rate(v, &join(&path, "rate_hz"));
             }
             if let Some(v) = map.get("format") {
                 self.format(v, &join(&path, "format"));
             }
             if let Some(v) = map.get("type") {
-                self.one_of(v, &join(&path, "type"), &["c32", "cq15", "f32", "q15"]);
+                self.one_of(
+                    v,
+                    &join(&path, "type"),
+                    &["c32", "cq15", "f32", "q15", "packets"],
+                );
             }
             if let Some(v) = map.get("description") {
                 self.description(v, &join(&path, "description"));
@@ -475,7 +485,7 @@ impl Checker {
                 self.one_of(v, &join(&path, "underrun"), &["zeros", "short"]);
             }
             if let Some(v) = self.required(map, "type", &path) {
-                self.one_of(v, &join(&path, "type"), &["stream", "frames"]);
+                self.one_of(v, &join(&path, "type"), &["stream", "frames", "packets"]);
             }
             if let Some(v) = map.get("format") {
                 self.format(v, &join(&path, "format"));

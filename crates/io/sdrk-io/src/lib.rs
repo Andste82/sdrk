@@ -1,8 +1,10 @@
-//! File I/O of SDRk: raw sample files, SigMF recordings and WAV files as RX and TX streams.
+//! File I/O of SDRk: raw sample files, SigMF recordings and WAV files as RX and TX streams,
+//! and packet files in the JSON Lines format ([`packets`]).
 //!
-//! Layer `crates/io` (std, heap allowed); depends only on `sdrk-device`. Readers implement
-//! [`sdrk_device::RxStream`], writers implement [`sdrk_device::TxStream`], so they plug into
-//! the pipeline and the driver conformance suite like a device.
+//! Layer `crates/io` (std, heap allowed); depends on `sdrk-device` and, for the packet type,
+//! on `sdrk-proto`. Readers implement [`sdrk_device::RxStream`], writers implement
+//! [`sdrk_device::TxStream`], so they plug into the pipeline and the driver conformance suite
+//! like a device.
 //!
 //! ```
 //! use sdrk_device::{formats, Rate, RxStream, SampleIndex};
@@ -26,6 +28,7 @@
 
 mod error;
 mod iso8601;
+pub mod packets;
 mod raw;
 mod sigmf;
 mod wav;

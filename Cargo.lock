@@ -1220,6 +1220,7 @@ dependencies = [
  "sdrk",
  "sdrk-core",
  "sdrk-device",
+ "sdrk-proto",
  "sdrk-testkit",
 ]
 
@@ -1242,6 +1243,7 @@ name = "sdrk-io"
 version = "0.1.0"
 dependencies = [
  "sdrk-device",
+ "sdrk-proto",
  "sdrk-testkit",
  "serde_json",
  "tempfile",
@@ -1264,6 +1266,14 @@ dependencies = [
  "serde",
  "serde-saphyr",
  "serde_json",
+]
+
+[[package]]
+name = "sdrk-proto"
+version = "0.1.0"
+dependencies = [
+ "sdrk-device",
+ "sdrk-testkit",
 ]
 
 [[package]]
@@ -1310,6 +1320,7 @@ dependencies = [
  "sdrk",
  "sdrk-blocks",
  "sdrk-device",
+ "sdrk-io",
  "sdrk-pipeline",
  "sdrk-testkit",
  "serde_json",

@@ -5,6 +5,7 @@ members = [
     "crates/core/sdrk-core",
     "crates/backends/sdrk-backend-simd",
     "crates/facade/sdrk",
+    "crates/proto/sdrk-proto",
     "crates/blocks/sdrk-blocks",
     "crates/pipeline/sdrk-pipeline",
     "crates/io/sdrk-io",

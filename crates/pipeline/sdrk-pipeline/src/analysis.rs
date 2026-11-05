@@ -23,14 +23,16 @@ use crate::model::{
     OutputSpec, OutputType, PipelineSpec, PortName, Precision, is_valid_name,
 };
 use crate::params::check_params;
-use crate::registry::{BlockFactory, BuildOptions, Checked, PortKind, Registry};
+use crate::registry::{BlockFactory, BuildOptions, Checked, PortInfo, PortKind, Registry};
 use crate::structure::join;
 use crate::validate::{DiagCode, Diagnostic, GroupEdge, NodeReport, OutputReport, Report};
 
 /// Largest `capacity` of a stream output in samples.
 const MAX_CAPACITY: usize = 1 << 28;
-/// Largest `queue` of a frame output.
+/// Largest `queue` of a frame or packet output.
 const MAX_QUEUE: usize = 1 << 16;
+/// Slack added to every packet buffer.
+pub(crate) const PACKET_SLACK: usize = 4;
 /// Slack added to every buffer.
 pub(crate) const BUFFER_SLACK: usize = 64;
 
@@ -82,7 +84,11 @@ pub(crate) struct PlanInput {
     pub name: String,
     pub stream: usize,
     pub ty: PortType,
+    /// The sample rate; for a packet input the `rate_hz` of the encoder output (1 Hz as a
+    /// placeholder when it has none).
     pub rate: Rate,
+    /// False for a packet input without `rate_hz`.
+    pub has_rate: bool,
 }
 
 /// What feeds an output.
@@ -140,8 +146,15 @@ impl PlanStream {
         }
     }
 
-    /// Capacity of the buffer: `ceil(max_chunk * R) + min_input + 64`.
+    /// Capacity of the buffer: `ceil(max_chunk * R) + min_input + 64`; a packet buffer holds
+    /// `ceil(max_chunk * R) + 4` packets (`R` is `max_per_input` behind a decoder, 1 for the
+    /// buffer of a packet input).
     pub(crate) fn capacity(&self, max_chunk: usize, origin_rate: Rate, min_input: usize) -> usize {
+        if self.ty == PortType::Packets {
+            return self
+                .elements_for(max_chunk, origin_rate)
+                .saturating_add(PACKET_SLACK);
+        }
         self.elements_for(max_chunk, origin_rate)
             .saturating_add(min_input)
             .saturating_add(BUFFER_SLACK)
@@ -154,6 +167,7 @@ pub(crate) fn elem_size(t: PortType) -> usize {
         PortType::C32 => 8,
         PortType::CQ15 | PortType::F32 => 4,
         PortType::Q15 => 2,
+        PortType::Packets => core::mem::size_of::<sdrk_blocks::Packet>(),
         _ => 1,
     }
 }
@@ -195,6 +209,7 @@ fn input_port(t: InputType) -> PortType {
         InputType::Cq15 => PortType::CQ15,
         InputType::F32 => PortType::F32,
         InputType::Q15 => PortType::Q15,
+        InputType::Packets => PortType::Packets,
     }
 }
 
@@ -205,6 +220,7 @@ fn port_name(t: PortType) -> &'static str {
         PortType::F32 => "f32",
         PortType::Q15 => "q15",
         PortType::Raw => "raw bytes",
+        PortType::Packets => "packets",
         _ => "frames",
     }
 }
@@ -286,7 +302,7 @@ fn stage1(registry: &Registry, spec: &PipelineSpec, report: &mut Report) {
     }
     check_names(registry, spec, report);
     check_groups(spec, report);
-    check_inputs(spec, report);
+    check_inputs(registry, spec, report);
     check_nodes(registry, spec, report);
     check_outputs(spec, report);
 }
@@ -385,10 +401,64 @@ fn check_groups(spec: &PipelineSpec, report: &mut Report) {
     }
 }
 
-fn check_inputs(spec: &PipelineSpec, report: &mut Report) {
+/// How the nodes read a packet input: `(port a, port b)` readers. Port `a` of a node whose
+/// first input takes packets is an encoder of kind `Source`; port `b` is the packet port of a
+/// clocked encoder.
+fn packet_readers(registry: &Registry, spec: &PipelineSpec, input: &str) -> (bool, bool) {
+    let mut readers = (false, false);
+    for edge in spec.edges.iter().filter(|e| e.from == input) {
+        let Some(factory) = spec
+            .nodes
+            .get(&edge.to)
+            .and_then(|n| registry.factory(&n.kind))
+        else {
+            continue;
+        };
+        let port = edge.port_or_default();
+        let takes_packets = factory
+            .description()
+            .inputs
+            .get(port.index())
+            .is_some_and(|p| p.types.contains(&PortType::Packets));
+        match (port, takes_packets) {
+            (PortName::A, true) => readers.0 = true,
+            (PortName::B, true) => readers.1 = true,
+            _ => {}
+        }
+    }
+    readers
+}
+
+fn check_inputs(registry: &Registry, spec: &PipelineSpec, report: &mut Report) {
     for (name, input) in &spec.inputs {
         let path = join("inputs", name);
         check_description(input.description.as_ref(), &path, report);
+        if input.sample_type == Some(InputType::Packets) {
+            let (port_a, port_b) = packet_readers(registry, spec, name);
+            if port_a && input.rate_hz.is_none() {
+                report.error(
+                    join(&path, "rate_hz"),
+                    DiagCode::MissingParam,
+                    format!(
+                        "an encoder reads the packet input `{name}` and needs its `rate_hz`: the sample rate of the stream it produces"
+                    ),
+                );
+            } else if !port_a && port_b && input.rate_hz.is_some() {
+                report.warning(
+                    join(&path, "rate_hz"),
+                    DiagCode::InvalidValue,
+                    format!(
+                        "only port `b` of clocked encoders reads the packet input `{name}`; they take their rate from their clock, so `rate_hz` is ignored"
+                    ),
+                );
+            }
+        } else if input.rate_hz.is_none() {
+            report.error(
+                join(&path, "rate_hz"),
+                DiagCode::MissingParam,
+                "the field `rate_hz` is required",
+            );
+        }
         match (&input.format, &input.sample_type) {
             (Some(_), Some(_)) | (None, None) => report.error(
                 &path,
@@ -442,11 +512,11 @@ fn check_outputs(spec: &PipelineSpec, report: &mut Report) {
         let path = join("outputs", name);
         check_description(output.description.as_ref(), &path, report);
         if let Some(f) = &output.format {
-            if output.output_type == OutputType::Frames {
+            if output.output_type != OutputType::Stream {
                 report.error(
                     join(&path, "format"),
                     DiagCode::InvalidValue,
-                    "a frames output has no format",
+                    "only a stream output has a format",
                 );
             } else if let Err(m) = f.to_format() {
                 report.error(join(&path, "format"), DiagCode::InvalidValue, m);
@@ -463,12 +533,12 @@ fn check_outputs(spec: &PipelineSpec, report: &mut Report) {
                 }
                 check_range(output.capacity, MAX_CAPACITY, "capacity", &path, report);
             }
-            OutputType::Frames => {
+            OutputType::Frames | OutputType::Packets => {
                 if output.capacity.is_some() {
                     report.error(
                         join(&path, "capacity"),
                         DiagCode::InvalidValue,
-                        "`capacity` belongs to stream outputs; a frames output has a `queue`",
+                        "`capacity` belongs to stream outputs; a frames or packets output has a `queue`",
                     );
                 }
                 check_range(output.queue, MAX_QUEUE, "queue", &path, report);
@@ -1163,7 +1233,12 @@ impl<'a> Stage2<'a> {
         let spec = self.spec;
         let precision = spec.settings.precision;
         for (name, input) in &spec.inputs {
-            let rate = input.rate_hz.0;
+            // Stage 1 reported a sample input without a rate; a packet input without one has
+            // a placeholder (only port `b` of clocked encoders reads it, or nothing).
+            let Some(rate) = input.rate_hz.map(|r| r.0).or_else(|| Rate::hz(1).ok()) else {
+                self.produced.insert(name.clone(), Produced::Failed);
+                continue;
+            };
             let path = join("inputs", name);
             let input_index = self.inputs.len();
             if let Some(format) = &input.format {
@@ -1183,6 +1258,7 @@ impl<'a> Stage2<'a> {
                     stream: raw,
                     ty: PortType::Raw,
                     rate,
+                    has_rate: true,
                 });
                 let mut params = Map::new();
                 if let Ok(v) = serde_json::to_value(format) {
@@ -1206,6 +1282,17 @@ impl<'a> Stage2<'a> {
                         self.produced.insert(name.clone(), Produced::Failed);
                     }
                 }
+            } else if input.sample_type == Some(InputType::Packets) {
+                // A packet input is its own clock domain (`origin`); its stream holds packets.
+                let s = self.new_stream(PortType::Packets, rate, input_index, (1, 1));
+                self.inputs.push(PlanInput {
+                    name: name.clone(),
+                    stream: s,
+                    ty: PortType::Packets,
+                    rate,
+                    has_rate: input.rate_hz.is_some(),
+                });
+                self.produced.insert(name.clone(), Produced::Stream(s));
             } else if let Some(t) = input.sample_type {
                 let ty = input_port(t);
                 let wanted = match precision {
@@ -1232,6 +1319,7 @@ impl<'a> Stage2<'a> {
                     stream: s,
                     ty,
                     rate,
+                    has_rate: true,
                 });
                 self.produced.insert(name.clone(), Produced::Stream(s));
             } else {
@@ -1423,6 +1511,40 @@ impl<'a> Stage2<'a> {
         })
     }
 
+    /// An encoder of kind `Source` (packets at port `a`) takes its output rate from the
+    /// `rate_hz` of a packet input and starts that input's clock domain (D465). A packet stream
+    /// of a decoder has a nominal rate for buffer sizing only (D452) and the clock of the
+    /// decoder's input, so it cannot feed such an encoder: `type_mismatch` at the edge.
+    fn source_packets_ok(
+        &mut self,
+        name: &str,
+        ports: &[PortInfo],
+        first: Option<(usize, usize)>,
+    ) -> bool {
+        let Some((k, s)) = first else {
+            return true;
+        };
+        let takes_packets = ports
+            .first()
+            .is_some_and(|p| p.accepts.contains(&PortType::Packets));
+        let is_packets = self
+            .streams
+            .get(s)
+            .is_some_and(|x| x.ty == PortType::Packets);
+        if !takes_packets || !is_packets || self.inputs.iter().any(|i| i.stream == s) {
+            return true;
+        }
+        let from = self.spec.edges.get(k).map_or("", |e| e.from.as_str());
+        self.report.error(
+            format!("edges[{k}].to"),
+            DiagCode::TypeMismatch,
+            format!(
+                "`{name}` encodes packets at the `rate_hz` of a packet input, but `{from}` is not a pipeline input; its packets have no sample rate. Read the packets out and push them into a packet input with `rate_hz`"
+            ),
+        );
+        false
+    }
+
     /// Type, rate, clock and alignment checks of one node, then the node itself.
     fn node(&mut self, name: &str) {
         let spec = self.spec;
@@ -1453,8 +1575,19 @@ impl<'a> Stage2<'a> {
         let (Some(&(_, mut src)), second) = (feeds.first(), feeds.get(1).copied()) else {
             return;
         };
+        if !self.source_packets_ok(name, &ports, feeds.first().copied()) {
+            self.produced.insert(name.to_string(), Produced::Failed);
+            return;
+        }
         let mut src_b = None;
-        if let Some((kb, b)) = second {
+        let clocked = ports
+            .get(1)
+            .is_some_and(|p| p.accepts.contains(&PortType::Packets));
+        if let Some((_, b)) = second.filter(|_| clocked) {
+            // Port `b` of a clocked encoder: packets have no rate, clock or group delay, so
+            // the pair checks and the alignment apply to stream ports only.
+            src_b = Some(b);
+        } else if let Some((kb, b)) = second {
             if !self.pair_ok(name, kb, src, b) {
                 self.produced.insert(name.to_string(), Produced::Failed);
                 return;
@@ -1550,24 +1683,36 @@ impl<'a> Stage2<'a> {
                 .get(&edge.from)
                 .copied()
                 .unwrap_or(Produced::Failed);
+            let packets = match produced {
+                Produced::Stream(s) => self
+                    .streams
+                    .get(s)
+                    .is_some_and(|x| x.ty == PortType::Packets),
+                _ => false,
+            };
+            let wanted = match (produced, packets) {
+                (Produced::Frames { .. }, _) => "frames",
+                (_, true) => "packets",
+                _ => "stream",
+            };
             match (output.output_type, produced) {
                 (_, Produced::Failed) => {}
-                (OutputType::Stream, Produced::Frames { .. }) => self.report.error(
-                    join(&path, "type"),
-                    DiagCode::TypeMismatch,
-                    format!(
-                        "`{}` produces frames; declare the output with type `frames`",
-                        edge.from
-                    ),
-                ),
-                (OutputType::Frames, Produced::Stream(_)) => self.report.error(
-                    join(&path, "type"),
-                    DiagCode::TypeMismatch,
-                    format!(
-                        "`{}` produces a stream; declare the output with type `stream`",
-                        edge.from
-                    ),
-                ),
+                (OutputType::Stream, Produced::Stream(_)) if packets => {
+                    self.type_error(&path, &edge.from, wanted);
+                }
+                (OutputType::Packets, Produced::Stream(s)) if packets => {
+                    self.outputs.push(PlanOutput {
+                        name: name.clone(),
+                        spec: output.clone(),
+                        source: OutSource::Stream(s),
+                        capacity: output.queue_packets(),
+                    });
+                }
+                (OutputType::Stream, Produced::Frames { .. })
+                | (OutputType::Frames | OutputType::Packets, Produced::Stream(_))
+                | (OutputType::Packets, Produced::Frames { .. }) => {
+                    self.type_error(&path, &edge.from, wanted);
+                }
                 (OutputType::Frames, Produced::Frames { len, node }) => {
                     let idx = self.outputs.len();
                     if let Some(n) = self.nodes.get_mut(node) {
@@ -1585,6 +1730,21 @@ impl<'a> Stage2<'a> {
                 }
             }
         }
+    }
+
+    /// An output whose type does not fit what its source produces (`wanted`: `stream`,
+    /// `frames` or `packets`).
+    fn type_error(&mut self, path: &str, from: &str, wanted: &str) {
+        let what = match wanted {
+            "frames" => "frames",
+            "packets" => "packets",
+            _ => "a stream",
+        };
+        self.report.error(
+            join(path, "type"),
+            DiagCode::TypeMismatch,
+            format!("`{from}` produces {what}; declare the output with type `{wanted}`"),
+        );
     }
 
     /// A stream output, with the automatic `convert_out` node if it has a format.
@@ -1672,7 +1832,13 @@ impl<'a> Stage2<'a> {
     /// Estimated multiply-accumulates per input sample: the sum over the nodes of their cost
     /// times the samples per second they see, divided by the input samples per second.
     fn cost(&self, input_rates: &[Rate]) -> f64 {
-        let total_rate: f64 = input_rates.iter().map(Rate::as_f64).sum();
+        // A packet input without `rate_hz` carries no samples.
+        let total_rate: f64 = input_rates
+            .iter()
+            .zip(&self.inputs)
+            .filter(|(_, i)| i.has_rate)
+            .map(|(r, _)| r.as_f64())
+            .sum();
         let macs_per_second: f64 = self
             .nodes
             .iter()

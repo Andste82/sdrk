@@ -88,6 +88,55 @@ fn layers_rejects_device_depending_on_core() {
     assert!(findings[0].message.contains("sdrk-device"));
 }
 
+fn proto(deps: &str) -> Krate<'_> {
+    Krate {
+        dir: "crates/proto/sdrk-proto",
+        name: "sdrk-proto",
+        deps,
+        lib: "#![no_std]\n",
+    }
+}
+
+#[test]
+fn layers_accepts_proto_on_device() {
+    let ws = workspace(&[
+        device(""),
+        proto("sdrk-device = { path = \"../../core/sdrk-device\" }"),
+    ]);
+    assert_eq!(check_layers(ws.path()).expect("run"), []);
+}
+
+#[test]
+fn layers_rejects_core_depending_on_proto() {
+    let ws = workspace(&[
+        device(""),
+        core(
+            "sdrk-device = { path = \"../sdrk-device\" }\nsdrk-proto = { path = \"../../proto/sdrk-proto\" }",
+            "#![no_std]\n",
+        ),
+        proto("sdrk-device = { path = \"../../core/sdrk-device\" }"),
+    ]);
+    let findings = check_layers(ws.path()).expect("run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(findings[0].message.contains("sdrk-core"));
+    assert!(findings[0].message.contains("sdrk-proto"));
+}
+
+#[test]
+fn layers_rejects_proto_depending_on_core() {
+    let ws = workspace(&[
+        device(""),
+        core(
+            "sdrk-device = { path = \"../sdrk-device\" }",
+            "#![no_std]\n",
+        ),
+        proto("sdrk-core = { path = \"../../core/sdrk-core\" }"),
+    ]);
+    let findings = check_layers(ws.path()).expect("run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(findings[0].message.contains("crate `sdrk-proto`"));
+}
+
 #[test]
 fn layers_rejects_reference_feature_in_library_crates() {
     let facade = Krate {

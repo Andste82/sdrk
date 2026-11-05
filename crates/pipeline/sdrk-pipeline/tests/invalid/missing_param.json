@@ -5,12 +5,18 @@
     "iq": {
       "type": "c32",
       "rate_hz": 48000
+    },
+    "msg": {
+      "type": "packets"
     }
   },
   "nodes": {
     "g": {
       "kind": "ddc",
       "params": {}
+    },
+    "enc": {
+      "kind": "frame_encode"
     }
   },
   "edges": [
@@ -21,10 +27,21 @@
     {
       "from": "g",
       "to": "out"
+    },
+    {
+      "from": "msg",
+      "to": "enc"
+    },
+    {
+      "from": "enc",
+      "to": "out2"
     }
   ],
   "outputs": {
     "out": {
+      "type": "stream"
+    },
+    "out2": {
       "type": "stream"
     }
   }

@@ -301,7 +301,8 @@ impl Pipeline {
         Ok(at(&self.outputs, self.output_pos(output)?)?.rate)
     }
 
-    /// Sample rate of an input.
+    /// Sample rate of an input; for a packet input the `rate_hz` of the stream its encoder
+    /// produces.
     ///
     /// ```
     /// use sdrk_pipeline::{BuildOptions, Registry};
@@ -314,9 +315,15 @@ impl Pipeline {
     /// ```
     ///
     /// # Errors
-    /// `UnknownInput`.
+    /// `UnknownInput`, `InvalidState` (a packet input without `rate_hz`).
     pub fn input_rate(&self, input: &str) -> Result<Rate> {
-        Ok(at(&self.inputs, self.input_pos(input)?)?.rate)
+        let i = at(&self.inputs, self.input_pos(input)?)?;
+        if !i.has_rate {
+            return Err(Error::InvalidState(format!(
+                "the packet input `{input}` has no rate_hz"
+            )));
+        }
+        Ok(i.rate)
     }
 
     /// Group delay and buffering from the input to an output, see `docs/timing.md`.
@@ -373,7 +380,8 @@ impl Pipeline {
     ///
     /// # Errors
     /// The errors of `push`, `InvalidState` (the start index lies before the expected one) and
-    /// `LengthMismatch` (raw data that is not a whole number of packing groups).
+    /// `LengthMismatch` (raw data that is not a whole number of packing groups). Packets carry
+    /// no block metadata: a packet input is `WrongType` (use `push_packets`).
     #[allow(
         clippy::large_stack_frames,
         reason = "clippy counts the temporary of every `?` separately; the real frame is small"
@@ -386,6 +394,13 @@ impl Pipeline {
     ) -> Result<()> {
         let ii = self.input_pos(input)?;
         self.check_push(ii, &data)?;
+        if matches!(data, InputData::Packets(_)) {
+            return Err(Error::WrongType {
+                name: input.to_string(),
+                expected: "packets without metadata (push_packets)",
+                got: "a block with metadata",
+            });
+        }
         let sid = at(&self.inputs, ii)?.stream;
         let elems = at(&self.streams, sid)?.elems;
         if matches!(data, InputData::Raw(_)) && !(data.len() as u64).is_multiple_of(elems.0.max(1))

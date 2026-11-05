@@ -3,6 +3,10 @@
     {
       "path": "edges[0].to",
       "code": "type_mismatch"
+    },
+    {
+      "path": "edges[2].to",
+      "code": "type_mismatch"
     }
   ]
 }

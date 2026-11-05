@@ -36,13 +36,13 @@ use sdrk_blocks::{
     ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig,
     DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock,
     DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FmStereoDemodBlock, FmStereoDemodConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
-    MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
-    NoiseBlankConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    ToComplexBlock, all_descriptions,
+    FmStereoDemodBlock, FmStereoDemodConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
+    FrameEncodeConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock,
+    Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind,
+    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -62,10 +62,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_thirty_eight_unique_kinds() {
+fn there_are_forty_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 38);
-    assert_eq!(all_descriptions().len(), 38);
+    assert_eq!(kinds.len(), 40);
+    assert_eq!(all_descriptions().len(), 40);
     for kind in [
         "convert",
         "convert_out",
@@ -105,6 +105,8 @@ fn there_are_thirty_eight_unique_kinds() {
         "stereo_matrix",
         "noise_blank",
         "auto_notch",
+        "frame_encode",
+        "frame_decode",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -303,6 +305,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
     defaults_match("noise_blank", |n| NoiseBlankConfig::default().get(n), &[]);
     defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
+    defaults_match("frame_encode", |n| FrameEncodeConfig::default().get(n), &[]);
+    defaults_match("frame_decode", |n| FrameDecodeConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -393,6 +397,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("stereo_pll", StereoPllConfig);
     round_trip!("noise_blank", NoiseBlankConfig);
     round_trip!("auto_notch", AutoNotchConfig);
+    round_trip!("frame_encode", FrameEncodeConfig);
+    round_trip!("frame_decode", FrameDecodeConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -597,6 +603,14 @@ fn blocks_accept_and_report_every_described_parameter() {
         "fm_mod",
         &mut FmModBlock::<C32, _>::new(&FmModConfig::default(), r, &mut s).unwrap(),
     );
+    check_block_params(
+        "frame_encode",
+        &mut FrameEncodeBlock::new(&FrameEncodeConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "frame_decode",
+        &mut FrameDecodeBlock::new(&FrameDecodeConfig::default(), r, &mut s).unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -713,6 +727,7 @@ fn port_types(ports: &[sdrk_blocks::PortDesc]) -> String {
                 PortType::Q15 => "q15".to_string(),
                 PortType::Raw => "raw".to_string(),
                 PortType::Frame { len_param } => format!("frame({len_param})"),
+                PortType::Packets => "packets".to_string(),
                 _ => "?".to_string(),
             })
             .collect();

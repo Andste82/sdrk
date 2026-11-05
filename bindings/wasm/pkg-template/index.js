@@ -24,6 +24,14 @@ export const BlockFlags = Object.freeze({
   Retuned: 64,
 });
 
+/** Flags of `Packet.flags` (bit values of the Rust `PacketFlags`). */
+export const PacketFlags = Object.freeze({
+  CrcOk: 1,
+  CrcFail: 2,
+  Corrected: 4,
+  Truncated: 8,
+});
+
 /** A module with one function that uses a v128 instruction: valid only with SIMD128. */
 const SIMD_PROBE = new Uint8Array([
   0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253,

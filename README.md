@@ -14,6 +14,22 @@ The repository contains only reusable SDR building blocks and what is needed to 
 
 Milestones M00 to M15, M19 to M25, M24.1 and M25.1 are delivered: the kernels, the blocks, the JSON pipeline with time, events and the transmit path, file I/O and device capabilities, the SIMD backend (x86-64, AArch64, wasm32), the WebAssembly bindings with the npm package layout, the emulator targets (Cortex-M4, Cortex-M55, RISC-V 32, ESP32-P4, ESP32-S3), NFM receive with a squelch (M19), AM receive with an AGC (M20), SSB receive (M21), audio filters (M22), real-sampling devices (M23), FM stereo (M24), the block names (M24.1), FM transmit audio (M25) and the release 0.1.0 (M25.1, [release notes](docs/releases/0.1.0.md)). M16 to M18 are planned. The workspace version is 0.1.0, released as the tag `v0.1.0`; nothing is published to crates.io or npm. See [docs/milestones/README.md](docs/milestones/README.md) and [docs/open-items.md](docs/open-items.md).
 
+## Crates
+
+| Crate | Folder | Content |
+| --- | --- | --- |
+| `sdrk-device` | `crates/core` | sample formats, time types, stream and device traits, the shared error kinds |
+| `sdrk-core` | `crates/core` | the kernels: reference and portable fallback |
+| `sdrk-backend-simd` | `crates/backends` | the SIMD kernels (x86-64, AArch64, wasm32) |
+| `sdrk` | `crates/facade` | the facade that picks the backend per kernel |
+| `sdrk-proto` | `crates/proto` | packets, CRCs and a test framing (protocol logic without signal processing) |
+| `sdrk-blocks` | `crates/blocks` | self-describing blocks, filter design, storage |
+| `sdrk-pipeline` | `crates/pipeline` | the JSON/YAML pipeline: model, validation, runner |
+| `sdrk-io` | `crates/io` | file I/O: raw, SigMF, WAV; JSON Lines packet files |
+| `sdrk-testkit` | `crates/testing` | test helpers, golden vectors, virtual devices |
+
+The layers and their dependency rules are in [docs/architecture.md](docs/architecture.md); everything up to `sdrk-blocks` is `no_std` and heap-free.
+
 ## Documentation
 
 - Project plan: [docs/PLAN.md](docs/PLAN.md)

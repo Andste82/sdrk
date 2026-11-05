@@ -21,6 +21,7 @@
 # | GNU Radio `frequency_modulator_fc` | main at ec1bf15 (frequency_modulator_fc_impl.cc of gr-analog with `gr::fxpt` and its sine table), see gr-fm-mod.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `fm_mod` |
 # | GNU Radio `quadrature_demod_cf` | main at ec1bf15 (quadrature_demod_cf_impl.cc of gr-analog, `fast_atan2f` of gnuradio-runtime, VOLK's generic `multiply_conjugate`), see gr-quad-demod.c and gr-fast-atan2f.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, two object files) | the scalar reference of `quad_demod` |
 # | GNU Radio `fm_deemph` | main at ec1bf15 (fm_emph.py of gr-analog, `iir_filter_ffd` of gr-filter), see gr-deemph.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `deemphasis` |
+# | GNU Radio `crc` | main at ec1bf15 (crc.cc and crc.h of gr-digital, the generic table-driven CRC), see gr-crc.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of the CRCs of `sdrk-proto` (`crc16_ccitt_false`, `crc16_x25`, `crc32`, `crc24_adsb`) |
 # | liquid-dsp `iirfilt` DC blocker | 1.8.3 (iirfilt.proto.c and dotprod.proto.c, portable dot products), see liquid-dcblock.c and liquid-dotprod.c | MIT | x86_64, aarch64, wasm32 (static, two object files) | the scalar reference of `dc_block` and `dc_block_real` |
 # | liquid-dsp halfband decimators | 1.8.3 (the release tarball: `resamp2.proto.c`, `firhilb.proto.c`, the dot products `dotprod_crcf.c` and `dotprod_rrrf.c` with their SSE, AVX, AVX-512F and NEON loops, the window buffers and the support files), see liquid-halfband.c | MIT | x86_64, aarch64, wasm32 (static, one library per level, built from the unpacked release) | the reference of `halfband_decimate` (`resamp2_crcf`), `halfband_decimate_real` (`resamp2_rrrf`) and `real_to_complex` (`firhilbf`) with the SIMD dot product of the level (the portable loop at `simd128`), and the scalar reference of their fallbacks (the portable dot product) |
 # | liquid-dsp `nco_crcf` (`LIQUID_VCO_INTERP`) | 1.8.3 (nco.proto.c: the interpolated sine table, `_sincos`, `_adjust_frequency`, `_adjust_phase`, `_constrain` and `_step`), see liquid-nco.c | MIT | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of the `f32` `stereo_pll` fallback (the loop gains of SDRk applied through `_adjust_frequency` and `_adjust_phase`) |
@@ -148,7 +149,7 @@ fi
 
 stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
-    "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" \
+    "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/airspy-iqconv.c" \
     "$here/volk-nofma.c" "$here/volk-generic.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
@@ -286,6 +287,13 @@ build_gr_fallback() {
     $ar rcs "$prefix/lib/libgrquaddemod.a" "$work/gr-quad-demod.o" "$work/gr-fast-atan2f.o"
     $cc $GR_AGC_FLAGS -c "$here/gr-deemph.c" -o "$work/gr-deemph.o"
     $ar rcs "$prefix/lib/libgrdeemph.a" "$work/gr-deemph.o"
+}
+
+# GNU Radio's generic CRC (gr::digital::crc of gr-digital), compiled with the same generic
+# flags as agc_cc: the reference of the CRCs of sdrk-proto.
+build_gr_crc() {
+    $cc $GR_AGC_FLAGS -c "$here/gr-crc.c" -o "$work/gr-crc.o"
+    $ar rcs "$prefix/lib/libgrcrc.a" "$work/gr-crc.o"
 }
 
 # liquid-dsp's DC blocker (iirfilt with its portable dot products, liquid-dcblock.c and
@@ -644,6 +652,7 @@ case $platform in
         build_gr_agc
         build_gr_squelch
         build_gr_fallback
+        build_gr_crc
         build_liquid_dcblock
         build_liquid_nco
         build_kfr_biquad
@@ -653,7 +662,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft gragc grsquelch grfallback liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     aarch64)
         build_volk
@@ -663,6 +672,7 @@ case $platform in
         build_gr_agc
         build_gr_squelch
         build_gr_fallback
+        build_gr_crc
         build_liquid_dcblock
         build_liquid_nco
         build_kfr_biquad
@@ -672,7 +682,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc liquiddc liquidnco kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     wasm32)
         build_volk_wasm
@@ -680,6 +690,7 @@ case $platform in
         build_gr_agc
         build_gr_squelch
         build_gr_fallback
+        build_gr_crc
         build_liquid_dcblock
         build_liquid_nco
         build_kfr_biquad
@@ -688,7 +699,7 @@ case $platform in
         build_liquid_halfband
         build_airspy
         build_volk_generic
-        libraries=(volk kissfft gragc grsquelch grfallback liquiddc liquidnco kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
+        libraries=(volk kissfft gragc grsquelch grfallback grcrc liquiddc liquidnco kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -713,6 +724,7 @@ esac
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
+            grcrc) entry="\"gnuradio_crc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-crc.c" | cut -d ' ' -f 1)\", \"build\": \"gr-crc.c (gr::digital::crc): $GR_AGC_FLAGS\" }" ;;
             liquiddc) entry="\"liquid_dsp_dc_blocker\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(cat "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"liquid-dotprod.c liquid-dcblock.c (portable dot products): $GR_AGC_FLAGS\" }" ;;
             liquidnco) entry="\"liquid_dsp_nco\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-nco.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-nco.c (nco_crcf, LIQUID_VCO_INTERP): $GR_AGC_FLAGS\" }" ;;
             liquidhb) entry="\"liquid_dsp_halfband\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$LIQUID_SHA256\", \"build\": \"liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release: $BIQUAD_OPT, per level $(biquad_levels | tr , ' '), dot products (crcf / rrrf) $(for e in $(biquad_levels); do printf '%s=%s/%s ' "${e%%:*}" "$(liquid_simd "${e%%:*}" crcf)" "$(liquid_simd "${e%%:*}" rrrf)"; done)\" }" ;;

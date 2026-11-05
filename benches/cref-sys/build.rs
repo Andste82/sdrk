@@ -1,7 +1,7 @@
 //! Links the static C reference libraries that `benches/refs/build.sh` built into the prefix
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
 //! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_grrotator`,
-//! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_liquiddc`, `has_kfr`, `has_cmsis`,
+//! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_grcrc`, `has_liquiddc`, `has_kfr`, `has_cmsis`,
 //! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`, `has_volkgeneric`) unset, and its wrapper then reports that the library is not available.
 //!
 //! The biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 11] = [
+const LIBRARIES: [(&str, &str, &str); 12] = [
     ("has_fftw", "libfftw3f.a", "fftw3f"),
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
@@ -23,6 +23,7 @@ const LIBRARIES: [(&str, &str, &str); 11] = [
     ("has_grfmmod", "libgrfmmod.a", "grfmmod"),
     ("has_grquaddemod", "libgrquaddemod.a", "grquaddemod"),
     ("has_grdeemph", "libgrdeemph.a", "grdeemph"),
+    ("has_grcrc", "libgrcrc.a", "grcrc"),
     ("has_liquiddc", "libliquiddc.a", "liquiddc"),
     ("has_liquidnco", "libliquidnco.a", "liquidnco"),
 ];

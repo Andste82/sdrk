@@ -24,10 +24,10 @@ mod common;
 use common::{Aligned, rate, signal};
 use sdrk::{C32, CQ15, Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_blocks::{
-    ArenaStorage, Block, BlockDescription, BlockTiming, Chain, ConvertBlock, ConvertConfig,
-    DdcBlock, DdcConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, Frame, FrameOut,
-    ParamValue, ResampleBlock, ResampleConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, StreamElem, Two, chain,
+    ArenaStorage, Block, BlockDescription, BlockTiming, Chain, ChainEnd, ConvertBlock,
+    ConvertConfig, DdcBlock, DdcConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig,
+    Frame, FrameOut, ParamValue, ResampleBlock, ResampleConfig, ScaleBlock, ScaleConfig,
+    SpectrumBlock, SpectrumConfig, StreamElem, Two, chain,
 };
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
 
@@ -157,7 +157,9 @@ fn build<A, B>((a, b): (A, B), chunk: usize) -> Chain<A, B, Vs>
 where
     A: Block,
     B: Block<In = A::Out>,
+    A::In: ChainEnd,
     A::Out: StreamElem,
+    B::Out: ChainEnd,
 {
     Chain::new(a, b, chunk, &mut VecStorage).unwrap()
 }
@@ -402,7 +404,9 @@ fn assert_timing<A, B>(c: &Chain<A, B, Vs>)
 where
     A: Block,
     B: Block<In = A::Out>,
+    A::In: ChainEnd,
     A::Out: StreamElem,
+    B::Out: ChainEnd,
 {
     let (ta, tb) = (c.first().timing(), c.second().timing());
     let t = c.timing();

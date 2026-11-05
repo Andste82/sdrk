@@ -10,7 +10,9 @@
 //!   `multiply_conjugate` and `gr::fast_atan2f` (`gr-quad-demod.c`, `gr-fast-atan2f.c`, cfg
 //!   `has_grquaddemod`), the reference of `quad_demod`;
 //! - [`GrFmDeemph`]: the `iir_filter_ffd` of `analog.fm_deemph` (`gr-deemph.c`, cfg
-//!   `has_grdeemph`), the reference of `deemphasis`.
+//!   `has_grdeemph`), the reference of `deemphasis`;
+//! - [`GrCrc`]: the generic table-driven CRC `gr::digital::crc` of gr-digital (`gr-crc.c`, cfg
+//!   `has_grcrc`), the reference of the CRCs of `sdrk-proto`.
 //!
 //! A constructor returns `None` when its library is not linked.
 
@@ -347,5 +349,100 @@ impl Drop for GrFmDeemph {
     fn drop(&mut self) {
         // SAFETY: the object was initialized by `new`; its buffers are freed once.
         unsafe { deemph_ffi::sdrk_gr_fm_deemph_free(self.object.as_mut_ptr()) }
+    }
+}
+
+#[cfg(has_grcrc)]
+mod crc_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_crc_size() -> core::ffi::c_ulong;
+        pub fn sdrk_gr_crc_init(
+            object: *mut u64,
+            num_bits: core::ffi::c_uint,
+            poly: u64,
+            initial_value: u64,
+            final_xor: u64,
+            input_reflected: bool,
+            result_reflected: bool,
+        ) -> core::ffi::c_int;
+        pub fn sdrk_gr_crc_compute(object: *mut u64, data: *const u8, len: usize) -> u64;
+    }
+}
+
+/// Words of storage for the C object of [`GrCrc`] (the 256-entry `uint64_t` table and the
+/// parameters: 2088 bytes on the 64-bit targets, 2080 on wasm32).
+const GR_CRC_WORDS: usize = 264;
+
+/// GNU Radio's generic CRC `gr::digital::crc(num_bits, poly, initial_value, final_xor,
+/// input_reflected, result_reflected)`: a 256-entry table of `uint64_t` built by the
+/// constructor, then one table lookup per byte with a 64-bit remainder.
+pub struct GrCrc {
+    object: Box<[u64; GR_CRC_WORDS]>,
+}
+
+impl GrCrc {
+    /// The CRC with the parameters of the CRC catalogue (`poly` MSB first); `None` without the
+    /// library or for a width outside 8 to 64 bits.
+    ///
+    /// # Panics
+    /// If the C object does not fit the storage of the wrapper.
+    #[must_use]
+    pub fn new(
+        num_bits: u32,
+        poly: u64,
+        initial_value: u64,
+        final_xor: u64,
+        input_reflected: bool,
+        result_reflected: bool,
+    ) -> Option<Self> {
+        if !cfg!(has_grcrc) {
+            return None;
+        }
+        #[cfg_attr(not(has_grcrc), allow(unused_mut))]
+        let mut object = Box::new([0u64; GR_CRC_WORDS]);
+        #[cfg(has_grcrc)]
+        // SAFETY: the storage is checked to hold the object, and it is 8-byte aligned.
+        unsafe {
+            let size = usize::try_from(crc_ffi::sdrk_gr_crc_size()).unwrap_or(usize::MAX);
+            assert!(size <= 8 * GR_CRC_WORDS, "crc: the object is too large");
+            if crc_ffi::sdrk_gr_crc_init(
+                object.as_mut_ptr(),
+                num_bits,
+                poly,
+                initial_value,
+                final_xor,
+                input_reflected,
+                result_reflected,
+            ) != 0
+            {
+                return None;
+            }
+        }
+        #[cfg(not(has_grcrc))]
+        let _ = (
+            num_bits,
+            poly,
+            initial_value,
+            final_xor,
+            input_reflected,
+            result_reflected,
+            &mut object,
+        );
+        Some(GrCrc { object })
+    }
+
+    /// `compute(data, len)`: the CRC of `data` (0 without the library).
+    #[must_use]
+    pub fn compute(&mut self, data: &[u8]) -> u64 {
+        #[cfg(has_grcrc)]
+        // SAFETY: `data` holds `len` bytes; the object was initialized by `new`.
+        return unsafe {
+            crc_ffi::sdrk_gr_crc_compute(self.object.as_mut_ptr(), data.as_ptr(), data.len())
+        };
+        #[cfg(not(has_grcrc))]
+        {
+            let _ = (data, &mut self.object);
+            0
+        }
     }
 }

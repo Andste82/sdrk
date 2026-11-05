@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "data": {
+      "dtype": "u8",
+      "file": "crc16_ccitt_false.data.bin",
+      "len": 9091
+    },
+    "expected": {
+      "dtype": "i32",
+      "file": "crc16_ccitt_false.expected.bin",
+      "len": 69
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "crc16_ccitt_false.lengths.bin",
+      "len": 69
+    }
+  },
+  "case": "crc16_ccitt_false",
+  "format_version": 1,
+  "kernel": "proto",
+  "notes": "binascii.crc_hqx(d, 0xFFFF); 69 messages of 0 to 256 bytes",
+  "params": {
+    "messages": 69
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 479,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

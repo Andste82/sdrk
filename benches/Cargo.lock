@@ -90,6 +90,7 @@ dependencies = [
  "sdrk-blocks",
  "sdrk-core",
  "sdrk-device",
+ "sdrk-proto",
  "serde_json",
  "volk-sys",
 ]
@@ -273,6 +274,7 @@ dependencies = [
  "sdrk",
  "sdrk-core",
  "sdrk-device",
+ "sdrk-proto",
 ]
 
 [[package]]
@@ -301,6 +303,13 @@ dependencies = [
  "sdrk-device",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "sdrk-proto"
+version = "0.1.0"
+dependencies = [
+ "sdrk-device",
 ]
 
 [[package]]

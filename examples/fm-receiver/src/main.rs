@@ -97,7 +97,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         Failure::Run("the sample format of the file has no name in the flow model".into())
     })?);
     entry.sample_type = None;
-    entry.rate_hz = RateHz(rate);
+    entry.rate_hz = Some(RateHz(rate));
 
     let audio_name = o.get("audio-output").unwrap_or("audio").to_string();
     let mut pipeline = cli::build(&registry, &spec, &opts)?;

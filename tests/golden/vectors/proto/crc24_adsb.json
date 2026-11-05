@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "data": {
+      "dtype": "u8",
+      "file": "crc24_adsb.data.bin",
+      "len": 9091
+    },
+    "expected": {
+      "dtype": "i32",
+      "file": "crc24_adsb.expected.bin",
+      "len": 69
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "crc24_adsb.lengths.bin",
+      "len": 69
+    }
+  },
+  "case": "crc24_adsb",
+  "format_version": 1,
+  "kernel": "proto",
+  "notes": "bitwise model of the Mode S CRC-24; 69 messages of 0 to 256 bytes",
+  "params": {
+    "messages": 69
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 479,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

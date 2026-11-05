@@ -493,6 +493,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `frame_decode` (our code, per bit) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `frame_encode_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `frame_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `symbol_sync` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `symbol_sync_real` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
@@ -686,6 +688,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `frame_decode` (our code, per bit) | 25.28 / 25.28 | 25.28 / 25.28 | 24.85 / 24.85 | 25.07 | 23.79 / 23.79 | 20.23 / 20.23 | 58.70 / 58.70 |
 | `frame_encode_block` (our code, per output sample) | 3.08 / 3.08 | 3.08 / 3.08 | 3.11 / 3.11 | 3.08 | 2.98 / 2.98 | 2.63 / 2.63 | 8.97 / 8.97 |
 | `frame_decode_block` (our code, per input sample) | 23.28 / 23.28 | 23.28 / 23.28 | 22.86 / 22.86 | 23.07 | 22.79 / 22.79 | 20.23 / 20.23 | 53.71 / 53.71 |
+| `symbol_sync` C32 (our fallback) | 69.30 / 69.30 | 65.89 / 65.89 | 60.28 / 60.28 | 69.30 | 56.62 / 56.62 | 46.62 / 46.62 | 138.13 / 138.13 |
+| `symbol_sync_real` f32 (our fallback) | 34.16 / 34.16 | 32.79 / 32.79 | 28.66 / 28.66 | 34.16 | 27.29 / 27.29 | 23.41 / 23.41 | 64.45 / 64.45 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -879,6 +883,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `frame_decode` (our code, per bit) | exact | exact | exact | exact | exact | exact |
 | `frame_encode_block` (our code, per output sample) | exact | exact | exact | exact | exact | exact |
 | `frame_decode_block` (our code, per input sample) | exact | exact | exact | exact | exact | exact |
+| `symbol_sync` C32 (our fallback) | exact | exact | exact | exact | exact | exact |
+| `symbol_sync_real` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
@@ -1088,6 +1094,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `stereo_matrix_fallback` | 1.55 | 1.07 | 1.45 | 1.67 | 1.38 | 1.21 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `stereo_pll_fallback` | 88.89 | 71.63 | 1.24 | 77.84 | 62.55 | 1.24 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse2) |
 | `stereo_pll_q15_fallback` | 38.04 | 55.57 | 0.68 | 38.05 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `symbol_sync` | 49.33 | 49.33 | 1.00 | 39.08 | 39.08 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 23.16 | 23.16 | 1.00 | 18.66 | 18.66 | 1.00 | sdrk fallback |
 
 #### Simulated cycles at `sse4.2` (`x86_64`)
 
@@ -1286,6 +1294,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `stereo_matrix_fallback` | 1.52 | 1.07 | 1.42 | 1.46 | 1.38 | 1.06 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `stereo_pll_fallback` | 88.29 | 71.63 | 1.23 | 77.34 | 62.55 | 1.24 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse4.2) |
 | `stereo_pll_q15_fallback` | 38.04 | 55.57 | 0.68 | 38.05 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `symbol_sync` | 49.82 | 49.82 | 1.00 | 37.86 | 37.86 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 23.29 | 23.29 | 1.00 | 18.29 | 18.29 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 
@@ -1486,6 +1496,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `stereo_matrix_fallback` | 0.63 | 0.60 | 1.05 | 0.86 | 0.53 | 1.61 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `stereo_pll_fallback` | 63.32 | 57.06 | 1.11 | 80.41 | 78.06 | 1.03 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx2) |
 | `stereo_pll_q15_fallback` | 37.04 | 51.46 | 0.72 | 37.39 | 37.63 | 0.99 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `symbol_sync` | 31.52 | 31.52 | 1.00 | 43.74 | 43.74 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 15.79 | 15.79 | 1.00 | 21.81 | 21.81 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 
@@ -1686,6 +1698,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `stereo_matrix_fallback` | 0.45 | 0.60 | 0.75 | 0.54 | 0.53 | 1.02 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `stereo_pll_fallback` | 61.34 | 56.30 | 1.09 | 74.40 | 78.06 | 0.95 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx512) |
 | `stereo_pll_q15_fallback` | 37.04 | 45.61 | 0.81 | 37.39 | 37.63 | 0.99 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `symbol_sync` | 28.82 | 28.82 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 14.40 | 14.40 | 1.00 | 19.80 | 19.80 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 
@@ -1886,6 +1900,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `stereo_matrix_fallback` | 1.90 | 3.83 | 0.50 | 1.39 | 3.07 | 0.45 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `stereo_pll_fallback` | 95.51 | 122.43 | 0.78 | 56.44 | 57.23 | 0.99 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, neon) |
 | `stereo_pll_q15_fallback` | 41.07 | 100.31 | 0.41 | 39.08 | 88.00 | 0.44 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `symbol_sync` | 51.52 | 51.52 | 1.00 | 28.58 | 28.58 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 22.67 | 22.67 | 1.00 | 12.03 | 12.03 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 

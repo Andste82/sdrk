@@ -229,7 +229,7 @@ pub use m27::{
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 176] = [
+pub(crate) static CASES: [TestCase; 179] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,

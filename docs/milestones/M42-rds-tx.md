@@ -176,7 +176,7 @@ pub trait RdsShape { fn rds_shape<Tab>(&self, s: &mut RdsShapeState<Tab>, bits: 
 
 ### 5. Flow
 
-`fm_stereo_rds_transmitter` (+ YAML): `audio` C32 at 48 kHz → `pre` = `preemph_limit` → `up` = `resample` (192000) → edges to `mpx` port a and to `rds` port a (the clock); `text` packets input → `rds` port b; `rds` = `rds_encode` (pi 0xD123 as 53539) → `mpx` port b; `mpx` = `fm_stereo_rds_mod` → `mod` = `fm_mod` (75000) → `duc` (interpolation 10, 600000) → `rf` `cs8`, pull mode.
+`fm_stereo_rds_transmitter` (+ YAML): `audio` C32 at 48 kHz → `up` = `resample` (192000) → `pre` = `preemph_limit` (after the resampler, D487 of M36) → edges to `mpx` port a and to `rds` port a (the clock); `text` packets input → `rds` port b; `rds` = `rds_encode` (pi 0xD123 as 53539) → `mpx` port b; `mpx` = `fm_stereo_rds_mod` → `mod` = `fm_mod` (75000) → `duc` (interpolation 10, 600000) → `rf` `cs8`, pull mode.
 
 ## Tests
 

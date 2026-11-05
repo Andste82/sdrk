@@ -52,14 +52,14 @@
   "edges": [
     {
       "from": "audio",
-      "to": "pre"
-    },
-    {
-      "from": "pre",
       "to": "up"
     },
     {
       "from": "up",
+      "to": "pre"
+    },
+    {
+      "from": "pre",
       "to": "mpx"
     },
     {

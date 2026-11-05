@@ -195,7 +195,7 @@ The phase convention matches the receiver: `stereo_pll` locks to the pilot `sin(
 | `preemph_limit` | `PreemphLimitBlock<T>` of M25, now also for C32 (stereo) | C32 → C32 (new), f32/Q15 → same (M25) | as M25: `preemphasis_us` (50), `limit` (**runtime**, 1.0), `hold_s` (0.02), `release_s` (0.2) | 12 for C32 (6 for real, M25) |
 | `fm_stereo_mod` | `FmStereoModBlock` | C32 → f32 | `pilot_hz` (Hz, build, 19000), `main` (None, build, 0.9), `pilot` (None, **runtime**, 0.09) | 10 |
 
-`fm_stereo_mod` rejects Q15 and CQ15 input with `type_mismatch`; `preemph_limit` rejects CQ15 (backlog). `fm_stereo_mod` below 120 kHz is `rate_unsupported` (the subcarrier reaches 53 kHz). `docs/blocks.md` chain position: `preemph_limit` at the audio rate before the up-sampling `resample`, `fm_stereo_mod` at 192 kHz or more, followed by `fm_mod` with `deviation_hz` 75000.
+`fm_stereo_mod` rejects Q15 and CQ15 input with `type_mismatch`; `preemph_limit` rejects CQ15 (backlog). `fm_stereo_mod` below 120 kHz is `rate_unsupported` (the subcarrier reaches 53 kHz). `docs/blocks.md` chain position: `preemph_limit` after the up-sampling `resample` (at 192 kHz; amended by D487, see §5), `fm_stereo_mod` at 192 kHz or more, followed by `fm_mod` with `deviation_hz` 75000.
 
 ### 4. Golden cases (`preemph_limit.py`, `stereo_encode.py`)
 
@@ -209,7 +209,10 @@ The limiter rule of M25 (exact float32 model, log the exception) applies to the 
 
 ### 5. Loop test and flow
 
-- `examples/flows/fm_stereo_transmitter.json` (+ YAML): `audio` C32 at 48 kHz (re left, im right) → `pre` = `preemph_limit` → `up` = `resample` (to 192000) → `mpx` = `fm_stereo_mod` → `mod` = `fm_mod` (75000) → `duc` (interpolation 10, frequency 600000) → `rf` `cs8`, pull mode, `max_chunk` 4800.
+- `examples/flows/fm_stereo_transmitter.json` (+ YAML): `audio` C32 at 48 kHz (re left, im right) → `up` = `resample` (to 192000) → `pre` = `preemph_limit` → `mpx` = `fm_stereo_mod` → `mod` = `fm_mod` (75000) → `duc` (interpolation 10, frequency 600000) → `rf` `cs8`, pull mode, `max_chunk` 4800.
+
+> **Amendment 2026-11-05 (maintainer decision, D487):** the limiter runs after the resampler, at 192 kHz (`audio` → `up` → `pre` → `mpx`). With `pre` before `up`, as this section first said, the resampler rebuilds the peaks between the limited 48 kHz samples and rings at the gain steps, and the limiter test failed (multiplex peak 1.112, 83.4 kHz deviation); the order is that of the mono `fm_transmitter` (M25).
+
 - **E2E-STEREO-TX (`e2e_fm_stereo_loop_f32`):** the flow without `duc` (output C32 at 192 kHz) feeds the kind `fm_stereo_demod` (de-emphasis 50 µs) at 192 kHz. Left 1 kHz 0.5, right 3 kHz 0.3 (seed 488 adds noise σ 0.001 to both): the pilot is locked after 0.5 s; in the last second the left output has the 1 kHz tone within 1 dB of the input level and the 3 kHz tone at least **30 dB** below it, the right output the opposite. With `pilot` 0 at runtime, the receiver falls back to mono within 0.5 s.
 - Limiter: a full-scale 15 kHz burst in both channels (seed 489) keeps the `fm_stereo_mod` output within ±0.99 and the `fm_mod` frequency deviation within 75 kHz (measured by `quad_demod`).
 
@@ -230,7 +233,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Kernels `preemph_limit_stereo` (C32) and `stereo_encode` (C32 → f32) with reference, fallback, delegation, contracts
 - [x] Blocks, kinds, costs, schema
 - [x] Golden cases (seeds 485–487), extremes, equality with M25's mono kernel and with the M30 composition
-- [ ] E2E-STEREO-TX and limiter test (seeds 488, 489); flow `fm_stereo_transmitter` with YAML twin
+- [x] E2E-STEREO-TX and limiter test (seeds 488, 489); flow `fm_stereo_transmitter` with YAML twin
 - [x] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md` ("Not accelerated": both are recursions or table lookups), `examples/README.md`, CHANGELOG, decisions log
 
 ## Status
@@ -243,8 +246,8 @@ Departures from the spec (each in the decisions log):
 - `preemph_limit_stereo` applies the full input rule of the mono `f32` kernel (non-finite to 0 and the clamp to `[-1024, 1024]`, D460) and takes the envelope peak by a select, not `f32::max` (D461).
 - The pilot increment of `stereo_encode` is that of `Nco::new` (D464); the encoder has no input rule for non-finite samples (D466); the ranges of `StereoEncodeState::new` are closed and `main + pilot` is not limited (D467).
 - The kind `preemph_limit` reports both kernels for every input type (D474).
-- The limiter test on the specified chain is marked `#[ignore]` with the reason I36-1; its thresholds 0.99 and 75 kHz and the flow order are unchanged (D486).
+- The flow runs the limiter after the resampler (`audio` → `up` → `pre` → `mpx`), not before it as §5 first said: maintainer decision D487 on open item I36-1. With the limiter at 48 kHz the resampler rebuilt the peaks between the limited samples, and a full-scale 15 kHz burst reached a multiplex peak of 1.112 and 83.4 kHz deviation; after the resampler it stays at 0.990 and 74.2 kHz (same phase in both channels; 0.965 and 72.4 kHz with independent phases). The thresholds are unchanged; the `#[ignore]` of D486 is removed.
 
-Open items: I36-1 (in `docs/open-items.md`): the limiter test of §5 fails on the flow as specified, because the limiter at 48 kHz bounds the samples and the resampler rebuilds higher peaks between them. The maintainer chooses: (a) move `pre` after `up` (the measured fix, changes §3/§5 and the `blocks.md` chain position), (b) keep the order and lower `limit` or accept the overshoot (a threshold change), or (c) another remedy. Until then the checklist item "E2E-STEREO-TX and limiter test" stays open.
+Open items: none (I36-1 is closed by D487).
 
 Gate and counts: see below.

@@ -821,6 +821,61 @@
           },
           {
             "additionalProperties": false,
+            "description": "Automatic notch: removes steady tones (carriers, heterodynes) from real audio.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "auto_notch"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "delay": {
+                    "default": 8,
+                    "description": "Distance in samples between a sample and the newest sample of its prediction, 1 to 64; it must exceed the correlation length of the wanted audio. Unit: samples. Typical: 8. Build-time.",
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "mu": {
+                    "default": 0.01,
+                    "description": "Step size of the normalized LMS update (used as f32); a change applies from the next sample. Typical: 0.01; 0.001 for slow, gentle adaptation. Runtime.",
+                    "maximum": 0.1,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "taps": {
+                    "default": 32,
+                    "description": "Number of weights of the adaptive filter, 8 to 256. Typical: 32 at 8 to 12 kHz. Build-time.",
+                    "maximum": 256,
+                    "minimum": 8,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Filters with a Butterworth low-pass or high-pass, a band-pass or a notch (IIR).",
             "properties": {
               "align": {
@@ -1937,6 +1992,68 @@
             "required": [
               "kind",
               "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Noise blanker: sets short strong impulses of a complex signal to zero.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "noise_blank"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "hold_s": {
+                    "default": 0.0002,
+                    "description": "Blanking time after the last impulse sample in seconds, rounded to whole samples. Unit: s. Typical: 0.0002. Build-time.",
+                    "maximum": 0.01,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "lookahead_s": {
+                    "default": 0.00005,
+                    "description": "Blanking time before an impulse in seconds, rounded to whole samples; it is also the delay of the block. Unit: s. Typical: 0.00005. Build-time.",
+                    "maximum": 0.001,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "tau_s": {
+                    "default": 0.01,
+                    "description": "Time constant of the power average in seconds. Unit: s. Typical: 0.01. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "threshold_db": {
+                    "default": 15.0,
+                    "description": "A sample is an impulse when its power exceeds the average power by this many dB; a change applies from the next sample. Unit: dB. Typical: 15; lower blanks weaker impulses but also signal peaks. Runtime.",
+                    "maximum": 40.0,
+                    "minimum": 6.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
             ],
             "type": "object"
           },

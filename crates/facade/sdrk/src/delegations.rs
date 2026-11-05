@@ -3,6 +3,7 @@
 use crate::{C32, CQ15, Chained, ComplexSample, Fallback, Progress, Q15, Result};
 use sdrk_core::fused::{ddc_chained, duc_chained, fm_demod_chained};
 use sdrk_core::kernels::agc::{Agc, AgcState};
+use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::basic::Scale;
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
 use sdrk_core::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
@@ -27,6 +28,7 @@ use sdrk_core::kernels::interp::{
 use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
 use sdrk_core::kernels::mix::{Nco, Oscillate, Rotate};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
+use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
 use sdrk_core::kernels::preemph_limit::{PreemphLimit, PreemphLimitState};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::kernels::squelch::{Squelch, SquelchState};
@@ -96,6 +98,8 @@ crate::delegate! {
     BiquadReal<Q15>::biquad_real[C: AsRef<[[i16; 5]]>, H: AsRef<[Q15]> + AsMut<[Q15]>](&self, s: &mut BiquadRealState<Q15, C, H>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fast;
     Squelch<C32>::squelch(&self, state: &mut SquelchState<C32>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
     Squelch<CQ15>::squelch(&self, state: &mut SquelchState<CQ15>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    NoiseBlank<C32>::noise_blank[H: AsRef<[C32]> + AsMut<[C32]>](&self, s: &mut NoiseBlankState<C32, H>, input: &[C32], output: &mut [C32]) -> Result<()> => Fallback;
+    NoiseBlank<CQ15>::noise_blank[H: AsRef<[CQ15]> + AsMut<[CQ15]>](&self, s: &mut NoiseBlankState<CQ15, H>, input: &[CQ15], output: &mut [CQ15]) -> Result<()> => Fallback;
     PreemphLimit<f32>::preemph_limit(&self, state: &mut PreemphLimitState<f32>, input: &[f32], output: &mut [f32]) -> Result<()> => Fallback;
     PreemphLimit<Q15>::preemph_limit(&self, state: &mut PreemphLimitState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
     StereoPll<f32>::stereo_pll(&self, state: &mut StereoPllState<f32>, mpx: &[f32], pilot: &[f32], output: &mut [C32]) -> Result<()> => Fallback;
@@ -143,6 +147,7 @@ crate::delegate! {
         ("deinterleave", CQ15, Fast),
         ("rfft", f32, Fast),
         ("irfft", f32, Fast),
+        ("auto_notch", f32, Fallback),
         ("ddc", C32, Chained),
         ("ddc", CQ15, Chained),
         ("duc", C32, Chained),
@@ -175,6 +180,25 @@ impl RealFft for crate::Sdrk {
         scratch: &mut [C32],
     ) -> Result<FftScale> {
         <Fast as RealFft>::irfft(&Fast, plan, input, output, scratch)
+    }
+}
+
+// `AutoNotch` has no sample-type parameter (it exists for `f32` only), so it is delegated by
+// hand like `RealFft`; the row above registers it in the `backend_for` table. It is a
+// per-sample recursion and stays with the fallback on every backend.
+impl AutoNotch for crate::Sdrk {
+    #[inline]
+    fn auto_notch<W, X>(
+        &self,
+        s: &mut AutoNotchState<W, X>,
+        input: &[f32],
+        output: &mut [f32],
+    ) -> Result<()>
+    where
+        W: AsRef<[f32]> + AsMut<[f32]>,
+        X: AsRef<[f32]> + AsMut<[f32]>,
+    {
+        <Fallback as AutoNotch>::auto_notch(&Fallback, s, input, output)
     }
 }
 

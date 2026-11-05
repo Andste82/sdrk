@@ -241,6 +241,8 @@ fn validate_schema_and_backends() {
     let backend = |kernel: &str| backends.iter().find(|(k, _)| *k == kernel).unwrap().1;
     assert_eq!(backend("ddc"), "chained");
     assert_eq!(backend("squelch"), "fallback");
+    assert_eq!(backend("noise_blank"), "fallback");
+    assert_eq!(backend("auto_notch"), "fallback");
     assert_eq!(backend("stereo_pll"), "fallback");
     assert_eq!(backend("preemph_limit"), "fallback");
     assert_eq!(

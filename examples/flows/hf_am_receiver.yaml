@@ -1,0 +1,79 @@
+# SDRk pipeline: receive one short-wave AM channel with a noise blanker against impulse noise
+# and an automatic notch against whistles (YAML twin of hf_am_receiver.json). YAML is accepted
+# as input; JSON stays the canonical format.
+sdrk: 1
+name: hf-am-receiver
+description: "Receive one short-wave AM channel with a noise blanker and an automatic notch and output 12 kHz audio."
+# f32 pipeline (auto_notch has no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# HF receiver: signed 16-bit IQ at 192 kHz (a sound-card or direct-sampling receiver).
+inputs:
+  rf:
+    format: cs16
+    rate_hz: 192000
+    description: "HF receiver IQ"
+nodes:
+  # Automatic gain control with slow time constants for AM (attack 0.1 s, release 0.5 s): a
+  # gain that reacts within the audio period would follow the modulation and distort it.
+  agc:
+    kind: agc
+    params:
+      attack_s: 0.1
+      release_s: 0.5
+  # Envelope detector with DC removal and an audio low-pass at 4000 Hz, decimating by 4
+  # (48 kHz -> 12 kHz). The lower audio rate also suits the automatic notch: its 32 weights
+  # then span 2.7 ms, which separates a whistle from speech.
+  demod:
+    kind: am_demod
+    params:
+      audio_cutoff_hz: 4000
+      audio_decimation: 4
+  # Noise blanker: sets impulses (ignition noise, power-line spikes, lightning) to zero while
+  # they are still short and strong, on the wide-band signal before the channel filter. A
+  # sample is an impulse when its power exceeds the average power by threshold_db (default
+  # 15 dB, runtime). Every blanked sample is a hole in the carrier that the channel filter
+  # turns into a dip of the audio, so the flow blanks as little as possible: a lookahead of
+  # 10 us (2 samples, covers the rising edge; also the delay of the node) and no hold. Raise
+  # hold_s (block default 0.2 ms) for impulses with a long tail. Remove the node when there is
+  # no impulse noise: it then only adds its delay and its cost.
+  nb:
+    kind: noise_blank
+    params:
+      hold_s: 0
+      lookahead_s: 0.00001
+  # Automatic notch: an adaptive LMS line enhancer that removes steady tones from the audio
+  # (heterodynes of a carrier near the station, whistles) and follows them when they drift.
+  # It sits after the demodulator; mu (default 0.01, runtime) sets the speed of the
+  # adaptation. It also removes a wanted steady tone, so remove the node for CW, test tones
+  # or data modes, and when no whistle is present.
+  notch:
+    kind: auto_notch
+  # Power squelch on the channel signal, before the gain control (after the AGC every signal
+  # has the same level); default threshold -40 dBFS.
+  squelch:
+    kind: squelch
+  # Digital down converter: decimate by 4 (192 kHz -> 48 kHz) with a 4.5 kHz channel filter for
+  # a short-wave AM channel. Set frequency_hz to the offset of the channel from the tuner
+  # centre (it can be changed while the flow runs).
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 4500
+      decimation: 4
+# Noise blanker, channel filter, squelch, gain control, envelope detector, notch.
+edges:
+  - { from: rf, to: nb }
+  - { from: nb, to: tune }
+  - { from: tune, to: squelch }
+  - { from: squelch, to: agc }
+  - { from: agc, to: demod }
+  - { from: demod, to: notch }
+  - { from: notch, to: audio }
+# Audio samples at 12 kHz (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

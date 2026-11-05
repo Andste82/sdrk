@@ -1,0 +1,38 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "an_sweep_f32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "an_sweep_f32_16384.input.bin",
+      "len": 16384
+    }
+  },
+  "case": "an_sweep_f32_16384",
+  "format_version": 1,
+  "kernel": "auto_notch",
+  "model": "float32",
+  "notes": "as an_tone_f32_16384 (own draw), the 1000 Hz tone sweeps linearly to 1100 Hz over the 16384 samples (phase (f0 k + (f1 - f0) k^2 / (2 n)) / fs turns, reduced exactly)",
+  "params": {
+    "delay": 8,
+    "guard_skip": 0,
+    "mu": 0.01,
+    "rate_hz": 8000,
+    "snr_db_guard": 122.3,
+    "sweep_end_hz": 1100,
+    "taps": 32
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 475,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

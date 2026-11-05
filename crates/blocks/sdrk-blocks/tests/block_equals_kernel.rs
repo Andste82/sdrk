@@ -31,17 +31,20 @@ use sdrk_blocks::design::{
     to_f32_sos, to_q14,
 };
 use sdrk_blocks::{
-    BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock, Block, BlockReal, BlockSample,
-    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockConfig,
-    DcBlockRealBlock, DesignSpec, FirBlock, FirConfig, FmModBlock, FmModConfig,
-    HalfbandDecimateConfig, ParamValue, RealToIqBlock, StreamElem,
+    AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock,
+    Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    DcBlockConfig, DcBlockRealBlock, DesignSpec, FirBlock, FirConfig, FmModBlock, FmModConfig,
+    HalfbandDecimateConfig, NoiseBlankBlock, NoiseBlankConfig, ParamValue, RealToIqBlock,
+    StreamElem,
 };
+use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
 use sdrk_core::kernels::convert::{Convert, ConvertOut};
 use sdrk_core::kernels::demod::{DcBlockReal, DcBlockRealState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::halfband::{RealToComplex, RealToComplexState};
 use sdrk_core::kernels::modulate::{FmMod, FmModState};
+use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
 use sdrk_device::{SampleFormat, formats};
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
 
@@ -671,4 +674,204 @@ fn fm_mod_equals_the_kernel() {
         fm_mod_equals_kernel::<C32>(deviation_hz, fs, next_hz);
         fm_mod_equals_kernel::<CQ15>(deviation_hz, fs, next_hz);
     }
+}
+
+// ---- noise_blank (M33) ------------------------------------------------------------------
+
+/// A tone of amplitude 0.05 with noise, 30 impulses of 3 samples at (0.9, -0.9) (28 dB above
+/// the tone) and a full-scale stretch of 40 samples, the kind of input the blanker is made for.
+fn impulsive<T: BlockSample>(n: usize) -> Vec<T> {
+    let mut rng = Pcg32::new(SEED, 23);
+    let mut input: Vec<T> = (0..n)
+        .map(|i| {
+            let phase = std::f64::consts::TAU * 0.02 * i as f64;
+            let noise = Complex64::new(rng.normal(), rng.normal()) * 0.005;
+            T::from_c64_round(Complex64::new(0.05 * phase.cos(), 0.05 * phase.sin()) + noise)
+        })
+        .collect();
+    for _ in 0..30 {
+        let at = 100 + rng.below((n - 200) as u32) as usize;
+        for x in &mut input[at..at + 3] {
+            *x = T::from_c64_round(Complex64::new(0.9, -0.9));
+        }
+    }
+    for x in &mut input[n / 2..n / 2 + 40] {
+        *x = T::from_c64_round(Complex64::new(1.0, -1.0));
+    }
+    input
+}
+
+/// `NoiseBlankBlock` equals `noise_blank` with the documented parameters
+/// (`D = floor(lookahead_s fs + 0.5)` samples of history; threshold, time constant and hold as
+/// given), in one piece and over the 20 cut plans; a runtime change of `threshold_db` at sample
+/// `CHANGE_AT` equals the kernel with `set_threshold_db` at the same sample. The kernel stays
+/// with the fallback on every backend, so every comparison is bit for bit.
+fn noise_blank_equals_kernel<T: BlockSample>(cfg: &NoiseBlankConfig, fs: u64, next_db: f64)
+where
+    Sdrk: NoiseBlank<T>,
+    T: PartialEq + core::fmt::Debug,
+{
+    let input = impulsive::<T>(4000);
+    let d = (cfg.lookahead_s * fs as f64 + 0.5).floor() as usize;
+    let what = format!("noise_blank {:?} {cfg:?} at {fs} Hz", T::TYPE);
+    let make = || NoiseBlankBlock::<T, _>::new(cfg, rate(fs), &mut VecStorage).unwrap();
+    assert_eq!(make().lookahead(), d, "{what}: lookahead");
+    let new_state = || {
+        NoiseBlankState::<T, _>::new(
+            cfg.threshold_db,
+            cfg.tau_s,
+            cfg.hold_s,
+            vec![T::ZERO; d],
+            rate(fs),
+        )
+        .unwrap()
+    };
+
+    let mut state = new_state();
+    let mut want = vec![T::ZERO; input.len()];
+    <Sdrk as NoiseBlank<T>>::noise_blank(&Sdrk, &mut state, &input, &mut want).unwrap();
+    assert!(state.blanked() > 0, "{what}: nothing blanked");
+    check_block(&want, &input, SEED, make, &what);
+    let mut block = make();
+    run_block(&mut block, &input, None);
+    assert_eq!(block.blanked(), state.blanked(), "{what}: blanked count");
+
+    let mut state = new_state();
+    let mut want = vec![T::ZERO; input.len()];
+    let (a, b) = want.split_at_mut(CHANGE_AT);
+    <Sdrk as NoiseBlank<T>>::noise_blank(&Sdrk, &mut state, &input[..CHANGE_AT], a).unwrap();
+    state.set_threshold_db(next_db).unwrap();
+    <Sdrk as NoiseBlank<T>>::noise_blank(&Sdrk, &mut state, &input[CHANGE_AT..], b).unwrap();
+    check_change(
+        &want,
+        &input,
+        CHANGE_AT,
+        make,
+        |blk| {
+            blk.set_param("threshold_db", ParamValue::F64(next_db))
+                .unwrap();
+        },
+        &format!("{what} changed to {next_db} dB"),
+    );
+}
+
+#[test]
+fn noise_blank_equals_the_kernel() {
+    let configs = [
+        // The defaults at the 192 kHz of examples/flows/hf_am_receiver.json (D = 10, H = 38).
+        (NoiseBlankConfig::default(), 192_000, 25.0),
+        // Extreme: no lookahead and no hold.
+        (
+            NoiseBlankConfig {
+                hold_s: 0.0,
+                lookahead_s: 0.0,
+                ..NoiseBlankConfig::default()
+            },
+            48_000,
+            6.0,
+        ),
+        // Extreme: the longest lookahead and hold, the shortest time constant, the lowest and
+        // the highest threshold.
+        (
+            NoiseBlankConfig {
+                threshold_db: 6.0,
+                tau_s: 0.001,
+                hold_s: 0.01,
+                lookahead_s: 0.001,
+            },
+            48_000,
+            40.0,
+        ),
+    ];
+    for (cfg, fs, next_db) in &configs {
+        noise_blank_equals_kernel::<C32>(cfg, *fs, *next_db);
+        noise_blank_equals_kernel::<CQ15>(cfg, *fs, *next_db);
+    }
+}
+
+// ---- auto_notch (M33) -------------------------------------------------------------------
+
+/// `AutoNotchRealBlock` equals `auto_notch` with `taps` zero weights, a history of
+/// `taps + delay` samples and `mu` as `f32`, in one piece and over the 20 cut plans; a runtime
+/// change of `mu` at sample `CHANGE_AT` equals the kernel with `set_mu` at the same sample.
+/// The kernel stays with the fallback, so every comparison is bit for bit.
+fn auto_notch_equals_kernel(cfg: &AutoNotchConfig, next_mu: f64) {
+    let fs = 8_000;
+    // Two tones and noise; a NaN and an infinity in the middle.
+    let mut input: Vec<f32> = {
+        let mut rng = Pcg32::new(SEED, 29);
+        (0..4000)
+            .map(|i| {
+                let t = i as f64 / fs as f64;
+                let v = 0.5 * (std::f64::consts::TAU * 1000.0 * t).sin()
+                    + 0.3 * (std::f64::consts::TAU * 1700.0 * t).sin()
+                    + 0.1 * rng.normal();
+                v as f32
+            })
+            .collect()
+    };
+    input[1500] = f32::NAN;
+    input[2500] = f32::INFINITY;
+    let what = format!("auto_notch {cfg:?}");
+    let make = || AutoNotchRealBlock::new(cfg, rate(fs), &mut VecStorage).unwrap();
+    let new_state = || {
+        AutoNotchState::new(
+            vec![0.0f32; cfg.taps],
+            vec![0.0f32; cfg.taps + cfg.delay],
+            cfg.delay,
+            cfg.mu as f32,
+        )
+        .unwrap()
+    };
+
+    let mut state = new_state();
+    let mut want = vec![0.0f32; input.len()];
+    <Sdrk as AutoNotch>::auto_notch(&Sdrk, &mut state, &input, &mut want).unwrap();
+    let whole: Vec<u32> = want.iter().map(|v| v.to_bits()).collect();
+    let mut block = make();
+    let got = run_block(&mut block, &input, None);
+    assert_eq!(
+        got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        whole,
+        "{what}: bits"
+    );
+    assert_eq!(block.weights(), state.weights(), "{what}: weights");
+    check_block(&want, &input, SEED, make, &what);
+
+    let mut state = new_state();
+    let mut want = vec![0.0f32; input.len()];
+    let (a, b) = want.split_at_mut(CHANGE_AT);
+    <Sdrk as AutoNotch>::auto_notch(&Sdrk, &mut state, &input[..CHANGE_AT], a).unwrap();
+    state.set_mu(next_mu as f32).unwrap();
+    <Sdrk as AutoNotch>::auto_notch(&Sdrk, &mut state, &input[CHANGE_AT..], b).unwrap();
+    check_change(
+        &want,
+        &input,
+        CHANGE_AT,
+        make,
+        |blk| blk.set_param("mu", ParamValue::F64(next_mu)).unwrap(),
+        &format!("{what} changed to mu {next_mu}"),
+    );
+}
+
+#[test]
+fn auto_notch_equals_the_kernel() {
+    // The defaults, then the extremes of the ranges.
+    auto_notch_equals_kernel(&AutoNotchConfig::default(), 0.05);
+    auto_notch_equals_kernel(
+        &AutoNotchConfig {
+            taps: 8,
+            delay: 1,
+            mu: 0.1,
+        },
+        0.0001,
+    );
+    auto_notch_equals_kernel(
+        &AutoNotchConfig {
+            taps: 256,
+            delay: 64,
+            mu: 0.0001,
+        },
+        0.1,
+    );
 }

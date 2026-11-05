@@ -10,12 +10,12 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AgcKind, AmDemodKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind,
-    DecimateKind, DeemphasisKind, DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind,
-    FmStereoDemodKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind,
-    MakeComplexKind, MulKind, NcoKind, PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind,
-    ResampleKind, RotateKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, StereoMatrixKind,
-    StereoPllKind, ToComplexKind,
+    AddKind, AgcKind, AmDemodKind, AutoNotchKind, BiquadKind, ConvertKind, ConvertOutKind,
+    DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, Factory, FirKind,
+    FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind,
+    Kind, MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, PreemphLimitKind,
+    QuadDemodKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SpectrumKind,
+    SquelchKind, SsbDemodKind, StereoMatrixKind, StereoPllKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -202,7 +202,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 36);
+/// assert_eq!(registry.descriptions().count(), 38);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -266,6 +266,8 @@ impl Registry {
         register::<MulKind>(&mut factories);
         register::<MakeComplexKind>(&mut factories);
         register::<StereoPllKind>(&mut factories);
+        register::<NoiseBlankKind>(&mut factories);
+        register::<AutoNotchKind>(&mut factories);
         Self { factories }
     }
 

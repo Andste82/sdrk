@@ -287,3 +287,23 @@ Verified locally on Linux x86-64 for the review fixes: `cargo test -p sdrk-block
 Not run here: the whole workspace test suite, the Cortex-M emulator (`cargo xtask emu --target qemu-cortex-m4`), the WebAssembly tests, `cargo xtask count` and `cargo measure`; the figures of `symbol_sync` and `symbol_sync_real` go into `docs/performance.md` with the counts.
 
 Gate and counts: see below.
+
+Gate (2026-11-05, on main after M37, with D565): `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -D warnings`, `cargo xtask check`, `cargo xtask schema --check`, `generate.py --check`, the tests of `sdrk-core` (also the fallback-only build), `sdrk`, `sdrk-testkit`, `sdrk-blocks`, `sdrk-pipeline`, `xtask`, `sdrk-wasm`, `fm-transmitter`, `cref-sys` and `sdrk-proto`, `cargo doc -D warnings`, `cargo xtask bare-metal`, clippy for `thumbv7em-none-eabihf` and the bench crates: 20 of 20 steps pass, 3335 tests, none failed. The emulator run (`qemu-cortex-m4`) is left to CI.
+
+Counts (instructions per input sample; both entries are `info` against our own fallback, D562, D563):
+
+| Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `symbol_sync` (`C32`, sps 4.1) | 69.30 | 65.89 | 60.28 | 69.30 | 56.62 | 46.62 | 138.13 |
+| `symbol_sync_real` (`f32`, sps 8) | 34.16 | 32.79 | 28.66 | 34.16 | 27.29 | 23.41 | 64.45 |
+
+The run-time build runs the baseline code of a kernel that stays with the fallback (1.15 and 1.19 times the fixed `avx2` build).
+
+Simulated cycles per input sample (whole-loop, reference / counter model; `skylake` / `znver2` at `sse2` and `sse4.2`, `znver3` / `alderlake` at `avx2`, `znver4` / `sapphirerapids` at `avx512`, `cortex-a72` / `cortex-a76` at `neon`):
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
+| --- | --- | --- | --- | --- | --- |
+| `symbol_sync` | 49.33 / 39.08 | 49.82 / 37.86 | 31.52 / 43.74 | 28.82 / 39.57 | 51.52 / 28.58 |
+| `symbol_sync_real` | 23.16 / 18.66 | 23.29 / 18.29 | 15.79 / 21.81 | 14.40 / 19.80 | 22.67 / 12.03 |
+
+The cost is per strobe (one symbol: two cubic interpolations for Gardner, the detector and the loop filter in f64), a dependency chain from the strobe position through the interpolation and the error back to the position; per input sample it is that cost divided by `sps`.

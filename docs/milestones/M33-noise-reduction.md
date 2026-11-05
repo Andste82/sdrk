@@ -270,7 +270,7 @@ Gate and counts (run after the review):
   - `cargo fmt --check` and workspace clippy (all targets, all features, `-D warnings`).
   - `cargo xtask check`, including the cycle gate.
   - `cargo xtask schema --check` and `tests/golden/generate.py --check` (723 files).
-  - Tests, 2531 in total: `sdrk-core` (all features and `sdrk_fallback_only`), `sdrk`, `sdrk-testkit` (`std`: golden, suite and E2E), `sdrk-blocks`, `sdrk-pipeline`, `xtask`, `sdrk-wasm`.
+  - Tests, 2824 in total (on main after M34): `sdrk-core` (all features and `sdrk_fallback_only`), `sdrk`, `sdrk-testkit` (`std`: golden, suite and E2E), `sdrk-blocks`, `sdrk-pipeline`, `xtask`, `sdrk-wasm`.
   - `cargo doc --workspace` with `-D warnings`, `cargo xtask bare-metal` and thumbv7em clippy.
-  - The registry count in `sdrk-pipeline` (the doctest and three tests) was raised from 32 to 34 kinds.
+  - The registry count in `sdrk-pipeline` (the doctest and three tests) was raised to 38 kinds (M34 and M33).
 - **Emulator run:** in CI (`build_m4_qemu`).

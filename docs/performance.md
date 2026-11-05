@@ -481,6 +481,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `am_mod_cq15` (our fallback) | 1.00 info | 0.45 info | 0.41 info | 0.78 info | 0.44 info | 0.45 info |
 | `am_mod_fallback` C32 (liquid-dsp `ampmodem`) | 1.63 waived | 1.63 waived | 0.73 | 0.45 | 1.99 waived | 0.23 |
 | `am_mod_cq15_fallback` (CMSIS-DSP composition) | 0.47 | 0.23 | 0.14 | 0.07 | 0.28 | 0.28 |
+| `preemph_limit_stereo` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `stereo_encode` C32 to f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
@@ -665,6 +667,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `am_mod_cq15` (our fallback) | 7.78 / 7.78 | 1.40 / 3.15 | 0.65 / 1.59 | 0.66 | 0.59 / 0.76 | 1.27 / 2.90 | 3.92 / 8.80 |
 | `am_mod_fallback` C32 (liquid-dsp `ampmodem`) | 4.52 / 2.78 | 4.52 / 2.78 | 2.02 / 2.78 | - | 1.24 / 2.78 | 3.52 / 1.77 | 10.54 / 46.02 |
 | `am_mod_cq15_fallback` (CMSIS-DSP composition) | 7.78 / 16.42 | 3.15 / 13.66 | 1.59 / 11.65 | - | 0.76 / 11.28 | 2.90 / 10.35 | 8.80 / 31.69 |
+| `preemph_limit_stereo` C32 (our fallback) | 73.20 / 73.20 | 71.20 / 71.20 | 56.20 / 56.20 | 73.20 | 55.21 / 55.21 | 59.64 / 59.64 | 126.84 / 126.84 |
+| `stereo_encode` C32 to f32 (our fallback) | 43.01 / 43.01 | 43.01 / 43.01 | 17.15 / 17.15 | 43.01 | 6.02 / 6.02 | 35.01 / 35.01 | 37.54 / 37.54 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -849,6 +853,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `am_mod_cq15` (our fallback) | exact | exact | exact | exact | exact | exact |
 | `am_mod_fallback` C32 (liquid-dsp `ampmodem`) | 150.8 / 150.8 | 150.8 / 150.8 | 150.8 / 150.8 | 150.8 / 150.8 | 150.8 / 152.1 | 150.8 / 150.8 |
 | `am_mod_cq15_fallback` (CMSIS-DSP composition) | 92.7 / 89.7 | 92.7 / 89.7 | 92.7 / 89.7 | 92.7 / 89.7 | 92.7 / 89.7 | 92.7 / 89.7 |
+| `preemph_limit_stereo` C32 (our fallback) | exact | exact | exact | exact | exact | exact |
+| `stereo_encode` C32 to f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
@@ -1034,11 +1040,13 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.48 | 11.48 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.51 | 57.15 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_airspy` | 5.31 | 11.28 | 0.47 | 5.51 | 9.31 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_cq15` | 8.98 | 15.69 | 0.57 | 8.96 | 17.83 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_cq15_fallback` | 29.09 | 15.69 | 1.85 | 34.86 | 17.83 | 1.95 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_fallback` | 17.76 | 70.40 | 0.25 | 20.55 | 57.15 | 0.36 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.49 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.51 | 1.02 | 0.50 | 0.53 | 1.14 | 0.47 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 1.02 | 5.50 | 0.19 | 1.14 | 5.68 | 0.20 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
@@ -1220,10 +1228,12 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.29 | 11.29 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.34 | 55.36 | 0.10 | 5.42 | 50.15 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.87 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15_fallback` | 22.69 | 10.87 | 2.09 | 23.47 | 13.87 | 1.69 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_fallback` | 17.36 | 70.45 | 0.25 | 19.88 | 56.98 | 0.35 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
+| `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.48 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.51 | 1.52 | 0.34 | 0.53 | 0.83 | 0.64 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 1.52 | 3.43 | 0.44 | 0.83 | 2.20 | 0.38 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
@@ -1407,10 +1417,12 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `noise_blank_cq15` | 8.48 | 8.48 | 1.00 | 9.30 | 9.30 | 1.00 | sdrk fallback |
 | `preemph_limit` | 15.40 | 15.40 | 1.00 | 13.20 | 13.20 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
 | `real_to_complex` | 2.50 | 92.12 | 0.03 | 2.29 | 35.30 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15` | 4.74 | 7.27 | 0.65 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15_fallback` | 14.91 | 7.27 | 2.05 | 14.62 | 8.83 | 1.66 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_fallback` | 12.67 | 106.99 | 0.12 | 13.29 | 53.74 | 0.25 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
+| `stereo_encode` | 4.47 | 4.47 | 1.00 | 6.04 | 6.04 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.32 | 1.26 | 0.26 | 0.45 | 1.45 | 0.31 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.15 | 0.39 | 0.39 | 0.20 | 0.54 | 0.37 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 0.39 | 1.55 | 0.25 | 0.54 | 1.55 | 0.35 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
@@ -1594,10 +1606,12 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `noise_blank_cq15` | 8.41 | 8.41 | 1.00 | 9.24 | 9.24 | 1.00 | sdrk fallback |
 | `preemph_limit` | 19.20 | 19.20 | 1.00 | 12.19 | 12.19 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
 | `real_to_complex` | 1.68 | 54.21 | 0.03 | 1.56 | 23.24 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15` | 4.32 | 220.51 | 0.02 | 5.03 | 25.95 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15_fallback` | 14.48 | 219.77 | 0.07 | 15.70 | 25.89 | 0.61 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_fallback` | 12.02 | 105.40 | 0.11 | 12.35 | 55.02 | 0.22 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
+| `stereo_encode` | 1.15 | 1.15 | 1.00 | 5.53 | 5.53 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.32 | 0.84 | 0.38 | 0.32 | 1.07 | 0.30 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.13 | 0.39 | 0.34 | 0.13 | 0.58 | 0.23 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 0.39 | 0.82 | 0.47 | 0.58 | 1.55 | 0.37 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
@@ -1781,10 +1795,12 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `noise_blank_cq15` | 9.51 | 9.51 | 1.00 | 10.53 | 10.53 | 1.00 | sdrk fallback |
 | `preemph_limit` | 20.93 | 20.93 | 1.00 | 16.43 | 16.43 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 29.76 | 29.76 | 1.00 | 26.44 | 26.44 | 1.00 | sdrk fallback |
 | `real_to_complex` | 10.15 | 90.81 | 0.11 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15` | 10.69 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15_fallback` | 33.37 | 17.90 | 1.86 | 31.07 | 17.14 | 1.81 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_fallback` | 31.18 | 92.79 | 0.34 | 30.71 | 60.25 | 0.51 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
+| `stereo_encode` | 15.15 | 15.15 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.90 | 5.74 | 0.33 | 1.39 | 5.23 | 0.27 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.77 | 0.77 | 1.00 | 0.76 | 0.76 | 1.00 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 0.77 | 2.70 | 0.28 | 0.76 | 2.31 | 0.33 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |

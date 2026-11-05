@@ -4501,5 +4501,55 @@
       "status": "info",
       "waiver": "`symbol_sync` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
+  },
+  "costas": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`costas` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "costas_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
   }
 }

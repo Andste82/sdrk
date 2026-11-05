@@ -763,3 +763,143 @@ impl DesignSpec {
         Lowpass::new(self.cutoff_hz, fs_hz, DesignWindow::Kaiser { beta }, n)
     }
 }
+
+/// The smallest roll-off of [`rrc`].
+pub const RRC_MIN_ROLLOFF: f64 = 0.05;
+/// The smallest span of [`rrc`] in symbols.
+pub const RRC_MIN_SPAN: usize = 4;
+/// The largest span of [`rrc`] in symbols.
+pub const RRC_MAX_SPAN: usize = 32;
+/// The largest samples per symbol of [`rrc`] (D600).
+pub const RRC_MAX_SPS: usize = 1024;
+
+/// The singular points `|t| = 1 / (4 rolloff)` of the root-raised-cosine formula are detected
+/// with this tolerance on `|1 - (4 rolloff t)^2|` (the golden generator uses the same rule).
+const RRC_SINGULAR: f64 = 1e-9;
+
+/// Tap count of [`rrc`]: `span sps + 1`, after the checks of the parameters.
+///
+/// ```
+/// use sdrk_blocks::design::rrc_len;
+/// assert_eq!(rrc_len(8, 10)?, 81);
+/// assert!(rrc_len(1, 10).is_err());
+/// assert!(rrc_len(8, 3).is_err());
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+pub fn rrc_len(sps: usize, span: usize) -> Result<usize> {
+    if !(2..=RRC_MAX_SPS).contains(&sps) {
+        return Err(Error::OutOfRange {
+            name: "samples_per_symbol",
+            min: 2.0,
+            max: RRC_MAX_SPS as f64,
+            got: sps as f64,
+        });
+    }
+    if !(RRC_MIN_SPAN..=RRC_MAX_SPAN).contains(&span) {
+        return Err(Error::OutOfRange {
+            name: "span",
+            min: RRC_MIN_SPAN as f64,
+            max: RRC_MAX_SPAN as f64,
+            got: span as f64,
+        });
+    }
+    Ok(span * sps + 1)
+}
+
+/// The root-raised-cosine design of [`rrc`], one tap at a time (so the blocks need no `f64`
+/// buffer). `tap(k)` equals `rrc(..)[k]` bit for bit.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Rrc {
+    rolloff: f64,
+    sps: usize,
+    n: usize,
+    /// `1 / sqrt(sum h^2)` of the unnormalized taps.
+    norm: f64,
+}
+
+impl Rrc {
+    /// Checks the parameters and computes the energy of the unnormalized taps.
+    pub(crate) fn new(rolloff: f64, sps: usize, span: usize) -> Result<Self> {
+        if !(rolloff.is_finite() && (RRC_MIN_ROLLOFF..=1.0).contains(&rolloff)) {
+            return Err(Error::OutOfRange {
+                name: "rolloff",
+                min: RRC_MIN_ROLLOFF,
+                max: 1.0,
+                got: rolloff,
+            });
+        }
+        let n = rrc_len(sps, span)?;
+        let mut d = Self {
+            rolloff,
+            sps,
+            n,
+            norm: 1.0,
+        };
+        let mut energy = 0.0f64;
+        for k in 0..n {
+            let h = d.unscaled(k);
+            energy += h * h;
+        }
+        d.norm = 1.0 / libm::sqrt(energy);
+        Ok(d)
+    }
+
+    /// The number of taps.
+    pub(crate) fn len(&self) -> usize {
+        self.n
+    }
+
+    /// The impulse response at tap `k` before the normalization, for a symbol period of 1.
+    #[allow(clippy::many_single_char_names)]
+    fn unscaled(&self, k: usize) -> f64 {
+        let b = self.rolloff;
+        let t = (k as f64 - (self.n - 1) as f64 / 2.0) / self.sps as f64;
+        if t == 0.0 {
+            return (1.0 - b) + 4.0 * b / PI;
+        }
+        let x = 4.0 * b * t;
+        let den = 1.0 - x * x;
+        if libm::fabs(den) < RRC_SINGULAR {
+            let a = PI / (4.0 * b);
+            return (b / core::f64::consts::SQRT_2)
+                * ((1.0 + 2.0 / PI) * libm::sin(a) + (1.0 - 2.0 / PI) * libm::cos(a));
+        }
+        let num = libm::sin(PI * t * (1.0 - b)) + x * libm::cos(PI * t * (1.0 + b));
+        num / (PI * t * den)
+    }
+
+    /// Tap `k`, normalized to unit energy.
+    pub(crate) fn tap(&self, k: usize) -> f64 {
+        self.unscaled(k) * self.norm
+    }
+}
+
+/// Root-raised-cosine taps (M40): the standard impulse response for a symbol period of `sps`
+/// samples, truncated to `span` symbols (`span sps + 1` taps, centred), normalized to unit
+/// energy (`sum h^2 = 1`).
+///
+/// With `t` the time from the centre in symbols and `b = rolloff`:
+/// `h(t) = (sin(pi t (1 - b)) + 4 b t cos(pi t (1 + b))) / (pi t (1 - (4 b t)^2))`, with the
+/// closed forms `h(0) = 1 - b + 4 b / pi` and, where `|1 - (4 b t)^2| < 1e-9` (the points
+/// `|t| = 1 / (4 b)`), `h = b / sqrt(2) ((1 + 2 / pi) sin(pi / (4 b)) + (1 - 2 / pi) cos(pi / (4 b)))`.
+/// `rolloff` 0.05 to 1, `sps` 2 to 1024, `span` 4 to 32 ([`OutOfRange`](Error::OutOfRange)
+/// otherwise); `taps.len()` must be [`rrc_len`]`(sps, span)`.
+///
+/// ```
+/// use sdrk_blocks::design::{rrc, rrc_len};
+/// let mut h = vec![0.0f64; rrc_len(8, 8)?];
+/// rrc(0.5, 8, 8, &mut h)?;
+/// assert!((h.iter().map(|v| v * v).sum::<f64>() - 1.0).abs() < 1e-12);
+/// assert_eq!(h[0], h[64]); // symmetric
+/// assert!(h[32] > h[31]); // the peak is in the centre
+/// assert!(rrc(0.01, 8, 8, &mut h).is_err());
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+pub fn rrc(rolloff: f64, sps: usize, span: usize, taps: &mut [f64]) -> Result<()> {
+    let d = Rrc::new(rolloff, sps, span)?;
+    check_len(d.len(), taps.len())?;
+    for (k, t) in taps.iter_mut().enumerate() {
+        *t = d.tap(k);
+    }
+    Ok(())
+}

@@ -313,6 +313,45 @@ fn backend_table_lists_the_m38_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m40_kernels() {
+    // The carrier loop is a recursion over the symbols: not accelerated (`C32` only).
+    assert_eq!(backend_for("costas", SampleType::C32), "fallback");
+    for ty in [SampleType::CQ15, SampleType::F32, SampleType::Q15] {
+        assert_eq!(backend_for("costas", ty), "none", "{ty:?}");
+    }
+}
+
+#[test]
+fn m40_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::costas::{Costas, CostasState};
+
+    let mut seed = 559u64;
+    // QPSK symbols with a carrier offset of 0.003 cycles per symbol, a start phase and noise.
+    let input: Vec<C32> = (0..3000)
+        .map(|k| {
+            let b = lcg(&mut seed);
+            let n1 = (lcg(&mut seed) as f32 / u32::MAX as f32 - 0.5) * 0.2;
+            let n2 = (lcg(&mut seed) as f32 / u32::MAX as f32 - 0.5) * 0.2;
+            let r = core::f32::consts::FRAC_1_SQRT_2;
+            let re = if b & 1 == 0 { r } else { -r };
+            let im = if b & 2 == 0 { r } else { -r };
+            let (s, c) = (0.7 + 0.003 * core::f32::consts::TAU * k as f32).sin_cos();
+            C32::new(re * c - im * s + n1, re * s + im * c + n2)
+        })
+        .collect();
+    for order in [2, 4] {
+        let mut a = CostasState::new(order, 0.03, 0.75, 0.05)?;
+        let mut b = a;
+        let (mut ya, mut yb) = (vec![C32::default(); 3000], vec![C32::default(); 3000]);
+        Sdrk.costas(&mut a, &input, &mut ya)?;
+        Fallback.costas(&mut b, &input, &mut yb)?;
+        assert_eq!(flat(&ya), flat(&yb));
+        assert_eq!(a, b);
+    }
+    Ok(())
+}
+
+#[test]
 fn m38_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     use sdrk::kernels::symbol_sync::{SymbolSync, SymbolSyncState, Ted};
 

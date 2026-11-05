@@ -1,0 +1,32 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "rrc_0p35_sps4_span10.expected.bin",
+      "len": 41
+    }
+  },
+  "case": "rrc_0p35_sps4_span10",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "root-raised-cosine impulse response, t = (k - span sps / 2) / sps symbols, h = (sin(pi t (1 - b)) + 4 b t cos(pi t (1 + b))) / (pi t (1 - (4 b t)^2)), closed forms h(0) = 1 - b + 4 b / pi and, where |1 - (4 b t)^2| < 1e-9, b / sqrt(2) ((1 + 2 / pi) sin(pi / (4 b)) + (1 - 2 / pi) cos(pi / (4 b))); normalized to sum h^2 = 1; computed tap by tap with the math module",
+  "params": {
+    "num_taps": 41,
+    "rolloff": 0.35,
+    "samples_per_symbol": 4,
+    "singular_taps": 0,
+    "span": 10
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-12,
+    "skip": 0
+  }
+}

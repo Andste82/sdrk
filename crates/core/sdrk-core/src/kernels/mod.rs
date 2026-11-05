@@ -5,6 +5,7 @@ pub mod auto_notch;
 pub mod basic;
 pub mod biquad;
 pub mod convert;
+pub mod costas;
 pub mod decim;
 pub mod demod;
 pub mod dot;

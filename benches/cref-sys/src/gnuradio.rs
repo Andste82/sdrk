@@ -12,7 +12,9 @@
 //! - [`GrFmDeemph`]: the `iir_filter_ffd` of `analog.fm_deemph` (`gr-deemph.c`, cfg
 //!   `has_grdeemph`), the reference of `deemphasis`;
 //! - [`GrCrc`]: the generic table-driven CRC `gr::digital::crc` of gr-digital (`gr-crc.c`, cfg
-//!   `has_grcrc`), the reference of the CRCs of `sdrk-proto`.
+//!   `has_grcrc`), the reference of the CRCs of `sdrk-proto`;
+//! - [`GrCostasLoopCc`]: the loop of `digital.costas_loop_cc` with `gr::blocks::control_loop`
+//!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`.
 //!
 //! A constructor returns `None` when its library is not linked.
 
@@ -444,5 +446,109 @@ impl GrCrc {
             let _ = (data, &mut self.object);
             0
         }
+    }
+}
+
+#[cfg(has_grcostas)]
+mod costas_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_costas_cc_init(
+            state: *mut super::CostasLoopState,
+            loop_bw: f32,
+            order: core::ffi::c_uint,
+        );
+        pub fn sdrk_gr_costas_cc_work(
+            state: *mut super::CostasLoopState,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// The members of `gr::blocks::control_loop` and `gr::digital::costas_loop_cc_impl` as the C
+/// translation lays them out.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CostasLoopState {
+    /// `d_phase` in radians.
+    pub phase: f32,
+    /// `d_freq` in radians per sample.
+    pub freq: f32,
+    /// `d_max_freq`.
+    pub max_freq: f32,
+    /// `d_min_freq`.
+    pub min_freq: f32,
+    /// `d_damping`.
+    pub damping: f32,
+    /// `d_loop_bw`.
+    pub loop_bw: f32,
+    /// `d_alpha`, the proportional gain.
+    pub alpha: f32,
+    /// `d_beta`, the integral gain.
+    pub beta: f32,
+    /// `d_error`.
+    pub error: f32,
+    /// `d_noise`.
+    pub noise: f32,
+    /// `d_use_snr`.
+    pub use_snr: core::ffi::c_int,
+    /// `d_order`.
+    pub order: core::ffi::c_uint,
+}
+
+/// The loop of GNU Radio's `costas_loop_cc(loop_bw, order)` (one output, no tags, `use_snr`
+/// false): per sample `sincosf` of the phase, a complex product, the detector, the clip to
+/// `+-1` and the second-order loop of `control_loop`.
+pub struct GrCostasLoopCc {
+    state: CostasLoopState,
+}
+
+impl GrCostasLoopCc {
+    /// The block `costas_loop_cc(loop_bw, order)` for the order 2 or 4; `None` without the
+    /// library or for another order.
+    #[must_use]
+    pub fn new(loop_bw: f32, order: u32) -> Option<Self> {
+        if !cfg!(has_grcostas) || !matches!(order, 2 | 4) {
+            return None;
+        }
+        #[cfg_attr(not(has_grcostas), allow(unused_mut))]
+        let mut state = CostasLoopState::default();
+        #[cfg(has_grcostas)]
+        // SAFETY: the state is the C object, initialized here.
+        unsafe {
+            costas_ffi::sdrk_gr_costas_cc_init(&raw mut state, loop_bw, order);
+        }
+        #[cfg(not(has_grcostas))]
+        let _ = loop_bw;
+        Some(GrCostasLoopCc { state })
+    }
+
+    /// The members of the loop.
+    #[must_use]
+    pub fn state(&self) -> CostasLoopState {
+        self.state
+    }
+
+    /// `work` over `input`.
+    ///
+    /// # Panics
+    /// If the buffers differ in length or hold more than `u32::MAX` samples.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(input.len(), output.len(), "costas_loop_cc: length mismatch");
+        let n = u32::try_from(input.len()).expect("costas_loop_cc: too many samples");
+        #[cfg(has_grcostas)]
+        // SAFETY: both buffers hold `n` pairs and do not overlap; the state was initialized by
+        // `new`.
+        unsafe {
+            costas_ffi::sdrk_gr_costas_cc_work(
+                &raw mut self.state,
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                n,
+            );
+        }
+        #[cfg(not(has_grcostas))]
+        let _ = n;
     }
 }

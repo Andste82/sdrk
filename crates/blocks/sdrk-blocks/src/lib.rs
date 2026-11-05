@@ -57,6 +57,7 @@ pub use blocks::auto_notch::{AutoNotchConfig, AutoNotchRealBlock};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
+pub use blocks::costas::{CostasBlock, CostasConfig};
 pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig, DcBlockRealBlock};
 pub use blocks::ddc::{DdcBlock, DdcConfig};
 pub use blocks::decimate::{DecimateBlock, DecimateConfig, DecimateRealBlock};
@@ -68,7 +69,7 @@ pub use blocks::fm_demod::{FM_DEMOD_CHUNK, FmDemodBlock, FmDemodConfig};
 pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
 pub use blocks::fm_stereo_mod::{FmStereoModBlock, FmStereoModConfig};
-pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig};
+pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig, FramePolarity};
 pub use blocks::frame_encode::{FrameEncodeBlock, FrameEncodeConfig, FrameIdle};
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
@@ -81,6 +82,8 @@ pub use blocks::mul::{MulBlock, MulRealBlock};
 pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
+pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
+pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::real_part::RealPartBlock;
 pub use blocks::real_to_iq::RealToIqBlock;

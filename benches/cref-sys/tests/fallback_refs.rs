@@ -4,7 +4,8 @@
 
 use cref_sys::cmsis_dsp as cm;
 use cref_sys::{
-    GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator, LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
+    GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator,
+    LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
 };
 use std::f64::consts::PI;
 
@@ -579,4 +580,42 @@ fn liquid_ampmodem() {
         );
         assert_eq!(o[1], 0.0);
     }
+}
+
+#[test]
+fn gnuradio_costas_loop() {
+    let Some(mut cl) = GrCostasLoopCc::new(0.02, 4) else {
+        eprintln!("skipped: the GNU Radio costas_loop_cc is not linked");
+        return;
+    };
+    // The gains of control_loop: alpha = 4 zeta bw / d, beta = 4 bw^2 / d.
+    let st = cl.state();
+    let (z, bw) = (f64::from(st.damping), 0.02f64);
+    let d = 1.0 + 2.0 * z * bw + bw * bw;
+    assert_close(f64::from(st.alpha), 4.0 * z * bw / d, 1e-7);
+    assert_close(f64::from(st.beta), 4.0 * bw * bw / d, 1e-9);
+    // QPSK on the diagonals turned by 0.3 rad and 0.002 rad per sample: the loop takes the
+    // offset into its frequency and turns the points back onto the diagonals.
+    let r = std::f64::consts::FRAC_1_SQRT_2;
+    let input: Vec<[f32; 2]> = (0..4000u32)
+        .map(|k| {
+            let b = k.wrapping_mul(2_654_435_761) >> 30;
+            let (re, im) = (
+                if b & 1 == 1 { r } else { -r },
+                if b & 2 == 2 { r } else { -r },
+            );
+            let p = 0.3 + 0.002 * f64::from(k);
+            let (s, c) = p.sin_cos();
+            [(re * c - im * s) as f32, (re * s + im * c) as f32]
+        })
+        .collect();
+    let mut out = vec![[0.0f32; 2]; input.len()];
+    cl.work(&input[..1000], &mut out[..1000]);
+    cl.work(&input[1000..], &mut out[1000..]);
+    assert_close(f64::from(cl.state().freq), 0.002, 1e-4);
+    for v in &out[3000..] {
+        assert_close(f64::from(v[0].abs()), r, 1e-2);
+        assert_close(f64::from(v[1].abs()), r, 1e-2);
+    }
+    assert!(GrCostasLoopCc::new(0.02, 8).is_none());
 }

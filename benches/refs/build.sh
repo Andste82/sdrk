@@ -16,6 +16,7 @@
 # | VOLK generic | 3.3.0 (the `generic` protokernels of `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`, and their 16-bit interleave loop), see volk-generic.c | LGPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one library per level) | the scalar references of the `interleave` and `deinterleave` fallbacks |
 # | VOLK without FMA | 3.3.0 (the protokernel of `volk_32fc_x2_multiply_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | the gate of `mul` `C32` at the levels where VOLK's dispatcher picks a fused implementation (D287) |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
+# | GNU Radio `costas_loop_cc` | main at ec1bf15 (costas_loop_cc_impl.cc of gr-digital, control_loop of gr-blocks), see gr-costas.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `costas_fallback` |
 # | GNU Radio `pwr_squelch_cc` | main at ec1bf15 (squelch_base_cc_impl.cc and pwr_squelch_cc_impl of gr-analog), see gr-squelch.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `squelch` |
 # | GNU Radio `rotator` | main at ec1bf15 (rotator.h of gr-blocks, the scalar `rotate`), see gr-rotator.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of the `C32` `rotate` fallback |
 # | GNU Radio `frequency_modulator_fc` | main at ec1bf15 (frequency_modulator_fc_impl.cc of gr-analog with `gr::fxpt` and its sine table), see gr-fm-mod.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `fm_mod` |
@@ -152,7 +153,7 @@ stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/airspy-iqconv.c" \
-    "$here/volk-nofma.c" "$here/volk-generic.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -288,6 +289,13 @@ build_gr_fallback() {
     $ar rcs "$prefix/lib/libgrquaddemod.a" "$work/gr-quad-demod.o" "$work/gr-fast-atan2f.o"
     $cc $GR_AGC_FLAGS -c "$here/gr-deemph.c" -o "$work/gr-deemph.o"
     $ar rcs "$prefix/lib/libgrdeemph.a" "$work/gr-deemph.o"
+}
+
+# The loop of GNU Radio's costas_loop_cc, compiled with the same generic flags as agc_cc: the
+# reference of the costas fallback.
+build_gr_costas() {
+    $cc $GR_AGC_FLAGS -c "$here/gr-costas.c" -o "$work/gr-costas.o"
+    $ar rcs "$prefix/lib/libgrcostas.a" "$work/gr-costas.o"
 }
 
 # GNU Radio's generic CRC (gr::digital::crc of gr-digital), compiled with the same generic
@@ -661,6 +669,7 @@ case $platform in
         build_gr_squelch
         build_gr_fallback
         build_gr_crc
+        build_gr_costas
         build_liquid_dcblock
         build_liquid_nco
         build_liquid_ampmodem
@@ -671,7 +680,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grcostas liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     aarch64)
         build_volk
@@ -682,6 +691,7 @@ case $platform in
         build_gr_squelch
         build_gr_fallback
         build_gr_crc
+        build_gr_costas
         build_liquid_dcblock
         build_liquid_nco
         build_liquid_ampmodem
@@ -692,7 +702,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grcostas liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     wasm32)
         build_volk_wasm
@@ -701,6 +711,7 @@ case $platform in
         build_gr_squelch
         build_gr_fallback
         build_gr_crc
+        build_gr_costas
         build_liquid_dcblock
         build_liquid_nco
         build_liquid_ampmodem
@@ -710,7 +721,7 @@ case $platform in
         build_liquid_halfband
         build_airspy
         build_volk_generic
-        libraries=(volk kissfft gragc grsquelch grfallback grcrc liquiddc liquidnco liquidam kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
+        libraries=(volk kissfft gragc grsquelch grfallback grcrc grcostas liquiddc liquidnco liquidam kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -735,6 +746,7 @@ esac
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
+            grcostas) entry="\"gnuradio_costas_loop_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-costas.c" | cut -d ' ' -f 1)\", \"build\": \"gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): $GR_AGC_FLAGS\" }" ;;
             grcrc) entry="\"gnuradio_crc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-crc.c" | cut -d ' ' -f 1)\", \"build\": \"gr-crc.c (gr::digital::crc): $GR_AGC_FLAGS\" }" ;;
             liquiddc) entry="\"liquid_dsp_dc_blocker\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(cat "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"liquid-dotprod.c liquid-dcblock.c (portable dot products): $GR_AGC_FLAGS\" }" ;;
             liquidnco) entry="\"liquid_dsp_nco\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-nco.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-nco.c (nco_crcf, LIQUID_VCO_INTERP): $GR_AGC_FLAGS\" }" ;;

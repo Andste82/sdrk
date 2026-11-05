@@ -4825,6 +4825,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "costas": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 95.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 95.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 95.03,
+          "ours_instr_per_sample": 95.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_fallback": {
+          "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 137.67,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 95.03,
+              "ratio": 0.69
+            }
+          ],
+          "other_instr_per_sample": 137.67,
+          "ours_instr_per_sample": 95.03,
+          "ratio": 0.69,
+          "snr_db": {
+            "other": 129.22,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
         }
       },
       "volk": {
@@ -4931,6 +4977,11 @@
         "build": "volk-nofma.c over volk_32fc_x2_multiply_32fc.h (u_avx): -O3 -ffp-contract=off, per level avx2:-march=x86-64-v3 avx512:-march=sapphirerapids",
         "sha256": "739127816a2afe22f5c39b0bbc9936a4ae44623d4117d86d344895d781f560c7",
         "version": "3.3.0"
+      },
+      "gnuradio_costas_loop_cc": {
+        "build": "gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): -O3",
+        "sha256": "a07744aa891bfd78c48ddd3dfa6a43e93a97b80601a66e5a9d280460c178194a",
+        "version": "main at ec1bf15"
       }
     },
     "platform": "x86_64"

@@ -7,6 +7,7 @@ use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::basic::Scale;
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
 use sdrk_core::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
+use sdrk_core::kernels::costas::{Costas, CostasState};
 use sdrk_core::kernels::decim::{
     FirDecimState, FirDecimate, Resample, ResampleReal, ResampleRealState, ResampleState,
 };
@@ -159,6 +160,7 @@ crate::delegate! {
         ("auto_notch", f32, Fallback),
         ("preemph_limit_stereo", C32, Fallback),
         ("stereo_encode", C32, Fallback),
+        ("costas", C32, Fallback),
         ("ddc", C32, Chained),
         ("ddc", CQ15, Chained),
         ("duc", C32, Chained),
@@ -238,6 +240,16 @@ impl StereoEncode for crate::Sdrk {
         output: &mut [f32],
     ) -> Result<()> {
         <Fallback as StereoEncode>::stereo_encode(&Fallback, state, input, output)
+    }
+}
+
+// `Costas` has no sample-type parameter (the signature of the spec, `C32` only), so it is
+// delegated by hand like `StereoEncode`; the row above registers it in the `backend_for` table.
+// The loop is a recursion over the symbols and stays with the fallback on every backend.
+impl Costas for crate::Sdrk {
+    #[inline]
+    fn costas(&self, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
+        <Fallback as Costas>::costas(&Fallback, s, input, output)
     }
 }
 

@@ -38,6 +38,10 @@ use sdrk_blocks::{
     SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SymbolSyncBlock,
     SymbolSyncConfig, Ted,
 };
+use sdrk_blocks::{
+    CostasBlock, CostasConfig, FramePolarity, PskDemodBlock, PskDemodConfig, PskModBlock,
+    PskModConfig,
+};
 use sdrk_device::{SdrkError, formats};
 
 type A<'a> = ArenaStorage<'a>;
@@ -304,6 +308,47 @@ fn dc_block_real_exact<R: sdrk_blocks::BlockReal>() {
     });
 }
 
+/// The blocks of M40 take exactly what `storage_bytes` reports (the arena is used up, one byte
+/// less fails); `costas` needs none.
+#[test]
+fn psk_blocks_storage_is_exact() {
+    let r = rate(9600);
+    let cfg = CostasConfig::default();
+    let bytes = CostasBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+    assert_eq!(bytes, 0);
+    check_exact_storage(bytes, |a| CostasBlock::new(&cfg, r, a).map(|_| ()));
+    for (order, sps, span, differential) in [(2, 2, 4, false), (4, 8, 10, true), (4, 64, 32, false)]
+    {
+        let cfg = PskModConfig {
+            order,
+            samples_per_symbol: sps,
+            span,
+            differential,
+            ..PskModConfig::default()
+        };
+        check_exact_storage(PskModBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(), |a| {
+            PskModBlock::new(&cfg, r, a).map(|_| ())
+        });
+    }
+    for (order, symbol_rate_hz, fs, span) in [
+        (2, 4800.0, 9600, 4),
+        (4, 25_000.0, 200_000, 10),
+        (4, 1200.0, 48_000, 32),
+    ] {
+        let cfg = PskDemodConfig {
+            order,
+            symbol_rate_hz,
+            span,
+            ..PskDemodConfig::default()
+        };
+        let r = rate(fs);
+        check_exact_storage(
+            PskDemodBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(),
+            |a| PskDemodBlock::new(&cfg, r, a).map(|_| ()),
+        );
+    }
+}
+
 #[test]
 fn dc_block_real_blocks() {
     dc_block_real_exact::<f32>();
@@ -431,6 +476,11 @@ fn no_block_is_larger_than_512_bytes() {
     check::<SymbolSyncBlock<f32, sdrk_testkit::VecStorage>>("SymbolSyncBlock<f32, Vec>");
     check::<SliceBlock<C32, A<'static>>>("SliceBlock<C32>");
     check::<SliceBlock<f32, sdrk_testkit::VecStorage>>("SliceBlock<f32, Vec>");
+    check::<CostasBlock<A<'static>>>("CostasBlock");
+    check::<PskModBlock<A<'static>>>("PskModBlock");
+    check::<PskModBlock<sdrk_testkit::VecStorage>>("PskModBlock<Vec>");
+    check::<PskDemodBlock<A<'static>>>("PskDemodBlock");
+    check::<PskDemodBlock<sdrk_testkit::VecStorage>>("PskDemodBlock<Vec>");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
     check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
@@ -496,6 +546,22 @@ fn public_types_are_send() {
     assert_sync::<SliceBlock<C32, A<'static>>>();
     assert_sync::<SliceBlock<f32, A<'static>>>();
     assert_send::<SliceConfig>();
+    assert_send::<CostasBlock<A<'static>>>();
+    assert_sync::<CostasBlock<sdrk_testkit::VecStorage>>();
+    assert_send::<CostasConfig>();
+    assert_sync::<CostasConfig>();
+    assert_send::<PskModBlock<A<'static>>>();
+    assert_send::<PskModBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<PskModBlock<A<'static>>>();
+    assert_send::<PskModConfig>();
+    assert_sync::<PskModConfig>();
+    assert_send::<PskDemodBlock<A<'static>>>();
+    assert_send::<PskDemodBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<PskDemodBlock<A<'static>>>();
+    assert_send::<PskDemodConfig>();
+    assert_sync::<PskDemodConfig>();
+    assert_send::<FramePolarity>();
+    assert_sync::<FramePolarity>();
     assert_sync::<SliceConfig>();
     assert_send::<SliceConstellation>();
     fn slice_elem<T: SliceElem + Send + Sync>() {}

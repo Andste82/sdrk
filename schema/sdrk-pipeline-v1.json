@@ -1135,6 +1135,68 @@
           },
           {
             "additionalProperties": false,
+            "description": "Recovers the carrier of BPSK or QPSK symbols: removes phase and frequency offset.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "costas"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "damping": {
+                    "default": 0.7071,
+                    "description": "Damping factor of the loop. Typical: 0.7071. Build-time.",
+                    "maximum": 4.0,
+                    "minimum": 0.1,
+                    "type": "number"
+                  },
+                  "loop_bw": {
+                    "default": 0.02,
+                    "description": "Loop bandwidth normalized to the symbol rate. Typical: 0.02; 0.005 for weak signals, 0.05 for fast acquisition. Build-time.",
+                    "maximum": 0.2,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "max_offset": {
+                    "default": 0.05,
+                    "description": "Limit of the frequency integrator in cycles per symbol. Typical: 0.05 (5 % of the symbol rate). Build-time.",
+                    "maximum": 0.25,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "order": {
+                    "default": 2,
+                    "description": "Order of the phase-shift keying: 2 (BPSK) or 4 (QPSK). Typical: 2 for BPSK, 4 for QPSK. Build-time.",
+                    "maximum": 4,
+                    "minimum": 2,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Removes the DC offset of a complex or real signal with a one-pole high-pass.",
             "properties": {
               "align": {
@@ -1834,6 +1896,15 @@
                     "maximum": 4,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "polarity": {
+                    "default": "normal",
+                    "description": "normal accepts only the sync word; both also accepts the inverted sync word and inverts the bits of that frame. Typical: normal; both behind a coherent psk_demod. Build-time.",
+                    "enum": [
+                      "normal",
+                      "both"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -2329,6 +2400,167 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates BPSK or QPSK to soft bits: matched filter, symbol timing and carrier recovery.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "psk_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "carrier_bw": {
+                    "default": 0.02,
+                    "description": "Loop bandwidth of the carrier loop, normalized to the symbol rate. Typical: 0.02; wider for large frequency offsets. Build-time.",
+                    "maximum": 0.2,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "differential": {
+                    "default": false,
+                    "description": "Differential detection instead of the carrier loop. Typical: false; true for differentially coded signals (no carrier loop). Build-time.",
+                    "type": "boolean"
+                  },
+                  "max_offset": {
+                    "default": 0.05,
+                    "description": "Limit of the carrier loop's frequency integrator in cycles per symbol. Typical: 0.05; above the largest carrier offset in cycles per symbol. Build-time.",
+                    "maximum": 0.25,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "order": {
+                    "default": 2,
+                    "description": "Order of the phase-shift keying: 2 (BPSK) or 4 (QPSK). Typical: 2 for BPSK, 4 for QPSK. Build-time.",
+                    "maximum": 4,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "rolloff": {
+                    "default": 0.35,
+                    "description": "Roll-off of the matched root-raised-cosine filter. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.05,
+                    "type": "number"
+                  },
+                  "span": {
+                    "default": 10,
+                    "description": "Length of the matched filter in symbols. Typical: 10. Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  },
+                  "symbol_rate_hz": {
+                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it and at least twice it. Required. Unit: Hz. Typical: 25000 for 50 kbit/s QPSK. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "sync_bw": {
+                    "default": 0.01,
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.01. Build-time.",
+                    "maximum": 0.1,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "symbol_rate_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Turns soft bits into BPSK or QPSK symbols shaped with a root-raised-cosine pulse.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "psk_mod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "differential": {
+                    "default": false,
+                    "description": "Differential coding: each symbol adds its phase to the previous one. Typical: false; true for a receiver without carrier recovery. Build-time.",
+                    "type": "boolean"
+                  },
+                  "order": {
+                    "default": 2,
+                    "description": "Order of the phase-shift keying: 2 (BPSK, 1 bit per symbol) or 4 (QPSK, 2 bits per symbol). Typical: 2 for BPSK, 4 for QPSK. Build-time.",
+                    "maximum": 4,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "rolloff": {
+                    "default": 0.35,
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum, 0.5 to 1 for easy timing recovery. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.05,
+                    "type": "number"
+                  },
+                  "samples_per_symbol": {
+                    "description": "Output samples per symbol, 2 to 64. Required. Typical: 8. Build-time.",
+                    "maximum": 64,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "span": {
+                    "default": 10,
+                    "description": "Length of the pulse in symbols (span samples_per_symbol + 1 taps). Typical: 10; 16 or more for less intersymbol interference. Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "samples_per_symbol"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
             ],
             "type": "object"
           },

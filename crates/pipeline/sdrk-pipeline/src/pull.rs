@@ -16,6 +16,10 @@ use crate::runner::{
 use crate::runner_time::map_along;
 use crate::time::{Event, EventKind, OutputId};
 
+/// Calls of an idle packet encoder in one step of a pull before it reports that the output
+/// made no progress.
+const IDLE_ROUNDS: usize = 64;
+
 /// The error type of a [`PullSource`].
 pub type PullError = crate::Error;
 
@@ -425,8 +429,19 @@ impl Pipeline {
                 .div_ceil(u128::from(rate_out.den()) * u128::from(out_rate.num()))
                 .max(1);
             let k = usize::try_from(k).unwrap_or(usize::MAX);
-            self.step_idle(enc, k)?;
-            self.run()?;
+            // A block on the path may need more than the rounded share of one call before it
+            // produces (a QPSK `psk_mod` takes whole symbols of two bits, D620): idle samples
+            // are added until the output moves, for a bounded number of rounds.
+            for _ in 0..IDLE_ROUNDS {
+                if self.step_idle(enc, k)? == 0 {
+                    self.run()?;
+                    break;
+                }
+                self.run()?;
+                if self.produced_index_of(oi)? != before || self.queued(oi)? != 0 {
+                    break;
+                }
+            }
         }
         if self.produced_index_of(oi)? == before && self.queued(oi)? == 0 {
             return Err(internal("the packet encoder of a pull made no progress"));

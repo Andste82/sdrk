@@ -1,0 +1,69 @@
+# SDRk pipeline: QPSK packet transmitter in pull mode (YAML twin of qpsk_transmitter.json). The
+# caller asks for bytes with Pipeline::pull; the packets are supplied on demand by a packet
+# source. Use it with the qpsk_receiver flow.
+sdrk: 1
+name: qpsk-transmitter
+description: "Frame packets, modulate them as QPSK at 25 kBd with a root-raised-cosine pulse and output a 1 MHz signed 8-bit baseband for a transmitter, in pull mode."
+# f32 pipeline; at most 64 packets per call of the packet source. The buffers behind the
+# encoder are sized for the frames of max_chunk packets (up to 2112 bits each): 64 keeps the
+# flow at about 74 kB, 4096 would need 2.3 MB.
+settings:
+  precision: f32
+  max_chunk: 64
+inputs:
+  # A packet input: its rate_hz is the rate of the encoded stream, one bit per sample. QPSK
+  # carries two bits per symbol, so 50000 bit/s are 25000 symbols per second.
+  msg:
+    type: packets
+    rate_hz: 50000
+    description: "Packets to send, up to 253 bytes each"
+nodes:
+  # Up converter: x5 from 200 kHz to 1 MS/s with the carrier at 0 Hz (set frequency_hz to move
+  # it). The image filter passes the QPSK band (25 kBd times 1.35 = 33.75 kHz wide, +-16.9 kHz)
+  # up to 20 kHz and stops from 80 kHz, far below the first image at 200 - 16.9 kHz.
+  duc:
+    kind: duc
+    params:
+      cutoff_hz: 50000
+      interpolation: 5
+      transition_hz: 60000
+  # Encoder: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, length, payload and CRC-16, one
+  # +1/-1 sample per bit. When the source has no packet, the encoder sends the preamble bits
+  # (idle preamble): the transmitter keeps a carrier on the air and the receiver stays locked.
+  # In QPSK the bit pairs 01 of 0x55 are one constant symbol, a steady carrier.
+  enc:
+    kind: frame_encode
+    params:
+      idle: preamble
+      preamble_bytes: 4
+  # Level: -3 dB. The pulse of psk_mod gives the symbols amplitude 1 at their centres, but
+  # the overlapping pulses of a roll-off of 0.35 peak at about 1.12 in I or Q; at -3 dB the
+  # peaks stay at 0.79, inside the cs8 range (full scale 1), with no clipping.
+  level:
+    kind: scale
+    params:
+      gain_db: -3
+  # QPSK modulator: Gray mapping (bit 1 is positive, the first bit of a pair in I, the second
+  # in Q), root-raised-cosine pulse with roll-off 0.35 over 10 symbols, 8 samples per symbol
+  # (200 kHz). differential: true would code the bits in phase changes for a receiver
+  # without carrier recovery.
+  mod:
+    kind: psk_mod
+    params:
+      order: 4
+      rolloff: 0.35
+      samples_per_symbol: 8
+      span: 10
+edges:
+  - { from: msg, to: enc }
+  - { from: enc, to: mod }
+  - { from: mod, to: level }
+  - { from: level, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; underrun zeros is the default of raw outputs (a packet input never
+# underruns: the encoder sends its idle signal instead).
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

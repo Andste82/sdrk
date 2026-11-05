@@ -262,6 +262,15 @@ pub fn encode_bytes(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> R
     Ok(total)
 }
 
+/// The sync words a [`Decoder`] hunts for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Polarity {
+    /// Only [`SYNC_WORD`].
+    Normal,
+    /// [`SYNC_WORD`] and its inverse.
+    Both,
+}
+
 /// The bit-by-bit frame decoder.
 ///
 /// It hunts for the sync word with at most `max_sync_errors` differing bits, then reads the
@@ -273,10 +282,18 @@ pub fn encode_bytes(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> R
 ///
 /// The `index` of a returned packet is the index of the first bit of its sync word, computed
 /// from the index the caller passes with the last sync-word bit (indices must be consecutive).
+///
+/// With [`Decoder::with_both_polarities`] the hunt also accepts the inverted sync word (with
+/// the same number of differing bits); the bits of such a frame are inverted before they are
+/// read. This resolves the 180 degree ambiguity of a coherent PSK receiver.
 #[derive(Clone, Debug)]
 pub struct Decoder {
     max_sync_errors: u32,
     emit_bad: bool,
+    /// Which sync words the hunt accepts.
+    polarity: Polarity,
+    /// Whether the frame being read was found by the inverted sync word.
+    invert: bool,
     /// The last bits while hunting, newest in bit 0.
     shift: u32,
     /// Bits still missing before `shift` holds 32 bits of this hunt.
@@ -307,6 +324,8 @@ impl Decoder {
         Ok(Self {
             max_sync_errors,
             emit_bad,
+            polarity: Polarity::Normal,
+            invert: false,
             shift: 0,
             pending: 31,
             in_frame: false,
@@ -316,6 +335,47 @@ impl Decoder {
             body_need: 8,
             start: 0,
         })
+    }
+
+    /// The decoder with the polarity rule `both`: when set, the hunt also accepts the inverted
+    /// sync word `!SYNC_WORD` (at most `max_sync_errors` differing bits, the normal word is
+    /// tried first) and inverts the bits of the frame that follows (M40, for coherent PSK
+    /// receivers whose phase may be off by 180 degrees). [`Decoder::new`] gives `false`.
+    ///
+    /// ```
+    /// use sdrk_proto::frame::{self, Decoder};
+    /// use sdrk_proto::{Packet, PacketFlags};
+    ///
+    /// let p = Packet::new(0, PacketFlags::NONE, b"ok")?;
+    /// let mut bits = [0u8; frame::frame_bits(2, 2)];
+    /// frame::encode(&p, 2, &mut bits)?;
+    /// let mut dec = Decoder::new(0, false)?.with_both_polarities(true);
+    /// assert!(dec.both_polarities());
+    /// let mut got = None;
+    /// for (i, &b) in bits.iter().enumerate() {
+    ///     // every bit inverted
+    ///     if let Some(packet) = dec.push_bit(b == 0, i as u64) {
+    ///         got = Some(packet);
+    ///     }
+    /// }
+    /// let got = got.expect("one frame");
+    /// assert_eq!((got.data(), got.flags), (&b"ok"[..], PacketFlags::CRC_OK));
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    #[must_use]
+    pub fn with_both_polarities(mut self, both: bool) -> Self {
+        self.polarity = if both {
+            Polarity::Both
+        } else {
+            Polarity::Normal
+        };
+        self.hunt();
+        self
+    }
+
+    /// Whether the inverted sync word is accepted too (see [`Decoder::with_both_polarities`]).
+    pub fn both_polarities(&self) -> bool {
+        self.polarity == Polarity::Both
     }
 
     /// The accepted number of sync-word bit errors.
@@ -342,6 +402,7 @@ impl Decoder {
         self.shift = 0;
         self.pending = 31;
         self.in_frame = false;
+        self.invert = false;
         self.body_bits = 0;
         self.body_need = 8;
     }
@@ -374,10 +435,22 @@ impl Decoder {
                 self.body_bits = 0;
                 self.body_need = 8;
                 self.start = index.wrapping_sub(31);
+            } else if self.polarity == Polarity::Both {
+                // `shift ^ !SYNC_WORD` is `!diff`.
+                let inv = !diff;
+                if inv == 0
+                    || (self.max_sync_errors != 0 && inv.count_ones() <= self.max_sync_errors)
+                {
+                    self.in_frame = true;
+                    self.invert = true;
+                    self.body_bits = 0;
+                    self.body_need = 8;
+                    self.start = index.wrapping_sub(31);
+                }
             }
             return None;
         }
-        self.cur = (self.cur << 1) | u8::from(bit);
+        self.cur = (self.cur << 1) | u8::from(bit != self.invert);
         self.body_bits += 1;
         if !self.body_bits.is_multiple_of(8) {
             return None;

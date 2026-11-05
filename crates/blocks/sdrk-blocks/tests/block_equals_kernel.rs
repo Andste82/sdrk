@@ -758,8 +758,18 @@ where
 #[test]
 fn noise_blank_equals_the_kernel() {
     let configs = [
-        // The defaults at the 192 kHz of examples/flows/hf_am_receiver.json (D = 10, H = 38).
+        // The defaults at the 192 kHz of examples/flows/hf_am_receiver.json (D = 2, H = 0).
         (NoiseBlankConfig::default(), 192_000, 25.0),
+        // A lookahead and a hold at 192 kHz (D = 10, H = 38).
+        (
+            NoiseBlankConfig {
+                hold_s: 0.0002,
+                lookahead_s: 0.00005,
+                ..NoiseBlankConfig::default()
+            },
+            192_000,
+            25.0,
+        ),
         // Extreme: no lookahead and no hold.
         (
             NoiseBlankConfig {

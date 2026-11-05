@@ -229,7 +229,7 @@ where
         .collect();
     let mut block = NoiseBlankBlock::<T, _>::new(&cfg, rate(fs), &mut VecStorage).unwrap();
     let d = block.lookahead();
-    assert_eq!(d, 10);
+    assert_eq!(d, 2);
     let out = run_block(&mut block, &input, None);
     assert_eq!(block.blanked(), 0);
     assert!(out[..d].iter().all(|y| *y == T::ZERO));

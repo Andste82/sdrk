@@ -34,9 +34,9 @@ nodes:
   # they are still short and strong, on the wide-band signal before the channel filter. A
   # sample is an impulse when its power exceeds the average power by threshold_db (default
   # 15 dB, runtime). Every blanked sample is a hole in the carrier that the channel filter
-  # turns into a dip of the audio, so the flow blanks as little as possible: a lookahead of
-  # 10 us (2 samples, covers the rising edge; also the delay of the node) and no hold. Raise
-  # hold_s (block default 0.2 ms) for impulses with a long tail. Remove the node when there is
+  # turns into a dip of the audio, so the blanker blanks as little as possible: a lookahead of
+  # 10 us (2 samples, covers the rising edge; also the delay of the node) and no hold, the
+  # block defaults. Raise hold_s for impulses with a long tail. Remove the node when there is
   # no impulse noise: it then only adds its delay and its cost.
   nb:
     kind: noise_blank

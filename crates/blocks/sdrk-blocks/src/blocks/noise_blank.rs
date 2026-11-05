@@ -74,9 +74,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             kind: ParamKind::F64 {
                 min: 0.0,
                 max: 0.01,
-                default: Some(0.0002),
+                default: Some(0.0),
             },
-            typical: "0.0002",
+            typical: "0",
             mutability: Mutability::Build,
             description: "Blanking time after the last impulse sample in seconds, rounded to \
                 whole samples.",
@@ -87,9 +87,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             kind: ParamKind::F64 {
                 min: 0.0,
                 max: 0.001,
-                default: Some(0.00005),
+                default: Some(0.00001),
             },
-            typical: "0.00005",
+            typical: "0.00001",
             mutability: Mutability::Build,
             description: "Blanking time before an impulse in seconds, rounded to whole \
                 samples; it is also the delay of the block.",
@@ -105,7 +105,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// let cfg = NoiseBlankConfig::default();
 /// assert_eq!(cfg.threshold_db, 15.0);
 /// let rate = sdrk::Rate::hz(192_000)?;
-/// assert_eq!(cfg.lookahead_samples(rate)?, 10);
+/// assert_eq!(cfg.lookahead_samples(rate)?, 2);
 /// assert!(NoiseBlankConfig { threshold_db: 5.0, ..cfg }.validate(rate).is_err());
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -126,8 +126,8 @@ impl Default for NoiseBlankConfig {
         Self {
             threshold_db: 15.0,
             tau_s: 0.01,
-            hold_s: 0.0002,
-            lookahead_s: 0.00005,
+            hold_s: 0.0,
+            lookahead_s: 0.00001,
         }
     }
 }
@@ -258,9 +258,9 @@ impl<T: BlockSample, S: Storage> NoiseBlankBlock<T, S> {
     /// use sdrk_blocks::{ArenaStorage, NoiseBlankBlock, NoiseBlankConfig};
     /// use sdrk::{Rate, C32, CQ15};
     /// let cfg = NoiseBlankConfig::default();
-    /// let rate = Rate::hz(192_000)?; // D = 10
-    /// assert_eq!(NoiseBlankBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?, 80);
-    /// assert_eq!(NoiseBlankBlock::<CQ15, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?, 40);
+    /// let rate = Rate::hz(192_000)?; // D = 2
+    /// assert_eq!(NoiseBlankBlock::<C32, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?, 16);
+    /// assert_eq!(NoiseBlankBlock::<CQ15, ArenaStorage<'_>>::storage_bytes(&cfg, rate)?, 8);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn storage_bytes(config: &NoiseBlankConfig, rate_in: Rate) -> Result<usize> {

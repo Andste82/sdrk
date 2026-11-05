@@ -4009,5 +4009,95 @@
       "status": "info",
       "waiver": "provisional"
     }
+  },
+  "noise_blank": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "noise_blank_cq15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`noise_blank` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "auto_notch": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`auto_notch` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
   }
 }

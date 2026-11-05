@@ -288,6 +288,65 @@ fn backend_table_lists_the_m25_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m33_kernels() {
+    // The noise blanker and the automatic notch are per-sample recursions: not accelerated.
+    for (kernel, ty) in [
+        ("noise_blank", SampleType::C32),
+        ("noise_blank", SampleType::CQ15),
+        ("auto_notch", SampleType::F32),
+    ] {
+        assert_eq!(backend_for(kernel, ty), "fallback", "{kernel} {ty:?}");
+    }
+    assert_eq!(backend_for("noise_blank", SampleType::F32), "none");
+    assert_eq!(backend_for("auto_notch", SampleType::Q15), "none");
+    assert_eq!(backend_for("auto_notch", SampleType::C32), "none");
+}
+
+#[test]
+fn m33_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::Rate;
+    use sdrk::kernels::auto_notch::{AutoNotch, AutoNotchState};
+    use sdrk::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
+
+    let mut seed = 33u64;
+    let mut next = move || {
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        ((seed >> 40) as f32 / (1u64 << 24) as f32) * 0.2 - 0.1
+    };
+    let mut c32: Vec<C32> = (0..3000).map(|_| C32::new(next(), next())).collect();
+    for n in (100..3000).step_by(400) {
+        c32[n] = C32::new(0.9, -0.9);
+    }
+    let cq15: Vec<CQ15> = c32.iter().map(|&x| CQ15::from_c32(x)).collect();
+    let rate = Rate::hz(48_000)?;
+    let mut a = NoiseBlankState::<C32, _>::new(15.0, 0.01, 0.0002, vec![C32::default(); 5], rate)?;
+    let mut b = a.clone();
+    let (mut ya, mut yb) = (vec![C32::default(); 3000], vec![C32::default(); 3000]);
+    Sdrk.noise_blank(&mut a, &c32, &mut ya)?;
+    Fallback.noise_blank(&mut b, &c32, &mut yb)?;
+    assert_eq!(flat(&ya), flat(&yb));
+    assert!(a.blanked() > 0);
+    let mut a =
+        NoiseBlankState::<CQ15, _>::new(15.0, 0.01, 0.0002, vec![CQ15::default(); 5], rate)?;
+    let mut b = a.clone();
+    let (mut ya, mut yb) = (vec![CQ15::default(); 3000], vec![CQ15::default(); 3000]);
+    Sdrk.noise_blank(&mut a, &cq15, &mut ya)?;
+    Fallback.noise_blank(&mut b, &cq15, &mut yb)?;
+    assert_eq!(ya, yb);
+    let audio: Vec<f32> = c32.iter().map(|x| x.re).collect();
+    let mut a = AutoNotchState::new(vec![0.0f32; 32], vec![0.0f32; 40], 8, 0.01)?;
+    let mut b = a.clone();
+    let (mut ya, mut yb) = (vec![0.0f32; 3000], vec![0.0f32; 3000]);
+    Sdrk.auto_notch(&mut a, &audio, &mut ya)?;
+    Fallback.auto_notch(&mut b, &audio, &mut yb)?;
+    assert_eq!(
+        ya.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        yb.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
+#[test]
 fn m06_kernels_agree_with_the_fallback() -> Result<()> {
     use sdrk::Rate;
     use sdrk::kernels::decim::{

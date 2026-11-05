@@ -298,6 +298,29 @@
           "status": "dev",
           "verdict": "warn"
         },
+        "auto_notch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 480.16,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 480.16,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 480.16,
+          "ours_instr_per_sample": 480.16,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (neon64, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
           "goal": true,
@@ -3571,6 +3594,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "noise_blank": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 22.98,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 22.98,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 22.98,
+          "ours_instr_per_sample": 22.98,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "noise_blank_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 20.89,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 20.89,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 20.89,
+          "ours_instr_per_sample": 20.89,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "oscillate": {
           "compared_with": "sdrk fallback",

@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "an_tone_f32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "an_tone_f32_16384.input.bin",
+      "len": 16384
+    }
+  },
+  "case": "an_tone_f32_16384",
+  "format_version": 1,
+  "kernel": "auto_notch",
+  "model": "float32",
+  "notes": "8 kHz; real white noise sigma 0.1 plus tones 1000 Hz 0.5 and 1700 Hz 0.3 (sine, start phase 0); taps 32, delay 8, mu 0.01; exact float32 model (sums from +0.0 in ascending i, D370); the generator asserts that both tones lose more than 20 dB over the last quarter; snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "delay": 8,
+    "guard_skip": 0,
+    "mu": 0.01,
+    "rate_hz": 8000,
+    "snr_db_guard": 121.3,
+    "taps": 32
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 474,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

@@ -11,21 +11,21 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock,
-    BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig,
-    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
-    DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig,
-    DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AutoNotchConfig,
+    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample,
+    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock,
+    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
+    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
+    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
     InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
-    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, ParamValue,
-    PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
+    NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock,
+    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -623,6 +623,64 @@ impl Kind for SquelchKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(SquelchBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------- noise_blank
+
+pub(crate) struct NoiseBlankKind;
+
+impl Kind for NoiseBlankKind {
+    type Cfg = NoiseBlankConfig;
+
+    const KIND: &'static str = "noise_blank";
+    fn kernels() -> &'static [&'static str] {
+        &["noise_blank"]
+    }
+    fn default_cfg() -> NoiseBlankConfig {
+        NoiseBlankConfig::default()
+    }
+    fn set(cfg: &mut NoiseBlankConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &NoiseBlankConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("noise_blank needs complex samples"));
+        }
+        let d = cfg.lookahead_samples(rate)?;
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: NoiseBlankBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: NoiseBlankBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 8.0,
+                taps: 0,
+                delay: Delay::new(d as u64, 1).unwrap_or(Delay::ZERO),
+                min_input: 1,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &NoiseBlankConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(NoiseBlankBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )
@@ -1426,6 +1484,57 @@ impl Kind for DeemphasisKind {
                 )?)))
             )
         }
+    }
+}
+
+// -------------------------------------------------------------- auto_notch
+
+pub(crate) struct AutoNotchKind;
+
+impl Kind for AutoNotchKind {
+    type Cfg = AutoNotchConfig;
+
+    const KIND: &'static str = "auto_notch";
+    fn kernels() -> &'static [&'static str] {
+        &["auto_notch"]
+    }
+    fn default_cfg() -> AutoNotchConfig {
+        AutoNotchConfig::default()
+    }
+    fn set(cfg: &mut AutoNotchConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &AutoNotchConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        // Only f32: the description rejects other input types with `type_mismatch`; a Q15
+        // precision can never carry f32 samples.
+        if input != PortType::F32 || p != Precision::F32 {
+            return Err(mismatch("auto_notch needs f32 samples"));
+        }
+        Ok(Figures {
+            rate_out: AutoNotchRealBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: AutoNotchRealBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            cost: 2.0 * cfg.taps as f64 + 4.0,
+            taps: cfg.taps,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &AutoNotchConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(AutoNotchRealBlock::new(
+            cfg, rate, st,
+        )?)))
     }
 }
 

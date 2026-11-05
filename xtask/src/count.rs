@@ -864,7 +864,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 176] = [
+pub static KERNELS: [KernelSpec; 179] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1064,6 +1064,9 @@ pub static KERNELS: [KernelSpec; 176] = [
     spec("stereo_pll_q15_fallback", Family::FallbackVsCmsis, false),
     spec("preemph_limit", Family::Own, false),
     spec("preemph_limit_q15", Family::Own, false),
+    spec("noise_blank", Family::Own, false),
+    spec("noise_blank_cq15", Family::Own, false),
+    spec("auto_notch", Family::Own, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4405,6 +4408,35 @@ mod tests {
                 "{k}"
             );
             assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+    }
+
+    #[test]
+    fn the_noise_reduction_kernels_are_information_against_the_fallback_at_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let names = ["noise_blank", "noise_blank_cq15", "auto_notch"];
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            for k in names {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in names {
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(k)).0,
+                Reference::OwnLevel("avx2"),
+                "{k}"
+            );
+            assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        // Not accelerated: no `_fallback` entry next to the facade entry.
+        for k in names {
+            let fallback = format!("{k}_fallback");
+            assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
         }
     }
 

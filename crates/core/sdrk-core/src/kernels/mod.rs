@@ -1,6 +1,7 @@
 //! Kernel traits, one trait per kernel, generic over the sample type.
 
 pub mod agc;
+pub mod auto_notch;
 pub mod basic;
 pub mod biquad;
 pub mod convert;
@@ -15,6 +16,7 @@ pub mod interp;
 pub mod math;
 pub mod mix;
 pub mod modulate;
+pub mod noise_blank;
 pub mod preemph_limit;
 pub mod spectrum;
 pub mod squelch;

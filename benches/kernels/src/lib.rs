@@ -45,6 +45,7 @@ use volk_sys::{lv_16sc_t, lv_32fc_t};
 mod fir_family;
 mod halfband_family;
 mod math_family;
+mod noise_family;
 mod stereo_family;
 
 use fir_family::{Entry, FirFamK, Mode};
@@ -343,7 +344,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 176] = [
+pub const KERNELS: [&str; 179] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -520,6 +521,9 @@ pub const KERNELS: [&str; 176] = [
     "interleave_cq15_fallback",
     "deinterleave_fallback",
     "deinterleave_cq15_fallback",
+    "noise_blank",
+    "noise_blank_cq15",
+    "auto_notch",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -679,6 +683,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "deemphasis_fallback" => Box::new(DeemphasisK::<f32>::new(rng, layout, fallback)),
         "preemph_limit" => Box::new(PreemphK::<f32>::new(rng, layout)),
         "preemph_limit_q15" => Box::new(PreemphK::<Q15>::new(rng, layout)),
+        "noise_blank" => Box::new(noise_family::NoiseBlankK::<C32>::new(rng, layout)),
+        "noise_blank_cq15" => Box::new(noise_family::NoiseBlankK::<CQ15>::new(rng, layout)),
+        "auto_notch" => Box::new(noise_family::AutoNotchK::new(rng, layout)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

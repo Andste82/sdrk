@@ -31,17 +31,18 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, BiquadBlock,
-    BiquadConfig, BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock,
-    DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock,
-    MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, ParamKind, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, ToComplexBlock, all_descriptions,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AutoNotchConfig,
+    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
+    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig,
+    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock,
+    DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
+    FmStereoDemodBlock, FmStereoDemodConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
+    MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
+    NoiseBlankConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
+    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -61,10 +62,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_thirty_six_unique_kinds() {
+fn there_are_thirty_eight_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 36);
-    assert_eq!(all_descriptions().len(), 36);
+    assert_eq!(kinds.len(), 38);
+    assert_eq!(all_descriptions().len(), 38);
     for kind in [
         "convert",
         "convert_out",
@@ -102,6 +103,8 @@ fn there_are_thirty_six_unique_kinds() {
         "nco",
         "stereo_pll",
         "stereo_matrix",
+        "noise_blank",
+        "auto_notch",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -298,6 +301,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("delay", |n| DelayConfig::default().get(n), &[]);
     defaults_match("nco", |n| NcoConfig::default().get(n), &[]);
     defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
+    defaults_match("noise_blank", |n| NoiseBlankConfig::default().get(n), &[]);
+    defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -386,6 +391,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("biquad", BiquadConfig);
     round_trip!("nco", NcoConfig);
     round_trip!("stereo_pll", StereoPllConfig);
+    round_trip!("noise_blank", NoiseBlankConfig);
+    round_trip!("auto_notch", AutoNotchConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -524,6 +531,19 @@ fn blocks_accept_and_report_every_described_parameter() {
         &mut StereoMatrixBlock::<C32, _>::new(r, &mut s).unwrap(),
     );
     check_block_params(
+        "noise_blank",
+        &mut NoiseBlankBlock::<C32, _>::new(&NoiseBlankConfig::default(), rate(192_000), &mut s)
+            .unwrap(),
+    );
+    check_block_params(
+        "noise_blank",
+        &mut NoiseBlankBlock::<CQ15, _>::new(&NoiseBlankConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "auto_notch",
+        &mut AutoNotchRealBlock::new(&AutoNotchConfig::default(), rate(8_000), &mut s).unwrap(),
+    );
+    check_block_params(
         "dc_block",
         &mut DcBlockBlock::<CQ15, _>::new(&DcBlockConfig::default(), r, &mut s).unwrap(),
     );
@@ -628,6 +648,34 @@ fn dc_block_describes_the_complex_and_the_real_variant() {
     assert!(std::ptr::eq(complex.description(), d));
     assert!(std::ptr::eq(real.description(), d));
     assert!(d.details.contains("dc_block_real"));
+}
+
+/// The kinds of M33: `noise_blank` takes the complex types, `auto_notch` only `f32` (a `Q15`
+/// variant is backlog); the runtime parameters are exactly `threshold_db` and `mu`.
+#[test]
+fn noise_blank_and_auto_notch_describe_their_ports_and_parameters() {
+    let nb = find("noise_blank");
+    assert_eq!(nb.inputs[0].types, [PortType::C32, PortType::CQ15]);
+    assert_eq!(nb.outputs[0].types, [PortType::C32, PortType::CQ15]);
+    let an = find("auto_notch");
+    assert_eq!(an.inputs[0].types, [PortType::F32]);
+    assert_eq!(an.outputs[0].types, [PortType::F32]);
+    let runtime = |d: &BlockDescription| -> Vec<&str> {
+        d.params
+            .iter()
+            .filter(|p| p.mutability == Mutability::Runtime)
+            .map(|p| p.name)
+            .collect()
+    };
+    assert_eq!(runtime(nb), ["threshold_db"]);
+    assert_eq!(runtime(an), ["mu"]);
+    let names = |d: &BlockDescription| -> Vec<&str> { d.params.iter().map(|p| p.name).collect() };
+    assert_eq!(
+        names(nb),
+        ["threshold_db", "tau_s", "hold_s", "lookahead_s"]
+    );
+    assert_eq!(names(an), ["taps", "delay", "mu"]);
+    assert!(nb.required.is_empty() && an.required.is_empty());
 }
 
 #[test]

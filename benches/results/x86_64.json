@@ -266,6 +266,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "auto_notch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 565.09,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 565.09,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 565.09,
+          "ours_instr_per_sample": 565.09,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
           "goal": true,
@@ -3272,6 +3295,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "noise_blank": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 27.76,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.76,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 27.78,
+          "ours_instr_per_sample": 27.78,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "noise_blank_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 30.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 30.33,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 30.33,
+          "ours_instr_per_sample": 30.33,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "oscillate": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -4542,6 +4611,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "auto_notch": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 565.09,
+          "ours_instr_per_sample": 689.89,
+          "ratio": 1.22,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "biquad": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -5296,6 +5378,32 @@
           "status": "release",
           "verdict": "pass"
         },
+        "noise_blank": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 27.78,
+          "ours_instr_per_sample": 33.72,
+          "ratio": 1.21,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "noise_blank_cq15": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 30.33,
+          "ours_instr_per_sample": 30.36,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "oscillate": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -5911,6 +6019,29 @@
           },
           "status": "dev",
           "verdict": "warn"
+        },
+        "auto_notch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 689.89,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 689.89,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 689.89,
+          "ours_instr_per_sample": 689.89,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
@@ -8964,6 +9095,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "noise_blank": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 34.34,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 34.34,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 34.35,
+          "ours_instr_per_sample": 34.35,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "noise_blank_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 30.71,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 30.71,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 30.71,
+          "ours_instr_per_sample": 30.71,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "oscillate": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -10447,6 +10624,29 @@
           },
           "status": "dev",
           "verdict": "warn"
+        },
+        "auto_notch": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 689.89,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 689.89,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 689.89,
+          "ours_instr_per_sample": 689.89,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse42, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
@@ -13445,6 +13645,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "noise_blank": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.34,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 33.34,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 33.35,
+          "ours_instr_per_sample": 33.35,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "noise_blank_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 30.71,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 30.71,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 30.71,
+          "ours_instr_per_sample": 30.71,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "oscillate": {
           "compared_with": "sdrk fallback",

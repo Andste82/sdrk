@@ -282,6 +282,7 @@ The halfband references (M23, maintainer decisions of 2026-10-31) get SDRk's tap
 - `mul` `CQ15`, `mul_real` `Q15`, `interleave` `CQ15` and `oscillate` (M30) have no fair SIMD reference, see the table above: `info` with the efficiency verdict, with the CMSIS-DSP entries beside them for the fallbacks. All M30 entries in `benches/limits.json` carry the waiver `provisional` where the status is not `release`.
 - `info` entries are reported with their numbers and never judged; the reason is the `waiver` text of the entry.
 - `preemph_limit` (f32) and `preemph_limit_q15` (M25) have no reference: GNU Radio's `fm_preemph` and liquid-dsp's `iirfilt` implement the one-pole pre-emphasis only, no library has a peak limiter of this kind, so a comparison would compare a partial workload (D195). Both are `info` against our own fallback at every level, `avx2-runtime` included, and carry no efficiency gate.
+- `noise_blank` (`C32`), `noise_blank_cq15` and `auto_notch` (`f32`) (M33) are per-sample recursions that stay with the fallback on every backend: the facade entry is `info` against our own fallback at every level, `avx2-runtime` included, without an efficiency gate (D420). The workloads are the block defaults: `noise_blank` at 192 kHz on noise with an impulse of 3 samples in every 512, `auto_notch` with 32 taps on 12 kHz audio with a 1.5 kHz whistle. The `noise_blank` fallback runs a call in sections of 128 samples (D424): one `memcpy` of the whole call is `rep movsb` in glibc, which the simulated cycles cost per byte (811.18 cycles per sample on `znver3` at `avx2` before, 11.58 after). `auto_notch` is bound by the latency of its sums, which run in a fixed ascending order shared bit for bit with the reference.
 - Under the [measurement policy](#what-is-compared-with-what-d32) our own fallback is no fair gate for a SIMD branch, and since the fallback round no SIMD entry is `release` against it (issue #20, group A). `fm_mod` `C32` is `info` (D58), with GNU Radio's scalar `frequency_modulator_fc` and the fallback as information. `mag_sq` `CQ15` is `info` with the efficiency verdict (no SIMD library has the rounding and saturation of its rule; CMSIS-DSP's scalar `arm_cmplx_mag_squared_q15` gates the fallback entry). `quad_demod` `CQ15` (round 2), `rotate` `CQ15` (D45), `fm_mod` `CQ15` (D46), the biquad Q15 entries (D21, D39), `window` `CQ15` and `power_db` `Q15` (D43), the Q15 polyphase entries (D44) and `dot` `CQ15`, `dot_real` `Q15` and `scale` `CQ15` (D48) are `info` and judged by their simulated cycles and efficiency (see the notes below). `squelch` `C32` is gated against GNU Radio's `pwr_squelch_cc` (D41). The `C32` fallbacks of `agc` and `quad_demod` are gated against GNU Radio (`agc_fallback`, `quad_demod_fallback`) and the `CQ15` fallback of `quad_demod` against CMSIS-DSP (`quad_demod_cq15_fallback`). The fallbacks of `dc_block_real` and `dc_block` (`f32`/`C32`) are gated against liquid-dsp's DC blocker and that of `deemphasis` `f32` against GNU Radio's `fm_deemph` (D53, entries `<kernel>_fallback`); their SIMD entries (the `f64` block scan) stay `info` against the fallback, since no SIMD library has these recursions. The `info` entries of `squelch` `CQ15`, `agc` `CQ15` and the `Q15`/`CQ15` forms of `dc_block_real`, `deemphasis` and `dc_block` compare the fallback with itself and still need a scalar reference (group B; no established fixed-point implementation was found).
 
 ## Limits
@@ -468,6 +469,9 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `stereo_pll_q15_fallback` (CMSIS-DSP oscillator) | 0.63 info | 0.63 info | 0.63 info | 0.63 info | 0.51 info | 0.80 info |
 | `preemph_limit` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `preemph_limit_q15` (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `noise_blank` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `noise_blank_cq15` (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `auto_notch` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
@@ -645,6 +649,9 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `stereo_pll_q15_fallback` (CMSIS-DSP oscillator) | 85.03 / 135.02 | 85.03 / 135.02 | 85.03 / 135.02 | - | 85.03 / 135.02 | 58.02 / 113.02 | 183.05 / 228.04 |
 | `preemph_limit` f32 (our fallback) | 44.30 / 44.30 | 42.30 / 42.30 | 33.30 / 33.30 | 44.30 | 33.98 / 33.98 | 41.63 / 41.63 | 93.56 / 93.56 |
 | `preemph_limit_q15` (our fallback) | 94.87 / 94.87 | 94.87 / 94.87 | 94.50 / 94.50 | 94.87 | 94.50 / 94.50 | 65.96 / 65.96 | 448.58 / 448.58 |
+| `noise_blank` C32 (our fallback) | 34.35 / 34.35 | 33.35 / 33.35 | 27.78 / 27.78 | 33.72 | 27.37 / 27.37 | 22.98 / 22.98 | 77.93 / 77.93 |
+| `noise_blank_cq15` (our fallback) | 30.71 / 30.71 | 30.71 / 30.71 | 30.33 / 30.33 | 30.36 | 29.97 / 29.97 | 20.89 / 20.89 | 74.15 / 74.15 |
+| `auto_notch` f32 (our fallback) | 689.89 / 689.89 | 689.89 / 689.89 | 565.09 / 565.09 | 689.89 | 571.92 / 571.92 | 480.16 / 480.16 | 1700.29 / 1700.29 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -822,6 +829,9 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `stereo_pll_q15_fallback` (CMSIS-DSP oscillator) | 53.6 / 53.7 | 53.6 / 53.7 | 53.6 / 53.7 | 53.6 / 53.7 | 53.6 / 53.7 | 53.6 / 53.7 |
 | `preemph_limit` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 | `preemph_limit_q15` (our fallback) | exact | exact | exact | exact | exact | exact |
+| `noise_blank` C32 (our fallback) | exact | exact | exact | exact | exact | exact |
+| `noise_blank_cq15` (our fallback) | exact | exact | exact | exact | exact | exact |
+| `auto_notch` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
@@ -990,6 +1000,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `fft_cq15_1024_full_scale` | 7.68 | 52.83 | 0.15 | 8.06 | 62.25 | 0.13 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `rfft_1024` | 4.71 | 5.63 | 0.84 | 4.39 | 4.62 | 0.95 | FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place) |
 | `rfft_1024_fallback` | 16.76 | 14.25 | 1.18 | 16.72 | 14.97 | 1.12 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `auto_notch` | 233.12 | 233.12 | 1.00 | 207.22 | 207.22 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 7.01 | 59.03 | 0.12 | 7.55 | 50.41 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2) |
 | `halfband_decimate_cq15` | 16.69 | 39.56 | 0.42 | 16.21 | 46.08 | 0.35 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 39.56 | 41.57 | 0.95 | 46.08 | 50.10 | 0.92 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
@@ -998,6 +1009,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.00 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `halfband_decimate_real_q15` | 7.02 | 22.39 | 0.31 | 6.65 | 27.24 | 0.24 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.39 | 20.77 | 1.08 | 27.24 | 25.03 | 1.09 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `noise_blank` | 15.92 | 15.92 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.48 | 11.48 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.51 | 57.15 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
@@ -1169,6 +1182,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `fft_cq15_1024_full_scale` | 5.76 | 52.83 | 0.11 | 6.26 | 62.25 | 0.10 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `rfft_1024` | 4.71 | 5.63 | 0.84 | 4.39 | 4.62 | 0.95 | FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place) |
 | `rfft_1024_fallback` | 16.64 | 13.39 | 1.24 | 16.44 | 14.51 | 1.13 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `auto_notch` | 233.12 | 233.12 | 1.00 | 207.22 | 207.22 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 6.77 | 59.03 | 0.11 | 7.67 | 50.41 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2) |
 | `halfband_decimate_cq15` | 13.12 | 23.94 | 0.55 | 12.99 | 21.81 | 0.60 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 23.94 | 38.80 | 0.62 | 21.81 | 47.25 | 0.46 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
@@ -1177,6 +1191,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.00 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
 | `halfband_decimate_real_q15` | 6.20 | 16.50 | 0.38 | 5.32 | 16.82 | 0.32 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 16.50 | 19.39 | 0.85 | 16.82 | 23.61 | 0.71 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `noise_blank` | 15.92 | 15.92 | 1.00 | 11.82 | 11.82 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.29 | 11.29 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.34 | 55.36 | 0.10 | 5.42 | 50.15 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
@@ -1349,6 +1365,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `fft_cq15_1024_full_scale` | 2.41 | 50.51 | 0.05 | 2.48 | 50.50 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `rfft_1024` | 2.12 | 2.71 | 0.78 | 2.09 | 2.85 | 0.73 | realfft on rustfft (RealFftPlanner, forward, out of place) |
 | `rfft_1024_fallback` | 9.73 | 10.06 | 0.97 | 9.95 | 13.52 | 0.74 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `auto_notch` | 164.98 | 164.98 | 1.00 | 169.39 | 169.39 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 3.40 | 87.58 | 0.04 | 2.97 | 34.43 | 0.09 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_cq15` | 7.25 | 13.07 | 0.55 | 7.13 | 13.27 | 0.54 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 13.07 | 31.18 | 0.42 | 13.27 | 33.35 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
@@ -1357,6 +1374,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `halfband_decimate_real_fallback` | 9.13 | 80.22 | 0.11 | 8.76 | 50.71 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_real_q15` | 4.03 | 11.33 | 0.36 | 3.84 | 10.14 | 0.38 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.33 | 15.59 | 0.73 | 10.14 | 16.67 | 0.61 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `noise_blank` | 11.58 | 11.58 | 1.00 | 11.37 | 11.37 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 8.48 | 8.48 | 1.00 | 9.30 | 9.30 | 1.00 | sdrk fallback |
 | `preemph_limit` | 15.40 | 15.40 | 1.00 | 13.20 | 13.20 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `real_to_complex` | 2.50 | 92.12 | 0.03 | 2.29 | 35.30 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
@@ -1529,6 +1548,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `fft_cq15_1024_full_scale` | 1.90 | 48.10 | 0.04 | 2.50 | 50.50 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `rfft_1024` | 1.70 | 2.55 | 0.67 | 1.66 | 2.86 | 0.58 | realfft on rustfft (RealFftPlanner, forward, out of place) |
 | `rfft_1024_fallback` | 8.94 | 8.90 | 1.00 | 8.85 | 13.58 | 0.65 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `auto_notch` | 161.09 | 161.09 | 1.00 | 168.96 | 168.96 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 1.97 | 108.34 | 0.02 | 3.44 | 34.03 | 0.10 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `halfband_decimate_cq15` | 7.12 | 11.98 | 0.59 | 8.56 | 13.27 | 0.65 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 11.98 | 30.73 | 0.39 | 13.27 | 33.31 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
@@ -1537,6 +1557,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `halfband_decimate_real_fallback` | 8.93 | 78.88 | 0.11 | 8.71 | 52.10 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
 | `halfband_decimate_real_q15` | 3.85 | 11.81 | 0.33 | 4.51 | 12.41 | 0.36 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.81 | 15.39 | 0.77 | 12.41 | 16.68 | 0.74 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `noise_blank` | 11.45 | 11.45 | 1.00 | 11.30 | 11.30 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 8.41 | 8.41 | 1.00 | 9.24 | 9.24 | 1.00 | sdrk fallback |
 | `preemph_limit` | 19.20 | 19.20 | 1.00 | 12.19 | 12.19 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `real_to_complex` | 1.68 | 54.21 | 0.03 | 1.56 | 23.24 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
@@ -1709,6 +1731,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `fft_cq15_1024_full_scale` | 10.93 | 67.26 | 0.16 | 9.01 | 77.63 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `rfft_1024` | 8.82 | 10.89 | 0.81 | 5.72 | 10.04 | 0.57 | realfft on rustfft (RealFftPlanner, forward, out of place) |
 | `rfft_1024_fallback` | 18.29 | 18.65 | 0.98 | 17.01 | 18.61 | 0.91 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `auto_notch` | 296.16 | 296.16 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 13.17 | 90.82 | 0.15 | 12.58 | 83.63 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `halfband_decimate_cq15` | 16.35 | 29.05 | 0.56 | 15.22 | 25.78 | 0.59 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 29.05 | 39.92 | 0.73 | 25.78 | 40.69 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
@@ -1717,6 +1740,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `halfband_decimate_real_fallback` | 25.68 | 90.62 | 0.28 | 21.30 | 58.40 | 0.36 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
 | `halfband_decimate_real_q15` | 7.67 | 22.83 | 0.34 | 6.49 | 21.15 | 0.31 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.83 | 19.75 | 1.16 | 21.15 | 20.11 | 1.05 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `noise_blank` | 17.64 | 17.64 | 1.00 | 8.80 | 8.80 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 9.51 | 9.51 | 1.00 | 10.53 | 10.53 | 1.00 | sdrk fallback |
 | `preemph_limit` | 20.93 | 20.93 | 1.00 | 16.43 | 16.43 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `real_to_complex` | 10.15 | 90.81 | 0.11 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |

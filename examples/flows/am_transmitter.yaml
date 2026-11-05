@@ -1,0 +1,61 @@
+# SDRk pipeline: AM broadcast transmitter (medium wave, short wave) in pull mode (YAML twin of
+# am_transmitter.json). The caller asks for bytes with Pipeline::pull; the audio is supplied
+# on demand. Use it with the am_receiver flow (tune.frequency_hz 600000).
+sdrk: 1
+name: am-transmitter
+description: "Modulate 48 kHz audio to AM with a 4.5 kHz audio low-pass and output a 2.4 MHz signed 8-bit baseband with the carrier at +600 kHz for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+inputs:
+  audio:
+    type: f32
+    rate_hz: 48000
+    description: "mono audio"
+nodes:
+  # Audio band limit: a 4th-order Butterworth low-pass at 4500 Hz. AM puts the audio on both
+  # sides of the carrier, so the audio band sets the occupied bandwidth: 4500 Hz gives the
+  # 9 kHz channel of medium wave in Europe (use 5000 for the 10 kHz channels of the Americas).
+  # cutoff_hz can be changed while the flow runs (set_param).
+  lpf:
+    kind: biquad
+    params:
+      cutoff_hz: 4500
+      order: 4
+      response: lowpass
+  # AM modulator: carrier amplitude 0.5 and modulation index 0.8, so the envelope peaks at
+  # 0.5 * (1 + 0.8) = 0.9 of full scale with full-scale audio; audio beyond +-1 is clipped,
+  # which keeps the index at most 1 (no over-modulation). depth can be changed while the flow
+  # runs (set_param).
+  mod:
+    kind: am_mod
+    params:
+      carrier: 0.5
+      depth: 0.8
+  # Digital up converter: x50 to 2.4 MS/s and shift to +600 kHz. The offset keeps the signal
+  # away from the carrier leakage that a transmitter has at its centre frequency; tune the
+  # transmitter 600 kHz below the channel. The image filter is set for audio up to 4.8 kHz:
+  # its pass band ends at 4.8 kHz (cutoff 24 kHz minus half the transition of 38.4 kHz) and
+  # its stop band starts at 43.2 kHz, below the first image at 48 - 4.5 kHz. That needs about
+  # 230 taps; the default image filter (cutoff 0.4, transition 0.1 times 48 kHz) would need
+  # about 1800 taps, more than max_taps allows, for a band the AM signal does not use.
+  duc:
+    kind: duc
+    params:
+      cutoff_hz: 24000
+      frequency_hz: 600000
+      interpolation: 50
+      transition_hz: 38400
+# Audio low-pass, modulator, up converter.
+edges:
+  - { from: audio, to: lpf }
+  - { from: lpf, to: mod }
+  - { from: mod, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

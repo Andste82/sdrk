@@ -27,7 +27,7 @@ use sdrk_core::kernels::interp::{
 };
 use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
 use sdrk_core::kernels::mix::{Nco, Oscillate, Rotate};
-use sdrk_core::kernels::modulate::{FmMod, FmModState};
+use sdrk_core::kernels::modulate::{AmMod, FmMod, FmModState};
 use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
 use sdrk_core::kernels::preemph_limit::{PreemphLimit, PreemphLimitState};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
@@ -136,6 +136,8 @@ crate::delegate! {
     FirInterpolateReal<Q15>::fir_interpolate_real[Taps: AsRef<[Q15]>, Hist: AsRef<[Q15]> + AsMut<[Q15]>](&self, state: &mut FirInterpRealState<Q15, Taps, Hist>, input: &[Q15], output: &mut [Q15]) -> Result<Progress> => Fast;
     FmMod<C32>::fm_mod(&self, s: &mut FmModState, input: &[f32], output: &mut [C32]) -> Result<()> => Fast;
     FmMod<CQ15>::fm_mod(&self, s: &mut FmModState, input: &[Q15], output: &mut [CQ15]) -> Result<()> => Fast;
+    AmMod<C32>::am_mod(&self, carrier: f32, depth: f32, input: &[f32], output: &mut [C32]) -> Result<()> => Fast;
+    AmMod<CQ15>::am_mod(&self, carrier: f32, depth: f32, input: &[Q15], output: &mut [CQ15]) -> Result<()> => Fast;
     Dot<C32>::dot(&self, x: &[C32], taps: &[f32]) -> Result<C32> => Fast;
     Dot<CQ15>::dot(&self, x: &[CQ15], taps: &[Q15]) -> Result<CQ15> => Fast;
     DotReal<f32>::dot_real(&self, x: &[f32], taps: &[f32]) -> Result<f32> => Fast;

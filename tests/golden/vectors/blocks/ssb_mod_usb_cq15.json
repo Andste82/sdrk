@@ -1,0 +1,50 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "ssb_mod_usb_cq15.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "ssb_mod_usb_cq15.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "ssb_mod_usb_cq15",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the input of ssb_mod_usb_c32 quantized to Q15, sideband usb; integer chain: (x, 0), rotate (Q15 cosine table of 4097 entries, linear interpolation with a 15-bit fraction, complex Q15 multiply), fir (taps round(2 h 32768), int64 sum, one rounding and saturation per output), rotate by NCO 2",
+  "params": {
+    "attenuation_db": 60.0,
+    "delay": 436,
+    "high_hz": 3000.0,
+    "inc_1": 4147327795,
+    "inc_2": 147639501,
+    "low_hz": 300.0,
+    "max_taps": 1023,
+    "rate_hz": 48000,
+    "sideband": "usb",
+    "tap_gain": 2.0,
+    "taps": 873,
+    "tone_amplitude": [
+      0.3,
+      0.2
+    ],
+    "tone_hz": [
+      700,
+      1900
+    ],
+    "transition_hz": 200.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 482,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

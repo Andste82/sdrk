@@ -31,11 +31,11 @@ use sdrk_blocks::design::{
     to_f32_sos, to_q14,
 };
 use sdrk_blocks::{
-    AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock,
-    Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockConfig, DcBlockRealBlock, DesignSpec, FirBlock, FirConfig, FmModBlock, FmModConfig,
-    HalfbandDecimateConfig, NoiseBlankBlock, NoiseBlankConfig, ParamValue, RealToIqBlock,
-    StreamElem,
+    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
+    BiquadElem, BiquadRealBlock, Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig,
+    ConvertOutBlock, ConvertOutConfig, DcBlockConfig, DcBlockRealBlock, DesignSpec, FirBlock,
+    FirConfig, FmModBlock, FmModConfig, HalfbandDecimateConfig, NoiseBlankBlock, NoiseBlankConfig,
+    ParamValue, RealToIqBlock, StreamElem,
 };
 use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
@@ -43,7 +43,7 @@ use sdrk_core::kernels::convert::{Convert, ConvertOut};
 use sdrk_core::kernels::demod::{DcBlockReal, DcBlockRealState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::halfband::{RealToComplex, RealToComplexState};
-use sdrk_core::kernels::modulate::{FmMod, FmModState};
+use sdrk_core::kernels::modulate::{AmMod, FmMod, FmModState};
 use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
 use sdrk_device::{SampleFormat, formats};
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
@@ -673,6 +673,78 @@ fn fm_mod_equals_the_kernel() {
     ] {
         fm_mod_equals_kernel::<C32>(deviation_hz, fs, next_hz);
         fm_mod_equals_kernel::<CQ15>(deviation_hz, fs, next_hz);
+    }
+}
+
+// ---- am_mod (M35) ----------------------------------------------------------------------
+
+/// `AmModBlock` equals `am_mod` with `carrier` and `depth` of the configuration converted once
+/// to `f32`; a runtime change of `depth` applies from the next call on. The input holds a tone
+/// with noise, full scale in both directions, values beyond full scale and (`f32`) NaN and
+/// infinities. `am_mod` is bit-exact with the fallback on every backend, so every cut plan is
+/// compared bit for bit.
+fn am_mod_equals_kernel<T: BlockSample>(carrier: f64, depth: f64, next_depth: f64)
+where
+    Sdrk: AmMod<T>,
+    T: PartialEq + core::fmt::Debug,
+{
+    let cfg = AmModConfig { carrier, depth };
+    let mut rng = Pcg32::new(SEED, 31);
+    let mut input: Vec<T::Real> = (0..4000)
+        .map(|i| {
+            let tone = 0.7 * (std::f64::consts::TAU * 1000.0 / 48_000.0 * i as f64).sin();
+            <T::Real as RealSample>::from_f64_round(tone + 0.2 * rng.normal())
+        })
+        .collect();
+    for x in &mut input[500..540] {
+        *x = <T::Real as RealSample>::from_f64_round(1.0);
+    }
+    for x in &mut input[3000..3040] {
+        *x = <T::Real as RealSample>::from_f64_round(-1.0);
+    }
+    for (i, v) in [
+        (700, f64::NAN),
+        (701, f64::INFINITY),
+        (702, f64::NEG_INFINITY),
+        (703, 3.5),
+    ] {
+        input[i] = <T::Real as RealSample>::from_f64_round(v);
+    }
+    let what = format!("am_mod {:?} carrier {carrier} depth {depth}", T::TYPE);
+    let make = || AmModBlock::<T, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap();
+    let kernel = |d: f64, x: &[T::Real], out: &mut [T]| {
+        <Sdrk as AmMod<T>>::am_mod(&Sdrk, carrier as f32, d as f32, x, out).unwrap();
+    };
+
+    let mut want = vec![T::ZERO; input.len()];
+    kernel(depth, &input, &mut want);
+    check_block(&want, &input, SEED, make, &what);
+
+    let mut want = vec![T::ZERO; input.len()];
+    let (a, b) = want.split_at_mut(CHANGE_AT);
+    kernel(depth, &input[..CHANGE_AT], a);
+    kernel(next_depth, &input[CHANGE_AT..], b);
+    check_change(
+        &want,
+        &input,
+        CHANGE_AT,
+        make,
+        |blk| blk.set_param("depth", ParamValue::F64(next_depth)).unwrap(),
+        &format!("{what} changed to depth {next_depth}"),
+    );
+}
+
+#[test]
+fn am_mod_equals_the_kernel() {
+    // The defaults, the edges of the ranges and a carrier that is not a power of two.
+    for (carrier, depth, next_depth) in [
+        (0.5, 0.8, 1.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 0.5, 0.8),
+        (0.3, 0.0, 0.123_456_789),
+    ] {
+        am_mod_equals_kernel::<C32>(carrier, depth, next_depth);
+        am_mod_equals_kernel::<CQ15>(carrier, depth, next_depth);
     }
 }
 

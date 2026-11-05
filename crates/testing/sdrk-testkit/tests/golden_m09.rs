@@ -334,7 +334,10 @@ fn blocks_cases_are_present() {
             "ssb_demod_lsb_c32_dec2",
             "ssb_demod_lsb_cq15",
             "ssb_demod_usb_c32",
-            "ssb_demod_usb_cq15_dec4_loud"
+            "ssb_demod_usb_cq15_dec4_loud",
+            "ssb_mod_lsb_c32",
+            "ssb_mod_usb_c32",
+            "ssb_mod_usb_cq15"
         ]
     );
 }

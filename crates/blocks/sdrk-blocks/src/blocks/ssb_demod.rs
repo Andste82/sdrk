@@ -54,7 +54,7 @@ impl SsbSideband {
     }
 
     /// `+1.0` for USB and `-1.0` for LSB.
-    const fn sign(self) -> f64 {
+    pub(crate) const fn sign(self) -> f64 {
         match self {
             Self::Usb => 1.0,
             Self::Lsb => -1.0,
@@ -218,10 +218,59 @@ impl Default for SsbDemodConfig {
     }
 }
 
+/// Centre `(low_hz + high_hz) / 2` of an SSB audio band in Hz (shared with `ssb_mod`).
+pub(crate) fn band_centre_hz(low_hz: f64, high_hz: f64) -> f64 {
+    f64::midpoint(low_hz, high_hz)
+}
+
+/// The low-pass of an SSB block: cutoff half the band width `(high_hz - low_hz) / 2` (shared
+/// with `ssb_mod`).
+pub(crate) fn band_spec(
+    low_hz: f64,
+    high_hz: f64,
+    transition_hz: f64,
+    attenuation_db: f64,
+) -> DesignSpec {
+    DesignSpec {
+        cutoff_hz: (high_hz - low_hz) / 2.0,
+        transition_hz,
+        attenuation_db,
+    }
+}
+
+/// Checks the audio band of an SSB block: `0 <= low_hz < high_hz` and
+/// `high_hz + transition_hz / 2 <= out_half` (half the audio rate); else `OutOfRange` (shared
+/// with `ssb_mod`).
+pub(crate) fn check_band(
+    low_hz: f64,
+    high_hz: f64,
+    transition_hz: f64,
+    out_half: f64,
+) -> Result<()> {
+    if !(low_hz >= 0.0 && low_hz < high_hz) {
+        return Err(Error::OutOfRange {
+            name: "low_hz",
+            min: 0.0,
+            max: high_hz,
+            got: low_hz,
+        });
+    }
+    let max = out_half - transition_hz / 2.0;
+    if high_hz.is_nan() || high_hz > max {
+        return Err(Error::OutOfRange {
+            name: "high_hz",
+            min: low_hz,
+            max,
+            got: high_hz,
+        });
+    }
+    Ok(())
+}
+
 impl SsbDemodConfig {
     /// Centre of the audio band in Hz.
     fn centre_hz(&self) -> f64 {
-        f64::midpoint(self.low_hz, self.high_hz)
+        band_centre_hz(self.low_hz, self.high_hz)
     }
 
     /// The low-pass specification (half the band width as cutoff, designed at the input rate).
@@ -232,35 +281,20 @@ impl SsbDemodConfig {
     /// assert_eq!((spec.cutoff_hz, spec.transition_hz), (1_350.0, 200.0));
     /// ```
     pub fn design_spec(&self) -> DesignSpec {
-        DesignSpec {
-            cutoff_hz: (self.high_hz - self.low_hz) / 2.0,
-            transition_hz: self.transition_hz,
-            attenuation_db: self.attenuation_db,
-        }
+        band_spec(
+            self.low_hz,
+            self.high_hz,
+            self.transition_hz,
+            self.attenuation_db,
+        )
     }
 
     /// Number of taps for the input rate (also checks the whole configuration).
     pub fn num_taps(&self, rate_in: Rate) -> Result<usize> {
         check_count("audio_decimation", self.audio_decimation, 1, 64)?;
-        if !(self.low_hz >= 0.0 && self.low_hz < self.high_hz) {
-            return Err(Error::OutOfRange {
-                name: "low_hz",
-                min: 0.0,
-                max: self.high_hz,
-                got: self.low_hz,
-            });
-        }
         let fs = hz(rate_in);
         let out_half = fs / self.audio_decimation as f64 / 2.0;
-        let max = out_half - self.transition_hz / 2.0;
-        if self.high_hz.is_nan() || self.high_hz > max {
-            return Err(Error::OutOfRange {
-                name: "high_hz",
-                min: self.low_hz,
-                max,
-                got: self.high_hz,
-            });
-        }
+        check_band(self.low_hz, self.high_hz, self.transition_hz, out_half)?;
         self.design_spec().num_taps(fs, self.max_taps)
     }
 

@@ -92,3 +92,48 @@ pub trait FmMod<T: ComplexSample> {
     /// table amplitude `1 - 2^-15`. The lengths must be equal.
     fn fm_mod(&self, s: &mut FmModState, input: &[T::Real], output: &mut [T]) -> Result<()>;
 }
+
+/// AM modulator: real audio in, complex baseband with carrier out.
+///
+/// `C32` (input `f32`): `x' = clamp(x, -1, 1)` with NaN giving 0, then `t = depth·x'`,
+/// `u = 1 + t`, `re = carrier·u` in `f32` in that order (no FMA), `im = 0`.
+///
+/// `CQ15` (input `Q15`): `c_q = round(carrier·32768)` and `m_q = round(depth·32768)`, each
+/// limited to 32767 (the `f32` to `Q15` conversion of the numeric conventions), then
+/// `t = round_shift(m_q·x, 15)`, `u = 32768 + t`, `re = sat16(round_shift(c_q·u, 15))` in
+/// `i64`, `im = 0`.
+///
+/// `carrier` and `depth` must lie in `0 ..= 1` (NaN and the infinities are outside), else
+/// `InvalidParameter`; unequal lengths give `LengthMismatch`. The parameters are checked
+/// first, and nothing is written on an error. Stateless, ratio 1, delay 0, bit-exact class.
+///
+/// ```
+/// use sdrk_core::{kernels::modulate::AmMod, Fallback, C32, CQ15, Q15};
+/// let mut out = [C32::default(); 3];
+/// Fallback.am_mod(0.5, 0.8, &[1.0, -1.0, f32::NAN], &mut out)?;
+/// assert_eq!(out[0], C32::new(0.5 * (1.0 + 0.8), 0.0));
+/// assert_eq!(out[1], C32::new(0.5 * (1.0 - 0.8), 0.0));
+/// assert_eq!(out[2], C32::new(0.5, 0.0)); // NaN counts as 0: the bare carrier
+///
+/// let mut out = [CQ15::default(); 2];
+/// Fallback.am_mod(1.0, 1.0, &[Q15::MIN, Q15::MAX], &mut out)?;
+/// assert_eq!(out[0].re, Q15(1)); // the envelope touches 0 up to one LSB
+/// assert_eq!(out[1].re, Q15::MAX); // saturated
+/// assert!(Fallback.am_mod(1.5, 0.8, &[Q15(0)], &mut out[..1]).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait AmMod<T: ComplexSample> {
+    /// `out[n] = (c·(1 + m·x[n]), 0)` with `x` clamped to `[−1, 1]`.
+    fn am_mod(&self, carrier: f32, depth: f32, input: &[T::Real], output: &mut [T]) -> Result<()>;
+}
+
+/// `Ok` when `carrier` and `depth` both lie in `0 ..= 1`, else `InvalidParameter`.
+pub(crate) fn check_am_params(carrier: f32, depth: f32) -> Result<()> {
+    if !(0.0..=1.0).contains(&carrier) {
+        return Err(Error::InvalidParameter("carrier must be 0 to 1"));
+    }
+    if !(0.0..=1.0).contains(&depth) {
+        return Err(Error::InvalidParameter("depth must be 0 to 1"));
+    }
+    Ok(())
+}

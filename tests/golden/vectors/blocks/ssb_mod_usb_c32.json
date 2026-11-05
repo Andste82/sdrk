@@ -1,0 +1,52 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "ssb_mod_usb_c32.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "ssb_mod_usb_c32.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "ssb_mod_usb_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "48 kHz; real tones 700 Hz 0.3 and 1900 Hz 0.2 (cosines from phase 0), defaults (band 300 to 3000 Hz, transition 200 Hz, 60 dB, max_taps 1023); float64 chain: x times exp(j 2 pi phase_1 / 2^32) (NCO 1 at -1650 Hz, exact modular 32-bit phase from 0), upfirdn(h, ., 1, 1) restricted to n outputs with h = 2 firwin(kaiser) rounded to f32 (cutoff 1350 Hz), times exp(j 2 pi phase_2 / 2^32) (NCO 2 at +1650 Hz); the tones come out at +700 and +1900 Hz",
+  "params": {
+    "attenuation_db": 60.0,
+    "delay": 436,
+    "high_hz": 3000.0,
+    "inc_1": 4147327795,
+    "inc_2": 147639501,
+    "low_hz": 300.0,
+    "max_taps": 1023,
+    "rate_hz": 48000,
+    "sideband": "usb",
+    "tap_gain": 2.0,
+    "taps": 873,
+    "tone_amplitude": [
+      0.3,
+      0.2
+    ],
+    "tone_hz": [
+      700,
+      1900
+    ],
+    "transition_hz": 200.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 481,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

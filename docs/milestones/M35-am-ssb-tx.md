@@ -200,9 +200,52 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Kernel `am_mod` (C32, CQ15) with reference, fallback, delegation, contract
-- [ ] Blocks `am_mod`, `ssb_mod`; kinds, costs, schema
-- [ ] Golden cases (seeds 480–482), extremes, chunk invariance (483), sideband switch (484)
-- [ ] Loop tests AM and SSB
-- [ ] Flows `am_transmitter`, `ssb_transmitter` with YAML twins
-- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md` (`am_mod` accelerated where cheap, else "Not accelerated"), `examples/README.md`, CHANGELOG, decisions log
+- [x] Kernel `am_mod` (C32, CQ15) with reference, fallback, delegation, contract
+- [x] Blocks `am_mod`, `ssb_mod`; kinds, costs, schema
+- [x] Golden cases (seeds 480–482), extremes, chunk invariance (483), sideband switch (484)
+- [x] Loop tests AM and SSB
+- [x] Flows `am_transmitter`, `ssb_transmitter` with YAML twins
+- [x] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md` (`am_mod` accelerated where cheap, else "Not accelerated"), `examples/README.md`, CHANGELOG, decisions log
+
+## Status
+
+Done: the kernel `am_mod` (`C32`, `CQ15`) in `sdrk-core` (`kernels::modulate::AmMod`) with the contract, `Reference`, `Fallback` and the facade delegation (D427, D428, D429); the SIMD backend's `CQ15` paths for SSE4.2, AVX2 (also run at AVX-512), NEON and SIMD128 and its `C32` entry, the fallback loop compiled at the level of the dispatch (D429, D430); the blocks `AmModBlock` and `SsbModBlock` (the Weaver chain of `interleave`, `rotate` and `fir` in pieces of 256 samples, one work buffer, D433, D434, D435), the pipeline kinds `am_mod` and `ssb_mod` with their costs and the regenerated schema; the golden cases `am_mod/c32_4096` and `am_mod/cq15_4096` (seed 480), `blocks/ssb_mod_usb_c32` and `blocks/ssb_mod_lsb_c32` (seed 481) and `blocks/ssb_mod_usb_cq15` (seed 482) with their generators `am_mod.py` and `ssb_mod.py`; the suite case `extremes_m35`; the chunk invariance with 20 chunk plans (seed 483) and the runtime sideband switch (seed 484) in `crates/blocks/sdrk-blocks/tests/am_ssb_mod.rs`; LOOP-AM and LOOP-SSB in `crates/testing/sdrk-testkit/tests/e2e_loop_m35.rs` (D436); the flows `examples/flows/am_transmitter.json` and `ssb_transmitter.json` with their YAML twins and the flow tests in `crates/pipeline/sdrk-pipeline/tests/am_ssb_transmitters.rs` (D439); the count registration of the four `am_mod` entries against liquid-dsp's `ampmodem` and the CMSIS-DSP composition (D440, D441, D442); `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/performance.md`, `examples/README.md`, CHANGELOG and the decisions log (D427 to D443).
+
+Measured (loop tests, D437; every threshold unchanged):
+- LOOP-AM: SINAD 125.88 dB (`f32`, required 40 dB) and 81.67 dB (Q15, required 30 dB); tone amplitude 0.2003 against carrier * depth * 0.5 = 0.2.
+- LOOP-SSB, the same for USB and LSB: level +0.0005 dB (`f32`) and +0.0047 dB (Q15) from the input 0.5 (allowed 0.5 dB); SINAD 126.98 dB and 87.27 dB; the audio peak on the 1 kHz bin; the opposite sideband in the demodulator 82.56 dB (`f32`) and 74.70 dB (Q15) lower (required 50 dB); the `ssb_mod` output peak at +1 kHz (USB) or -1 kHz (LSB) with amplitude 0.50001 (`f32`) and 0.50011 (Q15), the mirror at -88.58 dB (`f32`) and -113.88 dB (Q15) (required at most -50 dB).
+- Sideband switch (Test 5, D435): largest step 0.163 (`C32`) against the bound 0.5 of the spec.
+
+Departures from the spec (each in the decisions log):
+- `sideband` flips the sign of both oscillators, not of NCO 2 only as section 3 says: NCO 1 rotates by `-s c` and NCO 2 by `+s c`, the mirror of `ssb_demod`; with NCO 1 fixed a tone at `f` would come out at `f - 2c` for LSB, against the spec's own rule that it comes out at `-f`. The golden cases are generated so; the LSB output is the complex conjugate of the USB output (D431).
+- The `ssb_mod` golden cases use 8192 samples instead of the 4096 of the `am_mod` cases, so that the filter of 873 taps leaves a settled stretch of whole tone periods (D432).
+- The `duc` of both transmitter flows sets `cutoff_hz` 24000 and `transition_hz` 38400 besides the spec's interpolation 50 and frequency, because with its defaults the image filter needs 1815 taps, more than `max_taps` 1023, and the flows do not build; the `biquad` low-pass of `am_transmitter` is of order 4, which the spec does not give (D438).
+
+Open:
+- I35-1: `am_mod_fallback` (`C32`) against liquid-dsp's `ampmodem`, which does less work than the contract (no clamp, no NaN rule, no carrier product, and `fmla` on AArch64): counted 1.63 times liquid's instructions at `sse2` and `sse4.2` and 1.99 at `neon` (`dev` with a ratio waiver; on `neon` also an accuracy waiver, 150.8 against 152.1 dB), 0.73, 0.45 and 0.23 at `avx2`, `avx512` and `simd128` (`release`); in simulated cycles 1.84 / 1.61 at `sse2` and 2.27 / 1.48 at `neon` (reference / counter model). The maintainer decides whether the gap is accepted or another reference is taken (D443).
+
+Gate and counts: see below.
+
+Gate (2026-11-05, on main after M33 and M34): `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -D warnings`, `cargo xtask check`, `cargo xtask schema --check`, `generate.py --check`, the tests of `sdrk-core` (also the fallback-only build), `sdrk`, `sdrk-testkit`, `sdrk-blocks`, `sdrk-pipeline`, `xtask`, `sdrk-wasm`, `fm-transmitter` and `cref-sys`, `cargo doc -D warnings`, `cargo xtask bare-metal`, clippy for `thumbv7em-none-eabihf` and the bench crates: 19 of 19 steps pass, 2861 tests, none failed (the doctest of `Registry` was raised from 38 to 40 kinds). The emulator run (`qemu-cortex-m4`) is left to CI.
+
+Counts (instructions per sample, ours / comparison; D440 to D443):
+
+| Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `am_mod` (our fallback, `info`) | 4.52 / 4.52 | 4.52 / 4.52 | 2.02 / 2.02 | 2.03 | 1.24 / 1.24 | 3.52 / 3.52 | 10.54 / 10.54 |
+| `am_mod_cq15` (our fallback, `info`) | 7.78 / 7.78 | 1.40 / 3.15 | 0.65 / 1.59 | 0.66 | 0.59 / 0.76 | 1.27 / 2.90 | 3.92 / 8.80 |
+| `am_mod_fallback` (liquid-dsp `ampmodem`) | 4.52 / 2.78 | 4.52 / 2.78 | 2.02 / 2.78 | - | 1.24 / 2.78 | 3.52 / 1.77 | 10.54 / 46.02 |
+| `am_mod_cq15_fallback` (CMSIS-DSP composition) | 7.78 / 16.42 | 3.15 / 13.66 | 1.59 / 11.65 | - | 0.76 / 11.28 | 2.90 / 10.35 | 8.80 / 31.69 |
+
+Simulated cycles per sample (whole-loop, reference / counter model; `skylake` / `znver2` at `sse2` and `sse4.2`, `znver3` / `alderlake` at `avx2`, `znver4` / `sapphirerapids` at `avx512`, `cortex-a72` / `cortex-a76` at `neon`):
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
+| --- | --- | --- | --- | --- | --- |
+| `am_mod` | 1.09 / 1.16 | 1.09 / 1.16 | 0.65 / 0.47 | 0.38 / 0.30 | 2.91 / 1.52 |
+| `am_mod_cq15` | 2.62 / 3.12 | 0.31 / 0.36 | 0.20 / 0.21 | 0.14 / 0.20 | 0.90 / 0.77 |
+| `am_mod_fallback` | 1.09 / 1.16 | 1.09 / 1.16 | 0.65 / 0.47 | 0.38 / 0.30 | 2.91 / 1.52 |
+| liquid-dsp `ampmodem` | 0.59 / 0.72 | 0.59 / 0.72 | 0.53 / 0.54 | 0.53 / 0.54 | 1.28 / 1.03 |
+| `am_mod_cq15_fallback` | 2.62 / 3.12 | 1.23 / 1.15 | 0.45 / 0.56 | 0.32 / 0.48 | 1.72 / 1.33 |
+| CMSIS-DSP composition | 4.17 / 4.64 | 3.17 / 3.57 | 2.97 / 2.30 | 2.85 / 2.37 | 4.30 / 4.49 |
+
+The `C32` SIMD entry is the loop of the fallback (D429), so it equals the fallback; the `CQ15` SIMD paths are 0.25 to 0.52 of the fallback on the reference model and run the fallback at `sse2` (D430). No SIMD entry is slower than its fallback (D321).

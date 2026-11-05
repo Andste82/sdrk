@@ -66,6 +66,7 @@ pub mod ffi {
         fn arm_scale_f32(src: *const f32, scale: f32, dst: *mut f32, n: u32);
         fn arm_scale_q15(src: *const i16, scale_fract: i16, shift: i8, dst: *mut i16, n: u32);
         fn arm_add_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
+        fn arm_offset_q15(src: *const i16, offset: i16, dst: *mut i16, n: u32);
         fn arm_sub_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
         fn arm_add_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
         fn arm_sub_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
@@ -353,6 +354,17 @@ pub fn add_q15(a: &[i16], b: &[i16], dst: &mut [i16]) {
         b.as_ptr(),
         dst.as_mut_ptr(),
         block(a.len())
+    ));
+}
+
+/// `arm_offset_q15`: `dst[i] = sat16(src[i] + offset)`.
+pub fn offset_q15(src: &[i16], offset: i16, dst: &mut [i16]) {
+    same(src.len(), dst.len(), "offset_q15");
+    call!(arm_offset_q15(
+        src.as_ptr(),
+        offset,
+        dst.as_mut_ptr(),
+        block(src.len())
     ));
 }
 

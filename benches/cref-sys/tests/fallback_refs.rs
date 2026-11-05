@@ -4,8 +4,8 @@
 
 use cref_sys::cmsis_dsp as cm;
 use cref_sys::{
-    GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator, LiquidDcBlocker,
-    LiquidDcBlockerCrcf,
+    GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator, LiquidAmpmodem,
+    LiquidDcBlocker, LiquidDcBlockerCrcf,
 };
 use std::f64::consts::PI;
 
@@ -139,6 +139,10 @@ fn cmsis_scale_and_products() {
     cm::mult_q15(&qa, &qb, &mut q);
     for ((o, &x), &y) in q.iter().zip(&qa).zip(&qb) {
         assert_eq!(i32::from(*o), (i32::from(x) * i32::from(y)) >> 15);
+    }
+    cm::offset_q15(&qa, 30000, &mut q);
+    for (o, &x) in q.iter().zip(&qa) {
+        assert_eq!(i32::from(*o), (i32::from(x) + 30000).clamp(-32768, 32767));
     }
 
     let (ca, cb) = (pairs(&a[..20]), pairs(&b[..20]));
@@ -524,4 +528,25 @@ fn liquid_dc_blockers() {
         assert_eq!(c[1], -*o);
     }
     assert!(LiquidDcBlocker::new(0.0).is_none());
+}
+
+#[test]
+fn liquid_ampmodem() {
+    let Some(mut am) = LiquidAmpmodem::new(0.8) else {
+        eprintln!("skipped: liquid-dsp's ampmodem is not linked");
+        return;
+    };
+    let x = signal(37, 9);
+    let mut y = [[f32::NAN; 2]; 37];
+    am.modulate_block(&x, &mut y);
+    // DSB with the carrier: `x * mod_index + 1`, a real value as a complex one (GCC may fuse
+    // the product and the sum on AArch64, liquid's own flags allow it).
+    for (o, v) in y.iter().zip(&x) {
+        assert_close(
+            f64::from(o[0]),
+            f64::from(*v) * f64::from(0.8f32) + 1.0,
+            1e-6,
+        );
+        assert_eq!(o[1], 0.0);
+    }
 }

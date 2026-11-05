@@ -42,6 +42,7 @@ use sdrk_core::Reference;
 use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, formats};
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
+mod am_family;
 mod fir_family;
 mod halfband_family;
 mod math_family;
@@ -344,7 +345,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 179] = [
+pub const KERNELS: [&str; 183] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -524,6 +525,10 @@ pub const KERNELS: [&str; 179] = [
     "noise_blank",
     "noise_blank_cq15",
     "auto_notch",
+    "am_mod",
+    "am_mod_cq15",
+    "am_mod_fallback",
+    "am_mod_cq15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -686,6 +691,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "noise_blank" => Box::new(noise_family::NoiseBlankK::<C32>::new(rng, layout)),
         "noise_blank_cq15" => Box::new(noise_family::NoiseBlankK::<CQ15>::new(rng, layout)),
         "auto_notch" => Box::new(noise_family::AutoNotchK::new(rng, layout)),
+        "am_mod" | "am_mod_fallback" => Box::new(am_family::AmModC32K::new(rng, layout, entry)),
+        "am_mod_cq15" | "am_mod_cq15_fallback" => {
+            Box::new(am_family::AmModCq15K::new(rng, layout, entry))
+        }
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

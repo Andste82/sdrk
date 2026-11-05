@@ -1,0 +1,67 @@
+{
+  "sdrk": 1,
+  "name": "am-transmitter",
+  "description": "Modulate 48 kHz audio to AM with a 4.5 kHz audio low-pass and output a 2.4 MHz signed 8-bit baseband with the carrier at +600 kHz for a transmitter, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4800
+  },
+  "inputs": {
+    "audio": {
+      "type": "f32",
+      "rate_hz": 48000,
+      "description": "mono audio"
+    }
+  },
+  "nodes": {
+    "duc": {
+      "kind": "duc",
+      "params": {
+        "cutoff_hz": 24000,
+        "frequency_hz": 600000,
+        "interpolation": 50,
+        "transition_hz": 38400
+      }
+    },
+    "lpf": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 4500,
+        "order": 4,
+        "response": "lowpass"
+      }
+    },
+    "mod": {
+      "kind": "am_mod",
+      "params": {
+        "carrier": 0.5,
+        "depth": 0.8
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "audio",
+      "to": "lpf"
+    },
+    {
+      "from": "lpf",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "duc"
+    },
+    {
+      "from": "duc",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs8",
+      "underrun": "zeros"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "sdrk": 1,
+  "name": "ssb-transmitter",
+  "description": "Modulate 48 kHz voice audio to single sideband (USB or LSB, 300 to 3000 Hz) and output a 2.4 MHz signed 8-bit baseband with the suppressed carrier at 0 Hz for a transmitter, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4800
+  },
+  "inputs": {
+    "audio": {
+      "type": "f32",
+      "rate_hz": 48000,
+      "description": "mono audio"
+    }
+  },
+  "nodes": {
+    "duc": {
+      "kind": "duc",
+      "params": {
+        "cutoff_hz": 24000,
+        "frequency_hz": 0,
+        "interpolation": 50,
+        "transition_hz": 38400
+      }
+    },
+    "mod": {
+      "kind": "ssb_mod",
+      "params": {
+        "high_hz": 3000,
+        "low_hz": 300,
+        "sideband": "usb"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "audio",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "duc"
+    },
+    {
+      "from": "duc",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs8",
+      "underrun": "zeros"
+    }
+  }
+}

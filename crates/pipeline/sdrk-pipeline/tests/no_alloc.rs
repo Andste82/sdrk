@@ -226,6 +226,12 @@ fn pull_of_the_narrow_band_transmitter_does_not_allocate() {
     pull_without_allocation("nfm_transmitter");
 }
 
+#[test]
+fn pull_of_the_am_and_ssb_transmitters_does_not_allocate() {
+    pull_without_allocation("am_transmitter");
+    pull_without_allocation("ssb_transmitter");
+}
+
 fn pull_without_allocation(flow: &str) {
     struct Tone {
         data: Vec<f32>,

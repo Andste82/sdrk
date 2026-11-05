@@ -51,6 +51,7 @@
 )]
 
 mod agc;
+mod am_mod;
 mod biquad;
 mod convert;
 mod convert_out;

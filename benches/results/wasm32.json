@@ -266,6 +266,106 @@
           "status": "release",
           "verdict": "pass"
         },
+        "am_mod": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10.54,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 10.54,
+          "ours_instr_per_sample": 10.54,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 150.8,
+            "ours": 150.8
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "am_mod_cq15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "information: cmsis",
+              "other_instr_per_sample": 31.69,
+              "other_snr_db": 89.68,
+              "ours_instr_per_sample": 3.92,
+              "ratio": 0.12
+            },
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 8.8,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.92,
+              "ratio": 0.45
+            }
+          ],
+          "other_instr_per_sample": 8.8,
+          "ours_instr_per_sample": 3.92,
+          "ratio": 0.45,
+          "snr_db": {
+            "other": 92.65,
+            "ours": 92.65
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "am_mod_cq15_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 31.69,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 8.8,
+              "ratio": 0.28
+            }
+          ],
+          "other_instr_per_sample": 31.69,
+          "ours_instr_per_sample": 8.8,
+          "ratio": 0.28,
+          "snr_db": {
+            "other": 89.68,
+            "ours": 92.65
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "am_mod_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 46.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.54,
+              "ratio": 0.23
+            }
+          ],
+          "other_instr_per_sample": 46.02,
+          "ours_instr_per_sample": 10.54,
+          "ratio": 0.23,
+          "snr_db": {
+            "other": 150.8,
+            "ours": 150.8
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "auto_notch": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -4560,6 +4660,11 @@
         "build": "airspy-iqconv.c over iqconverter_float.c and iqconverter_int16.c (conversion without remove_dc; the SSE2 converter with the FreeBSD branch, x86_64 only): -O3 -ffp-contract=off, per level simd128:-msimd128",
         "sha256": "fcca23911c9a9da71cebeffeba708c59d1d6401eec6eb2dd73cae35b8ea3c613",
         "version": "1.0.10"
+      },
+      "liquid_dsp_ampmodem": {
+        "build": "liquid-ampmodem.c (ampmodem, LIQUID_AMPMODEM_DSB with the carrier): -O3 -msimd128",
+        "sha256": "a9e5025a7683d4f881d5c1cade4ca4905de4e4ff5c18454140175055e5abc178",
+        "version": "1.8.3"
       },
       "liquid_dsp_dc_blocker": {
         "build": "liquid-dotprod.c liquid-dcblock.c (portable dot products): -O3 -msimd128",

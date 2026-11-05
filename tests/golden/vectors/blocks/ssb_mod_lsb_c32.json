@@ -1,0 +1,52 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "ssb_mod_lsb_c32.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "ssb_mod_lsb_c32.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "ssb_mod_lsb_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "the input and the chain of ssb_mod_usb_c32 with sideband lsb: NCO 1 at +1650 Hz and NCO 2 at -1650 Hz (both signs flip, D431), so the tones come out at -700 and -1900 Hz",
+  "params": {
+    "attenuation_db": 60.0,
+    "delay": 436,
+    "high_hz": 3000.0,
+    "inc_1": 147639501,
+    "inc_2": 4147327795,
+    "low_hz": 300.0,
+    "max_taps": 1023,
+    "rate_hz": 48000,
+    "sideband": "lsb",
+    "tap_gain": 2.0,
+    "taps": 873,
+    "tone_amplitude": [
+      0.3,
+      0.2
+    ],
+    "tone_hz": [
+      700,
+      1900
+    ],
+    "transition_hz": 200.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 481,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

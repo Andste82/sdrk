@@ -97,7 +97,10 @@ fn the_default_detector_gain_is_the_gardner_slope_per_symbol() {
     let mm = slope_per_symbol(Ted::MuellerMuller).abs();
     eprintln!("detector slope per symbol: Gardner {gardner:.3}, Mueller-Mueller {mm:.3}");
     let default = SymbolSyncConfig::default().ted_gain;
-    assert!((gardner / default - 1.0).abs() < 0.1, "Gardner slope {gardner}");
+    assert!(
+        (gardner / default - 1.0).abs() < 0.1,
+        "Gardner slope {gardner}"
+    );
     assert!(mm > gardner);
 }
 
@@ -296,10 +299,19 @@ impl Receiver {
     fn new(ebn0_db: f64, sps: f64, ted: Ted, power: f64, seed: u64) -> Self {
         let fs = Rate::hz((sps * SYMBOL_RATE as f64).round() as u64).unwrap();
         let mut storage = VecStorage;
+        // Gardner runs with the block default `ted_gain` 1.0 (its slope is about 1.08);
+        // Mueller–Müller with its own slope per symbol (about 1.78), as `docs/blocks.md` advises:
+        // with 1.0 its loop is 1.78 times wider and slips at 6 dB (D565).
+        let defaults = SymbolSyncConfig::default();
+        let ted_gain = match ted {
+            Ted::MuellerMuller => slope_per_symbol(ted).abs(),
+            _ => defaults.ted_gain,
+        };
         let sync_cfg = SymbolSyncConfig {
             symbol_rate_hz: SYMBOL_RATE as f64,
             ted,
-            ..SymbolSyncConfig::default()
+            ted_gain,
+            ..defaults
         };
         let sync = SymbolSyncBlock::new(&sync_cfg, fs, &mut storage).unwrap();
         assert_eq!(sync.sps_estimate(), sps);

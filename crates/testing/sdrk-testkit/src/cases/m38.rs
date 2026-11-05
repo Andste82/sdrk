@@ -317,11 +317,15 @@ where
     ensure(same(get(o1, 0, n)?, get(o2, 0, m)?), || {
         Failure::new(case, msg).detail(format_args!("{ted:?}: the implementations differ"))
     })?;
+    // `omega = sps + integ` with `|integ| <= lim`: compared in that form, because at the clamp
+    // `(omega - sps)` can round above `lim`.
     let w = a.sps_estimate();
+    let lim = a.gains().max_integ;
     ensure(
         w.to_bits() == b.sps_estimate().to_bits()
             && w.is_finite()
-            && (w - sps).abs() <= a.gains().max_integ,
+            && w <= sps + lim
+            && w >= sps - lim,
         || Failure::new(case, msg).detail(format_args!("{ted:?}: omega {w}")),
     )?;
     Ok((n, a))

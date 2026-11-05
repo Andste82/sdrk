@@ -252,35 +252,35 @@ Done: the kernel `symbol_sync` (`C32`, `f32`) with Reference, Fallback, the faca
 Deviations from the specification, recorded in the decisions log:
 - The PSK test signal is `sdrk_testkit::r#gen::PskTest` (and `r#gen::psk_test`), not `signals::psk_test` (D542).
 - The phase step of the loop is clamped to a quarter symbol (D534), and a non-finite timing error counts as 0 (D533).
-- **Tests 2, 3 and 7 do not use the default `ted_gain` 1.0 of §2.** They set `ted_gain` to the detector slope per sample of timing offset, `abs(dE[e]/dtau) / sps` for the raised-cosine response 0.35 at unit amplitude (Gardner 1.078 / sps, Mueller–Müller 1.780 / sps; the flow `bpsk_sync_test` writes 0.263 for Gardner at sps 4.1; D558). With the default 1.0 the lock test fails at every `sps` (worst timing error 0.117 to 0.346 symbols after 500 symbols), because the loop constants of §1 act per sample while the detector slope falls with `1 / sps`. The kernel, the float32 model and the golden cases keep §1 and §2 unchanged until the maintainer decides open item I38-1 (D564).
+- The loop works in symbols: `kp` and `ki` are scaled by `sps` (maintainer decision D565 on open item I38-1, §1 amended), so the block default `ted_gain` 1.0 fits Gardner at every `sps`. With the constants of §1 as first written the loop acted per sample and the lock test failed at every `sps` with `ted_gain` 1.0 (worst timing error 0.117 to 0.346 symbols). The lock test, the Gardner BER test and the flow `bpsk_sync_test` run with the block defaults; the Mueller–Müller BER test sets `ted_gain` to its detector slope per symbol, 1.78 (with 1.0 its loop is 1.78 times wider and slipped twice at 6 dB).
 
-Measured (local run of the M38 end-to-end tests in the release profile, Linux x86-64; all pass):
+Measured (local run of the M38 end-to-end tests in the test profile, Linux x86-64, with the loop of D565; all pass):
 
-Test 2, Gardner lock (seed 494, start error -0.500 symbols, `ted_gain` 1.078 / sps, D558, D560); timing error in symbols over the strobes 500 to 1499:
+Test 2, Gardner lock (seed 494, start error -0.500 symbols, block defaults, `ted_gain` 1.0); timing error in symbols over the strobes 500 to 1499:
 
 | sps | Drift (ppm) | Below 0.05 from strobe | Max error | RMS error |
 | --- | --- | --- | --- | --- |
-| 2 | +100 | 368 | 0.0243 | 0.0095 |
-| 2 | -100 | 379 | 0.0361 | 0.0201 |
-| 4 | +100 | 320 | 0.0306 | 0.0151 |
-| 4 | -100 | 266 | 0.0283 | 0.0139 |
-| 4.1 | +100 | 353 | 0.0300 | 0.0134 |
-| 4.1 | -100 | 314 | 0.0265 | 0.0142 |
-| 10.1 | +100 | 283 | 0.0286 | 0.0145 |
-| 10.1 | -100 | 315 | 0.0295 | 0.0147 |
+| 2 | +100 | 348 | 0.0229 | 0.0097 |
+| 2 | -100 | 364 | 0.0396 | 0.0212 |
+| 4 | +100 | 299 | 0.0333 | 0.0163 |
+| 4 | -100 | 265 | 0.0308 | 0.0148 |
+| 4.1 | +100 | 339 | 0.0327 | 0.0145 |
+| 4.1 | -100 | 271 | 0.0293 | 0.0153 |
+| 10.1 | +100 | 283 | 0.0314 | 0.0155 |
+| 10.1 | -100 | 296 | 0.0319 | 0.0158 |
 
-Test 3, BPSK BER over 10^6 counted bits per point (50 ppm drift, matched filter, D557; theory `Q(sqrt(2 Eb/N0))`):
+Test 3, BPSK BER over 10^6 counted bits per point (50 ppm drift, matched filter, D557; theory `Q(sqrt(2 Eb/N0))`; Gardner with `ted_gain` 1.0, Mueller–Müller with 1.78):
 
 | Detector | sps | Seed | Eb/N0 (dB) | BER | 95 % interval | Theory | Ratio | Limit | Slips |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Gardner | 4.1 | 495 | 6 | 2.9400e-3 | 2.8358e-3 .. 3.0480e-3 | 2.3883e-3 | 1.231 | 1.5 | 0 |
-| Gardner | 4.1 | 495 | 8 | 2.7400e-4 | 2.4342e-4 .. 3.0842e-4 | 1.9091e-4 | 1.435 | 1.5 | 0 |
+| Gardner | 4.1 | 495 | 6 | 2.9810e-3 | 2.8760e-3 .. 3.0898e-3 | 2.3883e-3 | 1.248 | 1.5 | 0 |
+| Gardner | 4.1 | 495 | 8 | 2.8300e-4 | 2.5190e-4 .. 3.1794e-4 | 1.9091e-4 | 1.482 | 1.5 | 0 |
 | Mueller–Müller | 2 | 496 | 6 | 3.0520e-3 | 2.9458e-3 .. 3.1620e-3 | 2.3883e-3 | 1.278 | 2 | 0 |
 | Mueller–Müller | 2 | 496 | 8 | 2.3800e-4 | 2.0963e-4 .. 2.7021e-4 | 1.9091e-4 | 1.247 | 2 | 0 |
 
 The mean transmitted power is 1.00000 per sample in both BER tests. Test 6: `Awgn::from_ebn0` gives the measured Eb/N0 within 0.1 dB at 0, 6, 8 and 20 dB over 10^6 samples (seed 498; both components within 1 % of `sigma^2`); the test asserts the bound and records no figure. Test 7: the flow `bpsk_sync_test` decodes 100 of 100 frames (equal data, `CRC_OK`, no slip) from 421522 input samples.
 
-Open item: I38-1 (normalization of the loop gains of `symbol_sync` by `sps`), see `docs/open-items.md`.
+Open items: none (I38-1 is closed by D565).
 
 Verified locally on Linux x86-64 for the review fixes: `cargo test -p sdrk-blocks --all-features --test describe` (blocks table), `cargo test -p sdrk-pipeline --all-features --test schema`, `cargo xtask schema --check` (ok), `python tests/golden/generate.py --check` (Python 3.12, the pinned NumPy and SciPy; 777 files, among them the 9 files of the three `symbol_sync` cases) and `cargo clippy -p sdrk-blocks --all-targets --all-features -- -D warnings`. The tests of the milestone (kernel, blocks, kinds, testkit, proto, flow) were run by the implementation steps; the full gate of the Acceptance section is run before the commit.
 

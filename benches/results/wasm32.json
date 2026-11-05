@@ -3663,6 +3663,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "preemph_limit_stereo": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 126.84,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 126.84,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 126.84,
+          "ours_instr_per_sample": 126.84,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "quad_demod": {
           "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
           "goal": true,
@@ -4349,6 +4372,29 @@
           ],
           "other_instr_per_sample": 67.05,
           "ours_instr_per_sample": 67.05,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "stereo_encode": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 37.54,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 37.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 37.54,
+          "ours_instr_per_sample": 37.54,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

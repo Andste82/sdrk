@@ -251,3 +251,21 @@ Departures from the spec (each in the decisions log):
 Open items: none (I36-1 is closed by D487).
 
 Gate and counts: see below.
+
+Gate (2026-11-05, on main after M35, with D487): `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -D warnings`, `cargo xtask check`, `cargo xtask schema --check`, `generate.py --check`, the tests of `sdrk-core` (also the fallback-only build), `sdrk`, `sdrk-testkit`, `sdrk-blocks`, `sdrk-pipeline`, `xtask`, `sdrk-wasm`, `fm-transmitter` and `cref-sys`, `cargo doc -D warnings`, `cargo xtask bare-metal`, clippy for `thumbv7em-none-eabihf` and the bench crates: 19 of 19 steps pass, 3027 tests, none failed. The emulator run (`qemu-cortex-m4`) is left to CI.
+
+Counts (instructions per sample; both entries are `info` against our own fallback, D484, D485):
+
+| Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `preemph_limit_stereo` | 73.20 | 71.20 | 56.20 | 73.20 | 55.21 | 59.64 | 126.84 |
+| `stereo_encode` | 43.01 | 43.01 | 17.15 | 43.01 | 6.02 | 35.01 | 37.54 |
+
+The run-time build runs the baseline code of a kernel that stays with the fallback (1.30 and 2.51 times the fixed `avx2` build), as for `squelch` and `agc` `CQ15`.
+
+Simulated cycles per sample (whole-loop, reference / counter model; `skylake` / `znver2` at `sse2` and `sse4.2`, `znver3` / `alderlake` at `avx2`, `znver4` / `sapphirerapids` at `avx512`, `cortex-a72` / `cortex-a76` at `neon`):
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
+| --- | --- | --- | --- | --- | --- |
+| `preemph_limit_stereo` | 21.13 / 22.70 | 20.85 / 21.65 | 16.71 / 22.32 | 15.64 / 13.07 | 29.76 / 26.44 |
+| `stereo_encode` | 10.15 / 10.88 | 10.15 / 10.88 | 4.47 / 6.04 | 1.15 / 5.53 | 15.15 / 16.08 |

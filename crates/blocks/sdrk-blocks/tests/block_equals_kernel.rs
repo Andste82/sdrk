@@ -1,6 +1,7 @@
 //! Block equals kernel (M32): each block computes exactly what its kernel computes with the
 //! parameters the block derives from its configuration, in one piece and over 20 cut plans of
-//! seed 470.
+//! seed 470. Later milestones add their blocks here (M33 `noise_blank`, `auto_notch`; M36 the
+//! stereo `preemph_limit` and `fm_stereo_mod`).
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -28,14 +29,10 @@ use num_complex::Complex64;
 use sdrk::{C32, CQ15, Q15, RealSample, Sample, SampleType, Sdrk};
 use sdrk_blocks::design::{
     BiquadResponse, biquad_coefs, butterworth_sos, halfband_len, halfband_taps, kaiser_beta,
-    to_f32_sos, to_q14,
+    preemphasis_coefs, to_f32_sos, to_q14,
 };
 use sdrk_blocks::{
-    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
-    BiquadElem, BiquadRealBlock, Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, DcBlockConfig, DcBlockRealBlock, DesignSpec, FirBlock,
-    FirConfig, FmModBlock, FmModConfig, HalfbandDecimateConfig, NoiseBlankBlock, NoiseBlankConfig,
-    ParamValue, RealToIqBlock, StreamElem,
+    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock, Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockConfig, DcBlockRealBlock, DesignSpec, FirBlock, FirConfig, FmModBlock, FmModConfig, HalfbandDecimateConfig, NoiseBlankBlock, NoiseBlankConfig, ParamValue, RealToIqBlock, StreamElem, FmStereoModBlock, FmStereoModConfig, PreemphLimitBlock, PreemphLimitConfig,
 };
 use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
@@ -45,6 +42,8 @@ use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::halfband::{RealToComplex, RealToComplexState};
 use sdrk_core::kernels::modulate::{AmMod, FmMod, FmModState};
 use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
+use sdrk_core::kernels::preemph_limit::{PreemphLimitStereo, PreemphLimitStereoState};
+use sdrk_core::kernels::stereo::{StereoEncode, StereoEncodeState};
 use sdrk_device::{SampleFormat, formats};
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
 
@@ -956,4 +955,199 @@ fn auto_notch_equals_the_kernel() {
         },
         0.1,
     );
+}
+
+// ---- preemph_limit stereo and fm_stereo_mod (M36) ---------------------------------------
+
+/// Stereo audio that drives the limiter from either channel: left a 1 kHz tone of 0.4 with
+/// bursts of 2.5 times full scale, right noise of sigma 0.2 with a loud stretch of its own, and
+/// a quiet stretch where the gain recovers.
+fn stereo_audio(n: usize, fs: f64) -> Vec<C32> {
+    let mut rng = Pcg32::new(SEED, 29);
+    (0..n)
+        .map(|i| {
+            let t = i as f64 / fs;
+            let tone = (std::f64::consts::TAU * 1000.0 * t).sin();
+            let burst = if (i / 500) % 4 == 1 { 2.5 } else { 0.4 };
+            let mut l = burst * tone;
+            let mut r = 0.2 * rng.normal();
+            if (2600..2900).contains(&i) {
+                r *= 6.0;
+            }
+            if (3200..3600).contains(&i) {
+                l *= 0.01;
+                r *= 0.01;
+            }
+            C32::new(l as f32, r as f32)
+        })
+        .collect()
+}
+
+/// `PreemphLimitBlock<C32>` equals `preemph_limit_stereo` with the coefficients of
+/// `preemphasis_coefs` (`[1, 0, 0]` without pre-emphasis), in one piece and over the 20 cut
+/// plans; a runtime change of `limit` at `CHANGE_AT` equals `set_limit` at the same sample.
+/// The kernel stays with the fallback on every backend, so the comparison is bit for bit.
+fn preemph_limit_stereo_equals_kernel(cfg: &PreemphLimitConfig, fs: u64, next_limit: f64) {
+    let input = stereo_audio(4000, fs as f64);
+    let what = format!("preemph_limit stereo {cfg:?} at {fs} Hz");
+    let coefs = if cfg.preemphasis_us == 0.0 {
+        [1.0, 0.0, 0.0]
+    } else {
+        preemphasis_coefs(cfg.preemphasis_us * 1e-6, fs as f64).unwrap()
+    };
+    let make = || PreemphLimitBlock::<C32, _>::new(cfg, rate(fs), &mut VecStorage).unwrap();
+    let new_state = || {
+        PreemphLimitStereoState::new(coefs, cfg.limit, cfg.hold_s, cfg.release_s, rate(fs)).unwrap()
+    };
+
+    let mut state = new_state();
+    let mut want = vec![C32::default(); input.len()];
+    Sdrk.preemph_limit_stereo(&mut state, &input, &mut want)
+        .unwrap();
+    assert!(
+        want.iter()
+            .all(|y| y.re.abs() <= cfg.limit as f32 && y.im.abs() <= cfg.limit as f32),
+        "{what}: above the limit"
+    );
+    check_block(&want, &input, SEED, make, &what);
+    let mut block = make();
+    run_block(&mut block, &input, None);
+    assert_eq!(block.gain(), state.gain(), "{what}: gain");
+
+    let mut state = new_state();
+    let mut want = vec![C32::default(); input.len()];
+    let (a, b) = want.split_at_mut(CHANGE_AT);
+    Sdrk.preemph_limit_stereo(&mut state, &input[..CHANGE_AT], a)
+        .unwrap();
+    state.set_limit(next_limit).unwrap();
+    Sdrk.preemph_limit_stereo(&mut state, &input[CHANGE_AT..], b)
+        .unwrap();
+    check_change(
+        &want,
+        &input,
+        CHANGE_AT,
+        make,
+        |blk| {
+            blk.set_param("limit", ParamValue::F64(next_limit)).unwrap();
+        },
+        &format!("{what} changed to limit {next_limit}"),
+    );
+}
+
+#[test]
+fn preemph_limit_stereo_equals_the_kernel() {
+    let configs = [
+        // The defaults at the audio rate of examples/flows/fm_stereo_transmitter.json.
+        (PreemphLimitConfig::default(), 48_000, 0.5),
+        // 75 us and a lower limit at 240 kHz.
+        (
+            PreemphLimitConfig {
+                preemphasis_us: 75.0,
+                limit: 0.6,
+                ..PreemphLimitConfig::default()
+            },
+            240_000,
+            1.0,
+        ),
+        // Extreme: no pre-emphasis, no hold, the shortest release, the lowest limit.
+        (
+            PreemphLimitConfig {
+                preemphasis_us: 0.0,
+                limit: 0.1,
+                hold_s: 0.0,
+                release_s: 0.001,
+            },
+            8_000,
+            1.0,
+        ),
+        // Extreme: the longest time constant and hold.
+        (
+            PreemphLimitConfig {
+                preemphasis_us: 1000.0,
+                limit: 1.0,
+                hold_s: 1.0,
+                release_s: 10.0,
+            },
+            48_000,
+            0.1,
+        ),
+    ];
+    for (cfg, fs, next) in &configs {
+        preemph_limit_stereo_equals_kernel(cfg, *fs, *next);
+    }
+}
+
+/// `FmStereoModBlock` equals `stereo_encode` with `StereoEncodeState::new(pilot_hz, main as
+/// f32, pilot as f32)`, in one piece and over the 20 cut plans, also for the final phase; a
+/// runtime change of `pilot` at `CHANGE_AT` equals `set_pilot` at the same sample.
+fn fm_stereo_mod_equals_kernel(cfg: &FmStereoModConfig, fs: u64, next_pilot: f64) {
+    let input: Vec<C32> = stereo_audio(4000, fs as f64)
+        .iter()
+        .map(|x| C32::new(x.re.clamp(-1.0, 1.0), x.im.clamp(-1.0, 1.0)))
+        .collect();
+    let what = format!("fm_stereo_mod {cfg:?} at {fs} Hz");
+    let make = || FmStereoModBlock::new(cfg, rate(fs), &mut VecStorage).unwrap();
+    let new_state = || {
+        StereoEncodeState::new(cfg.pilot_hz, cfg.main as f32, cfg.pilot as f32, rate(fs)).unwrap()
+    };
+
+    let mut state = new_state();
+    let mut want = vec![0f32; input.len()];
+    Sdrk.stereo_encode(&mut state, &input, &mut want).unwrap();
+    check_block(&want, &input, SEED, make, &what);
+    let mut block = make();
+    run_block(&mut block, &input, None);
+    assert_eq!(block.phase(), state.phase(), "{what}: phase");
+    block.reset();
+    assert_eq!(block.phase(), 0, "{what}: reset");
+
+    let mut state = new_state();
+    let mut want = vec![0f32; input.len()];
+    let (a, b) = want.split_at_mut(CHANGE_AT);
+    Sdrk.stereo_encode(&mut state, &input[..CHANGE_AT], a)
+        .unwrap();
+    state.set_pilot(next_pilot as f32).unwrap();
+    Sdrk.stereo_encode(&mut state, &input[CHANGE_AT..], b)
+        .unwrap();
+    check_change(
+        &want,
+        &input,
+        CHANGE_AT,
+        make,
+        |blk| {
+            blk.set_param("pilot", ParamValue::F64(next_pilot)).unwrap();
+        },
+        &format!("{what} changed to pilot {next_pilot}"),
+    );
+}
+
+#[test]
+fn fm_stereo_mod_equals_the_kernel() {
+    let configs = [
+        // The defaults at 192 kHz; the pilot is switched off at runtime.
+        (FmStereoModConfig::default(), 192_000, 0.0),
+        // Extreme: the lowest pilot frequency and rate, the largest gains.
+        (
+            FmStereoModConfig {
+                pilot_hz: 18_000.0,
+                main: 1.0,
+                pilot: 0.2,
+            },
+            120_000,
+            0.05,
+        ),
+        // Extreme: the highest pilot frequency, no audio, no pilot, a high rate.
+        (
+            FmStereoModConfig {
+                pilot_hz: 20_000.0,
+                main: 0.0,
+                pilot: 0.0,
+            },
+            1_000_000,
+            0.2,
+        ),
+    ];
+    for (cfg, fs, next) in &configs {
+        fm_stereo_mod_equals_kernel(cfg, *fs, *next);
+    }
 }

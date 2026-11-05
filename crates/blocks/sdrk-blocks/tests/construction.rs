@@ -32,9 +32,10 @@ use sdrk_blocks::{
     ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig,
     DcBlockRealBlock, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
     FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    Frame, PreemphLimitBlock, PreemphLimitConfig, ResampleBlock, ResampleConfig, ResampleRealBlock,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    FmStereoModBlock, FmStereoModConfig, Frame, PreemphLimitBlock, PreemphLimitConfig,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -276,8 +277,8 @@ fn complex_blocks_cq15() {
     spectrum_exact::<CQ15>();
 }
 
-/// `preemph_limit` needs no storage, with and without pre-emphasis.
-fn preemph_limit_exact<R: sdrk_blocks::BlockReal>() {
+/// `preemph_limit` needs no storage, with and without pre-emphasis (mono and stereo).
+fn preemph_limit_exact<R: sdrk_blocks::PreemphLimitElem>() {
     for (preemphasis_us, rate_hz) in [(50.0, 240_000), (530.0, 48_000), (0.0, 8_000)] {
         let cfg = PreemphLimitConfig {
             preemphasis_us,
@@ -312,6 +313,28 @@ fn dc_block_real_blocks() {
 fn preemph_limit_blocks() {
     preemph_limit_exact::<f32>();
     preemph_limit_exact::<Q15>();
+    preemph_limit_exact::<C32>();
+}
+
+/// `fm_stereo_mod` needs no storage, at the lowest rate and at 192 kHz; below 120 kHz it is
+/// rejected.
+#[test]
+fn fm_stereo_mod_blocks() {
+    for rate_hz in [120_000, 192_000, 1_000_000] {
+        let cfg = FmStereoModConfig::default();
+        let r = rate(rate_hz);
+        let bytes = FmStereoModBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 0);
+        check_exact_storage(bytes, |a| FmStereoModBlock::new(&cfg, r, a).map(|_| ()));
+    }
+    let cfg = FmStereoModConfig::default();
+    assert!(matches!(
+        FmStereoModBlock::<A<'_>>::storage_bytes(&cfg, rate(96_000)),
+        Err(Error::OutOfRange {
+            name: "rate_in",
+            ..
+        })
+    ));
 }
 
 fn real_resample_blocks<R: sdrk_blocks::BlockReal>() {
@@ -401,6 +424,8 @@ fn no_block_is_larger_than_512_bytes() {
     check::<PreemphLimitBlock<f32, A<'static>>>("PreemphLimitBlock<f32>");
     check::<PreemphLimitBlock<Q15, A<'static>>>("PreemphLimitBlock<Q15>");
     check::<PreemphLimitBlock<Q15, sdrk_testkit::VecStorage>>("PreemphLimitBlock<Q15, Vec>");
+    check::<PreemphLimitBlock<C32, A<'static>>>("PreemphLimitBlock<C32>");
+    check::<FmStereoModBlock<A<'static>>>("FmStereoModBlock");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
     check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
@@ -447,6 +472,13 @@ fn public_types_are_send() {
     assert_send::<PreemphLimitBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_sync::<PreemphLimitBlock<Q15, A<'static>>>();
     assert_send::<PreemphLimitConfig>();
+    assert_send::<PreemphLimitBlock<C32, sdrk_testkit::VecStorage>>();
+    assert_sync::<PreemphLimitBlock<C32, A<'static>>>();
+    assert_send::<FmStereoModBlock<A<'static>>>();
+    assert_send::<FmStereoModBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<FmStereoModBlock<A<'static>>>();
+    assert_send::<FmStereoModConfig>();
+    assert_sync::<FmStereoModConfig>();
     assert_send::<DcBlockRealBlock<f32, A<'static>>>();
     assert_send::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_sync::<DcBlockRealBlock<Q15, A<'static>>>();

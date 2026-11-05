@@ -227,8 +227,24 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Kernels `preemph_limit_stereo` (C32) and `stereo_encode` (C32 → f32) with reference, fallback, delegation, contracts
-- [ ] Blocks, kinds, costs, schema
-- [ ] Golden cases (seeds 485–487), extremes, equality with M25's mono kernel and with the M30 composition
+- [x] Kernels `preemph_limit_stereo` (C32) and `stereo_encode` (C32 → f32) with reference, fallback, delegation, contracts
+- [x] Blocks, kinds, costs, schema
+- [x] Golden cases (seeds 485–487), extremes, equality with M25's mono kernel and with the M30 composition
 - [ ] E2E-STEREO-TX and limiter test (seeds 488, 489); flow `fm_stereo_transmitter` with YAML twin
-- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md` ("Not accelerated": both are recursions or table lookups), `examples/README.md`, CHANGELOG, decisions log
+- [x] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md` ("Not accelerated": both are recursions or table lookups), `examples/README.md`, CHANGELOG, decisions log
+
+## Status
+
+Done: the kernels `preemph_limit_stereo` (`C32`, one envelope and one gain for both channels) and `stereo_encode` (`C32` to `f32`) in `sdrk-core` with states, `Reference`, `Fallback` (bit-exact, both stay with the fallback on every backend) and the facade delegation by hand (D463); golden cases `preemph_limit/stereo_limit_c32_16384`, `preemph_limit/stereo_equal_c32_8192` and `stereo_encode/c32_16384` (seeds 485 to 487) with the f64 regression guards (D469), whole and with 20 chunk plans (D470); the suite cases `preemph_limit_stereo_c32`, `stereo_encode_c32` (linked gain, equality with the M25 mono kernel and with the M30 composition) and `extremes_m36` (D471); `PreemphLimitBlock<C32>` through the new trait `PreemphLimitElem` (D472) and `FmStereoModBlock`, the kinds `preemph_limit` (now `c32`, cost 12) and `fm_stereo_mod` (cost 10), the regenerated schema; the flow `examples/flows/fm_stereo_transmitter.json` with its YAML twin, exactly as §5 (D478); E2E-STEREO-TX (`e2e_fm_stereo_loop_f32`, seed 488), the limiter test (seed 489) and the flow test in `crates/pipeline/sdrk-pipeline/tests/stereo_tx.rs` (D479 to D483); the count registration (`info` entries with a waiver "not accelerated", D484, D485); `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/performance.md`, `examples/README.md`, CHANGELOG and the decisions log (D460 to D486).
+
+Measured (E2E-STEREO-TX, D481): the pilot is locked from 0.02 s; in the last second of the stereo part the left level is -0.922 dB (1 kHz, required within 1 dB) and the right level -0.900 dB (3 kHz); separation 68.6 dB left and 60.9 dB right (required 30 dB); mono 0.056 s after `pilot` 0 (required within 0.5 s). Limiter test (D482), full-scale 15 kHz burst on the flow as specified (limiter at 48 kHz before the resampler): multiplex peak 1.11202 and deviation 83401.4 Hz with the same phase in both channels (fails, required 0.99 and 75 kHz), 0.96779 and 72584.2 Hz with independent phases (passes). With the limiter after the resampler (at 192 kHz): 0.98981 / 74235.6 Hz and 0.96513 / 72384.9 Hz (passes), and E2E-STEREO-TX still passes there (L -0.913 dB, R -0.857 dB, separation 68.5 / 60.9 dB).
+
+Departures from the spec (each in the decisions log):
+- `preemph_limit_stereo` applies the full input rule of the mono `f32` kernel (non-finite to 0 and the clamp to `[-1024, 1024]`, D460) and takes the envelope peak by a select, not `f32::max` (D461).
+- The pilot increment of `stereo_encode` is that of `Nco::new` (D464); the encoder has no input rule for non-finite samples (D466); the ranges of `StereoEncodeState::new` are closed and `main + pilot` is not limited (D467).
+- The kind `preemph_limit` reports both kernels for every input type (D474).
+- The limiter test on the specified chain is marked `#[ignore]` with the reason I36-1; its thresholds 0.99 and 75 kHz and the flow order are unchanged (D486).
+
+Open items: I36-1 (in `docs/open-items.md`): the limiter test of §5 fails on the flow as specified, because the limiter at 48 kHz bounds the samples and the resampler rebuilds higher peaks between them. The maintainer chooses: (a) move `pre` after `up` (the measured fix, changes §3/§5 and the `blocks.md` chain position), (b) keep the order and lower `limit` or accept the overshoot (a threshold change), or (c) another remedy. Until then the checklist item "E2E-STEREO-TX and limiter test" stays open.
+
+Gate and counts: see below.

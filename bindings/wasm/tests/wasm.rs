@@ -36,6 +36,8 @@ const FM_TRANSMITTER: &str = include_str!("../../../examples/flows/fm_transmitte
 const NFM_TRANSMITTER: &str = include_str!("../../../examples/flows/nfm_transmitter.json");
 const AM_TRANSMITTER: &str = include_str!("../../../examples/flows/am_transmitter.json");
 const SSB_TRANSMITTER: &str = include_str!("../../../examples/flows/ssb_transmitter.json");
+const FM_STEREO_TRANSMITTER: &str =
+    include_str!("../../../examples/flows/fm_stereo_transmitter.json");
 const RESAMPLE_AUDIO: &str = include_str!("../../../examples/flows/resample_audio.json");
 const SPECTRUM_ONLY: &str = include_str!("../../../examples/flows/spectrum_only.json");
 
@@ -133,6 +135,7 @@ fn every_example_flow_validates_clean() {
         ("nfm_transmitter", NFM_TRANSMITTER),
         ("am_transmitter", AM_TRANSMITTER),
         ("ssb_transmitter", SSB_TRANSMITTER),
+        ("fm_stereo_transmitter", FM_STEREO_TRANSMITTER),
         ("nfm_receiver", NFM_RECEIVER),
         ("am_receiver", AM_RECEIVER),
         ("airband_receiver", AIRBAND_RECEIVER),

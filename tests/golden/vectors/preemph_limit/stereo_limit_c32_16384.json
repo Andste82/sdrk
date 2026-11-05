@@ -1,0 +1,56 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "stereo_limit_c32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "stereo_limit_c32_16384.input.bin",
+      "len": 16384
+    }
+  },
+  "case": "stereo_limit_c32_16384",
+  "format_version": 1,
+  "kernel": "preemph_limit",
+  "model": "float32",
+  "notes": "stereo limiter (re left, im right), 48 kHz, tau 50 us, limit 0.9, hold 0.02 s, release 0.2 s; left: 1 kHz 0.5 plus 10 kHz 0.9 over the listed bursts, right: noise sigma 0.3; the envelope peak comes from either channel while limiting; exact float32 model; snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "a1_bits": 4593989502643561391,
+    "b0_bits": 4614586531936190583,
+    "b1_bits": 13835405426330217021,
+    "bursts": [
+      [
+        2000,
+        4000
+      ],
+      [
+        9000,
+        11000
+      ]
+    ],
+    "coefs": [
+      3.2880867522836144,
+      -2.154263734254782,
+      0.13382301802883265
+    ],
+    "guard_skip": 0,
+    "hold_s": 0.02,
+    "limit": 0.9,
+    "rate_hz": 48000,
+    "release_s": 0.2,
+    "snr_db_guard": 92.7,
+    "tau_s": 5e-05
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 485,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

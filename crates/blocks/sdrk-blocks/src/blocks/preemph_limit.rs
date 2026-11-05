@@ -1,9 +1,12 @@
-//! `preemph_limit`: pre-emphasis and peak limiter for the audio of an FM transmitter.
+//! `preemph_limit`: pre-emphasis and peak limiter for the audio of an FM transmitter, mono
+//! (`f32`, `Q15`) or stereo (`C32`, one gain for both channels).
 
 use core::marker::PhantomData;
 
-use sdrk::{Progress, Rate, Sdrk};
-use sdrk_core::kernels::preemph_limit::{PreemphLimit, PreemphLimitState};
+use sdrk::{C32, Progress, Rate, Sdrk};
+use sdrk_core::kernels::preemph_limit::{
+    PreemphLimit, PreemphLimitState, PreemphLimitStereo, PreemphLimitStereoState,
+};
 
 use super::{head, head_mut, hz, unit_timing, unknown};
 use crate::block::{Block, BlockTiming, ParamValue, runtime_param};
@@ -12,6 +15,7 @@ use crate::describe::{
 };
 use crate::design::{PREEMPHASIS_MIN_RATE_HZ, preemphasis_coefs};
 use crate::error::{Error, Result};
+use crate::ports::StreamElem;
 use crate::sample::BlockReal;
 use crate::storage::{Plan, Storage};
 
@@ -32,15 +36,21 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         below 1 to leave room for its overshoot. limit 1.0 keeps the peak deviation at the \
         deviation_hz of fm_mod. Pitfalls: a pre-emphasis needs an input rate of at least \
         40 kHz; 530 us amplifies by 36 dB at 48 kHz Nyquist, so the limiter works hard on \
-        unfiltered audio.",
+        unfiltered audio. Stereo: c32 input carries the left channel in re and the right \
+        channel in im (the kind chooses the stereo variant by the input type); both channels \
+        get their own pre-emphasis and one common gain, so a loud channel does not move the \
+        stereo image. In a stereo transmitter it runs at the audio rate before the up-sampling \
+        resample and fm_stereo_mod; the multiplex of fm_stereo_mod keeps its peak at main plus \
+        pilot for audio within the limit.",
     inputs: &[PortDesc {
         name: "in",
-        types: &[PortType::F32, PortType::Q15],
-        description: "Real audio at the rate of the modulator.",
+        types: &[PortType::F32, PortType::Q15, PortType::C32],
+        description: "Real audio at the rate of the modulator, or stereo audio (c32, re left, \
+            im right).",
     }],
     outputs: &[PortDesc {
         name: "out",
-        types: &[PortType::F32, PortType::Q15],
+        types: &[PortType::F32, PortType::Q15, PortType::C32],
         description: "Pre-emphasised and limited audio; same type and rate as the input.",
     }],
     params: &[
@@ -183,6 +193,13 @@ impl PreemphLimitConfig {
             self.release_s,
             rate_in,
         )?;
+        PreemphLimitStereoState::new(
+            self.coefs(rate_in)?,
+            self.limit,
+            self.hold_s,
+            self.release_s,
+            rate_in,
+        )?;
         Ok(())
     }
 
@@ -212,7 +229,125 @@ impl PreemphLimitConfig {
     }
 }
 
-/// Pre-emphasis and peak limiter for `f32` and `Q15`.
+/// A sample type of [`PreemphLimitBlock`]: `f32` and `Q15` (mono, kernel `preemph_limit`) and
+/// `C32` (stereo with `re` left and `im` right, kernel `preemph_limit_stereo`).
+///
+/// The trait maps the sample type to its kernel state and calls the kernel on the facade; it
+/// is implemented for every [`BlockReal`] type with a `preemph_limit` kernel and for `C32`.
+///
+/// ```
+/// use sdrk_blocks::PreemphLimitElem;
+/// use sdrk::{Rate, C32};
+/// let mut st = <C32 as PreemphLimitElem>::new_state([1.0, 0.0, 0.0], 0.5, 0.0, 0.2, Rate::hz(48_000)?)?;
+/// let mut out = [C32::default(); 1];
+/// C32::run(&mut st, &[C32::new(1.0, 0.25)], &mut out)?;
+/// assert_eq!(out[0], C32::new(0.5, 0.125)); // one gain for both channels
+/// assert_eq!(C32::gain(&st), 0.5);
+/// # Ok::<(), sdrk::Error>(())
+/// ```
+pub trait PreemphLimitElem: StreamElem {
+    /// The kernel state.
+    type State: core::fmt::Debug + Clone + Send + Sync;
+
+    /// Creates the kernel state at rest (the checks of the kernel).
+    ///
+    /// # Errors
+    /// `InvalidParameter` of the kernel for a parameter it rejects.
+    fn new_state(
+        coefs: [f64; 3],
+        limit: f64,
+        hold_s: f64,
+        release_s: f64,
+        rate: Rate,
+    ) -> sdrk::Result<Self::State>;
+
+    /// Runs the kernel through the facade over equal-length slices.
+    ///
+    /// # Errors
+    /// `LengthMismatch` when the lengths differ.
+    fn run(state: &mut Self::State, input: &[Self], output: &mut [Self]) -> sdrk::Result<()>;
+
+    /// Changes the limit from the next sample.
+    ///
+    /// # Errors
+    /// `InvalidParameter` for a limit outside `(0, 1]`.
+    fn set_limit(state: &mut Self::State, limit: f64) -> sdrk::Result<()>;
+
+    /// The current gain reduction (1.0 while idle).
+    fn gain(state: &Self::State) -> f64;
+
+    /// Clears the history of the state.
+    fn reset(state: &mut Self::State);
+}
+
+impl<T: BlockReal> PreemphLimitElem for T
+where
+    Sdrk: PreemphLimit<T>,
+{
+    type State = PreemphLimitState<T>;
+
+    fn new_state(
+        coefs: [f64; 3],
+        limit: f64,
+        hold_s: f64,
+        release_s: f64,
+        rate: Rate,
+    ) -> sdrk::Result<PreemphLimitState<T>> {
+        PreemphLimitState::new(coefs, limit, hold_s, release_s, rate)
+    }
+
+    fn run(state: &mut PreemphLimitState<T>, input: &[T], output: &mut [T]) -> sdrk::Result<()> {
+        <Sdrk as PreemphLimit<T>>::preemph_limit(&Sdrk, state, input, output)
+    }
+
+    fn set_limit(state: &mut PreemphLimitState<T>, limit: f64) -> sdrk::Result<()> {
+        state.set_limit(limit)
+    }
+
+    fn gain(state: &PreemphLimitState<T>) -> f64 {
+        state.gain()
+    }
+
+    fn reset(state: &mut PreemphLimitState<T>) {
+        state.reset();
+    }
+}
+
+impl PreemphLimitElem for C32 {
+    type State = PreemphLimitStereoState;
+
+    fn new_state(
+        coefs: [f64; 3],
+        limit: f64,
+        hold_s: f64,
+        release_s: f64,
+        rate: Rate,
+    ) -> sdrk::Result<PreemphLimitStereoState> {
+        PreemphLimitStereoState::new(coefs, limit, hold_s, release_s, rate)
+    }
+
+    fn run(
+        state: &mut PreemphLimitStereoState,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> sdrk::Result<()> {
+        <Sdrk as PreemphLimitStereo>::preemph_limit_stereo(&Sdrk, state, input, output)
+    }
+
+    fn set_limit(state: &mut PreemphLimitStereoState, limit: f64) -> sdrk::Result<()> {
+        state.set_limit(limit)
+    }
+
+    fn gain(state: &PreemphLimitStereoState) -> f64 {
+        state.gain()
+    }
+
+    fn reset(state: &mut PreemphLimitStereoState) {
+        state.reset();
+    }
+}
+
+/// Pre-emphasis and peak limiter for `f32` and `Q15` (mono) and `C32` (stereo).
 ///
 /// ```
 /// use sdrk_blocks::{ArenaStorage, Block, ParamValue, PreemphLimitBlock, PreemphLimitConfig};
@@ -228,22 +363,28 @@ impl PreemphLimitConfig {
 /// block.set_param("limit", ParamValue::F64(0.5))?;
 /// block.process(&loud, &mut out)?;
 /// assert!(out.iter().all(|v| v.abs() <= 0.5));
+///
+/// // Stereo: a loud left channel lowers the right channel by the same factor.
+/// let mut stereo = PreemphLimitBlock::<sdrk::C32, _>::new(&cfg, Rate::hz(240_000)?, &mut arena)?;
+/// let mut out = [sdrk::C32::default(); 1];
+/// stereo.process(&[sdrk::C32::new(2.0, 0.5)], &mut out)?;
+/// assert_eq!(out[0], sdrk::C32::new(1.0, 0.25)); // both channels times 1 / 2
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug)]
-pub struct PreemphLimitBlock<T: BlockReal, S: Storage> {
+pub struct PreemphLimitBlock<T: PreemphLimitElem, S: Storage> {
     config: PreemphLimitConfig,
-    state: PreemphLimitState<T>,
+    state: T::State,
     _storage: PhantomData<fn() -> S>,
 }
 
-impl<T: BlockReal, S: Storage> PreemphLimitBlock<T, S> {
+impl<T: PreemphLimitElem, S: Storage> PreemphLimitBlock<T, S> {
     /// Creates the block; it needs no storage.
     pub fn new(config: &PreemphLimitConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
         Ok(Self {
             config: *config,
-            state: PreemphLimitState::new(
+            state: T::new_state(
                 config.coefs(rate_in)?,
                 config.limit,
                 config.hold_s,
@@ -268,14 +409,11 @@ impl<T: BlockReal, S: Storage> PreemphLimitBlock<T, S> {
 
     /// Current gain reduction of the limiter (1.0 while idle), for meters.
     pub fn gain(&self) -> f64 {
-        self.state.gain()
+        T::gain(&self.state)
     }
 }
 
-impl<T: BlockReal, S: Storage> Block for PreemphLimitBlock<T, S>
-where
-    Sdrk: PreemphLimit<T>,
-{
+impl<T: PreemphLimitElem, S: Storage> Block for PreemphLimitBlock<T, S> {
     type In = T;
     type Out = T;
 
@@ -285,12 +423,7 @@ where
 
     fn process(&mut self, input: &[T], output: &mut [T]) -> Result<Progress> {
         let n = input.len().min(output.len());
-        <Sdrk as PreemphLimit<T>>::preemph_limit(
-            &Sdrk,
-            &mut self.state,
-            head(input, n)?,
-            head_mut(output, n)?,
-        )?;
+        T::run(&mut self.state, head(input, n)?, head_mut(output, n)?)?;
         Ok(Progress {
             consumed: n,
             produced: n,
@@ -302,14 +435,14 @@ where
     }
 
     fn reset(&mut self) {
-        self.state.reset();
+        T::reset(&mut self.state);
     }
 
     fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()> {
         match runtime_param(&DESCRIPTION, name, &value)? {
             "limit" => {
                 let v = value.as_f64()?;
-                self.state.set_limit(v)?;
+                T::set_limit(&mut self.state, v)?;
                 self.config.limit = v;
                 Ok(())
             }

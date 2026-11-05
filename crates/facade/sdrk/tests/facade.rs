@@ -813,3 +813,49 @@ fn backend_table_lists_am_mod_and_the_facade_gives_the_fallback_bits() {
         Err(Error::LengthMismatch { .. })
     ));
 }
+
+#[test]
+fn backend_table_lists_the_m36_kernels() {
+    // The stereo limiter is a per-sample recursion and the encoder a table lookup per sample:
+    // both stay with the fallback on every backend.
+    for kernel in ["preemph_limit_stereo", "stereo_encode"] {
+        assert_eq!(backend_for(kernel, SampleType::C32), "fallback", "{kernel}");
+        assert_eq!(backend_for(kernel, SampleType::F32), "none", "{kernel}");
+        assert_eq!(backend_for(kernel, SampleType::CQ15), "none", "{kernel}");
+    }
+}
+
+#[test]
+fn m36_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::Rate;
+    use sdrk::kernels::preemph_limit::{PreemphLimitStereo, PreemphLimitStereoState};
+    use sdrk::kernels::stereo::{StereoEncode, StereoEncodeState};
+
+    let mut seed = 36u64;
+    let input: Vec<C32> = (0..3000)
+        .map(|_| {
+            let a = lcg(&mut seed) as f32 / 4_294_967_296.0 * 4.0 - 2.0;
+            let b = lcg(&mut seed) as f32 / 4_294_967_296.0 * 2.0 - 1.0;
+            C32::new(a, b)
+        })
+        .collect();
+    let coefs = [5.4, -4.6, 0.13];
+    let mut a = PreemphLimitStereoState::new(coefs, 0.9, 0.02, 0.2, Rate::hz(48_000)?)?;
+    let mut b = a;
+    let (mut ya, mut yb) = (vec![C32::default(); 3000], vec![C32::default(); 3000]);
+    Sdrk.preemph_limit_stereo(&mut a, &input, &mut ya)?;
+    Fallback.preemph_limit_stereo(&mut b, &input, &mut yb)?;
+    assert_eq!(flat(&ya), flat(&yb));
+    assert_eq!(a, b);
+    let mut a = StereoEncodeState::new(19_000.0, 0.9, 0.09, Rate::hz(192_000)?)?;
+    let mut b = a;
+    let (mut ya, mut yb) = (vec![0.0f32; 3000], vec![0.0f32; 3000]);
+    Sdrk.stereo_encode(&mut a, &input, &mut ya)?;
+    Fallback.stereo_encode(&mut b, &input, &mut yb)?;
+    assert_eq!(
+        ya.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        yb.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+    );
+    assert_eq!(a, b);
+    Ok(())
+}

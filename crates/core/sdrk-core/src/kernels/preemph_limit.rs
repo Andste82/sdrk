@@ -52,7 +52,7 @@ use sdrk_device::Ratio;
 
 use crate::error::{Error, Result};
 use crate::timing::{Delay, Rate, Timing};
-use crate::types::{RealSample, SampleType};
+use crate::types::{C32, RealSample, SampleType};
 
 /// `2^24`: scale of the `Q15` coefficients.
 const Q24: f64 = 16_777_216.0;
@@ -157,6 +157,40 @@ fn check_limit(limit: f64) -> Result<()> {
     }
 }
 
+/// The checks of [`PreemphLimitState::new`] that do not depend on the sample type; returns the
+/// hold time in samples and the release factor `r` per sample in f64.
+pub(crate) fn checked_params(
+    coefs: [f64; 3],
+    limit: f64,
+    hold_s: f64,
+    release_s: f64,
+    rate: Rate,
+) -> Result<(u32, f64)> {
+    check_limit(limit)?;
+    if !(release_s.is_finite() && release_s > 0.0) {
+        return Err(Error::InvalidParameter(
+            "release time must be finite and positive",
+        ));
+    }
+    if !(hold_s.is_finite() && hold_s >= 0.0) {
+        return Err(Error::InvalidParameter(
+            "hold time must be finite and not negative",
+        ));
+    }
+    let fs = rate.as_f64();
+    let hold = libm::floor(hold_s * fs + 0.5);
+    if hold.is_nan() || hold > MAX_HOLD {
+        return Err(Error::InvalidParameter("hold time is too long"));
+    }
+    if !coefs.iter().all(|c| c.is_finite() && c.abs() < COEF_LIMIT) {
+        return Err(Error::InvalidParameter(
+            "pre-emphasis coefficients must be finite with an absolute value below 2^14",
+        ));
+    }
+    let r = libm::exp(-1.0 / (fs * release_s));
+    Ok((hold as u32, r))
+}
+
 impl<T: RealSample> PreemphLimitState<T> {
     /// Creates a state at rest.
     ///
@@ -175,28 +209,7 @@ impl<T: RealSample> PreemphLimitState<T> {
         release_s: f64,
         rate: Rate,
     ) -> Result<Self> {
-        check_limit(limit)?;
-        if !(release_s.is_finite() && release_s > 0.0) {
-            return Err(Error::InvalidParameter(
-                "release time must be finite and positive",
-            ));
-        }
-        if !(hold_s.is_finite() && hold_s >= 0.0) {
-            return Err(Error::InvalidParameter(
-                "hold time must be finite and not negative",
-            ));
-        }
-        let fs = rate.as_f64();
-        let hold = libm::floor(hold_s * fs + 0.5);
-        if hold.is_nan() || hold > MAX_HOLD {
-            return Err(Error::InvalidParameter("hold time is too long"));
-        }
-        if !coefs.iter().all(|c| c.is_finite() && c.abs() < COEF_LIMIT) {
-            return Err(Error::InvalidParameter(
-                "pre-emphasis coefficients must be finite with an absolute value below 2^14",
-            ));
-        }
-        let r = libm::exp(-1.0 / (fs * release_s));
+        let (hold, r) = checked_params(coefs, limit, hold_s, release_s, rate)?;
         let r_f = r as f32;
         let r_q = round_scaled(r, Q31);
         let never = if T::TYPE == SampleType::Q15 {
@@ -212,7 +225,7 @@ impl<T: RealSample> PreemphLimitState<T> {
         let (t_f, t_q30, t_q15) = limits(limit);
         Ok(Self {
             limit,
-            hold_len: hold as u32,
+            hold_len: hold,
             b0_f: coefs[0] as f32,
             b1_f: coefs[1] as f32,
             a1_f: coefs[2] as f32,
@@ -366,5 +379,196 @@ pub trait PreemphLimit<T: RealSample> {
         state: &mut PreemphLimitState<T>,
         input: &[T],
         output: &mut [T],
+    ) -> Result<()>;
+}
+
+/// State of the stereo pre-emphasis and limiter (`preemph_limit_stereo`, `C32` with left in
+/// `re` and right in `im`): the coefficients, the previous input and pre-emphasized value of
+/// each channel, one envelope and one hold counter for both channels, and the limit.
+///
+/// Both channels get the same gain (linked limiter), so a loud left channel does not move the
+/// stereo image. The parameters and their checks are those of [`PreemphLimitState::new`] for
+/// `f32`; the state starts at rest.
+///
+/// ```
+/// use sdrk_core::{kernels::preemph_limit::PreemphLimitStereoState, Rate};
+/// let state = PreemphLimitStereoState::new([1.0, 0.0, 0.0], 0.5, 0.02, 0.2, Rate::hz(48_000)?)?;
+/// assert_eq!(state.gain(), 1.0);
+/// assert_eq!(state.hold_samples(), 960);
+/// // The limit must be in (0, 1].
+/// assert!(PreemphLimitStereoState::new([1.0, 0.0, 0.0], 1.5, 0.02, 0.2, Rate::hz(48_000)?).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreemphLimitStereoState {
+    limit: f64,
+    pub(crate) hold_len: u32,
+    pub(crate) b0: f32,
+    pub(crate) b1: f32,
+    pub(crate) a1: f32,
+    pub(crate) r: f32,
+    pub(crate) t: f32,
+    pub(crate) x1: C32,
+    pub(crate) v1: C32,
+    pub(crate) env: f32,
+    pub(crate) hold: u32,
+}
+
+impl PreemphLimitStereoState {
+    /// Creates a state at rest.
+    ///
+    /// The parameters and the rules are those of [`PreemphLimitState::new`] for `f32`:
+    /// `coefs = [b0, b1, a1]` (finite, `|c| < 2^14`), `limit` in `(0, 1]`, `hold_s >= 0` (at
+    /// most `2^31` samples), `release_s > 0` with a factor per sample that does not round to 1
+    /// in `f32`; anything else (NaN included) is `InvalidParameter`.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::preemph_limit::PreemphLimitStereoState, Rate};
+    /// let rate = Rate::hz(48_000)?;
+    /// assert!(PreemphLimitStereoState::new([1.0, 0.0, 0.0], 1.0, 0.0, 0.2, rate).is_ok());
+    /// assert!(PreemphLimitStereoState::new([1.0, 0.0, 0.0], 1.0, -1.0, 0.2, rate).is_err());
+    /// assert!(PreemphLimitStereoState::new([f64::NAN, 0.0, 0.0], 1.0, 0.0, 0.2, rate).is_err());
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn new(
+        coefs: [f64; 3],
+        limit: f64,
+        hold_s: f64,
+        release_s: f64,
+        rate: Rate,
+    ) -> Result<Self> {
+        let (hold_len, r) = checked_params(coefs, limit, hold_s, release_s, rate)?;
+        let r = r as f32;
+        if r >= 1.0 {
+            return Err(Error::InvalidParameter(
+                "release time is too long for the rate",
+            ));
+        }
+        Ok(Self {
+            limit,
+            hold_len,
+            b0: coefs[0] as f32,
+            b1: coefs[1] as f32,
+            a1: coefs[2] as f32,
+            r,
+            t: limit as f32,
+            x1: C32::new(0.0, 0.0),
+            v1: C32::new(0.0, 0.0),
+            env: 0.0,
+            hold: 0,
+        })
+    }
+
+    /// Changes the limit; it applies from the next sample, the envelope and the hold counter are
+    /// kept. The limit must be in `(0, 1]`; on an error nothing changes.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::preemph_limit::PreemphLimitStereoState, Rate};
+    /// let mut state = PreemphLimitStereoState::new([1.0, 0.0, 0.0], 1.0, 0.0, 0.2, Rate::hz(48_000)?)?;
+    /// state.set_limit(0.5)?;
+    /// assert_eq!(state.limit(), 0.5);
+    /// assert!(state.set_limit(f64::NAN).is_err());
+    /// assert_eq!(state.limit(), 0.5);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_limit(&mut self, limit: f64) -> Result<()> {
+        check_limit(limit)?;
+        self.limit = limit;
+        self.t = limit as f32;
+        Ok(())
+    }
+
+    /// The limit.
+    pub fn limit(&self) -> f64 {
+        self.limit
+    }
+
+    /// The hold time in samples, `floor(hold_s * fs + 0.5)`.
+    pub fn hold_samples(&self) -> u32 {
+        self.hold_len
+    }
+
+    /// The current gain reduction of both channels for meters: `1.0` while the envelope is at or
+    /// below the limit, otherwise `limit / envelope` from the stored `f32` values, widened.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::preemph_limit::{PreemphLimitStereo, PreemphLimitStereoState}, Fallback, Rate, C32};
+    /// let mut state = PreemphLimitStereoState::new([1.0, 0.0, 0.0], 0.5, 0.0, 0.2, Rate::hz(48_000)?)?;
+    /// let mut out = [C32::new(0.0, 0.0); 1];
+    /// Fallback.preemph_limit_stereo(&mut state, &[C32::new(1.0, 0.25)], &mut out)?;
+    /// assert_eq!(out[0], C32::new(0.5, 0.125));
+    /// assert_eq!(state.gain(), 0.5);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn gain(&self) -> f64 {
+        if self.env > self.t {
+            f64::from(self.t) / f64::from(self.env)
+        } else {
+            1.0
+        }
+    }
+
+    /// Sets the previous inputs and pre-emphasized values, the envelope and the hold counter
+    /// back to zero (coefficients, limit and times are kept).
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::preemph_limit::{PreemphLimitStereo, PreemphLimitStereoState}, Fallback, Rate, C32};
+    /// let mut state = PreemphLimitStereoState::new([1.0, 0.0, 0.0], 0.5, 0.0, 0.2, Rate::hz(48_000)?)?;
+    /// let mut out = [C32::new(0.0, 0.0); 1];
+    /// Fallback.preemph_limit_stereo(&mut state, &[C32::new(1.0, 1.0)], &mut out)?;
+    /// state.reset();
+    /// assert_eq!(state.gain(), 1.0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn reset(&mut self) {
+        self.x1 = C32::new(0.0, 0.0);
+        self.v1 = C32::new(0.0, 0.0);
+        self.env = 0.0;
+        self.hold = 0;
+    }
+}
+
+impl Timing for PreemphLimitStereoState {
+    fn ratio(&self) -> Ratio {
+        Ratio::ONE
+    }
+
+    /// Zero, as for the mono kernel.
+    fn group_delay(&self) -> Delay {
+        Delay::ZERO
+    }
+}
+
+/// Pre-emphasis and peak limiter for stereo audio with one gain for both channels.
+///
+/// ```
+/// use sdrk_core::{kernels::preemph_limit::{PreemphLimitStereo, PreemphLimitStereoState}, Fallback, Rate, C32};
+/// let mut state = PreemphLimitStereoState::new([1.0, 0.0, 0.0], 0.5, 0.02, 0.2, Rate::hz(48_000)?)?;
+/// let input = [C32::new(0.25, 0.25), C32::new(-2.0, 0.5), C32::new(0.25, 0.0)];
+/// let mut output = [C32::new(0.0, 0.0); 3];
+/// Fallback.preemph_limit_stereo(&mut state, &input, &mut output)?;
+/// assert_eq!(output[0], C32::new(0.25, 0.25));
+/// // The loud left channel lowers the right channel by the same factor 1/4.
+/// assert_eq!(output[1], C32::new(-0.5, 0.125));
+/// assert_eq!(output[2], C32::new(0.0625, 0.0));
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait PreemphLimitStereo {
+    /// Pre-emphasizes both channels of `input` (`re` left, `im` right) and limits the peaks
+    /// with one gain for both. The lengths must be equal, otherwise `LengthMismatch` and nothing
+    /// changes.
+    ///
+    /// Per sample (f32, every operation rounded once, no FMA): each component is replaced by
+    /// `0.0` when it is NaN or infinite and clamped to `[-1024, 1024]` otherwise; the
+    /// pre-emphasis of the mono kernel runs on each channel with its own `x1`, `v1` (`re`
+    /// first); `m = if |v.re| > |v.im| { |v.re| } else { |v.im| }`; the envelope and the hold
+    /// counter follow `m` as in the mono kernel; when `env > T` both channels are multiplied by
+    /// `g = T / env` (computed once); each channel is then clamped to `[-T, T]`. With `re == im`
+    /// the output equals the mono kernel on one channel bit for bit.
+    fn preemph_limit_stereo(
+        &self,
+        state: &mut PreemphLimitStereoState,
+        input: &[C32],
+        output: &mut [C32],
     ) -> Result<()>;
 }

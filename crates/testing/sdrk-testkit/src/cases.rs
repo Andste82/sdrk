@@ -159,6 +159,9 @@
 //! | `am_mod_c32` | quick | about 14 KiB |
 //! | `am_mod_cq15` | quick | about 7 KiB |
 //! | `extremes_m35` | full | about 3 KiB |
+//! | `preemph_limit_stereo_c32` | quick | about 64 KiB |
+//! | `stereo_encode_c32` | quick | about 40 KiB |
+//! | `extremes_m36` | full | about 16 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -219,6 +222,7 @@ mod m27;
 mod m30;
 mod m33;
 mod m35;
+mod m36;
 
 pub use m27::{
     CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
@@ -1105,6 +1109,21 @@ pub(crate) static CASES: [TestCase; 176] = [
         name: "extremes_m35",
         tier: Tier::Full,
         run: m35::extremes_m35,
+    },
+    TestCase {
+        name: "preemph_limit_stereo_c32",
+        tier: Tier::Quick,
+        run: m36::preemph_limit_stereo_c32,
+    },
+    TestCase {
+        name: "stereo_encode_c32",
+        tier: Tier::Quick,
+        run: m36::stereo_encode_c32,
+    },
+    TestCase {
+        name: "extremes_m36",
+        tier: Tier::Full,
+        run: m36::extremes_m36,
     },
 ];
 

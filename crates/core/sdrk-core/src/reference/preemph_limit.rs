@@ -9,10 +9,11 @@ use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
 use crate::kernels::preemph_limit::{
-    INPUT_LIMIT, PreemphLimit, PreemphLimitParts, PreemphLimitState, V_LIMIT,
+    INPUT_LIMIT, PreemphLimit, PreemphLimitParts, PreemphLimitState, PreemphLimitStereo,
+    PreemphLimitStereoState, V_LIMIT,
 };
 use crate::num::{flush_denormal, round_shift, sat16};
-use crate::types::Q15;
+use crate::types::{C32, Q15};
 
 /// Step 1: a non-finite input counts as zero, a finite one is clamped to `[-1024, 1024]`.
 fn sanitize(x: f32) -> f32 {
@@ -130,6 +131,70 @@ impl PreemphLimit<Q15> for Reference {
             *g.env_q = env;
             *g.hold = hold;
             *o = Q15(limit_q15(&g, v, env));
+        }
+        Ok(())
+    }
+}
+
+/// Step 2 of the stereo kernel for one channel: `v = (b0 x + b1 x1) - a1 v1`.
+fn pre_emphasis_f32(s: &PreemphLimitStereoState, x: f32, x1: f32, v1: f32) -> f32 {
+    let forward = s.b0 * x + s.b1 * x1;
+    forward - s.a1 * v1
+}
+
+/// Step 3 of the stereo kernel: the larger magnitude of the two channels.
+fn stereo_peak(v: C32) -> f32 {
+    let (l, r) = (v.re.abs(), v.im.abs());
+    if l > r { l } else { r }
+}
+
+/// Step 4 of the stereo kernel: one factor `T / env` for both channels, then the clamp.
+fn limit_stereo(v: C32, env: f32, t: f32) -> C32 {
+    let y = if env > t {
+        let g = t / env;
+        C32::new(v.re * g, v.im * g)
+    } else {
+        v
+    };
+    C32::new(clamp_to(y.re, t), clamp_to(y.im, t))
+}
+
+/// `y` clamped to `[-t, t]` (a NaN stays a NaN).
+fn clamp_to(y: f32, t: f32) -> f32 {
+    if y > t {
+        t
+    } else if y < -t {
+        -t
+    } else {
+        y
+    }
+}
+
+impl PreemphLimitStereo for Reference {
+    fn preemph_limit_stereo(
+        &self,
+        state: &mut PreemphLimitStereoState,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (o, &sample) in output.iter_mut().zip(input) {
+            let x = C32::new(sanitize(sample.re), sanitize(sample.im));
+            let vl = pre_emphasis_f32(state, x.re, state.x1.re, state.v1.re);
+            let vr = pre_emphasis_f32(state, x.im, state.x1.im, state.v1.im);
+            let v = C32::new(vl, vr);
+            state.x1 = x;
+            state.v1 = C32::new(flush_denormal(vl), flush_denormal(vr));
+            let (env, hold) = envelope_f32(
+                stereo_peak(v),
+                state.env,
+                state.hold,
+                state.hold_len,
+                state.r,
+            );
+            state.env = env;
+            state.hold = hold;
+            *o = limit_stereo(v, env, state.t);
         }
         Ok(())
     }

@@ -1,0 +1,72 @@
+# FM broadcast stereo transmitter in pull mode (YAML twin of fm_stereo_transmitter.json).
+# The caller asks for bytes with Pipeline::pull; the audio is supplied on demand.
+sdrk: 1
+name: fm-stereo-transmitter
+description: "Modulate 48 kHz stereo audio (left in re, right in im) to FM stereo with pre-emphasis, a linked peak limiter, the 19 kHz pilot and the 38 kHz subcarrier, and output a 1.92 MHz signed 8-bit baseband for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+# Stereo audio as complex samples: re is the left channel, im the right channel (the
+# interleaved L, R layout of sound cards and WAV files, as at the output of fm_stereo_demod).
+inputs:
+  audio:
+    type: c32
+    rate_hz: 48000
+    description: "stereo audio (left in re, right in im)"
+nodes:
+  # Digital up converter: x10 to 1.92 MS/s and shift to +600 kHz.
+  duc:
+    kind: duc
+    params:
+      frequency_hz: 600000
+      interpolation: 10
+  # FM modulator: 75 kHz deviation for a multiplex signal of full scale; the multiplex stays
+  # within main + pilot = 0.99, so the deviation stays within 74.25 kHz.
+  mod:
+    kind: fm_mod
+    params:
+      deviation_hz: 75000
+  # Stereo encoder: main (L + R) / 2 + main (L - R) / 2 sin(2 phi) + pilot sin(phi), with the
+  # 19 kHz pilot and the 38 kHz subcarrier from the same phase, so that fm_stereo_demod decodes
+  # left as left. The multiplex reaches 53 kHz: the rate must be at least 120 kHz. The pilot
+  # can be changed while the flow runs (set_param); 0 turns it off and receivers fall back to
+  # mono. pilot_hz and main are fixed when the flow is built.
+  mpx:
+    kind: fm_stereo_mod
+    params:
+      main: 0.9
+      pilot: 0.09
+      pilot_hz: 19000
+  # Pre-emphasis and peak limiter on both channels with one gain, so that a loud channel does
+  # not move the stereo image. Every FM broadcast receiver de-emphasises the audio with 50 us
+  # (75 us in North America and South Korea: set preemphasis_us to 75 there). Unlike the mono
+  # fm_transmitter, the limiter runs at the audio rate before the resampler. The limiter bounds
+  # the 48 kHz samples only: the resampler rebuilds the peaks between them and rings when the
+  # gain drops, so a full-scale 15 kHz burst reaches 1.11 times full scale in the multiplex
+  # (83 kHz deviation); with pre after up (at 192 kHz) it stays within 0.99 (open item I36-1).
+  # The limit can be changed while the flow runs (set_param); hold_s 0.02 and release_s 0.2
+  # are the defaults.
+  pre:
+    kind: preemph_limit
+    params:
+      limit: 1.0
+      preemphasis_us: 50
+  # 48 kHz -> 192 kHz (ratio 4/1); the resampler treats re and im alike.
+  up:
+    kind: resample
+    params:
+      rate_out_hz: 192000
+edges:
+  - { from: audio, to: pre }
+  - { from: pre, to: up }
+  - { from: up, to: mpx }
+  - { from: mpx, to: mod }
+  - { from: mod, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

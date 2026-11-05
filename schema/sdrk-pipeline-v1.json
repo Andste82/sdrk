@@ -1731,6 +1731,61 @@
           },
           {
             "additionalProperties": false,
+            "description": "Stereo encoder: stereo audio to the FM multiplex signal with 19 kHz pilot and 38 kHz subcarrier.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "fm_stereo_mod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "main": {
+                    "default": 0.9,
+                    "description": "Gain of the sum and of the difference signal. Typical: 0.9 (with pilot 0.09: peak 0.99). Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "pilot": {
+                    "default": 0.09,
+                    "description": "Amplitude of the pilot; 0 turns it off. Typical: 0.09 (9 % of the deviation), 0 for mono. Runtime.",
+                    "maximum": 0.2,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "pilot_hz": {
+                    "default": 19000.0,
+                    "description": "Frequency of the pilot; the subcarrier is at twice this frequency. Unit: Hz. Typical: 19000 (broadcast). Build-time.",
+                    "maximum": 20000.0,
+                    "minimum": 18000.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Halfband low-pass filter and decimation by 2.",
             "properties": {
               "align": {

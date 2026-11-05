@@ -865,7 +865,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 183] = [
+pub static KERNELS: [KernelSpec; 185] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1072,6 +1072,8 @@ pub static KERNELS: [KernelSpec; 183] = [
     spec("am_mod_cq15", Family::Q15Own, false),
     spec("am_mod_fallback", Family::FallbackVsLiquid, false),
     spec("am_mod_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("preemph_limit_stereo", Family::Own, false),
+    spec("stereo_encode", Family::Own, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4462,6 +4464,35 @@ mod tests {
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
         let names = ["noise_blank", "noise_blank_cq15", "auto_notch"];
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            for k in names {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in names {
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(k)).0,
+                Reference::OwnLevel("avx2"),
+                "{k}"
+            );
+            assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        // Not accelerated: no `_fallback` entry next to the facade entry.
+        for k in names {
+            let fallback = format!("{k}_fallback");
+            assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
+        }
+    }
+
+    #[test]
+    fn the_stereo_transmit_kernels_are_information_against_the_fallback_at_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let names = ["preemph_limit_stereo", "stereo_encode"];
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
             for k in names {
                 assert_eq!(

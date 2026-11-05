@@ -29,10 +29,14 @@ use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
 use sdrk_core::kernels::mix::{Nco, Oscillate, Rotate};
 use sdrk_core::kernels::modulate::{AmMod, FmMod, FmModState};
 use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
-use sdrk_core::kernels::preemph_limit::{PreemphLimit, PreemphLimitState};
+use sdrk_core::kernels::preemph_limit::{
+    PreemphLimit, PreemphLimitState, PreemphLimitStereo, PreemphLimitStereoState,
+};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::kernels::squelch::{Squelch, SquelchState};
-use sdrk_core::kernels::stereo::{StereoMatrix, StereoPll, StereoPllState};
+use sdrk_core::kernels::stereo::{
+    StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
+};
 use sdrk_device::SampleFormat;
 
 // The implementation of the accelerated kernels: the SIMD backend, or the fallback when the
@@ -150,6 +154,8 @@ crate::delegate! {
         ("rfft", f32, Fast),
         ("irfft", f32, Fast),
         ("auto_notch", f32, Fallback),
+        ("preemph_limit_stereo", C32, Fallback),
+        ("stereo_encode", C32, Fallback),
         ("ddc", C32, Chained),
         ("ddc", CQ15, Chained),
         ("duc", C32, Chained),
@@ -201,6 +207,34 @@ impl AutoNotch for crate::Sdrk {
         X: AsRef<[f32]> + AsMut<[f32]>,
     {
         <Fallback as AutoNotch>::auto_notch(&Fallback, s, input, output)
+    }
+}
+
+// `PreemphLimitStereo` and `StereoEncode` have no sample-type parameter (they exist for `C32`
+// only), so they are delegated by hand; the rows above register them in the `backend_for`
+// table. The limiter is a per-sample recursion and the encoder a table lookup per sample with
+// little arithmetic around it: both stay with the fallback on every backend.
+impl PreemphLimitStereo for crate::Sdrk {
+    #[inline]
+    fn preemph_limit_stereo(
+        &self,
+        state: &mut PreemphLimitStereoState,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> Result<()> {
+        <Fallback as PreemphLimitStereo>::preemph_limit_stereo(&Fallback, state, input, output)
+    }
+}
+
+impl StereoEncode for crate::Sdrk {
+    #[inline]
+    fn stereo_encode(
+        &self,
+        state: &mut StereoEncodeState,
+        input: &[C32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        <Fallback as StereoEncode>::stereo_encode(&Fallback, state, input, output)
     }
 }
 

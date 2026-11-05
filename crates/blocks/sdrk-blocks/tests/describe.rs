@@ -31,18 +31,19 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AutoNotchConfig,
-    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
-    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig,
-    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock,
-    DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig,
-    FmStereoDemodBlock, FmStereoDemodConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
-    MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
-    NoiseBlankConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
-    ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    ToComplexBlock, all_descriptions,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
+    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
+    Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig,
+    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock,
+    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, ImagPartBlock,
+    InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
+    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -62,10 +63,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_thirty_eight_unique_kinds() {
+fn there_are_forty_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 38);
-    assert_eq!(all_descriptions().len(), 38);
+    assert_eq!(kinds.len(), 40);
+    assert_eq!(all_descriptions().len(), 40);
     for kind in [
         "convert",
         "convert_out",
@@ -105,6 +106,8 @@ fn there_are_thirty_eight_unique_kinds() {
         "stereo_matrix",
         "noise_blank",
         "auto_notch",
+        "am_mod",
+        "ssb_mod",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -303,6 +306,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
     defaults_match("noise_blank", |n| NoiseBlankConfig::default().get(n), &[]);
     defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
+    defaults_match("am_mod", |n| AmModConfig::default().get(n), &[]);
+    defaults_match("ssb_mod", |n| SsbModConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -393,6 +398,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("stereo_pll", StereoPllConfig);
     round_trip!("noise_blank", NoiseBlankConfig);
     round_trip!("auto_notch", AutoNotchConfig);
+    round_trip!("am_mod", AmModConfig);
+    round_trip!("ssb_mod", SsbModConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -597,6 +604,22 @@ fn blocks_accept_and_report_every_described_parameter() {
         "fm_mod",
         &mut FmModBlock::<C32, _>::new(&FmModConfig::default(), r, &mut s).unwrap(),
     );
+    check_block_params(
+        "am_mod",
+        &mut AmModBlock::<C32, _>::new(&AmModConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "am_mod",
+        &mut AmModBlock::<CQ15, _>::new(&AmModConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "ssb_mod",
+        &mut SsbModBlock::<C32, _>::new(&SsbModConfig::default(), rate(48_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "ssb_mod",
+        &mut SsbModBlock::<CQ15, _>::new(&SsbModConfig::default(), rate(48_000), &mut s).unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -676,6 +699,45 @@ fn noise_blank_and_auto_notch_describe_their_ports_and_parameters() {
     );
     assert_eq!(names(an), ["taps", "delay", "mu"]);
     assert!(nb.required.is_empty() && an.required.is_empty());
+}
+
+/// The kinds of M35: real audio in, complex baseband out; the runtime parameters are exactly
+/// `depth` (`am_mod`) and `sideband` (`ssb_mod`), whose options are those of `ssb_demod`.
+#[test]
+fn am_mod_and_ssb_mod_describe_their_ports_and_parameters() {
+    let am = find("am_mod");
+    let ssb = find("ssb_mod");
+    for d in [am, ssb] {
+        assert_eq!(d.inputs.len(), 1);
+        assert_eq!(d.outputs.len(), 1);
+        assert_eq!(d.inputs[0].types, [PortType::F32, PortType::Q15]);
+        assert_eq!(d.outputs[0].types, [PortType::C32, PortType::CQ15]);
+        assert!(d.required.is_empty());
+    }
+    let runtime = |d: &BlockDescription| -> Vec<&str> {
+        d.params
+            .iter()
+            .filter(|p| p.mutability == Mutability::Runtime)
+            .map(|p| p.name)
+            .collect()
+    };
+    assert_eq!(runtime(am), ["depth"]);
+    assert_eq!(runtime(ssb), ["sideband"]);
+    let names = |d: &BlockDescription| -> Vec<&str> { d.params.iter().map(|p| p.name).collect() };
+    assert_eq!(names(am), ["carrier", "depth"]);
+    assert_eq!(
+        names(ssb),
+        [
+            "sideband",
+            "low_hz",
+            "high_hz",
+            "transition_hz",
+            "attenuation_db",
+            "max_taps"
+        ]
+    );
+    let demod = find("ssb_demod");
+    assert_eq!(ssb.params[0].kind, demod.params[0].kind);
 }
 
 #[test]

@@ -3,6 +3,7 @@
 pub mod add;
 pub mod agc;
 pub mod am_demod;
+pub mod am_mod;
 pub mod auto_notch;
 pub mod biquad;
 pub mod convert;
@@ -35,6 +36,7 @@ pub mod scale;
 pub mod spectrum;
 pub mod squelch;
 pub mod ssb_demod;
+pub mod ssb_mod;
 pub mod stereo_matrix;
 pub mod stereo_pll;
 pub mod to_complex;

@@ -705,9 +705,9 @@ pub enum Family {
     /// (`LevelPlan::kfr`), CMSIS-DSP's generic C as information; at a level without KFR,
     /// CMSIS-DSP is the gate.
     Kfr,
-    /// The Q15 and CQ15 biquads (D15), `rotate` and `fm_mod` of `CQ15`: no SIMD library has
-    /// them on our levels, so our fallback is the comparison; CMSIS-DSP's generic C (for
-    /// `rotate` and `fm_mod` composed of its building blocks) as information.
+    /// The Q15 and CQ15 biquads (D15), `rotate`, `fm_mod` and `am_mod` of `CQ15`: no SIMD
+    /// library has them on our levels, so our fallback is the comparison; CMSIS-DSP's generic C
+    /// (for `rotate`, `fm_mod` and `am_mod` composed of its building blocks) as information.
     Q15Own,
     /// A fallback entry (D16, `<kernel>_fallback`): the measured side is our fallback, compiled
     /// for the level, and the gate is CMSIS-DSP's generic C. Not measured at a level with
@@ -725,8 +725,9 @@ pub enum Family {
     /// CMSIS-DSP's generic C as information where the entry has it.
     FallbackVsGnuRadio,
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
-    /// (`dc_block_fallback`, `dc_block_real_fallback`) or its halfband decimator with the
-    /// portable dot product (`halfband_decimate_fallback`, `halfband_decimate_real_fallback`).
+    /// (`dc_block_fallback`, `dc_block_real_fallback`), its halfband decimator with the
+    /// portable dot product (`halfband_decimate_fallback`, `halfband_decimate_real_fallback`) or
+    /// its amplitude modulator `ampmodem` (`am_mod_fallback`).
     FallbackVsLiquid,
     /// The halfband decimators of the float types (`halfband_decimate`,
     /// `halfband_decimate_real`): liquid-dsp's `resamp2` with its SIMD dot product of the level
@@ -864,7 +865,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 179] = [
+pub static KERNELS: [KernelSpec; 183] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1067,6 +1068,10 @@ pub static KERNELS: [KernelSpec; 179] = [
     spec("noise_blank", Family::Own, false),
     spec("noise_blank_cq15", Family::Own, false),
     spec("auto_notch", Family::Own, false),
+    spec("am_mod", Family::Own, false),
+    spec("am_mod_cq15", Family::Q15Own, false),
+    spec("am_mod_fallback", Family::FallbackVsLiquid, false),
+    spec("am_mod_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4409,6 +4414,47 @@ mod tests {
             );
             assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
         }
+    }
+
+    #[test]
+    fn the_am_mod_entries_have_the_comparisons_of_their_decision() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            // No SIMD library has an AM modulator: our fallback, CMSIS-DSP's composition beside
+            // the `CQ15` one.
+            assert_eq!(
+                comparisons(plan(level), kernel("am_mod")),
+                (Reference::Fallback, Vec::new()),
+                "am_mod at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("am_mod_cq15")),
+                (Reference::Fallback, vec![Reference::Cmsis]),
+                "am_mod_cq15 at {level}"
+            );
+            // The fallbacks: liquid-dsp's `ampmodem` and the CMSIS-DSP composition.
+            assert_eq!(
+                comparisons(plan(level), kernel("am_mod_fallback")),
+                (Reference::Liquid, Vec::new()),
+                "am_mod_fallback at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("am_mod_cq15_fallback")),
+                (Reference::Cmsis, Vec::new()),
+                "am_mod_cq15_fallback at {level}"
+            );
+        }
+        for k in ["am_mod", "am_mod_cq15"] {
+            assert_eq!(kernel(k).family.measured(), "ours", "{k}");
+            assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        for k in ["am_mod_fallback", "am_mod_cq15_fallback"] {
+            assert_eq!(kernel(k).family.measured(), "fallback", "{k}");
+            assert!(!kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+        }
+        // `ssb_mod` is a block of existing kernels, without an entry of its own.
+        assert!(KERNELS.iter().all(|s| !s.name.starts_with("ssb_mod")));
     }
 
     #[test]

@@ -2,6 +2,7 @@
 
 from . import (  # noqa: F401
     agc,
+    am_mod,
     auto_notch,
     basic_math,
     biquad,
@@ -32,6 +33,7 @@ from . import (  # noqa: F401
     rotate,
     scale,
     squelch,
+    ssb_mod,
     stereo,
     window,
 )

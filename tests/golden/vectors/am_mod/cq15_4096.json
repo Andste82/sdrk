@@ -1,0 +1,82 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "cq15_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "i16",
+      "file": "cq15_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "cq15_4096",
+  "format_version": 1,
+  "kernel": "am_mod",
+  "notes": "the signal of c32_4096 quantized to Q15 (the values beyond +-1 saturate, NaN gives 0); integer model: c_q = 16384, m_q = 26214 (floor(v 32768 + 0.5) of the f32 values, limited to 32767), t = round_shift(m_q x, 15), u = 32768 + t, re = sat16(round_shift(c_q u, 15)), im = 0",
+  "params": {
+    "beyond_positions": [
+      440,
+      849,
+      940,
+      1013,
+      1015,
+      1341,
+      1347,
+      1416,
+      1450,
+      1472,
+      1838,
+      1849,
+      1911,
+      2239,
+      2323,
+      2401,
+      2432,
+      2529,
+      2593,
+      2664,
+      2858,
+      2996,
+      3058,
+      3061,
+      3102,
+      3364,
+      3392,
+      3425,
+      3609,
+      3635,
+      3700,
+      3980
+    ],
+    "carrier": 0.5,
+    "carrier_q": 16384,
+    "depth": 0.8,
+    "depth_q": 26214,
+    "nan_positions": [
+      269,
+      805,
+      896,
+      1308,
+      2476,
+      3377,
+      3500,
+      3775
+    ],
+    "noise_sigma": 0.2,
+    "rate_hz": 48000,
+    "tone_amplitude": 0.7,
+    "tone_hz": 1000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 480,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

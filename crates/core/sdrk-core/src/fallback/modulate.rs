@@ -1,10 +1,10 @@
-//! Fallback implementation of the `fm_mod` kernel.
+//! Fallback implementations of the `fm_mod` and `am_mod` kernels.
 
 use crate::Fallback;
 use crate::error::Result;
 use crate::fallback::mix::{cos_sin_f32, cos_sin_q15};
 use crate::kernels::check_len;
-use crate::kernels::modulate::{FmMod, FmModState};
+use crate::kernels::modulate::{AmMod, FmMod, FmModState, check_am_params};
 use crate::types::{C32, CQ15, Q15, RealSample};
 
 /// `1.5 * 2^52`: adding it to an `f64` of magnitude below `2^51` rounds to the nearest integer
@@ -260,6 +260,138 @@ mod tests {
             Fallback.fm_mod(&mut s, &q, &mut got).unwrap();
             assert_eq!(got, want, "cq15 n = {n}");
             assert_eq!(s.phase(), end, "cq15 n = {n}");
+        }
+    }
+}
+
+/// One `am_mod` `C32` value: `carrier * (1 + depth * clamp(x, -1, 1))` in `f32` in the order of
+/// the contract, NaN counting as 0. The clamp passes NaN through, and the mask of `x == x` turns
+/// it into `+0` without a branch (a `-0` from the clamp or an `x` of `-0` gives `t = -0` or `0`
+/// and `u = 1` either way), so the compilers vectorize the loop (`maxps`, `minps`, `cmpordps`
+/// and `andps` on x86, `fmax`, `fmin`, `fcmeq` and `and` on NEON).
+#[inline]
+fn am_f32(carrier: f32, depth: f32, x: f32) -> f32 {
+    let mask = 0u32.wrapping_sub(u32::from(!x.is_nan()));
+    let x = f32::from_bits(x.clamp(-1.0, 1.0).to_bits() & mask);
+    let t = depth * x;
+    let u = 1.0 + t;
+    carrier * u
+}
+
+impl AmMod<C32> for Fallback {
+    fn am_mod(&self, carrier: f32, depth: f32, input: &[f32], output: &mut [C32]) -> Result<()> {
+        check_am_params(carrier, depth)?;
+        check_len(input.len(), output.len())?;
+        let output: &mut [[f32; 2]] = bytemuck::cast_slice_mut(output);
+        for (o, &x) in output.iter_mut().zip(input) {
+            *o = [am_f32(carrier, depth, x), 0.0];
+        }
+        Ok(())
+    }
+}
+
+/// The `Q15` gain `round(v * 32768)` limited to 32767 of `am_mod`, for `v` in `0 ..= 1`
+/// (checked by the caller). `v * 32768 + 0.5` lies in `[0.5, 32768.5]`, and the truncating
+/// conversion of a positive value is its floor, so this is `floor(v * 32768 + 0.5)` without the
+/// call of `libm::floor`. The product is exact in `f64`; where the sum is not (`v` below
+/// `2^-38`), it lies in `[0.5, 1)` and rounds within that range, so the floor is 0 either way.
+#[inline]
+fn am_gain(v: f32) -> i32 {
+    ((f64::from(v) * 32768.0 + 0.5) as i32).min(32767)
+}
+
+/// One `am_mod` `CQ15` value in `i32`, bit for bit the `i64` formula of the contract
+/// `sat16(round_shift(c (32768 + t), 15))` with `t = round_shift(m x, 15)`.
+///
+/// With `0 <= c, m <= 32767` and `-32768 <= x <= 32767`: `m x` lies in `[-2^30 + 2^15, 2^30]`,
+/// so `t` lies in `[-32767, 32766]`. Because `c 32768` is a multiple of `2^15`,
+/// `round_shift(c 32768 + c t, 15) = c + round_shift(c t, 15)`, and `|c t| < 2^30` fits. The sum
+/// `c + round_shift(c t, 15)` is at least 0 (`c t >= -32767 c`), so only the upper limit of
+/// `sat16` can act. The products are of 16-bit values (`t` fits `i16`), the form the compilers
+/// vectorize with 16-bit multiplies; the SIMD backend computes the same two rounding products
+/// with `pmulhrsw` / `sqrdmulh` / `q15mulr` and a saturating add. Unit test
+/// `am_mod_i32_form_equals_the_i64_formula` checks every `x` against the formula.
+#[inline]
+fn am_q15(c_q: i32, m_q: i32, x: i16) -> i16 {
+    let t = (m_q * i32::from(x) + (1 << 14)) >> 15;
+    let r = (c_q * t + (1 << 14)) >> 15;
+    (c_q + r).min(32767) as i16
+}
+
+impl AmMod<CQ15> for Fallback {
+    fn am_mod(&self, carrier: f32, depth: f32, input: &[Q15], output: &mut [CQ15]) -> Result<()> {
+        check_am_params(carrier, depth)?;
+        check_len(input.len(), output.len())?;
+        let (c_q, m_q) = (am_gain(carrier), am_gain(depth));
+        let input: &[i16] = bytemuck::cast_slice(input);
+        let output: &mut [[i16; 2]] = bytemuck::cast_slice_mut(output);
+        for (o, &x) in output.iter_mut().zip(input) {
+            *o = [am_q15(c_q, m_q, x), 0];
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::cast_possible_truncation)]
+mod am_tests {
+    use super::am_q15;
+    use crate::num::{round_shift, sat16};
+
+    fn formula(c: i64, m: i64, x: i64) -> i16 {
+        let t = round_shift(m * x, 15);
+        sat16(round_shift(c * (32768 + t), 15))
+    }
+
+    #[test]
+    fn am_mod_gain_equals_the_rounded_product() {
+        let mut v = 0.0f32;
+        // Every f32 step near the rounding boundaries of small gains, then a coarse sweep.
+        let mut values = std::vec![
+            0.0f32,
+            -0.0,
+            1.0,
+            1.0e-45,
+            1.0e-30,
+            0.999_984_7,
+            0.999_999_94
+        ];
+        while v <= 1.0 {
+            values.push(v);
+            v += 1.0 / 65536.0;
+            values.push(v + f32::EPSILON * v);
+            values.push(v - f32::EPSILON * v);
+        }
+        for v in values.into_iter().filter(|v| (0.0..=1.0).contains(v)) {
+            let want = (libm::floor(f64::from(v) * 32768.0 + 0.5) as i64).min(32767);
+            assert_eq!(i64::from(super::am_gain(v)), want, "v={v}");
+        }
+    }
+
+    #[test]
+    fn am_mod_i32_form_equals_the_i64_formula() {
+        let gains = [0, 1, 2, 3, 16383, 16384, 16385, 26214, 32766, 32767];
+        let mut seed = 0x9e37_79b9_u32;
+        let mut pairs = std::vec::Vec::new();
+        for &c in &gains {
+            for &m in &gains {
+                pairs.push((c, m));
+            }
+        }
+        for _ in 0..40 {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            pairs.push(((seed & 0x7fff) as i32, ((seed >> 15) & 0x7fff) as i32));
+        }
+        for (c, m) in pairs {
+            for x in i16::MIN..=i16::MAX {
+                assert_eq!(
+                    am_q15(c, m, x),
+                    formula(i64::from(c), i64::from(m), i64::from(x)),
+                    "c={c} m={m} x={x}"
+                );
+            }
         }
     }
 }

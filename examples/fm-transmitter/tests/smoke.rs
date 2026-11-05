@@ -6,7 +6,8 @@
     clippy::indexing_slicing,
     clippy::panic,
     clippy::cast_lossless,
-    clippy::too_many_lines
+    clippy::too_many_lines,
+    clippy::large_stack_frames
 )]
 
 use std::path::Path;
@@ -285,4 +286,57 @@ fn the_narrow_band_flow_modulates_a_wav_file_for_the_nfm_receiver() {
         }
     }
     assert!(sinad_db(&audio[audio.len() / 2..], 48_000.0, 1000.0) > 30.0);
+}
+
+/// Transmits a 1 kHz tone (amplitude 0.8, 1 s) with the transmitter flow `flow` and decodes
+/// the `cs8` bytes with the receiver flow `receiver` tuned to `frequency_hz`; returns the SINAD
+/// of the tone over the second half of the audio.
+fn transmit_and_receive(flow: &str, receiver: &str, frequency_hz: f64) -> f64 {
+    let dir = tempfile::tempdir().unwrap();
+    let wav = dir.path().join("audio.wav");
+    let out = dir.path().join("rf.cs8");
+    let n = write_tone(&wav, 48_000, 1.0, false);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../flows/{flow}.json"));
+    let o = run(&["--input", p(&wav), "--output", p(&out), "--flow", p(&path)]);
+    assert!(o.status.success(), "{flow}: {}", stderr(&o));
+    let bytes = std::fs::read(&out).unwrap();
+    let samples = bytes.len() / 2;
+    assert!(
+        samples <= n * 50 && samples > (n - 100) * 50,
+        "{flow}: {samples} samples for {n} audio samples"
+    );
+    let json = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../flows/{receiver}.json")),
+    )
+    .unwrap()
+    .replace("\"cu8\"", "\"cs8\"");
+    let mut p = Registry::standard()
+        .build_json(&json, &BuildOptions::default())
+        .unwrap();
+    p.set_param("tune", "frequency_hz", serde_json::json!(frequency_hz))
+        .unwrap();
+    let mut audio = Vec::new();
+    let mut buf = vec![0f32; 4096];
+    for piece in bytes.chunks(8192) {
+        p.push("rf", InputData::Raw(piece)).unwrap();
+        loop {
+            let got = p.read_stream("audio", &mut buf).unwrap();
+            if got == 0 {
+                break;
+            }
+            audio.extend(buf[..got].iter().map(|&v| f64::from(v)));
+        }
+    }
+    sinad_db(&audio[audio.len() / 2..], 48_000.0, 1000.0)
+}
+
+#[test]
+fn the_am_and_ssb_flows_modulate_a_wav_file_for_their_receivers() {
+    let am = transmit_and_receive("am_transmitter", "am_receiver", 600_000.0);
+    assert!(am > 30.0, "am_transmitter into am_receiver: SINAD {am} dB");
+    let ssb = transmit_and_receive("ssb_transmitter", "ssb_receiver", 0.0);
+    assert!(
+        ssb > 30.0,
+        "ssb_transmitter into ssb_receiver: SINAD {ssb} dB"
+    );
 }

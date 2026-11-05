@@ -156,6 +156,9 @@
 //! | `noise_blank_cq15` | quick | about 24 KiB |
 //! | `auto_notch_f32` | quick | about 32 KiB |
 //! | `extremes_m33` | full | about 7 KiB |
+//! | `am_mod_c32` | quick | about 14 KiB |
+//! | `am_mod_cq15` | quick | about 7 KiB |
+//! | `extremes_m35` | full | about 3 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -215,13 +218,14 @@ mod m25;
 mod m27;
 mod m30;
 mod m33;
+mod m35;
 
 pub use m27::{
     CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 173] = [
+pub(crate) static CASES: [TestCase; 176] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -1086,6 +1090,21 @@ pub(crate) static CASES: [TestCase; 173] = [
         name: "extremes_m33",
         tier: Tier::Full,
         run: m33::extremes_m33,
+    },
+    TestCase {
+        name: "am_mod_c32",
+        tier: Tier::Quick,
+        run: m35::am_mod_c32,
+    },
+    TestCase {
+        name: "am_mod_cq15",
+        tier: Tier::Quick,
+        run: m35::am_mod_cq15,
+    },
+    TestCase {
+        name: "extremes_m35",
+        tier: Tier::Full,
+        run: m35::extremes_m35,
     },
 ];
 

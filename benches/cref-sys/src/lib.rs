@@ -25,6 +25,8 @@
 //! - [`liquid`]: liquid-dsp's DC blocker ([`LiquidDcBlocker`], [`LiquidDcBlockerCrcf`], MIT).
 //! - [`LiquidNcoPll`]: liquid-dsp's interpolated-table NCO (`nco_crcf`, `LIQUID_VCO_INTERP`) with the
 //!   pilot loop of `stereo_pll` around it (MIT).
+//! - [`LiquidAmpmodem`]: liquid-dsp's amplitude modulator (`ampmodem`, `LIQUID_AMPMODEM_DSB` with
+//!   the carrier, MIT), the scalar reference of the `C32` `am_mod` fallback.
 //! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
 //!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
 //!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
@@ -43,6 +45,7 @@ pub mod cmsis_dsp;
 pub mod gnuradio;
 mod halfband;
 pub mod liquid;
+mod liquid_am;
 mod liquid_nco;
 pub mod volk_generic;
 pub mod volk_nofma;
@@ -53,6 +56,7 @@ pub use halfband::{
     AirspyFloat, AirspyInt16, LiquidFirhilbf, LiquidResamp2Crcf, LiquidResamp2Rrrf,
 };
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
+pub use liquid_am::LiquidAmpmodem;
 pub use liquid_nco::LiquidNcoPll;
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place

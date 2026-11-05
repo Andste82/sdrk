@@ -778,3 +778,38 @@ fn backend_table_lists_the_m30_kernels() {
     Sdrk.deinterleave(&out, Some(&mut re), None).unwrap();
     assert_eq!(re, [Q15(1), Q15(2)]);
 }
+
+#[test]
+fn backend_table_lists_am_mod_and_the_facade_gives_the_fallback_bits() {
+    use sdrk::kernels::modulate::AmMod;
+    for ty in [SampleType::C32, SampleType::CQ15] {
+        assert_eq!(backend_for("am_mod", ty), ACCEL, "am_mod {ty:?}");
+    }
+    assert_eq!(backend_for("am_mod", SampleType::F32), "none");
+
+    let mut s = 35u64;
+    let x: Vec<f32> = (0..300)
+        .map(|_| lcg(&mut s) as f32 / 1.4e9 - 1.5)
+        .chain([f32::NAN, f32::INFINITY, -0.0])
+        .collect();
+    let (mut a, mut b) = (vec![C32::default(); x.len()], vec![C32::default(); x.len()]);
+    Sdrk.am_mod(0.5, 0.8, &x, &mut a).unwrap();
+    Fallback.am_mod(0.5, 0.8, &x, &mut b).unwrap();
+    assert_eq!(flat(&a), flat(&b));
+    let q: Vec<Q15> = (0..300).map(|_| Q15(lcg(&mut s) as i16)).collect();
+    let (mut a, mut b) = (
+        vec![CQ15::default(); q.len()],
+        vec![CQ15::default(); q.len()],
+    );
+    Sdrk.am_mod(1.0, 1.0, &q, &mut a).unwrap();
+    Fallback.am_mod(1.0, 1.0, &q, &mut b).unwrap();
+    assert_eq!(a, b);
+    assert!(matches!(
+        Sdrk.am_mod(1.5, 0.5, &q, &mut a),
+        Err(Error::InvalidParameter(_))
+    ));
+    assert!(matches!(
+        Sdrk.am_mod(0.5, 0.5, &q[..1], &mut a),
+        Err(Error::LengthMismatch { .. })
+    ));
+}

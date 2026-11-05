@@ -1,0 +1,81 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "c32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "c32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "c32_4096",
+  "format_version": 1,
+  "kernel": "am_mod",
+  "model": "float32",
+  "notes": "48 kHz; a 1 kHz tone 0.7 plus real noise sigma 0.2, then 32 values beyond +-1 (+-inf, +-f32::MAX, +-(1 + 2^-23) and 26 random magnitudes in (1, 4)) and 8 NaN at the listed positions; carrier 0.5, depth 0.8; exact float32 model: x' = clamp(x, -1, 1) with NaN giving 0, t = depth x', u = 1 + t, re = carrier u, im = +0",
+  "params": {
+    "beyond_positions": [
+      440,
+      849,
+      940,
+      1013,
+      1015,
+      1341,
+      1347,
+      1416,
+      1450,
+      1472,
+      1838,
+      1849,
+      1911,
+      2239,
+      2323,
+      2401,
+      2432,
+      2529,
+      2593,
+      2664,
+      2858,
+      2996,
+      3058,
+      3061,
+      3102,
+      3364,
+      3392,
+      3425,
+      3609,
+      3635,
+      3700,
+      3980
+    ],
+    "carrier": 0.5,
+    "depth": 0.8,
+    "nan_positions": [
+      269,
+      805,
+      896,
+      1308,
+      2476,
+      3377,
+      3500,
+      3775
+    ],
+    "noise_sigma": 0.2,
+    "rate_hz": 48000,
+    "tone_amplitude": 0.7,
+    "tone_hz": 1000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 480,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

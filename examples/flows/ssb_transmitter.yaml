@@ -1,0 +1,53 @@
+# SDRk pipeline: single-sideband voice transmitter (amateur radio, HF utility and maritime) in
+# pull mode (YAML twin of ssb_transmitter.json). The caller asks for bytes with Pipeline::pull;
+# the audio is supplied on demand. Use it with the ssb_receiver flow and the same sideband.
+sdrk: 1
+name: ssb-transmitter
+description: "Modulate 48 kHz voice audio to single sideband (USB or LSB, 300 to 3000 Hz) and output a 2.4 MHz signed 8-bit baseband with the suppressed carrier at 0 Hz for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+inputs:
+  audio:
+    type: f32
+    rate_hz: 48000
+    description: "mono audio"
+nodes:
+  # SSB modulator (Weaver method): the voice band 300 ... 3000 Hz goes to the carrier plus
+  # 300 ... 3000 Hz (usb) or minus (lsb); the other sideband and everything outside the band
+  # is removed by a Kaiser low-pass (transition 200 Hz, 60 dB: 873 taps at 48 kHz, a delay of
+  # 436 samples or 9.1 ms). An audio tone of amplitude A comes out with amplitude A, so keep
+  # the voice peaks below full scale: speech sent as SSB has higher peaks than the audio
+  # itself, and the cs8 output clips them. By convention amateur radio uses lsb below 10 MHz
+  # and usb above. sideband can be changed while the flow runs (set_param).
+  mod:
+    kind: ssb_mod
+    params:
+      sideband: usb
+      low_hz: 300
+      high_hz: 3000
+  # Digital up converter: x50 to 2.4 MS/s with the suppressed carrier at 0 Hz, the centre
+  # frequency of the transmitter; set frequency_hz to move the signal away from the carrier
+  # leakage of the transmitter and tune it by the same amount lower. The image filter passes
+  # up to 4.8 kHz and stops from 43.2 kHz (cutoff 24 kHz, transition 38.4 kHz, about 230
+  # taps), wide enough for the 3 kHz voice band; the default image filter would need about
+  # 1800 taps, more than max_taps allows.
+  duc:
+    kind: duc
+    params:
+      cutoff_hz: 24000
+      frequency_hz: 0
+      interpolation: 50
+      transition_hz: 38400
+# Modulator, up converter.
+edges:
+  - { from: audio, to: mod }
+  - { from: mod, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

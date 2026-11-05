@@ -11,21 +11,21 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AutoNotchConfig,
-    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample,
-    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock,
-    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
-    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
-    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
-    InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
+    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
+    BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
+    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
+    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
+    ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
     MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
     NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock,
     QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock,
     ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
     SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -1990,6 +1990,112 @@ impl Kind for FmModKind {
             p,
             T,
             Ok(Box::new(StreamNode::new(FmModBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ------------------------------------------------------------------ am_mod
+
+pub(crate) struct AmModKind;
+
+impl Kind for AmModKind {
+    type Cfg = AmModConfig;
+
+    const KIND: &'static str = "am_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["am_mod"]
+    }
+    fn default_cfg() -> AmModConfig {
+        AmModConfig::default()
+    }
+    fn set(cfg: &mut AmModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &AmModConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if is_complex(input) {
+            return Err(mismatch("am_mod needs real samples"));
+        }
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: AmModBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: AmModBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 2.0,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &AmModConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(AmModBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
+    }
+}
+
+// ----------------------------------------------------------------- ssb_mod
+
+pub(crate) struct SsbModKind;
+
+impl Kind for SsbModKind {
+    type Cfg = SsbModConfig;
+
+    const KIND: &'static str = "ssb_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["interleave", "rotate", "fir"]
+    }
+    fn default_cfg() -> SsbModConfig {
+        SsbModConfig::default()
+    }
+    fn set(cfg: &mut SsbModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &SsbModConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        if is_complex(input) {
+            return Err(mismatch("ssb_mod needs real samples"));
+        }
+        let taps = cfg.num_taps(rate)?;
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: SsbModBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: SsbModBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                // Two oscillators and the complex filter at the audio rate.
+                cost: 8.0 + 4.0 * taps as f64,
+                taps,
+                delay: delay_half(taps),
+                min_input: 1,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &SsbModConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(SsbModBlock::<T, _>::new(
                 cfg, rate, st
             )?)))
         )

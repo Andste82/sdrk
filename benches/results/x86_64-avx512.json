@@ -4557,6 +4557,52 @@
           "status": "info",
           "verdict": "info"
         },
+        "symbol_sync": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 56.62,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 56.62,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 56.62,
+          "ours_instr_per_sample": 56.62,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_sync_real": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 27.29,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 27.29,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 27.29,
+          "ours_instr_per_sample": 27.29,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "window": {
           "compared_with": "volk_32fc_32f_multiply_32fc",
           "goal": true,
@@ -4688,6 +4734,11 @@
       "gnuradio_agc_cc": {
         "build": "-O3",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_crc": {
+        "build": "gr-crc.c (gr::digital::crc): -O3",
+        "sha256": "332a0f06bc91b00d04dd1cebe6c1394ae722c3a89598765b15f98f0ec0f9d243",
         "version": "main at ec1bf15"
       },
       "gnuradio_fallback_references": {

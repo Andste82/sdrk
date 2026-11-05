@@ -54,7 +54,7 @@ fn costs_and_delays_follow_the_table() {
     // noise_blank: cost 8, delay D = round(lookahead_s fs).
     for (ty, precision) in [("c32", "f32"), ("cq15", "q15")] {
         for (params, d) in [
-            (json!({}), 10),
+            (json!({}), 2),
             (json!({ "lookahead_s": 0.0, "hold_s": 0.0 }), 0),
             (json!({ "lookahead_s": 0.001 }), 192),
         ] {

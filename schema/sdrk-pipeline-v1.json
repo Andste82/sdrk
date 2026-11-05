@@ -2021,15 +2021,15 @@
                 "additionalProperties": false,
                 "properties": {
                   "hold_s": {
-                    "default": 0.0002,
-                    "description": "Blanking time after the last impulse sample in seconds, rounded to whole samples. Unit: s. Typical: 0.0002. Build-time.",
+                    "default": 0.0,
+                    "description": "Blanking time after the last impulse sample in seconds, rounded to whole samples. Unit: s. Typical: 0. Build-time.",
                     "maximum": 0.01,
                     "minimum": 0.0,
                     "type": "number"
                   },
                   "lookahead_s": {
-                    "default": 0.00005,
-                    "description": "Blanking time before an impulse in seconds, rounded to whole samples; it is also the delay of the block. Unit: s. Typical: 0.00005. Build-time.",
+                    "default": 0.00001,
+                    "description": "Blanking time before an impulse in seconds, rounded to whole samples; it is also the delay of the block. Unit: s. Typical: 0.00001. Build-time.",
                     "maximum": 0.001,
                     "minimum": 0.0,
                     "type": "number"

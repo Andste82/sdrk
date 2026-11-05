@@ -10,7 +10,13 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, ToComplexKind, FmStereoModKind,
+    AddKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind,
+    ConvertOutKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind,
+    Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind,
+    HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind, MakeComplexKind, MulKind,
+    NcoKind, NoiseBlankKind, PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind,
+    ResampleKind, RotateKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind,
+    StereoMatrixKind, StereoPllKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;

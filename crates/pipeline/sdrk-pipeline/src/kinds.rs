@@ -11,7 +11,22 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock, FmStereoModBlock, FmStereoModConfig,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
+    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
+    BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
+    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
+    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, HalfbandDecimateBlock,
+    HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock,
+    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock,
+    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue,
+    PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};

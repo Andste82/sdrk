@@ -3,9 +3,8 @@
 //! the runtime parameters, and a pipeline that equals the blocks; the flow
 //! `fm_stereo_transmitter` (validates, builds, pull equals push), the loop test E2E-STEREO-TX
 //! (`e2e_fm_stereo_loop_f32`: the flow without `duc` into `fm_stereo_demod`) and the limiter test
-//! (checks that a full-scale 15 kHz burst keeps the multiplex within 0.99 and the deviation within
-//! 75 kHz: on the specified chain, with the limiter at 48 kHz, it fails and is ignored until the
-//! maintainer decides open item I36-1; with the limiter at 192 kHz it passes).
+//! (a full-scale 15 kHz burst keeps the multiplex within 0.99 and the deviation within 75 kHz;
+//! the flow runs the limiter after the resampler, D487).
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -77,7 +76,7 @@ fn the_kinds_are_registered_with_their_kernels() {
     assert_eq!(f.description().kind, "fm_stereo_mod");
     let f = registry.factory("preemph_limit").unwrap();
     assert_eq!(f.kernels(), ["preemph_limit", "preemph_limit_stereo"]);
-    assert_eq!(registry.descriptions().count(), 39);
+    assert_eq!(registry.descriptions().count(), 41);
 }
 
 #[test]
@@ -326,9 +325,9 @@ fn the_stereo_transmitter_flow_validates_and_pull_equals_push() {
 
 /// The flow without `duc` (the FM signal at 192 kHz), received by `fm_stereo_demod` (50 us
 /// de-emphasis, 192 kHz to 48 kHz); the multiplex signal and the instantaneous frequency of the
-/// FM signal (`quad_demod`, 1.0 = 75 kHz) are outputs, too. `limit_at_192k` swaps `pre` and `up`
-/// (the limiter after the resampler, as in `fm_transmitter`; open item I36-1).
-fn loop_pipeline(limit_at_192k: bool) -> Pipeline {
+/// FM signal (`quad_demod`, 1.0 = 75 kHz) are outputs, too. The front of the chain is that of the
+/// flow: `audio`, `up`, `pre` (the limiter after the resampler, D487), `mpx`.
+fn loop_pipeline() -> Pipeline {
     let mut v: Value = serde_json::from_str(&flow("fm_stereo_transmitter")).unwrap();
     let nodes = v["nodes"].as_object_mut().unwrap();
     assert!(nodes.remove("duc").is_some());
@@ -343,19 +342,15 @@ fn loop_pipeline(limit_at_192k: bool) -> Pipeline {
         "fq".into(),
         json!({ "kind": "quad_demod", "params": { "deviation_hz": 75000 } }),
     );
-    let front = if limit_at_192k {
-        json!([
-            { "from": "audio", "to": "up" },
-            { "from": "up", "to": "pre" },
-            { "from": "pre", "to": "mpx" }
-        ])
-    } else {
-        json!([
-            { "from": "audio", "to": "pre" },
-            { "from": "pre", "to": "up" },
-            { "from": "up", "to": "mpx" }
-        ])
-    };
+    let front = json!([
+        { "from": "audio", "to": "up" },
+        { "from": "up", "to": "pre" },
+        { "from": "pre", "to": "mpx" }
+    ]);
+    let edges = v["edges"].as_array().unwrap();
+    for e in front.as_array().unwrap() {
+        assert!(edges.contains(e), "the flow has the edge {e}");
+    }
     v["edges"] = json!([
         front[0],
         front[1],
@@ -388,8 +383,8 @@ struct LoopRun {
 
 /// Pushes `input` in pieces of 4800 samples; `pilot_off_at` sets `pilot` to 0 before the
 /// sample with that index.
-fn run_loop(input: &[C32], pilot_off_at: Option<usize>, limit_at_192k: bool) -> LoopRun {
-    let mut p = loop_pipeline(limit_at_192k);
+fn run_loop(input: &[C32], pilot_off_at: Option<usize>) -> LoopRun {
+    let mut p = loop_pipeline();
     let mut out = LoopRun::default();
     let mut c = vec![C32::default(); 1 << 14];
     let mut f = vec![0f32; 1 << 16];
@@ -452,7 +447,7 @@ fn e2e_fm_stereo_loop_f32() {
     let rate = AUDIO_HZ as usize;
     let stereo_end = 2 * rate;
     let input = loop_audio(3 * rate, 0.001, 488);
-    let run = run_loop(&input, Some(stereo_end), false);
+    let run = run_loop(&input, Some(stereo_end));
     let audio = &run.stereo;
     assert!(audio.len() + 64 >= input.len(), "{}", audio.len());
 
@@ -503,7 +498,7 @@ fn e2e_fm_stereo_loop_f32() {
 /// burst in both channels (0.1 s to 0.5 s of 0.6 s; seed 489 draws the phases): `same` gives
 /// both channels the same phase (sum only), otherwise the phases are independent (sum and
 /// difference).
-fn burst_peaks(same: bool, limit_at_192k: bool) -> (f32, f64) {
+fn burst_peaks(same: bool) -> (f32, f64) {
     let rate = AUDIO_HZ as usize;
     let mut rng = Pcg32::new(489, 0);
     let pl = std::f64::consts::TAU * rng.next_f64();
@@ -523,18 +518,13 @@ fn burst_peaks(same: bool, limit_at_192k: bool) -> (f32, f64) {
             }
         })
         .collect();
-    let run = run_loop(&input, None, limit_at_192k);
+    let run = run_loop(&input, None);
     assert!(run.multiplex.len() > 4 * rate / 2);
     let peak_mpx = run.multiplex.iter().fold(0f32, |m, x| m.max(x.abs()));
     let peak_dev = run.deviation.iter().fold(0f32, |m, x| m.max(x.abs()));
     let dev_hz = f64::from(peak_dev) * 75_000.0;
     eprintln!(
-        "limiter ({}, {}): peak multiplex {peak_mpx:.5}, peak deviation {dev_hz:.1} Hz",
-        if limit_at_192k {
-            "limiter at 192 kHz"
-        } else {
-            "the flow: limiter at 48 kHz"
-        },
+        "limiter ({}): peak multiplex {peak_mpx:.5}, peak deviation {dev_hz:.1} Hz",
         if same {
             "same phase"
         } else {
@@ -544,38 +534,22 @@ fn burst_peaks(same: bool, limit_at_192k: bool) -> (f32, f64) {
     (peak_mpx, dev_hz)
 }
 
-/// The limiter test of the spec (seed 489) on the flow as specified: a full-scale 15 kHz burst
-/// in both channels must keep the multiplex signal within +-0.99 and the deviation of `fm_mod`
-/// within 75 kHz (measured by `quad_demod`).
-///
-/// Open item I36-1: this fails with the chain of the spec, where the limiter runs at 48 kHz
-/// before the resampler. The resampler rebuilds the peaks between the limited 48 kHz samples
-/// (0.99092 in the steady state with the same phase in both channels) and rings at the gain
-/// steps of the attack (1.112 at the start of the burst); see `docs/open-items.md`. The test is
-/// ignored until the maintainer decides I36-1 (D486); `cargo test -- --ignored` runs it. Both
-/// phase cases are measured and printed before the thresholds are checked.
+/// The limiter test of the spec (seed 489) on the flow: a full-scale 15 kHz burst in both
+/// channels keeps the multiplex signal within +-0.99 and the deviation of `fm_mod` within 75 kHz
+/// (measured by `quad_demod`). The limiter runs after the resampler (D487): at 48 kHz before it
+/// the resampler rebuilt the peaks between the limited samples and rang at the gain steps of the
+/// attack (1.112 and 83.4 kHz with the same phase in both channels). Both phase cases are
+/// measured and printed before the thresholds are checked.
 #[test]
-#[ignore = "I36-1: limiter at 48 kHz before the resampler, see docs/open-items.md"]
 fn a_full_scale_burst_stays_within_the_deviation() {
     let peaks = [
-        ("same phase", burst_peaks(true, false)),
-        ("independent phases", burst_peaks(false, false)),
+        ("same phase", burst_peaks(true)),
+        ("independent phases", burst_peaks(false)),
     ];
     let failures: Vec<String> = peaks
         .iter()
         .filter(|(_, (mpx, dev_hz))| *mpx > 0.99 || *dev_hz > 75_000.0)
         .map(|(case, (mpx, dev_hz))| format!("{case}: multiplex peak {mpx}, deviation {dev_hz} Hz"))
         .collect();
-    assert!(failures.is_empty(), "I36-1: {}", failures.join("; "));
-}
-
-/// The same burst with the limiter after the resampler (at 192 kHz, the order of
-/// `fm_transmitter`): the thresholds hold. The evidence for the fix proposed in I36-1.
-#[test]
-fn a_full_scale_burst_stays_within_the_deviation_with_the_limiter_at_192_khz() {
-    for same in [true, false] {
-        let (mpx, dev_hz) = burst_peaks(same, true);
-        assert!(mpx <= 0.99, "multiplex peak {mpx}");
-        assert!(dev_hz <= 75_000.0, "deviation {dev_hz} Hz");
-    }
+    assert!(failures.is_empty(), "{}", failures.join("; "));
 }

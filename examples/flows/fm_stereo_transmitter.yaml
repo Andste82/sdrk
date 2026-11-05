@@ -40,27 +40,26 @@ nodes:
       pilot_hz: 19000
   # Pre-emphasis and peak limiter on both channels with one gain, so that a loud channel does
   # not move the stereo image. Every FM broadcast receiver de-emphasises the audio with 50 us
-  # (75 us in North America and South Korea: set preemphasis_us to 75 there). Unlike the mono
-  # fm_transmitter, the limiter runs at the audio rate before the resampler. The limiter bounds
-  # the 48 kHz samples only: the resampler rebuilds the peaks between them and rings when the
-  # gain drops, so a full-scale 15 kHz burst reaches 1.11 times full scale in the multiplex
-  # (83 kHz deviation); with pre after up (at 192 kHz) it stays within 0.99 (open item I36-1).
-  # The limit can be changed while the flow runs (set_param); hold_s 0.02 and release_s 0.2
-  # are the defaults.
+  # (75 us in North America and South Korea: set preemphasis_us to 75 there). As in the mono
+  # fm_transmitter, the limiter runs after the resampler, at 192 kHz: a limiter at 48 kHz bounds
+  # only the 48 kHz samples, and the resampler would rebuild the peaks between them and ring
+  # when the gain drops (a full-scale 15 kHz burst reached 1.11 times full scale, 83 kHz
+  # deviation); here the multiplex stays within 0.99 (D487). The limit can be changed while the
+  # flow runs (set_param); hold_s 0.02 and release_s 0.2 are the defaults.
   pre:
     kind: preemph_limit
     params:
       limit: 1.0
       preemphasis_us: 50
-  # 48 kHz -> 192 kHz (ratio 4/1); the resampler treats re and im alike.
+  # 48 kHz -> 192 kHz (ratio 4/1) before the limiter; the resampler treats re and im alike.
   up:
     kind: resample
     params:
       rate_out_hz: 192000
 edges:
-  - { from: audio, to: pre }
-  - { from: pre, to: up }
-  - { from: up, to: mpx }
+  - { from: audio, to: up }
+  - { from: up, to: pre }
+  - { from: pre, to: mpx }
   - { from: mpx, to: mod }
   - { from: mod, to: duc }
   - { from: duc, to: rf }

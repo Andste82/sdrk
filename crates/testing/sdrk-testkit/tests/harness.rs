@@ -669,7 +669,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[allow(clippy::too_many_lines)]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 176);
+    assert_eq!(cases.len(), 179);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));

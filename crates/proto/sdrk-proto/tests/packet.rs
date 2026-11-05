@@ -4,7 +4,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use sdrk_device::{ErrorKind, SdrkError};
-use sdrk_proto::frame::{Decoder, FrameBits};
+use sdrk_proto::frame::{Decoder, FrameBits, Whitening};
+use sdrk_proto::whiten::Pn9;
 use sdrk_proto::{Error, MAX_PACKET_BYTES, Packet, PacketFlags, ProtoError};
 
 #[test]
@@ -80,6 +81,8 @@ fn public_types_are_send_and_sync() {
     assert_send_sync::<Error>();
     assert_send_sync::<Decoder>();
     assert_send_sync::<FrameBits>();
+    assert_send_sync::<Whitening>();
+    assert_send_sync::<Pn9>();
 }
 
 #[test]

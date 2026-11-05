@@ -8,20 +8,26 @@
 //! | payload | `8·L` | the packet bytes |
 //! | CRC | 16 | [`crc16_ccitt_false`] over length and payload, big-endian |
 //!
+//! With [`Whitening::Pn9`] the length byte, the payload and the CRC (computed over the plain
+//! length and payload) are combined by XOR with the PN9 sequence of [`crate::whiten`], starting with its
+//! first byte at the length byte; preamble and sync word are sent as they are. The decoder
+//! removes the whitening before it reads the length and checks the CRC. Both sides must use
+//! the same setting.
+//!
 //! Bits are sent most significant bit first. [`encode`] writes a whole frame as bytes `0`/`1`,
 //! [`FrameBits`] yields the same bits one at a time (for encoders that cannot hold a frame),
 //! and [`Decoder`] is a bit-by-bit state machine that finds frames in a bit stream.
 //!
 //! ```
-//! use sdrk_proto::frame::{self, Decoder};
+//! use sdrk_proto::frame::{self, Decoder, Whitening};
 //! use sdrk_proto::{Packet, PacketFlags};
 //!
 //! let p = Packet::new(0, PacketFlags::NONE, b"abc")?;
 //! let mut bits = [0u8; frame::frame_bits(3, 4)];
-//! let n = frame::encode(&p, 4, &mut bits)?;
+//! let n = frame::encode(&p, 4, Whitening::Pn9, &mut bits)?;
 //! assert_eq!(n, bits.len());
 //!
-//! let mut dec = Decoder::new(0, false)?;
+//! let mut dec = Decoder::new(0, false, Whitening::Pn9)?;
 //! let mut got = None;
 //! for (i, &b) in bits.iter().enumerate() {
 //!     if let Some(packet) = dec.push_bit(b != 0, 100 + i as u64) {
@@ -38,6 +44,34 @@
 use crate::crc::crc16_ccitt_false;
 use crate::error::{Error, Result};
 use crate::packet::{MAX_PACKET_BYTES, Packet, PacketFlags};
+use crate::whiten::{Pn9, pn9_byte};
+
+/// The whitening of a frame (see the module documentation).
+///
+/// ```
+/// use sdrk_proto::frame::Whitening;
+/// assert_eq!(Whitening::default(), Whitening::None);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum Whitening {
+    /// The bytes are sent as they are.
+    #[default]
+    None,
+    /// Length, payload and CRC are combined by XOR with the PN9 sequence ([`crate::whiten::Pn9`]).
+    Pn9,
+}
+
+impl Whitening {
+    /// The byte the `k`-th byte after the sync word is combined with by XOR (0 without whitening).
+    #[inline]
+    fn mask(self, k: usize) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Pn9 => pn9_byte(k),
+        }
+    }
+}
 
 /// The sync word (CCSDS attached sync marker), sent most significant bit first.
 pub const SYNC_WORD: u32 = 0x1ACF_FC1D;
@@ -74,11 +108,11 @@ pub const fn frame_bits(payload_len: usize, preamble_bytes: usize) -> usize {
 /// where its output buffer ended.
 ///
 /// ```
-/// use sdrk_proto::frame::FrameBits;
+/// use sdrk_proto::frame::{FrameBits, Whitening};
 /// use sdrk_proto::{Packet, PacketFlags};
 ///
 /// let p = Packet::new(0, PacketFlags::NONE, &[])?;
-/// let bits: Vec<u8> = FrameBits::new(&p, 1)?.collect();
+/// let bits: Vec<u8> = FrameBits::new(&p, 1, Whitening::None)?.collect();
 /// assert_eq!(bits.len(), 8 * (1 + 4 + 1 + 2));
 /// assert_eq!(&bits[..8], &[0, 1, 0, 1, 0, 1, 0, 1]); // the preamble 0x55
 /// # Ok::<(), sdrk_proto::Error>(())
@@ -87,18 +121,20 @@ pub const fn frame_bits(payload_len: usize, preamble_bytes: usize) -> usize {
 pub struct FrameBits {
     packet: Packet,
     preamble_bytes: usize,
+    whitening: Whitening,
     crc: u16,
     pos: usize,
     total: usize,
 }
 
 impl FrameBits {
-    /// The bits of the frame of `packet` with `preamble_bytes` preamble bytes.
+    /// The bits of the frame of `packet` with `preamble_bytes` preamble bytes and the given
+    /// whitening.
     ///
     /// # Errors
     /// [`Error::TooLong`] when the payload has more than [`MAX_PAYLOAD`] bytes;
     /// [`Error::InvalidArgument`] when the frame length overflows `usize`.
-    pub fn new(packet: &Packet, preamble_bytes: usize) -> Result<Self> {
+    pub fn new(packet: &Packet, preamble_bytes: usize, whitening: Whitening) -> Result<Self> {
         let len = packet.len();
         if len > MAX_PAYLOAD {
             return Err(Error::TooLong {
@@ -124,6 +160,7 @@ impl FrameBits {
         Ok(Self {
             packet: *packet,
             preamble_bytes,
+            whitening,
             crc,
             pos: 0,
             total,
@@ -147,14 +184,20 @@ impl FrameBits {
         match k.checked_sub(pre) {
             None => PREAMBLE_BYTE,
             Some(j @ 0..4) => SYNC_WORD.to_be_bytes().get(j).copied().unwrap_or(0),
-            Some(4) => len as u8,
             Some(j) => {
-                let p = j - 5;
-                match p.cmp(&len) {
-                    core::cmp::Ordering::Less => self.packet.data().get(p).copied().unwrap_or(0),
-                    core::cmp::Ordering::Equal => (self.crc >> 8) as u8,
-                    core::cmp::Ordering::Greater => self.crc as u8,
-                }
+                // `b`: the byte index after the sync word (0 is the length byte).
+                let b = j - 4;
+                let plain = match b.checked_sub(1) {
+                    None => len as u8,
+                    Some(p) => match p.cmp(&len) {
+                        core::cmp::Ordering::Less => {
+                            self.packet.data().get(p).copied().unwrap_or(0)
+                        }
+                        core::cmp::Ordering::Equal => (self.crc >> 8) as u8,
+                        core::cmp::Ordering::Greater => self.crc as u8,
+                    },
+                };
+                plain ^ self.whitening.mask(b)
             }
         }
     }
@@ -181,16 +224,17 @@ impl Iterator for FrameBits {
 
 impl ExactSizeIterator for FrameBits {}
 
-/// Writes the frame of `packet` with `preamble_bytes` preamble bytes as bits (`0`/`1`, one per
-/// byte) to the start of `out` and returns the number of bits, [`frame_bits`]`(packet.len(),
-/// preamble_bytes)`.
+/// Writes the frame of `packet` with `preamble_bytes` preamble bytes and the given whitening as
+/// bits (`0`/`1`, one per byte) to the start of `out` and returns the number of bits,
+/// [`frame_bits`]`(packet.len(), preamble_bytes)`.
 ///
 /// ```
-/// use sdrk_proto::{frame, Packet, PacketFlags};
+/// use sdrk_proto::frame::{self, Whitening};
+/// use sdrk_proto::{Packet, PacketFlags};
 ///
 /// let p = Packet::new(0, PacketFlags::NONE, &[0xA5])?;
 /// let mut out = [9u8; 200];
-/// let n = frame::encode(&p, 0, &mut out)?;
+/// let n = frame::encode(&p, 0, Whitening::None, &mut out)?;
 /// assert_eq!(n, 64);
 /// assert_eq!(&out[40..48], &[1, 0, 1, 0, 0, 1, 0, 1]); // the payload byte 0xA5
 /// assert_eq!(out[64], 9); // untouched
@@ -200,8 +244,13 @@ impl ExactSizeIterator for FrameBits {}
 /// # Errors
 /// [`Error::TooLong`] when the payload has more than [`MAX_PAYLOAD`] bytes;
 /// [`Error::BufferTooSmall`] when `out` is shorter than the frame.
-pub fn encode(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> Result<usize> {
-    let bits = FrameBits::new(packet, preamble_bytes)?;
+pub fn encode(
+    packet: &Packet,
+    preamble_bytes: usize,
+    whitening: Whitening,
+    out: &mut [u8],
+) -> Result<usize> {
+    let bits = FrameBits::new(packet, preamble_bytes, whitening)?;
     let total = bits.total();
     let got = out.len();
     let dst = out
@@ -213,25 +262,35 @@ pub fn encode(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> Result<
     Ok(total)
 }
 
-/// Writes the frame of `packet` with `preamble_bytes` preamble bytes as packed bytes (the bits
-/// of [`encode`], eight per byte, most significant bit first) to the start of `out` and returns
-/// the number of bytes, [`frame_bits`]`(packet.len(), preamble_bytes) / 8`.
+/// Writes the frame of `packet` with `preamble_bytes` preamble bytes and the given whitening as
+/// packed bytes (the bits of [`encode`], eight per byte, most significant bit first) to the
+/// start of `out` and returns the number of bytes, [`frame_bits`]`(packet.len(),
+/// preamble_bytes) / 8`.
 ///
 /// ```
-/// use sdrk_proto::{frame, Packet, PacketFlags};
+/// use sdrk_proto::frame::{self, Whitening};
+/// use sdrk_proto::{Packet, PacketFlags};
 ///
 /// let p = Packet::new(0, PacketFlags::NONE, &[0xA5])?;
 /// let mut out = [0u8; 16];
-/// let n = frame::encode_bytes(&p, 1, &mut out)?;
+/// let n = frame::encode_bytes(&p, 1, Whitening::None, &mut out)?;
 /// assert_eq!(n, 1 + 4 + 1 + 1 + 2);
 /// assert_eq!(&out[..7], &[0x55, 0x1A, 0xCF, 0xFC, 0x1D, 1, 0xA5]);
+/// // PN9: the length byte and the payload are XORed with FF E1.
+/// frame::encode_bytes(&p, 1, Whitening::Pn9, &mut out)?;
+/// assert_eq!(&out[5..7], &[1 ^ 0xFF, 0xA5 ^ 0xE1]);
 /// # Ok::<(), sdrk_proto::Error>(())
 /// ```
 ///
 /// # Errors
 /// [`Error::TooLong`] when the payload has more than [`MAX_PAYLOAD`] bytes;
 /// [`Error::BufferTooSmall`] when `out` is shorter than the frame.
-pub fn encode_bytes(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> Result<usize> {
+pub fn encode_bytes(
+    packet: &Packet,
+    preamble_bytes: usize,
+    whitening: Whitening,
+    out: &mut [u8],
+) -> Result<usize> {
     let len = packet.len();
     if len > MAX_PAYLOAD {
         return Err(Error::TooLong {
@@ -259,6 +318,10 @@ pub fn encode_bytes(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> R
     *len_byte = len as u8;
     payload.copy_from_slice(packet.data());
     crc.copy_from_slice(&crc16_ccitt_false(body).to_be_bytes());
+    if whitening == Whitening::Pn9 {
+        // Length, payload and CRC: everything after the sync word.
+        Pn9::new().apply(rest);
+    }
     Ok(total)
 }
 
@@ -269,7 +332,8 @@ pub fn encode_bytes(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> R
 /// [`PacketFlags::CRC_OK`]; one with a wrong CRC only when `emit_bad` is set, with
 /// [`PacketFlags::CRC_FAIL`]. A length above [`MAX_PAYLOAD`] ends the frame at once (nothing
 /// is returned). After every frame, delivered or not, the hunt starts afresh with the next bit:
-/// the bits of the frame are never searched for another sync word.
+/// the bits of the frame are never searched for another sync word. With [`Whitening::Pn9`]
+/// every byte after the sync word is de-whitened as soon as it is complete.
 ///
 /// The `index` of a returned packet is the index of the first bit of its sync word, computed
 /// from the index the caller passes with the last sync-word bit (indices must be consecutive).
@@ -277,6 +341,7 @@ pub fn encode_bytes(packet: &Packet, preamble_bytes: usize, out: &mut [u8]) -> R
 pub struct Decoder {
     max_sync_errors: u32,
     emit_bad: bool,
+    whitening: Whitening,
     /// The last bits while hunting, newest in bit 0.
     shift: u32,
     /// Bits still missing before `shift` holds 32 bits of this hunt.
@@ -296,17 +361,18 @@ pub struct Decoder {
 }
 
 impl Decoder {
-    /// A decoder in the hunting state.
+    /// A decoder in the hunting state for frames with the given whitening.
     ///
     /// # Errors
     /// [`Error::InvalidArgument`] when `max_sync_errors` is above [`MAX_SYNC_ERRORS`].
-    pub fn new(max_sync_errors: u32, emit_bad: bool) -> Result<Self> {
+    pub fn new(max_sync_errors: u32, emit_bad: bool, whitening: Whitening) -> Result<Self> {
         if max_sync_errors > MAX_SYNC_ERRORS {
             return Err(Error::InvalidArgument("max_sync_errors is above 4"));
         }
         Ok(Self {
             max_sync_errors,
             emit_bad,
+            whitening,
             shift: 0,
             pending: 31,
             in_frame: false,
@@ -326,6 +392,11 @@ impl Decoder {
     /// Whether frames with a wrong CRC are returned.
     pub fn emit_bad(&self) -> bool {
         self.emit_bad
+    }
+
+    /// The whitening the decoder removes.
+    pub fn whitening(&self) -> Whitening {
+        self.whitening
     }
 
     /// Whether the decoder is hunting for a sync word (not inside a frame).
@@ -350,8 +421,8 @@ impl Decoder {
     /// that is delivered.
     ///
     /// ```
-    /// use sdrk_proto::frame::Decoder;
-    /// let mut dec = Decoder::new(0, false)?;
+    /// use sdrk_proto::frame::{Decoder, Whitening};
+    /// let mut dec = Decoder::new(0, false, Whitening::None)?;
     /// assert!(dec.push_bit(true, 0).is_none());
     /// # Ok::<(), sdrk_proto::Error>(())
     /// ```
@@ -382,9 +453,10 @@ impl Decoder {
         if !self.body_bits.is_multiple_of(8) {
             return None;
         }
-        // A whole byte: store it.
-        let byte = self.cur;
-        let Some(slot) = self.body.get_mut(self.body_bits / 8 - 1) else {
+        // A whole byte: de-whiten and store it.
+        let k = self.body_bits / 8 - 1;
+        let byte = self.cur ^ self.whitening.mask(k);
+        let Some(slot) = self.body.get_mut(k) else {
             // Unreachable: `body_need` never exceeds the body. Start over to stay safe.
             self.hunt();
             return None;

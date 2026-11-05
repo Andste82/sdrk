@@ -94,10 +94,17 @@ impl InputData<'_> {
 ///
 /// ```
 /// use sdrk_pipeline::NodeStats;
-/// let s = NodeStats { name: "tune".into(), calls: 0, samples_in: 0, samples_out: 0, frames: 0 };
+/// let s = NodeStats {
+///     name: "afc".into(),
+///     calls: 0,
+///     samples_in: 0,
+///     samples_out: 0,
+///     frames: 0,
+///     readings: vec![("offset_hz", 0.0)],
+/// };
 /// assert_eq!(s.calls, 0);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NodeStats {
     /// Node name.
     pub name: String,
@@ -109,6 +116,19 @@ pub struct NodeStats {
     pub samples_out: u64,
     /// Frames produced by a frame node.
     pub frames: u64,
+    /// The readings of the block (`Block::reading`, for example `offset_hz` and `offset_ppm`
+    /// of `afc`) as of its last call or `reset`; empty for blocks without readings.
+    pub readings: Vec<(&'static str, f64)>,
+}
+
+/// Copies the current readings of a node into its statistics (no allocation: the names and
+/// their number are fixed at build time).
+pub(crate) fn update_readings(node: &dyn Node, st: &mut NodeStats) {
+    for (i, r) in st.readings.iter_mut().enumerate() {
+        if let Some(v) = node.reading(i) {
+            *r = v;
+        }
+    }
 }
 
 pub(crate) fn name_of(t: PortType) -> &'static str {
@@ -1285,6 +1305,7 @@ impl Pipeline {
             Dst::Frames(oi) => step_frames(n, streams, at_mut(outputs, oi)?, avail, direct)?,
         };
         if let Some((p, frames)) = progress {
+            update_readings(&*n.node, st);
             st.calls += 1;
             st.samples_in += p.consumed as u64;
             st.samples_out += (p.produced - frames) as u64;
@@ -1690,8 +1711,11 @@ impl Pipeline {
     /// Resets all blocks, empties all buffers, queues and events and starts every index at 0
     /// again; the statistics are kept.
     pub fn reset(&mut self) {
-        for n in &mut self.nodes {
+        for (n, st) in self.nodes.iter_mut().zip(self.stats.iter_mut()) {
             n.node.reset();
+            update_readings(&*n.node, st);
+        }
+        for n in &mut self.nodes {
             n.consumed = 0;
             n.n0_in = 0;
             n.n0_out = 0;

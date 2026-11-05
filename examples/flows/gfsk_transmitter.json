@@ -1,0 +1,64 @@
+{
+  "sdrk": 1,
+  "name": "gfsk-transmitter",
+  "description": "Frame packets with the PN9-whitened test framing and send them as GFSK at 50 kbit/s (deviation 25 kHz, BT 0.5) on a 1 MS/s signed 8-bit baseband, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "msg": {
+      "type": "packets",
+      "rate_hz": 50000,
+      "description": "Packets to send, up to 253 bytes each"
+    }
+  },
+  "nodes": {
+    "duc": {
+      "kind": "duc",
+      "params": {
+        "interpolation": 5
+      }
+    },
+    "enc": {
+      "kind": "frame_encode",
+      "params": {
+        "idle": "preamble",
+        "whitening": "pn9"
+      }
+    },
+    "mod": {
+      "kind": "fsk_mod",
+      "params": {
+        "bt": 0.5,
+        "deviation_hz": 25000,
+        "samples_per_symbol": 4
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "msg",
+      "to": "enc"
+    },
+    {
+      "from": "enc",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "duc"
+    },
+    {
+      "from": "duc",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs8",
+      "underrun": "zeros"
+    }
+  }
+}

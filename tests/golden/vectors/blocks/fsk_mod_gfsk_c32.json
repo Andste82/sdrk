@@ -1,0 +1,47 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "fsk_mod_gfsk_c32.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "fsk_mod_gfsk_c32.input.bin",
+      "len": 1024
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "fsk_mod_gfsk_c32.taps.bin",
+      "len": 40
+    }
+  },
+  "case": "fsk_mod_gfsk_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "notes": "GMSK: 1024 random soft bits +-1 at 9600 bit/s, levels 2, sps 8, bt 0.5, span 4, deviation 2400 Hz (symbol rate / 4); float64 chain: level +1 for a bit above 0 and -1 otherwise, upfirdn(h, levels, 8, 1) restricted to 8 outputs per bit with h = the boxcar of 8 ones convolved with design.gaussian(0.5, 8, 4), scaled to sum 8 and rounded to f32 (the taps of the block, D576), then phase += floor(x k + 0.5) modulo 2^32 with k = 2400 / 76800 2^32 from phase 0 and exp(j 2 pi phase / 2^32) with math.cos and math.sin",
+  "params": {
+    "bit_rate_hz": 9600.0,
+    "bt": 0.5,
+    "deviation_hz": 2400.0,
+    "k": 134217728.0,
+    "levels": 2,
+    "outputs": 8192,
+    "rate_out_hz": 76800.0,
+    "samples_per_symbol": 8,
+    "span": 4,
+    "taps": 40
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 530,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 90.0
+  }
+}

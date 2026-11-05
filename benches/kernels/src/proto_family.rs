@@ -38,7 +38,7 @@ use sdrk_blocks::{
     ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
 };
 use sdrk_proto::crc;
-use sdrk_proto::frame::{self, Decoder};
+use sdrk_proto::frame::{self, Decoder, Whitening};
 use sdrk_proto::{MAX_PACKET_BYTES, Packet, PacketFlags};
 
 use cref_sys::GrCrc;
@@ -219,7 +219,7 @@ impl FrameDecodeK {
             let payload: Vec<u8> = (0..DECODE_PAYLOAD).map(|_| rng.next_u32() as u8).collect();
             let p = Packet::new(0, PacketFlags::NONE, &payload).expect("packet");
             let mut f = vec![0u8; per];
-            frame::encode(&p, DECODE_PREAMBLE, &mut f).expect("frame");
+            frame::encode(&p, DECODE_PREAMBLE, Whitening::None, &mut f).expect("frame");
             bits.extend(f);
             payloads.push(payload);
         }
@@ -227,7 +227,7 @@ impl FrameDecodeK {
         FrameDecodeK {
             bits,
             payloads,
-            decoder: Decoder::new(0, false).expect("decoder"),
+            decoder: Decoder::new(0, false, Whitening::None).expect("decoder"),
             index: 0,
             got: Vec::with_capacity(64),
         }
@@ -297,7 +297,7 @@ fn decode_workload(rng: &mut Pcg32, n: usize) -> (Vec<u8>, Vec<Vec<u8>>) {
         let payload: Vec<u8> = (0..DECODE_PAYLOAD).map(|_| rng.next_u32() as u8).collect();
         let p = Packet::new(0, PacketFlags::NONE, &payload).expect("packet");
         let mut f = vec![0u8; per];
-        frame::encode(&p, DECODE_PREAMBLE, &mut f).expect("frame");
+        frame::encode(&p, DECODE_PREAMBLE, Whitening::None, &mut f).expect("frame");
         bits.extend(f);
         payloads.push(payload);
     }
@@ -337,7 +337,7 @@ impl FrameEncodeBlockK {
         let mut want = Vec::with_capacity(count * per);
         for p in &packets {
             let mut f = vec![0u8; per];
-            frame::encode(p, DECODE_PREAMBLE, &mut f).expect("frame");
+            frame::encode(p, DECODE_PREAMBLE, Whitening::None, &mut f).expect("frame");
             want.extend(f.iter().map(|&b| if b == 1 { 1.0f32 } else { -1.0 }));
         }
         want.truncate(layout.n);

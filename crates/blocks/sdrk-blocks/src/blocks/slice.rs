@@ -1,5 +1,5 @@
-//! `slice`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK and
-//! QPSK. A stateless per-symbol map without a kernel.
+//! `slice`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
+//! QPSK and 4-FSK levels. A stateless per-symbol map without a kernel.
 
 use core::marker::PhantomData;
 
@@ -16,7 +16,11 @@ use crate::ports::StreamElem;
 use crate::storage::{Plan, Storage};
 
 /// The names of the `constellation` choice, in index order.
-const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk"];
+const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4"];
+
+/// The `f32` nearest to 2/3: the threshold between the inner (±1/3) and the outer (±1) levels
+/// of 4-FSK.
+const TWO_THIRDS: f32 = 2.0 / 3.0;
 
 /// Smallest `scale` (D553).
 const MIN_SCALE: f64 = 1e-9;
@@ -30,7 +34,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the confidence.",
     details: "Maps every input symbol to bits-per-symbol soft bits in the order of the \
         constellation: real (f32 input, 1 bit: scale x), bpsk (C32 input, 1 bit: scale re), \
-        qpsk (C32 input, 2 bits, Gray: scale re for bit 0, then scale im for bit 1). A soft \
+        qpsk (C32 input, 2 bits, Gray: scale re for bit 0, then scale im for bit 1), fsk4 (f32 \
+        input, the 4-FSK levels +1, +1/3, -1/3, -1 of fsk_mod, 2 bits: scale (-v) for bit 0, \
+        which is 1 for the negative levels, then scale (|v| - 2/3) for bit 1, which is 1 for \
+        the outer levels). A soft \
         bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
         this convention holds for the whole project (frame_decode reads it). Place it after \
         symbol_sync (and carrier recovery for PSK). A receiver that wants log-likelihood \
@@ -55,10 +62,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 options: CONSTELLATION_OPTIONS,
                 default: 1,
             },
-            typical: "bpsk; real after an FSK discriminator, qpsk for QPSK",
+            typical: "bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK",
             mutability: Mutability::Build,
-            description: "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit) or qpsk \
-                (C32, 2 bits, re then im).",
+            description: "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk \
+                (C32, 2 bits, re then im) or fsk4 (f32, 2 bits, -v then |v| - 2/3).",
         },
         ParamDesc {
             name: "scale",
@@ -91,6 +98,9 @@ pub enum SliceConstellation {
     Bpsk,
     /// QPSK (`C32` input), two bits (Gray): `scale re` (bit 0), `scale im` (bit 1).
     Qpsk,
+    /// 4-FSK levels `+1, +1/3, -1/3, -1` (`f32` input), two bits: `scale (-v)` (bit 0, 1 for
+    /// the negative levels), `scale (|v| - 2/3)` (bit 1, 1 for the outer levels).
+    Fsk4,
 }
 
 impl SliceConstellation {
@@ -98,7 +108,7 @@ impl SliceConstellation {
     pub const fn bits_per_symbol(self) -> usize {
         match self {
             Self::Real | Self::Bpsk => 1,
-            Self::Qpsk => 2,
+            Self::Qpsk | Self::Fsk4 => 2,
         }
     }
 
@@ -108,10 +118,11 @@ impl SliceConstellation {
     /// use sdrk_blocks::{PortType, SliceConstellation};
     /// assert_eq!(SliceConstellation::Real.input_type(), PortType::F32);
     /// assert_eq!(SliceConstellation::Bpsk.input_type(), PortType::C32);
+    /// assert_eq!(SliceConstellation::Fsk4.input_type(), PortType::F32);
     /// ```
     pub const fn input_type(self) -> PortType {
         match self {
-            Self::Real => PortType::F32,
+            Self::Real | Self::Fsk4 => PortType::F32,
             Self::Bpsk | Self::Qpsk => PortType::C32,
         }
     }
@@ -121,6 +132,7 @@ impl SliceConstellation {
             Self::Real => 0,
             Self::Bpsk => 1,
             Self::Qpsk => 2,
+            Self::Fsk4 => 3,
         }
     }
 
@@ -128,6 +140,7 @@ impl SliceConstellation {
         match i {
             0 => Self::Real,
             2 => Self::Qpsk,
+            3 => Self::Fsk4,
             _ => Self::Bpsk,
         }
     }
@@ -211,8 +224,8 @@ impl SliceConfig {
     }
 }
 
-/// An input sample type of [`SliceBlock`]: `f32` (constellation `real`) or `C32` (`bpsk`,
-/// `qpsk`).
+/// An input sample type of [`SliceBlock`]: `f32` (constellations `real` and `fsk4`) or `C32`
+/// (`bpsk`, `qpsk`).
 ///
 /// ```
 /// use sdrk_blocks::SliceElem;
@@ -239,11 +252,12 @@ impl SliceElem for C32 {
     }
 }
 
-/// Symbol slicer: `T` symbols in (`f32` for `real`, `C32` for `bpsk` and `qpsk`), `f32` soft
+/// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk` and `qpsk`), `f32` soft
 /// bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and its magnitude is
 /// the confidence.
 ///
-/// Each soft bit is one `f32` product `scale * component` (`scale` rounded once to `f32`).
+/// Each soft bit is one `f32` product `scale * component` (`scale` rounded once to `f32`); for
+/// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3).
 /// A call takes `min(input.len(), output.len() / bits_per_symbol)` symbols. Timing: constant
 /// ratio `bits_per_symbol / 1`, delay 0. The block needs no storage.
 ///
@@ -279,7 +293,7 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
         } else {
             Err(Error::InvalidParameter {
                 name: "constellation",
-                reason: "real needs f32 input; bpsk and qpsk need c32 input",
+                reason: "real and fsk4 need f32 input; bpsk and qpsk need c32 input",
             })
         }
     }
@@ -288,7 +302,7 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
     ///
     /// # Errors
     /// `OutOfRange` for `scale`; `InvalidParameter` for a constellation that does not take
-    /// `T` (`real` needs `f32`, `bpsk` and `qpsk` need `C32`).
+    /// `T` (`real` and `fsk4` need `f32`, `bpsk` and `qpsk` need `C32`).
     pub fn new(config: &SliceConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         Self::check(config)?;
         Ok(Self {
@@ -327,20 +341,32 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
 
     fn process(&mut self, input: &[T], output: &mut [f32]) -> Result<Progress> {
         let s = self.scale;
-        let n = if self.config.constellation == SliceConstellation::Qpsk {
-            for (o, &x) in output.chunks_exact_mut(2).zip(input) {
-                let (re, im) = x.parts();
-                if let [b0, b1] = o {
-                    *b0 = s * re;
-                    *b1 = s * im;
+        let n = match self.config.constellation {
+            SliceConstellation::Qpsk => {
+                for (o, &x) in output.chunks_exact_mut(2).zip(input) {
+                    let (re, im) = x.parts();
+                    if let [b0, b1] = o {
+                        *b0 = s * re;
+                        *b1 = s * im;
+                    }
                 }
+                input.len().min(output.len() / 2)
             }
-            input.len().min(output.len() / 2)
-        } else {
-            for (o, &x) in output.iter_mut().zip(input) {
-                *o = s * x.parts().0;
+            SliceConstellation::Fsk4 => {
+                for (o, &x) in output.chunks_exact_mut(2).zip(input) {
+                    let v = x.parts().0;
+                    if let [b0, b1] = o {
+                        (*b0, *b1) = fsk4_bits(s, v);
+                    }
+                }
+                input.len().min(output.len() / 2)
             }
-            input.len().min(output.len())
+            _ => {
+                for (o, &x) in output.iter_mut().zip(input) {
+                    *o = s * x.parts().0;
+                }
+                input.len().min(output.len())
+            }
         };
         Ok(Progress {
             consumed: n,
@@ -378,4 +404,12 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
     fn min_input(&self) -> usize {
         1
     }
+}
+
+/// The two soft bits of a 4-FSK level `v` with the factor `s`: `s (-v)` (bit 0, 1 for the
+/// negative levels) and `s (|v| - 2/3)` (bit 1, 1 for the outer levels). Shared by `slice`
+/// (`fsk4`) and `fsk_demod`.
+#[inline]
+pub(crate) fn fsk4_bits(s: f32, v: f32) -> (f32, f32) {
+    (s * -v, s * (libm::fabsf(v) - TWO_THIRDS))
 }

@@ -1,0 +1,52 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "fsk_demod_2fsk_f32.expected.bin",
+      "len": 1605
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "fsk_demod_2fsk_f32.input.bin",
+      "len": 16384
+    }
+  },
+  "case": "fsk_demod_2fsk_f32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "model": "float32",
+  "notes": "continuous-phase 2-FSK (h = 1, rectangular frequency pulses, level 2 b - 1) at 48 kHz, 4700 Bd (sps 480 / 47), deviation 2350 Hz, symbol j over the transmit time [offset + (j - 1) sps, offset + j sps), 50 ppm clock drift (receive sample n is the transmit position n (1 + 50e-6), D540), unit amplitude plus complex noise for Eb/N0 20 dB (sigma^2 = sps / (2 Eb/N0) per component); float64 chain: atan2(x[n] conj(x[n - 1])) (x[-1] = 0) times the f32 gain fs / (2 pi 2350), the boxcar of 10 f32 taps 1 / 10 (zero history), rounded once to f32, then the float32 model of symbol_sync (cases/symbol_sync.py; Gardner, loop_bw 0.01, damping 0.7071, max_deviation 0.005, gains of D565 with ted_gain 1.48 = TED_GAIN_2FSK of D571) over the whole input in one call; the 2-FSK soft bit is the symbol value; produced is the output count; timing_error_last_256 is the largest distance of the last 256 strobes from a symbol peak in symbols (information); snr_db_f64_loop is the SNR of the model against the same loop in float64 on the float64 chain (information, D34)",
+  "params": {
+    "deviation_hz": 2350.0,
+    "drift_ppm": 50.0,
+    "ebn0_db": 20.0,
+    "ki_bits": 4567728955000280906,
+    "kp_bits": 4595709966882707170,
+    "levels": 2,
+    "loop_bw": 0.01,
+    "max_integ_bits": 4587519894469455158,
+    "offset": 8.53039195213569,
+    "produced": 1605,
+    "rate_hz": 48000,
+    "sigma": 0.22597307314641285,
+    "snr_db_f64_loop": 148.2,
+    "sps": 10.212765957446809,
+    "sps_bits": 4621938894174805842,
+    "symbol_rate_hz": 4700.0,
+    "taps": 10,
+    "ted_gain": 1.48,
+    "timing_error_last_256": 0.022756
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 531,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 80.0
+  }
+}

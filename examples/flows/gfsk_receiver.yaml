@@ -1,0 +1,78 @@
+# SDRk pipeline: receive GFSK packets (YAML twin of gfsk_receiver.json). YAML is accepted as
+# input; JSON stays the canonical format.
+#
+# The receiving half of a GFSK packet link at 50 kbit/s with 25 kHz deviation (modulation index
+# 1), the counterpart of gfsk_transmitter: channel filter, automatic frequency control, FSK
+# demodulator with symbol timing recovery and the decoder of the test framing with PN9
+# whitening. Cheap sub-GHz radios are often tens of ppm off; the AFC pulls such an offset back
+# to 0 Hz before the demodulator, and its readings offset_hz and offset_ppm in the pipeline
+# statistics show how far the transmitter is off.
+sdrk: 1
+name: gfsk-receiver
+description: "Receive GFSK packets at 50 kbit/s (deviation 25 kHz) from a 1 MS/s signed 16-bit baseband with automatic frequency control and the PN9-whitened test framing."
+# f32 pipeline (the FSK kinds have no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # Signed 16-bit IQ at 1 MS/s with the wanted channel at 0 Hz.
+  rf:
+    format: cs16
+    rate_hz: 1000000
+    description: "IQ at 1 MS/s with the channel at 0 Hz"
+nodes:
+  # Automatic frequency control at 200 kHz: it measures the mean instantaneous frequency in
+  # pieces of 256 samples and rotates the signal back by its estimate (time constant 0.5 s,
+  # the default). The estimate is limited to +-20 kHz; an offset above about 10 kHz is
+  # already cut by the channel filter before the AFC can remove it. It needs a signal whose
+  # mean frequency is the carrier: the whitened frames and the 0x55 idle of gfsk_transmitter
+  # are such a signal; long runs of equal bits are not. Random data moves the estimate by
+  # roughly deviation / sqrt(2 * time_constant_s * symbol rate) rms, about 110 Hz here. Set
+  # carrier_hz to the RF frequency (for example 868e6) to get the reading offset_ppm; set
+  # hold to true (it can be changed while the flow runs) to freeze the estimate, for example
+  # between transmissions.
+  afc:
+    kind: afc
+    params:
+      max_offset_hz: 20000
+  # Decoder of the test framing: finds the sync word 0x1ACFFC1D in the soft bits, removes the
+  # PN9 whitening from length, payload and CRC (it must match the transmitter) and outputs every
+  # packet whose CRC matches, with the flag CRC_OK.
+  dec:
+    kind: frame_decode
+    params:
+      whitening: pn9
+  # FSK demodulator at 4 samples per symbol: quadrature discriminator scaled so that +-25 kHz
+  # read +-1, a boxcar matched filter of 4 taps, the Gardner timing loop (loop_bw 0.01, the
+  # default) and one soft bit per symbol. The Gaussian pulse of the transmitter is not undone;
+  # in the loop tests of M39 GFSK with BT 0.5 decodes as well as plain FSK.
+  # The built-in detector slope is that of rectangular FSK; with a Gaussian pulse the slope is
+  # lower (about 0.78 at bt 0.5, 0.21 at bt 0.3), so the loop is that much narrower than
+  # loop_bw: raise loop_bw by about 1.9 for bt 0.5.
+  demod:
+    kind: fsk_demod
+    params:
+      deviation_hz: 25000
+      symbol_rate_hz: 50000
+  # Digital down converter: decimate by 5 (1 MS/s -> 200 kHz) with a 60 kHz channel filter.
+  # Carson's rule gives 2 * (25 + 25) = 100 kHz for the signal, so 60 kHz per side leaves
+  # about 10 kHz for a frequency offset before the AFC has pulled it in. Set frequency_hz to
+  # the offset of the channel from the tuner centre.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 60000
+      decimation: 5
+# Channel filter, AFC, demodulator, decoder.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: afc }
+  - { from: afc, to: demod }
+  - { from: demod, to: dec }
+  - { from: dec, to: packets }
+outputs:
+  # The decoded packets; the reader empties the queue after every push.
+  packets:
+    type: packets
+    queue: 256
+    description: "The decoded packets with CRC_OK and the input sample index of their sync word"

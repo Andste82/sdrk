@@ -1,5 +1,5 @@
 //! Packet inputs, outputs and edges (M37): validation, push and pull mode, drop policies, the
-//! proof flow `frame_loop`.
+//! proof flow `frame_loop` (also with the PN9 whitening of M39).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -160,6 +160,49 @@ fn frame_loop_exact() {
     assert_eq!(stats[0].samples_out, start as u64);
     assert_eq!(stats[1].samples_in, start as u64);
     assert_eq!(stats[1].samples_out, 1000);
+}
+
+/// `frame_loop` with the `whitening` of the encoder and the decoder set (M39).
+fn frame_loop_whitened(enc: &str, dec: &str) -> Value {
+    let mut spec: Value = serde_json::from_str(&flow("frame_loop")).unwrap();
+    spec["nodes"]["enc"]["params"]["whitening"] = json!(enc);
+    spec["nodes"]["dec"]["params"]["whitening"] = json!(dec);
+    spec
+}
+
+#[test]
+fn frame_loop_with_pn9_whitening() {
+    let packets = random_packets(200, 3);
+    let mut p = build(&frame_loop_whitened("pn9", "pn9"));
+    p.push_packets("msg", &packets).unwrap();
+    let mut got = Vec::new();
+    read_all(&mut p, "out", &mut got);
+    assert_eq!(got.len(), packets.len());
+    let mut start = 0;
+    for (k, (sent, out)) in packets.iter().zip(&got).enumerate() {
+        assert_eq!(out.data(), sent.data(), "packet {k}");
+        assert_eq!(out.flags, PacketFlags::CRC_OK, "packet {k}");
+        assert_eq!(out.index, (start + PREAMBLE * 8) as u64, "packet {k}");
+        start += frame_samples(sent.len());
+    }
+    // Whitening on one side only: no packet passes the CRC.
+    for (enc, dec) in [("pn9", "none"), ("none", "pn9")] {
+        let mut p = build(&frame_loop_whitened(enc, dec));
+        p.push_packets("msg", &packets).unwrap();
+        let mut got = Vec::new();
+        read_all(&mut p, "out", &mut got);
+        assert!(got.is_empty(), "enc {enc} dec {dec}: {} packets", got.len());
+    }
+    // An unknown whitening is rejected at its parameter path.
+    let report = validate(&frame_loop_whitened("pn15", "none"));
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|d| d.path == "nodes.enc.params.whitening"),
+        "{}",
+        report.to_json()
+    );
 }
 
 /// Sends the packets of a list in random small groups and, in between, nothing (idle).

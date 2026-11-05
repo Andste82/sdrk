@@ -4,9 +4,9 @@ use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::Packet;
-use sdrk_proto::frame::{Decoder, MAX_SYNC_ERRORS, frame_bits};
+use sdrk_proto::frame::{Decoder, MAX_SYNC_ERRORS, Whitening, frame_bits};
 
-use super::{check_count, unknown};
+use super::{WHITENING_OPTIONS, check_count, unknown, whitening_choice, whitening_from_choice};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
@@ -29,7 +29,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         and outputs the packet with the flag CRC_OK; a frame with a wrong CRC is output with \
         CRC_FAIL only when emit_bad is set. The packet index is the input sample index of \
         the first sync word bit, counted since construction or reset. After every frame the \
-        hunt starts again with the next bit. Pitfall: max_sync_errors above 0 finds frames \
+        hunt starts again with the next bit. With whitening pn9 every byte after the sync \
+        word is XORed with the PN9 sequence before it is read, as frame_encode with the same \
+        setting sends it. Pitfall: max_sync_errors above 0 finds frames \
         with damaged sync words but also false syncs in noise; those mostly fail the CRC.",
     inputs: &[PortDesc {
         name: "in",
@@ -62,6 +64,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             mutability: Mutability::Build,
             description: "Also output frames whose CRC does not match, with the flag CRC_FAIL.",
         },
+        ParamDesc {
+            name: "whitening",
+            unit: Unit::None,
+            kind: ParamKind::Choice {
+                options: WHITENING_OPTIONS,
+                default: 0,
+            },
+            typical: "none; pn9 for links whose data has long runs of equal bits",
+            mutability: Mutability::Build,
+            description: "Whitening the sender applied to length, payload and CRC: none, or pn9 (the \
+                PN9 sequence is removed).",
+        },
     ],
     required: &[],
 };
@@ -81,6 +95,8 @@ pub struct FrameDecodeConfig {
     pub max_sync_errors: usize,
     /// Output frames with a wrong CRC (flag `CRC_FAIL`).
     pub emit_bad: bool,
+    /// The whitening of length, payload and CRC that the sender applied.
+    pub whitening: Whitening,
 }
 
 impl FrameDecodeConfig {
@@ -107,6 +123,7 @@ impl FrameDecodeConfig {
         match p.name {
             "max_sync_errors" => self.max_sync_errors = value.as_usize()?,
             "emit_bad" => self.emit_bad = value.as_bool()?,
+            "whitening" => self.whitening = whitening_from_choice(value.as_choice()?),
             _ => return unknown(),
         }
         Ok(())
@@ -120,6 +137,7 @@ impl FrameDecodeConfig {
         match name {
             "max_sync_errors" => Ok(ParamValue::I64(self.max_sync_errors as i64)),
             "emit_bad" => Ok(ParamValue::Bool(self.emit_bad)),
+            "whitening" => Ok(ParamValue::Choice(whitening_choice(self.whitening))),
             _ => unknown(),
         }
     }
@@ -141,7 +159,7 @@ impl FrameDecodeConfig {
 /// let mut dec = FrameDecodeBlock::new(&FrameDecodeConfig::default(), Rate::hz(9600)?, &mut arena)?;
 /// let sent = Packet::new(0, PacketFlags::NONE, b"hi")?;
 /// let mut bits = [0u8; frame::frame_bits(2, 4)];
-/// frame::encode(&sent, 4, &mut bits)?;
+/// frame::encode(&sent, 4, frame::Whitening::None, &mut bits)?;
 /// let soft: Vec<f32> = bits.iter().map(|&b| if b == 1 { 1.0 } else { -1.0 }).collect();
 /// let mut out = [Packet::default(); 2];
 /// let p = dec.process(&soft, &mut out)?;
@@ -172,7 +190,7 @@ impl<S: Storage> FrameDecodeBlock<S> {
         let max = u32::try_from(config.max_sync_errors).unwrap_or(u32::MAX);
         Ok(Self {
             config: *config,
-            decoder: Decoder::new(max, config.emit_bad)?,
+            decoder: Decoder::new(max, config.emit_bad, config.whitening)?,
             count: 0,
             max_per_input: Ratio::new(1, MIN_FRAME_BITS as u64)?,
             _storage: PhantomData,

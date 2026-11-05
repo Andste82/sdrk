@@ -151,6 +151,8 @@ Additional rules:
 
 `gaussian(bt, sps, span) -> taps` (f64, length `span·sps + 1`, `sps` an integer ≥ 2, `span` 2 … 8, `bt` 0.2 … 1): `h[n] = exp(−(2π²·bt²/ln 2)·(t/T)²)` with `t/T = (n − (len−1)/2) / sps`, normalized to sum 1. Golden case `design/gaussian_bt0p5_sps8_span4` (`max_abs_err` 1e-12 against the Python formula).
 
+> **Amendment 2026-11-05 (D566):** the design module is heap-free, so the function writes into a caller slice: `design::gaussian(bt, sps, span, taps: &mut [f64]) -> Result<()>`, with `taps` exactly `span·sps + 1` long (`LengthMismatch` otherwise); out-of-range `bt`, `sps` and `span` are `OutOfRange`. The blocks use a crate-internal tap-at-a-time form with the same arithmetic.
+
 ### 2. `fsk_mod`
 
 `FskModBlock`: input soft bits `f32` (±1 from `frame_encode`, one sample per bit), output C32 at `samples_per_symbol` per symbol. Per piece of input:
@@ -171,6 +173,8 @@ Parameters: `levels` (I64, build, 2; 2 or 4), `samples_per_symbol` (I64, build, 
 4. `slice`: `levels` 2: `real` (soft bit = level). `levels` 4: two soft bits per symbol `s0 = −v` (bit 0 is 1 for negative levels), `s1 = |v| − 2/3` (bit 1 is 1 for the outer levels); add this as constellation `fsk4` to the `slice` table of M38.
 
 Parameters: `levels`, `symbol_rate_hz` (Hz, build, required), `deviation_hz` (Hz, build, required), `loop_bw` (None, build, 0.01). `rate_unsupported` if `fs / symbol_rate_hz < 4` (FSK needs at least 4 samples per symbol here). Ratio `bits_per_symbol / sps`, `RatioKind::Variable`. Cost `12 + round(sps) + 24/sps`.
+
+> **Amendment 2026-11-05 (maintainer decision, D571):** the loop parameters of M38 are used with a built-in `ted_gain` instead of the M38 default 1.0: since D565 `ted_gain` is the detector slope per symbol, and the measured Gardner slope of the boxcar-filtered discriminator output is `TED_GAIN_2FSK` = 1.48 for 2-FSK and `TED_GAIN_4FSK` = 0.84 for 4-FSK, so `loop_bw` keeps its nominal meaning for plain (rectangular) FSK. `fsk_demod` has no `ted_gain` parameter. With a Gaussian pulse the slope is lower (0.78 at `bt` 0.5, 0.21 at `bt` 0.3), so with GFSK at `bt` 0.5 the loop is about 1.9 times narrower than `loop_bw` says. `fs / symbol_rate_hz` is also capped at 1024 (D573).
 
 ### 4. `afc`
 
@@ -197,6 +201,8 @@ Parameters: `time_constant_s` (s, build, 0.5), `max_offset_hz` (Hz, build, requi
 2. **Loop 2-FSK (`fsk_loop_ber`):** `fsk_mod` (sps 8, h = 1) → AWGN → `fsk_demod` → BER over 10^6 bits within a factor 2 of `0.5·exp(−Eb/(2·N0))` (non-coherent 2-FSK) at Eb/N0 10 and 12 dB (seed 532). GFSK with bt 0.5 at most 1.5 dB worse (seed 533).
 3. **Loop 4-FSK:** 10^5 symbols at Eb/N0 14 dB, symbol error rate below 1e-3 (seed 534).
 4. **AFC:** an offset of 5 kHz and 20 ppm drift over 10 s at 868 MHz carrier: `afc` converges to within 50 Hz in 1 s, reports the ppm within 0.1 ppm; packets decode with PER < 1 % at Eb/N0 12 dB with AFC and fail without (seed 535). `hold` freezes the estimate.
+
+   > **Amendment 2026-11-05 (reading set by the maintainer, D579; set-up D582; pending open item I39-1):** the drift is a ramp of the carrier offset from 5000 Hz by 20 ppm of 868 MHz (17 360 Hz) in 10 s to 22 360 Hz; the test sets `max_offset_hz` 30 kHz and `carrier_hz` 868 MHz. The convergence (within 50 Hz from 1 s on), ppm and `hold` checks run on the noiseless idle preamble (balanced alternating bits); the PER check runs on PN9-whitened packets at Eb/N0 12 dB. On random data or with noise the first-order loop of §4 cannot hold 50 Hz under the ramp (the data and the discriminator clicks move the estimate); whether 50 Hz must also hold there is open item I39-1.
 5. **Flow loop:** `gfsk_transmitter` → testkit channel (Eb/N0 14 dB, offset 3 kHz, 30 ppm clock drift; seed 536) → `gfsk_receiver`: 1000 packets, at least 990 with `CRC_OK` and identical payload; whitening on both sides.
 6. Chunk invariance of `fsk_demod`, `fsk_mod`, `afc` with 20 plans (seed 537); extremes (silence, full scale, NaN) do not panic and recover.
 7. `cargo xtask schema --check`.
@@ -207,9 +213,41 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] `design::gaussian` with golden case
-- [ ] Blocks and kinds `fsk_mod`, `fsk_demod`, `afc`; constellation `fsk4` in `slice`
-- [ ] PN9 whitening in `sdrk-proto` and the framing option
-- [ ] Flows `gfsk_receiver`, `gfsk_transmitter` with YAML twins
-- [ ] Tests (seeds 530–537)
-- [ ] `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
+- [x] `design::gaussian` with golden case
+- [x] Blocks and kinds `fsk_mod`, `fsk_demod`, `afc`; constellation `fsk4` in `slice`
+- [x] PN9 whitening in `sdrk-proto` and the framing option
+- [x] Flows `gfsk_receiver`, `gfsk_transmitter` with YAML twins
+- [x] Tests (seeds 530–537)
+- [x] `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
+
+## Status
+
+Done: `design::gaussian` with the golden case `design/gaussian_bt0p5_sps8_span4` (D566, D567); the blocks and kinds `fsk_mod`, `fsk_demod` and `afc`, composed of existing kernels, each called once per piece (D571 to D576); the constellation `fsk4` of `slice`; block readings in the pipeline statistics (D572); `sdrk_proto::whiten::Pn9` and the option `whitening` of `frame_encode` and `frame_decode` (D568 to D570); the flows `gfsk_receiver` and `gfsk_transmitter` with their YAML twins (D584); the tests 1 to 7 (seeds 530 to 537; D577 to D584); the docs, the CHANGELOG and the decisions log. Open: I39-1 (the AFC criterion of test 4 on random data and with noise).
+
+Deviations from the specification, recorded in the decisions log:
+- `design::gaussian` writes into a caller slice (D566, §1 amended).
+- `fsk_demod` has a built-in `ted_gain` (`TED_GAIN_2FSK` 1.48, `TED_GAIN_4FSK` 0.84; maintainer decision D571, §3 amended); with GFSK the loop is narrower than `loop_bw` (about 1.9 times at `bt` 0.5).
+- The loop tests 2 and 3 put a `ddc` channel filter between the noise and `fsk_demod` (D580); without it the discriminator runs below its threshold.
+- Test 4 reads the drift as a ramp of the offset and checks the convergence on the noiseless idle preamble (maintainer reading D579, set-up D582, test 4 amended; open item I39-1).
+- The framing functions get a `whitening` argument (D569, hard break, no compatibility shim).
+
+Measured (local run of the M39 tests in the test profile; all pass):
+
+| Test | Quantity | Target | Measured |
+| --- | --- | --- | --- |
+| 1, `blocks/fsk_mod_gfsk_c32` | SNR (dB) | ≥ 90 | 133 |
+| 1, `blocks/fsk_demod_2fsk_f32` | SNR (dB) | ≥ 80 | 143 |
+| 2, 2-FSK at Eb/N0 10 dB | BER (ratio to theory) | within factor 2 | 2.951e-3 (0.876) |
+| 2, 2-FSK at Eb/N0 12 dB | BER (ratio to theory) | within factor 2 | 1.950e-4 (1.078) |
+| 2, GFSK `bt` 0.5 at Eb/N0 10 dB | BER (dB against plain-FSK theory) | at most 1.5 dB worse | 2.026e-3 (0.42 dB better) |
+| 2, GFSK `bt` 0.5 at Eb/N0 12 dB | BER (dB against plain-FSK theory) | at most 1.5 dB worse | 8.30e-5 (0.41 dB better) |
+| 3, 4-FSK at Eb/N0 14 dB | SER | < 1e-3 | 3.1e-4 |
+| 4, AFC on the idle preamble | largest error from 1 s on (Hz) | ≤ 50 | 17.4 (the ramp lag) |
+| 4, AFC on the idle preamble | largest ppm error (ppm) | ≤ 0.1 | 0.020 |
+| 4, packets at Eb/N0 12 dB | PER with AFC | < 1 % | 0.55 % (2531 of 2545) |
+| 4, packets at Eb/N0 12 dB | PER without AFC | fail | 78 % (552 of 2545) |
+| 5, flow loop | packets with `CRC_OK` and identical payload | ≥ 990 of 1000 | 999 of 1000 |
+
+Remarks: test 4 also checks `hold` (the estimate stays bit for bit the same for 1 s while the offset moves by 1736 Hz) and is within 17.4 Hz again 1 s after the release. Test 6 (chunk invariance with 20 plans, extremes) and test 7 (`cargo xtask schema --check`) pass. Speed (cycles per sample of the new blocks) is measured by the milestone gate.
+
+Gate and counts: see below.

@@ -157,6 +157,12 @@ pub trait Node: Send {
     fn consumed_packets(&self) -> usize {
         0
     }
+    /// The reading `index` of the block (see `Block::reading`); `None` for nodes without
+    /// readings.
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        let _ = index;
+        None
+    }
 }
 
 /// A [`Node`] around a [`Block`].
@@ -229,6 +235,10 @@ where
 
     fn map_index(&self, rel_in: u64) -> u64 {
         self.block.map_index(rel_in)
+    }
+
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        self.block.reading(index)
     }
 }
 

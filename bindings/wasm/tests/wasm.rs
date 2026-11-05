@@ -41,6 +41,8 @@ const FM_STEREO_TRANSMITTER: &str =
 const RESAMPLE_AUDIO: &str = include_str!("../../../examples/flows/resample_audio.json");
 const SPECTRUM_ONLY: &str = include_str!("../../../examples/flows/spectrum_only.json");
 const FRAME_LOOP: &str = include_str!("../../../examples/flows/frame_loop.json");
+const GFSK_RECEIVER: &str = include_str!("../../../examples/flows/gfsk_receiver.json");
+const GFSK_TRANSMITTER: &str = include_str!("../../../examples/flows/gfsk_transmitter.json");
 
 fn get(value: &JsValue, key: &str) -> JsValue {
     Reflect::get(value, &JsValue::from_str(key)).unwrap()
@@ -150,6 +152,8 @@ fn every_example_flow_validates_clean() {
         ("resample_audio", RESAMPLE_AUDIO),
         ("spectrum_only", SPECTRUM_ONLY),
         ("frame_loop", FRAME_LOOP),
+        ("gfsk_receiver", GFSK_RECEIVER),
+        ("gfsk_transmitter", GFSK_TRANSMITTER),
     ] {
         let report = validate(flow).unwrap();
         assert_eq!(array_len(&report, "errors"), 0, "{name}");

@@ -11,24 +11,25 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
-    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
-    Block, BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock,
-    ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock,
-    DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
-    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig,
-    FrameEncodeBlock, FrameEncodeConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
-    HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock, InterpolateConfig,
-    InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock,
-    NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
-    RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
-    RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
-    ToComplexBlock,
+    AddBlock, AddRealBlock, AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig,
+    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
+    BiquadRealBlock, Block, BlockDescription, BlockSample, ConvertBlock, ConvertConfig,
+    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig,
+    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
+    DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig,
+    DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock,
+    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
+    FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
+    InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
+    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
+    NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock,
+    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SliceBlock, SliceConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock,
+    StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3067,5 +3068,151 @@ impl Kind for SliceKind {
                 cfg, rate, st,
             )?)))
         }
+    }
+}
+
+// -------------------------------------------------------------------- fsk_mod
+
+pub(crate) struct FskModKind;
+
+impl Kind for FskModKind {
+    type Cfg = FskModConfig;
+
+    const KIND: &'static str = "fsk_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate_real", "fm_mod"]
+    }
+    fn default_cfg() -> FskModConfig {
+        FskModConfig::default()
+    }
+    fn set(cfg: &mut FskModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FskModConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("fsk_mod needs f32 soft bits"));
+        }
+        let block = FskModBlock::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: FskModBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: FskModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The level map, the pulse filter and the oscillator (the formula of M39 §2).
+            cost: 8.0 + (cfg.span * cfg.samples_per_symbol) as f64,
+            taps: block.taps().len(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &FskModConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(FskModBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// ------------------------------------------------------------------ fsk_demod
+
+pub(crate) struct FskDemodKind;
+
+impl Kind for FskDemodKind {
+    type Cfg = FskDemodConfig;
+
+    const KIND: &'static str = "fsk_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["quad_demod", "resample_real", "symbol_sync"]
+    }
+    fn default_cfg() -> FskDemodConfig {
+        FskDemodConfig::default()
+    }
+    fn set(cfg: &mut FskDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FskDemodConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("fsk_demod needs c32 samples"));
+        }
+        // Fewer than 4 samples per symbol is `OutOfRange` of `symbol_rate_hz`, which the
+        // factory reports as `rate_unsupported`.
+        let sps = cfg.sps(rate)?;
+        let block = FskDemodBlock::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: FskDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: FskDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // Discriminator, boxcar and the timing loop (the formula of M39 §3).
+            cost: 12.0 + sps.round() + 24.0 / sps,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &FskDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(FskDemodBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------------ afc
+
+pub(crate) struct AfcKind;
+
+impl Kind for AfcKind {
+    type Cfg = AfcConfig;
+
+    const KIND: &'static str = "afc";
+    fn kernels() -> &'static [&'static str] {
+        &["rotate", "quad_demod"]
+    }
+    fn default_cfg() -> AfcConfig {
+        AfcConfig::default()
+    }
+    fn set(cfg: &mut AfcConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &AfcConfig, input: PortType, rate: Rate, _p: Precision) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("afc needs c32 samples"));
+        }
+        Ok(Figures {
+            rate_out: AfcBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: AfcBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // Rotation, discriminator and the sum (the figure of M39 §4).
+            cost: 20.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &AfcConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(AfcBlock::new(cfg, rate, st)?)))
     }
 }

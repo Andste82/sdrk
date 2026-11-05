@@ -10,14 +10,14 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind,
+    AddKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind,
     ConvertOutKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind,
     Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind, FrameDecodeKind,
-    FrameEncodeKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind,
-    MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, PreemphLimitKind, QuadDemodKind,
-    RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SliceKind, SpectrumKind,
-    SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, SymbolSyncKind,
-    ToComplexKind,
+    FrameEncodeKind, FskDemodKind, FskModKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind,
+    Kind, MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, PreemphLimitKind,
+    QuadDemodKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SliceKind,
+    SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind,
+    SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -204,7 +204,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 45);
+/// assert_eq!(registry.descriptions().count(), 48);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -277,6 +277,9 @@ impl Registry {
         register::<FrameDecodeKind>(&mut factories);
         register::<SymbolSyncKind>(&mut factories);
         register::<SliceKind>(&mut factories);
+        register::<FskModKind>(&mut factories);
+        register::<FskDemodKind>(&mut factories);
+        register::<AfcKind>(&mut factories);
         Self { factories }
     }
 

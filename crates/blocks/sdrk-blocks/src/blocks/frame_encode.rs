@@ -5,9 +5,9 @@ use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::Packet;
-use sdrk_proto::frame::{MAX_PAYLOAD, encode_bytes, frame_bits};
+use sdrk_proto::frame::{MAX_PAYLOAD, Whitening, encode_bytes, frame_bits};
 
-use super::{check_count, unknown};
+use super::{WHITENING_OPTIONS, check_count, unknown, whitening_choice, whitening_from_choice};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
@@ -68,8 +68,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the alternating bits of 0x55 (idle preamble). It is a source: the output rate is the \
         rate_hz of the packet input of the pipeline, and in push mode the block only produces \
         the samples of the packets it has. A packet is consumed when its last sample is \
-        written. Pitfall: payloads above 253 bytes do not fit the length byte and are \
-        rejected with an error.",
+        written. With whitening pn9 the length byte, the payload and the CRC are XORed with \
+        the PN9 sequence (x^9 + x^5 + 1, seed 0x1FF) of sdrk_proto::whiten; the receiver must \
+        use the same setting. Pitfall: payloads above 253 bytes do not fit the length byte \
+        and are rejected with an error.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::Packets],
@@ -105,6 +107,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             description: "What is sent between frames: zero sends 0.0, preamble the bits of \
                 0x55 as +1/-1.",
         },
+        ParamDesc {
+            name: "whitening",
+            unit: Unit::None,
+            kind: ParamKind::Choice {
+                options: WHITENING_OPTIONS,
+                default: 0,
+            },
+            typical: "none; pn9 for links whose data has long runs of equal bits",
+            mutability: Mutability::Build,
+            description: "Whitening of length, payload and CRC: none, or pn9 (XOR with the PN9 \
+                sequence).",
+        },
     ],
     required: &[],
 };
@@ -139,6 +153,8 @@ pub struct FrameEncodeConfig {
     pub preamble_bytes: usize,
     /// The signal between frames.
     pub idle: FrameIdle,
+    /// The whitening of length, payload and CRC.
+    pub whitening: Whitening,
 }
 
 impl Default for FrameEncodeConfig {
@@ -146,6 +162,7 @@ impl Default for FrameEncodeConfig {
         Self {
             preamble_bytes: 4,
             idle: FrameIdle::Zero,
+            whitening: Whitening::None,
         }
     }
 }
@@ -174,6 +191,7 @@ impl FrameEncodeConfig {
                     _ => FrameIdle::Preamble,
                 }
             }
+            "whitening" => self.whitening = whitening_from_choice(value.as_choice()?),
             _ => return unknown(),
         }
         Ok(())
@@ -190,6 +208,7 @@ impl FrameEncodeConfig {
                 FrameIdle::Zero => 0,
                 FrameIdle::Preamble => 1,
             })),
+            "whitening" => Ok(ParamValue::Choice(whitening_choice(self.whitening))),
             _ => unknown(),
         }
     }
@@ -300,7 +319,12 @@ impl<S: Storage> FrameEncodeBlock<S> {
 
     /// Starts the frame of `packet`.
     fn start(&mut self, packet: &Packet) -> Result<()> {
-        let bytes = encode_bytes(packet, self.config.preamble_bytes, &mut self.frame)?;
+        let bytes = encode_bytes(
+            packet,
+            self.config.preamble_bytes,
+            self.config.whitening,
+            &mut self.frame,
+        )?;
         self.frame_len = bytes * 8;
         self.pos = 0;
         Ok(())

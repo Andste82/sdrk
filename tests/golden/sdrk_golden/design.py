@@ -147,3 +147,28 @@ def halfband_taps(n, beta):
         h[m - 2 * i] = 0.0
         h[m + 2 * i] = 0.0
     return h / np.sum(h)
+
+
+# Gaussian pulse of GFSK and GMSK (M39): ``sdrk_blocks::design::gaussian``.
+
+
+def gaussian(bt, sps, span):
+    """Taps ``exp(-(2 pi^2 bt^2 / ln 2) (t/T)^2)``, ``t/T = (n - (N - 1) / 2) / sps``,
+    ``N = span sps + 1``, normalised to sum 1 (float64).
+
+    The arithmetic follows ``Gaussian`` of the Rust design module one operation at a time
+    (``a = 2 pi pi bt bt / ln 2`` from the left, ``exp(-(a (x x)))`` per tap with ``math.exp``,
+    the unscaled taps summed in ascending order, every tap divided by the sum), so the result
+    does not depend on the SIMD code of NumPy's ``exp`` and ``sum`` on the host CPU."""
+    assert 0.2 <= bt <= 1.0 and sps >= 2 and 2 <= span <= 8
+    n = span * sps + 1
+    a = 2.0 * math.pi * math.pi * bt * bt / math.log(2.0)
+    mid = (n - 1) / 2.0
+    raw = []
+    for i in range(n):
+        x = (i - mid) / sps
+        raw.append(math.exp(-(a * (x * x))))
+    total = 0.0
+    for v in raw:
+        total += v
+    return np.array([v / total for v in raw], dtype=np.float64)

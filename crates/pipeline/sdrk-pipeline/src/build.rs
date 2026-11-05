@@ -464,12 +464,14 @@ fn assemble(
         .collect();
     let stats = plan_nodes
         .iter()
-        .map(|n| NodeStats {
+        .zip(&nodes)
+        .map(|(n, rt)| NodeStats {
             name: n.name.clone(),
             calls: 0,
             samples_in: 0,
             samples_out: 0,
             frames: 0,
+            readings: (0..).map_while(|i| rt.node.reading(i)).collect(),
         })
         .collect();
     report.memory_bytes = memory;

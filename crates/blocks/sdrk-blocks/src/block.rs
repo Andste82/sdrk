@@ -199,6 +199,24 @@ pub trait Block: Send {
     fn consumed_packets(&self) -> usize {
         0
     }
+
+    /// The reading `index` of the block, a measured value with its name (for example the
+    /// carrier offset `offset_hz` of `afc`), or `None` past the last one. Readings are numbered
+    /// from 0 without gaps; their number and names never change. The pipeline copies them
+    /// into its statistics after every call. The default has none.
+    ///
+    /// ```
+    /// use sdrk::{Rate, C32};
+    /// use sdrk_blocks::{ArenaStorage, Block, ScaleBlock, ScaleConfig};
+    /// let mut arena = ArenaStorage::new(&mut []);
+    /// let block = ScaleBlock::<C32, _>::new(&ScaleConfig::default(), Rate::hz(1000)?, &mut arena)?;
+    /// assert_eq!(block.reading(0), None);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        let _ = index;
+        None
+    }
 }
 
 /// Metadata of a completed frame.

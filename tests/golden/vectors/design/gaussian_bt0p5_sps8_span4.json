@@ -1,0 +1,31 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "gaussian_bt0p5_sps8_span4.expected.bin",
+      "len": 33
+    }
+  },
+  "case": "gaussian_bt0p5_sps8_span4",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "exp(-(2 pi^2 bt^2 / ln 2) (t/T)^2) with t/T = (n - (N - 1) / 2) / sps, N = span sps + 1, normalised to sum 1; float64",
+  "params": {
+    "bt": 0.5,
+    "num_taps": 33,
+    "span": 4,
+    "sps": 8
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-12,
+    "skip": 0
+  }
+}

@@ -18,6 +18,7 @@ from . import (  # noqa: F401
     fir_decimate,
     fir_interpolate,
     fm_mod,
+    fsk,
     halfband,
     io,
     mag,

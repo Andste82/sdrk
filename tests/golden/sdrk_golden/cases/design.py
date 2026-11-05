@@ -213,3 +213,18 @@ for _tau_us, _fs, _tag in (
     (50, 240000, "50us_240k"),
 ):
     _register_preemphasis(_tau_us, _fs, _tag)
+
+
+# Gaussian pulse of GFSK and GMSK (M39 §1)
+
+
+@case(kernel="design", name="gaussian_bt0p5_sps8_span4", seed=0)
+def _gaussian_bt0p5_sps8_span4(rng):
+    bt, sps, span = 0.5, 8, 4
+    return dict(
+        params={"bt": bt, "sps": sps, "span": span, "num_taps": span * sps + 1},
+        arrays={"expected": Array("f64", sdrk_design.gaussian(bt, sps, span))},
+        tolerance={"class": "max_abs_err", "max_abs_err": 1e-12, "skip": 0},
+        notes="exp(-(2 pi^2 bt^2 / ln 2) (t/T)^2) with t/T = (n - (N - 1) / 2) / sps, "
+        "N = span sps + 1, normalised to sum 1; float64",
+    )

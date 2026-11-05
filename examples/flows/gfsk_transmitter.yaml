@@ -1,0 +1,57 @@
+# SDRk pipeline: send packets as GFSK, in pull mode (YAML twin of gfsk_transmitter.json). The
+# caller asks for bytes with Pipeline::pull; the packets are supplied on demand. Use it with the
+# gfsk_receiver flow.
+sdrk: 1
+name: gfsk-transmitter
+description: "Frame packets with the PN9-whitened test framing and send them as GFSK at 50 kbit/s (deviation 25 kHz, BT 0.5) on a 1 MS/s signed 8-bit baseband, in pull mode."
+# f32 pipeline (the FSK kinds have no Q15 variant); at most 4096 packets per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # A packet input has no samples of its own: its rate_hz is the rate of the bit stream the
+  # encoder makes from it, here 50 kbit/s.
+  msg:
+    type: packets
+    rate_hz: 50000
+    description: "Packets to send, up to 253 bytes each"
+nodes:
+  # Digital up converter: x5 to 1 MS/s with the default image filter (cutoff 80 kHz). Set
+  # frequency_hz to move the carrier away from the centre.
+  duc:
+    kind: duc
+    params:
+      interpolation: 5
+  # Encoder of the test framing: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, then
+  # length, payload and CRC-16 combined with the PN9 sequence (whitening keeps long runs of
+  # equal bits out of the signal, which would move the receiver's AFC and timing loop). In
+  # pull mode the gaps between packets are filled with the bits of 0x55 (idle preamble): a
+  # signal whose mean frequency is the carrier and whose transitions keep the receiver's timing
+  # loop locked. idle zero would send 0.0, which the modulator sends as a constant -25 kHz.
+  enc:
+    kind: frame_encode
+    params:
+      idle: preamble
+      whitening: pn9
+  # GFSK modulator: 4 samples per bit (200 kHz), a Gaussian pulse with BT 0.5 over 4 bits (the
+  # default span) and 25 kHz deviation, the modulation index 1 at 50 kbit/s. bt 0 sends plain
+  # FSK; deviation_hz 12500 with bt 0.5 is GMSK. deviation_hz can be changed while the flow
+  # runs (set_param).
+  mod:
+    kind: fsk_mod
+    params:
+      bt: 0.5
+      deviation_hz: 25000
+      samples_per_symbol: 4
+# Encoder, modulator, up converter.
+edges:
+  - { from: msg, to: enc }
+  - { from: enc, to: mod }
+  - { from: mod, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ at 1 MS/s; the encoder never runs dry (idle preamble), so no underrun.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

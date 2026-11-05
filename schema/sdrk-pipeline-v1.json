@@ -704,6 +704,69 @@
           },
           {
             "additionalProperties": false,
+            "description": "Automatic frequency control: measures the carrier offset of a signal and shifts it to 0 Hz.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "afc"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "carrier_hz": {
+                    "default": 0.0,
+                    "description": "RF frequency of the carrier in Hz, only for the reading offset_ppm. Unit: Hz. Typical: 868e6; 0 when the RF frequency is not known. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "hold": {
+                    "default": false,
+                    "description": "Freezes the estimate (the signal is still shifted by it). Typical: false; true while a packet is received. Runtime.",
+                    "type": "boolean"
+                  },
+                  "max_offset_hz": {
+                    "description": "Largest offset the estimate may reach in Hz, below half the sample rate. Required. Unit: Hz. Typical: 20000 for 20 ppm at 868 MHz. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "time_constant_s": {
+                    "default": 0.5,
+                    "description": "Time constant of the loop in seconds. Unit: s. Typical: 0.5; 0.05 for fast acquisition. Build-time.",
+                    "maximum": 1000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "max_offset_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Automatic gain control: scales a complex signal to a constant output amplitude.",
             "properties": {
               "align": {
@@ -1834,6 +1897,15 @@
                     "maximum": 4,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "whitening": {
+                    "default": "none",
+                    "description": "Whitening the sender applied to length, payload and CRC: none, or pn9 (the PN9 sequence is removed). Typical: none; pn9 for links whose data has long runs of equal bits. Build-time.",
+                    "enum": [
+                      "none",
+                      "pn9"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -1884,6 +1956,15 @@
                     "maximum": 32,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "whitening": {
+                    "default": "none",
+                    "description": "Whitening of length, payload and CRC: none, or pn9 (XOR with the PN9 sequence). Typical: none; pn9 for links whose data has long runs of equal bits. Build-time.",
+                    "enum": [
+                      "none",
+                      "pn9"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -1891,6 +1972,143 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates 2-FSK or 4-FSK (also GFSK and GMSK) to soft bits without a carrier lock.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "fsk_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "deviation_hz": {
+                    "description": "Frequency of the outer levels in Hz; at most half the sample rate. Required. Unit: Hz. Typical: the deviation of the transmitter (its outer frequencies). Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "levels": {
+                    "default": 2,
+                    "description": "Number of frequencies: 2 (one bit per symbol) or 4 (two bits). Typical: 2; 4 for M17 and DMR. Build-time.",
+                    "maximum": 4,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "loop_bw": {
+                    "default": 0.01,
+                    "description": "Bandwidth of the timing loop normalized to the symbol rate. Typical: 0.01; 0.005 for weak signals, 0.02 for fast acquisition. Build-time.",
+                    "maximum": 0.1,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "symbol_rate_hz": {
+                    "description": "Nominal symbol rate in Hz, rounded to 1/1000 Hz; the sample rate divided by it must lie between 4 and 1024. Required. Unit: Hz. Typical: 50000 for a GFSK packet link, 4800 for M17. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "symbol_rate_hz",
+                  "deviation_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Modulates soft bits to 2-FSK or 4-FSK, with an optional Gaussian pulse for GFSK and GMSK.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "fsk_mod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "bt": {
+                    "default": 0.0,
+                    "description": "Bandwidth-time product of the Gaussian pulse: 0 (no Gaussian, rectangular frequency steps) or 0.2 to 1. Typical: 0 for FSK, 0.5 for GFSK and GMSK, 0.3 for GSM. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "deviation_hz": {
+                    "description": "Frequency of the level +1 in Hz; at most half the output rate. Required. Unit: Hz. Typical: symbol rate / 2 for 2-FSK with h = 1, symbol rate / 4 for GMSK. Runtime.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "levels": {
+                    "default": 2,
+                    "description": "Number of frequencies: 2 (one bit per symbol) or 4 (two bits). Typical: 2; 4 for M17 and DMR. Build-time.",
+                    "maximum": 4,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "samples_per_symbol": {
+                    "description": "Output samples per symbol, 2 to 64. Required. Typical: 8; 4 before a duc. Build-time.",
+                    "maximum": 64,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "span": {
+                    "default": 4,
+                    "description": "Length of the Gaussian in symbols, 2 to 8 (not used with bt 0). Typical: 4. Build-time.",
+                    "maximum": 8,
+                    "minimum": 2,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "samples_per_symbol",
+                  "deviation_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
             ],
             "type": "object"
           },
@@ -2654,11 +2872,12 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit) or qpsk (C32, 2 bits, re then im). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK. Build-time.",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im) or fsk4 (f32, 2 bits, -v then |v| - 2/3). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK. Build-time.",
                     "enum": [
                       "real",
                       "bpsk",
-                      "qpsk"
+                      "qpsk",
+                      "fsk4"
                     ],
                     "type": "string"
                   },

@@ -50,6 +50,7 @@ mod storage;
 
 pub use block::{Block, BlockTiming, FrameMeta, ParamValue};
 pub use blocks::add::{AddBlock, AddRealBlock};
+pub use blocks::afc::{AFC_PIECE, AfcBlock, AfcConfig};
 pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::am_mod::{AmModBlock, AmModConfig};
@@ -70,6 +71,10 @@ pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmS
 pub use blocks::fm_stereo_mod::{FmStereoModBlock, FmStereoModConfig};
 pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig};
 pub use blocks::frame_encode::{FrameEncodeBlock, FrameEncodeConfig, FrameIdle};
+pub use blocks::fsk_demod::{
+    FSK_DEMOD_CHUNK, FskDemodBlock, FskDemodConfig, TED_GAIN_2FSK, TED_GAIN_4FSK,
+};
+pub use blocks::fsk_mod::{FSK_MOD_CHUNK, FskModBlock, FskModConfig};
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
@@ -110,5 +115,6 @@ pub use param_map::ParamMap;
 pub use ports::{ChainEnd, ChainItem, Clocked, Frame, FrameOut, Packets, Ports, StreamElem, Two};
 pub use sample::{BlockReal, BlockSample, TunedElem};
 pub use sdrk_core::kernels::symbol_sync::Ted;
+pub use sdrk_proto::frame::Whitening;
 pub use sdrk_proto::{Packet, PacketFlags};
 pub use storage::{ARENA_ALIGN, AlignedBytes, ArenaStorage, Storage};

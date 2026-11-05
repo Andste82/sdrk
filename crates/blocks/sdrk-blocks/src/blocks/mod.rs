@@ -1,6 +1,7 @@
 //! The blocks.
 
 pub mod add;
+pub mod afc;
 pub mod agc;
 pub mod am_demod;
 pub mod am_mod;
@@ -21,6 +22,8 @@ pub mod fm_stereo_demod;
 pub mod fm_stereo_mod;
 pub mod frame_decode;
 pub mod frame_encode;
+pub mod fsk_demod;
+pub mod fsk_mod;
 pub mod halfband_decimate;
 pub mod imag_part;
 pub mod interpolate;
@@ -151,4 +154,24 @@ pub(crate) fn check_count(name: &'static str, value: usize, min: usize, max: usi
 /// Unknown parameter name.
 pub(crate) fn unknown<T>() -> Result<T> {
     Err(Error::UnknownParameter)
+}
+
+/// The names of the `whitening` choice of `frame_encode` and `frame_decode`, in index order.
+pub(crate) const WHITENING_OPTIONS: &[&str] = &["none", "pn9"];
+
+/// The `whitening` choice index of a [`sdrk_proto::frame::Whitening`].
+pub(crate) fn whitening_choice(w: sdrk_proto::frame::Whitening) -> u16 {
+    match w {
+        sdrk_proto::frame::Whitening::Pn9 => 1,
+        _ => 0,
+    }
+}
+
+/// The [`sdrk_proto::frame::Whitening`] of a `whitening` choice index (checked against
+/// [`WHITENING_OPTIONS`] before).
+pub(crate) fn whitening_from_choice(index: u16) -> sdrk_proto::frame::Whitening {
+    match index {
+        1 => sdrk_proto::frame::Whitening::Pn9,
+        _ => sdrk_proto::frame::Whitening::None,
+    }
 }

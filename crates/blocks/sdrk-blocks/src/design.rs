@@ -371,6 +371,131 @@ impl HalfbandDesign {
     }
 }
 
+/// Smallest and largest `bt` of [`gaussian`].
+const GAUSSIAN_BT: (f64, f64) = (0.2, 1.0);
+
+/// Smallest and largest `span` (in symbols) of [`gaussian`].
+const GAUSSIAN_SPAN: (usize, usize) = (2, 8);
+
+/// The Gaussian pulse of [`gaussian`], one tap at a time (so a block needs no `f64` buffer).
+/// `tap(n)` equals `gaussian(bt, sps, span, ..)[n]` bit for bit.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Gaussian {
+    /// `2 pi^2 bt^2 / ln 2`.
+    a: f64,
+    /// Samples per symbol.
+    sps: f64,
+    /// `(len - 1) / 2`.
+    mid: f64,
+    /// Number of taps, `span sps + 1`.
+    n: usize,
+    /// Sum of the unscaled taps.
+    sum: f64,
+}
+
+impl Gaussian {
+    /// Validates the parameters and computes the normalisation sum.
+    pub(crate) fn new(bt: f64, sps: usize, span: usize) -> Result<Self> {
+        let (bt_min, bt_max) = GAUSSIAN_BT;
+        if !(bt.is_finite() && (bt_min..=bt_max).contains(&bt)) {
+            return Err(Error::OutOfRange {
+                name: "bt",
+                min: bt_min,
+                max: bt_max,
+                got: bt,
+            });
+        }
+        let (span_min, span_max) = GAUSSIAN_SPAN;
+        if !(span_min..=span_max).contains(&span) {
+            return Err(Error::OutOfRange {
+                name: "span",
+                min: span_min as f64,
+                max: span_max as f64,
+                got: span as f64,
+            });
+        }
+        let sps_max = (TAP_LIMIT - 1) / span;
+        if !(2..=sps_max).contains(&sps) {
+            return Err(Error::OutOfRange {
+                name: "sps",
+                min: 2.0,
+                max: sps_max as f64,
+                got: sps as f64,
+            });
+        }
+        // `span sps <= TAP_LIMIT - 1`, so neither operation overflows.
+        let n = span * sps + 1;
+        let mut g = Self {
+            a: 2.0 * PI * PI * bt * bt / core::f64::consts::LN_2,
+            sps: sps as f64,
+            mid: (n - 1) as f64 / 2.0,
+            n,
+            sum: 1.0,
+        };
+        let mut sum = 0.0f64;
+        for i in 0..n {
+            sum += g.raw(i);
+        }
+        // The centre region is close to 1 for every valid `bt`, so the sum is at least 1.
+        g.sum = sum;
+        Ok(g)
+    }
+
+    /// Number of taps, `span sps + 1`.
+    pub(crate) fn len(&self) -> usize {
+        self.n
+    }
+
+    /// Unscaled tap `exp(-a (t/T)^2)` with `t/T = (i - mid) / sps`.
+    fn raw(&self, i: usize) -> f64 {
+        let x = (i as f64 - self.mid) / self.sps;
+        libm::exp(-(self.a * (x * x)))
+    }
+
+    /// Tap `i`, normalised so that the taps sum to 1.
+    pub(crate) fn tap(&self, i: usize) -> f64 {
+        self.raw(i) / self.sum
+    }
+}
+
+/// Gaussian pulse-shaping filter of GFSK and GMSK, normalised to sum 1.
+///
+/// With `N = span sps + 1` taps (`taps.len()` must be `N`), the symbol period `T`,
+/// `t/T = (n - (N - 1) / 2) / sps` and the bandwidth-time product `bt`:
+///
+/// ```text
+/// h[n] = exp(-(2 pi^2 bt^2 / ln 2) (t/T)^2),   then h = h / sum h
+/// ```
+///
+/// `bt` is 0.2 to 1 (0.5 with a modulation index of 0.5 is GMSK), `sps` (samples per symbol)
+/// at least 2, `span` (the length in symbols) 2 to 8. The filter is symmetric up to rounding;
+/// its peak is at the centre. Computed in `f64`, equal to the Python formula of the golden case
+/// `design/gaussian_bt0p5_sps8_span4` within 1e-12.
+///
+/// ```
+/// use sdrk_blocks::design::gaussian;
+/// let mut h = [0.0f64; 4 * 8 + 1];
+/// gaussian(0.5, 8, 4, &mut h)?;
+/// assert!((h.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// assert!(h[16] > h[15] && (h[15] - h[17]).abs() < 1e-15); // peak at the centre
+/// assert!(gaussian(0.1, 8, 4, &mut h).is_err()); // bt below 0.2
+/// assert!(gaussian(0.5, 8, 4, &mut [0.0; 32]).is_err()); // wrong length
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+///
+/// # Errors
+/// `OutOfRange` for `bt` outside 0.2 to 1 (NaN included), `sps` below 2 (or so large that
+/// the filter exceeds 2^24 taps) or `span` outside 2 to 8; `Core(LengthMismatch)` if
+/// `taps.len()` is not `span sps + 1`.
+pub fn gaussian(bt: f64, sps: usize, span: usize, taps: &mut [f64]) -> Result<()> {
+    let g = Gaussian::new(bt, sps, span)?;
+    check_len(g.len(), taps.len())?;
+    for (i, t) in taps.iter_mut().enumerate() {
+        *t = g.tap(i);
+    }
+    Ok(())
+}
+
 /// Converts taps to `f32`.
 ///
 /// ```

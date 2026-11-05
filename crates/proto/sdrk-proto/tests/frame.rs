@@ -11,7 +11,7 @@
 )]
 
 use sdrk_proto::frame::{
-    self, Decoder, FrameBits, MAX_PAYLOAD, MAX_SYNC_ERRORS, PREAMBLE_BYTE, SYNC_WORD,
+    self, Decoder, FrameBits, MAX_PAYLOAD, MAX_SYNC_ERRORS, PREAMBLE_BYTE, SYNC_WORD, Whitening,
 };
 use sdrk_proto::{Error, Packet, PacketFlags};
 use sdrk_testkit::Pcg32;
@@ -27,7 +27,7 @@ fn bytes(rng: &mut Pcg32, n: usize) -> Vec<u8> {
 fn encode(payload: &[u8], preamble: usize) -> Vec<u8> {
     let p = Packet::new(0, PacketFlags::NONE, payload).unwrap();
     let mut out = vec![0u8; frame::frame_bits(payload.len(), preamble)];
-    let n = frame::encode(&p, preamble, &mut out).unwrap();
+    let n = frame::encode(&p, preamble, Whitening::None, &mut out).unwrap();
     assert_eq!(n, out.len());
     out
 }
@@ -62,7 +62,7 @@ fn layout_of_a_frame() {
 #[test]
 fn round_trip_every_length() {
     let mut rng = Pcg32::new(SEED, 1);
-    let mut dec = Decoder::new(0, false).unwrap();
+    let mut dec = Decoder::new(0, false, Whitening::None).unwrap();
     for len in 0..=MAX_PAYLOAD {
         let payload = bytes(&mut rng, len);
         let bits = encode(&payload, 4);
@@ -90,7 +90,11 @@ fn back_to_back_frames_without_preamble() {
         starts.push(stream.len() as u64);
         stream.extend(encode(p, 0));
     }
-    let got = decode(&mut Decoder::new(0, false).unwrap(), &stream, 0);
+    let got = decode(
+        &mut Decoder::new(0, false, Whitening::None).unwrap(),
+        &stream,
+        0,
+    );
     assert_eq!(got.len(), payloads.len());
     for ((g, p), s) in got.iter().zip(&payloads).zip(&starts) {
         assert_eq!(g.data(), p.as_slice());
@@ -109,7 +113,11 @@ fn finds_a_frame_after_arbitrary_leading_bits() {
         let preamble = rng.below(5) as usize;
         let mut stream = leading;
         stream.extend(encode(&payload, preamble));
-        let got = decode(&mut Decoder::new(0, false).unwrap(), &stream, 7);
+        let got = decode(
+            &mut Decoder::new(0, false, Whitening::None).unwrap(),
+            &stream,
+            7,
+        );
         assert_eq!(got.len(), 1, "trial {trial}");
         assert_eq!(got[0].data(), payload.as_slice(), "trial {trial}");
         assert_eq!(
@@ -141,7 +149,11 @@ fn accepts_up_to_max_sync_errors() {
                 for p in &pos {
                     bits[sync_start + p] ^= 1;
                 }
-                let got = decode(&mut Decoder::new(max, false).unwrap(), &bits, 0);
+                let got = decode(
+                    &mut Decoder::new(max, false, Whitening::None).unwrap(),
+                    &bits,
+                    0,
+                );
                 if errors <= max {
                     assert_eq!(got.len(), 1, "max {max}, errors {pos:?}");
                     assert_eq!(got[0].data(), payload.as_slice());
@@ -154,7 +166,7 @@ fn accepts_up_to_max_sync_errors() {
         }
     }
     assert!(matches!(
-        Decoder::new(MAX_SYNC_ERRORS + 1, false),
+        Decoder::new(MAX_SYNC_ERRORS + 1, false, Whitening::None),
         Err(Error::InvalidArgument(_))
     ));
 }
@@ -166,15 +178,30 @@ fn bad_crc_is_delivered_only_with_emit_bad() {
     // Flip the last bit of the CRC.
     let last = bits.len() - 1;
     bits[last] ^= 1;
-    assert_eq!(decode(&mut Decoder::new(0, false).unwrap(), &bits, 0), NONE);
-    let got = decode(&mut Decoder::new(0, true).unwrap(), &bits, 0);
+    assert_eq!(
+        decode(
+            &mut Decoder::new(0, false, Whitening::None).unwrap(),
+            &bits,
+            0
+        ),
+        NONE
+    );
+    let got = decode(
+        &mut Decoder::new(0, true, Whitening::None).unwrap(),
+        &bits,
+        0,
+    );
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].flags, PacketFlags::CRC_FAIL);
     assert_eq!(got[0].data(), payload.as_slice());
     // A payload bit error: the payload is returned as received.
     let mut bits = encode(&payload, 4);
     bits[32 + 32 + 8] ^= 1;
-    let got = decode(&mut Decoder::new(0, true).unwrap(), &bits, 0);
+    let got = decode(
+        &mut Decoder::new(0, true, Whitening::None).unwrap(),
+        &bits,
+        0,
+    );
     assert_eq!(got[0].flags, PacketFlags::CRC_FAIL);
     assert_eq!(got[0].data()[0], payload[0] ^ 0x80);
 }
@@ -189,7 +216,7 @@ fn length_above_max_payload_ends_the_frame() {
     bits.extend((0..8).map(|i| (254u8 >> (7 - i)) & 1));
     let start = bits.len() as u64;
     bits.extend(encode(b"next", 0));
-    let mut dec = Decoder::new(0, true).unwrap();
+    let mut dec = Decoder::new(0, true, Whitening::None).unwrap();
     let got = decode(&mut dec, &bits, 0);
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].data(), b"next");
@@ -199,7 +226,7 @@ fn length_above_max_payload_ends_the_frame() {
 #[test]
 fn reset_drops_a_partial_frame() {
     let bits = encode(b"abcdef", 4);
-    let mut dec = Decoder::new(0, false).unwrap();
+    let mut dec = Decoder::new(0, false, Whitening::None).unwrap();
     assert_eq!(decode(&mut dec, &bits[..bits.len() / 2], 0), NONE);
     assert!(!dec.is_hunting());
     dec.reset();
@@ -213,23 +240,23 @@ fn encode_errors() {
     let long = Packet::new(0, PacketFlags::NONE, &[0u8; MAX_PAYLOAD + 1]).unwrap();
     let mut out = vec![0u8; 4000];
     assert_eq!(
-        frame::encode(&long, 4, &mut out),
+        frame::encode(&long, 4, Whitening::None, &mut out),
         Err(Error::TooLong {
             len: MAX_PAYLOAD + 1,
             max: MAX_PAYLOAD
         })
     );
-    assert!(FrameBits::new(&long, 0).is_err());
+    assert!(FrameBits::new(&long, 0, Whitening::None).is_err());
     let p = Packet::new(0, PacketFlags::NONE, b"x").unwrap();
     let need = frame::frame_bits(1, 4);
     assert_eq!(
-        frame::encode(&p, 4, &mut out[..need - 1]),
+        frame::encode(&p, 4, Whitening::None, &mut out[..need - 1]),
         Err(Error::BufferTooSmall {
             needed: need,
             got: need - 1
         })
     );
-    assert!(FrameBits::new(&p, usize::MAX).is_err());
+    assert!(FrameBits::new(&p, usize::MAX, Whitening::None).is_err());
     assert_eq!(frame::frame_bits(1, usize::MAX), usize::MAX);
 }
 
@@ -239,7 +266,7 @@ fn frame_bits_resume_anywhere() {
     let payload = bytes(&mut rng, 100);
     let p = Packet::new(0, PacketFlags::NONE, &payload).unwrap();
     let whole = encode(&payload, 3);
-    let mut it = FrameBits::new(&p, 3).unwrap();
+    let mut it = FrameBits::new(&p, 3, Whitening::None).unwrap();
     assert_eq!(it.len(), whole.len());
     let mut got = Vec::new();
     while it.len() > 0 {
@@ -277,7 +304,14 @@ fn corrupted(
     // Random bits after the frame, so a length error that makes the frame longer is read to
     // its (wrong) end.
     bits.extend((0..2200).map(|_| (rng.next_u32() & 1) as u8));
-    (decode(&mut Decoder::new(0, true).unwrap(), &bits, 0), pos)
+    (
+        decode(
+            &mut Decoder::new(0, true, Whitening::None).unwrap(),
+            &bits,
+            0,
+        ),
+        pos,
+    )
 }
 
 #[test]
@@ -368,14 +402,18 @@ fn golden_frame_encode() {
         pos += len;
         starts.push((got.len() + pre * 8) as u64);
         let mut out = vec![0u8; frame::frame_bits(len, pre)];
-        frame::encode(&p, pre, &mut out).unwrap();
+        frame::encode(&p, pre, Whitening::None, &mut out).unwrap();
         got.extend(out);
         packets.push(p);
     }
     assert_eq!(pos, payload.len());
     assert_eq!(got, want, "frame bits differ from the golden model");
     // The decoder recovers every frame of the golden stream with its sync-word index.
-    let dec = decode(&mut Decoder::new(0, false).unwrap(), &want, 0);
+    let dec = decode(
+        &mut Decoder::new(0, false, Whitening::None).unwrap(),
+        &want,
+        0,
+    );
     assert_eq!(dec.len(), packets.len());
     for ((d, p), s) in dec.iter().zip(&packets).zip(&starts) {
         assert_eq!(d.data(), p.data());
@@ -393,7 +431,7 @@ fn encode_bytes_packs_the_bits_of_encode() {
             let p = Packet::new(0, PacketFlags::NONE, &payload).unwrap();
             let bits = encode(&payload, preamble);
             let mut packed = vec![0u8; bits.len() / 8 + 3];
-            let n = frame::encode_bytes(&p, preamble, &mut packed).unwrap();
+            let n = frame::encode_bytes(&p, preamble, Whitening::None, &mut packed).unwrap();
             assert_eq!(n * 8, bits.len());
             let unpacked: Vec<u8> = packed[..n]
                 .iter()
@@ -404,7 +442,7 @@ fn encode_bytes_packs_the_bits_of_encode() {
     }
     let p = Packet::new(0, PacketFlags::NONE, &[1, 2, 3]).unwrap();
     assert_eq!(
-        frame::encode_bytes(&p, 4, &mut [0u8; 13]),
+        frame::encode_bytes(&p, 4, Whitening::None, &mut [0u8; 13]),
         Err(Error::BufferTooSmall {
             needed: 14,
             got: 13
@@ -412,7 +450,7 @@ fn encode_bytes_packs_the_bits_of_encode() {
     );
     let long = Packet::new(0, PacketFlags::NONE, &[0; 254]).unwrap();
     assert!(matches!(
-        frame::encode_bytes(&long, 0, &mut [0u8; 512]),
+        frame::encode_bytes(&long, 0, Whitening::None, &mut [0u8; 512]),
         Err(Error::TooLong { .. })
     ));
 }

@@ -1,6 +1,7 @@
 //! Packet ports of M37: `Packets`, `Clocked<S, Packets>`, the timing kinds `Packets` and
 //! `Source`, and the blocks `frame_encode` and `frame_decode` (descriptions, exact storage,
-//! chunk invariance with 20 chunk plans, resumption, idle signals, errors).
+//! chunk invariance with 20 chunk plans, resumption, idle signals, errors), and the option
+//! `whitening` of M39.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -22,7 +23,7 @@ use sdrk_blocks::{
     FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FrameIdle, Packet, PacketFlags,
     Packets, ParamValue, PortType, Ports, all_descriptions,
 };
-use sdrk_proto::frame::{self, MAX_PAYLOAD};
+use sdrk_proto::frame::{self, MAX_PAYLOAD, Whitening};
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
 
 const SEED: u64 = 479;
@@ -65,7 +66,7 @@ fn random_packets(rng: &mut Pcg32, n: usize) -> Vec<Packet> {
 /// The frame of `p` as `±1.0` samples, from `sdrk_proto::frame::encode`.
 fn frame_samples(p: &Packet, preamble_bytes: usize) -> Vec<f32> {
     let mut bits = vec![0u8; frame::frame_bits(p.len(), preamble_bytes)];
-    frame::encode(p, preamble_bytes, &mut bits).unwrap();
+    frame::encode(p, preamble_bytes, Whitening::None, &mut bits).unwrap();
     bits.iter()
         .map(|&b| if b == 1 { 1.0 } else { -1.0 })
         .collect()
@@ -185,6 +186,18 @@ fn descriptions_name_packet_ports() {
     assert!(m.check(&ParamValue::I64(5)).is_err());
     let b = dec.param("emit_bad").unwrap();
     assert_eq!(b.default_value(), Some(ParamValue::Bool(false)));
+    // M39: `whitening` none / pn9 on both blocks.
+    for d in [enc, dec] {
+        let w = d.param("whitening").unwrap();
+        assert_eq!(w.default_value(), Some(ParamValue::Choice(0)));
+        assert!(matches!(
+            w.kind,
+            sdrk_blocks::ParamKind::Choice {
+                options: ["none", "pn9"],
+                ..
+            }
+        ));
+    }
     for p in enc.params.iter().chain(dec.params) {
         assert_eq!(p.mutability, sdrk_blocks::Mutability::Build, "{}", p.name);
     }
@@ -196,6 +209,7 @@ fn blocks_report_their_parameters_and_reject_changes() {
     let cfg = FrameEncodeConfig {
         preamble_bytes: 7,
         idle: FrameIdle::Preamble,
+        whitening: Whitening::None,
     };
     let mut enc = encoder(&cfg);
     assert_eq!(enc.description().kind, "frame_encode");
@@ -212,6 +226,7 @@ fn blocks_report_their_parameters_and_reject_changes() {
     let cfg = FrameDecodeConfig {
         max_sync_errors: 3,
         emit_bad: true,
+        whitening: Whitening::None,
     };
     let mut dec = decoder(&cfg);
     assert_eq!(dec.description().kind, "frame_decode");
@@ -474,6 +489,7 @@ fn decoder_is_chunk_invariant_with_20_plans() {
     let cfg = FrameDecodeConfig {
         max_sync_errors: 2,
         emit_bad: true,
+        whitening: Whitening::None,
     };
     let whole = run_decoder(&mut decoder(&cfg), &soft, None, None);
     // With 2 sync errors and emit_bad, noise may give extra CRC_FAIL packets; the sent
@@ -541,6 +557,7 @@ fn decoder_options_sync_errors_and_bad_frames() {
         &mut decoder(&FrameDecodeConfig {
             max_sync_errors: 2,
             emit_bad: false,
+            whitening: Whitening::None,
         }),
         &damaged,
         None,
@@ -565,6 +582,7 @@ fn decoder_options_sync_errors_and_bad_frames() {
         &mut decoder(&FrameDecodeConfig {
             max_sync_errors: 0,
             emit_bad: true,
+            whitening: Whitening::None,
         }),
         &bad,
         None,
@@ -584,6 +602,7 @@ fn encoder_to_decoder_loop() {
         let cfg = FrameEncodeConfig {
             preamble_bytes: 2,
             idle,
+            whitening: Whitening::None,
         };
         let mut enc = encoder(&cfg);
         let mut soft = Vec::new();
@@ -622,6 +641,85 @@ fn encoder_to_decoder_loop() {
         );
         assert_eq!(got, want, "{idle:?}");
     }
+}
+
+#[test]
+fn whitening_pn9_round_trip_through_the_blocks() {
+    // Every length 0 to 253 (fixed payload patterns), an all-zero payload among them.
+    let packets: Vec<Packet> = (0..=MAX_PAYLOAD)
+        .map(|len| {
+            let data: Vec<u8> = (0..len)
+                .map(|i| {
+                    if len == 64 {
+                        0
+                    } else {
+                        (i * 13 + len * 3) as u8
+                    }
+                })
+                .collect();
+            Packet::new(0, PacketFlags::NONE, &data).unwrap()
+        })
+        .collect();
+    let white = FrameEncodeConfig {
+        whitening: Whitening::Pn9,
+        ..FrameEncodeConfig::default()
+    };
+    let mut enc = encoder(&white);
+    assert_eq!(
+        enc.param("whitening").unwrap(),
+        ParamValue::Choice(1),
+        "the block reports its whitening"
+    );
+    let soft = run_encoder(&mut enc, &packets, None, Some(ChunkPlan::new(SEED, 900)));
+    // The samples are the frames of `sdrk_proto::frame::encode` with PN9.
+    let want: Vec<f32> = packets
+        .iter()
+        .flat_map(|p| {
+            let mut bits = vec![0u8; frame::frame_bits(p.len(), 4)];
+            frame::encode(p, 4, Whitening::Pn9, &mut bits).unwrap();
+            bits.into_iter()
+                .map(|b| if b == 1 { 1.0 } else { -1.0 })
+                .collect::<Vec<f32>>()
+        })
+        .collect();
+    assert_eq!(soft, want);
+    // `none` is unchanged: the frames of M37.
+    let plain = run_encoder(
+        &mut encoder(&FrameEncodeConfig::default()),
+        &packets,
+        None,
+        None,
+    );
+    let m37: Vec<f32> = packets.iter().flat_map(|p| frame_samples(p, 4)).collect();
+    assert_eq!(plain, m37);
+    assert_ne!(plain, soft);
+    // A decoder with PN9 recovers every packet, in pieces.
+    let dec_cfg = FrameDecodeConfig {
+        whitening: Whitening::Pn9,
+        ..FrameDecodeConfig::default()
+    };
+    let got = run_decoder(
+        &mut decoder(&dec_cfg),
+        &soft,
+        Some(ChunkPlan::new(SEED, 901)),
+        Some(ChunkPlan::new(SEED, 902)),
+    );
+    assert_eq!(got.len(), packets.len());
+    let mut start = 0usize;
+    for (g, p) in got.iter().zip(&packets) {
+        assert_eq!(g.data(), p.data());
+        assert_eq!(g.flags, PacketFlags::CRC_OK);
+        assert_eq!(g.index, (start + 32) as u64);
+        start += enc.frame_samples(p.len());
+    }
+    // Without whitening at the receiver nothing passes the CRC.
+    let none = run_decoder(
+        &mut decoder(&FrameDecodeConfig::default()),
+        &soft,
+        None,
+        None,
+    );
+    assert!(none.is_empty());
 }
 
 /// A tiny clocked encoder for the test of `Clocked`: per clock sample it outputs the next

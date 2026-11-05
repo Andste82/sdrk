@@ -31,21 +31,21 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
-    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
-    Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig,
-    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    AddBlock, AddRealBlock, AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig,
+    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
+    BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock,
+    ConvertOutConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
+    DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
     FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
-    FrameEncodeConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock,
-    Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind,
-    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock,
-    all_descriptions,
+    FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, ImagPartBlock,
+    InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
+    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock,
+    SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock,
+    StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -65,10 +65,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_forty_five_unique_kinds() {
+fn there_are_forty_eight_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 45);
-    assert_eq!(all_descriptions().len(), 45);
+    assert_eq!(kinds.len(), 48);
+    assert_eq!(all_descriptions().len(), 48);
     for kind in [
         "convert",
         "convert_out",
@@ -115,6 +115,9 @@ fn there_are_forty_five_unique_kinds() {
         "frame_decode",
         "symbol_sync",
         "slice",
+        "fsk_mod",
+        "fsk_demod",
+        "afc",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -324,6 +327,9 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("frame_decode", |n| FrameDecodeConfig::default().get(n), &[]);
     defaults_match("symbol_sync", |n| SymbolSyncConfig::default().get(n), &[]);
     defaults_match("slice", |n| SliceConfig::default().get(n), &[]);
+    defaults_match("fsk_mod", |n| FskModConfig::default().get(n), &[]);
+    defaults_match("fsk_demod", |n| FskDemodConfig::default().get(n), &[]);
+    defaults_match("afc", |n| AfcConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -421,6 +427,9 @@ fn configs_accept_every_described_parameter() {
     round_trip!("frame_decode", FrameDecodeConfig);
     round_trip!("symbol_sync", SymbolSyncConfig);
     round_trip!("slice", SliceConfig);
+    round_trip!("fsk_mod", FskModConfig);
+    round_trip!("fsk_demod", FskDemodConfig);
+    round_trip!("afc", AfcConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -681,6 +690,34 @@ fn blocks_accept_and_report_every_described_parameter() {
         "slice",
         &mut SliceBlock::<f32, _>::new(&real, r, &mut s).unwrap(),
     );
+    let fsk = FskModConfig {
+        samples_per_symbol: 4,
+        deviation_hz: 25_000.0,
+        bt: 0.5,
+        ..FskModConfig::default()
+    };
+    check_block_params(
+        "fsk_mod",
+        &mut FskModBlock::new(&fsk, rate(50_000), &mut s).unwrap(),
+    );
+    let fsk = FskDemodConfig {
+        levels: 4,
+        symbol_rate_hz: 50_000.0,
+        deviation_hz: 25_000.0,
+        ..FskDemodConfig::default()
+    };
+    check_block_params(
+        "fsk_demod",
+        &mut FskDemodBlock::new(&fsk, rate(200_000), &mut s).unwrap(),
+    );
+    let afc = AfcConfig {
+        max_offset_hz: 20_000.0,
+        ..AfcConfig::default()
+    };
+    check_block_params(
+        "afc",
+        &mut AfcBlock::new(&afc, rate(200_000), &mut s).unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -855,7 +892,7 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         slice.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["real", "bpsk", "qpsk"],
+            options: &["real", "bpsk", "qpsk", "fsk4"],
             default: 1
         }
     );
@@ -878,6 +915,78 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     let b =
         SliceBlock::<C32, _>::new(&SliceConfig::default(), rate(1000), &mut VecStorage).unwrap();
     assert!(std::ptr::eq(b.description(), slice));
+}
+
+/// The kinds of M39: `fsk_mod` turns `f32` soft bits into `c32` and changes only
+/// `deviation_hz` at run time; `fsk_demod` turns `c32` into `f32` soft bits, all its parameters
+/// are build parameters; `afc` keeps `c32`, its only runtime parameter is `hold`; the details
+/// name the level map, the chain and the SSB limitation.
+#[test]
+fn the_fsk_kinds_describe_their_ports_and_parameters() {
+    let names = |d: &BlockDescription| -> Vec<(&str, Mutability)> {
+        d.params.iter().map(|p| (p.name, p.mutability)).collect()
+    };
+    let m = find("fsk_mod");
+    assert_eq!(m.inputs[0].types, [PortType::F32]);
+    assert_eq!(m.outputs[0].types, [PortType::C32]);
+    assert_eq!(m.required, ["samples_per_symbol", "deviation_hz"]);
+    assert_eq!(
+        names(m),
+        [
+            ("levels", Mutability::Build),
+            ("samples_per_symbol", Mutability::Build),
+            ("deviation_hz", Mutability::Runtime),
+            ("bt", Mutability::Build),
+            ("span", Mutability::Build),
+        ]
+    );
+    for word in [
+        "01 -> +1",
+        "11 -> -1",
+        "fir_interpolate_real",
+        "fm_mod",
+        "GMSK",
+    ] {
+        assert!(m.details.contains(word), "fsk_mod details: {word}");
+    }
+    let d = find("fsk_demod");
+    assert_eq!(d.inputs[0].types, [PortType::C32]);
+    assert_eq!(d.outputs[0].types, [PortType::F32]);
+    assert_eq!(d.required, ["symbol_rate_hz", "deviation_hz"]);
+    assert_eq!(
+        names(d),
+        [
+            ("levels", Mutability::Build),
+            ("symbol_rate_hz", Mutability::Build),
+            ("deviation_hz", Mutability::Build),
+            ("loop_bw", Mutability::Build),
+        ]
+    );
+    for word in [
+        "quad_demod",
+        "symbol_sync",
+        "fsk4",
+        "frame_decode",
+        "4 times",
+    ] {
+        assert!(d.details.contains(word), "fsk_demod details: {word}");
+    }
+    let a = find("afc");
+    assert_eq!(a.inputs[0].types, [PortType::C32]);
+    assert_eq!(a.outputs[0].types, [PortType::C32]);
+    assert_eq!(a.required, ["max_offset_hz"]);
+    assert_eq!(
+        names(a),
+        [
+            ("time_constant_s", Mutability::Build),
+            ("max_offset_hz", Mutability::Build),
+            ("hold", Mutability::Runtime),
+            ("carrier_hz", Mutability::Build),
+        ]
+    );
+    for word in ["SSB", "offset_hz", "offset_ppm", "256", "hold"] {
+        assert!(a.details.contains(word), "afc details: {word}");
+    }
 }
 
 #[test]

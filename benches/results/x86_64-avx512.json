@@ -1429,6 +1429,98 @@
           "status": "release",
           "verdict": "pass"
         },
+        "crc16_ccitt_false": {
+          "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 6.88,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 6.88,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 10.2,
+          "ours_instr_per_sample": 6.88,
+          "ratio": 0.67,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "crc16_x25": {
+          "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 6.51,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 6.51,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 8.21,
+          "ours_instr_per_sample": 6.51,
+          "ratio": 0.79,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "crc24_adsb": {
+          "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 6.88,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 6.88,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 10.2,
+          "ours_instr_per_sample": 6.88,
+          "ratio": 0.67,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "crc32": {
+          "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.5,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 5.5,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 8.21,
+          "ours_instr_per_sample": 5.5,
+          "ratio": 0.67,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "dc_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -2614,6 +2706,45 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "frame_decode": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 23.79,
+          "ours_instr_per_sample": 23.79,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "frame_decode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 22.79,
+          "ours_instr_per_sample": 22.79,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "frame_encode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 2.98,
+          "ours_instr_per_sample": 2.98,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "halfband_decimate": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
@@ -4688,6 +4819,11 @@
       "gnuradio_agc_cc": {
         "build": "-O3",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_crc": {
+        "build": "gr-crc.c (gr::digital::crc): -O3",
+        "sha256": "332a0f06bc91b00d04dd1cebe6c1394ae722c3a89598765b15f98f0ec0f9d243",
         "version": "main at ec1bf15"
       },
       "gnuradio_fallback_references": {

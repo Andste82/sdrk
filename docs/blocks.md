@@ -273,6 +273,8 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `nco` | Generates a complex tone at frequency_hz, one sample per input sample. | `clock`: c32, cq15, f32, q15 | `out`: c32, cq15 | `frequency_hz` |
 | `stereo_pll` | Locks a loop to the 19 kHz stereo pilot and demodulates the 38 kHz difference. | `mpx`: f32, q15; `pilot`: f32, q15 | `out`: c32, cq15 | - |
 | `stereo_matrix` | Turns sum and difference (S, D) into left and right: L = S + 2 D, R = S - 2 D. | `in`: c32, cq15 | `out`: c32, cq15 | - |
+| `noise_blank` | Noise blanker: sets short strong impulses of a complex signal to zero. | `in`: c32, cq15 | `out`: c32, cq15 | - |
+| `auto_notch` | Automatic notch: removes steady tones (carriers, heterodynes) from real audio. | `in`: f32 | `out`: f32 | - |
 
 | Block | Parameter | Unit | When | Type, range, default | Typical |
 | --- | --- | --- | --- | --- | --- |
@@ -375,6 +377,13 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `stereo_pll` | `natural_hz` | Hz | build | f64, 1 to 190, default 20 | 20 |
 | `stereo_pll` | `pilot_level` | - | build | f64, 0.000001 to 1, default 0.1 | 0.1; for Q15 0.1 times the scale of the discriminator output |
 | `stereo_pll` | `stereo` | - | runtime | choice auto / mono, default auto | auto; mono for a weak station |
+| `noise_blank` | `threshold_db` | dB | runtime | f64, 6 to 40, default 15 | 15; lower blanks weaker impulses but also signal peaks |
+| `noise_blank` | `tau_s` | s | build | f64, 0.001 to 1, default 0.01 | 0.01 |
+| `noise_blank` | `hold_s` | s | build | f64, 0 to 0.01, default 0.0002 | 0.0002 |
+| `noise_blank` | `lookahead_s` | s | build | f64, 0 to 0.001, default 0.00005 | 0.00005 |
+| `auto_notch` | `taps` | - | build | integer, 8 to 256, default 32 | 32 at 8 to 12 kHz |
+| `auto_notch` | `delay` | samples | build | integer, 1 to 64, default 8 | 8 |
+| `auto_notch` | `mu` | - | runtime | f64, 0.0001 to 0.1, default 0.01 | 0.01; 0.001 for slow, gentle adaptation |
 
 <!-- blocks-table:end -->
 
@@ -409,7 +418,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `stereo_pll`, `stereo_matrix` | building blocks of `fm_stereo_demod` | M30 (delivered) |
 | `to_complex`, `real_part`, `imag_part`, `make_complex` | domain changes: real → complex with imaginary part 0, complex → real part, complex → imaginary part, two real streams → one complex stream | M30 (delivered) |
 | `nco`, `add`, `mul` | oscillator source, sum and product of two streams | M30 (delivered; pipeline kinds of `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_matrix` in M30, of `add`, `mul`, `make_complex`, `stereo_pll`: M34) |
-| `noise_blank`, `auto_notch` | impulse blanker, adaptive notch | M33 |
+| `noise_blank`, `auto_notch` | impulse blanker, adaptive notch | M33 (delivered) |
 | `am_mod`, `ssb_mod` | AM and SSB transmit | M35 |
 | `fm_stereo_mod` | FM stereo encoder (pilot, 38 kHz subcarrier) | M36 |
 | `frame_encode`, `frame_decode` | test framing of `sdrk-proto` (sync word, length, CRC) | M37 |
@@ -454,6 +463,8 @@ The kinds that later milestones add have their names reserved here, so that ever
 - **`nco`:** `NcoBlock<T>` (clock is a `C32`/`CQ15` stream) and `NcoRealBlock<T>` (clock is an `f32`/`Q15` stream; `T` is the complex output type) around the kernel `oscillate`: one output sample `exp(j 2 pi k phase)` per input sample, the input values are ignored (the input is the clock, so a pipeline needs no source nodes). `frequency_hz` (runtime, required, strictly inside plus or minus half the rate; a change keeps the phase), `harmonic` (build, 1 to 8, the output is the harmonic `k` of the same phase, so harmonic 2 on the same clock is the square of harmonic 1) and `phase_turns` (build, 0 to 1, start phase; `reset` returns to it). `NcoConfig` is the config of both. No storage.
 - **`stereo_pll`:** `StereoPllBlock<T>` (`Two<f32, f32>` or `Two<Q15, Q15>`, multiplex signal and pilot band-pass output, to `C32`/`CQ15`) around the kernel `stereo_pll` with the same loop state as `fm_stereo_demod`: with the same parameters and the same two inputs its output equals the internal loop of `fm_stereo_demod` bit for bit. `pilot_hz` (19000), `natural_hz` (20), `pilot_level` (0.1; for Q15 0.1 times the scale of the discriminator output), `stereo` (`auto`/`mono`, runtime), `pilot_locked()`. No storage.
 - **`stereo_matrix`:** `StereoMatrixBlock<T>` (`C32`, `CQ15`) around the kernel `stereo_matrix`: `L = S + 2 D`, `R = S - 2 D` for sum in `re` and demodulated difference in `im`.
+- **`noise_blank`:** `NoiseBlankBlock<T>` (`C32`, `CQ15`) around the kernel `noise_blank` (bit-exact in both types, not accelerated) with `NoiseBlankState::new(threshold_db, tau_s, hold_s, history, fs)`: the history of `D = floor(lookahead_s fs + 0.5)` samples comes from the storage (`D` elements of `T`), `H = floor(hold_s fs + 0.5)`. A sample whose power exceeds the average power by `threshold_db` is an impulse: the outputs of the inputs `n - D` to `n + H` are zero, everything else passes unchanged, delayed by `D` (the delay of the block). `threshold_db` (6 to 40, default 15) is a runtime parameter and applies from the next sample; `tau_s` (0.001 to 1, default 0.01), `hold_s` (0 to 0.01, default 0.0002) and `lookahead_s` (0 to 0.001, default 0.00005) are build parameters. `blanked()` counts the zeroed outputs. **Chain position:** directly after `convert` (or after a wide first decimation), before the `ddc`: on the wide-band signal an impulse is short and much stronger than the average; after the channel filter it is stretched into a click. Every blanked sample is a hole in the carrier that the channel filter turns into a dip of the envelope, so the blanking should be as short as the impulses allow (`hf_am_receiver` uses a lookahead of 10 us and no hold, D373).
+- **`auto_notch`:** `AutoNotchRealBlock` (`f32` only; a Q15 variant is backlog, the pipeline kind rejects Q15 input with `type_mismatch`) around the kernel `auto_notch` (bit-exact, not accelerated) with `AutoNotchState::new(weights, history, delay, mu as f32)`: `taps` weights and a history of `taps + delay` samples come from the storage, in this order. `taps` (8 to 256, default 32) and `delay` (1 to 64, default 8) are build parameters, `mu` (0.0001 to 0.1, default 0.01) is a runtime parameter and applies from the next sample (the weights are kept). No delay. **Chain position:** after the demodulator and before the AGC of the audio, if any, at a low audio rate (the weights then span enough time to separate a whistle from speech: `hf_am_receiver` decimates to 12 kHz). The notch also removes a wanted steady tone (CW, test tones), so it is off unless placed in the flow.
 - **`resample`:** see below.
 - **`spectrum`:** see below.
 
@@ -499,6 +510,7 @@ How the output of each block kind is checked against a reference. *Golden*: a ca
 | `scale` | property | `behaviour.rs`, `params.rs` |
 | `halfband_decimate` | property (the taps equal `halfband_taps`, stop band, group delay) | `halfband_decimate.rs` |
 | `squelch` | property (closed form of the gate) | `squelch.rs` |
+| `noise_blank`, `auto_notch` | block equals kernel (M33), with runtime changes of `threshold_db` and `mu` | `block_equals_kernel.rs`; storage, timing, validation, the clean pass-through of the blanker: `noise_reduction.rs`; end to end: `crates/testing/sdrk-testkit/tests/e2e_noise_reduction_m33.rs` |
 | `agc`, `preemph_limit` | block equals kernel | `agc.rs`, `preemph_limit.rs` |
 | `quad_demod`, `deemphasis`, `rotate`, `decimate`, `interpolate`, `mag`, `delay` | block equals kernel | `primitive_blocks.rs` |
 | `add`, `mul`, `make_complex`, `to_complex`, `real_part`, `imag_part`, `nco`, `stereo_pll`, `stereo_matrix` | block equals kernel | `two_port_blocks.rs` |

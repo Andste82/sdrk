@@ -1,0 +1,89 @@
+{
+  "sdrk": 1,
+  "name": "hf-am-receiver",
+  "description": "Receive one short-wave AM channel with a noise blanker and an automatic notch and output 12 kHz audio.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cs16",
+      "rate_hz": 192000,
+      "description": "HF receiver IQ"
+    }
+  },
+  "nodes": {
+    "agc": {
+      "kind": "agc",
+      "params": {
+        "attack_s": 0.1,
+        "release_s": 0.5
+      }
+    },
+    "demod": {
+      "kind": "am_demod",
+      "params": {
+        "audio_cutoff_hz": 4000,
+        "audio_decimation": 4
+      }
+    },
+    "nb": {
+      "kind": "noise_blank",
+      "params": {
+        "hold_s": 0,
+        "lookahead_s": 0.00001
+      }
+    },
+    "notch": {
+      "kind": "auto_notch"
+    },
+    "squelch": {
+      "kind": "squelch"
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 4500,
+        "decimation": 4
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "nb"
+    },
+    {
+      "from": "nb",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "squelch"
+    },
+    {
+      "from": "squelch",
+      "to": "agc"
+    },
+    {
+      "from": "agc",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "notch"
+    },
+    {
+      "from": "notch",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    }
+  }
+}

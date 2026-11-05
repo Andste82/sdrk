@@ -2,6 +2,7 @@
 
 from . import (  # noqa: F401
     agc,
+    auto_notch,
     basic_math,
     biquad,
     blocks,
@@ -20,6 +21,7 @@ from . import (  # noqa: F401
     io,
     mag,
     mag_sq,
+    noise_blank,
     oscillate,
     power_db,
     preemph_limit,

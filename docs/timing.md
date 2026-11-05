@@ -85,6 +85,8 @@ Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, d
 | `rotate`, `deemphasis`, `mag` | `1/1` | `Constant` | 0 (`deemphasis`: the IIR delay is not declared) |
 | `quad_demod` | `1/1` | `Constant` | `1/2` (the discriminator looks at two samples) |
 | `delay` with `samples` = `D` | `1/1` | `Constant` | `D` (exactly; the first `D` outputs are zero) |
+| `noise_blank` with `lookahead_s` giving `D = floor(lookahead_s fs + 0.5)` | `1/1` | `Constant` | `D` (exactly; a signal without impulses passes delayed by `D`, the first `D` outputs are zero) |
+| `auto_notch` | `1/1` | `Constant` | 0 (the output is the prediction error of the current sample) |
 | `decimate` with `N` taps, factor `M` (complex and real) | `1/M` | `Constant` | `(N - 1) / 2` |
 | `interpolate` with `N` taps (at the output rate), factor `L` (complex and real) | `L/1` | `Constant` | `(N - 1) / (2 L)` |
 | `fir` with `N` taps | `1/1` | `Constant` | `(N - 1) / 2` |

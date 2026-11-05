@@ -234,8 +234,43 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Deliverables checklist
 
-- [ ] Kernels `noise_blank` (C32, CQ15) and `auto_notch` (f32) with states, fallback, reference, delegation, contracts
-- [ ] Golden cases (seeds 471–475) with guards; suite cases; extremes
-- [ ] Blocks, kinds, schema; flow `hf_am_receiver` with YAML twin
-- [ ] E2E-NB and E2E-NOTCH (seeds 476, 477)
-- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `examples/README.md`, CHANGELOG, decisions log
+- [x] Kernels `noise_blank` (C32, CQ15) and `auto_notch` (f32) with states, fallback, reference, delegation, contracts
+- [x] Golden cases (seeds 471–475) with guards; suite cases; extremes
+- [x] Blocks, kinds, schema; flow `hf_am_receiver` with YAML twin
+- [x] E2E-NB and E2E-NOTCH (seeds 476, 477)
+- [x] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `examples/README.md`, CHANGELOG, decisions log
+
+## Status
+
+Done: the kernels `noise_blank` (`C32`, `CQ15`) and `auto_notch` (`f32`) in `sdrk-core` with states, `Reference`, `Fallback` (bit-exact, both stay with the fallback on every backend) and the facade delegation; golden cases `noise_blank.py` (seeds 471 to 473) and `auto_notch.py` (seeds 474, 475) with the f64 regression guard; the suite cases `noise_blank_*`, `auto_notch_f32` and `extremes_m33` (including huge finite inputs to `auto_notch`, D422); the blocks `NoiseBlankBlock` and `AutoNotchRealBlock`, the pipeline kinds `noise_blank` and `auto_notch`, the regenerated schema; the flow `examples/flows/hf_am_receiver.json` with its YAML twin; E2E-NB and E2E-NOTCH (seeds 476, 477) in `crates/testing/sdrk-testkit/tests/e2e_noise_reduction_m33.rs`, tied to the flow file by `the_chain_is_the_flow` (D423); the count registration (`info` entries with a waiver, D420, D421); `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/performance.md`, `examples/README.md`, CHANGELOG and the decisions log (D363 to D379, D420 to D424).
+
+Measured (E2E, D377, D378): E2E-NB 23.39 dB SINAD with the blanker against 7.57 dB without (`f32`) and 23.39 dB against 9.70 dB (Q15), required +10 dB; E2E-NOTCH 47.1 dB whistle attenuation after 0.5 s (required 30 dB), audio level change 0.23 dB (at most 2 dB).
+
+Departures from the spec (each in the decisions log):
+- `noise_blank` kernel rules beyond the per-sample rule: an impulse moves the average towards `k p` (D363), an average of zero starts at the first power (D364), an impulse sets the counter to `D + H + 1` (D365).
+- `auto_notch`: non-finite inputs (D366) and huge finite inputs (D422) leave the weights unchanged.
+- The golden case `nb_cq15_16384` scales its signal by 0.25 before quantization (D371); a guard of an exact model output is stored as the sentinel 300.0 dB (D372).
+- The flow `hf_am_receiver` sets the blanker to `lookahead_s` 0.00001 and `hold_s` 0 instead of the block defaults (D373), and the audio to 12 kHz (D374).
+
+Open items for the maintainer (`docs/open-items.md`): I33-1 (the extra `noise_blank` kernel rules D363 to D365) and I33-2 (the block defaults of `noise_blank` miss E2E-NB; the flow uses its own values).
+
+Gate and counts (run after the review):
+- **Counts** (`cargo xtask count --merge` on `x86_64`, `x86_64-avx512`, `aarch64`, `wasm32`): every entry is `info` and equal to its fallback. `avx2-runtime` is ours against ours at `avx2`: 1.21 for `noise_blank` and 1.22 for `auto_notch`, from code generation only. The rows are in the instruction, ratio and accuracy tables of `docs/performance.md`.
+- **Cycles** (`cargo measure`, whole-loop, cycles per sample, reference model / counter-model):
+
+  | Entry | sse2 | avx2 | avx512 | neon |
+  | --- | --- | --- | --- | --- |
+  | `noise_blank` | 15.92 / 11.83 | 11.58 / 11.37 | 11.45 / 11.30 | 17.64 / 8.80 |
+  | `noise_blank_cq15` | 9.59 / 10.54 | 8.48 / 9.30 | 8.41 / 9.24 | 9.51 / 10.53 |
+  | `auto_notch` | 233.12 / 207.22 | 164.98 / 169.39 | 161.09 / 168.96 | 296.16 / 208.69 |
+
+  The `sse4.2` rows equal `sse2` except `noise_blank` 15.92 / 11.82. Every golden case of M33 is bit-exact at every level.
+- **`noise_blank` fallback (D424):** the first measurement gave 811.18 cycles per sample at `avx2` on `znver3`. The cause was one `memcpy` of the whole call, which glibc runs as `rep movsb`. The fallback now runs a call in sections of 128 samples. The single-pass alternative and the chunked copy were measured and dropped.
+- **Gate:** all pass.
+  - `cargo fmt --check` and workspace clippy (all targets, all features, `-D warnings`).
+  - `cargo xtask check`, including the cycle gate.
+  - `cargo xtask schema --check` and `tests/golden/generate.py --check` (723 files).
+  - Tests, 2531 in total: `sdrk-core` (all features and `sdrk_fallback_only`), `sdrk`, `sdrk-testkit` (`std`: golden, suite and E2E), `sdrk-blocks`, `sdrk-pipeline`, `xtask`, `sdrk-wasm`.
+  - `cargo doc --workspace` with `-D warnings`, `cargo xtask bare-metal` and thumbv7em clippy.
+  - The registry count in `sdrk-pipeline` (the doctest and three tests) was raised from 32 to 34 kinds.
+- **Emulator run:** in CI (`build_m4_qemu`).

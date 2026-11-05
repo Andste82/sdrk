@@ -3,6 +3,7 @@
 pub mod add;
 pub mod agc;
 pub mod am_demod;
+pub mod auto_notch;
 pub mod biquad;
 pub mod convert;
 pub mod convert_out;
@@ -23,6 +24,7 @@ pub mod mag;
 pub mod make_complex;
 pub mod mul;
 pub mod nco;
+pub mod noise_blank;
 pub mod preemph_limit;
 pub mod quad_demod;
 pub mod real_part;

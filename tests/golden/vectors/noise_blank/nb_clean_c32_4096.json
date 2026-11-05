@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "nb_clean_c32_4096.expected.bin",
+      "len": 4096
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "nb_clean_c32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "nb_clean_c32_4096",
+  "format_version": 1,
+  "kernel": "noise_blank",
+  "model": "float32",
+  "notes": "the noise and the tone of nb_c32_16384 without impulses; the expected output is the input delayed by D = 10 samples (zeros first); the generator asserts that the float32 model gives the same",
+  "params": {
+    "alpha_bits": 4557941812091362304,
+    "alpha_q31": 1118190,
+    "blanked": 0,
+    "guard_skip": 0,
+    "hold": 38,
+    "hold_s": 0.0002,
+    "k_bits": 4629594237989614119,
+    "k_q16": 2072430,
+    "lookahead": 10,
+    "lookahead_s": 5e-05,
+    "rate_hz": 192000,
+    "tau_s": 0.01,
+    "threshold_db": 15.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 473,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

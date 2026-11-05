@@ -637,6 +637,7 @@ impl Engine {
         use sdrk::SampleType::{C32, F32};
         const KERNELS: &[(&str, sdrk::SampleType)] = &[
             ("agc", C32),
+            ("auto_notch", F32),
             ("convert", C32),
             ("convert_out", C32),
             ("convert_out_real", F32),
@@ -662,6 +663,7 @@ impl Engine {
             ("irfft", F32),
             ("mag", C32),
             ("mag_sq", C32),
+            ("noise_blank", C32),
             ("oscillate", C32),
             ("power_db", F32),
             ("preemph_limit", F32),

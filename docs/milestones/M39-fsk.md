@@ -202,7 +202,7 @@ Parameters: `time_constant_s` (s, build, 0.5), `max_offset_hz` (Hz, build, requi
 3. **Loop 4-FSK:** 10^5 symbols at Eb/N0 14 dB, symbol error rate below 1e-3 (seed 534).
 4. **AFC:** an offset of 5 kHz and 20 ppm drift over 10 s at 868 MHz carrier: `afc` converges to within 50 Hz in 1 s, reports the ppm within 0.1 ppm; packets decode with PER < 1 % at Eb/N0 12 dB with AFC and fail without (seed 535). `hold` freezes the estimate.
 
-   > **Amendment 2026-11-05 (reading set by the maintainer, D579; set-up D582; pending open item I39-1):** the drift is a ramp of the carrier offset from 5000 Hz by 20 ppm of 868 MHz (17 360 Hz) in 10 s to 22 360 Hz; the test sets `max_offset_hz` 30 kHz and `carrier_hz` 868 MHz. The convergence (within 50 Hz from 1 s on), ppm and `hold` checks run on the noiseless idle preamble (balanced alternating bits); the PER check runs on PN9-whitened packets at Eb/N0 12 dB. On random data or with noise the first-order loop of §4 cannot hold 50 Hz under the ramp (the data and the discriminator clicks move the estimate); whether 50 Hz must also hold there is open item I39-1.
+   > **Amendment 2026-11-05 (reading set by the maintainer, D579; set-up D582; confirmed by the maintainer, D585):** the drift is a ramp of the carrier offset from 5000 Hz by 20 ppm of 868 MHz (17 360 Hz) in 10 s to 22 360 Hz; the test sets `max_offset_hz` 30 kHz and `carrier_hz` 868 MHz. The convergence (within 50 Hz from 1 s on), ppm and `hold` checks run on the noiseless idle preamble (balanced alternating bits); the PER check runs on PN9-whitened packets at Eb/N0 12 dB. On random data or with noise the first-order loop of §4 cannot hold 50 Hz under the ramp (the data and the discriminator clicks move the estimate); the maintainer accepts this (D585, open item I39-1 closed): like the AFC of sub-GHz transceivers, the loop locks on the preamble and is then held (`hold`); an AFC that also follows a drift on random data is in the backlog.
 5. **Flow loop:** `gfsk_transmitter` → testkit channel (Eb/N0 14 dB, offset 3 kHz, 30 ppm clock drift; seed 536) → `gfsk_receiver`: 1000 packets, at least 990 with `CRC_OK` and identical payload; whitening on both sides.
 6. Chunk invariance of `fsk_demod`, `fsk_mod`, `afc` with 20 plans (seed 537); extremes (silence, full scale, NaN) do not panic and recover.
 7. `cargo xtask schema --check`.
@@ -222,13 +222,13 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Status
 
-Done: `design::gaussian` with the golden case `design/gaussian_bt0p5_sps8_span4` (D566, D567); the blocks and kinds `fsk_mod`, `fsk_demod` and `afc`, composed of existing kernels, each called once per piece (D571 to D576); the constellation `fsk4` of `slice`; block readings in the pipeline statistics (D572); `sdrk_proto::whiten::Pn9` and the option `whitening` of `frame_encode` and `frame_decode` (D568 to D570); the flows `gfsk_receiver` and `gfsk_transmitter` with their YAML twins (D584); the tests 1 to 7 (seeds 530 to 537; D577 to D584); the docs, the CHANGELOG and the decisions log. Open: I39-1 (the AFC criterion of test 4 on random data and with noise).
+Done: `design::gaussian` with the golden case `design/gaussian_bt0p5_sps8_span4` (D566, D567); the blocks and kinds `fsk_mod`, `fsk_demod` and `afc`, composed of existing kernels, each called once per piece (D571 to D576); the constellation `fsk4` of `slice`; block readings in the pipeline statistics (D572); `sdrk_proto::whiten::Pn9` and the option `whitening` of `frame_encode` and `frame_decode` (D568 to D570); the flows `gfsk_receiver` and `gfsk_transmitter` with their YAML twins (D584); the tests 1 to 7 (seeds 530 to 537; D577 to D584); the docs, the CHANGELOG and the decisions log. Open: none (I39-1 is closed by D585).
 
 Deviations from the specification, recorded in the decisions log:
 - `design::gaussian` writes into a caller slice (D566, §1 amended).
 - `fsk_demod` has a built-in `ted_gain` (`TED_GAIN_2FSK` 1.48, `TED_GAIN_4FSK` 0.84; maintainer decision D571, §3 amended); with GFSK the loop is narrower than `loop_bw` (about 1.9 times at `bt` 0.5).
 - The loop tests 2 and 3 put a `ddc` channel filter between the noise and `fsk_demod` (D580); without it the discriminator runs below its threshold.
-- Test 4 reads the drift as a ramp of the offset and checks the convergence on the noiseless idle preamble (maintainer reading D579, set-up D582, test 4 amended; open item I39-1).
+- Test 4 reads the drift as a ramp of the offset and checks the convergence on the noiseless idle preamble (maintainer reading D579, set-up D582, test 4 amended; confirmed by the maintainer, D585).
 - The framing functions get a `whitening` argument (D569, hard break, no compatibility shim).
 
 Measured (local run of the M39 tests in the test profile; all pass):

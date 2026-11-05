@@ -33,9 +33,10 @@ use sdrk_blocks::{
     DcBlockRealBlock, DdcBlock, DdcConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
     FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
     FmStereoModBlock, FmStereoModConfig, Frame, PreemphLimitBlock, PreemphLimitConfig,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SpectrumSample, SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, ScaleBlock, ScaleConfig, SliceBlock,
+    SliceConfig, SliceConstellation, SliceElem, SpectrumBlock, SpectrumConfig, SpectrumSample,
+    SpectrumWindow, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SymbolSyncBlock,
+    SymbolSyncConfig, Ted,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -426,6 +427,10 @@ fn no_block_is_larger_than_512_bytes() {
     check::<PreemphLimitBlock<Q15, sdrk_testkit::VecStorage>>("PreemphLimitBlock<Q15, Vec>");
     check::<PreemphLimitBlock<C32, A<'static>>>("PreemphLimitBlock<C32>");
     check::<FmStereoModBlock<A<'static>>>("FmStereoModBlock");
+    check::<SymbolSyncBlock<C32, A<'static>>>("SymbolSyncBlock<C32>");
+    check::<SymbolSyncBlock<f32, sdrk_testkit::VecStorage>>("SymbolSyncBlock<f32, Vec>");
+    check::<SliceBlock<C32, A<'static>>>("SliceBlock<C32>");
+    check::<SliceBlock<f32, sdrk_testkit::VecStorage>>("SliceBlock<f32, Vec>");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
     check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
@@ -479,6 +484,23 @@ fn public_types_are_send() {
     assert_sync::<FmStereoModBlock<A<'static>>>();
     assert_send::<FmStereoModConfig>();
     assert_sync::<FmStereoModConfig>();
+    assert_send::<SymbolSyncBlock<C32, A<'static>>>();
+    assert_send::<SymbolSyncBlock<f32, sdrk_testkit::VecStorage>>();
+    assert_sync::<SymbolSyncBlock<C32, A<'static>>>();
+    assert_sync::<SymbolSyncBlock<f32, A<'static>>>();
+    assert_send::<SymbolSyncConfig>();
+    assert_sync::<SymbolSyncConfig>();
+    assert_send::<Ted>();
+    assert_send::<SliceBlock<C32, A<'static>>>();
+    assert_send::<SliceBlock<f32, sdrk_testkit::VecStorage>>();
+    assert_sync::<SliceBlock<C32, A<'static>>>();
+    assert_sync::<SliceBlock<f32, A<'static>>>();
+    assert_send::<SliceConfig>();
+    assert_sync::<SliceConfig>();
+    assert_send::<SliceConstellation>();
+    fn slice_elem<T: SliceElem + Send + Sync>() {}
+    slice_elem::<f32>();
+    slice_elem::<C32>();
     assert_send::<DcBlockRealBlock<f32, A<'static>>>();
     assert_send::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>();
     assert_sync::<DcBlockRealBlock<Q15, A<'static>>>();

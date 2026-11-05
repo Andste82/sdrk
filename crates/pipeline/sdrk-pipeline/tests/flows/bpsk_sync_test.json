@@ -1,0 +1,50 @@
+{
+  "sdrk": 1,
+  "name": "bpsk-sync-test",
+  "description": "Test flow of M38 (test 7, not an example): raised-cosine BPSK at 4.1 samples per symbol through symbol_sync, slice bpsk and frame_decode back to packets.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rx": {
+      "type": "c32",
+      "rate_hz": 41000,
+      "description": "Baseband BPSK, 10000 symbols per second with a raised-cosine pulse (roll-off 0.35), amplitude 1"
+    }
+  },
+  "nodes": {
+    "sync": {
+      "kind": "symbol_sync",
+      "params": {
+        "symbol_rate_hz": 10000,
+        "ted": "gardner"
+      }
+    },
+    "slice": {
+      "kind": "slice",
+      "params": {
+        "constellation": "bpsk"
+      }
+    },
+    "dec": {
+      "kind": "frame_decode",
+      "params": {
+        "emit_bad": false
+      }
+    }
+  },
+  "edges": [
+    { "from": "rx", "to": "sync" },
+    { "from": "sync", "to": "slice" },
+    { "from": "slice", "to": "dec" },
+    { "from": "dec", "to": "out" }
+  ],
+  "outputs": {
+    "out": {
+      "type": "packets",
+      "queue": 1024,
+      "description": "The decoded packets with CRC_OK and the soft-bit index of their sync word"
+    }
+  }
+}

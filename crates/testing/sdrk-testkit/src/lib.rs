@@ -17,7 +17,8 @@
 //! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
 //! - [`drift`]: `TwoClockSim`, the two-clock buffer simulation of the clock drift tests (M28),
 //! - [`rng`]: deterministic PCG32 random numbers,
-//! - `r#gen` (`gen` is a reserved word in edition 2024): signal generators that depend only on the absolute sample index,
+//! - [`ber`]: `BerMeter`, the PRBS bit error rate meter (M38),
+//! - `r#gen` (`gen` is a reserved word in edition 2024): signal generators that depend only on the absolute sample index (including the BPSK/QPSK test signal `PskTest` of M38),
 //! - [`metrics`]: SNR, error and bit-exact comparison,
 //! - [`invariance`]: the block-size-invariance harness,
 //! - [`arena`]: a bump allocator over a caller buffer (no heap),
@@ -25,7 +26,7 @@
 //! - [`virtual_rx`]: a minimal virtual receiver,
 //! - [`virtual_tx`]: a virtual transmitter that records writes and injects statuses,
 //! - [`conformance`]: `check_rx` and `check_tx`, the conformance checks for stream implementations,
-//! - `channel` (feature `std`): the `Loopback` channel simulator (delay, attenuation, frequency offset, noise),
+//! - `channel` (feature `std`): the `Loopback` channel simulator (delay, attenuation, frequency offset, noise) and the impairments `Awgn`, `FrequencyOffset`, `ClockDrift` and `ChannelChain` (M38),
 //! - [`suite`]: the runner that executes registered cases on any target.
 //!
 //! ```
@@ -51,6 +52,7 @@
 extern crate std;
 
 pub mod arena;
+pub mod ber;
 #[cfg(feature = "std")]
 pub mod channel;
 pub mod conformance;

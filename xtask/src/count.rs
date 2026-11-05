@@ -882,7 +882,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 192] = [
+pub static KERNELS: [KernelSpec; 194] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1098,6 +1098,8 @@ pub static KERNELS: [KernelSpec; 192] = [
     proto("frame_decode", Family::Own),
     proto("frame_encode_block", Family::Own),
     proto("frame_decode_block", Family::Own),
+    spec("symbol_sync", Family::Own, false),
+    spec("symbol_sync_real", Family::Own, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4578,6 +4580,38 @@ mod tests {
                 "{k}"
             );
         }
+    }
+
+    #[test]
+    fn the_symbol_sync_entries_are_information_against_the_fallback_at_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        // `symbol_sync` (`C32`) and `symbol_sync_real` (`f32`): no library runs the same loop
+        // (D562), so both are counted against our own fallback.
+        let names = ["symbol_sync", "symbol_sync_real"];
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            for k in names {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in names {
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(k)).0,
+                Reference::OwnLevel("avx2"),
+                "{k}"
+            );
+            assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
+            assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
+            // Not accelerated: no `_fallback` entry next to the facade entry.
+            let fallback = format!("{k}_fallback");
+            assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
+        }
+        // The block `slice` has no kernel and no entry.
+        assert!(KERNELS.iter().all(|s| !s.name.starts_with("slice")));
     }
 
     #[test]

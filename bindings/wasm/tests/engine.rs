@@ -247,6 +247,7 @@ fn validate_schema_and_backends() {
     assert_eq!(backend("preemph_limit"), "fallback");
     assert_eq!(backend("preemph_limit_stereo"), "fallback");
     assert_eq!(backend("stereo_encode"), "fallback");
+    assert_eq!(backend("symbol_sync"), "fallback");
     assert_eq!(
         backend("rotate"),
         if sdrk::SIMD_BACKEND {

@@ -21,6 +21,7 @@ pub mod preemph_limit;
 pub mod spectrum;
 pub mod squelch;
 pub mod stereo;
+pub mod symbol_sync;
 
 /// `Ok` when both lengths are equal, else `LengthMismatch { expected, got }`.
 pub(crate) fn check_len(expected: usize, got: usize) -> crate::error::Result<()> {

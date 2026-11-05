@@ -12,6 +12,7 @@ sdrk = { path = "../../facade/sdrk" }
 sdrk-blocks = { path = "../../blocks/sdrk-blocks" }
 sdrk-core = { path = "../../core/sdrk-core", features = ["reference"] }
 sdrk-device = { path = "../../core/sdrk-device" }
+sdrk-proto = { path = "../../proto/sdrk-proto" }
 num-complex.workspace = true
 libm.workspace = true
 bytemuck.workspace = true

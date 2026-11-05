@@ -222,7 +222,7 @@ Departures from the spec (each in the decisions log):
 - The `duc` of both transmitter flows sets `cutoff_hz` 24000 and `transition_hz` 38400 besides the spec's interpolation 50 and frequency, because with its defaults the image filter needs 1815 taps, more than `max_taps` 1023, and the flows do not build; the `biquad` low-pass of `am_transmitter` is of order 4, which the spec does not give (D438).
 
 Open:
-- I35-1: `am_mod_fallback` (`C32`) against liquid-dsp's `ampmodem`, which does less work than the contract (no clamp, no NaN rule, no carrier product, and `fmla` on AArch64): counted 1.63 times liquid's instructions at `sse2` and `sse4.2` and 1.99 at `neon` (`dev` with a ratio waiver; on `neon` also an accuracy waiver, 150.8 against 152.1 dB), 0.73, 0.45 and 0.23 at `avx2`, `avx512` and `simd128` (`release`); in simulated cycles 1.84 / 1.61 at `sse2` and 2.27 / 1.48 at `neon` (reference / counter model). The maintainer decides whether the gap is accepted or another reference is taken (D443).
+- I35-1 is closed by the maintainer's decision D586: the gap to liquid-dsp's `ampmodem` is accepted, because the extra work of the contract (the clamp, the NaN rule, the carrier product) keeps the output bounded and finite for inputs beyond full scale, where liquid's loop overmodulates.
 
 Gate and counts: see below.
 

@@ -4155,11 +4155,11 @@
   "am_mod_fallback": {
     "sse2": {
       "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product. Counted (D443): 4.52 against 2.78 instructions per sample at `sse2` and `sse4.2` (1.63), 3.52 against 1.77 at `neon` (1.99, GCC fuses liquid's loop into `fmla`); simulated cycles per sample ours / liquid, whole-loop, reference / counter model: 1.09 / 0.59 and 1.16 / 0.72 at `sse2` and `sse4.2`, 2.91 / 1.28 and 1.52 / 1.03 at `neon`; open item I35-1"
+      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product. Counted (D443): 4.52 against 2.78 instructions per sample at `sse2` and `sse4.2` (1.63), 3.52 against 1.77 at `neon` (1.99, GCC fuses liquid's loop into `fmla`); simulated cycles per sample ours / liquid, whole-loop, reference / counter model: 1.09 / 0.59 and 1.16 / 0.72 at `sse2` and `sse4.2`, 2.91 / 1.28 and 1.52 / 1.03 at `neon`; accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
     },
     "sse4.2": {
       "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product. Counted (D443): 4.52 against 2.78 instructions per sample at `sse2` and `sse4.2` (1.63), 3.52 against 1.77 at `neon` (1.99, GCC fuses liquid's loop into `fmla`); simulated cycles per sample ours / liquid, whole-loop, reference / counter model: 1.09 / 0.59 and 1.16 / 0.72 at `sse2` and `sse4.2`, 2.91 / 1.28 and 1.52 / 1.03 at `neon`; open item I35-1"
+      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product. Counted (D443): 4.52 against 2.78 instructions per sample at `sse2` and `sse4.2` (1.63), 3.52 against 1.77 at `neon` (1.99, GCC fuses liquid's loop into `fmla`); simulated cycles per sample ours / liquid, whole-loop, reference / counter model: 1.09 / 0.59 and 1.16 / 0.72 at `sse2` and `sse4.2`, 2.91 / 1.28 and 1.52 / 1.03 at `neon`; accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
     },
     "avx2": {
       "status": "release"
@@ -4169,8 +4169,8 @@
     },
     "neon": {
       "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product. Counted (D443): 4.52 against 2.78 instructions per sample at `sse2` and `sse4.2` (1.63), 3.52 against 1.77 at `neon` (1.99, GCC fuses liquid's loop into `fmla`); simulated cycles per sample ours / liquid, whole-loop, reference / counter model: 1.09 / 0.59 and 1.16 / 0.72 at `sse2` and `sse4.2`, 2.91 / 1.28 and 1.52 / 1.03 at `neon`; open item I35-1",
-      "accuracy_waiver": "150.8 dB against 152.1 dB for liquid-dsp's `ampmodem` on the count input (SNR against the f64 model): GCC contracts liquid's `x * mod_index + 1` into `fmla` on AArch64 (one rounding fewer), while the numeric contract of `am_mod` forbids FMA in the fallback (R6.5); at the x86 levels, where liquid has no FMA, both are at 150.8 dB; open item I35-1"
+      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product. Counted (D443): 4.52 against 2.78 instructions per sample at `sse2` and `sse4.2` (1.63), 3.52 against 1.77 at `neon` (1.99, GCC fuses liquid's loop into `fmla`); simulated cycles per sample ours / liquid, whole-loop, reference / counter model: 1.09 / 0.59 and 1.16 / 0.72 at `sse2` and `sse4.2`, 2.91 / 1.28 and 1.52 / 1.03 at `neon`; accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on",
+      "accuracy_waiver": "150.8 dB against 152.1 dB for liquid-dsp's `ampmodem` on the count input (SNR against the f64 model): GCC contracts liquid's `x * mod_index + 1` into `fmla` on AArch64 (one rounding fewer), while the numeric contract of `am_mod` forbids FMA in the fallback (R6.5); at the x86 levels, where liquid has no FMA, both are at 150.8 dB; accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
     },
     "simd128": {
       "status": "release"

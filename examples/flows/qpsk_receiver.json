@@ -1,0 +1,77 @@
+{
+  "sdrk": 1,
+  "name": "qpsk-receiver",
+  "description": "Receive QPSK at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, demodulator with symbol timing and carrier recovery, and the decoded packets of the test framing.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cs16",
+      "rate_hz": 1000000,
+      "description": "IQ at 1 MS/s with the signal at 0 Hz"
+    }
+  },
+  "nodes": {
+    "agc": {
+      "kind": "agc",
+      "params": {
+        "reference_db": 0
+      }
+    },
+    "dec": {
+      "kind": "frame_decode",
+      "params": {
+        "max_sync_errors": 2,
+        "polarity": "both"
+      }
+    },
+    "demod": {
+      "kind": "psk_demod",
+      "params": {
+        "carrier_bw": 0.04,
+        "max_offset": 0.1,
+        "order": 4,
+        "symbol_rate_hz": 25000
+      }
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 50000,
+        "decimation": 5,
+        "transition_hz": 60000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "agc"
+    },
+    {
+      "from": "agc",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "packets"
+    }
+  ],
+  "outputs": {
+    "packets": {
+      "type": "packets",
+      "queue": 1024,
+      "description": "The decoded packets with CRC_OK and the sample index of their sync word"
+    }
+  }
+}

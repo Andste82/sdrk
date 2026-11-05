@@ -18,6 +18,25 @@ use crate::storage::{Plan, Storage};
 /// Bits of the shortest frame without preamble: sync word, length byte and CRC (56).
 pub(crate) const MIN_FRAME_BITS: usize = frame_bits(0, 0);
 
+/// The names of the `polarity` choice, in index order.
+const POLARITY_OPTIONS: &[&str] = &["normal", "both"];
+
+/// The sync-word polarities a [`FrameDecodeBlock`] accepts (parameter `polarity`).
+///
+/// ```
+/// use sdrk_blocks::FramePolarity;
+/// assert_eq!(FramePolarity::default(), FramePolarity::Normal);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum FramePolarity {
+    /// Only the sync word itself.
+    #[default]
+    Normal,
+    /// The sync word and its inverse; the bits of a frame found by the inverse are inverted.
+    Both,
+}
+
 /// Description of the `frame_decode` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "frame_decode",
@@ -31,8 +50,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the first sync word bit, counted since construction or reset. After every frame the \
         hunt starts again with the next bit. With whitening pn9 every byte after the sync \
         word is XORed with the PN9 sequence before it is read, as frame_encode with the same \
-        setting sends it. Pitfall: max_sync_errors above 0 finds frames \
-        with damaged sync words but also false syncs in noise; those mostly fail the CRC.",
+        setting sends it. With polarity both the hunt also accepts the inverted sync word and \
+        then inverts the bits of the frame, which resolves the 180 degree ambiguity of a \
+        coherent psk_demod (not the 90 degree one of QPSK). Pitfall: max_sync_errors above 0 \
+        finds frames with damaged sync words but also false syncs in noise; those mostly fail \
+        the CRC.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::F32],
@@ -76,6 +98,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             description: "Whitening the sender applied to length, payload and CRC: none, or pn9 (the \
                 PN9 sequence is removed).",
         },
+        ParamDesc {
+            name: "polarity",
+            unit: Unit::None,
+            kind: ParamKind::Choice {
+                options: POLARITY_OPTIONS,
+                default: 0,
+            },
+            typical: "normal; both behind a coherent psk_demod",
+            mutability: Mutability::Build,
+            description: "normal accepts only the sync word; both also accepts the inverted \
+                sync word and inverts the bits of that frame.",
+        },
     ],
     required: &[],
 };
@@ -84,8 +118,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 ///
 /// ```
 /// use sdrk_blocks::FrameDecodeConfig;
+/// use sdrk_blocks::FramePolarity;
 /// let cfg = FrameDecodeConfig::default();
 /// assert_eq!((cfg.max_sync_errors, cfg.emit_bad), (0, false));
+/// assert_eq!(cfg.polarity, FramePolarity::Normal);
 /// assert!(cfg.validate().is_ok());
 /// assert!(FrameDecodeConfig { max_sync_errors: 5, ..cfg }.validate().is_err());
 /// ```
@@ -97,6 +133,8 @@ pub struct FrameDecodeConfig {
     pub emit_bad: bool,
     /// The whitening of length, payload and CRC that the sender applied.
     pub whitening: Whitening,
+    /// The accepted sync-word polarities (M40).
+    pub polarity: FramePolarity,
 }
 
 impl FrameDecodeConfig {
@@ -124,6 +162,13 @@ impl FrameDecodeConfig {
             "max_sync_errors" => self.max_sync_errors = value.as_usize()?,
             "emit_bad" => self.emit_bad = value.as_bool()?,
             "whitening" => self.whitening = whitening_from_choice(value.as_choice()?),
+            "polarity" => {
+                self.polarity = if value.as_choice()? == 1 {
+                    FramePolarity::Both
+                } else {
+                    FramePolarity::Normal
+                };
+            }
             _ => return unknown(),
         }
         Ok(())
@@ -138,6 +183,10 @@ impl FrameDecodeConfig {
             "max_sync_errors" => Ok(ParamValue::I64(self.max_sync_errors as i64)),
             "emit_bad" => Ok(ParamValue::Bool(self.emit_bad)),
             "whitening" => Ok(ParamValue::Choice(whitening_choice(self.whitening))),
+            "polarity" => Ok(ParamValue::Choice(match self.polarity {
+                FramePolarity::Both => 1,
+                _ => 0,
+            })),
             _ => unknown(),
         }
     }
@@ -190,7 +239,8 @@ impl<S: Storage> FrameDecodeBlock<S> {
         let max = u32::try_from(config.max_sync_errors).unwrap_or(u32::MAX);
         Ok(Self {
             config: *config,
-            decoder: Decoder::new(max, config.emit_bad, config.whitening)?,
+            decoder: Decoder::new(max, config.emit_bad, config.whitening)?
+                .with_both_polarities(config.polarity == FramePolarity::Both),
             count: 0,
             max_per_input: Ratio::new(1, MIN_FRAME_BITS as u64)?,
             _storage: PhantomData,

@@ -9,6 +9,7 @@ from . import (  # noqa: F401
     blocks,
     convert,
     convert_out,
+    costas,
     dc_block,
     deemphasis,
     design,

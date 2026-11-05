@@ -1,0 +1,55 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "qpsk_offset_c32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "qpsk_offset_c32_8192.input.bin",
+      "len": 8192
+    },
+    "locked": {
+      "dtype": "u8",
+      "file": "qpsk_offset_c32_8192.locked.bin",
+      "len": 8192
+    }
+  },
+  "case": "qpsk_offset_c32_8192",
+  "format_version": 1,
+  "kernel": "costas",
+  "model": "float32",
+  "notes": "QPSK as qpsk_lock_c32_8192 with a carrier offset of 0.01 cycles per symbol (symbol k rotated by phase0 + 2 pi 0.01 k), Eb/N0 12 dB; order 4 with the block defaults; the frequency integrator ends within 0.002 of the offset (asserted by the generator); snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "damping": 0.7071,
+    "ebn0_db": 12.0,
+    "final_freq_bits": 1009057044,
+    "final_level_bits": 1063326904,
+    "final_locked": 1,
+    "final_phase": 210975054,
+    "first_locked": 244,
+    "guard_skip": 0,
+    "ki_bits": 963058442,
+    "kp_bits": 1007118694,
+    "loop_bw": 0.02,
+    "max_bits": 1028443341,
+    "max_offset": 0.05,
+    "offset_cycles_per_symbol": 0.01,
+    "order": 4,
+    "phase0_rad": 0.7687720468396055,
+    "sigma": 0.125594321575479,
+    "snr_db_guard": 131.1
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 552,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

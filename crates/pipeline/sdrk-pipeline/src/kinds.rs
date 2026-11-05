@@ -14,22 +14,23 @@ use sdrk_blocks::{
     AddBlock, AddRealBlock, AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig,
     AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
     BiquadRealBlock, Block, BlockDescription, BlockSample, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig,
-    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
-    DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig,
-    DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock,
+    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
+    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
+    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
     FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
     FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
     InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
     MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
-    NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock,
-    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SliceBlock, SliceConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock,
-    StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
+    PskDemodConfig, PskModBlock, PskModConfig, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
+    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
+    SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -74,6 +75,9 @@ pub(crate) trait Kind: Send + Sync + 'static {
         rate: Rate,
         precision: Precision,
     ) -> BlockResult<Figures>;
+    /// Adjusts the diagnostic of a planning error (for example the code of a block error
+    /// that is a rate problem); the default keeps it.
+    fn adjust(_e: &sdrk_blocks::Error, _d: &mut Diagnostic) {}
     /// Builds the node.
     fn build(
         cfg: &Self::Cfg,
@@ -190,7 +194,11 @@ impl<K: Kind> BlockFactory for Factory<K> {
                 format!("`{}` does not accept {input:?} input", self.desc.kind),
             )]);
         }
-        let f = K::plan(&cfg, input, rate_in, precision).map_err(|e| vec![plan_error(&e)])?;
+        let f = K::plan(&cfg, input, rate_in, precision).map_err(|e| {
+            let mut d = plan_error(&e);
+            K::adjust(&e, &mut d);
+            vec![d]
+        })?;
         Ok(Checked {
             rate_out: f.rate_out,
             memory_bytes: f.memory_bytes,
@@ -229,6 +237,7 @@ impl<K: Kind> BlockFactory for Factory<K> {
             })?;
         K::build(&held.cfg, held.input, held.rate, held.precision, storage).map_err(|e| {
             let mut d = plan_error(&e);
+            K::adjust(&e, &mut d);
             if matches!(e, sdrk_blocks::Error::Storage { .. }) {
                 d.code = DiagCode::LimitExceeded;
             }
@@ -3214,5 +3223,168 @@ impl Kind for AfcKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(AfcBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// ---------------------------------------------------------------------- costas
+
+pub(crate) struct CostasKind;
+
+impl Kind for CostasKind {
+    type Cfg = CostasConfig;
+
+    const KIND: &'static str = "costas";
+    fn kernels() -> &'static [&'static str] {
+        &["costas"]
+    }
+    fn default_cfg() -> CostasConfig {
+        CostasConfig::default()
+    }
+    fn set(cfg: &mut CostasConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &CostasConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("costas needs c32 symbols"));
+        }
+        Ok(Figures {
+            rate_out: rate,
+            memory_bytes: CostasBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // Two table interpolations, the derotation, the detector, the loop filter and the
+            // lock detector per symbol (D615).
+            cost: 30.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &CostasConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(CostasBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// ---------------------------------------------------------------------- psk_mod
+
+pub(crate) struct PskModKind;
+
+impl Kind for PskModKind {
+    type Cfg = PskModConfig;
+
+    const KIND: &'static str = "psk_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate"]
+    }
+    fn default_cfg() -> PskModConfig {
+        PskModConfig::default()
+    }
+    fn set(cfg: &mut PskModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &PskModConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("psk_mod needs real f32 soft bits"));
+        }
+        let block = PskModBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: PskModBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: PskModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // §3 of M40: 4 span per input sample.
+            cost: 4.0 * cfg.span as f64,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &PskModConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(PskModBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// -------------------------------------------------------------------- psk_demod
+
+pub(crate) struct PskDemodKind;
+
+impl Kind for PskDemodKind {
+    type Cfg = PskDemodConfig;
+
+    const KIND: &'static str = "psk_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["fir", "symbol_sync", "costas"]
+    }
+    fn default_cfg() -> PskDemodConfig {
+        PskDemodConfig::default()
+    }
+    fn set(cfg: &mut PskDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &PskDemodConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("psk_demod needs c32 samples"));
+        }
+        // A symbol rate that is not within 1 % of an integer fraction of the input rate is
+        // `InvalidParameter` of `symbol_rate_hz`, reported as `rate_unsupported` (`adjust`).
+        let block = PskDemodBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        let sps = rate.as_f64() / cfg.symbol_rate_hz;
+        Ok(Figures {
+            rate_out: PskDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: PskDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // §4 of M40: 4 span + 40 / sps per input sample.
+            cost: 4.0 * cfg.span as f64 + 40.0 / sps,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::F32),
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        if matches!(
+            e,
+            sdrk_blocks::Error::InvalidParameter {
+                name: "symbol_rate_hz",
+                ..
+            }
+        ) {
+            d.code = DiagCode::RateUnsupported;
+        }
+    }
+    fn build(
+        cfg: &PskDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(PskDemodBlock::new(
+            cfg, rate, st,
+        )?)))
     }
 }

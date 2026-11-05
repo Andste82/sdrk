@@ -256,7 +256,7 @@ Deviations from the specification, recorded in the decisions log:
 - `Clocked` reports the consumed packets through `Block::consumed_packets()`, not through a field of `Progress` (D503).
 - A node with a packet port reports `PortKind::Stream(PortType::Packets)`, no new `PortKind` variant (D512); packet streams get nominal rates for buffer sizing only (D513).
 - Port `a` of a `Source` encoder reads only a pipeline input, not the packets of a decoder (D526).
-- Packets cannot cross groups and have no message in version 1 of the wire format (D517; open item I37-2).
+- Packets cannot cross groups and have no message in version 1 of the wire format (D517; in the backlog with the network splits, D587).
 - The JSON Lines files of `sdrk-io` use the record type `PacketRecord`, not `Packet`: `sdrk-io` does not depend on `sdrk-proto`, as R2 asks (D528, replacing D522; open item I37-1 closed).
 - `sdrk-proto` and `frame_decode` have no SIMD: the CRCs are byte-serial table lookups and the decoder is a bit-serial state machine (D496, D509). The CRCs are gated against GNU Radio (D527, which corrects the reference statement of D496); `frame_decode` and the block entries stay `info` because no library has this framing.
 

@@ -341,7 +341,7 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
 /// use sdrk::Rate;
 /// use sdrk_blocks::{ArenaStorage, Block, SymbolSyncBlock, SymbolSyncConfig};
 /// let mut arena = ArenaStorage::new(&mut []);
-/// let cfg = SymbolSyncConfig { symbol_rate_hz: 1000.0, loop_bw: 0.05, ..SymbolSyncConfig::default() };
+/// let cfg = SymbolSyncConfig { symbol_rate_hz: 1000.0, ..SymbolSyncConfig::default() };
 /// let mut sync = SymbolSyncBlock::<f32, _>::new(&cfg, Rate::hz(4000)?, &mut arena)?;
 /// // Alternating symbols +1, -1 with 4 samples each.
 /// let input: Vec<f32> = (0..4000).map(|n| if (n / 4) % 2 == 0 { 1.0 } else { -1.0 }).collect();

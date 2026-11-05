@@ -63,7 +63,8 @@ fn design_cases_are_present() {
         assert!(names.contains(&format!("firwin_kaiser_{tag}")));
     }
     assert!(names.contains(&"kaiserord_table".to_string()));
-    // The biquad (M22), halfband (M23) and pre-emphasis (M25) design cases have their own test files.
+    // The biquad (M22), halfband (M23), pre-emphasis (M25) and root-raised-cosine (M40) design
+    // cases have their own test files.
     let m09 = names
         .iter()
         .filter(|n| {
@@ -71,6 +72,7 @@ fn design_cases_are_present() {
                 && !n.starts_with("butterworth_")
                 && !n.starts_with("halfband_")
                 && !n.starts_with("preemphasis_")
+                && !n.starts_with("rrc_")
         })
         .count();
     assert_eq!(m09, 10);

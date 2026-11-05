@@ -40,6 +40,9 @@ pub enum Error {
     ReadOnlyParameter,
     /// The value has the wrong type for the parameter (kind: `InvalidArgument`).
     WrongParamType,
+    /// An error of the protocol crate `sdrk-proto`, e.g. a packet too long for a framing
+    /// (kind forwarded).
+    Proto(sdrk_proto::Error),
 }
 
 /// Result alias of this crate.
@@ -70,6 +73,7 @@ impl fmt::Display for Error {
             Self::UnknownParameter => f.write_str("unknown parameter"),
             Self::ReadOnlyParameter => f.write_str("parameter can only be set at construction"),
             Self::WrongParamType => f.write_str("wrong value type for the parameter"),
+            Self::Proto(e) => write!(f, "protocol error: {e}"),
         }
     }
 }
@@ -78,6 +82,7 @@ impl core::error::Error for Error {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Core(e) => Some(e),
+            Self::Proto(e) => Some(e),
             _ => None,
         }
     }
@@ -93,6 +98,7 @@ impl SdrkError for Error {
             Self::OutOfRange { .. } => ErrorKind::OutOfRange,
             Self::Storage { .. } => ErrorKind::CapacityExceeded,
             Self::ReadOnlyParameter => ErrorKind::InvalidState,
+            Self::Proto(e) => e.kind(),
         }
     }
 }
@@ -106,5 +112,11 @@ impl From<sdrk_core::Error> for Error {
 impl From<sdrk_device::Error> for Error {
     fn from(e: sdrk_device::Error) -> Self {
         Self::Core(sdrk_core::Error::Device(e))
+    }
+}
+
+impl From<sdrk_proto::Error> for Error {
+    fn from(e: sdrk_proto::Error) -> Self {
+        Self::Proto(e)
     }
 }

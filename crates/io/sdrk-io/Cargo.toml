@@ -1,6 +1,6 @@
 [package]
 name = "sdrk-io"
-description = "SDRk file I/O: raw, SigMF (with captures and annotations) and WAV as RX/TX streams."
+description = "SDRk file I/O: raw, SigMF (with captures and annotations) and WAV as RX/TX streams; JSON Lines packet files."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

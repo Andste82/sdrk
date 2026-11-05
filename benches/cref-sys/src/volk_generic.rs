@@ -50,7 +50,12 @@ pub fn interleave_32fc(re: &[f32], im: &[f32], out: &mut [[f32; 2]]) -> bool {
     #[cfg(has_volkgeneric)]
     // SAFETY: every buffer holds at least `n` elements; the output is a separate mutable slice.
     unsafe {
-        ffi::sdrk_volk_generic_32f_x2_interleave_32fc(out.as_mut_ptr(), re.as_ptr(), im.as_ptr(), n);
+        ffi::sdrk_volk_generic_32f_x2_interleave_32fc(
+            out.as_mut_ptr(),
+            re.as_ptr(),
+            im.as_ptr(),
+            n,
+        );
     }
     #[cfg(not(has_volkgeneric))]
     let _ = n;
@@ -83,7 +88,12 @@ pub fn interleave_16ic(re: &[i16], im: &[i16], out: &mut [[i16; 2]]) -> bool {
     #[cfg(has_volkgeneric)]
     // SAFETY: as in `interleave_32fc`.
     unsafe {
-        ffi::sdrk_volk_generic_16i_x2_interleave_16ic(out.as_mut_ptr(), re.as_ptr(), im.as_ptr(), n);
+        ffi::sdrk_volk_generic_16i_x2_interleave_16ic(
+            out.as_mut_ptr(),
+            re.as_ptr(),
+            im.as_ptr(),
+            n,
+        );
     }
     #[cfg(not(has_volkgeneric))]
     let _ = n;

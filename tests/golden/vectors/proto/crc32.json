@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "data": {
+      "dtype": "u8",
+      "file": "crc32.data.bin",
+      "len": 9091
+    },
+    "expected": {
+      "dtype": "i32",
+      "file": "crc32.expected.bin",
+      "len": 69
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "crc32.lengths.bin",
+      "len": 69
+    }
+  },
+  "case": "crc32",
+  "format_version": 1,
+  "kernel": "proto",
+  "notes": "binascii.crc32; 69 messages of 0 to 256 bytes (i32 bit patterns)",
+  "params": {
+    "messages": 69
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 479,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

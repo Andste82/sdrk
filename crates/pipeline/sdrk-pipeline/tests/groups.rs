@@ -265,8 +265,8 @@ fn split_by_groups_makes_one_valid_description_per_group() {
     assert_eq!(front.nodes.keys().collect::<Vec<_>>(), ["tune"]);
     let edge_in = &audio.inputs["edge__tune__demod"];
     assert_eq!(edge_in.sample_type, Some(InputType::C32));
-    assert_eq!(edge_in.rate_hz.0.num(), 240_000);
-    assert_eq!(edge_in.rate_hz.0.den(), 1);
+    let rate = edge_in.rate_hz.unwrap().0;
+    assert_eq!((rate.num(), rate.den()), (240_000, 1));
     // The input `rf` is copied into both groups; the outputs follow their source node.
     assert!(front.inputs.contains_key("rf") && audio.inputs.contains_key("rf"));
     assert!(audio.outputs.contains_key("audio") && audio.outputs.contains_key("spectrum"));

@@ -1,6 +1,6 @@
 # WebAssembly bindings
 
-The crate `sdrk-wasm` (`bindings/wasm`, `cdylib` and `rlib`) exposes the pipeline API of [pipeline.md](pipeline.md) to JavaScript, in browsers and in Node 20 or later. The bindings only configure: they build a pipeline from JSON (or from the `FlowBuilder`), set parameters (immediately or at a sample index or time), push and pull data and read streams, frames and events. All processing stays in Rust. Data crosses the boundary once per block: `push` copies the typed array into a buffer that was allocated when the pipeline was built, `readStream` copies out of one; nothing allocates per call.
+The crate `sdrk-wasm` (`bindings/wasm`, `cdylib` and `rlib`) exposes the pipeline API of [pipeline.md](pipeline.md) to JavaScript, in browsers and in Node 20 or later. The bindings only configure: they build a pipeline from JSON (or from the `FlowBuilder`), set parameters (immediately or at a sample index or time), push and pull data and read streams, frames, packets and events. All processing stays in Rust. Data crosses the boundary once per block: `push` copies the typed array into a buffer that was allocated when the pipeline was built, `readStream` copies out of one; nothing allocates per call.
 
 The package `sdrk-wasm` (unscoped; it is not published, and the name is not reserved: `npm view sdrk-wasm` answered 404 on 2026-10-19, see M14-1 in [open-items.md](open-items.md)) is assembled by `cargo xtask wasm-pkg`. There is no `wasm-pack` (its upstream organisation was archived): xtask calls `cargo build --target wasm32-unknown-unknown --release` and `wasm-bindgen --target web` directly.
 
@@ -17,7 +17,7 @@ pipeline.free();
 
 ## Layers of the crate
 
-- `engine` (plain Rust, no `wasm-bindgen`): `Engine` wraps a `sdrk_pipeline::Pipeline` with the buffers of the data path and a `WasmError` that carries the fields of the JavaScript error. It runs, and is tested, on the host (`tests/engine.rs`, `tests/fm_native.rs`).
+- `engine` (plain Rust, no `wasm-bindgen`): `Engine` wraps a `sdrk_pipeline::Pipeline` with the buffers of the data path and a `WasmError` that carries the fields of the JavaScript error. It runs, and is tested, on the host (`tests/engine.rs`, `tests/fm_native.rs`, `tests/packets.rs`).
 - `lib.rs`: the exports of `wasm-bindgen` (camelCase names) and the conversion between JavaScript values and the engine.
 - `js/error.js`: the class `SdrkError`, imported by `wasm-bindgen` as a snippet (it ends up in `snippets/` of the package).
 - `pkg-template/`: `package.json`, the loader `index.js`, `builder.js`, the hand-written types `index.d.ts` and `builder.d.ts`, `README.md`.
@@ -38,6 +38,8 @@ class Pipeline {
   pull(output: string, out: Samples, source: PullSource): PullResult;
   readStream(output: string, out: Samples): number;
   readFrame(output: string, frame: Float32Array): FrameMeta | null;
+  pushPackets(input: string, packets: PacketIn[]): void;     // packet inputs (M37)
+  readPackets(output: string): Packet[];                      // packet outputs (M37)
   available(output: string): number;
   chunkSize(output: string): number;
   dropped(output: string): bigint;
@@ -51,7 +53,7 @@ class Pipeline {
 }
 ```
 
-`index.d.ts` has the complete types (`Report`, `Diagnostic`, `SdrkEvent`, `BlockMeta`, `FrameMeta`, ...). Beyond the specified surface the package has `chunkSize` and `dropped` (needed to size the buffers and to see what a drop policy discarded), `BlockFlags` (the bit values of `BlockMeta.flags`), `simdSupported()`, `defaultVariant()` and `loadedVariant()`.
+`index.d.ts` has the complete types (`Report`, `Diagnostic`, `SdrkEvent`, `BlockMeta`, `FrameMeta`, `Packet`, `PacketIn`, ...); `builder.d.ts` accepts `type: "packets"` for inputs (with `rate_hz` optional) and outputs. Beyond the specified surface the package has `chunkSize` and `dropped` (needed to size the buffers and to see what a drop policy discarded), `BlockFlags` (the bit values of `BlockMeta.flags`), `PacketFlags` (the bit values of `Packet.flags`), `simdSupported()`, `defaultVariant()` and `loadedVariant()`.
 
 ### Data layout
 
@@ -68,6 +70,14 @@ The typed array must match the stream; a mismatch throws `SdrkError { kind: "Inv
 All counts are in samples; for a complex stream a typed array of length `2 * n` holds `n` samples, and `readStream` returns `n`. For raw streams the unit is the byte. `push` takes at most `settings.max_chunk` samples (bytes for raw: `max_chunk` times the bytes of one sample, rounded up); more throws `LengthMismatch`. `readStream` reads as much as fits `out` (it copies through the output buffer of `chunkSize(output)` samples, that is `max_chunk` samples, at most 65 536, and four times as many bytes for a raw output, in as many steps as needed). `pull` makes one pull call through that buffer and may return fewer samples than `out` can hold, so a caller that needs more calls it again. A burst boundary ends a pull call (see [pipeline.md](pipeline.md)).
 
 `readFrame` needs a `Float32Array` of exactly the frame length (else `LengthMismatch`) and returns `{ firstSample: bigint, averaged: number, exponent: number }` or `null`.
+
+### Packets
+
+Packet inputs and outputs (`"type": "packets"`, M37, see [pipeline.md](pipeline.md)) carry no typed array: a packet is the object `{ index, flags, data }`, the same fields as a line of the JSON Lines packet files of `sdrk-io` ([io.md](io.md#packet-files-json-lines)). `data` is the payload as lower-case hex without spaces (at most 256 bytes, 512 digits), `flags` an OR of `PacketFlags` (`CrcOk = 1`, `CrcFail = 2`, `Corrected = 4`, `Truncated = 8`), `index` the sample index where the packet starts (a decoder sets it; an encoder ignores it).
+
+- `pushPackets(input, packets)` takes an `Array` of such objects; `index` (a `bigint` or a safe integer) and `flags` are optional and default to 0, other fields are ignored. Upper-case or odd-length hex, more than 256 bytes, a missing `data` or a value of the wrong type throws `InvalidArgument`; more than `settings.max_chunk` packets throws `LengthMismatch`. The packets are parsed into the input buffer that was allocated at build time (only the `data` string of each object is copied out of JavaScript), and all of them are taken or none.
+- `readPackets(output)` returns every packet waiting in the output as an `Array`, oldest first, with `index` as a `bigint` like every other 64-bit value the library returns. It copies through an output buffer of `chunkSize(output)` packets (`max_chunk`, at most 4096) and builds one object per packet.
+- `push`, `readStream` and `pull` on a packet port throw `InvalidArgument` (the message points to `pushPackets` and `readPackets`); `pushPackets` and `readPackets` on a sample port throw `InvalidArgument` too. `available` and `dropped` count packets.
 
 ### Metadata, 64-bit values and time
 
@@ -90,7 +100,7 @@ All counts are in samples; for a complex stream a typed array of length `2 * n` 
 
 ### Pull mode
 
-`pull(output, out, source)` produces `out`'s worth of a transmit output. `source(input, max)` is called whenever the path needs input data: it returns a typed array of the input's type with at most `max` samples, or `null` when it is exhausted. A source that returns the wrong type throws `InvalidArgument`, one that returns more than `max` samples `LengthMismatch`; an exception thrown by the source comes out of `pull` unchanged. `pull` returns `{ samples, meta }` where `meta` is `{ start: bigint, flags: number, anchor?, txTimeNs? }` of the first sample. `beginBurst(output, txTimeNs?)` and `endBurst(output)` frame bursts; see the burst rules in [pipeline.md](pipeline.md).
+`pull(output, out, source)` produces `out`'s worth of a transmit output. `source(input, max)` is called whenever the path needs input data: it returns a typed array of the input's type with at most `max` samples, or `null` when it is exhausted. For a packet input it returns an `Array` of at most `max` packet objects; there `null` or an empty array means "nothing to send now": the encoder sends its idle signal and the stream goes on (a packet input never ends a pull). A source that returns the wrong type throws `InvalidArgument`, one that returns more than `max` samples `LengthMismatch`; an exception thrown by the source comes out of `pull` unchanged. `pull` returns `{ samples, meta }` where `meta` is `{ start: bigint, flags: number, anchor?, txTimeNs? }` of the first sample. `beginBurst(output, txTimeNs?)` and `endBurst(output)` frame bursts; see the burst rules in [pipeline.md](pipeline.md).
 
 ### Errors
 
@@ -147,9 +157,9 @@ A `Pipeline` is not shared between threads; it lives in the WebAssembly memory o
 
 | Test | What | How to run |
 | --- | --- | --- |
-| `bindings/wasm/tests/engine.rs`, `fm_native.rs` | the engine on the host: layouts, errors, events, timed parameters, pull and bursts, FM receive | part of `cargo test --workspace` |
+| `bindings/wasm/tests/engine.rs`, `fm_native.rs`, `packets.rs` | the engine on the host: layouts, errors, events, timed parameters, pull and bursts, FM receive, packet push, read and pull with idle gaps | part of `cargo test --workspace` |
 | `bindings/wasm/tests/wasm.rs` | the JavaScript API from Rust with `wasm-bindgen-test` | `cargo xtask wasm-test [--env node\|chrome\|firefox] [--variant simd\|scalar\|relaxed\|all]` |
-| `bindings/wasm/js-tests/*.test.mjs` | the packed tarball installed into a temporary project with `npm install`: FM receive with a JS meter, the builder against `examples/flows/fm_receiver.json`, the loader | `node --test "bindings/wasm/js-tests/*.test.mjs"` after `cargo xtask wasm-pkg --relaxed` |
+| `bindings/wasm/js-tests/*.test.mjs` | the packed tarball installed into a temporary project with `npm install`: FM receive with a JS meter, the builder against `examples/flows/fm_receiver.json`, the loader, packets through `frame_loop.json` and a packet source in pull mode | `node --test "bindings/wasm/js-tests/*.test.mjs"` after `cargo xtask wasm-pkg --relaxed` |
 
 `wasm-test` runs `cargo test -p sdrk-wasm --release --test wasm --target wasm32-unknown-unknown` with `wasm-bindgen-test-runner` and the `RUSTFLAGS` of the variant (the tests need `--release`: unoptimised the filters are too slow). The browsers need `chromedriver` or `geckodriver` in `PATH` (or `CHROMEDRIVER`/`GECKODRIVER`); `WASM_BINDGEN_TEST_WEBDRIVER_JSON` points to a `webdriver.json` for options (for example `--no-sandbox` for Chrome as root).
 

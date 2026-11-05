@@ -343,3 +343,106 @@ fn nodes_with_two_inputs_do_not_allocate() {
         "allocations between 1000 pushes after build"
     );
 }
+
+#[test]
+fn packet_inputs_and_outputs_do_not_allocate() {
+    // The proof flow `frame_loop` in push mode, and its encoder in pull mode with an idle
+    // source between the packets.
+    let mut pipeline = common::build(&common::flow("frame_loop"));
+    let packets: Vec<sdrk_pipeline::Packet> = (0..64u8)
+        .map(|k| {
+            let data = vec![k; usize::from(k) * 3];
+            sdrk_pipeline::Packet::new(0, sdrk_pipeline::PacketFlags::NONE, &data).unwrap()
+        })
+        .collect();
+    let mut got = vec![sdrk_pipeline::Packet::default(); 128];
+    pipeline.push_packets("msg", &packets[..2]).unwrap();
+    pipeline.read_packets("out", &mut got).unwrap();
+    let (decoded, allocations) = count_allocations(|| {
+        let mut decoded = 0usize;
+        for i in 0..1000usize {
+            let n = 1 + i % 50;
+            let from = i % 10;
+            pipeline
+                .push_packets("msg", &packets[from..from + n])
+                .unwrap();
+            decoded += pipeline.read_packets("out", &mut got).unwrap();
+            assert_eq!(pipeline.available("out").unwrap(), 0);
+        }
+        decoded
+    });
+    assert_eq!(decoded, (0..1000).map(|i| 1 + i % 50).sum::<usize>());
+    assert_eq!(allocations, 0, "allocations of the packet flow after build");
+
+    struct Sometimes {
+        packets: Vec<sdrk_pipeline::Packet>,
+        calls: usize,
+    }
+    impl PullSource for Sometimes {
+        fn provide(&mut self, _input: &str, max: usize) -> Result<InputData<'_>, PullError> {
+            self.calls += 1;
+            if self.calls.is_multiple_of(3) {
+                Ok(InputData::Packets(&[]))
+            } else {
+                let n = max.min(2);
+                Ok(InputData::Packets(&self.packets[..n]))
+            }
+        }
+    }
+    let doc = json!({
+        "sdrk": 1, "name": "tx",
+        "inputs": { "msg": { "type": "packets", "rate_hz": 48000 } },
+        "nodes": { "enc": { "kind": "frame_encode", "params": { "idle": "preamble" } } },
+        "edges": [ { "from": "msg", "to": "enc" }, { "from": "enc", "to": "tx" } ],
+        "outputs": { "tx": { "type": "stream" } }
+    });
+    let mut tx = common::build(&doc.to_string());
+    let mut source = Sometimes {
+        packets: packets[..4].to_vec(),
+        calls: 0,
+    };
+    let mut samples = vec![0f32; 3000];
+    tx.pull_samples::<f32>("tx", &mut samples, &mut source)
+        .unwrap();
+    let (pulled, allocations) = count_allocations(|| {
+        let mut pulled = 0usize;
+        for i in 0..1000usize {
+            let want = 1 + (i * 131) % 3000;
+            pulled += tx
+                .pull_samples::<f32>("tx", &mut samples[..want], &mut source)
+                .unwrap()
+                .0;
+        }
+        pulled
+    });
+    assert_eq!(
+        pulled,
+        (0..1000).map(|i| 1 + (i * 131) % 3000).sum::<usize>()
+    );
+    assert_eq!(allocations, 0, "allocations of a packet pull after build");
+
+    // Burst cycles behind the packet input: `end_burst` sends the idle tail through the
+    // encoder and maps the end along the path without copying it.
+    tx.begin_burst("tx", None).unwrap();
+    tx.pull_samples::<f32>("tx", &mut samples, &mut source)
+        .unwrap();
+    tx.end_burst("tx").unwrap();
+    tx.pull_samples::<f32>("tx", &mut samples, &mut source)
+        .unwrap();
+    let ((), allocations) = count_allocations(|| {
+        for _ in 0..50 {
+            tx.begin_burst("tx", None).unwrap();
+            tx.pull_samples::<f32>("tx", &mut samples, &mut source)
+                .unwrap();
+            tx.end_burst("tx").unwrap();
+            for _ in 0..4 {
+                tx.pull_samples::<f32>("tx", &mut samples, &mut source)
+                    .unwrap();
+            }
+        }
+    });
+    assert_eq!(
+        allocations, 0,
+        "allocations in burst cycles behind a packet input"
+    );
+}

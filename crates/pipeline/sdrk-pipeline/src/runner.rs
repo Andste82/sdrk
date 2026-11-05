@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 
 use sdrk::{C32, CQ15, Delay, Progress, Q15, Rate, Sample, SampleType};
-use sdrk_blocks::{FrameMeta, ParamValue, PortType};
+use sdrk_blocks::{FrameMeta, Packet, ParamValue, PortType};
 use sdrk_device::TimeAnchor;
 use serde_json::Value;
 
@@ -21,7 +21,7 @@ use crate::validate::Report;
 /// Data pushed into one input of a pipeline.
 ///
 /// The variant must match the input: `Raw` for inputs with a `format`, the sample type for
-/// inputs with a `type`.
+/// inputs with a `type`, `Packets` for packet inputs (see also [`Pipeline::push_packets`]).
 ///
 /// ```
 /// use sdrk::C32;
@@ -42,10 +42,13 @@ pub enum InputData<'a> {
     F32(&'a [f32]),
     /// Real Q15 samples.
     Q15(&'a [Q15]),
+    /// Packets. In pull mode an empty slice from a packet input means "nothing to send now":
+    /// the encoder fills the output with its idle signal.
+    Packets(&'a [Packet]),
 }
 
 impl InputData<'_> {
-    /// Number of elements (bytes for `Raw`).
+    /// Number of elements (bytes for `Raw`, packets for `Packets`).
     pub fn len(&self) -> usize {
         match self {
             Self::Raw(s) => s.len(),
@@ -53,6 +56,7 @@ impl InputData<'_> {
             Self::CQ15(s) => s.len(),
             Self::F32(s) => s.len(),
             Self::Q15(s) => s.len(),
+            Self::Packets(s) => s.len(),
         }
     }
 
@@ -68,6 +72,7 @@ impl InputData<'_> {
             Self::CQ15(_) => PortType::CQ15,
             Self::F32(_) => PortType::F32,
             Self::Q15(_) => PortType::Q15,
+            Self::Packets(_) => PortType::Packets,
         }
     }
 
@@ -80,6 +85,7 @@ impl InputData<'_> {
             Self::CQ15(s) => NodeInput::CQ15(s.get(from..to)?),
             Self::F32(s) => NodeInput::F32(s.get(from..to)?),
             Self::Q15(s) => NodeInput::Q15(s.get(from..to)?),
+            Self::Packets(s) => NodeInput::Packets(s.get(from..to)?),
         })
     }
 }
@@ -112,6 +118,7 @@ pub(crate) fn name_of(t: PortType) -> &'static str {
         PortType::F32 => "f32",
         PortType::Q15 => "q15",
         PortType::Raw => "raw",
+        PortType::Packets => "packets",
         _ => "frames",
     }
 }
@@ -168,6 +175,7 @@ pub(crate) enum Buffer {
     CQ15(Vec<CQ15>),
     F32(Vec<f32>),
     Q15(Vec<Q15>),
+    Packets(Vec<Packet>),
 }
 
 macro_rules! each {
@@ -178,6 +186,7 @@ macro_rules! each {
             Buffer::CQ15($v) => $e,
             Buffer::F32($v) => $e,
             Buffer::Q15($v) => $e,
+            Buffer::Packets($v) => $e,
         }
     };
 }
@@ -205,6 +214,7 @@ impl Buffer {
             PortType::CQ15 => Self::CQ15(alloc_vec(len)?),
             PortType::F32 => Self::F32(alloc_vec(len)?),
             PortType::Q15 => Self::Q15(alloc_vec(len)?),
+            PortType::Packets => Self::Packets(alloc_vec(len)?),
             _ => {
                 return Err(sdrk_blocks::Error::InvalidParameter {
                     name: "buffer",
@@ -225,7 +235,16 @@ impl Buffer {
             Self::CQ15(v) => NodeInput::CQ15(v.get(r)?),
             Self::F32(v) => NodeInput::F32(v.get(r)?),
             Self::Q15(v) => NodeInput::Q15(v.get(r)?),
+            Self::Packets(v) => NodeInput::Packets(v.get(r)?),
         })
+    }
+
+    /// The packets in `r` (`None` unless this is a packet buffer).
+    pub(crate) fn packets(&self, r: Range<usize>) -> Option<&[Packet]> {
+        match self {
+            Self::Packets(v) => v.get(r),
+            _ => None,
+        }
     }
 
     /// The same view as [`Buffer::view`], for one port of a two-input node.
@@ -236,6 +255,8 @@ impl Buffer {
             Self::CQ15(v) => NodeElem::CQ15(v.get(r)?),
             Self::F32(v) => NodeElem::F32(v.get(r)?),
             Self::Q15(v) => NodeElem::Q15(v.get(r)?),
+            // Packets are never one stream of a lockstep pair.
+            Self::Packets(_) => return None,
         })
     }
 
@@ -246,6 +267,7 @@ impl Buffer {
             Self::CQ15(v) => NodeOutput::CQ15(v.get_mut(r)?),
             Self::F32(v) => NodeOutput::F32(v.get_mut(r)?),
             Self::Q15(v) => NodeOutput::Q15(v.get_mut(r)?),
+            Self::Packets(v) => NodeOutput::Packets(v.get_mut(r)?),
         })
     }
 
@@ -267,6 +289,7 @@ impl Buffer {
             (Self::CQ15(d), Self::CQ15(s)) => copy_slice(d, at, s, from, n),
             (Self::F32(d), Self::F32(s)) => copy_slice(d, at, s, from, n),
             (Self::Q15(d), Self::Q15(s)) => copy_slice(d, at, s, from, n),
+            (Self::Packets(d), Self::Packets(s)) => copy_slice(d, at, s, from, n),
             _ => false,
         }
     }
@@ -285,6 +308,7 @@ impl Buffer {
             (Self::CQ15(d), InputData::CQ15(s)) => copy_slice(d, at, s, from, n),
             (Self::F32(d), InputData::F32(s)) => copy_slice(d, at, s, from, n),
             (Self::Q15(d), InputData::Q15(s)) => copy_slice(d, at, s, from, n),
+            (Self::Packets(d), InputData::Packets(s)) => copy_slice(d, at, s, from, n),
             _ => false,
         }
     }
@@ -302,6 +326,8 @@ impl Buffer {
             Self::CQ15(v) => bytes_of(v, from, n),
             Self::F32(v) => bytes_of(v, from, n),
             Self::Q15(v) => bytes_of(v, from, n),
+            // Packets are not plain bytes; see `copy_packets_to`.
+            Self::Packets(_) => None,
         };
         let dst: &mut [u8] = bytemuck::cast_slice_mut(out);
         match (bytes, dst.get_mut(..n.saturating_mul(size))) {
@@ -310,6 +336,26 @@ impl Buffer {
                 true
             }
             _ => false,
+        }
+    }
+
+    /// Copies `n` packets starting at `from` into `out`.
+    pub(crate) fn copy_packets_to(&self, from: usize, n: usize, out: &mut [Packet]) -> bool {
+        match self {
+            Self::Packets(v) => copy_slice(out, 0, v, from, n),
+            _ => false,
+        }
+    }
+
+    /// Adds `offset` to the index of the packets in `r` (a decoder's packets move from the
+    /// block's count to the index domain of the node's input).
+    fn shift_packets(&mut self, r: Range<usize>, offset: u64) {
+        if let Self::Packets(v) = self
+            && let Some(packets) = v.get_mut(r)
+        {
+            for p in packets {
+                p.index = p.index.saturating_add(offset);
+            }
         }
     }
 }
@@ -647,6 +693,9 @@ pub(crate) struct NodeRt {
     /// The stream of port `b` of a two-input node, and the reader slot of the node in it.
     pub(crate) src_b: Option<usize>,
     pub(crate) slot_b: usize,
+    /// True for a clocked node: port `b` carries packets and lockstep applies to port `a`
+    /// only.
+    pub(crate) clocked: bool,
     pub(crate) dst: Dst,
     /// Output elements per input element (`num`, `den`).
     pub(crate) ratio: (u64, u64),
@@ -695,6 +744,8 @@ pub(crate) struct InRt {
     pub(crate) stream: usize,
     pub(crate) ty: PortType,
     pub(crate) rate: Rate,
+    /// False for a packet input without `rate_hz`.
+    pub(crate) has_rate: bool,
     pub(crate) max_len: usize,
     /// Zero samples for the flush of `end_burst`, allocated once in `build`.
     pub(crate) zeros: crate::pull::ZeroInput,
@@ -811,6 +862,7 @@ fn step_stream(
         if p.consumed > avail || ds.end + p.produced > ds.cap() {
             return Err(internal("block reported impossible progress"));
         }
+        ds.buf.shift_packets(ds.end..ds.end + p.produced, n.n0_in);
         ds.end += p.produced;
         ds.total_el += p.produced as u64;
         n.consumed += p.consumed as u64;
@@ -833,6 +885,7 @@ fn step_stream(
         if p.consumed > avail || ds.end + p.produced > ds.cap() {
             return Err(internal("block reported impossible progress"));
         }
+        ds.buf.shift_packets(ds.end..ds.end + p.produced, n.n0_in);
         ds.end += p.produced;
         ds.total_el += p.produced as u64;
         n.consumed += p.consumed as u64;
@@ -907,6 +960,76 @@ fn step_pair(
     n.consumed += p.consumed as u64;
     *at_mut(&mut at_mut(head, n.src)?.readers, n.slot)? += p.consumed;
     *at_mut(&mut at_mut(head, sb)?.readers, n.slot_b)? += p.consumed;
+    Ok(Some((p, 0)))
+}
+
+/// Runs a clocked node once on `avail` clock samples of port `a` and every packet queued at
+/// port `b`. `None` if its output buffer has no room.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+)]
+fn step_clocked(
+    n: &mut NodeRt,
+    streams: &mut [Stream],
+    d: usize,
+    avail: usize,
+) -> Result<Option<(Progress, usize)>> {
+    let sb = n
+        .src_b
+        .ok_or_else(|| internal("clocked node without a packet source"))?;
+    let needed = (avail as u128)
+        .saturating_mul(u128::from(n.ratio.0))
+        .div_ceil(u128::from(n.ratio.1.max(1)))
+        .saturating_add(4);
+    let needed = usize::try_from(needed).unwrap_or(usize::MAX);
+    {
+        let ds = at_mut(streams, d)?;
+        if ds.cap().saturating_sub(ds.end) < needed {
+            ds.compact();
+        }
+        if ds.end >= ds.cap() {
+            return Ok(None);
+        }
+    }
+    let (head, tail) = streams
+        .split_at_mut_checked(d)
+        .ok_or_else(|| internal("stream split"))?;
+    let ds = tail
+        .first_mut()
+        .ok_or_else(|| internal("destination stream"))?;
+    let mut meta: Option<FrameMeta> = None;
+    let (p, queued) = {
+        let (sa, sbs) = (at(head, n.src)?, at(head, sb)?);
+        let pos_a = *at(&sa.readers, n.slot)?;
+        let pos_b = *at(&sbs.readers, n.slot_b)?;
+        let a = sa
+            .buf
+            .elem_view(pos_a..pos_a + avail)
+            .ok_or_else(|| internal("input view"))?;
+        let packets = sbs
+            .buf
+            .packets(pos_b..sbs.end.max(pos_b))
+            .ok_or_else(|| internal("packet view"))?;
+        let out = ds
+            .buf
+            .view_mut(ds.end..ds.cap())
+            .ok_or_else(|| internal("output view"))?;
+        let p = n
+            .node
+            .process(NodeInput::Clocked { a, packets }, out, &mut meta)
+            .map_err(|e| block_error(&n.name, e))?;
+        (p, packets.len())
+    };
+    let taken = n.node.consumed_packets();
+    if p.consumed > avail || taken > queued || ds.end + p.produced > ds.cap() {
+        return Err(internal("block reported impossible progress"));
+    }
+    ds.end += p.produced;
+    ds.total_el += p.produced as u64;
+    n.consumed += p.consumed as u64;
+    *at_mut(&mut at_mut(head, n.src)?.readers, n.slot)? += p.consumed;
+    *at_mut(&mut at_mut(head, sb)?.readers, n.slot_b)? += taken;
     Ok(Some((p, 0)))
 }
 
@@ -1124,6 +1247,8 @@ impl Pipeline {
                 let s = at(&self.streams, n.src)?;
                 let a = s.end.saturating_sub(*at(&s.readers, n.slot)?);
                 match n.src_b {
+                    // A clocked node advances with its clock; the packets are optional.
+                    Some(_) if n.clocked => a,
                     // The two ports advance together: as much as both hold.
                     Some(sb) => {
                         let sbs = at(&self.streams, sb)?;
@@ -1154,6 +1279,7 @@ impl Pipeline {
         let n = at_mut(nodes, ni)?;
         let st = at_mut(stats, ni)?;
         let progress = match n.dst {
+            Dst::Stream(d) if n.clocked => step_clocked(n, streams, d, avail)?,
             Dst::Stream(d) if n.src_b.is_some() => step_pair(n, streams, d, avail)?,
             Dst::Stream(d) => step_stream(n, streams, d, avail, direct)?,
             Dst::Frames(oi) => step_frames(n, streams, at_mut(outputs, oi)?, avail, direct)?,
@@ -1166,6 +1292,48 @@ impl Pipeline {
             return Ok(Some(p));
         }
         Ok(None)
+    }
+
+    /// One idle call of the packet encoder `ni` (pull mode): an empty packet slice and room for
+    /// at most `samples` output samples, which the encoder fills with its idle signal. Returns
+    /// the number of samples produced (0 when the output buffer is full).
+    pub(crate) fn step_idle(&mut self, ni: usize, samples: usize) -> Result<usize> {
+        let Self {
+            nodes,
+            streams,
+            stats,
+            ..
+        } = self;
+        let n = at_mut(nodes, ni)?;
+        let Dst::Stream(d) = n.dst else {
+            return Err(internal("idle call of a frame node"));
+        };
+        let ds = at_mut(streams, d)?;
+        if ds.cap().saturating_sub(ds.end) < samples {
+            ds.compact();
+        }
+        let end = ds.end.saturating_add(samples).min(ds.cap());
+        if end <= ds.end {
+            return Ok(0);
+        }
+        let out = ds
+            .buf
+            .view_mut(ds.end..end)
+            .ok_or_else(|| internal("output view"))?;
+        let mut meta: Option<FrameMeta> = None;
+        let p = n
+            .node
+            .process(NodeInput::Packets(&[]), out, &mut meta)
+            .map_err(|e| block_error(&n.name, e))?;
+        if p.consumed > 0 || ds.end + p.produced > end {
+            return Err(internal("block reported impossible progress"));
+        }
+        ds.end += p.produced;
+        ds.total_el += p.produced as u64;
+        let st = at_mut(stats, ni)?;
+        st.calls += 1;
+        st.samples_out += p.produced as u64;
+        Ok(p.produced)
     }
 
     /// Moves data from the source stream of output `oi` into its queue, applying the drop
@@ -1363,8 +1531,69 @@ impl Pipeline {
         Ok(Some(meta))
     }
 
-    /// Elements waiting in an output: samples (bytes for a raw output) of a stream output or
-    /// frames of a frame output.
+    /// Pushes packets into a packet input: the same as `push(input, InputData::Packets(..))`.
+    /// All packets are taken, or an error is returned before anything is taken. A pure
+    /// encoder (`frame_encode`) produces the samples of the packets it has; with no packet it
+    /// produces nothing (in push mode there is no idle signal).
+    ///
+    /// ```
+    /// use sdrk_pipeline::{BuildOptions, Packet, PacketFlags, Registry};
+    /// let mut p = Registry::standard().build_json(
+    ///     include_str!("../../../../examples/flows/frame_loop.json"),
+    ///     &BuildOptions::default(),
+    /// )?;
+    /// let msg = Packet::new(0, PacketFlags::NONE, b"hello").map_err(|e| e.to_string())?;
+    /// p.push_packets("msg", &[msg])?;
+    /// assert_eq!(p.available("out")?, 1);
+    /// let mut got = [Packet::default(); 4];
+    /// assert_eq!(p.read_packets("out", &mut got)?, 1);
+    /// assert_eq!(got[0].data(), b"hello");
+    /// assert!(got[0].flags.contains(PacketFlags::CRC_OK));
+    /// assert_eq!(got[0].index, 32); // after the 4 preamble bytes
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Errors
+    /// As `push`: `UnknownInput`, `WrongType` (not a packet input), `ChunkTooLarge` (more than
+    /// `settings.max_chunk` packets), `OutputFull`, `Block` (e.g. a payload that the encoder
+    /// cannot frame).
+    pub fn push_packets(&mut self, input: &str, packets: &[Packet]) -> Result<()> {
+        self.push(input, InputData::Packets(packets))
+    }
+
+    /// Reads up to `out.len()` packets of a packet output, oldest first; returns the number
+    /// read.
+    ///
+    /// # Errors
+    /// `UnknownOutput`, `WrongType` (the output does not carry packets).
+    pub fn read_packets(&mut self, output: &str, out: &mut [Packet]) -> Result<usize> {
+        let oi = self.output_pos(output)?;
+        let o = at_mut(&mut self.outputs, oi)?;
+        let policy = o.policy;
+        let wrong = |expected| Error::WrongType {
+            name: output.to_string(),
+            expected,
+            got: "packets",
+        };
+        let OutKind::Stream { ty, queue, .. } = &mut o.kind else {
+            return Err(wrong("frames"));
+        };
+        if *ty != PortType::Packets {
+            return Err(wrong(name_of(*ty)));
+        }
+        let n = out.len().min(queue.len());
+        if !queue.buf.copy_packets_to(queue.start, n, out) {
+            return Err(internal("output queue read"));
+        }
+        queue.advance(n);
+        if n > 0 && policy == DropPolicy::Error {
+            self.run()?;
+        }
+        Ok(n)
+    }
+
+    /// Elements waiting in an output: samples (bytes for a raw output) of a stream output,
+    /// frames of a frame output or packets of a packet output.
     ///
     /// # Errors
     /// `UnknownOutput`.
@@ -1376,7 +1605,7 @@ impl Pipeline {
         })
     }
 
-    /// Number of elements (frames) that the drop policy discarded in an output since the
+    /// Number of elements (frames, packets) that the drop policy discarded in an output since the
     /// build.
     ///
     /// # Errors

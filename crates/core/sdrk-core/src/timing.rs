@@ -138,13 +138,35 @@ pub fn ceil_div(num: u128, den: u128) -> Option<u128> {
     Some(num / den + u128::from(!num.is_multiple_of(den)))
 }
 
-/// Whether the output/input rate ratio is fixed or can change at run time.
+/// Whether the output/input rate ratio is fixed or can change at run time, and how a block
+/// with a packet port relates its packets to samples.
+///
+/// ```
+/// use sdrk_core::timing::{Ratio, RatioKind};
+/// // A decoder that emits at most one packet per 56 input samples.
+/// let kind = RatioKind::Packets { max_per_input: Ratio::new(1, 56)? };
+/// assert_ne!(kind, RatioKind::Constant);
+/// assert_ne!(RatioKind::Source, RatioKind::Variable);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RatioKind {
     /// Fixed ratio.
     Constant,
     /// Ratio may change at run time.
     Variable,
+    /// The output is a packet port: the number of packets per input sample varies, and
+    /// `max_per_input` bounds it (used to size packet buffers). The `ratio` of the timing is
+    /// `max_per_input` as well.
+    Packets {
+        /// Upper bound of the packets per input sample.
+        max_per_input: Ratio,
+    },
+    /// The input is a packet port and the output a stream (a pure encoder): the output rate
+    /// is set from outside (the `rate_hz` of the packet input), not by a ratio. The `ratio`
+    /// of the timing bounds the output samples per input packet.
+    Source,
 }
 
 /// Implemented by every kernel *state* and every block.

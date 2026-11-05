@@ -47,6 +47,7 @@ mod fir_family;
 mod halfband_family;
 mod math_family;
 mod noise_family;
+mod proto_family;
 mod stereo_family;
 mod stereo_tx_family;
 
@@ -346,7 +347,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 185] = [
+pub const KERNELS: [&str; 192] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -532,6 +533,13 @@ pub const KERNELS: [&str; 185] = [
     "am_mod_cq15_fallback",
     "preemph_limit_stereo",
     "stereo_encode",
+    "crc16_ccitt_false",
+    "crc16_x25",
+    "crc32",
+    "crc24_adsb",
+    "frame_decode",
+    "frame_encode_block",
+    "frame_decode_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -700,6 +708,25 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "preemph_limit_stereo" => Box::new(stereo_tx_family::PreemphStereoK::new(rng, layout)),
         "stereo_encode" => Box::new(stereo_tx_family::StereoEncodeK::new(rng, layout)),
+        "crc16_ccitt_false" => Box::new(proto_family::CrcK::new(
+            rng,
+            layout,
+            proto_family::Crc::Ccitt,
+        )),
+        "crc16_x25" => Box::new(proto_family::CrcK::new(rng, layout, proto_family::Crc::X25)),
+        "crc32" => Box::new(proto_family::CrcK::new(
+            rng,
+            layout,
+            proto_family::Crc::Crc32,
+        )),
+        "crc24_adsb" => Box::new(proto_family::CrcK::new(
+            rng,
+            layout,
+            proto_family::Crc::Adsb,
+        )),
+        "frame_decode" => Box::new(proto_family::FrameDecodeK::new(rng, layout)),
+        "frame_encode_block" => Box::new(proto_family::FrameEncodeBlockK::new(rng, layout)),
+        "frame_decode_block" => Box::new(proto_family::FrameDecodeBlockK::new(rng, layout)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),
@@ -743,9 +770,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "oscillate" | "oscillate_fallback" => Box::new(OscC32K::new(layout, entry)),
         "oscillate_cq15" | "oscillate_cq15_fallback" => Box::new(OscCq15K::new(layout, entry)),
-        "interleave" | "interleave_fallback" => {
-            Box::new(SplitC32K::new(rng, layout, entry, false))
-        }
+        "interleave" | "interleave_fallback" => Box::new(SplitC32K::new(rng, layout, entry, false)),
         "interleave_cq15" | "interleave_cq15_fallback" => {
             Box::new(SplitCq15K::new(rng, layout, entry, false))
         }

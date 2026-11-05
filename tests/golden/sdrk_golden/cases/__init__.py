@@ -25,6 +25,7 @@ from . import (  # noqa: F401
     noise_blank,
     oscillate,
     power_db,
+    proto,
     preemph_limit,
     q15_ops,
     quad_demod,

@@ -1,6 +1,6 @@
 # File I/O (`sdrk-io`)
 
-The crate `sdrk-io` (layer `crates/io`, std, depends on `sdrk-device` and `serde_json`) reads and writes sample files as streams: readers implement `RxStream`, writers implement `TxStream`. They plug into the pipeline (`push_with_meta`, `pull`) and into the driver conformance checks like a device does ([device.md](device.md#conformance-checks)).
+The crate `sdrk-io` (layer `crates/io`, std, depends on `sdrk-device` and `serde_json`) reads and writes sample files as streams: readers implement `RxStream`, writers implement `TxStream`. They plug into the pipeline (`push_with_meta`, `pull`) and into the driver conformance checks like a device does ([device.md](device.md#conformance-checks)). Packet files (JSON Lines) are read and written as a whole by `sdrk_io::packets`.
 
 Errors: `sdrk_io::Error` is `Io(String)` (kind `Io`), `Parse { file, reason }` (kind `Parse`), `Unsupported(&'static str)` (kind `Unsupported`), `InvalidArgument(String)` and `Device(sdrk_device::Error)` (kind forwarded).
 
@@ -36,6 +36,20 @@ Every other datatype (big-endian, 32-bit integer, 64-bit float, `ru8`, ...) is `
 `WavReader::new(reader, iq, chunk_samples)` reads PCM 16-bit and IEEE float 32-bit, plain or `WAVE_FORMAT_EXTENSIBLE`, one or two channels; unknown chunks before `data` are skipped. A mono file is a real signal (`RS16`, `RF32`); a stereo file must be read with `iq: true` and gives `CS16` or `CF32` (I = left channel); the other combinations are `InvalidArgument`. A data size of `0xFFFFFFFF` (streamed files) reads to the end of the input; a size larger than the data reads what is there.
 
 `WavWriter::new(writer, format, rate)` writes `RS16`, `RF32`, `CS16` or `CF32` with the canonical 44-byte header (the `fmt ` chunk has 16 bytes also for float data) and patches the sizes in `finish()`. The rate must be a whole number of hertz that fits 32 bits; data beyond 4 GiB is `Unsupported`. The golden vectors `io/wav_pcm16_mono` (written with the Python `wave` module) and `io/wav_float32_stereo` (built with `struct`) contain the expected files.
+
+## Packet files (JSON Lines)
+
+`sdrk_io::packets::write_jsonl(writer, &records)` writes one `PacketRecord` per line and `read_jsonl(reader)` reads them back (any `BufRead`), for the packet inputs and outputs of the pipeline ([pipeline.md](pipeline.md)). A `PacketRecord` holds the three fields of a line (`index`, `flags`, `data`); `sdrk-io` stays on the core types (R2) and does not know the packet type `Packet` of `sdrk-proto`, so the caller converts, for example `Packet::new(r.index(), PacketFlags::from_bits(r.flags()), r.data())`:
+
+```text
+{"index":123,"flags":1,"data":"1acf"}
+{"index":2280,"flags":2,"data":""}
+```
+
+- **Fields.** Exactly `index` (the sample index of the packet, an unsigned 64-bit integer), `flags` (the bits of `PacketFlags` of `sdrk-proto`: `CRC_OK = 1`, `CRC_FAIL = 2`, `CORRECTED = 4`, `TRUNCATED = 8`; any unsigned 32-bit value is kept) and `data` (the payload as lower-case hex, two digits per byte, no spaces, at most `MAX_DATA_BYTES` = 256 bytes, the capacity of a packet). The writer emits them in this order without spaces and ends every line with LF; the reader accepts any field order and CRLF line ends.
+- **Errors.** An unknown or missing field, a value of the wrong type or range (a negative or fractional `index`, `flags` above 2^32 - 1), hex with upper-case letters, other characters or an odd number of digits, data longer than 256 bytes and text that is not a JSON object are `Parse { file: "line <n>", reason }`, with `n` counted from 1 (for example `cannot parse line 3: unknown field \`extra\``). Input that is not UTF-8 is an `Io` error.
+- **Empty lines.** Lines that are empty or hold only white space are skipped; they still count for the line numbers.
+- **Helpers.** `to_hex(&[u8])` and `from_hex(hex)` convert the `data` field; the WebAssembly binding uses them for its packet objects ([wasm.md](wasm.md#packets)), so the two representations are the same.
 
 ## Command-line examples
 

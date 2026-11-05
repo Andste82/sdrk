@@ -123,9 +123,7 @@ fn stereo_block(index: usize) -> Vec<u8> {
         // cos(39 k)) - 0.225 (cos(35 k) - cos(41 k)) + 0.1 sin(19 k), term by term.
         let sin_int = |amp: f64, f: f64| amp * (1.0 - (tau * f * t).cos()) / (tau * f);
         let cos_int = |amp: f64, f: f64| amp * (tau * f * t).sin() / (tau * f);
-        let integral = sin_int(0.45, 1_000.0)
-            + sin_int(0.45, 3_000.0)
-            + cos_int(0.225, 37_000.0)
+        let integral = sin_int(0.45, 1_000.0) + sin_int(0.45, 3_000.0) + cos_int(0.225, 37_000.0)
             - cos_int(0.225, 39_000.0)
             - cos_int(0.225, 35_000.0)
             + cos_int(0.225, 41_000.0)

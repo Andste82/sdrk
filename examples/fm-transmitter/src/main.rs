@@ -123,7 +123,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .inputs
         .get_mut(&input_name)
         .ok_or_else(|| Failure::Usage(format!("the flow has no input `{input_name}`")))?;
-    entry.rate_hz = RateHz(wav_rate);
+    entry.rate_hz = Some(RateHz(wav_rate));
 
     // A file has an end; `zeros` would pad the output with silence forever.
     let out_spec = spec

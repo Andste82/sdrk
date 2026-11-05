@@ -238,10 +238,31 @@ R1.2 commands; `cargo test -p sdrk-proto`; `cargo build -p sdrk-proto --target t
 
 ## Deliverables checklist
 
-- [ ] Crate `sdrk-proto` with `Packet`, flags, CRCs, `frame`; layer table and xtask check updated
-- [ ] `PortType::Packets`, `Packets` ports, `Clocked<S, Packets>`, timing kinds `Packets` and `Source`
-- [ ] Blocks and kinds `frame_encode`, `frame_decode`
-- [ ] Pipeline packet inputs, outputs, edges, push and pull mode, schema, WebAssembly
-- [ ] JSON Lines in `sdrk-io`
-- [ ] Flow `frame_loop` with YAML twin and loop test (seed 479)
-- [ ] Docs (`architecture.md`, `pipeline.md`, `blocks.md`, `io.md`, `wasm.md`, README), CHANGELOG, decisions log
+- [x] Crate `sdrk-proto` with `Packet`, flags, CRCs, `frame`; layer table and xtask check updated
+- [x] `PortType::Packets`, `Packets` ports, `Clocked<S, Packets>`, timing kinds `Packets` and `Source`
+- [x] Blocks and kinds `frame_encode`, `frame_decode`
+- [x] Pipeline packet inputs, outputs, edges, push and pull mode, schema, WebAssembly (`pushPackets`, `readPackets`, packet sources in `pull`; D524, D525)
+- [x] JSON Lines in `sdrk-io` (`sdrk_io::packets`; D523, D528)
+- [x] Flow `frame_loop` with YAML twin and loop test (seed 479)
+- [x] Docs (`architecture.md`, `pipeline.md`, `blocks.md`, `io.md`, `wasm.md`, README), CHANGELOG, decisions log
+
+## Status
+
+Done: the crate `sdrk-proto` with `Packet`, `PacketFlags`, the four table-driven CRCs and the test framing `frame` (`encode`, the bit iterator `FrameBits`, the bit-by-bit `Decoder`; D488 to D493, D497), the layer `crates/proto` in `cargo xtask check layers` with negative fixtures (D494) and in `cargo xtask bare-metal`; golden kernel `proto` (seed 479, D498); the port type `PortType::Packets`, the ports `Packets` and `Clocked<S, Packets>`, the timing kinds `RatioKind::Packets` and `RatioKind::Source` and the sealed `ChainEnd` that keeps packet ports out of `Chain` and `Fork` (D502 to D506); the blocks and kinds `frame_encode` and `frame_decode` (D507 to D510, D521); packet inputs, outputs and edges in the pipeline model, validation, buffers, the runner (`push_packets`, `read_packets`, `available`), pull mode with idle encoders, the node wrappers `PacketInNode`, `PacketOutNode` and `ClockedNode`, the schema and the corpus (D511 to D516, D518, D520, D526); JSON Lines packet files in `sdrk-io` (D523, D528); `pushPackets`, `readPackets` and packet sources in `pull` of the WebAssembly package (D524, D525); the flow `frame_loop` with its YAML twin and the tests `frame_loop_exact` and `frame_loop_exact_in_pull_mode_with_an_idle_source` (D519); the count entries of the CRCs (`release` against GNU Radio's `gr::digital::crc`, vendored as `benches/refs/gr-crc.c`, D527), of `frame_decode` (per bit) and of the two blocks (per signal sample), with the figures in the "Protocol code" section of `docs/performance.md` (D500); CI (D499); the docs, the README crate table (D501) and the CHANGELOG.
+
+Deviations from the specification, recorded in the decisions log:
+- The error type of `sdrk-proto` is `Error`, with `ProtoError` as an alias (D488); `frame::encode` takes `preamble_bytes` and returns a `Result` (D489); `Decoder::new` returns a `Result` (D490).
+- A block with a packet output reports `ratio = max_per_input` instead of `Rate::ZERO`, and `max_per_input` is a `Ratio` (D502): a zero ratio would break the existing users of `BlockTiming`.
+- `Clocked` reports the consumed packets through `Block::consumed_packets()`, not through a field of `Progress` (D503).
+- A node with a packet port reports `PortKind::Stream(PortType::Packets)`, no new `PortKind` variant (D512); packet streams get nominal rates for buffer sizing only (D513).
+- Port `a` of a `Source` encoder reads only a pipeline input, not the packets of a decoder (D526).
+- Packets cannot cross groups and have no message in version 1 of the wire format (D517; open item I37-2).
+- The JSON Lines files of `sdrk-io` use the record type `PacketRecord`, not `Packet`: `sdrk-io` does not depend on `sdrk-proto`, as R2 asks (D528, replacing D522; open item I37-1 closed).
+- `sdrk-proto` and `frame_decode` have no SIMD: the CRCs are byte-serial table lookups and the decoder is a bit-serial state machine (D496, D509). The CRCs are gated against GNU Radio (D527, which corrects the reference statement of D496); `frame_decode` and the block entries stay `info` because no library has this framing.
+
+Verified locally on Linux x86-64: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test -p sdrk-proto` (with its doc tests, also `cargo test --doc -p sdrk-proto`), `cargo build -p sdrk-proto --target thumbv7em-none-eabihf`, `cargo test -p sdrk-blocks --all-features` for the library and the tests `packet_ports`, `chain` and `describe`, `cargo test -p sdrk-pipeline --all-features` for the library (with `clocked_test`) and the tests `packets`, `validation`, `model`, `yaml`, `schema`, `no_alloc`, `groups`, `primitive_kinds`, `probe_two_threads`, `property`, `stereo` and `halfband_decimate`, `cargo test -p sdrk-io`, `cargo test -p xtask`, `cargo test -p sdrk-wasm --test packets --test engine`, `cargo xtask wasm-test --env node --variant all` (14 tests per variant), `cargo xtask wasm-pkg --relaxed` with `node --test "bindings/wasm/js-tests/*.test.mjs"` (28 tests), `cargo +nightly fuzz run pipeline_json -- -max_total_time=60` (153 987 runs, no crash), `cargo xtask check`, `cargo xtask check layers`, `cargo xtask schema --check`, `cargo xtask bare-metal`, `python tests/golden/generate.py --check` (Python 3.12, the pinned NumPy and SciPy; 744 files), and in the bench workspace `gnuradio_crc` (`cref-sys`) and `the_crc_entries_match_the_model` (`kernels`) with the references linked.
+
+Not done or not run:
+- The whole workspace test suite, the Cortex-M emulator and the browsers of `wasm-test` (Chrome, Firefox); CI runs them, the Windows and Linux arm64 hosts included.
+- `benches/results/*.json` and the results tables do not have the M37 entries yet; they get them at the next complete `cargo xtask count` run (D500). The cycles are not gated: `crc16_x25` is 1.12 of GNU Radio's simulated cycles per byte on `cortex-a72` (0.99 on `cortex-a76`), while its instructions per byte meet the release limit (D527).
+- `cargo clippy -D warnings` in the bench workspace (`cref-sys`, `kernels`) fails on lints that were there before M37 (`is_multiple_of` in `halfband.rs` and `liquid_nco.rs`, unused items when `SDRK_REFS_DIR` is not set); none is in code that M37 changed.

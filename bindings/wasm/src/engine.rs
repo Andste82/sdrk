@@ -12,13 +12,17 @@ use sdrk::{C32, CQ15, Q15};
 use sdrk_blocks::{FrameMeta, ParamKind, ParamValue, PortType};
 use sdrk_device::{BlockFlags, BlockMeta, ErrorKind, SdrkError, TimeAnchor, TimeSource};
 use sdrk_pipeline::{
-    BuildOptions, Event, EventKind, InputData, ParamTime, Pipeline, PortKind, PullSource, Registry,
-    Report,
+    BuildOptions, Event, EventKind, InputData, Packet, PacketFlags, ParamTime, Pipeline, PortKind,
+    PullSource, Registry, Report,
 };
 use serde_json::Value;
 
 /// Largest number of elements one `readStream` or `pull` call moves through the output buffer.
 pub const MAX_OUT_CHUNK: usize = 65_536;
+
+/// Largest number of packets one `readPackets` call moves through the output buffer of a
+/// packet output (a packet takes 272 bytes, so the buffer stays at about 1 MiB).
+pub const MAX_PACKET_CHUNK: usize = 4096;
 
 /// One problem of a description, as reported to JavaScript.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +117,8 @@ pub enum Dtype {
     I16,
     /// `Float32Array`: `f32` samples (complex ones interleaved).
     F32,
+    /// `Array` of packet objects `{ index, flags, data }` (`data` as lower-case hex).
+    Packets,
 }
 
 impl Dtype {
@@ -122,6 +128,7 @@ impl Dtype {
             Self::U8 => "Uint8Array",
             Self::I16 => "Int16Array",
             Self::F32 => "Float32Array",
+            Self::Packets => "Array",
         }
     }
 }
@@ -151,6 +158,7 @@ fn layout_of(ty: PortType) -> Option<Layout> {
         PortType::CQ15 => (Dtype::I16, 2),
         PortType::F32 => (Dtype::F32, 1),
         PortType::Q15 => (Dtype::I16, 1),
+        PortType::Packets => (Dtype::Packets, 1),
         _ => return None,
     };
     Some(Layout { dtype, lanes })
@@ -165,6 +173,8 @@ pub enum LanesMut<'a> {
     I16(&'a mut [i16]),
     /// Single-precision floats.
     F32(&'a mut [f32]),
+    /// Packets.
+    Packets(&'a mut [Packet]),
 }
 
 /// A shared view of typed-array elements.
@@ -176,6 +186,8 @@ pub enum Lanes<'a> {
     I16(&'a [i16]),
     /// Single-precision floats.
     F32(&'a [f32]),
+    /// Packets.
+    Packets(&'a [Packet]),
 }
 
 impl Lanes<'_> {
@@ -185,6 +197,7 @@ impl Lanes<'_> {
             Self::U8(s) => s.len(),
             Self::I16(s) => s.len(),
             Self::F32(s) => s.len(),
+            Self::Packets(s) => s.len(),
         }
     }
 
@@ -201,6 +214,7 @@ enum Buf {
     CQ15(Vec<CQ15>),
     F32(Vec<f32>),
     Q15(Vec<Q15>),
+    Packets(Vec<Packet>),
 }
 
 impl Buf {
@@ -211,6 +225,7 @@ impl Buf {
             PortType::CQ15 => Self::CQ15(vec![CQ15::default(); elems]),
             PortType::F32 => Self::F32(vec![0.0; elems]),
             PortType::Q15 => Self::Q15(vec![Q15::default(); elems]),
+            PortType::Packets => Self::Packets(vec![Packet::EMPTY; elems]),
             _ => return None,
         })
     }
@@ -223,6 +238,7 @@ impl Buf {
             Self::CQ15(v) => LanesMut::I16(bytemuck::cast_slice_mut(v.get_mut(..elems)?)),
             Self::F32(v) => LanesMut::F32(v.get_mut(..elems)?),
             Self::Q15(v) => LanesMut::I16(bytemuck::cast_slice_mut(v.get_mut(..elems)?)),
+            Self::Packets(v) => LanesMut::Packets(v.get_mut(..elems)?),
         })
     }
 
@@ -233,6 +249,7 @@ impl Buf {
             Self::CQ15(v) => Lanes::I16(bytemuck::cast_slice(v.get(..elems)?)),
             Self::F32(v) => Lanes::F32(v.get(..elems)?),
             Self::Q15(v) => Lanes::I16(bytemuck::cast_slice(v.get(..elems)?)),
+            Self::Packets(v) => Lanes::Packets(v.get(..elems)?),
         })
     }
 
@@ -243,6 +260,7 @@ impl Buf {
             Self::CQ15(v) => InputData::CQ15(v.get(..elems)?),
             Self::F32(v) => InputData::F32(v.get(..elems)?),
             Self::Q15(v) => InputData::Q15(v.get(..elems)?),
+            Self::Packets(v) => InputData::Packets(v.get(..elems)?),
         })
     }
 
@@ -253,6 +271,7 @@ impl Buf {
             Self::CQ15(v) => v.len(),
             Self::F32(v) => v.len(),
             Self::Q15(v) => v.len(),
+            Self::Packets(v) => v.len(),
         }
     }
 }
@@ -509,11 +528,12 @@ fn output_buffers<'a>(
         let slot = match pipeline.output_port(name)? {
             PortKind::Stream(ty) => {
                 let layout = layout_of(ty).ok_or_else(|| internal("output type"))?;
-                // A raw output counts bytes: leave room for a few bytes per sample.
-                let chunk = if ty == PortType::Raw {
-                    out_chunk.saturating_mul(4)
-                } else {
-                    out_chunk
+                // A raw output counts bytes: leave room for a few bytes per sample. A packet
+                // output counts packets.
+                let chunk = match ty {
+                    PortType::Raw => out_chunk.saturating_mul(4),
+                    PortType::Packets => out_chunk.min(MAX_PACKET_CHUNK),
+                    _ => out_chunk,
                 };
                 OutputBuf {
                     layout: OutLayout::Stream(layout),
@@ -545,6 +565,7 @@ fn read_into(
         Buf::CQ15(v) => pipeline.read_stream(output, v.get_mut(..n).unwrap_or_default()),
         Buf::F32(v) => pipeline.read_stream(output, v.get_mut(..n).unwrap_or_default()),
         Buf::Q15(v) => pipeline.read_stream(output, v.get_mut(..n).unwrap_or_default()),
+        Buf::Packets(v) => pipeline.read_packets(output, v.get_mut(..n).unwrap_or_default()),
     }
 }
 
@@ -562,6 +583,12 @@ fn pull_into(
         Buf::CQ15(v) => pipeline.pull_samples(output, v.get_mut(..n).unwrap_or_default(), source),
         Buf::F32(v) => pipeline.pull_samples(output, v.get_mut(..n).unwrap_or_default(), source),
         Buf::Q15(v) => pipeline.pull_samples(output, v.get_mut(..n).unwrap_or_default(), source),
+        // A packet output is never a transmit output.
+        Buf::Packets(_) => Err(sdrk_pipeline::Error::WrongType {
+            name: output.to_string(),
+            expected: "a sample stream",
+            got: "packets",
+        }),
     }
 }
 
@@ -798,6 +825,7 @@ impl Engine {
     pub fn push_u8(&mut self, input: &str, data: &[u8], meta: Option<&BlockMeta>) -> Result<()> {
         match self.stage(input, data.len())? {
             LanesMut::U8(dst) => dst.copy_from_slice(data),
+            LanesMut::Packets(_) => return Err(wrong_dtype(input, Dtype::Packets)),
             _ => return Err(wrong_dtype(input, Dtype::U8)),
         }
         self.push_staged(input, meta)
@@ -811,6 +839,7 @@ impl Engine {
     pub fn push_i16(&mut self, input: &str, data: &[i16], meta: Option<&BlockMeta>) -> Result<()> {
         match self.stage(input, data.len())? {
             LanesMut::I16(dst) => dst.copy_from_slice(data),
+            LanesMut::Packets(_) => return Err(wrong_dtype(input, Dtype::Packets)),
             _ => return Err(wrong_dtype(input, Dtype::I16)),
         }
         self.push_staged(input, meta)
@@ -825,9 +854,71 @@ impl Engine {
     pub fn push_f32(&mut self, input: &str, data: &[f32], meta: Option<&BlockMeta>) -> Result<()> {
         match self.stage(input, data.len())? {
             LanesMut::F32(dst) => dst.copy_from_slice(data),
+            LanesMut::Packets(_) => return Err(wrong_dtype(input, Dtype::Packets)),
             _ => return Err(wrong_dtype(input, Dtype::F32)),
         }
         self.push_staged(input, meta)
+    }
+
+    /// Copies `packets` into the buffer of a packet input and pushes them (see
+    /// `Pipeline::push_packets`).
+    ///
+    /// ```
+    /// use sdrk_pipeline::{Packet, PacketFlags};
+    /// use sdrk_wasm::engine::Engine;
+    /// let mut engine = Engine::from_json(include_str!("../../../examples/flows/frame_loop.json"))?;
+    /// let msg = sdrk_wasm::engine::packet_from(0, 0, "68656c6c6f")?; // "hello"
+    /// engine.push_packets("msg", &[msg])?;
+    /// let got = engine.read_packets("out", 16)?;
+    /// assert_eq!(got.len(), 1);
+    /// assert_eq!((got[0].data(), got[0].index), (&b"hello"[..], 32));
+    /// assert!(got[0].flags.contains(PacketFlags::CRC_OK));
+    /// # Ok::<(), sdrk_wasm::engine::WasmError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// `InvalidArgument` if the input does not take packets, else as
+    /// [`Engine::push_staged`].
+    pub fn push_packets(&mut self, input: &str, packets: &[Packet]) -> Result<()> {
+        match self.stage(input, packets.len())? {
+            LanesMut::Packets(dst) => dst.copy_from_slice(packets),
+            _ => return Err(self.wrong_input(input)),
+        }
+        self.push_staged(input, None)
+    }
+
+    /// Reads up to `max_packets` packets of a packet output through the output buffer (at most
+    /// one buffer full per call), oldest first.
+    ///
+    /// # Errors
+    /// `InvalidArgument` for an unknown output or one that does not carry packets.
+    pub fn read_packets(&mut self, output: &str, max_packets: usize) -> Result<&[Packet]> {
+        let slot = self
+            .outputs
+            .get_mut(output)
+            .ok_or_else(|| sdrk_pipeline::Error::UnknownOutput(output.to_string()))?;
+        if !matches!(slot.buf, Buf::Packets(_)) {
+            return Err(sdrk_pipeline::Error::WrongType {
+                name: output.to_string(),
+                expected: "packets",
+                got: "samples",
+            }
+            .into());
+        }
+        let n = max_packets.min(slot.chunk);
+        let got = read_into(&mut self.pipeline, output, &mut slot.buf, n)?;
+        match slot.buf.lanes(got) {
+            Some(Lanes::Packets(p)) => Ok(p),
+            _ => Err(internal("output buffer")),
+        }
+    }
+
+    /// The error for a push of the wrong element type into `input`.
+    fn wrong_input(&self, input: &str) -> WasmError {
+        match self.input_slot(input) {
+            Ok(slot) => wrong_dtype(input, slot.layout.dtype),
+            Err(e) => e,
+        }
     }
 
     /// Reads up to `max_samples` samples of a stream output through the output buffer (at
@@ -1177,8 +1268,56 @@ impl Engine {
 /// assert!(wrong_dtype("rf", Dtype::U8).message.contains("Uint8Array"));
 /// ```
 pub fn wrong_dtype(name: &str, expected: Dtype) -> WasmError {
+    if expected == Dtype::Packets {
+        return WasmError::invalid(format!(
+            "`{name}` carries packets: use pushPackets or readPackets with an Array of \
+             {{ index, flags, data }}"
+        ));
+    }
     WasmError::invalid(format!(
         "`{name}` needs a {}, not another typed array",
         expected.array_name()
     ))
+}
+
+/// A packet as the object JavaScript receives: `{ index, flags, data }` with `index` a
+/// `bigint`, `flags` a `number` and `data` the payload as lower-case hex (the representation of
+/// the JSON Lines packet files of `sdrk-io`).
+///
+/// ```
+/// use sdrk_pipeline::{Packet, PacketFlags};
+/// use sdrk_wasm::engine::{packet_dyn, Dyn};
+/// let p = Packet::new(32, PacketFlags::CRC_OK, &[0x1a, 0xcf]).map_err(|e| e.to_string())?;
+/// let d = packet_dyn(&p);
+/// assert_eq!(d.get("index"), Some(&Dyn::U64(32)));
+/// assert_eq!(d.get("flags"), Some(&Dyn::Num(1.0)));
+/// assert_eq!(d.get("data"), Some(&Dyn::Str("1acf".into())));
+/// # Ok::<(), String>(())
+/// ```
+pub fn packet_dyn(packet: &Packet) -> Dyn {
+    Dyn::Obj(vec![
+        ("index", Dyn::U64(packet.index)),
+        ("flags", Dyn::Num(f64::from(packet.flags.bits()))),
+        ("data", Dyn::Str(sdrk_io::packets::to_hex(packet.data()))),
+    ])
+}
+
+/// A packet from the fields of a JavaScript packet object: `data` is lower-case hex of at most
+/// 256 bytes.
+///
+/// ```
+/// let p = sdrk_wasm::engine::packet_from(5, 2, "ff")?;
+/// assert_eq!((p.index, p.flags.bits(), p.data()), (5, 2, &[0xff][..]));
+/// assert_eq!(sdrk_wasm::engine::packet_from(0, 0, "FF").unwrap_err().kind, "InvalidArgument");
+/// # Ok::<(), sdrk_wasm::engine::WasmError>(())
+/// ```
+///
+/// # Errors
+/// `InvalidArgument` for hex that is not lower case, has an odd number of digits or more than
+/// 256 bytes.
+pub fn packet_from(index: u64, flags: u32, data: &str) -> Result<Packet> {
+    let bytes = sdrk_io::packets::from_hex(data)
+        .map_err(|e| WasmError::invalid(format!("packet data: {e}")))?;
+    Packet::new(index, PacketFlags::from_bits(flags), &bytes)
+        .map_err(|e| WasmError::invalid(format!("packet data: {e}")))
 }

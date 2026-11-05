@@ -7,7 +7,7 @@ use sdrk_core::timing::ceil_div;
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::BlockDescription;
 use crate::error::{Error, Result};
-use crate::ports::{ChainItem, Ports, sealed::ChainBufs};
+use crate::ports::{ChainEnd, ChainItem, Ports, sealed::ChainBufs};
 use crate::storage::Storage;
 
 /// Description of a [`Chain`]: kind `chain`, no ports (they depend on the stages). A chain is a
@@ -41,7 +41,24 @@ pub static CHAIN_DESCRIPTION: BlockDescription = BlockDescription {
 /// pair of streams ([`Two`](crate::Two)). For a pair the chain holds two buffers of `chunk`
 /// samples that are written and consumed in lockstep. Frames (and any other port type that is
 /// not a stream element) cannot pass between the stages and are rejected at compile time.
-/// `A::In` and `B::Out` may be any port type, so a chain can end in a frame block.
+/// `A::In` and `B::Out` must be a [`ChainEnd`]: a stream element, a pair of streams or frames,
+/// so a chain can end in a frame block. Packet ports ([`Packets`](crate::Packets),
+/// [`Clocked`](crate::Clocked)) do not compile at either end of a chain:
+///
+/// ```compile_fail,E0277
+/// use sdrk::Rate;
+/// use sdrk_blocks::{
+///     AlignedBytes, ArenaStorage, Chain, DelayConfig, DelayRealBlock, FrameDecodeBlock,
+///     FrameDecodeConfig,
+/// };
+/// let mut mem = AlignedBytes([0u8; 256]);
+/// let mut arena = ArenaStorage::new(&mut mem.0);
+/// let rate = Rate::hz(48_000).unwrap();
+/// let delay = DelayRealBlock::<f32, _>::new(&DelayConfig { samples: 0 }, rate, &mut arena).unwrap();
+/// let dec = FrameDecodeBlock::new(&FrameDecodeConfig::default(), rate, &mut arena).unwrap();
+/// // `FrameDecodeBlock` writes packets: not a chain end.
+/// let _ = Chain::new(delay, dec, 16, &mut arena);
+/// ```
 ///
 /// `Progress::consumed` is what `A` consumed, `Progress::produced` what `B` produced. The
 /// output does not depend on how the caller cuts input and output.
@@ -129,7 +146,9 @@ pub struct Chain<A, B, S: Storage>
 where
     A: Block,
     B: Block<In = A::Out>,
+    A::In: ChainEnd,
     A::Out: ChainItem,
+    B::Out: ChainEnd,
 {
     a: A,
     b: B,
@@ -146,7 +165,9 @@ impl<A, B, S: Storage> core::fmt::Debug for Chain<A, B, S>
 where
     A: Block,
     B: Block<In = A::Out>,
+    A::In: ChainEnd,
     A::Out: ChainItem,
+    B::Out: ChainEnd,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Chain")
@@ -161,7 +182,9 @@ impl<A, B, S: Storage> Chain<A, B, S>
 where
     A: Block,
     B: Block<In = A::Out>,
+    A::In: ChainEnd,
     A::Out: ChainItem,
+    B::Out: ChainEnd,
 {
     /// Joins `a` and `b`. `chunk` is the capacity of the intermediate buffer in samples of
     /// `A::Out` (for a pair: of each of the two buffers); it is raised to at least
@@ -251,7 +274,7 @@ where
 fn combined_timing<A: Block, B: Block>(a: &A, b: &B) -> Result<BlockTiming> {
     let (ta, tb) = (a.timing(), b.timing());
     let ratio = ta.ratio.mul(tb.ratio)?;
-    let kind = if ta.kind == RatioKind::Variable || tb.kind == RatioKind::Variable {
+    let kind = if ta.kind != RatioKind::Constant || tb.kind != RatioKind::Constant {
         RatioKind::Variable
     } else {
         RatioKind::Constant
@@ -264,7 +287,9 @@ impl<A, B, S: Storage> Block for Chain<A, B, S>
 where
     A: Block,
     B: Block<In = A::Out>,
+    A::In: ChainEnd,
     A::Out: ChainItem,
+    B::Out: ChainEnd,
 {
     type In = A::In;
     type Out = B::Out;

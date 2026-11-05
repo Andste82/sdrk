@@ -3,6 +3,10 @@
     {
       "path": "nodes.g.params.decimation",
       "code": "missing_param"
+    },
+    {
+      "path": "inputs.msg.rate_hz",
+      "code": "missing_param"
     }
   ]
 }

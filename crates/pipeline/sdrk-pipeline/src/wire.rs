@@ -256,7 +256,8 @@ impl Message {
     }
 
     /// A block of samples from the data type of `push`; `samples` is the number of samples (for
-    /// raw bytes the data does not tell it).
+    /// raw bytes the data does not tell it). Version 1 of the wire format carries no packets:
+    /// `InputData::Packets` becomes an empty raw block.
     pub fn from_input(
         stream: u16,
         start: u64,
@@ -270,6 +271,7 @@ impl Message {
             InputData::CQ15(d) => Self::samples_cq15(stream, start, flags, d),
             InputData::F32(d) => Self::samples_f32(stream, start, flags, d),
             InputData::Q15(d) => Self::samples_q15(stream, start, flags, d),
+            InputData::Packets(_) => Self::samples_raw(stream, start, flags, 0, &[]),
         }
     }
 

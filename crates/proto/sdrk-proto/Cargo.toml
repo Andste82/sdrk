@@ -1,0 +1,17 @@
+[package]
+name = "sdrk-proto"
+description = "SDRk protocol logic without signal processing: packets, CRCs and a test framing (heap-free)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdrk-device = { path = "../../core/sdrk-device" }
+
+[dev-dependencies]
+sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
+
+[lints]
+workspace = true

@@ -92,7 +92,7 @@ export class FlowBuilder {
     return this;
   }
 
-  /** Adds an input: `{ format | type, rate_hz, description? }`. */
+  /** Adds an input: `{ format | type, rate_hz, description? }` (`type: "packets"` for packets). */
   input(name, spec) {
     this.#inputs[name] = clone(spec);
     return this;
@@ -131,7 +131,7 @@ export class FlowBuilder {
     return this;
   }
 
-  /** Adds an output: `{ type: "stream" | "frames", format?, capacity?, queue?, drop?, ... }`. */
+  /** Adds an output: `{ type: "stream" | "frames" | "packets", format?, capacity?, queue?, drop?, ... }`. */
   output(name, spec) {
     this.#outputs[name] = clone(spec);
     return this;

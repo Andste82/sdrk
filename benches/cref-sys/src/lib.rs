@@ -52,7 +52,10 @@ pub mod volk_generic;
 pub mod volk_nofma;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
-pub use gnuradio::{GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator};
+pub use gnuradio::{
+    CostasLoopState, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc,
+    GrQuadratureDemodCf, GrRotator,
+};
 pub use halfband::{
     AirspyFloat, AirspyInt16, LiquidFirhilbf, LiquidResamp2Crcf, LiquidResamp2Rrrf,
 };

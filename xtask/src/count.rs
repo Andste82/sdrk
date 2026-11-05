@@ -882,7 +882,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 194] = [
+pub static KERNELS: [KernelSpec; 196] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1100,6 +1100,8 @@ pub static KERNELS: [KernelSpec; 194] = [
     proto("frame_decode_block", Family::Own),
     spec("symbol_sync", Family::Own, false),
     spec("symbol_sync_real", Family::Own, false),
+    spec("costas", Family::Own, false),
+    spec("costas_fallback", Family::FallbackVsGnuRadio, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4612,6 +4614,42 @@ mod tests {
         }
         // The block `slice` has no kernel and no entry.
         assert!(KERNELS.iter().all(|s| !s.name.starts_with("slice")));
+    }
+
+    #[test]
+    fn the_costas_entries_are_information_and_the_fallback_against_gnu_radio() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        // `costas`: not accelerated, the facade entry is counted against our own fallback;
+        // `costas_fallback` against GNU Radio's `costas_loop_cc` (D607).
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), kernel("costas")),
+                (Reference::Fallback, Vec::new()),
+                "costas at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("costas_fallback")).0,
+                Reference::GnuRadio,
+                "costas_fallback at {level}"
+            );
+        }
+        assert_eq!(
+            comparisons(plan("avx2-runtime"), kernel("costas")).0,
+            Reference::OwnLevel("avx2"),
+        );
+        assert!(kernel("costas").family.measured_at(plan("avx2-runtime")));
+        assert!(
+            !kernel("costas_fallback")
+                .family
+                .measured_at(plan("avx2-runtime"))
+        );
+        assert_eq!(kernel("costas_fallback").family.measured(), "fallback");
+        for k in ["costas", "costas_fallback"] {
+            assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
+        }
+        // The filter design `rrc` is not a kernel and has no entry (D606).
+        assert!(KERNELS.iter().all(|s| !s.name.starts_with("rrc")));
     }
 
     #[test]

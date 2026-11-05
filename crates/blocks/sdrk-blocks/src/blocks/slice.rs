@@ -252,6 +252,32 @@ impl SliceElem for C32 {
     }
 }
 
+/// The soft bits of the symbols in `input`, `scale * component` each: one per symbol (`re`) or,
+/// with `qpsk`, two (`re`, then `im`). Takes `min(input.len(), output.len() / bits)` symbols
+/// and returns that count (shared by `slice` and `psk_demod`).
+pub(crate) fn soft_bits<T: SliceElem>(
+    qpsk: bool,
+    scale: f32,
+    input: &[T],
+    output: &mut [f32],
+) -> usize {
+    if qpsk {
+        for (o, &x) in output.chunks_exact_mut(2).zip(input) {
+            let (re, im) = x.parts();
+            if let [b0, b1] = o {
+                *b0 = scale * re;
+                *b1 = scale * im;
+            }
+        }
+        input.len().min(output.len() / 2)
+    } else {
+        for (o, &x) in output.iter_mut().zip(input) {
+            *o = scale * x.parts().0;
+        }
+        input.len().min(output.len())
+    }
+}
+
 /// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk` and `qpsk`), `f32` soft
 /// bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and its magnitude is
 /// the confidence.
@@ -342,16 +368,7 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
     fn process(&mut self, input: &[T], output: &mut [f32]) -> Result<Progress> {
         let s = self.scale;
         let n = match self.config.constellation {
-            SliceConstellation::Qpsk => {
-                for (o, &x) in output.chunks_exact_mut(2).zip(input) {
-                    let (re, im) = x.parts();
-                    if let [b0, b1] = o {
-                        *b0 = s * re;
-                        *b1 = s * im;
-                    }
-                }
-                input.len().min(output.len() / 2)
-            }
+            SliceConstellation::Qpsk => soft_bits(true, s, input, output),
             SliceConstellation::Fsk4 => {
                 for (o, &x) in output.chunks_exact_mut(2).zip(input) {
                     let v = x.parts().0;
@@ -361,12 +378,7 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
                 }
                 input.len().min(output.len() / 2)
             }
-            _ => {
-                for (o, &x) in output.iter_mut().zip(input) {
-                    *o = s * x.parts().0;
-                }
-                input.len().min(output.len())
-            }
+            _ => soft_bits(false, s, input, output),
         };
         Ok(Progress {
             consumed: n,

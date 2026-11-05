@@ -104,6 +104,7 @@ mod auto_notch;
 mod biquad;
 mod convert;
 mod convert_out;
+mod costas;
 mod decim;
 mod demod;
 mod dot;

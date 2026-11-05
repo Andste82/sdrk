@@ -43,6 +43,7 @@ use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, 
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod am_family;
+mod costas_family;
 mod fir_family;
 mod halfband_family;
 mod math_family;
@@ -348,7 +349,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 194] = [
+pub const KERNELS: [&str; 196] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -543,6 +544,8 @@ pub const KERNELS: [&str; 194] = [
     "frame_decode_block",
     "symbol_sync",
     "symbol_sync_real",
+    "costas",
+    "costas_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -732,6 +735,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "frame_decode_block" => Box::new(proto_family::FrameDecodeBlockK::new(rng, layout)),
         "symbol_sync" => Box::new(symbol_family::SymbolSyncK::c32(rng, layout)),
         "symbol_sync_real" => Box::new(symbol_family::SymbolSyncK::f32(rng, layout)),
+        "costas" => Box::new(costas_family::CostasK::new(rng, layout, false)),
+        "costas_fallback" => Box::new(costas_family::CostasK::new(rng, layout, true)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

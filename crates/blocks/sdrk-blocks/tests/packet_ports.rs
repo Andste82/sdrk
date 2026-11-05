@@ -226,7 +226,7 @@ fn blocks_report_their_parameters_and_reject_changes() {
     let cfg = FrameDecodeConfig {
         max_sync_errors: 3,
         emit_bad: true,
-        whitening: Whitening::None,
+        ..FrameDecodeConfig::default()
     };
     let mut dec = decoder(&cfg);
     assert_eq!(dec.description().kind, "frame_decode");
@@ -489,7 +489,7 @@ fn decoder_is_chunk_invariant_with_20_plans() {
     let cfg = FrameDecodeConfig {
         max_sync_errors: 2,
         emit_bad: true,
-        whitening: Whitening::None,
+        ..FrameDecodeConfig::default()
     };
     let whole = run_decoder(&mut decoder(&cfg), &soft, None, None);
     // With 2 sync errors and emit_bad, noise may give extra CRC_FAIL packets; the sent
@@ -557,7 +557,7 @@ fn decoder_options_sync_errors_and_bad_frames() {
         &mut decoder(&FrameDecodeConfig {
             max_sync_errors: 2,
             emit_bad: false,
-            whitening: Whitening::None,
+            ..FrameDecodeConfig::default()
         }),
         &damaged,
         None,
@@ -582,7 +582,7 @@ fn decoder_options_sync_errors_and_bad_frames() {
         &mut decoder(&FrameDecodeConfig {
             max_sync_errors: 0,
             emit_bad: true,
-            whitening: Whitening::None,
+            ..FrameDecodeConfig::default()
         }),
         &bad,
         None,

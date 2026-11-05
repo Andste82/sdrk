@@ -670,6 +670,7 @@ impl Engine {
             ("convert_out", C32),
             ("convert_out_real", F32),
             ("convert_real", F32),
+            ("costas", C32),
             ("dc_block", C32),
             ("dc_block_real", F32),
             ("ddc", C32),

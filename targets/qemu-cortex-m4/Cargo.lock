@@ -251,6 +251,7 @@ dependencies = [
  "sdrk",
  "sdrk-core",
  "sdrk-device",
+ "sdrk-proto",
 ]
 
 [[package]]
@@ -266,6 +267,13 @@ dependencies = [
 [[package]]
 name = "sdrk-device"
 version = "0.1.0"
+
+[[package]]
+name = "sdrk-proto"
+version = "0.1.0"
+dependencies = [
+ "sdrk-device",
+]
 
 [[package]]
 name = "sdrk-target-common"
@@ -301,6 +309,7 @@ dependencies = [
  "sdrk-blocks",
  "sdrk-core",
  "sdrk-device",
+ "sdrk-proto",
 ]
 
 [[package]]

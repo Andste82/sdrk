@@ -228,3 +228,62 @@ def _gaussian_bt0p5_sps8_span4(rng):
         notes="exp(-(2 pi^2 bt^2 / ln 2) (t/T)^2) with t/T = (n - (N - 1) / 2) / sps, "
         "N = span sps + 1, normalised to sum 1; float64",
     )
+
+
+# Root-raised-cosine design (M40)
+
+# The singular points |t| = 1 / (4 rolloff) are detected with this tolerance on
+# |1 - (4 rolloff t)^2|, the rule of design::rrc.
+RRC_SINGULAR = 1e-9
+
+
+def rrc_taps(rolloff, sps, span):
+    """The root-raised-cosine taps, one tap at a time with the scalar math module, unit energy."""
+    n = span * sps + 1
+    b = rolloff
+    raw = []
+    for k in range(n):
+        t = (k - (n - 1) / 2.0) / sps
+        if t == 0.0:
+            h = 1.0 - b + 4.0 * b / math.pi
+        elif abs(1.0 - (4.0 * b * t) ** 2) < RRC_SINGULAR:
+            a = math.pi / (4.0 * b)
+            h = b / math.sqrt(2.0) * ((1.0 + 2.0 / math.pi) * math.sin(a) + (1.0 - 2.0 / math.pi) * math.cos(a))
+        else:
+            h = (math.sin(math.pi * t * (1.0 - b)) + 4.0 * b * t * math.cos(math.pi * t * (1.0 + b))) / (
+                math.pi * t * (1.0 - (4.0 * b * t) ** 2)
+            )
+        raw.append(h)
+    norm = math.sqrt(math.fsum(h * h for h in raw))
+    return np.array([h / norm for h in raw], dtype=np.float64)
+
+
+def _register_rrc(tag, rolloff, sps, span, singular):
+    @case(kernel="design", name=f"rrc_{tag}_sps{sps}_span{span}", seed=0)
+    def _case(rng):
+        taps = rrc_taps(rolloff, sps, span)
+        # The number of taps on the singular points |t| = 1 / (4 rolloff); the case list states it.
+        hits = sum(
+            1
+            for k in range(span * sps + 1)
+            if (k - span * sps / 2.0) != 0.0
+            and abs(1.0 - (4.0 * rolloff * (k - span * sps / 2.0) / sps) ** 2) < RRC_SINGULAR
+        )
+        assert hits == singular, (tag, hits)
+        return dict(
+            params={"rolloff": rolloff, "samples_per_symbol": sps, "span": span, "num_taps": span * sps + 1,
+                    "singular_taps": singular},
+            arrays={"expected": Array("f64", taps)},
+            tolerance={"class": "max_abs_err", "max_abs_err": 1e-12, "skip": 0},
+            notes=(
+                "root-raised-cosine impulse response, t = (k - span sps / 2) / sps symbols, "
+                "h = (sin(pi t (1 - b)) + 4 b t cos(pi t (1 + b))) / (pi t (1 - (4 b t)^2)), closed forms "
+                "h(0) = 1 - b + 4 b / pi and, where |1 - (4 b t)^2| < 1e-9, "
+                "b / sqrt(2) ((1 + 2 / pi) sin(pi / (4 b)) + (1 - 2 / pi) cos(pi / (4 b))); "
+                "normalized to sum h^2 = 1; computed tap by tap with the math module"
+            ),
+        )
+
+
+for _tag, _b, _sps, _span, _sing in (("0p35", 0.35, 4, 10, 0), ("0p5", 0.5, 8, 8, 2), ("1p0", 1.0, 10, 6, 0)):
+    _register_rrc(_tag, _b, _sps, _span, _sing)

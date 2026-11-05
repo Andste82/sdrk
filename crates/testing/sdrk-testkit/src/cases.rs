@@ -165,6 +165,8 @@
 //! | `symbol_sync_c32` | quick | about 35 KiB |
 //! | `symbol_sync_f32` | quick | about 19 KiB |
 //! | `extremes_m38` | full | about 29 KiB |
+//! | `costas_c32` | quick | about 48 KiB |
+//! | `extremes_m40` | full | about 15 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -227,13 +229,14 @@ mod m33;
 mod m35;
 mod m36;
 mod m38;
+mod m40;
 
 pub use m27::{
     CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 182] = [
+pub(crate) static CASES: [TestCase; 184] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -1143,6 +1146,16 @@ pub(crate) static CASES: [TestCase; 182] = [
         name: "extremes_m38",
         tier: Tier::Full,
         run: m38::extremes_m38,
+    },
+    TestCase {
+        name: "costas_c32",
+        tier: Tier::Quick,
+        run: m40::costas_c32,
+    },
+    TestCase {
+        name: "extremes_m40",
+        tier: Tier::Full,
+        run: m40::extremes_m40,
     },
 ];
 

@@ -4825,6 +4825,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "costas": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 96.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 96.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 96.03,
+          "ours_instr_per_sample": 96.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_fallback": {
+          "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 137.67,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 96.03,
+              "ratio": 0.7
+            }
+          ],
+          "other_instr_per_sample": 137.67,
+          "ours_instr_per_sample": 96.03,
+          "ratio": 0.7,
+          "snr_db": {
+            "other": 129.22,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
         }
       },
       "volk": {
@@ -6217,6 +6263,19 @@
           "snr_db": {
             "other": 89.03,
             "ours": 89.03
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 96.03,
+          "ours_instr_per_sample": 116.03,
+          "ratio": 1.21,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
           },
           "status": "info",
           "verdict": "info"
@@ -11148,6 +11207,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "costas": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 116.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 116.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 116.03,
+          "ours_instr_per_sample": 116.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_fallback": {
+          "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 151.96,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 116.03,
+              "ratio": 0.76
+            }
+          ],
+          "other_instr_per_sample": 151.96,
+          "ours_instr_per_sample": 116.03,
+          "ratio": 0.76,
+          "snr_db": {
+            "other": 129.22,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
         }
       },
       "volk": {
@@ -15999,6 +16104,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "costas": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 112.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 112.03,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 112.03,
+          "ours_instr_per_sample": 112.03,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_fallback": {
+          "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 151.96,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 112.03,
+              "ratio": 0.74
+            }
+          ],
+          "other_instr_per_sample": 151.96,
+          "ours_instr_per_sample": 112.03,
+          "ratio": 0.74,
+          "snr_db": {
+            "other": 129.22,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
         }
       },
       "volk": {
@@ -16124,6 +16275,11 @@
         "build": "volk-nofma.c over volk_32fc_x2_multiply_32fc.h (u_avx): -O3 -ffp-contract=off, per level avx2:-march=x86-64-v3 avx512:-march=sapphirerapids",
         "sha256": "739127816a2afe22f5c39b0bbc9936a4ae44623d4117d86d344895d781f560c7",
         "version": "3.3.0"
+      },
+      "gnuradio_costas_loop_cc": {
+        "build": "gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): -O3",
+        "sha256": "a07744aa891bfd78c48ddd3dfa6a43e93a97b80601a66e5a9d280460c178194a",
+        "version": "main at ec1bf15"
       }
     },
     "platform": "x86_64"

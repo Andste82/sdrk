@@ -34,18 +34,19 @@ use sdrk_blocks::{
     AddBlock, AddRealBlock, AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig,
     AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
     BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock,
-    ConvertOutConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
-    DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
-    FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, ImagPartBlock,
-    InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
-    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock,
-    SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock,
-    StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    ConvertOutConfig, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock,
+    DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig,
+    FrameEncodeBlock, FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock,
+    FskModConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock,
+    Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind,
+    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
+    PskModBlock, PskModConfig, QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -65,10 +66,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_forty_eight_unique_kinds() {
+fn there_are_fifty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 48);
-    assert_eq!(all_descriptions().len(), 48);
+    assert_eq!(kinds.len(), 51);
+    assert_eq!(all_descriptions().len(), 51);
     for kind in [
         "convert",
         "convert_out",
@@ -118,6 +119,9 @@ fn there_are_forty_eight_unique_kinds() {
         "fsk_mod",
         "fsk_demod",
         "afc",
+        "costas",
+        "psk_mod",
+        "psk_demod",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -330,6 +334,9 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("fsk_mod", |n| FskModConfig::default().get(n), &[]);
     defaults_match("fsk_demod", |n| FskDemodConfig::default().get(n), &[]);
     defaults_match("afc", |n| AfcConfig::default().get(n), &[]);
+    defaults_match("costas", |n| CostasConfig::default().get(n), &[]);
+    defaults_match("psk_mod", |n| PskModConfig::default().get(n), &[]);
+    defaults_match("psk_demod", |n| PskDemodConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -430,6 +437,9 @@ fn configs_accept_every_described_parameter() {
     round_trip!("fsk_mod", FskModConfig);
     round_trip!("fsk_demod", FskDemodConfig);
     round_trip!("afc", AfcConfig);
+    round_trip!("costas", CostasConfig);
+    round_trip!("psk_mod", PskModConfig);
+    round_trip!("psk_demod", PskDemodConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -718,6 +728,24 @@ fn blocks_accept_and_report_every_described_parameter() {
         "afc",
         &mut AfcBlock::new(&afc, rate(200_000), &mut s).unwrap(),
     );
+    check_block_params(
+        "costas",
+        &mut CostasBlock::new(&CostasConfig::default(), r, &mut s).unwrap(),
+    );
+    let pm = PskModConfig {
+        order: 4,
+        ..PskModConfig::default()
+    };
+    check_block_params("psk_mod", &mut PskModBlock::new(&pm, r, &mut s).unwrap());
+    let pd = PskDemodConfig {
+        order: 4,
+        symbol_rate_hz: 25_000.0,
+        ..PskDemodConfig::default()
+    };
+    check_block_params(
+        "psk_demod",
+        &mut PskDemodBlock::new(&pd, rate(200_000), &mut s).unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -987,6 +1015,122 @@ fn the_fsk_kinds_describe_their_ports_and_parameters() {
     for word in ["SSB", "offset_hz", "offset_ppm", "256", "hold"] {
         assert!(a.details.contains(word), "afc details: {word}");
     }
+}
+
+/// The kinds of M40: `costas` (`c32` to `c32`, four build parameters), `psk_mod` (`f32` soft
+/// bits to `c32`, `samples_per_symbol` required), `psk_demod` (`c32` to `f32` soft bits,
+/// `symbol_rate_hz` required) and the parameter `polarity` of `frame_decode` (last, build,
+/// choice `normal`/`both`).
+#[test]
+fn the_psk_kinds_describe_their_ports_and_parameters() {
+    let costas = find("costas");
+    assert_eq!(costas.inputs[0].types, [PortType::C32]);
+    assert_eq!(costas.outputs[0].types, [PortType::C32]);
+    assert!(costas.required.is_empty());
+    let names: Vec<_> = costas
+        .params
+        .iter()
+        .map(|p| (p.name, p.mutability))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("order", Mutability::Build),
+            ("loop_bw", Mutability::Build),
+            ("damping", Mutability::Build),
+            ("max_offset", Mutability::Build),
+        ]
+    );
+    let m = find("psk_mod");
+    assert_eq!(m.inputs[0].types, [PortType::F32]);
+    assert_eq!(m.outputs[0].types, [PortType::C32]);
+    assert_eq!(m.required, ["samples_per_symbol"]);
+    let names: Vec<_> = m.params.iter().map(|p| p.name).collect();
+    assert_eq!(
+        names,
+        [
+            "order",
+            "samples_per_symbol",
+            "rolloff",
+            "span",
+            "differential"
+        ]
+    );
+    assert_eq!(
+        m.param("samples_per_symbol").unwrap().kind,
+        ParamKind::I64 {
+            min: 2,
+            max: 64,
+            default: None
+        }
+    );
+    let d = find("psk_demod");
+    assert_eq!(d.inputs[0].types, [PortType::C32]);
+    assert_eq!(d.outputs[0].types, [PortType::F32]);
+    assert_eq!(d.required, ["symbol_rate_hz"]);
+    let names: Vec<_> = d.params.iter().map(|p| p.name).collect();
+    assert_eq!(
+        names,
+        [
+            "order",
+            "symbol_rate_hz",
+            "rolloff",
+            "span",
+            "differential",
+            "sync_bw",
+            "carrier_bw",
+            "max_offset"
+        ]
+    );
+    for p in m.params.iter().chain(d.params).chain(costas.params) {
+        assert_eq!(p.mutability, Mutability::Build, "{}", p.name);
+    }
+    for word in [
+        "agc",
+        "resample",
+        "polarity both",
+        "differential",
+        "symbol_sync",
+    ] {
+        assert!(d.details.contains(word), "psk_demod details: {word}");
+    }
+    let fd = find("frame_decode");
+    let last = fd.params.last().unwrap();
+    assert_eq!(last.name, "polarity");
+    assert_eq!(last.mutability, Mutability::Build);
+    assert_eq!(
+        last.kind,
+        ParamKind::Choice {
+            options: &["normal", "both"],
+            default: 0
+        }
+    );
+    let mut cfg = FrameDecodeConfig::default();
+    cfg.set("polarity", ParamValue::Choice(1)).unwrap();
+    assert_eq!(cfg.polarity, FramePolarity::Both);
+    assert_eq!(cfg.get("polarity"), Ok(ParamValue::Choice(1)));
+    // the order 3 lies inside the range of the description but is not an order
+    for (kind, r) in [
+        (
+            "costas",
+            CostasConfig::default().set("order", ParamValue::I64(3)),
+        ),
+        (
+            "psk_mod",
+            PskModConfig::default().set("order", ParamValue::I64(3)),
+        ),
+        (
+            "psk_demod",
+            PskDemodConfig::default().set("order", ParamValue::I64(3)),
+        ),
+    ] {
+        assert!(
+            matches!(r, Err(Error::InvalidParameter { name: "order", .. })),
+            "{kind}: {r:?}"
+        );
+    }
+    let b = CostasBlock::new(&CostasConfig::default(), rate(1000), &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(b.description(), costas));
 }
 
 #[test]

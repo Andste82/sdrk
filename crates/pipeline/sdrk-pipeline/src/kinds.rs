@@ -11,21 +11,7 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
-    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
-    BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
-    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
-    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
-    ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
-    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
-    NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock,
-    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock, FmStereoModBlock, FmStereoModConfig,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -1299,7 +1285,7 @@ impl Kind for PreemphLimitKind {
 
     const KIND: &'static str = "preemph_limit";
     fn kernels() -> &'static [&'static str] {
-        &["preemph_limit"]
+        &["preemph_limit", "preemph_limit_stereo"]
     }
     fn default_cfg() -> PreemphLimitConfig {
         PreemphLimitConfig::default()
@@ -1313,31 +1299,46 @@ impl Kind for PreemphLimitKind {
         rate: Rate,
         p: Precision,
     ) -> BlockResult<Figures> {
-        if is_complex(input) {
-            return Err(mismatch("preemph_limit needs real samples"));
-        }
-        with_real!(
-            p,
-            T,
-            Ok(Figures {
-                rate_out: PreemphLimitBlock::<T, VecStorage>::rate_out(cfg, rate)?,
-                memory_bytes: PreemphLimitBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
-                // One pole (3 multiplications), the envelope and the gain.
-                cost: 6.0,
+        match input {
+            // Stereo (M36): two poles, the envelope of both channels and one gain for both.
+            PortType::C32 => Ok(Figures {
+                rate_out: PreemphLimitBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: PreemphLimitBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+                cost: 12.0,
                 taps: 0,
                 delay: Delay::ZERO,
                 min_input: 1,
                 output: stream(input),
-            })
-        )
+            }),
+            PortType::F32 | PortType::Q15 => with_real!(
+                p,
+                T,
+                Ok(Figures {
+                    rate_out: PreemphLimitBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    memory_bytes: PreemphLimitBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                    // One pole (3 multiplications), the envelope and the gain.
+                    cost: 6.0,
+                    taps: 0,
+                    delay: Delay::ZERO,
+                    min_input: 1,
+                    output: stream(input),
+                })
+            ),
+            _ => Err(mismatch("preemph_limit needs f32, q15 or c32 samples")),
+        }
     }
     fn build(
         cfg: &PreemphLimitConfig,
-        _input: PortType,
+        input: PortType,
         rate: Rate,
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
+        if input == PortType::C32 {
+            return Ok(Box::new(StreamNode::new(PreemphLimitBlock::<C32, _>::new(
+                cfg, rate, st,
+            )?)));
+        }
         with_real!(
             p,
             T,
@@ -1345,6 +1346,56 @@ impl Kind for PreemphLimitKind {
                 cfg, rate, st
             )?)))
         )
+    }
+}
+
+// ----------------------------------------------------------- fm_stereo_mod
+
+pub(crate) struct FmStereoModKind;
+
+impl Kind for FmStereoModKind {
+    type Cfg = FmStereoModConfig;
+
+    const KIND: &'static str = "fm_stereo_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["stereo_encode"]
+    }
+    fn default_cfg() -> FmStereoModConfig {
+        FmStereoModConfig::default()
+    }
+    fn set(cfg: &mut FmStereoModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FmStereoModConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("fm_stereo_mod needs c32 samples"));
+        }
+        Ok(Figures {
+            rate_out: FmStereoModBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: FmStereoModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // Sum and difference, two interpolated table lookups and three products.
+            cost: 10.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &FmStereoModConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(FmStereoModBlock::new(
+            cfg, rate, st,
+        )?)))
     }
 }
 

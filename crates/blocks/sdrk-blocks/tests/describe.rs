@@ -31,19 +31,12 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
-    AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
-    Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig,
-    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, ImagPartBlock,
+    AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, ImagPartBlock, FmStereoModBlock, FmStereoModConfig,
     InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
     NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, QuadDemodConfig, RealPartBlock, ResampleBlock,
     ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
-    all_descriptions,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -63,10 +56,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_forty_unique_kinds() {
+fn there_are_forty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 40);
-    assert_eq!(all_descriptions().len(), 40);
+    assert_eq!(kinds.len(), 41);
+    assert_eq!(all_descriptions().len(), 41);
     for kind in [
         "convert",
         "convert_out",
@@ -108,6 +101,7 @@ fn there_are_forty_unique_kinds() {
         "auto_notch",
         "am_mod",
         "ssb_mod",
+        "fm_stereo_mod",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -308,6 +302,11 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
     defaults_match("am_mod", |n| AmModConfig::default().get(n), &[]);
     defaults_match("ssb_mod", |n| SsbModConfig::default().get(n), &[]);
+    defaults_match(
+        "fm_stereo_mod",
+        |n| FmStereoModConfig::default().get(n),
+        &[],
+    );
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -400,6 +399,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("auto_notch", AutoNotchConfig);
     round_trip!("am_mod", AmModConfig);
     round_trip!("ssb_mod", SsbModConfig);
+    round_trip!("fm_stereo_mod", FmStereoModConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -454,6 +454,14 @@ fn blocks_accept_and_report_every_described_parameter() {
         "preemph_limit",
         &mut PreemphLimitBlock::<sdrk::Q15, _>::new(&PreemphLimitConfig::default(), r, &mut s)
             .unwrap(),
+    );
+    check_block_params(
+        "preemph_limit",
+        &mut PreemphLimitBlock::<C32, _>::new(&PreemphLimitConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "fm_stereo_mod",
+        &mut FmStereoModBlock::new(&FmStereoModConfig::default(), rate(192_000), &mut s).unwrap(),
     );
     check_block_params(
         "squelch",
@@ -738,6 +746,42 @@ fn am_mod_and_ssb_mod_describe_their_ports_and_parameters() {
     );
     let demod = find("ssb_demod");
     assert_eq!(ssb.params[0].kind, demod.params[0].kind);
+}
+
+/// The kinds of M36: `preemph_limit` takes `c32` (stereo) besides the real types and never
+/// `cq15`; `fm_stereo_mod` turns `c32` into `f32`, its only runtime parameter is `pilot`; both
+/// blocks of `preemph_limit` share the description.
+#[test]
+fn the_stereo_transmit_kinds_describe_their_ports_and_parameters() {
+    let pl = find("preemph_limit");
+    let three = [PortType::F32, PortType::Q15, PortType::C32];
+    assert_eq!(pl.inputs[0].types, three);
+    assert_eq!(pl.outputs[0].types, three);
+    assert!(pl.details.contains("fm_stereo_mod"));
+    let fsm = find("fm_stereo_mod");
+    assert_eq!(fsm.inputs[0].types, [PortType::C32]);
+    assert_eq!(fsm.outputs[0].types, [PortType::F32]);
+    let names: Vec<_> = fsm.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("pilot_hz", Mutability::Build),
+            ("main", Mutability::Build),
+            ("pilot", Mutability::Runtime),
+        ]
+    );
+    assert!(fsm.required.is_empty());
+    for word in ["120 kHz", "fm_mod", "75000", "preemph_limit", "resample"] {
+        assert!(fsm.details.contains(word), "fm_stereo_mod details: {word}");
+    }
+    let r = rate(192_000);
+    let cfg = PreemphLimitConfig::default();
+    let stereo = PreemphLimitBlock::<C32, _>::new(&cfg, r, &mut VecStorage).unwrap();
+    let mono = PreemphLimitBlock::<f32, _>::new(&cfg, r, &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(stereo.description(), pl));
+    assert!(std::ptr::eq(mono.description(), pl));
+    let enc = FmStereoModBlock::new(&FmStereoModConfig::default(), r, &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(enc.description(), fsm));
 }
 
 #[test]

@@ -10,13 +10,7 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind,
-    ConvertOutKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind,
-    Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind,
-    ImagPartKind, InterpolateKind, Kind, MagKind, MakeComplexKind, MulKind, NcoKind,
-    NoiseBlankKind, PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind, ResampleKind,
-    RotateKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind,
-    StereoPllKind, ToComplexKind,
+    AddKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind, ConvertOutKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, HalfbandDecimateKind, ImagPartKind, InterpolateKind, Kind, MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, PreemphLimitKind, QuadDemodKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, ToComplexKind, FmStereoModKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -203,7 +197,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 40);
+/// assert_eq!(registry.descriptions().count(), 41);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -240,6 +234,7 @@ impl Registry {
         register::<DucKind>(&mut factories);
         register::<FmDemodKind>(&mut factories);
         register::<FmStereoDemodKind>(&mut factories);
+        register::<FmStereoModKind>(&mut factories);
         register::<PreemphLimitKind>(&mut factories);
         register::<QuadDemodKind>(&mut factories);
         register::<DeemphasisKind>(&mut factories);

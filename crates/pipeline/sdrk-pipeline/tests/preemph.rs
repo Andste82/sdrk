@@ -1,5 +1,6 @@
 //! The kind `preemph_limit` and the flows `fm_transmitter` and `nfm_transmitter`: registration,
-//! the cost, the figures, real-only input, the parameter checks (the 40 kHz rule), the run-time
+//! the cost, the figures, the input types (real, or `c32` for stereo, see `stereo_tx.rs`), the
+//! parameter checks (the 40 kHz rule), the run-time
 //! parameter `limit`, push mode equal to pull mode, `f32` and Q15 builds, the YAML twins, chunk
 //! invariance and the clean validation.
 #![allow(
@@ -45,7 +46,7 @@ fn validate(doc: &Value) -> sdrk_pipeline::Report {
 fn the_kind_is_registered_with_its_kernel() {
     let registry = Registry::standard();
     let f = registry.factory("preemph_limit").unwrap();
-    assert_eq!(f.kernels(), ["preemph_limit"]);
+    assert_eq!(f.kernels(), ["preemph_limit", "preemph_limit_stereo"]);
     assert_eq!(f.description().kind, "preemph_limit");
 }
 
@@ -65,8 +66,9 @@ fn the_plan_has_cost_6_no_delay_and_the_rate_of_the_input() {
 }
 
 #[test]
-fn the_input_must_be_real_and_the_parameters_are_checked() {
-    assert!(!validate(&single("c32", "f32", 240_000, json!({}))).is_ok());
+fn cq15_input_is_rejected_and_the_parameters_are_checked() {
+    // `c32` is the stereo variant (M36); `cq15` is not supported.
+    assert!(validate(&single("c32", "f32", 240_000, json!({}))).is_ok());
     assert!(!validate(&single("cq15", "q15", 240_000, json!({}))).is_ok());
     // A pre-emphasis below 40 kHz is rejected; without it any rate works.
     assert!(!validate(&single("f32", "f32", 32_000, json!({}))).is_ok());

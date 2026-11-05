@@ -245,6 +245,8 @@ fn validate_schema_and_backends() {
     assert_eq!(backend("auto_notch"), "fallback");
     assert_eq!(backend("stereo_pll"), "fallback");
     assert_eq!(backend("preemph_limit"), "fallback");
+    assert_eq!(backend("preemph_limit_stereo"), "fallback");
+    assert_eq!(backend("stereo_encode"), "fallback");
     assert_eq!(
         backend("rotate"),
         if sdrk::SIMD_BACKEND {

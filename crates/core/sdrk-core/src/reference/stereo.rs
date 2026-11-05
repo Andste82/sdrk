@@ -10,7 +10,9 @@
 use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::stereo::{StereoMatrix, StereoPll, StereoPllState};
+use crate::kernels::stereo::{
+    StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
+};
 use crate::num::{flush_denormal, round_shift, sat16};
 use crate::tables::{COS_F32, COS_Q15};
 use crate::types::{C32, CQ15, Q15};
@@ -173,6 +175,49 @@ impl StereoMatrix<CQ15> for Reference {
                 re: Q15(sat16(s + d2)),
                 im: Q15(sat16(s - d2)),
             };
+        }
+        Ok(())
+    }
+}
+
+/// `(sin phi, sin 2 phi)` of `stereo_encode` from the cosine table.
+fn encode_sines(phase: u32) -> (f32, f32) {
+    let s1 = cos_f32(phase.wrapping_sub(QUARTER));
+    let s2 = cos_f32(phase.wrapping_mul(2).wrapping_sub(QUARTER));
+    (s1, s2)
+}
+
+/// One multiplex sample: the products first, then the sums from left to right.
+fn encode_sample(x: C32, main: f32, pilot: f32, s1: f32, s2: f32) -> f32 {
+    #[allow(
+        clippy::manual_midpoint,
+        reason = "the contract fixes the f32 sum, then the halving; `midpoint` rounds differently"
+    )]
+    let m = (x.re + x.im) * 0.5;
+    let d = (x.re - x.im) * 0.5;
+    let sum = main * m;
+    let main_d = main * d;
+    let diff = main_d * s2;
+    let tone = pilot * s1;
+    let partial = sum + diff;
+    partial + tone
+}
+
+impl StereoEncode for Reference {
+    fn stereo_encode(
+        &self,
+        state: &mut StereoEncodeState,
+        input: &[C32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        for (o, &x) in output.iter_mut().zip(input) {
+            let phase = state.nco.phase();
+            let (s1, s2) = encode_sines(phase);
+            *o = encode_sample(x, state.main, state.pilot, s1, s2);
+            state
+                .nco
+                .set_phase(phase.wrapping_add(state.nco.increment()));
         }
         Ok(())
     }

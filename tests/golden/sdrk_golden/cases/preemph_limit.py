@@ -290,3 +290,197 @@ def retune_f32_case(rng):
         "0-4095 and 0.5 from sample 4096 (set_limit before that sample; the 8 kHz burst spans "
         "the change); exact float32 model",
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Stereo variant (M36 section 1): one envelope and one gain for both channels
+# ---------------------------------------------------------------------------------------------
+
+# Start of the f64 regression guard (decision D111): the whole signal.
+GUARD_SKIP = 0
+
+
+def sanitize_f32(sample):
+    """The input rule of the f32 kernel: NaN and infinities become 0, a finite value is clamped
+    to +-1024 (D200, D460)."""
+    return fm.f32(max(-INPUT_LIMIT, min(INPUT_LIMIT, sample))) if math.isfinite(sample) else fm.f32(0.0)
+
+
+def clamp_to(y, t):
+    if y > t:
+        return t
+    if y < -t:
+        return -t
+    return y
+
+
+def preemph_stereo_f32(left, right, coefs, limit, hold_s, release_s, rate_hz):
+    """Float32 model of ``preemph_limit_stereo``. Returns ``(out_left, out_right, stats)``;
+    stats counts the samples per limiter state and the limited samples whose envelope peak came
+    from the left (``peak_left``) or the right channel (``peak_right``)."""
+    b0, b1, a1 = (fm.f32(c) for c in coefs)
+    r = fm.f32(release_factor(release_s, rate_hz))
+    hold_len = hold_samples(hold_s, rate_hz)
+    t = fm.f32(limit)
+    zero = fm.f32(0.0)
+    x1 = [zero, zero]
+    v1 = [zero, zero]
+    env = zero
+    hold = 0
+    n = len(left)
+    out = [np.zeros(n, dtype=np.float32), np.zeros(n, dtype=np.float32)]
+    stats = {"limited": 0, "held": 0, "released": 0, "idle": 0, "peak_left": 0, "peak_right": 0}
+    xs_l = np.asarray(left, dtype=np.float32).tolist()
+    xs_r = np.asarray(right, dtype=np.float32).tolist()
+    for i in range(n):
+        v = [zero, zero]
+        for ch, sample in enumerate((xs_l[i], xs_r[i])):
+            xs = sanitize_f32(sample)
+            v[ch] = fm.sub(fm.add(fm.mul(b0, xs), fm.mul(b1, x1[ch])), fm.mul(a1, v1[ch]))
+            x1[ch] = xs
+            v1[ch] = fm.flush_denormal(v[ch])
+        ml, mr = abs(v[0]), abs(v[1])
+        m = ml if ml > mr else mr  # a select, not max (D461)
+        if m >= env:
+            env, hold = m, hold_len
+        elif hold > 0:
+            hold -= 1
+            stats["held"] += 1
+        else:
+            env = fm.flush_denormal(fm.mul(env, r))
+            stats["released"] += 1
+        if env > t:
+            g = fm.div(t, env)
+            y = [fm.mul(v[0], g), fm.mul(v[1], g)]
+            stats["limited"] += 1
+            stats["peak_left" if ml > mr else "peak_right"] += 1
+        else:
+            y = v
+            stats["idle"] += 1
+        out[0][i] = clamp_to(y[0], t)
+        out[1][i] = clamp_to(y[1], t)
+    return out[0], out[1], stats
+
+
+def preemph_stereo_f64(left, right, coefs, limit, hold_s, release_s, rate_hz):
+    """The same loop in float64 (float64 coefficients, release factor and limit; no flush of
+    denormals): the regression guard of decision D111. Returns a list of complex values."""
+    b0, b1, a1 = coefs
+    r = release_factor(release_s, rate_hz)
+    hold_len = hold_samples(hold_s, rate_hz)
+    t = float(limit)
+    x1 = [0.0, 0.0]
+    v1 = [0.0, 0.0]
+    env = 0.0
+    hold = 0
+    out = []
+    for sl, sr in zip(np.asarray(left, dtype=np.float64).tolist(), np.asarray(right, dtype=np.float64).tolist()):
+        v = [0.0, 0.0]
+        for ch, sample in enumerate((sl, sr)):
+            xs = max(-INPUT_LIMIT, min(INPUT_LIMIT, sample)) if math.isfinite(sample) else 0.0
+            v[ch] = (b0 * xs + b1 * x1[ch]) - a1 * v1[ch]
+            x1[ch] = xs
+            v1[ch] = v[ch]
+        ml, mr = abs(v[0]), abs(v[1])
+        m = ml if ml > mr else mr
+        if m >= env:
+            env, hold = m, hold_len
+        elif hold > 0:
+            hold -= 1
+        else:
+            env = env * r
+        if env > t:
+            g = t / env
+            y = [v[0] * g, v[1] * g]
+        else:
+            y = v
+        out.append(complex(clamp_to(y[0], t), clamp_to(y[1], t)))
+    return out
+
+
+def snr_db(reference, test):
+    """``10 log10(sum |ref|^2 / sum |ref - test|^2)`` with exact sums."""
+    num = math.fsum(abs(r) ** 2 for r in reference)
+    den = math.fsum(abs(r - t) ** 2 for r, t in zip(reference, test))
+    return math.inf if den == 0.0 else 10.0 * math.log10(num / den)
+
+
+def guard_db(model, f64):
+    """The SNR of the model against the float64 loop from ``GUARD_SKIP`` on, minus 1 dB, rounded
+    down to 0.1 dB (D111, D115)."""
+    snr = snr_db(f64[GUARD_SKIP:], model[GUARD_SKIP:])
+    assert math.isfinite(snr), "the float32 model equals the float64 loop; use the sentinel of D372"
+    return math.floor((snr - 1.0) * 10.0) / 10.0
+
+
+def complex_of(left, right):
+    """A complex64 array from the float32 parts (never as ``re + 1j * im``)."""
+    z = np.zeros(len(left), dtype=np.complex64)
+    z.real = np.asarray(left, dtype=np.float32)
+    z.imag = np.asarray(right, dtype=np.float32)
+    return z
+
+
+def stereo_guard(left, right, out_l, out_r, coefs, limit):
+    f64 = preemph_stereo_f64(left, right, coefs, limit, HOLD_S, RELEASE_S, RATE_HZ)
+    model = [complex(float(a), float(b)) for a, b in zip(out_l.tolist(), out_r.tolist())]
+    return guard_db(model, f64)
+
+
+# Bursts of the 10 kHz tone on the left channel of stereo_limit_c32_16384: (first, end).
+STEREO_BURSTS = ((2000, 4000), (9000, 11000))
+
+
+@case(kernel="preemph_limit", name="stereo_limit_c32_16384", seed=485)
+def stereo_limit_c32_case(rng):
+    n = 16384
+    limit = 0.9
+    right = noise(rng, n, 0.3)
+    left = np.zeros(n)
+    for k in range(n):
+        left[k] = 0.5 * math.sin(2.0 * math.pi * ((1000 * k % RATE_HZ) / RATE_HZ))
+    for first, end in STEREO_BURSTS:
+        for k in range(first, end):
+            left[k] += 0.9 * math.sin(2.0 * math.pi * ((10000 * k % RATE_HZ) / RATE_HZ))
+    left = left.astype(np.float32)
+    right = right.astype(np.float32)
+    coefs = coefs_of(TAU_S)
+    out_l, out_r, stats = preemph_stereo_f32(left, right, coefs, limit, HOLD_S, RELEASE_S, RATE_HZ)
+    # The limiter attacks on either channel, holds and releases.
+    assert stats["peak_left"] > 500 and stats["peak_right"] > 500, stats
+    # The pre-emphasized noise (sigma about 1.1) keeps the limiter busy almost everywhere.
+    assert stats["held"] > 500 and stats["released"] > 500, stats
+    assert float(np.max(np.abs(out_l))) <= 0.9 and float(np.max(np.abs(out_r))) <= 0.9
+    guard = stereo_guard(left, right, out_l, out_r, coefs, limit)
+    return dict(
+        params=params(TAU_S, limit, coefs, bursts=[list(b) for b in STEREO_BURSTS], guard_skip=GUARD_SKIP,
+                      snr_db_guard=guard),
+        arrays={"input": Array("cf32", complex_of(left, right)), "expected": Array("cf32", complex_of(out_l, out_r))},
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="stereo limiter (re left, im right), 48 kHz, tau 50 us, limit 0.9, hold 0.02 s, release "
+        "0.2 s; left: 1 kHz 0.5 plus 10 kHz 0.9 over the listed bursts, right: noise sigma 0.3; the "
+        "envelope peak comes from either channel while limiting; exact float32 model; snr_db_guard "
+        "compares with the float64 loop (D111)",
+    )
+
+
+@case(kernel="preemph_limit", name="stereo_equal_c32_8192", seed=486)
+def stereo_equal_c32_case(rng):
+    # The input of limit_f32_8192 (seed 445) in both channels.
+    x = limit_input(np.random.default_rng(445))
+    coefs = coefs_of(TAU_S)
+    mono, mono_stats = preemph_f32(x, coefs, 0.5, HOLD_S, RELEASE_S, RATE_HZ)
+    out_l, out_r, stats = preemph_stereo_f32(x, x, coefs, 0.5, HOLD_S, RELEASE_S, RATE_HZ)
+    assert out_l.tobytes() == mono.tobytes() and out_r.tobytes() == mono.tobytes()
+    assert stats["limited"] == mono_stats["limited"] > 500, stats
+    guard = stereo_guard(x, x, out_l, out_r, coefs, 0.5)
+    return dict(
+        params=params(TAU_S, 0.5, coefs, guard_skip=GUARD_SKIP, snr_db_guard=guard),
+        arrays={"input": Array("cf32", complex_of(x, x)), "expected": Array("cf32", complex_of(mono, mono))},
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="the input of limit_f32_8192 (seed 445) in both channels, limit 0.5; the expected output "
+        "is the expected output of limit_f32_8192 in both channels (the generator asserts that the "
+        "stereo model gives the same bits); snr_db_guard compares with the float64 loop (D111)",
+    )

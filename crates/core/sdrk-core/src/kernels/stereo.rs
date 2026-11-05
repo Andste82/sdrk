@@ -7,6 +7,9 @@
 //! signal through a band-pass around 19 kHz), regenerates `sin(2 theta)` from its phase and
 //! multiplies the multiplex signal with it. After the audio low-pass, the sum `S` and the
 //! difference `D` give `L = S + 2 D` and `R = S - 2 D` ([`StereoMatrix`]).
+//!
+//! The transmit side is [`StereoEncode`] (`stereo_encode`): stereo audio to the multiplex
+//! signal with the pilot from an [`Nco`].
 
 #![allow(clippy::similar_names)]
 
@@ -15,8 +18,9 @@ use core::marker::PhantomData;
 use sdrk_device::Ratio;
 
 use crate::error::{Error, Result};
+use crate::kernels::mix::Nco;
 use crate::timing::{Delay, Rate, Timing};
-use crate::types::{ComplexSample, RealSample, SampleType};
+use crate::types::{C32, ComplexSample, RealSample, SampleType};
 
 /// Limit of the integrator in hertz (BS.450 allows +-2 Hz of pilot deviation).
 const IMAX_HZ: f64 = 50.0;
@@ -437,4 +441,170 @@ pub trait StereoMatrix<T: ComplexSample> {
     /// `C32`: `d2 = d + d`, `l = s + d2`, `r = s - d2` in f32. `CQ15`: `d2 = 2 d` in `i64`,
     /// `l = sat16(s + d2)`, `r = sat16(s - d2)`.
     fn stereo_matrix(&self, input: &[T], output: &mut [T]) -> Result<()>;
+}
+
+/// Lowest sample rate of `stereo_encode`: the difference band reaches 53 kHz.
+const ENCODE_MIN_RATE_HZ: f64 = 120_000.0;
+
+/// State of the stereo encoder: the pilot oscillator (19 kHz; the subcarrier is its doubled
+/// phase), the gain of the sum and difference signals (`main`) and the pilot amplitude.
+///
+/// ```
+/// use sdrk_core::{kernels::stereo::StereoEncodeState, Rate};
+/// let rate = Rate::hz(192_000)?;
+/// let st = StereoEncodeState::new(19_000.0, 0.9, 0.09, rate)?;
+/// assert_eq!((st.main(), st.pilot(), st.phase()), (0.9, 0.09, 0));
+/// // The sample rate must be at least 120 kHz.
+/// assert!(StereoEncodeState::new(19_000.0, 0.9, 0.09, Rate::hz(96_000)?).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StereoEncodeState {
+    pub(crate) nco: Nco,
+    pub(crate) main: f32,
+    pub(crate) pilot: f32,
+}
+
+fn check_pilot(pilot: f32) -> Result<()> {
+    if (0.0..=0.2).contains(&pilot) {
+        Ok(())
+    } else {
+        Err(invalid("stereo pilot amplitude must be in [0, 0.2]"))
+    }
+}
+
+impl StereoEncodeState {
+    /// Creates an encoder with the pilot phase 0.
+    ///
+    /// `pilot_hz` in `[18 000, 20 000]` (19 000 for broadcast), `main` in `[0, 1]` (0.9) and
+    /// `pilot` in `[0, 0.2]` (0.09); the sample rate must be at least 120 kHz. Anything else
+    /// (NaN included) is `InvalidParameter`. The phase increment is that of
+    /// [`Nco::new`]`(pilot_hz, rate)`.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::stereo::StereoEncodeState, Rate};
+    /// let rate = Rate::hz(192_000)?;
+    /// assert!(StereoEncodeState::new(17_000.0, 0.9, 0.09, rate).is_err());
+    /// assert!(StereoEncodeState::new(19_000.0, 1.5, 0.09, rate).is_err());
+    /// assert!(StereoEncodeState::new(19_000.0, 0.9, f32::NAN, rate).is_err());
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn new(pilot_hz: f64, main: f32, pilot: f32, rate: Rate) -> Result<Self> {
+        if !(18_000.0..=20_000.0).contains(&pilot_hz) {
+            return Err(invalid(
+                "stereo pilot frequency must be in [18000, 20000] Hz",
+            ));
+        }
+        if !(0.0..=1.0).contains(&main) {
+            return Err(invalid("stereo main gain must be in [0, 1]"));
+        }
+        check_pilot(pilot)?;
+        if rate.as_f64() < ENCODE_MIN_RATE_HZ {
+            return Err(invalid(
+                "stereo encoder needs a sample rate of at least 120 kHz",
+            ));
+        }
+        Ok(Self {
+            nco: Nco::new(pilot_hz, rate)?,
+            main,
+            pilot,
+        })
+    }
+
+    /// Changes the pilot amplitude from the next sample; `0` turns the pilot off (a receiver
+    /// then decodes mono). It must be in `[0, 0.2]`; on an error nothing changes.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::stereo::StereoEncodeState, Rate};
+    /// let mut st = StereoEncodeState::new(19_000.0, 0.9, 0.09, Rate::hz(192_000)?)?;
+    /// st.set_pilot(0.0)?;
+    /// assert_eq!(st.pilot(), 0.0);
+    /// assert!(st.set_pilot(0.3).is_err());
+    /// assert_eq!(st.pilot(), 0.0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_pilot(&mut self, pilot: f32) -> Result<()> {
+        check_pilot(pilot)?;
+        self.pilot = pilot;
+        Ok(())
+    }
+
+    /// The pilot amplitude.
+    pub fn pilot(&self) -> f32 {
+        self.pilot
+    }
+
+    /// The gain of the sum and difference signals.
+    pub fn main(&self) -> f32 {
+        self.main
+    }
+
+    /// The pilot phase before the next sample, in units of `2^-32` turn.
+    pub fn phase(&self) -> u32 {
+        self.nco.phase()
+    }
+
+    /// Sets the pilot phase (for tests and to align the pilot with another signal).
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::stereo::StereoEncodeState, Rate};
+    /// let mut st = StereoEncodeState::new(19_000.0, 0.9, 0.09, Rate::hz(192_000)?)?;
+    /// st.set_phase(0x4000_0000);
+    /// assert_eq!(st.phase(), 0x4000_0000);
+    /// st.reset();
+    /// assert_eq!(st.phase(), 0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_phase(&mut self, phase: u32) {
+        self.nco.set_phase(phase);
+    }
+
+    /// The pilot phase increment per sample.
+    pub fn increment(&self) -> u32 {
+        self.nco.increment()
+    }
+
+    /// Sets the pilot phase to 0; frequency, `main` and `pilot` are kept.
+    pub fn reset(&mut self) {
+        self.nco.reset();
+    }
+}
+
+impl Timing for StereoEncodeState {
+    fn ratio(&self) -> Ratio {
+        Ratio::ONE
+    }
+
+    /// Zero; the output belongs to the input sample at the same index.
+    fn group_delay(&self) -> Delay {
+        Delay::ZERO
+    }
+}
+
+/// Stereo encoder: stereo audio (`re` left, `im` right) to the FM multiplex signal.
+///
+/// ```
+/// use sdrk_core::{kernels::stereo::{StereoEncode, StereoEncodeState}, Fallback, Rate, C32};
+/// let mut st = StereoEncodeState::new(19_000.0, 0.9, 0.0, Rate::hz(192_000)?)?;
+/// // Mono audio (L = R) without pilot is the sum signal alone.
+/// let input = [C32::new(0.5, 0.5); 8];
+/// let mut out = [0.0f32; 8];
+/// Fallback.stereo_encode(&mut st, &input, &mut out)?;
+/// assert!(out.iter().all(|&y| y == 0.45));
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait StereoEncode {
+    /// Per sample (f32, no FMA), with `phi` the pilot phase before the sample:
+    /// `s1 = sin(phi)` and `s2 = sin(2 phi)` from the cosine tables of `rotate` with its
+    /// interpolation (`s2` at the phase `phi.wrapping_mul(2)`, as in `stereo_pll`),
+    /// `m = (L + R) 0.5`, `d = (L - R) 0.5`, `mpx = (main m + (main d) s2) + pilot s1`
+    /// (the products first, then the sums from left to right); the phase advances by one step.
+    /// A NaN or infinite input passes into the output of that sample only (there is no
+    /// feedback). The lengths must be equal, otherwise `LengthMismatch` and nothing changes.
+    fn stereo_encode(
+        &self,
+        state: &mut StereoEncodeState,
+        input: &[C32],
+        output: &mut [f32],
+    ) -> Result<()>;
 }

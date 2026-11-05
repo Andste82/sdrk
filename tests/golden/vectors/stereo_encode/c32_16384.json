@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "c32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_16384.input.bin",
+      "len": 16384
+    }
+  },
+  "case": "c32_16384",
+  "format_version": 1,
+  "kernel": "stereo_encode",
+  "model": "float32",
+  "notes": "192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; pilot 19 kHz with the start phase 0x40000000, main 0.9, pilot 0.09; exact float32 model with the cosine table of rotate and its interpolation; snr_db_guard compares with the float64 formula with exact sines (D34). The seed is not used (no random input)",
+  "params": {
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "inc": 425022805,
+    "main": 0.9,
+    "phase0": 1073741824,
+    "phase_end": 2505392128,
+    "pilot": 0.09,
+    "pilot_hz": 19000.0,
+    "rate_hz": 192000,
+    "snr_db_guard": 136.2
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 487,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

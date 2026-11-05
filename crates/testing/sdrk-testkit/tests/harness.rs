@@ -806,6 +806,9 @@ fn registered_cases_have_unique_names_without_spaces() {
         "am_mod_c32",
         "am_mod_cq15",
         "extremes_m35",
+        "preemph_limit_stereo_c32",
+        "stereo_encode_c32",
+        "extremes_m36",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

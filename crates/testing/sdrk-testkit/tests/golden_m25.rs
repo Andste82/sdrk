@@ -1,5 +1,6 @@
 //! Golden tests of the `preemph_limit` kernel (M25) through the facade `Sdrk`, `Fallback` and
-//! `Reference`, and of `preemphasis_coefs` against the design cases.
+//! `Reference`, and of `preemphasis_coefs` against the design cases (the stereo cases of M36 are
+//! run by `golden_m36`; their coefficients are checked here).
 //!
 //! Every kernel case is run in one piece and in chunks of random size (the plan seed is the case
 //! seed); both runs must match the golden file and each other bit for bit. `retune_f32_8192`
@@ -124,7 +125,9 @@ fn all_cases_are_present() {
             "nonfinite_f32_4096",
             "preemph_f32_8192",
             "preemph_q15_8192",
-            "retune_f32_8192"
+            "retune_f32_8192",
+            "stereo_equal_c32_8192",
+            "stereo_limit_c32_16384"
         ]
     );
     let designs: Vec<String> = golden::list("design")
@@ -211,6 +214,8 @@ fn the_coefficients_of_the_kernel_cases_are_the_design_values() {
         "nonfinite_f32_4096",
         "clamp_f32_4096",
         "retune_f32_8192",
+        "stereo_limit_c32_16384",
+        "stereo_equal_c32_8192",
     ] {
         let case = golden::load("preemph_limit", name).unwrap();
         let got = preemphasis_coefs(

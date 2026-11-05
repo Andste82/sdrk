@@ -15,15 +15,38 @@
 //!   64-bit division is much cheaper than a 128-bit one on x86-64 and the soft division of
 //!   `thumbv7em`, RISC-V32 and ESP32. The coefficient products stay in `i128` (they exceed `i64`
 //!   for the largest coefficients).
+//! * Stereo (`C32`): the `f32` loop with both channels, the factor `T / env` once per sample
+//!   for both and the larger magnitude as one select.
 
 #![allow(clippy::many_single_char_names)]
 
 use crate::Fallback;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::preemph_limit::{INPUT_LIMIT, PreemphLimit, PreemphLimitState, V_LIMIT};
+use crate::kernels::preemph_limit::{
+    INPUT_LIMIT, PreemphLimit, PreemphLimitState, PreemphLimitStereo, PreemphLimitStereoState,
+    V_LIMIT,
+};
 use crate::num::flush_denormal;
-use crate::types::Q15;
+use crate::types::{C32, Q15};
+
+/// The input rule: `0.0` for NaN and infinities, a finite value clamped to `+-INPUT_LIMIT`.
+/// A value within the limit passes after one compare; the rest is the rare path.
+#[inline]
+fn sanitize(sample: f32) -> f32 {
+    let a = sample.abs();
+    if a <= INPUT_LIMIT {
+        sample
+    } else if a <= f32::MAX {
+        if sample < 0.0 {
+            -INPUT_LIMIT
+        } else {
+            INPUT_LIMIT
+        }
+    } else {
+        0.0
+    }
+}
 
 /// Below this `|v|` (Q30) the product with `T_q30 <= 2^30` fits in 63 bits.
 const NARROW: u64 = 1 << 33;
@@ -40,18 +63,7 @@ impl PreemphLimit<f32> for Fallback {
         let (b0, b1, a1, r, t) = (g.b0_f, g.b1_f, g.a1_f, g.r_f, g.t_f);
         let (mut x1, mut v1, mut env, mut hold) = (*g.x1_f, *g.v1_f, *g.env_f, *g.hold);
         for (o, &sample) in output.iter_mut().zip(input) {
-            let a = sample.abs();
-            let x = if a <= INPUT_LIMIT {
-                sample
-            } else if a <= f32::MAX {
-                if sample < 0.0 {
-                    -INPUT_LIMIT
-                } else {
-                    INPUT_LIMIT
-                }
-            } else {
-                0.0
-            };
+            let x = sanitize(sample);
             let v = (b0 * x + b1 * x1) - a1 * v1;
             x1 = x;
             v1 = flush_denormal(v);
@@ -126,6 +138,62 @@ impl PreemphLimit<Q15> for Fallback {
         *g.v1_q = v1;
         *g.env_q = env;
         *g.hold = hold;
+        Ok(())
+    }
+}
+
+impl PreemphLimitStereo for Fallback {
+    fn preemph_limit_stereo(
+        &self,
+        state: &mut PreemphLimitStereoState,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let (b0, b1, a1, r, t, hold_len) = (
+            state.b0,
+            state.b1,
+            state.a1,
+            state.r,
+            state.t,
+            state.hold_len,
+        );
+        let (mut xl1, mut xr1) = (state.x1.re, state.x1.im);
+        let (mut vl1, mut vr1) = (state.v1.re, state.v1.im);
+        let (mut env, mut hold) = (state.env, state.hold);
+        for (o, s) in output.iter_mut().zip(input) {
+            let xl = sanitize(s.re);
+            let xr = sanitize(s.im);
+            let vl = (b0 * xl + b1 * xl1) - a1 * vl1;
+            let vr = (b0 * xr + b1 * xr1) - a1 * vr1;
+            xl1 = xl;
+            xr1 = xr;
+            vl1 = flush_denormal(vl);
+            vr1 = flush_denormal(vr);
+            let (al, ar) = (vl.abs(), vr.abs());
+            let m = if al > ar { al } else { ar };
+            if m >= env {
+                env = m;
+                hold = hold_len;
+            } else if hold > 0 {
+                hold -= 1;
+            } else {
+                env = flush_denormal(env * r);
+            }
+            let (yl, yr) = if env > t {
+                let g = t / env;
+                (vl * g, vr * g)
+            } else {
+                (vl, vr)
+            };
+            let yl = if yl > t { t } else { yl };
+            let yr = if yr > t { t } else { yr };
+            *o = C32::new(if yl < -t { -t } else { yl }, if yr < -t { -t } else { yr });
+        }
+        state.x1 = C32::new(xl1, xr1);
+        state.v1 = C32::new(vl1, vr1);
+        state.env = env;
+        state.hold = hold;
         Ok(())
     }
 }

@@ -66,6 +66,7 @@ pub use blocks::fir::{FirBlock, FirConfig};
 pub use blocks::fm_demod::{FM_DEMOD_CHUNK, FmDemodBlock, FmDemodConfig};
 pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
+pub use blocks::fm_stereo_mod::{FmStereoModBlock, FmStereoModConfig};
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
@@ -76,7 +77,7 @@ pub use blocks::make_complex::MakeComplexBlock;
 pub use blocks::mul::{MulBlock, MulRealBlock};
 pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};
-pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig};
+pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::real_part::RealPartBlock;
 pub use blocks::real_to_iq::RealToIqBlock;

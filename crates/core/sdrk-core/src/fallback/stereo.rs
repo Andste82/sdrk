@@ -4,6 +4,9 @@
 //! differs. The cosine of the doubled phase pair is not computed (only `sin(2 theta)` is
 //! needed), and `floor(f 2^32 + 0.5) as i64 as u32` is the `phase_step` of `fm_mod`, which equals
 //! that formula bit for bit without a library call to `floor`.
+//!
+//! `stereo_encode` reads the two sines with two table lookups per sample (the cosine of the
+//! pilot phase is not needed) and runs the phase as a local accumulator.
 
 #![allow(clippy::many_single_char_names)]
 
@@ -12,7 +15,9 @@ use crate::error::{Error, Result};
 use crate::fallback::mix::{interp_f32, interp_f32_pair, interp_q15};
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
-use crate::kernels::stereo::{StereoMatrix, StereoPll, StereoPllState};
+use crate::kernels::stereo::{
+    StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
+};
 use crate::num::flush_denormal;
 use crate::types::{C32, CQ15, Q15};
 
@@ -275,6 +280,38 @@ impl StereoMatrix<CQ15> for Fallback {
                 im: Q15(im),
             };
         }
+        Ok(())
+    }
+}
+
+impl StereoEncode for Fallback {
+    fn stereo_encode(
+        &self,
+        state: &mut StereoEncodeState,
+        input: &[C32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        check_len(input.len(), output.len())?;
+        let (main, pilot, inc) = (state.main, state.pilot, state.nco.increment());
+        let mut phase = state.nco.phase();
+        for (o, x) in output.iter_mut().zip(input) {
+            // The index is below 4096 and the table has 4097 entries: never `None`.
+            let (Some(s1), Some(s2)) = (
+                interp_f32(phase.wrapping_sub(QUARTER)),
+                interp_f32(phase.wrapping_mul(2).wrapping_sub(QUARTER)),
+            ) else {
+                return Err(table_error());
+            };
+            #[allow(
+                clippy::manual_midpoint,
+                reason = "the contract fixes the f32 sum, then the halving; `midpoint` rounds differently"
+            )]
+            let m = (x.re + x.im) * 0.5;
+            let d = (x.re - x.im) * 0.5;
+            *o = (main * m + main * d * s2) + pilot * s1;
+            phase = phase.wrapping_add(inc);
+        }
+        state.nco.set_phase(phase);
         Ok(())
     }
 }

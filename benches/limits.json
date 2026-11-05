@@ -4195,5 +4195,65 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "preemph_limit_stereo": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`preemph_limit_stereo` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "stereo_encode": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`stereo_encode` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
   }
 }

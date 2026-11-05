@@ -35,5 +35,6 @@ from . import (  # noqa: F401
     squelch,
     ssb_mod,
     stereo,
+    stereo_encode,
     window,
 )

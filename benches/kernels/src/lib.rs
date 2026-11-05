@@ -48,6 +48,7 @@ mod halfband_family;
 mod math_family;
 mod noise_family;
 mod stereo_family;
+mod stereo_tx_family;
 
 use fir_family::{Entry, FirFamK, Mode};
 use halfband_family::{
@@ -345,7 +346,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 183] = [
+pub const KERNELS: [&str; 185] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -529,6 +530,8 @@ pub const KERNELS: [&str; 183] = [
     "am_mod_cq15",
     "am_mod_fallback",
     "am_mod_cq15_fallback",
+    "preemph_limit_stereo",
+    "stereo_encode",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -695,6 +698,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "am_mod_cq15" | "am_mod_cq15_fallback" => {
             Box::new(am_family::AmModCq15K::new(rng, layout, entry))
         }
+        "preemph_limit_stereo" => Box::new(stereo_tx_family::PreemphStereoK::new(rng, layout)),
+        "stereo_encode" => Box::new(stereo_tx_family::StereoEncodeK::new(rng, layout)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

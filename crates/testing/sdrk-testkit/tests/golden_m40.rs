@@ -115,12 +115,11 @@ fn matched_pair(rolloff: f64, sps: usize, span: usize) -> (f64, f64) {
     (g(0), isi)
 }
 
-/// Test 1 of M40, the RRC matched pair: 1 at the centre, and below 1e-3 at the other symbol
-/// centres where the truncation to `span` symbols allows it. The truncated response does not
-/// reach 1e-3 at every span of at least 10 (D605, open item I40-1): at span 10 the largest value
-/// is 1.5e-3 to 6.1e-3 for the roll-offs 0.35 to 1 at 2 to 10 samples per symbol, and it falls
-/// with the span in an oscillating way. The tight bound is checked on the measured
-/// configurations below it, every other configuration of span 10 to 32 against 1e-2.
+/// Test 1 of M40, the RRC matched pair: 1 at the centre, and below 1e-2 at the other symbol
+/// centres for every span of at least 10 (D626). The response truncated to `span` symbols leaves
+/// 1.5e-3 to 6.1e-3 there at span 10 for the roll-offs 0.35 to 1 at 2 to 10 samples per symbol,
+/// and the value falls with the span in an oscillating way, so the 1e-3 of the first
+/// specification is checked only on the configurations whose truncation reaches it (D605).
 #[test]
 fn rrc_matched_pair_is_nyquist_at_the_symbol_centres() {
     let tight: &[(f64, &[usize])] = &[

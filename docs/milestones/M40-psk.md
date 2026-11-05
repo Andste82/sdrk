@@ -191,7 +191,7 @@ Parameters: `order`, `symbol_rate_hz` (required), `rolloff`, `span`, `differenti
 
 ## Tests
 
-1. Golden: `design/rrc_*`; `costas/{bpsk_lock_c32_8192, qpsk_lock_c32_8192, qpsk_offset_c32_8192}` (seeds 550–552; float32 model, bit-exact); RRC matched pair: `rrc ⊛ rrc` sampled at the symbol centres is 1 at 0 and below 1e-3 elsewhere for span ≥ 10.
+1. Golden: `design/rrc_*`; `costas/{bpsk_lock_c32_8192, qpsk_lock_c32_8192, qpsk_offset_c32_8192}` (seeds 550–552; float32 model, bit-exact); RRC matched pair: `rrc ⊛ rrc` sampled at the symbol centres is 1 at 0 and below 1e-2 elsewhere for span ≥ 10 (D626: the truncated RRC of §1 leaves 1.5e-3 to 6.1e-3 at span 10, as the RRC designs of GNU Radio and MATLAB do; the earlier bound of 1e-3 was a specification error).
 2. **BER BPSK/QPSK coherent:** `psk_mod` → AWGN, a frequency offset of 0.002 cycles per symbol, 50 ppm drift → `psk_demod`: after 2000 symbols of acquisition, BER over 10^6 bits within a factor 1.5 of `Q(√(2·Eb/N0))` at Eb/N0 6 and 8 dB (seeds 553, 554; ambiguity removed by the PRBS meter testing both polarities, and all four rotations for QPSK).
 3. **Differential:** DBPSK and DQPSK BER within 1 dB of theory (`0.5·exp(−Eb/N0)` for DBPSK; seeds 555, 556).
 4. **Lock:** `costas` order 4 locks from any start phase (8 starts) and an offset of 0.01 cycles per symbol within 500 symbols at Eb/N0 10 dB; `locked()` turns on, and off for noise only (seed 557).
@@ -213,13 +213,13 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 
 ## Status
 
-Done: `design::rrc` and `rrc_len` with the golden cases `design/rrc_*` (D600); the kernel `costas` (`C32`) with Reference, Fallback, the facade delegation, `backend_for` (fallback on every backend, "Not accelerated", D608), the contract in `docs/kernels.md` and the golden cases of seeds 550 to 552 (D601 to D604, D610); the blocks and kinds `costas`, `psk_mod` and `psk_demod` and the option `polarity` of `frame_decode` (D612 to D616); the flows `qpsk_transmitter` and `qpsk_receiver` with YAML twins (D621, D622); the tests 1 to 6 (seeds 550 to 559; D605, D611, D617 to D619, D623); the suite cases `costas_c32` (quick) and `extremes_m40` (full); the count entries `costas` and `costas_fallback` against a C translation of GNU Radio's `costas_loop_cc` (D607); the flush of a subnormal integrator limit of `costas` (D624) and the `rate_unsupported` error of `psk_demod` below 2 samples per symbol (D625); the docs, the CHANGELOG and the decisions log (D600 to D625).
+Done: `design::rrc` and `rrc_len` with the golden cases `design/rrc_*` (D600); the kernel `costas` (`C32`) with Reference, Fallback, the facade delegation, `backend_for` (fallback on every backend, "Not accelerated", D608), the contract in `docs/kernels.md` and the golden cases of seeds 550 to 552 (D601 to D604, D610); the blocks and kinds `costas`, `psk_mod` and `psk_demod` and the option `polarity` of `frame_decode` (D612 to D616); the flows `qpsk_transmitter` and `qpsk_receiver` with YAML twins (D621, D622); the tests 1 to 6 (seeds 550 to 559; D605, D611, D617 to D619, D623); the suite cases `costas_c32` (quick) and `extremes_m40` (full); the count entries `costas` and `costas_fallback` against a C translation of GNU Radio's `costas_loop_cc` (D607); the flush of a subnormal integrator limit of `costas` (D624) and the `rate_unsupported` error of `psk_demod` below 2 samples per symbol (D625); the docs, the CHANGELOG and the decisions log (D600 to D626).
 
 Deviations from the specification, recorded in the decisions log:
 - `design::rrc` writes into a caller slice (heap-free crate) and limits `sps` to 2 to 1024 (D600).
 - `psk_demod` refuses rates below 2 samples per symbol that the 1 % rule of §4 lets through (1.98 to 2), with the same `rate_unsupported` error (D614, D625); `costas` flushes a `max_offset` below 1e-30 to the limit 0 (D624).
 - The order-4 lock metric is the negative of the formula of §2, which is -1 on the points where the loop settles (D601). The trait `Costas` has no sample-type parameter, as §2 writes it (D602).
-- Test 1: the RRC matched-pair bound of 1e-3 does not hold at span 10 for the truncated design of §1; the test checks 1e-3 where the truncation allows it and 1e-2 elsewhere (D605, open item I40-1).
+- Test 1: the RRC matched-pair bound of 1e-3 did not hold at span 10 for the truncated design of §1; by the maintainer's decision D626 (open item I40-1, closed) the bound is 1e-2 for span ≥ 10 and the design stays as specified; the test also keeps the 1e-3 check where the truncation allows it (D605). Optimized square-root Nyquist designs are in the backlog.
 - The flow `qpsk_transmitter` has a node `level` (`scale`, -3 dB) that §5 does not list, so that the pulse peaks fit into `cs8` (D621). The flow `qpsk_receiver` sets `agc` `reference_db` 0, `carrier_bw` 0.04, `max_offset` 0.1 and `max_sync_errors` 2 (D622).
 - Test 5: `polarity` both resolves 180 degrees only, and coherent QPSK may lock 90 degrees off, where no frame decodes; the test runs the receiver on the channel output rotated by 0, 90, 180 and 270 degrees and requires 995 of 1000 for the two rotations whose lock lands on 0 or 180 degrees (D623). The 90 degree hypothesis is the `four` option of `frame_decode` in M44.
 - `Pipeline::pull` calls an idle packet encoder again until the output moves (D620): the first pull of `qpsk_transmitter` failed because a QPSK `psk_mod` needs two bits per symbol.
@@ -249,5 +249,5 @@ Not done or not run:
 - M40 was built on the M38 branch and rebased onto `main` after M38 landed (8bc8026); after the rebase `cargo test --doc -p sdrk-blocks` passes (191 doc tests; the `SymbolSyncBlock` example was fixed in M38), as do fmt, workspace clippy, `cargo xtask check`, `schema --check`, `cargo test -p xtask`, the flow-list and kind tests of `sdrk-pipeline` and `generate.py --check`.
 - `costas` has no SIMD path (D608) and no Cortex-M4 count entry (D609).
 
-Open items: I40-1 (the RRC matched-pair bound of test 1).
+Open items: none (I40-1 is closed by D626).
 

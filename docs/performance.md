@@ -1066,6 +1066,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.00 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `halfband_decimate_real_q15` | 7.02 | 22.39 | 0.31 | 6.65 | 27.24 | 0.24 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.39 | 20.77 | 1.08 | 27.24 | 25.03 | 1.09 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `halfband_ref_fir_decimate` | 13.14 | 29.62 | 0.44 | 12.40 | 29.79 | 0.42 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 60.59 | 60.59 | 1.00 | 86.10 | 86.10 | 1.00 | sdrk fallback |
+| `halfband_ref_shifted` | 9.73 | 17.92 | 0.54 | 11.08 | 21.03 | 0.53 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 19.61 | 42.48 | 0.46 | 20.38 | 50.24 | 0.41 | sdrk fallback |
 | `noise_blank` | 15.92 | 15.92 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.48 | 11.48 | 1.00 | sdrk fallback |
@@ -1261,6 +1265,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.00 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
 | `halfband_decimate_real_q15` | 6.20 | 16.50 | 0.38 | 5.32 | 16.82 | 0.32 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 16.50 | 19.39 | 0.85 | 16.82 | 23.61 | 0.71 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `halfband_ref_fir_decimate` | 13.07 | 29.62 | 0.44 | 12.40 | 29.79 | 0.42 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 19.30 | 60.59 | 0.32 | 19.62 | 86.10 | 0.23 | sdrk fallback |
+| `halfband_ref_shifted` | 9.48 | 18.49 | 0.51 | 11.20 | 21.34 | 0.52 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 16.03 | 26.84 | 0.60 | 17.15 | 25.98 | 0.66 | sdrk fallback |
 | `noise_blank` | 15.92 | 15.92 | 1.00 | 11.82 | 11.82 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.29 | 11.29 | 1.00 | sdrk fallback |
@@ -1457,6 +1465,10 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `halfband_decimate_real_fallback` | 9.13 | 80.22 | 0.11 | 8.76 | 50.71 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_real_q15` | 4.03 | 11.33 | 0.36 | 3.84 | 10.14 | 0.38 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.33 | 15.59 | 0.73 | 10.14 | 16.67 | 0.61 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `halfband_ref_fir_decimate` | 5.53 | 21.86 | 0.25 | 5.48 | 21.38 | 0.26 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 38.17 | 38.17 | 1.00 | 30.85 | 30.85 | 1.00 | sdrk fallback |
+| `halfband_ref_shifted` | 5.77 | 63.72 | 0.09 | 5.42 | 16.42 | 0.33 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 10.03 | 15.87 | 0.63 | 10.21 | 16.35 | 0.62 | sdrk fallback |
 | `noise_blank` | 11.58 | 11.58 | 1.00 | 11.37 | 11.37 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 8.48 | 8.48 | 1.00 | 9.30 | 9.30 | 1.00 | sdrk fallback |
 | `preemph_limit` | 15.40 | 15.40 | 1.00 | 13.20 | 13.20 | 1.00 | sdrk fallback |
@@ -1653,6 +1665,10 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `halfband_decimate_real_fallback` | 8.93 | 78.88 | 0.11 | 8.71 | 52.10 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
 | `halfband_decimate_real_q15` | 3.85 | 11.81 | 0.33 | 4.51 | 12.41 | 0.36 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.81 | 15.39 | 0.77 | 12.41 | 16.68 | 0.74 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `halfband_ref_fir_decimate` | 9.12 | 20.89 | 0.44 | 7.77 | 19.65 | 0.40 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 31.77 | 35.48 | 0.90 | 27.90 | 22.29 | 1.25 | sdrk fallback |
+| `halfband_ref_shifted` | 4.34 | 63.18 | 0.07 | 5.89 | 15.50 | 0.38 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 9.90 | 14.77 | 0.67 | 11.64 | 16.35 | 0.71 | sdrk fallback |
 | `noise_blank` | 11.45 | 11.45 | 1.00 | 11.30 | 11.30 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 8.41 | 8.41 | 1.00 | 9.24 | 9.24 | 1.00 | sdrk fallback |
 | `preemph_limit` | 19.20 | 19.20 | 1.00 | 12.19 | 12.19 | 1.00 | sdrk fallback |
@@ -1849,6 +1865,10 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `halfband_decimate_real_fallback` | 25.68 | 90.62 | 0.28 | 21.30 | 58.40 | 0.36 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
 | `halfband_decimate_real_q15` | 7.67 | 22.83 | 0.34 | 6.49 | 21.15 | 0.31 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.83 | 19.75 | 1.16 | 21.15 | 20.11 | 1.05 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `halfband_ref_fir_decimate` | 19.74 | 64.24 | 0.31 | 17.93 | 50.98 | 0.35 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 78.43 | 60.69 | 1.29 | 75.20 | 56.59 | 1.33 | sdrk fallback |
+| `halfband_ref_shifted` | 18.84 | 41.30 | 0.46 | 19.08 | 33.38 | 0.57 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 23.39 | 36.11 | 0.65 | 21.74 | 32.32 | 0.67 | sdrk fallback |
 | `noise_blank` | 17.64 | 17.64 | 1.00 | 8.80 | 8.80 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.51 | 9.51 | 1.00 | 10.53 | 10.53 | 1.00 | sdrk fallback |
 | `preemph_limit` | 20.93 | 20.93 | 1.00 | 16.43 | 16.43 | 1.00 | sdrk fallback |

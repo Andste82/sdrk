@@ -4255,5 +4255,191 @@
       "status": "info",
       "waiver": "`stereo_encode` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
+  },
+  "crc16_ccitt_false": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`crc16_ccitt_false` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "crc16_x25": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`crc16_x25` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "crc32": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`crc32` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "crc24_adsb": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`crc24_adsb` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "frame_decode": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per bit)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per bit)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per bit)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per bit)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per bit)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per bit)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`frame_decode` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "frame_encode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per output sample, one sample per bit)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per output sample, one sample per bit)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per output sample, one sample per bit)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per output sample, one sample per bit)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per output sample, one sample per bit)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per output sample, one sample per bit)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`frame_encode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "frame_decode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`frame_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

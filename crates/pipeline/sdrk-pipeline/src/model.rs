@@ -501,7 +501,13 @@ impl FormatSpec {
     }
 }
 
-/// The type of an input that delivers already converted samples.
+/// The type of an input that delivers already converted samples, or packets.
+///
+/// ```
+/// use sdrk_pipeline::InputType;
+/// assert_eq!(serde_json::to_string(&InputType::Packets)?, "\"packets\"");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum InputType {
@@ -513,14 +519,22 @@ pub enum InputType {
     F32,
     /// Real Q15.
     Q15,
+    /// Packets ([`Packet`](crate::Packet)), pushed with `push_packets`. The input starts its
+    /// own clock domain; `rate_hz` is the sample rate of the stream that an encoder of kind
+    /// `Source` (e.g. `frame_encode`) produces from it.
+    Packets,
 }
 
-/// An input of the pipeline: raw bytes in a `format` or converted samples of a `type`.
+/// An input of the pipeline: raw bytes in a `format`, converted samples of a `type`, or
+/// packets (`"type": "packets"`).
 ///
 /// ```
 /// use sdrk_pipeline::InputSpec;
 /// let i: InputSpec = serde_json::from_str(r#"{"format":"cu8","rate_hz":2400000}"#)?;
-/// assert_eq!(i.rate_hz.0.num(), 2_400_000);
+/// assert_eq!(i.rate_hz.map(|r| r.0.num()), Some(2_400_000));
+/// // A packet input that only feeds port `b` of a clocked encoder needs no rate.
+/// let p: InputSpec = serde_json::from_str(r#"{"type":"packets"}"#)?;
+/// assert_eq!(p.rate_hz, None);
 /// # Ok::<(), serde_json::Error>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -533,8 +547,12 @@ pub struct InputSpec {
     /// Type of already converted samples. Exactly one of `format` and `type` must be given.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub sample_type: Option<InputType>,
-    /// Sample rate in Hz.
-    pub rate_hz: RateHz,
+    /// Sample rate in Hz. Required for every sample input. A packet input needs it when an
+    /// encoder of kind `Source` (e.g. `frame_encode`) reads it: it is the rate of the stream
+    /// the encoder produces. A packet input read only by port `b` of a clocked encoder ignores
+    /// it (with a warning).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_hz: Option<RateHz>,
     /// Free text (at most 2000 characters).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -715,6 +733,8 @@ pub enum OutputType {
     Stream,
     /// Frames of `f32` values from a block with frame output.
     Frames,
+    /// Packets from a block with a packet output (e.g. `frame_decode`) or a packet input.
+    Packets,
 }
 
 /// An output of the pipeline.
@@ -729,7 +749,7 @@ pub enum OutputType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OutputSpec {
-    /// `"stream"` or `"frames"`.
+    /// `"stream"`, `"frames"` or `"packets"`.
     #[serde(rename = "type")]
     pub output_type: OutputType,
     /// Stream outputs only: convert to this raw format (an automatic `convert_out` node).
@@ -738,7 +758,8 @@ pub struct OutputSpec {
     /// Stream outputs only: capacity in samples (default `4 * max_chunk`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capacity: Option<usize>,
-    /// Frame outputs only: queue length in frames (default 4).
+    /// Frame outputs: queue length in frames (default 4). Packet outputs: queue length in
+    /// packets (default 64, 1 to 65 536).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue: Option<usize>,
     /// What happens when the output is full (default `"error"`).
@@ -773,6 +794,9 @@ pub enum UnderrunPolicy {
 /// Default queue length of a frame output.
 pub const DEFAULT_QUEUE: usize = 4;
 
+/// Default queue length of a packet output.
+pub const DEFAULT_PACKET_QUEUE: usize = 64;
+
 impl OutputSpec {
     /// The drop policy with the default applied.
     pub fn drop_policy(&self) -> DropPolicy {
@@ -782,6 +806,18 @@ impl OutputSpec {
     /// The queue length in frames with the default applied.
     pub fn queue_frames(&self) -> usize {
         self.queue.unwrap_or(DEFAULT_QUEUE)
+    }
+
+    /// The queue length in packets with the default applied.
+    ///
+    /// ```
+    /// use sdrk_pipeline::OutputSpec;
+    /// let o: OutputSpec = serde_json::from_str(r#"{"type":"packets"}"#)?;
+    /// assert_eq!(o.queue_packets(), 64);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
+    pub fn queue_packets(&self) -> usize {
+        self.queue.unwrap_or(DEFAULT_PACKET_QUEUE)
     }
 
     /// The capacity in samples with the default `4 * max_chunk` applied.

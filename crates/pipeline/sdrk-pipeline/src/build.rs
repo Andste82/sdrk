@@ -48,6 +48,22 @@ fn gain(stream: &PlanStream, origin: &PlanStream) -> Option<(u128, u128)> {
     Some((num, den))
 }
 
+/// Elements of stream `sid` per packet of a packet input: the product of the timing ratios of
+/// the nodes from the input to the stream (an encoder reports the most samples of one packet,
+/// a decoder the most packets per input sample). The rates of a packet input are nominal, so
+/// [`gain`] would not bound the production of a push.
+fn packet_gain(plan_nodes: &[PlanNode], nodes: &[NodeRt], sid: usize) -> Option<(u128, u128)> {
+    let mut gain = (1u128, 1u128);
+    for k in chain_to(plan_nodes, sid) {
+        let n = nodes.get(k)?;
+        gain = (
+            gain.0.checked_mul(u128::from(n.ratio.0))?,
+            gain.1.checked_mul(u128::from(n.ratio.1))?,
+        );
+    }
+    Some(gain)
+}
+
 /// Builds the blocks of all nodes (in processing order).
 fn build_nodes(
     registry: &Registry,
@@ -98,6 +114,10 @@ fn build_nodes(
             slot: 0,
             src_b: pn.src_b,
             slot_b: 0,
+            clocked: pn
+                .src_b
+                .and_then(|sb| streams.get(sb))
+                .is_some_and(|s| s.ty == PortType::Packets),
             dst: match pn.dst {
                 PlanDst::Stream(s) => Dst::Stream(s),
                 PlanDst::Frames { output } => Dst::Frames(output),
@@ -313,7 +333,12 @@ fn build_inputs(
             let Some(s) = streams.get(sid).filter(|s| s.origin == ii) else {
                 continue;
             };
-            if let Some((num, den)) = origin.and_then(|o| gain(s, o)) {
+            let g = if pi.ty == PortType::Packets {
+                packet_gain(plan_nodes, nodes, sid)
+            } else {
+                origin.and_then(|o| gain(s, o))
+            };
+            if let Some((num, den)) = g {
                 reach.push(Reach {
                     output: oi,
                     num,
@@ -338,6 +363,7 @@ fn build_inputs(
             stream: pi.stream,
             ty: pi.ty,
             rate: pi.rate,
+            has_rate: pi.has_rate,
             max_len,
             zeros: crate::pull::zero_input(
                 pi.ty,

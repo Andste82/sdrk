@@ -22,6 +22,8 @@ fn input_type(ty: PortType) -> Option<InputType> {
         PortType::CQ15 => Some(InputType::Cq15),
         PortType::F32 => Some(InputType::F32),
         PortType::Q15 => Some(InputType::Q15),
+        // Packets cannot cross groups yet: the group input would need the rate of the stream
+        // an encoder makes from it, which the edge does not carry.
         _ => None,
     }
 }
@@ -171,7 +173,7 @@ impl Splitter<'_> {
                 path,
                 DiagCode::InvalidValue,
                 format!(
-                    "the edge `{} -> {}` crosses groups but carries frames or raw bytes",
+                    "the edge `{} -> {}` crosses groups but carries frames, raw bytes or packets",
                     edge.from, edge.to
                 ),
             );
@@ -209,7 +211,7 @@ impl Splitter<'_> {
             InputSpec {
                 format: None,
                 sample_type: Some(sample_type),
-                rate_hz: RateHz(rate),
+                rate_hz: Some(RateHz(rate)),
                 description: Some(format!("group edge from `{}`", edge.from)),
             },
         );

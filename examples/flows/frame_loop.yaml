@@ -1,0 +1,52 @@
+# SDRk pipeline: packets through the test framing and back (YAML twin of frame_loop.json). YAML is
+# accepted as input; JSON stays the canonical format.
+#
+# The proof flow of the packet ports: frame_encode turns every packet into one frame (preamble,
+# sync word 0x1ACFFC1D, length, payload, CRC-16) and sends one sample per bit, +1.0 for 1 and
+# -1.0 for 0; frame_decode reads the samples as soft bits, finds the sync word and outputs the
+# packet again with the flag CRC_OK and the sample index of the first sync word bit. Between the
+# two a real flow would have a modulator, a channel and a demodulator.
+sdrk: 1
+name: frame-loop
+description: "Packets framed into one +1/-1 sample per bit and decoded again: the proof flow of the packet ports."
+# f32 pipeline; at most 4096 packets per push of the packet input.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # A packet input has no samples of its own. Its rate_hz is the sample rate of the stream that
+  # the encoder makes from it (one bit per sample, so 48000 bit/s here), and it starts its own
+  # clock domain: the encoded stream cannot be mixed with the stream of another input.
+  msg:
+    type: packets
+    rate_hz: 48000
+    description: "Packets to send, up to 253 bytes each"
+nodes:
+  # Decoder: a sample above 0 is a 1 bit. max_sync_errors 0 accepts only an exact sync word;
+  # emit_bad false drops frames whose CRC does not match.
+  dec:
+    kind: frame_decode
+    params:
+      emit_bad: false
+      max_sync_errors: 0
+  # Encoder: 4 preamble bytes 0x55 before every sync word. In push mode it sends the frames of
+  # the packets it has and nothing else; in pull mode it fills the gaps between packets with the
+  # idle signal (zero: 0.0 samples; preamble: the bits of 0x55).
+  enc:
+    kind: frame_encode
+    params:
+      idle: zero
+      preamble_bytes: 4
+edges:
+  - { from: msg, to: enc }
+  - { from: enc, to: dec }
+  - { from: dec, to: out }
+outputs:
+  # A packet output counts its queue in packets (default 64). The decoder can, in the worst case,
+  # find one packet in every 56 samples; a push is accepted only when the queue has room for that
+  # bound (2112 samples per packet / 56, about 38 packets per pushed packet), so the queue is
+  # large and the reader empties it after every push.
+  out:
+    type: packets
+    queue: 4096
+    description: "The decoded packets with CRC_OK and the sample index of their sync word"

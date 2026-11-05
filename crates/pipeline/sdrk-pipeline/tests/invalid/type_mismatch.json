@@ -5,6 +5,10 @@
     "audio": {
       "type": "f32",
       "rate_hz": 48000
+    },
+    "msg": {
+      "type": "packets",
+      "rate_hz": 48000
     }
   },
   "nodes": {
@@ -12,6 +16,12 @@
       "kind": "ddc",
       "params": {
         "decimation": 4
+      }
+    },
+    "s": {
+      "kind": "scale",
+      "params": {
+        "gain_db": -6
       }
     }
   },
@@ -23,10 +33,21 @@
     {
       "from": "d",
       "to": "out"
+    },
+    {
+      "from": "msg",
+      "to": "s"
+    },
+    {
+      "from": "s",
+      "to": "out2"
     }
   ],
   "outputs": {
     "out": {
+      "type": "stream"
+    },
+    "out2": {
       "type": "stream"
     }
   }

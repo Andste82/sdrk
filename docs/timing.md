@@ -9,7 +9,7 @@ Every kernel state and every block implements `sdrk_core::Timing`:
 | Method | Meaning |
 | --- | --- |
 | `ratio() -> Ratio` | output rate divided by input rate as an exact reduced fraction (`1/1` for same-rate kernels, `1/10` for decimation by 10) |
-| `ratio_kind() -> RatioKind` | `Constant` (default) or `Variable` if the ratio can change at run time |
+| `ratio_kind() -> RatioKind` | `Constant` (default) or `Variable` if the ratio can change at run time; blocks with a packet port report `Packets { max_per_input }` or `Source` (M37, [blocks.md](blocks.md#packet-ports)) |
 | `group_delay() -> Delay` | delay between an input sample and its effect on the output, in *input* samples, as an exact fraction |
 
 `Ratio` and `Rate` come from `sdrk-device` and use `u128` integer arithmetic; `Delay` (`num/den`, `Delay::reduced`, `Delay::add`) is exact as well. Floats are never used for time.

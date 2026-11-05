@@ -2,8 +2,8 @@
 
 use sdrk::{C32, CQ15, Progress, Q15};
 use sdrk_blocks::{
-    Block, BlockDescription, BlockTiming, Error as BlockError, Frame, FrameMeta, FrameOut,
-    ParamValue, StreamElem, Two,
+    Block, BlockDescription, BlockTiming, Clocked, Error as BlockError, Frame, FrameMeta, FrameOut,
+    Packet, Packets, ParamValue, StreamElem, Two,
 };
 
 /// One typed, borrowed stream: the data of one input port of a node.
@@ -48,6 +48,16 @@ pub enum NodeInput<'a> {
     F32(&'a [f32]),
     /// Real Q15.
     Q15(&'a [Q15]),
+    /// Packets (the input of an encoder).
+    Packets(&'a [Packet]),
+    /// The input of a clocked encoder: the clock stream of port `a` and the queued packets of
+    /// port `b`. Lockstep applies to the clock only.
+    Clocked {
+        /// The clock stream of port `a`.
+        a: NodeElem<'a>,
+        /// The packets of port `b` (any number, also none).
+        packets: &'a [Packet],
+    },
 }
 
 /// Typed, borrowed output views used by the type-erased runner.
@@ -65,6 +75,8 @@ pub enum NodeOutput<'a> {
     Q15(&'a mut [Q15]),
     /// One frame of `f32` values.
     Frame(&'a mut [f32]),
+    /// Room for packets (the output of a decoder).
+    Packets(&'a mut [Packet]),
 }
 
 /// How a stream element is taken out of a [`NodeInput`] or [`NodeOutput`]. Implemented for
@@ -140,6 +152,11 @@ pub trait Node: Send {
     /// Input samples since the last origin to output samples (see `Block::map_index`); frame
     /// nodes map every index to itself.
     fn map_index(&self, rel_in: u64) -> u64;
+    /// Packets of port `b` that the last `process` call of a clocked node consumed (see
+    /// `Block::consumed_packets`); 0 for every other node.
+    fn consumed_packets(&self) -> usize {
+        0
+    }
 }
 
 /// A [`Node`] around a [`Block`].
@@ -381,4 +398,181 @@ where
     fn map_index(&self, rel_in: u64) -> u64 {
         rel_in
     }
+}
+
+/// The methods of [`Node`] that only forward to the block.
+macro_rules! forward_node {
+    () => {
+        fn reset(&mut self) {
+            self.block.reset();
+        }
+
+        fn set_param(&mut self, name: &str, value: ParamValue) -> Result<(), BlockError> {
+            self.block.set_param(name, value)
+        }
+
+        fn param(&self, name: &str) -> Result<ParamValue, BlockError> {
+            self.block.param(name)
+        }
+
+        fn timing(&self) -> Option<BlockTiming> {
+            Some(self.block.timing())
+        }
+
+        fn min_input(&self) -> usize {
+            self.block.min_input()
+        }
+
+        fn description(&self) -> &'static BlockDescription {
+            self.block.description()
+        }
+
+        fn map_index(&self, rel_in: u64) -> u64 {
+            self.block.map_index(rel_in)
+        }
+    };
+}
+
+/// A [`Node`] around a [`Block`] with a packet input and a stream output (`In = Packets`):
+/// the node of an encoder such as `frame_encode`. An empty packet slice asks the block for
+/// its idle signal (pull mode).
+///
+/// ```
+/// use sdrk::Rate;
+/// use sdrk_blocks::{FrameEncodeBlock, FrameEncodeConfig, Packet, PacketFlags};
+/// use sdrk_pipeline::{Node, NodeInput, NodeOutput, PacketInNode, VecStorage};
+/// let block = FrameEncodeBlock::new(&FrameEncodeConfig::default(), Rate::hz(9600)?, &mut VecStorage)?;
+/// let mut node = PacketInNode::new(block);
+/// let packets = [Packet::new(0, PacketFlags::NONE, b"hi")?];
+/// let mut out = [0.0f32; 200];
+/// let mut meta = None;
+/// let p = node.process(NodeInput::Packets(&packets), NodeOutput::F32(&mut out), &mut meta)?;
+/// assert_eq!((p.consumed, p.produced), (1, 104));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct PacketInNode<B: Block> {
+    block: B,
+}
+
+impl<B: Block> PacketInNode<B> {
+    /// Wraps a block with a [`Packets`] input.
+    pub fn new(block: B) -> Self {
+        Self { block }
+    }
+}
+
+impl<B, O> Node for PacketInNode<B>
+where
+    B: Block<In = Packets, Out = O>,
+    O: NodeSlice,
+{
+    fn process(
+        &mut self,
+        input: NodeInput<'_>,
+        output: NodeOutput<'_>,
+        _meta: &mut Option<FrameMeta>,
+    ) -> Result<Progress, BlockError> {
+        let NodeInput::Packets(input) = input else {
+            return Err(mismatch());
+        };
+        let output = <O as NodeSlice>::output(output).ok_or_else(mismatch)?;
+        self.block.process(input, output)
+    }
+
+    forward_node!();
+}
+
+/// A [`Node`] around a [`Block`] with a stream input and a packet output (`Out = Packets`):
+/// the node of a decoder such as `frame_decode`. The packet indices are those of the block
+/// (counted from its construction or reset); the runner moves them into the index domain of
+/// the node's input.
+///
+/// ```
+/// use sdrk::Rate;
+/// use sdrk_blocks::{FrameDecodeBlock, FrameDecodeConfig, Packet};
+/// use sdrk_pipeline::{Node, NodeInput, NodeOutput, PacketOutNode, VecStorage};
+/// let block = FrameDecodeBlock::new(&FrameDecodeConfig::default(), Rate::hz(9600)?, &mut VecStorage)?;
+/// let mut node = PacketOutNode::new(block);
+/// let noise = [-1.0f32; 100];
+/// let mut out = [Packet::default(); 2];
+/// let mut meta = None;
+/// let p = node.process(NodeInput::F32(&noise), NodeOutput::Packets(&mut out), &mut meta)?;
+/// assert_eq!((p.consumed, p.produced), (100, 0));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct PacketOutNode<B: Block> {
+    block: B,
+}
+
+impl<B: Block> PacketOutNode<B> {
+    /// Wraps a block with a [`Packets`] output.
+    pub fn new(block: B) -> Self {
+        Self { block }
+    }
+}
+
+impl<B, I> Node for PacketOutNode<B>
+where
+    B: Block<In = I, Out = Packets>,
+    I: NodeSlice,
+{
+    fn process(
+        &mut self,
+        input: NodeInput<'_>,
+        output: NodeOutput<'_>,
+        _meta: &mut Option<FrameMeta>,
+    ) -> Result<Progress, BlockError> {
+        let input = <I as NodeSlice>::input(input).ok_or_else(mismatch)?;
+        let NodeOutput::Packets(output) = output else {
+            return Err(mismatch());
+        };
+        self.block.process(input, output)
+    }
+
+    forward_node!();
+}
+
+/// A [`Node`] around a [`Block`] with a [`Clocked`] input (`In = Clocked<A, Packets>`): an
+/// encoder driven by the clock stream of port `a` that takes the packets of port `b`.
+/// `Progress::consumed` counts clock samples; [`Node::consumed_packets`] reports the packets
+/// the same call consumed.
+#[derive(Debug)]
+pub struct ClockedNode<B: Block> {
+    block: B,
+}
+
+impl<B: Block> ClockedNode<B> {
+    /// Wraps a block with a [`Clocked`] input.
+    pub fn new(block: B) -> Self {
+        Self { block }
+    }
+}
+
+impl<B, A, O> Node for ClockedNode<B>
+where
+    B: Block<In = Clocked<A, Packets>, Out = O>,
+    A: NodeSlice,
+    O: NodeSlice,
+{
+    fn process(
+        &mut self,
+        input: NodeInput<'_>,
+        output: NodeOutput<'_>,
+        _meta: &mut Option<FrameMeta>,
+    ) -> Result<Progress, BlockError> {
+        let NodeInput::Clocked { a, packets } = input else {
+            return Err(mismatch());
+        };
+        let a = <A as NodeSlice>::elem(a).ok_or_else(mismatch)?;
+        let output = <O as NodeSlice>::output(output).ok_or_else(mismatch)?;
+        self.block.process((a, packets), output)
+    }
+
+    fn consumed_packets(&self) -> usize {
+        self.block.consumed_packets()
+    }
+
+    forward_node!();
 }

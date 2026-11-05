@@ -162,6 +162,34 @@ export const BlockFlags: {
   readonly Retuned: 64;
 };
 
+/** Flags of {@link Packet.flags}: OR them together. */
+export const PacketFlags: {
+  readonly CrcOk: 1;
+  readonly CrcFail: 2;
+  readonly Corrected: 4;
+  readonly Truncated: 8;
+};
+
+/**
+ * A packet: a byte message with a sample index and flags, as in the JSON Lines packet files of
+ * `sdrk-io`.
+ */
+export interface Packet {
+  /** Sample index where the packet starts (decoders); a transmitting encoder ignores it. */
+  index: bigint;
+  /** OR of {@link PacketFlags}. */
+  flags: number;
+  /** The payload as lower-case hex without spaces, at most 256 bytes (512 digits). */
+  data: string;
+}
+
+/** A packet to push: `index` (a `bigint` or a safe integer) and `flags` default to 0. */
+export interface PacketIn {
+  index?: bigint | number;
+  flags?: number;
+  data: string;
+}
+
 /** An absolute time for one sample. */
 export interface TimeAnchor {
   index: bigint;
@@ -236,8 +264,15 @@ export type SdrkEvent =
   | (EventBase & { type: "eventsLost"; count: bigint })
   | (EventBase & { type: "unknown" });
 
-/** The supplier of a pull call: at most `max` samples for `input`, or null when exhausted. */
-export type PullSource = (input: string, max: number) => Samples | null | undefined;
+/**
+ * The supplier of a pull call: at most `max` samples for `input`, or null when exhausted. For
+ * a packet input: at most `max` packets; null or an empty array means "nothing to send now"
+ * (the encoder sends its idle signal), never the end.
+ */
+export type PullSource = (
+  input: string,
+  max: number,
+) => Samples | PacketIn[] | null | undefined;
 
 /** A built pipeline. Not shared between workers: one pipeline per worker. */
 export class Pipeline {
@@ -255,11 +290,21 @@ export class Pipeline {
    * {@link Pipeline.chunkSize} samples per call.
    */
   pull(output: string, out: Samples, source: PullSource): PullResult;
+  /**
+   * Pushes packets into a packet input (`type: "packets"`); all are taken, or the call throws
+   * before any is taken.
+   */
+  pushPackets(input: string, packets: PacketIn[]): void;
+  /** Reads every packet waiting in a packet output, oldest first. */
+  readPackets(output: string): Packet[];
   /** Reads samples of a stream output (complex ones interleaved); returns the sample count. */
   readStream(output: string, out: Samples): number;
   /** Reads the oldest frame of a frames output; `null` if there is none. */
   readFrame(output: string, frame: Float32Array): FrameMeta | null;
-  /** Samples (bytes for a raw output, frames for a frames output) waiting in an output. */
+  /**
+   * Samples (bytes for a raw output, frames for a frames output, packets for a packet output)
+   * waiting in an output.
+   */
   available(output: string): number;
   /** Samples one `readStream` or `pull` call moves at most for an output. */
   chunkSize(output: string): number;

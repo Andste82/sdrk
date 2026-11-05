@@ -21,7 +21,7 @@ use sdrk_pipeline::{BuildOptions, DiagCode, Error, InputData, PipelineSpec, Regi
 
 use common::{cu8_recording, workspace_file};
 
-const FLOWS: [&str; 17] = [
+const FLOWS: [&str; 18] = [
     "fm_receiver",
     "spectrum_only",
     "resample_audio",
@@ -39,6 +39,7 @@ const FLOWS: [&str; 17] = [
     "am_transmitter",
     "ssb_transmitter",
     "fm_stereo_transmitter",
+    "frame_loop",
 ];
 
 fn text(name: &str, ext: &str) -> String {
@@ -158,7 +159,7 @@ edges: [ { from: iq, to: g }, { from: g, to: h }, { from: h, to: out } ]
 outputs: { out: { type: stream } }
 ";
     let spec = PipelineSpec::from_yaml(yaml).unwrap();
-    assert_eq!(spec.inputs["iq"].rate_hz.0.num(), 48000);
+    assert_eq!(spec.inputs["iq"].rate_hz.unwrap().0.num(), 48000);
     assert_eq!(spec.nodes["g"], spec.nodes["h"]);
     assert!(
         Registry::standard()

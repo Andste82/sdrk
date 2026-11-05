@@ -10,6 +10,11 @@ use crate::ports::Ports;
 /// Exact timing of a block: output rate divided by input rate, whether it can change, and the
 /// group delay in input samples.
 ///
+/// A block with a packet output reports `kind: RatioKind::Packets { max_per_input }` and the
+/// same bound as `ratio` (packets per input sample, for buffer sizing). A pure encoder with a
+/// packet input and a stream output reports `kind: RatioKind::Source`; its `ratio` bounds the
+/// output samples per packet (the output rate comes from the packet input of the pipeline).
+///
 /// ```
 /// use sdrk_blocks::BlockTiming;
 /// use sdrk::{Delay, Ratio, RatioKind};
@@ -112,8 +117,10 @@ pub(crate) fn runtime_param(
 }
 
 /// A processing block. Its input and output are port types ([`Ports`]): a stream of one sample
-/// type, a pair of streams ([`Two`](crate::Two)) or frames ([`Frame`](crate::Frame)). A stream
-/// block writes `type In = C32;` and `fn process(&mut self, input: &[C32], output: &mut [C32])`.
+/// type, a pair of streams ([`Two`](crate::Two)), frames ([`Frame`](crate::Frame)), packets
+/// ([`Packets`](crate::Packets)) or a clock stream with packets ([`Clocked`](crate::Clocked)).
+/// A stream block writes `type In = C32;` and
+/// `fn process(&mut self, input: &[C32], output: &mut [C32])`.
 ///
 /// Lockstep rule for [`Two`](crate::Two) ports: both slices of a pair have the same length
 /// (otherwise `LengthMismatch`, nothing changes) and `Progress` counts pairs.
@@ -182,6 +189,14 @@ pub trait Block: Send {
 
     /// Number of `f32` values of one frame for `Out = Frame`; 0 for every other block.
     fn frame_len(&self) -> usize {
+        0
+    }
+
+    /// Number of packets of port b that the last `process` call consumed, for a block with a
+    /// [`Clocked`](crate::Clocked) input (`Progress::consumed` counts its clock samples); 0
+    /// for every other block. The caller resubmits the packets after these together with the
+    /// unconsumed clock samples.
+    fn consumed_packets(&self) -> usize {
         0
     }
 }

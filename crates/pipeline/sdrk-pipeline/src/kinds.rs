@@ -13,26 +13,27 @@ use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
     AddBlock, AddRealBlock, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock,
     AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock,
-    BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
-    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
+    Block, BlockDescription, BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock,
+    ConvertOutConfig, ConvertRealBlock, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock,
+    DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
     DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
     FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, HalfbandDecimateBlock,
-    HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock,
-    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue,
-    PortType, PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig,
+    FrameEncodeBlock, FrameEncodeConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
+    HalfbandDecimateRealBlock, ImagPartBlock, InterpolateBlock, InterpolateConfig,
+    InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock,
+    NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
+    RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
+    RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
+    StereoPllBlock, StereoPllConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
 
 use crate::model::Precision;
-use crate::node::{FrameNode, Node, PairNode, StreamNode};
+use crate::node::{FrameNode, Node, PacketInNode, PacketOutNode, PairNode, StreamNode};
 use crate::params::{check_params, to_param};
 use crate::registry::{BlockFactory, Checked, PortKind};
 use crate::storage::VecStorage;
@@ -2833,5 +2834,109 @@ impl Kind for StereoPllKind {
                 cfg, rate, st
             )?)))
         )
+    }
+}
+
+// ---------------------------------------------------------------- frame_encode
+
+pub(crate) struct FrameEncodeKind;
+
+impl Kind for FrameEncodeKind {
+    type Cfg = FrameEncodeConfig;
+
+    const KIND: &'static str = "frame_encode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> FrameEncodeConfig {
+        FrameEncodeConfig::default()
+    }
+    fn set(cfg: &mut FrameEncodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FrameEncodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch("frame_encode needs packets"));
+        }
+        // `rate` is the `rate_hz` of the packet input: the rate of the encoded stream.
+        Ok(Figures {
+            rate_out: FrameEncodeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: FrameEncodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // A table lookup per output sample.
+            cost: 1.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &FrameEncodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketInNode::new(FrameEncodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ---------------------------------------------------------------- frame_decode
+
+pub(crate) struct FrameDecodeKind;
+
+impl Kind for FrameDecodeKind {
+    type Cfg = FrameDecodeConfig;
+
+    const KIND: &'static str = "frame_decode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> FrameDecodeConfig {
+        FrameDecodeConfig::default()
+    }
+    fn set(cfg: &mut FrameDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FrameDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("frame_decode needs real f32 soft bits"));
+        }
+        // The packet stream gets the nominal rate `rate * max_per_input`, which sizes its
+        // buffer: `ceil(max_chunk * max_per_input) + 4` packets.
+        let block = FrameDecodeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: FrameDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // A shift, a compare and a population count per input sample.
+            cost: 1.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &FrameDecodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(FrameDecodeBlock::new(
+            cfg, rate, st,
+        )?)))
     }
 }

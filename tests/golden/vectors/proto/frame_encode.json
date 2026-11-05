@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "bits": {
+      "dtype": "u8",
+      "file": "frame_encode.bits.bin",
+      "len": 17720
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "frame_encode.lengths.bin",
+      "len": 16
+    },
+    "payload": {
+      "dtype": "u8",
+      "file": "frame_encode.payload.bin",
+      "len": 1862
+    },
+    "preamble_bytes": {
+      "dtype": "i32",
+      "file": "frame_encode.preamble_bytes.bin",
+      "len": 16
+    }
+  },
+  "case": "frame_encode",
+  "format_version": 1,
+  "kernel": "proto",
+  "notes": "16 frames (payloads 0, 1, 253 and 13 random lengths; preambles 4, 0, 4 and 13 random of 0 to 32 bytes); CRC-16/CCITT-FALSE from binascii.crc_hqx; bits MSB first",
+  "params": {
+    "frames": 16
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 479,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

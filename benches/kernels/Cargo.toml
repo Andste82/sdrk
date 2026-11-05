@@ -24,6 +24,8 @@ sdrk-device = { path = "../../crates/core/sdrk-device" }
 # The halfband taps of the M23 workloads (`halfband_taps`).
 sdrk-blocks = { path = "../../crates/blocks/sdrk-blocks" }
 sdrk-backend-simd = { path = "../../crates/backends/sdrk-backend-simd" }
+# The CRCs and the frame decoder of M37 (no backends: `ours` and `fallback` are the same code).
+sdrk-proto = { path = "../../crates/proto/sdrk-proto" }
 rustfft = "6.4"
 # The real-input FFT on top of rustfft (its author's `RealFftPlanner`), the reference of `rfft`.
 realfft = "3.5"

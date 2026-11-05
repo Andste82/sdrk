@@ -4,7 +4,8 @@
 //! Layer `crates/blocks`, heap-free. A block is built from a config, the input sample rate and
 //! a [`Storage`]; it uses the facade [`sdrk::Sdrk`] for every kernel call, so backends speed
 //! up the blocks automatically. Every block kind has a machine-readable
-//! [`BlockDescription`] (see [`all_descriptions`]).
+//! [`BlockDescription`] (see [`all_descriptions`]). Packet ports ([`Packets`], [`Clocked`])
+//! carry the [`Packet`]s of `sdrk-proto` (re-exported here).
 //!
 //! ```
 //! use sdrk::{Rate, C32};
@@ -67,6 +68,8 @@ pub use blocks::fm_demod::{FM_DEMOD_CHUNK, FmDemodBlock, FmDemodConfig};
 pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
 pub use blocks::fm_stereo_mod::{FmStereoModBlock, FmStereoModConfig};
+pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig};
+pub use blocks::frame_encode::{FrameEncodeBlock, FrameEncodeConfig, FrameIdle};
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
@@ -102,6 +105,7 @@ pub use drift::{DriftConfig, DriftController};
 pub use error::{Error, Result};
 pub use fork::{FORK_DESCRIPTION, Fork};
 pub use param_map::ParamMap;
-pub use ports::{ChainItem, Frame, FrameOut, Ports, StreamElem, Two};
+pub use ports::{ChainEnd, ChainItem, Clocked, Frame, FrameOut, Packets, Ports, StreamElem, Two};
 pub use sample::{BlockReal, BlockSample, TunedElem};
+pub use sdrk_proto::{Packet, PacketFlags};
 pub use storage::{ARENA_ALIGN, AlignedBytes, ArenaStorage, Storage};

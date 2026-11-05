@@ -746,8 +746,12 @@ impl Kernel for SplitC32K {
         match (which, self.deinterleave) {
             (Impl::Volk, false) => "volk_32f_x2_interleave_32fc",
             (Impl::Volk, true) => "volk_32fc_deinterleave_32f_x2",
-            (Impl::VolkGeneric, false) => describe_volk_generic("volk_32f_x2_interleave_32fc_generic"),
-            (Impl::VolkGeneric, true) => describe_volk_generic("volk_32fc_deinterleave_32f_x2_generic"),
+            (Impl::VolkGeneric, false) => {
+                describe_volk_generic("volk_32f_x2_interleave_32fc_generic")
+            }
+            (Impl::VolkGeneric, true) => {
+                describe_volk_generic("volk_32fc_deinterleave_32f_x2_generic")
+            }
             (Impl::Fallback, _) => "sdrk fallback",
             _ => "sdrk",
         }
@@ -874,7 +878,9 @@ impl Kernel for SplitCq15K {
             (Impl::VolkGeneric, false) => describe_volk_generic(
                 "volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave)",
             ),
-            (Impl::VolkGeneric, true) => describe_volk_generic("volk_16ic_deinterleave_16i_x2_generic"),
+            (Impl::VolkGeneric, true) => {
+                describe_volk_generic("volk_16ic_deinterleave_16i_x2_generic")
+            }
             (Impl::Fallback, _) => "sdrk fallback",
             _ => "sdrk",
         }

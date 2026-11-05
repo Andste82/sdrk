@@ -76,7 +76,7 @@ fn the_kinds_are_registered_with_their_kernels() {
     assert_eq!(f.description().kind, "fm_stereo_mod");
     let f = registry.factory("preemph_limit").unwrap();
     assert_eq!(f.kernels(), ["preemph_limit", "preemph_limit_stereo"]);
-    assert_eq!(registry.descriptions().count(), 41);
+    assert_eq!(registry.descriptions().count(), 43);
 }
 
 #[test]

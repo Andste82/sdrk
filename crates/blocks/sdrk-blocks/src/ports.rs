@@ -1,12 +1,14 @@
 //! Port types: what a [`Block`](crate::Block) reads and writes in one `process` call.
 //!
 //! A port type is a stream of one sample type ([`StreamElem`]), a pair of streams that advance
-//! together ([`Two`]) or frames of `f32` values ([`Frame`]). The types exist only at compile
-//! time; a stream block keeps the signature it had before ports were introduced.
+//! together ([`Two`]), frames of `f32` values ([`Frame`]), packets ([`Packets`]) or a clock
+//! stream with packets ([`Clocked`]). The types exist only at compile time; a stream block
+//! keeps the signature it had before ports were introduced.
 
 use core::mem::{align_of, size_of};
 
 use sdrk::{C32, CQ15, Q15};
+use sdrk_proto::Packet;
 
 use crate::block::FrameMeta;
 use crate::describe::PortType;
@@ -20,6 +22,10 @@ pub(crate) mod sealed {
 
     /// Seals [`StreamElem`](super::StreamElem): only the five sample types implement it.
     pub trait Sealed {}
+
+    /// Seals [`ChainEnd`](super::ChainEnd): stream elements, [`Two`](super::Two) and
+    /// [`Frame`](super::Frame) implement it.
+    pub trait SealedEnd {}
 
     /// Seals [`ChainItem`](super::ChainItem) and holds its machinery, which stays private to
     /// the crate: the intermediate buffer(s) of a chain and their views.
@@ -104,18 +110,7 @@ macro_rules! stream_elem {
 /// rejected where a stream is required:
 ///
 /// ```compile_fail,E0277
-/// use sdrk_blocks::{Ports, StreamElem};
-/// struct Packets;
-/// impl Ports for Packets {
-///     type Ref<'a> = &'a [u8];
-///     type Mut<'a> = &'a mut [u8];
-///     const COUNT: usize = 1;
-///     fn ref_len(view: &Self::Ref<'_>) -> usize { view.len() }
-///     fn mut_len(view: &Self::Mut<'_>) -> usize { view.len() }
-///     fn ref_skip(view: Self::Ref<'_>, _: usize) -> Self::Ref<'_> { view }
-///     fn mut_skip(view: Self::Mut<'_>, _: usize) -> Self::Mut<'_> { view }
-///     fn mut_reborrow<'a>(view: &'a mut Self::Mut<'_>) -> Self::Mut<'a> { &mut **view }
-/// }
+/// use sdrk_blocks::{Packets, StreamElem};
 /// fn needs_stream<T: StreamElem>() {}
 /// needs_stream::<Packets>();
 /// ```
@@ -158,13 +153,19 @@ stream_elem!(C32 => C32, CQ15 => CQ15, f32 => F32, Q15 => Q15, u8 => Raw);
 /// passable::<Two<f32, C32>>();
 /// ```
 ///
-/// Frames (and the packet ports of a later milestone, which are not stream elements) cannot
-/// be passed between the stages of a chain:
+/// Frames and packets (which are not stream elements) cannot be passed between the stages of
+/// a chain:
 ///
 /// ```compile_fail,E0277
 /// use sdrk_blocks::{ChainItem, Frame};
 /// fn passable<T: ChainItem>() {}
 /// passable::<Frame>();
+/// ```
+///
+/// ```compile_fail,E0277
+/// use sdrk_blocks::{ChainItem, Packets};
+/// fn passable<T: ChainItem>() {}
+/// passable::<Packets>();
 /// ```
 pub trait ChainItem: Ports + sealed::ChainBufs {}
 
@@ -199,6 +200,35 @@ impl<T: StreamElem> sealed::ChainBufs for T {
 }
 
 impl<T: StreamElem> ChainItem for T {}
+
+/// A port type that may be the input or the output of a [`Chain`](crate::Chain): a stream
+/// element ([`StreamElem`]), a pair of streams ([`Two`]) or frames ([`Frame`]). Sealed.
+///
+/// Packet ports ([`Packets`], [`Clocked`]) are not chain ends: a chain never starts with an
+/// encoder or ends with a decoder (the pipeline connects those blocks).
+///
+/// ```
+/// use sdrk::C32;
+/// use sdrk_blocks::{ChainEnd, Frame, Two};
+/// fn end<T: ChainEnd>() {}
+/// end::<C32>();
+/// end::<Two<f32, f32>>();
+/// end::<Frame>();
+/// ```
+///
+/// ```compile_fail,E0277
+/// use sdrk_blocks::{ChainEnd, Packets};
+/// fn end<T: ChainEnd>() {}
+/// end::<Packets>();
+/// ```
+pub trait ChainEnd: Ports + sealed::SealedEnd {}
+
+impl<T: StreamElem> sealed::SealedEnd for T {}
+impl<T: StreamElem> ChainEnd for T {}
+impl<X: StreamElem, Y: StreamElem> sealed::SealedEnd for Two<X, Y> {}
+impl<X: StreamElem, Y: StreamElem> ChainEnd for Two<X, Y> {}
+impl sealed::SealedEnd for Frame {}
+impl ChainEnd for Frame {}
 
 impl<X: StreamElem, Y: StreamElem> sealed::ChainBufs for Two<X, Y> {
     type Bufs<S: Storage> = (S::Buf<X>, S::Buf<Y>);
@@ -260,10 +290,11 @@ pub trait Ports: 'static {
     type Ref<'a>: Copy;
     /// Writable view of the output data of one call.
     type Mut<'a>;
-    /// Number of ports (1 for a stream or a frame, 2 for [`Two`]).
+    /// Number of ports (1 for a stream, a frame or packets, 2 for [`Two`] and [`Clocked`]).
     const COUNT: usize;
 
-    /// Number of steps a read-only view holds (for [`Two`] the shorter of the two streams).
+    /// Number of steps a read-only view holds (for [`Two`] the shorter of the two streams, for
+    /// [`Clocked`] the clock samples).
     fn ref_len(view: &Self::Ref<'_>) -> usize;
 
     /// Number of steps a writable view can still take (a stream: its length; [`Two`]: the
@@ -415,5 +446,90 @@ impl Ports for Frame {
             values: &mut *view.values,
             meta: &mut *view.meta,
         }
+    }
+}
+
+/// Packets ([`Packet`]: bytes with a sample index and flags), one item per packet.
+///
+/// The views are slices of packets: `Ref = &[Packet]`, `Mut = &mut [Packet]`. `Progress`
+/// counts packets on a packet port. `Packet` is not a [`StreamElem`], so [`Chain`](crate::Chain)
+/// and [`Fork`](crate::Fork) do not accept packet ports (a compile error); the pipeline
+/// connects packet blocks.
+///
+/// ```
+/// use sdrk_blocks::{Packet, Packets, Ports};
+/// assert_eq!(<Packets as Ports>::COUNT, 1);
+/// let queue = [Packet::default(); 3];
+/// let view: <Packets as Ports>::Ref<'_> = &queue;
+/// assert_eq!(<Packets as Ports>::ref_len(&<Packets as Ports>::ref_skip(view, 1)), 2);
+/// ```
+pub struct Packets;
+
+impl Ports for Packets {
+    type Ref<'a> = &'a [Packet];
+    type Mut<'a> = &'a mut [Packet];
+    const COUNT: usize = 1;
+
+    fn ref_len(view: &Self::Ref<'_>) -> usize {
+        view.len()
+    }
+    fn mut_len(view: &Self::Mut<'_>) -> usize {
+        view.len()
+    }
+    fn ref_skip(view: Self::Ref<'_>, n: usize) -> Self::Ref<'_> {
+        skip_ref(view, n)
+    }
+    fn mut_skip(view: Self::Mut<'_>, n: usize) -> Self::Mut<'_> {
+        skip_mut(view, n)
+    }
+    fn mut_reborrow<'a>(view: &'a mut Self::Mut<'_>) -> Self::Mut<'a> {
+        &mut **view
+    }
+}
+
+/// A clock stream `A` (port a) with packets (port b): the input of an encoder that is driven
+/// by a sample clock. Implemented for `Clocked<A, Packets>`.
+///
+/// Lockstep applies to port a only: `process` gets `n` clock samples and the queued packets
+/// (any number, also none). `Progress::consumed` counts clock samples;
+/// [`Block::consumed_packets`](crate::Block::consumed_packets) reports how many packets
+/// (from the front of the queue) the same call consumed. The caller resubmits the
+/// unconsumed clock samples and packets. The values of the clock samples may be ignored.
+/// Port b carries no clock domain and no group delay.
+///
+/// [`Ports::ref_len`] and [`Ports::ref_skip`] work on the clock samples; the packets stay
+/// untouched (they advance by `consumed_packets`).
+///
+/// ```
+/// use sdrk_blocks::{Clocked, Packet, Packets, Ports};
+/// assert_eq!(<Clocked<f32, Packets> as Ports>::COUNT, 2);
+/// let clock = [0.0f32; 4];
+/// let queue = [Packet::default(); 1];
+/// let view: <Clocked<f32, Packets> as Ports>::Ref<'_> = (&clock, &queue);
+/// assert_eq!(<Clocked<f32, Packets> as Ports>::ref_len(&view), 4);
+/// let rest = <Clocked<f32, Packets> as Ports>::ref_skip(view, 3);
+/// assert_eq!((rest.0.len(), rest.1.len()), (1, 1));
+/// ```
+pub struct Clocked<A: StreamElem, B>(core::marker::PhantomData<(A, B)>);
+
+impl<A: StreamElem> Ports for Clocked<A, Packets> {
+    type Ref<'a> = (&'a [A], &'a [Packet]);
+    type Mut<'a> = (&'a mut [A], &'a mut [Packet]);
+    const COUNT: usize = 2;
+
+    fn ref_len(view: &Self::Ref<'_>) -> usize {
+        view.0.len()
+    }
+    fn mut_len(view: &Self::Mut<'_>) -> usize {
+        view.0.len()
+    }
+    fn ref_skip(view: Self::Ref<'_>, n: usize) -> Self::Ref<'_> {
+        (skip_ref(view.0, n), view.1)
+    }
+    fn mut_skip(view: Self::Mut<'_>, n: usize) -> Self::Mut<'_> {
+        (skip_mut(view.0, n), view.1)
+    }
+    fn mut_reborrow<'a>(view: &'a mut Self::Mut<'_>) -> Self::Mut<'a> {
+        (&mut *view.0, &mut *view.1)
     }
 }

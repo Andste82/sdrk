@@ -9,18 +9,25 @@ export interface FlowSettings {
   pending_params?: number;
 }
 
-/** An input: raw bytes in a `format`, or converted samples of a `type`. */
+/**
+ * An input: raw bytes in a `format`, converted samples of a `type`, or packets
+ * (`type: "packets"`).
+ */
 export interface InputSpec {
   format?: FormatSpec;
-  type?: "c32" | "cq15" | "f32" | "q15";
-  /** Samples per second: an integer, or an exact fraction written as "num/den". */
-  rate_hz: number | string;
+  type?: "c32" | "cq15" | "f32" | "q15" | "packets";
+  /**
+   * Samples per second: an integer, or an exact fraction written as "num/den". Required for
+   * samples; for a packet input the rate of the stream that a pure encoder produces from it
+   * (required when such an encoder reads the input, else optional).
+   */
+  rate_hz?: number | string;
   description?: string;
 }
 
 /** An output of a flow. */
 export interface OutputSpec {
-  type: "stream" | "frames";
+  type: "stream" | "frames" | "packets";
   format?: FormatSpec;
   capacity?: number;
   queue?: number;

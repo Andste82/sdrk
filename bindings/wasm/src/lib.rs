@@ -27,7 +27,7 @@ use js_sys::{
     Array, BigInt, Float32Array, Function, Int16Array, JSON, Object, Reflect, Uint8Array,
 };
 use sdrk_device::{BlockMeta, ErrorKind, SampleIndex, TimeAnchor};
-use sdrk_pipeline::ParamTime;
+use sdrk_pipeline::{Packet, ParamTime};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 
@@ -247,9 +247,69 @@ fn array_len(value: &JsValue, want: Dtype, what: &str) -> Result<usize, JsValue>
         Dtype::U8 => value.dyn_ref::<Uint8Array>().map(Uint8Array::length),
         Dtype::I16 => value.dyn_ref::<Int16Array>().map(Int16Array::length),
         Dtype::F32 => value.dyn_ref::<Float32Array>().map(Float32Array::length),
+        // Packets go through `pushPackets` and `readPackets`, never through a typed array.
+        Dtype::Packets => None,
     };
     len.map(|n| n as usize)
         .ok_or_else(|| fail(&engine::wrong_dtype(what, want)))
+}
+
+/// A packet from a JavaScript object `{ index?, flags?, data }`: `index` a `bigint` or an
+/// integral `number` (default 0), `flags` an integer 0 … 2^32 - 1 (default 0), `data` the
+/// payload as lower-case hex. Other fields are ignored.
+fn parse_packet(value: &JsValue, i: usize) -> Result<Packet, WasmError> {
+    // The name is formatted only for an error: a valid packet costs no allocation here.
+    let what = Fmt(i);
+    let bad = |message: String| WasmError::invalid(message);
+    if !value.is_object() {
+        return Err(bad(format!(
+            "{what} must be an object {{ index, flags, data }}"
+        )));
+    }
+    let index = get(value, "index");
+    let index = if present(&index) {
+        if let Some(n) = index.as_f64() {
+            if n.fract() != 0.0 || !(0.0..9_007_199_254_740_992.0).contains(&n) {
+                return Err(bad(format!("{what}.index must be a non-negative integer")));
+            }
+            n as u64
+        } else {
+            u64::try_from(index).map_err(|_| bad(format!("{what}.index must be a bigint")))?
+        }
+    } else {
+        0
+    };
+    let flags = get(value, "flags");
+    let flags = if present(&flags) {
+        flags
+            .as_f64()
+            .filter(|f| f.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(f))
+            .ok_or_else(|| bad(format!("{what}.flags must be an integer 0 … 4294967295")))?
+            as u32
+    } else {
+        0
+    };
+    let data = get(value, "data")
+        .as_string()
+        .ok_or_else(|| bad(format!("{what}.data must be a hex string")))?;
+    engine::packet_from(index, flags, &data).map_err(|e| bad(format!("{what}: {}", e.message)))
+}
+
+/// Displays as `packets[i]`.
+struct Fmt(usize);
+
+impl std::fmt::Display for Fmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "packets[{}]", self.0)
+    }
+}
+
+/// Parses the packet objects of the JavaScript array `src` into `dst` (same length).
+fn packets_in(src: &Array, dst: &mut [Packet]) -> Result<(), WasmError> {
+    for (i, slot) in dst.iter_mut().enumerate() {
+        *slot = parse_packet(&src.get(i as u32), i)?;
+    }
+    Ok(())
 }
 
 /// Copies `src` into the typed array `dst` (of the matching type) from element `at` on.
@@ -271,6 +331,8 @@ fn copy_out(dst: &JsValue, at: usize, src: Lanes<'_>) {
                 a.subarray(from, to).copy_from(s);
             }
         }
+        // Packets leave through `readPackets` as objects.
+        Lanes::Packets(_) => {}
     }
 }
 
@@ -292,6 +354,8 @@ fn copy_in(src: &JsValue, dst: LanesMut<'_>) {
                 a.copy_to(d);
             }
         }
+        // Packets enter through `packets_in`.
+        LanesMut::Packets(_) => {}
     }
 }
 
@@ -399,8 +463,61 @@ impl Pipeline {
             .map_err(|e| fail(&e))
     }
 
+    /// Pushes packets into a packet input: an `Array` of `{ index, flags, data }` objects
+    /// (`data` the payload as lower-case hex, at most 256 bytes; `index` and `flags` are
+    /// optional and default to 0). All packets are taken, or the call throws before anything is
+    /// taken.
+    ///
+    /// ```js
+    /// pipeline.pushPackets("msg", [{ data: "68656c6c6f" }, { index: 0n, flags: 0, data: "" }]);
+    /// ```
+    #[wasm_bindgen(js_name = pushPackets)]
+    pub fn push_packets(&mut self, input: &str, packets: &JsValue) -> Result<(), JsValue> {
+        let layout = self.engine.input_layout(input).map_err(|e| fail(&e))?;
+        if layout.dtype != Dtype::Packets {
+            return Err(fail(&engine::wrong_dtype(input, layout.dtype)));
+        }
+        let array = packets
+            .dyn_ref::<Array>()
+            .ok_or_else(|| invalid("packets must be an Array of { index, flags, data }"))?;
+        let dst = self
+            .engine
+            .stage(input, array.length() as usize)
+            .map_err(|e| fail(&e))?;
+        if let LanesMut::Packets(dst) = dst {
+            packets_in(array, dst).map_err(|e| fail(&e))?;
+        }
+        self.engine.push_staged(input, None).map_err(|e| fail(&e))
+    }
+
+    /// Reads every packet waiting in a packet output, oldest first: an `Array` of
+    /// `{ index, flags, data }` objects (`index` a `bigint`, `data` lower-case hex).
+    ///
+    /// ```js
+    /// for (const p of pipeline.readPackets("out")) console.log(p.index, p.flags, p.data);
+    /// ```
+    #[wasm_bindgen(js_name = readPackets)]
+    pub fn read_packets(&mut self, output: &str) -> Result<Array, JsValue> {
+        let all = Array::new();
+        loop {
+            let got = self
+                .engine
+                .read_packets(output, engine::MAX_PACKET_CHUNK)
+                .map_err(|e| fail(&e))?;
+            if got.is_empty() {
+                break;
+            }
+            for p in got {
+                all.push(&dyn_to_js(&engine::packet_dyn(p)));
+            }
+        }
+        Ok(all)
+    }
+
     /// Produces data for a transmit output by asking `source(input, max)` for input data. The
     /// source returns a typed array of at most `max` samples, or `null` when it is exhausted.
+    /// For a packet input it returns an `Array` of at most `max` packet objects; `null` or an
+    /// empty array means "nothing to send now" and the encoder sends its idle signal.
     /// At most `chunkSize(output)` samples are produced per call. Returns
     /// `{ samples, meta }`.
     ///
@@ -625,10 +742,30 @@ fn call_source(
         return Ok(0);
     }
     let Layout { dtype, lanes } = buf.layout;
+    if let LanesMut::Packets(dst) = buf.lanes {
+        let array = returned.dyn_ref::<Array>().ok_or_else(|| {
+            WasmError::invalid(format!(
+                "the source must return an Array of packets (or null) for `{input}`"
+            ))
+        })?;
+        let len = array.length() as usize;
+        let dst = dst.get_mut(..len).ok_or_else(|| {
+            WasmError::new(
+                ErrorKind::LengthMismatch,
+                format!(
+                    "the source returned {len} packets for `{input}`; at most {} were asked for",
+                    buf.max_samples
+                ),
+            )
+        })?;
+        packets_in(array, dst)?;
+        return Ok(len);
+    }
     let len = match dtype {
         Dtype::U8 => returned.dyn_ref::<Uint8Array>().map(Uint8Array::length),
         Dtype::I16 => returned.dyn_ref::<Int16Array>().map(Int16Array::length),
         Dtype::F32 => returned.dyn_ref::<Float32Array>().map(Float32Array::length),
+        Dtype::Packets => None,
     }
     .ok_or_else(|| engine::wrong_dtype(input, dtype))? as usize;
     if !len.is_multiple_of(lanes) || len / lanes > buf.max_samples {
@@ -646,6 +783,7 @@ fn call_source(
         LanesMut::U8(d) => copy_in_prefix(&returned, LanesMut::U8(d), len),
         LanesMut::I16(d) => copy_in_prefix(&returned, LanesMut::I16(d), len),
         LanesMut::F32(d) => copy_in_prefix(&returned, LanesMut::F32(d), len),
+        LanesMut::Packets(_) => {}
     }
     Ok(len / lanes)
 }
@@ -668,5 +806,6 @@ fn copy_in_prefix(src: &JsValue, dst: LanesMut<'_>, len: usize) {
                 copy_in(src, LanesMut::F32(d));
             }
         }
+        LanesMut::Packets(_) => {}
     }
 }

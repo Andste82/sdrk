@@ -4,8 +4,7 @@
 
 use cref_sys::cmsis_dsp as cm;
 use cref_sys::{
-    GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator, LiquidAmpmodem,
-    LiquidDcBlocker, LiquidDcBlockerCrcf,
+    GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator, LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
 };
 use std::f64::consts::PI;
 
@@ -492,6 +491,37 @@ fn gnuradio_fm_deemph() {
     de.work(&input[700..], &mut out[700..]);
     assert!(out[0] > 0.0 && out[0] < 0.5);
     assert_close(f64::from(out[1999]), 0.5, 1e-5);
+}
+
+#[test]
+fn gnuradio_crc() {
+    // The check values of the CRC catalogue over "123456789".
+    const CHECK: &[u8] = b"123456789";
+    let cases: [(u32, u64, u64, u64, bool, u64); 3] = [
+        (16, 0x1021, 0xFFFF, 0, false, 0x29B1),
+        (16, 0x1021, 0xFFFF, 0xFFFF, true, 0x906E),
+        (32, 0x04C1_1DB7, 0xFFFF_FFFF, 0xFFFF_FFFF, true, 0xCBF4_3926),
+    ];
+    for (bits, poly, init, xorout, reflected, check) in cases {
+        let Some(mut crc) = GrCrc::new(bits, poly, init, xorout, reflected, reflected) else {
+            eprintln!("skipped: the GNU Radio CRC is not linked");
+            return;
+        };
+        assert_eq!(crc.compute(CHECK), check, "width {bits}, poly {poly:#x}");
+        assert_eq!(
+            crc.compute(&[]),
+            init ^ xorout,
+            "width {bits}: empty message"
+        );
+    }
+    // Mode S: the CRC of a message followed by its parity is zero.
+    let mut adsb = GrCrc::new(24, 0x00FF_F409, 0, 0, false, false).expect("crc24");
+    let mut m = CHECK.to_vec();
+    let parity = adsb.compute(&m);
+    assert_eq!(parity, 0x05_4268);
+    m.extend_from_slice(&parity.to_be_bytes()[5..]);
+    assert_eq!(adsb.compute(&m), 0);
+    assert!(GrCrc::new(7, 0x09, 0, 0, false, false).is_none());
 }
 
 #[test]

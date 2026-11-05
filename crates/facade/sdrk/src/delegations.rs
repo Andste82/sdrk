@@ -37,6 +37,7 @@ use sdrk_core::kernels::squelch::{Squelch, SquelchState};
 use sdrk_core::kernels::stereo::{
     StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
 };
+use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
 use sdrk_device::SampleFormat;
 
 // The implementation of the accelerated kernels: the SIMD backend, or the fallback when the
@@ -108,6 +109,8 @@ crate::delegate! {
     PreemphLimit<Q15>::preemph_limit(&self, state: &mut PreemphLimitState<Q15>, input: &[Q15], output: &mut [Q15]) -> Result<()> => Fallback;
     StereoPll<f32>::stereo_pll(&self, state: &mut StereoPllState<f32>, mpx: &[f32], pilot: &[f32], output: &mut [C32]) -> Result<()> => Fallback;
     StereoPll<Q15>::stereo_pll(&self, state: &mut StereoPllState<Q15>, mpx: &[Q15], pilot: &[Q15], output: &mut [CQ15]) -> Result<()> => Fallback;
+    SymbolSync<C32>::symbol_sync(&self, s: &mut SymbolSyncState<C32>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fallback;
+    SymbolSync<f32>::symbol_sync(&self, s: &mut SymbolSyncState<f32>, input: &[f32], output: &mut [f32]) -> Result<Progress> => Fallback;
     Add<C32>::add(&self, a: &[C32], b: &[C32], out: &mut [C32]) -> Result<()> => Fast;
     Add<CQ15>::add(&self, a: &[CQ15], b: &[CQ15], out: &mut [CQ15]) -> Result<()> => Fast;
     AddReal<f32>::add_real(&self, a: &[f32], b: &[f32], out: &mut [f32]) -> Result<()> => Fast;

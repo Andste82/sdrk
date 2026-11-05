@@ -37,5 +37,6 @@ from . import (  # noqa: F401
     ssb_mod,
     stereo,
     stereo_encode,
+    symbol_sync,
     window,
 )

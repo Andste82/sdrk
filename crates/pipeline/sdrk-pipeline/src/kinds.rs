@@ -25,9 +25,10 @@ use sdrk_blocks::{
     NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
     RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
-    RotateConfig, ScaleBlock, ScaleConfig, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, ToComplexBlock,
+    RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
+    ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -2938,5 +2939,133 @@ impl Kind for FrameDecodeKind {
         Ok(Box::new(PacketOutNode::new(FrameDecodeBlock::new(
             cfg, rate, st,
         )?)))
+    }
+}
+
+// ---------------------------------------------------------------- symbol_sync
+
+pub(crate) struct SymbolSyncKind;
+
+impl Kind for SymbolSyncKind {
+    type Cfg = SymbolSyncConfig;
+
+    const KIND: &'static str = "symbol_sync";
+    fn kernels() -> &'static [&'static str] {
+        &["symbol_sync"]
+    }
+    fn default_cfg() -> SymbolSyncConfig {
+        SymbolSyncConfig::default()
+    }
+    fn set(cfg: &mut SymbolSyncConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SymbolSyncConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        // `symbol_rate_hz` below 2 samples per symbol is `OutOfRange` of the block, which the
+        // factory reports as `rate_unsupported`.
+        let (timing, min_input) = match input {
+            PortType::C32 => {
+                let b = SymbolSyncBlock::<C32, VecStorage>::new(cfg, rate, &mut VecStorage)?;
+                (b.timing(), b.min_input())
+            }
+            PortType::F32 => {
+                let b = SymbolSyncBlock::<f32, VecStorage>::new(cfg, rate, &mut VecStorage)?;
+                (b.timing(), b.min_input())
+            }
+            _ => return Err(mismatch("symbol_sync needs c32 or f32 samples")),
+        };
+        let sps = cfg.sps(rate)?;
+        Ok(Figures {
+            rate_out: SymbolSyncBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: SymbolSyncBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+            // Two cubic interpolations (12 operations each) and the loop per symbol.
+            cost: 2.0 + 24.0 / sps,
+            taps: 0,
+            delay: timing.delay,
+            min_input,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &SymbolSyncConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if input == PortType::F32 {
+            Ok(Box::new(StreamNode::new(SymbolSyncBlock::<f32, _>::new(
+                cfg, rate, st,
+            )?)))
+        } else {
+            Ok(Box::new(StreamNode::new(SymbolSyncBlock::<C32, _>::new(
+                cfg, rate, st,
+            )?)))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------- slice
+
+pub(crate) struct SliceKind;
+
+impl Kind for SliceKind {
+    type Cfg = SliceConfig;
+
+    const KIND: &'static str = "slice";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> SliceConfig {
+        SliceConfig::default()
+    }
+    fn set(cfg: &mut SliceConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &SliceConfig, input: PortType, rate: Rate, _p: Precision) -> BlockResult<Figures> {
+        // A constellation that does not take the input type is `InvalidParameter` of
+        // `constellation` (`invalid_value`).
+        let (rate_out, memory_bytes) = match input {
+            PortType::C32 => (
+                SliceBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+                SliceBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+            ),
+            PortType::F32 => (
+                SliceBlock::<f32, VecStorage>::rate_out(cfg, rate)?,
+                SliceBlock::<f32, VecStorage>::storage_bytes(cfg, rate)?,
+            ),
+            _ => return Err(mismatch("slice needs c32 or f32 samples")),
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            // One multiplication per soft bit.
+            cost: 1.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &SliceConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if input == PortType::F32 {
+            Ok(Box::new(StreamNode::new(SliceBlock::<f32, _>::new(
+                cfg, rate, st,
+            )?)))
+        } else {
+            Ok(Box::new(StreamNode::new(SliceBlock::<C32, _>::new(
+                cfg, rate, st,
+            )?)))
+        }
     }
 }

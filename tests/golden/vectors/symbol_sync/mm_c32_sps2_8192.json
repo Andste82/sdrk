@@ -1,0 +1,47 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "mm_c32_sps2_8192.expected.bin",
+      "len": 4095
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "mm_c32_sps2_8192.input.bin",
+      "len": 8192
+    }
+  },
+  "case": "mm_c32_sps2_8192",
+  "format_version": 1,
+  "kernel": "symbol_sync",
+  "model": "float32",
+  "notes": "QPSK (Gray, bit 2k on the real and 2k + 1 on the imaginary part, each (2b - 1) / sqrt(2)) shaped with the raised cosine of gardner_c32_sps4p1_16384, sps 2, symbol k at the sample position (k + 0.37) sps (timing offset 0.37 symbols), no noise, no drift; Mueller-Mueller with the block defaults; exact float32 model over the whole input in one call; timing_error_last_256 in symbols (information); snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "damping": 0.7071,
+    "guard_skip": 0,
+    "ki_bits": 4559611239253058887,
+    "kp_bits": 4587745117784985542,
+    "loop_bw": 0.01,
+    "max_deviation": 0.005,
+    "max_integ_bits": 4576918229304087675,
+    "produced": 4095,
+    "rolloff": 0.35,
+    "snr_db_guard": 145.2,
+    "span": 16,
+    "sps": 2.0,
+    "ted": "mm",
+    "ted_gain": 1.0,
+    "timing_error_last_256": 0.002621,
+    "timing_offset_symbols": 0.37
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 492,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

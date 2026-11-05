@@ -4441,5 +4441,65 @@
       "status": "info",
       "waiver": "`frame_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "symbol_sync": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_sync` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "symbol_sync_real": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_sync` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
   }
 }

@@ -120,6 +120,7 @@ mod preemph_limit;
 mod spectrum;
 mod squelch;
 mod stereo;
+mod symbol_sync;
 
 #[cfg(test)]
 mod tests {

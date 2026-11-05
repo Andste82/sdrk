@@ -277,3 +277,293 @@ pub mod extreme {
         }
     }
 }
+
+/// Modulation of [`PskTest`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Psk {
+    /// One bit per symbol: bit `b` gives the symbol `2b - 1` (bit 1 is `+1`).
+    Bpsk,
+    /// Two bits per symbol, Gray coded: bit `2k` gives the real part, bit `2k + 1` the
+    /// imaginary part, each `(2b - 1) / sqrt(2)`.
+    Qpsk,
+}
+
+impl Psk {
+    /// Bits per symbol.
+    ///
+    /// ```
+    /// use sdrk_testkit::r#gen::Psk;
+    /// assert_eq!(Psk::Qpsk.bits_per_symbol(), 2);
+    /// ```
+    pub const fn bits_per_symbol(self) -> usize {
+        match self {
+            Self::Bpsk => 1,
+            Self::Qpsk => 2,
+        }
+    }
+}
+
+/// Pulse shape of [`PskTest`]; the time `t` is in symbols.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pulse {
+    /// Raised cosine `sinc(t) cos(pi b t) / (1 - (2 b t)^2)` (Nyquist: zero at every other
+    /// integer `t`).
+    RaisedCosine,
+    /// Root-raised cosine `(sin(pi t (1 - b)) + 4 b t cos(pi t (1 + b))) / (pi t (1 - (4 b t)^2))`;
+    /// its convolution with itself (over `t` in symbols) is the raised cosine.
+    RootRaisedCosine,
+}
+
+/// Largest pulse span of [`PskTest`] in symbols per side.
+pub const PSK_MAX_SPAN: usize = 32;
+
+/// Near-zero test of the pulse singularities.
+const PULSE_EPS: f64 = 1e-9;
+
+/// The pulse `p(t)` (time `t` in symbols, roll-off `b` in `0..=1`), evaluated in f64; the
+/// removable singularities take their limits.
+///
+/// ```
+/// use sdrk_testkit::r#gen::{pulse, Pulse};
+/// assert_eq!(pulse(Pulse::RaisedCosine, 0.35, 0.0), 1.0);
+/// assert!(pulse(Pulse::RaisedCosine, 0.35, 3.0).abs() < 1e-15);
+/// ```
+pub fn pulse(shape: Pulse, rolloff: f64, t: f64) -> f64 {
+    let (a, b) = pulse_angles(shape, rolloff);
+    pulse_from(shape, rolloff, t, libm::sin(a * t), libm::cos(b * t))
+}
+
+/// The angle factors `a`, `b` of the pulse terms `sin(a t)` and `cos(b t)`.
+fn pulse_angles(shape: Pulse, rolloff: f64) -> (f64, f64) {
+    match shape {
+        Pulse::RaisedCosine => (PI, PI * rolloff),
+        Pulse::RootRaisedCosine => (PI * (1.0 - rolloff), PI * (1.0 + rolloff)),
+    }
+}
+
+/// The pulse from the precomputed terms `sin_at = sin(a t)` and `cos_bt = cos(b t)`.
+fn pulse_from(shape: Pulse, beta: f64, t: f64, sin_at: f64, cos_bt: f64) -> f64 {
+    match shape {
+        Pulse::RaisedCosine => {
+            let x = 2.0 * beta * t;
+            let den = 1.0 - x * x;
+            if libm::fabs(den) < PULSE_EPS {
+                // t = +-1 / (2 b): (pi / 4) sinc(1 / (2 b))
+                let u = 0.5 / beta;
+                PI / 4.0 * libm::sin(PI * u) / (PI * u)
+            } else if libm::fabs(t) < PULSE_EPS {
+                1.0
+            } else {
+                sin_at / (PI * t) * cos_bt / den
+            }
+        }
+        Pulse::RootRaisedCosine => {
+            let x = 4.0 * beta * t;
+            let den = 1.0 - x * x;
+            if libm::fabs(t) < PULSE_EPS {
+                1.0 - beta + 4.0 * beta / PI
+            } else if libm::fabs(den) < PULSE_EPS {
+                // t = +-1 / (4 b)
+                let q = PI / (4.0 * beta);
+                beta / core::f64::consts::SQRT_2
+                    * ((1.0 + 2.0 / PI) * libm::sin(q) + (1.0 - 2.0 / PI) * libm::cos(q))
+            } else {
+                (sin_at + x * cos_bt) / (PI * t * den)
+            }
+        }
+    }
+}
+
+/// A BPSK or QPSK test signal shaped with a raised-cosine (or root-raised-cosine) pulse,
+/// computed in f64 (M38; the library pulse design comes in M40).
+///
+/// Symbol `k` (from the bits, see [`Psk`]) is centred at the sample position
+/// [`PskTest::symbol_position`]`(k) = offset + k sps`; sample `n` is
+/// `sum_k a_k p((n - offset) / sps - k)` over the symbols within `span` symbols of `n`.
+/// Each sample depends only on its absolute index, so chunked generation equals generation
+/// at once.
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::r#gen::{Psk, PskTest};
+/// let bits = [1u8, 0, 0, 1];
+/// let g = PskTest::new(Psk::Bpsk, 4.0, 0.35);
+/// let mut out = vec![Complex64::new(0.0, 0.0); g.samples(&bits)];
+/// g.generate(&bits, 0, &mut out);
+/// assert!((out[0].re - 1.0).abs() < 1e-12); // symbol 0 (bit 1) at sample 0
+/// assert!((out[4].re + 1.0).abs() < 1e-12); // symbol 1 (bit 0) at sample 4
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PskTest {
+    /// Modulation.
+    pub modulation: Psk,
+    /// Pulse shape (default raised cosine).
+    pub pulse: Pulse,
+    /// Samples per symbol (`> 0`, need not be an integer).
+    pub sps: f64,
+    /// Roll-off factor `b` in `0..=1`.
+    pub rolloff: f64,
+    /// Sample position of symbol 0 (default 0.0).
+    pub offset: f64,
+    /// Truncation of the pulse in symbols per side (default 16, at most [`PSK_MAX_SPAN`]).
+    pub span: usize,
+}
+
+impl PskTest {
+    /// A raised-cosine signal with symbol 0 at sample 0 and a span of 16 symbols per side.
+    ///
+    /// ```
+    /// use sdrk_testkit::r#gen::{Psk, Pulse, PskTest};
+    /// let g = PskTest::new(Psk::Qpsk, 4.1, 0.35);
+    /// assert_eq!((g.pulse, g.offset, g.span), (Pulse::RaisedCosine, 0.0, 16));
+    /// ```
+    pub fn new(modulation: Psk, sps: f64, rolloff: f64) -> Self {
+        Self {
+            modulation,
+            pulse: Pulse::RaisedCosine,
+            sps,
+            rolloff,
+            offset: 0.0,
+            span: 16,
+        }
+    }
+
+    /// Number of whole symbols in `bits` (left-over bits are ignored).
+    ///
+    /// ```
+    /// use sdrk_testkit::r#gen::{Psk, PskTest};
+    /// assert_eq!(PskTest::new(Psk::Qpsk, 2.0, 0.5).symbols(&[0; 7]), 3);
+    /// ```
+    pub fn symbols(&self, bits: &[u8]) -> usize {
+        bits.len() / self.modulation.bits_per_symbol()
+    }
+
+    /// Symbol `k` of `bits` (zero beyond the last whole symbol); a non-zero bit counts as 1.
+    ///
+    /// ```
+    /// use num_complex::Complex64;
+    /// use sdrk_testkit::r#gen::{Psk, PskTest};
+    /// let g = PskTest::new(Psk::Qpsk, 2.0, 0.5);
+    /// let h = core::f64::consts::FRAC_1_SQRT_2;
+    /// assert_eq!(g.symbol(&[1, 0], 0), Complex64::new(h, -h));
+    /// ```
+    pub fn symbol(&self, bits: &[u8], k: usize) -> Complex64 {
+        let level = |b: Option<&u8>| {
+            if b.is_some_and(|&b| b != 0) {
+                1.0
+            } else {
+                -1.0
+            }
+        };
+        if k >= self.symbols(bits) {
+            return Complex64::new(0.0, 0.0);
+        }
+        match self.modulation {
+            Psk::Bpsk => Complex64::new(level(bits.get(k)), 0.0),
+            Psk::Qpsk => {
+                let h = core::f64::consts::FRAC_1_SQRT_2;
+                Complex64::new(h * level(bits.get(2 * k)), h * level(bits.get(2 * k + 1)))
+            }
+        }
+    }
+
+    /// Sample position of the centre of symbol `k`: `offset + k sps`.
+    ///
+    /// ```
+    /// use sdrk_testkit::r#gen::{Psk, PskTest};
+    /// let mut g = PskTest::new(Psk::Bpsk, 4.1, 0.35);
+    /// g.offset = 2.0;
+    /// assert!((g.symbol_position(10) - 43.0).abs() < 1e-12);
+    /// ```
+    pub fn symbol_position(&self, k: usize) -> f64 {
+        self.offset + k as f64 * self.sps
+    }
+
+    /// Number of samples that hold the whole signal including the pulse tail of the last
+    /// symbol (from sample 0).
+    ///
+    /// ```
+    /// use sdrk_testkit::r#gen::{Psk, PskTest};
+    /// let g = PskTest::new(Psk::Bpsk, 4.0, 0.35);
+    /// assert_eq!(g.samples(&[1; 10]), 36 + 64 + 1);
+    /// ```
+    pub fn samples(&self, bits: &[u8]) -> usize {
+        let n = self.symbols(bits);
+        if n == 0 {
+            return 0;
+        }
+        let last = self.symbol_position(n - 1) + self.span.min(PSK_MAX_SPAN) as f64 * self.sps;
+        if last < 0.0 {
+            0
+        } else {
+            libm::floor(last) as usize + 1
+        }
+    }
+
+    /// Writes the samples `start .. start + out.len()` of the signal of `bits`.
+    ///
+    /// ```
+    /// use num_complex::Complex64;
+    /// use sdrk_testkit::r#gen::{Psk, PskTest};
+    /// let bits = [1u8, 1, 0, 1, 0, 0, 1, 0];
+    /// let g = PskTest::new(Psk::Qpsk, 4.1, 0.35);
+    /// let mut whole = vec![Complex64::new(0.0, 0.0); 40];
+    /// g.generate(&bits, 0, &mut whole);
+    /// let mut tail = vec![Complex64::new(0.0, 0.0); 15];
+    /// g.generate(&bits, 25, &mut tail);
+    /// assert_eq!(&whole[25..], &tail[..]);
+    /// ```
+    pub fn generate(&self, bits: &[u8], start: u64, out: &mut [Complex64]) {
+        let nsym = self.symbols(bits) as i64;
+        let span = self.span.min(PSK_MAX_SPAN);
+        let beta = self.rolloff;
+        let (ang_a, ang_b) = pulse_angles(self.pulse, beta);
+        // sin and cos of a j and b j for the symbol steps j = 0 ..= 2 span
+        let mut tab = [(0.0f64, 0.0f64, 0.0f64, 0.0f64); 2 * PSK_MAX_SPAN + 1];
+        for (j, e) in tab.iter_mut().enumerate() {
+            let jf = j as f64;
+            *e = (
+                libm::sin(ang_a * jf),
+                libm::cos(ang_a * jf),
+                libm::sin(ang_b * jf),
+                libm::cos(ang_b * jf),
+            );
+        }
+        let spanf = span as f64;
+        for (i, o) in out.iter_mut().enumerate() {
+            let u = (index_of(start, i) - self.offset) / self.sps;
+            let k_lo = (libm::ceil(u - spanf) as i64).max(0);
+            let k_hi = (libm::floor(u + spanf) as i64).min(nsym - 1);
+            let mut acc = Complex64::new(0.0, 0.0);
+            if k_lo <= k_hi {
+                let t0 = u - k_lo as f64;
+                let (sa0, ca0) = (libm::sin(ang_a * t0), libm::cos(ang_a * t0));
+                let (sb0, cb0) = (libm::sin(ang_b * t0), libm::cos(ang_b * t0));
+                for (k, &(saj, caj, sbj, cbj)) in (k_lo..=k_hi).zip(tab.iter()) {
+                    let t = u - k as f64;
+                    // t = t0 - j: sin(a t) and cos(b t) by the angle-difference formulas
+                    let sin_at = sa0 * caj - ca0 * saj;
+                    let cos_bt = cb0 * cbj + sb0 * sbj;
+                    let p = pulse_from(self.pulse, beta, t, sin_at, cos_bt);
+                    acc += self.symbol(bits, k as usize) * p;
+                }
+            }
+            *o = acc;
+        }
+    }
+}
+
+/// Writes the samples `0 .. out.len()` of a BPSK or QPSK signal of `bits` with the
+/// raised-cosine pulse of roll-off `rolloff`, `sps` samples per symbol and symbol 0 at
+/// sample 0 (the defaults of [`PskTest::new`]).
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::r#gen::{psk_test, Psk};
+/// let mut out = [Complex64::new(0.0, 0.0); 16];
+/// psk_test(Psk::Bpsk, 4.0, 0.35, &[1, 0, 1, 1], &mut out);
+/// assert!((out[8].re - 1.0).abs() < 1e-12);
+/// ```
+pub fn psk_test(modulation: Psk, sps: f64, rolloff: f64, bits: &[u8], out: &mut [Complex64]) {
+    PskTest::new(modulation, sps, rolloff).generate(bits, 0, out);
+}

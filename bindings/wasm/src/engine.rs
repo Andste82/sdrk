@@ -707,6 +707,7 @@ impl Engine {
             ("stereo_encode", C32),
             ("stereo_matrix", C32),
             ("stereo_pll", F32),
+            ("symbol_sync", C32),
             ("window", C32),
         ];
         KERNELS

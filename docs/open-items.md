@@ -12,6 +12,8 @@ I33-1 and I33-2 (the `noise_blank` kernel rules and block defaults) are closed o
 
 I36-1 (the limiter of the FM stereo transmitter at 48 kHz before the resampler overshot the deviation) is closed on 2026-11-05 by the maintainer's decision D487: the flow `fm_stereo_transmitter` runs the limiter after the resampler, at 192 kHz, as `fm_transmitter` does; a full-scale 15 kHz burst stays at a multiplex peak of 0.990 and 74.2 kHz deviation.
 
+I38-1 (the loop gain of `symbol_sync` depended on `sps`) is closed on 2026-11-05 by the maintainer's decision D565 (option b): the kernel reads the detector output as a timing error in symbols and scales `kp` and `ki` by `sps`, so `loop_bw` and the default `ted_gain` 1.0 mean the same at every `sps`; the tests run with the block defaults.
+
 I30-1 (the speed and accuracy gaps of the M30 entries) is closed on 2026-11-04 by the maintainer's decisions D320, D326 and D327 to D331: the accuracy of `oscillate_fallback` and the cycle gaps of `mul_fallback` C32 at `avx512`, `mul_real_q15_fallback` at `avx2` and `avx512` and `deinterleave_cq15_fallback` at `avx2` are accepted (none needs a waiver: each is within its instruction gate), `mul` C32 fuses on the FMA levels, the gate of `interleave_cq15_fallback` is confirmed, and `add` CQ15 and `add_real` Q15 delegate to the fallback on wasm32.
 
 | Milestone | Item | Why it is open | Needed decision / input |

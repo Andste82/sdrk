@@ -4992,6 +4992,11 @@
         "sha256": "9b5144c3705159280b99d36ecd057962c4b60dbd9b2899572edd586a74d74d4c",
         "version": "main at ec1bf15"
       },
+      "gnuradio_linear_equalizer": {
+        "build": "gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK 3.3.0 generic dot products): -O3 -msimd128",
+        "sha256": "b28de16052b9478decba1db261bdc0a6e81b64ea8f3a9eb9d9427bb6f1aac312",
+        "version": "main at ec1bf15"
+      },
       "gnuradio_pwr_squelch_cc": {
         "build": "-O3 -msimd128",
         "sha256": "ff8c9a04f5681c2b21d95465c0751e8decee193e0696290a4088d2993d939781",

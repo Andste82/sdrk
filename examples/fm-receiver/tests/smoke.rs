@@ -509,4 +509,77 @@ fn the_mono_flow_still_writes_one_channel() {
     ]);
     assert!(o.status.success(), "{}", stderr(&o));
     assert_eq!(wav_channels(&out), 1);
+    // A flow without a packets output `rds` prints nothing about RDS.
+    assert!(!stderr(&o).contains("rds"), "{}", stderr(&o));
+}
+
+/// `cs16` bytes of the RDS reference signal of M41 (480 kHz, no noise), `samples` long.
+fn rds_reference_cs16(samples: usize) -> Vec<u8> {
+    use sdrk_testkit::rds::{RDS_LEVEL, RdsReference, TABLE_LEN, to_cs16};
+    let mut sig = RdsReference::new(vec![0.0; TABLE_LEN], RDS_LEVEL).unwrap();
+    let mut iq = vec![Complex64::new(0.0, 0.0); samples];
+    sig.fill(0, &mut iq).unwrap();
+    let mut bytes = Vec::with_capacity(4 * samples);
+    for &v in &iq {
+        let sample = to_cs16(v);
+        bytes.extend_from_slice(&sample.re.0.to_le_bytes());
+        bytes.extend_from_slice(&sample.im.0.to_le_bytes());
+    }
+    bytes
+}
+
+#[test]
+fn the_rds_flow_prints_ps_and_rt() {
+    let dir = tempfile::tempdir().unwrap();
+    let rec = dir.path().join("rds.cs16");
+    // 1.2 s: PS is complete after 0.8 s, RT (up to its carriage return) after 0.9 s.
+    let samples = 576_000;
+    std::fs::write(&rec, rds_reference_cs16(samples)).unwrap();
+    let flow = concat!(env!("CARGO_MANIFEST_DIR"), "/../flows/fm_rds_receiver.json");
+    let out = dir.path().join("rds.wav");
+    let o = run(&[
+        "--input",
+        p(&rec),
+        "--format",
+        "cs16",
+        "--rate",
+        "480000",
+        "--output",
+        p(&out),
+        "--flow",
+        flow,
+    ]);
+    let err = stderr(&o);
+    assert!(o.status.success(), "{err}");
+    assert!(
+        err.contains("rds: PI 0xD123 PTY 10 PS \"SDRK TST\""),
+        "{err}"
+    );
+    assert!(err.contains("rds: RT \"Hello from sdrk!\""), "{err}");
+    assert!(err.contains("rds groups on `rds`:"), "{err}");
+    assert_eq!(wav_channels(&out), 2);
+    let (frames, rate) = read_stereo_wav(&out);
+    assert_eq!(rate, 48_000);
+    assert_eq!(frames.len(), samples / 10);
+    // --rds-output naming an output that is not a packets output is a usage error.
+    let o = run(&[
+        "--input",
+        p(&rec),
+        "--format",
+        "cs16",
+        "--rate",
+        "480000",
+        "--output",
+        p(&out),
+        "--flow",
+        flow,
+        "--rds-output",
+        "audio",
+    ]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(
+        stderr(&o).contains("not a packets output"),
+        "{}",
+        stderr(&o)
+    );
 }

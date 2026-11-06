@@ -11,6 +11,18 @@
 //! mono WAV file, a complex stream (`C32`, stereo audio with the left channel in `re` and the
 //! right channel in `im`, as in `fm_stereo_receiver.json`) a two-channel WAV file.
 //!
+//! RDS (M41): when the flow has a packets output `rds` (as in `fm_rds_receiver.json`; another
+//! name with `--rds-output`), its groups go through `sdrk_proto::rds::RdsState`, and the
+//! programme service name and the radiotext are printed to standard error once they are
+//! complete and whenever they change:
+//!
+//! ```text
+//! fm-receiver --input rds.cs16 --format cs16 --rate 480000 \
+//!             --flow examples/flows/fm_rds_receiver.json --output audio.wav
+//! rds: PI 0xD123 PTY 10 PS "SDRK TST"
+//! rds: RT "Hello from sdrk!"
+//! ```
+//!
 //! The report summary and the events go to standard error. Exit code 1 with the diagnostics
 //! JSON on standard error for an invalid flow, 2 for a wrong command line.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -26,18 +38,23 @@ use sdrk::C32;
 use sdrk_blocks::PortType;
 use sdrk_device::{BlockMeta, Rate, RxStream, SampleIndex, formats};
 use sdrk_io::{RawReader, SigmfReader, WavWriter, sigmf_paths};
-use sdrk_pipeline::{BuildOptions, EventKind, InputData, Pipeline, PortKind, RateHz, Registry};
+use sdrk_pipeline::{
+    BuildOptions, EventKind, InputData, Packet, PacketFlags, Pipeline, PortKind, RateHz, Registry,
+};
+use sdrk_proto::rds::{Group, RdsState};
 
 use cli::{Failure, Options};
 
 const USAGE: &str = "usage: fm-receiver --input <rec.sigmf-meta | rec.cu8 ...> --output <audio.wav>
                    [--format <name> --rate <hz>]   (raw input only)
                    [--flow <flow.json | flow.yaml>] [--set <node.param=value>]...
-                   [--input-name <name>] [--audio-output <name>]
+                   [--input-name <name>] [--audio-output <name>] [--rds-output <name>]
 
 Reads an IQ recording (SigMF, or a raw file with --format and --rate), pushes it through the
 flow in max_chunk pieces and writes the stream output `audio` (default) as a mono f32 WAV file.
-Without --flow the example flow examples/flows/fm_receiver.json is used.";
+Without --flow the example flow examples/flows/fm_receiver.json is used. When the flow has the
+packets output `rds` (default name; examples/flows/fm_rds_receiver.json), the RDS programme
+service name and radiotext are printed to standard error.";
 
 const DEFAULT_FLOW: &str = include_str!("../../flows/fm_receiver.json");
 /// Events printed to standard error before the rest is only counted.
@@ -72,6 +89,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
             "output",
             "input-name",
             "audio-output",
+            "rds-output",
         ],
     )?;
     let input_path = o.required("input")?;
@@ -113,6 +131,18 @@ fn run(args: &[String]) -> Result<(), Failure> {
             )));
         }
     };
+    // The RDS groups, when the flow has a packets output of that name.
+    let rds_name = o.get("rds-output").unwrap_or("rds").to_string();
+    let mut rds = match pipeline.output_port(&rds_name) {
+        Ok(PortKind::Stream(PortType::Packets)) => Some(Rds::new(rds_name)),
+        Ok(_) => {
+            return Err(Failure::Usage(format!(
+                "output `{rds_name}` is not a packets output"
+            )));
+        }
+        Err(e) if o.get("rds-output").is_some() => return Err(e.into()),
+        Err(_) => None,
+    };
     let wav_file = File::create(output_path)
         .map_err(|e| Failure::Run(format!("cannot create `{output_path}`: {e}")))?;
     let wav_format = if stereo { formats::CF32 } else { formats::RF32 };
@@ -146,6 +176,9 @@ fn run(args: &[String]) -> Result<(), Failure> {
             &mut wav,
             &mut stats,
         )?;
+        if let Some(r) = rds.as_mut() {
+            r.drain(&mut pipeline)?;
+        }
         events(&mut pipeline, &mut stats);
     }
     let out = wav.finish()?;
@@ -157,7 +190,80 @@ fn run(args: &[String]) -> Result<(), Failure> {
     };
     eprintln!("input: {shown} ({} Hz, {})", rate.as_f64(), input_name);
     summary(&pipeline, &stats, &input_name, &audio_name, audio_rate);
+    if let Some(r) = &rds {
+        r.summary();
+    }
     Ok(())
+}
+
+/// The RDS display: the groups of a packets output through [`RdsState`].
+struct Rds {
+    output: String,
+    state: RdsState,
+    buf: Vec<Packet>,
+    groups: u64,
+    bad: u64,
+    shown_ps: String,
+    shown_rt: String,
+}
+
+impl Rds {
+    fn new(output: String) -> Self {
+        Self {
+            output,
+            state: RdsState::new(),
+            buf: vec![Packet::default(); 64],
+            groups: 0,
+            bad: 0,
+            shown_ps: String::new(),
+            shown_rt: String::new(),
+        }
+    }
+
+    /// Reads every waiting group, updates the state and prints PS and RT when they change.
+    fn drain(&mut self, p: &mut Pipeline) -> Result<(), Failure> {
+        loop {
+            let n = p.read_packets(&self.output, &mut self.buf)?;
+            for pk in self.buf.iter().take(n) {
+                // Only groups with four valid blocks (a flow with `emit_bad` also delivers the
+                // others, marked CRC_FAIL).
+                match Group::from_packet(pk) {
+                    Some(g) if pk.flags.contains(PacketFlags::CRC_OK) => {
+                        self.groups += 1;
+                        self.state.update(&g);
+                    }
+                    _ => self.bad += 1,
+                }
+            }
+            self.show();
+            if n == 0 {
+                return Ok(());
+            }
+        }
+    }
+
+    fn show(&mut self) {
+        if self.state.ps_ready() && self.state.ps() != self.shown_ps {
+            self.shown_ps = self.state.ps().to_string();
+            eprintln!(
+                "rds: PI 0x{:04X} PTY {} PS \"{}\"",
+                self.state.pi().unwrap_or(0),
+                self.state.pty().unwrap_or(0),
+                self.shown_ps
+            );
+        }
+        if self.state.rt_ready() && self.state.rt() != self.shown_rt {
+            self.shown_rt = self.state.rt().to_string();
+            eprintln!("rds: RT \"{}\"", self.shown_rt);
+        }
+    }
+
+    fn summary(&self) {
+        eprintln!(
+            "rds groups on `{}`: {} valid, {} not valid",
+            self.output, self.groups, self.bad
+        );
+    }
 }
 
 type Input = Box<dyn RxStream<Error = sdrk_io::Error>>;

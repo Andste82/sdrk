@@ -1,0 +1,86 @@
+{
+  "sdrk": 1,
+  "name": "fm-rds-receiver",
+  "description": "Receive one FM broadcast station in stereo with its RDS groups: 48 kHz stereo audio (left in re, right in im) and one packet per RDS group.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cs16",
+      "rate_hz": 480000,
+      "description": "IQ at 480 kHz with the station at 0 Hz"
+    }
+  },
+  "nodes": {
+    "groups": {
+      "kind": "rds_decode"
+    },
+    "quad": {
+      "kind": "quad_demod",
+      "params": {
+        "deviation_hz": 75000
+      }
+    },
+    "stereo": {
+      "kind": "fm_stereo_demod",
+      "params": {
+        "audio_decimation": 5
+      }
+    },
+    "subcarrier": {
+      "kind": "rds_demod"
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 100000,
+        "decimation": 2,
+        "frequency_hz": 0
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "stereo"
+    },
+    {
+      "from": "tune",
+      "to": "quad"
+    },
+    {
+      "from": "stereo",
+      "to": "audio"
+    },
+    {
+      "from": "quad",
+      "to": "subcarrier"
+    },
+    {
+      "from": "subcarrier",
+      "to": "groups"
+    },
+    {
+      "from": "groups",
+      "to": "rds"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    },
+    "rds": {
+      "type": "packets",
+      "queue": 256,
+      "description": "One packet per RDS group: the blocks A, B, C, D big-endian, CRC_OK, validity in bits 16 to 19 of the flags"
+    }
+  }
+}

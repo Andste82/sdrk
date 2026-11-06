@@ -37,6 +37,8 @@ pub mod preemph_limit;
 pub mod psk_demod;
 pub mod psk_mod;
 pub mod quad_demod;
+pub mod rds_decode;
+pub mod rds_demod;
 pub mod real_part;
 pub mod real_to_iq;
 pub mod resample;

@@ -2,6 +2,10 @@
 """Golden-vector generator for SDRk.
 
 Usage: python tests/golden/generate.py [--all | --kernel NAME] [--check] [--list] [--out DIR]
+       python tests/golden/generate.py --emit rds_reference --emit-out PATH [--seconds S] [--snr DB]
+
+``--emit`` writes a long signal that is not a golden case (never checked or committed): the RDS
+reference signal of M41 (raw cs16 at 480 kHz plus a JSON sidecar ``PATH.json``).
 """
 
 import argparse
@@ -51,7 +55,24 @@ def main():
     ap.add_argument("--check", action="store_true", help="compare with the committed files")
     ap.add_argument("--list", action="store_true", help="print kernel/case lines")
     ap.add_argument("--out", default=os.path.join(HERE, "vectors"), help="output directory")
+    ap.add_argument("--emit", choices=["rds_reference"], help="write a long signal instead of the cases")
+    ap.add_argument("--emit-out", metavar="PATH", help="output file of --emit")
+    ap.add_argument("--seconds", type=float, default=8.0, help="length of the --emit signal (default 8)")
+    ap.add_argument("--snr", type=float, default=30.0, help="SNR of the --emit signal in dB (default 30)")
     args = ap.parse_args()
+
+    if args.emit is not None:
+        if not args.emit_out:
+            print("error: --emit needs --emit-out PATH", file=sys.stderr)
+            return 2
+        if not (args.seconds > 0.0):
+            print("error: --seconds must be positive", file=sys.stderr)
+            return 2
+        from sdrk_golden.cases import rds  # noqa: E402
+
+        meta = rds.emit_reference(args.emit_out, seconds=args.seconds, snr_db=args.snr)
+        print(f"wrote {meta['samples']} cs16 samples to {args.emit_out} (and {args.emit_out}.json)")
+        return 0
 
     selected = [c for c in registry.CASES if args.kernel is None or c.kernel == args.kernel]
     if args.kernel is not None and not selected:

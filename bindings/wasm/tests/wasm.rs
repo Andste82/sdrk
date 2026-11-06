@@ -45,6 +45,7 @@ const GFSK_RECEIVER: &str = include_str!("../../../examples/flows/gfsk_receiver.
 const GFSK_TRANSMITTER: &str = include_str!("../../../examples/flows/gfsk_transmitter.json");
 const QPSK_TRANSMITTER: &str = include_str!("../../../examples/flows/qpsk_transmitter.json");
 const QPSK_RECEIVER: &str = include_str!("../../../examples/flows/qpsk_receiver.json");
+const FM_RDS_RECEIVER: &str = include_str!("../../../examples/flows/fm_rds_receiver.json");
 
 fn get(value: &JsValue, key: &str) -> JsValue {
     Reflect::get(value, &JsValue::from_str(key)).unwrap()
@@ -158,6 +159,7 @@ fn every_example_flow_validates_clean() {
         ("gfsk_transmitter", GFSK_TRANSMITTER),
         ("qpsk_transmitter", QPSK_TRANSMITTER),
         ("qpsk_receiver", QPSK_RECEIVER),
+        ("fm_rds_receiver", FM_RDS_RECEIVER),
     ] {
         let report = validate(flow).unwrap();
         assert_eq!(array_len(&report, "errors"), 0, "{name}");

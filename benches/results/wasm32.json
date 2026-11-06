@@ -1429,6 +1429,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "costas": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 228.05,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 228.05,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 228.05,
+          "ours_instr_per_sample": 228.05,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_fallback": {
+          "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 255.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 228.05,
+              "ratio": 0.89
+            }
+          ],
+          "other_instr_per_sample": 255.33,
+          "ours_instr_per_sample": 228.05,
+          "ratio": 0.89,
+          "snr_db": {
+            "other": 129.23,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "crc16_ccitt_false": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
           "goal": true,
@@ -3917,6 +3963,32 @@
           "status": "info",
           "verdict": "info"
         },
+        "rds_decode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 84.97,
+          "ours_instr_per_sample": 84.97,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "rds_demod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 340.3,
+          "ours_instr_per_sample": 340.3,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "real_to_complex": {
           "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, simd128)",
           "goal": true,
@@ -4817,52 +4889,6 @@
           },
           "status": "release",
           "verdict": "pass"
-        },
-        "costas": {
-          "compared_with": "sdrk fallback",
-          "goal": true,
-          "informational": [
-            {
-              "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
-              "other_instr_per_sample": 228.05,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 228.05,
-              "ratio": 1.0
-            }
-          ],
-          "other_instr_per_sample": 228.05,
-          "ours_instr_per_sample": 228.05,
-          "ratio": 1.0,
-          "snr_db": {
-            "other": 999.0,
-            "ours": 999.0
-          },
-          "status": "info",
-          "verdict": "info"
-        },
-        "costas_fallback": {
-          "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
-          "goal": true,
-          "informational": [
-            {
-              "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
-              "label": "misaligned by one sample",
-              "other_instr_per_sample": 255.33,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 228.05,
-              "ratio": 0.89
-            }
-          ],
-          "other_instr_per_sample": 255.33,
-          "ours_instr_per_sample": 228.05,
-          "ratio": 0.89,
-          "snr_db": {
-            "other": 129.23,
-            "ours": 999.0
-          },
-          "status": "release",
-          "verdict": "pass"
         }
       },
       "volk": {
@@ -4903,6 +4929,11 @@
       "gnuradio_agc_cc": {
         "build": "-O3 -msimd128",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_costas_loop_cc": {
+        "build": "gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): -O3 -msimd128",
+        "sha256": "a07744aa891bfd78c48ddd3dfa6a43e93a97b80601a66e5a9d280460c178194a",
         "version": "main at ec1bf15"
       },
       "gnuradio_crc": {
@@ -4969,11 +5000,6 @@
         "build": "headers of libc++ and wasi-libc for KFR",
         "sha256": "9d813544eeebe38b7b8f2244ed591de46b6db812c6dd1a257ff9f0d2a905a2be",
         "version": "34.0"
-      },
-      "gnuradio_costas_loop_cc": {
-        "build": "gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): -O3 -msimd128",
-        "sha256": "a07744aa891bfd78c48ddd3dfa6a43e93a97b80601a66e5a9d280460c178194a",
-        "version": "main at ec1bf15"
       }
     },
     "platform": "wasm32"

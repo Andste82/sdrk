@@ -2845,6 +2845,100 @@
           },
           {
             "additionalProperties": false,
+            "description": "Finds the blocks of RDS groups in a stream of soft data bits and outputs the groups as packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "rds_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "emit_bad": {
+                    "default": false,
+                    "description": "Also output groups with an invalid block, with the flag CRC_FAIL. Typical: false; true to see damaged groups. Build-time.",
+                    "type": "boolean"
+                  },
+                  "max_bad": {
+                    "default": 10,
+                    "description": "The synchronization ends when more than this many of the last 50 blocks were invalid. Typical: 10. Build-time.",
+                    "maximum": 50,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates the 57 kHz RDS subcarrier of an FM multiplex to soft data bits at 1187.5 bit/s.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "rds_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "carrier_bw": {
+                    "default": 0.01,
+                    "description": "Loop bandwidth of the carrier loop, normalized to the chip rate 2375 Hz. Typical: 0.01. Build-time.",
+                    "maximum": 0.2,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "sync_bw": {
+                    "default": 0.01,
+                    "description": "Loop bandwidth of the chip timing, normalized to the chip rate 2375 Hz. Typical: 0.01. Build-time.",
+                    "maximum": 0.1,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Outputs the real part of a complex stream as a real stream.",
             "properties": {
               "align": {

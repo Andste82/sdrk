@@ -40,7 +40,7 @@ use sdrk_blocks::{
 };
 use sdrk_blocks::{
     CostasBlock, CostasConfig, FramePolarity, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig,
+    PskModConfig, PskVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -317,28 +317,44 @@ fn psk_blocks_storage_is_exact() {
     let bytes = CostasBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
     assert_eq!(bytes, 0);
     check_exact_storage(bytes, |a| CostasBlock::new(&cfg, r, a).map(|_| ()));
-    for (order, sps, span, differential) in [(2, 2, 4, false), (4, 8, 10, true), (4, 64, 32, false)]
-    {
+    // M40, then 8PSK and the variants of M40.1 (`offset` adds its ring of `sps / 2`)
+    for (order, sps, span, differential, variant) in [
+        (2, 2, 4, false, PskVariant::Plain),
+        (4, 8, 10, true, PskVariant::Plain),
+        (4, 64, 32, false, PskVariant::Plain),
+        (8, 8, 10, false, PskVariant::Plain),
+        (4, 8, 10, true, PskVariant::Pi4),
+        (4, 2, 4, false, PskVariant::Offset),
+        (4, 64, 32, false, PskVariant::Offset),
+    ] {
         let cfg = PskModConfig {
             order,
             samples_per_symbol: sps,
             span,
             differential,
+            variant,
             ..PskModConfig::default()
         };
         check_exact_storage(PskModBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(), |a| {
             PskModBlock::new(&cfg, r, a).map(|_| ())
         });
     }
-    for (order, symbol_rate_hz, fs, span) in [
-        (2, 4800.0, 9600, 4),
-        (4, 25_000.0, 200_000, 10),
-        (4, 1200.0, 48_000, 32),
+    for (order, symbol_rate_hz, fs, span, differential, variant) in [
+        (2, 4800.0, 9600, 4, false, PskVariant::Plain),
+        (4, 25_000.0, 200_000, 10, false, PskVariant::Plain),
+        (4, 1200.0, 48_000, 32, false, PskVariant::Plain),
+        (8, 25_000.0, 200_000, 10, false, PskVariant::Plain),
+        (8, 1200.0, 48_000, 32, true, PskVariant::Plain),
+        (4, 25_000.0, 200_000, 10, true, PskVariant::Pi4),
+        (4, 25_000.0, 200_000, 10, false, PskVariant::Offset),
+        (4, 50.0, 51_200, 4, false, PskVariant::Offset),
     ] {
         let cfg = PskDemodConfig {
             order,
             symbol_rate_hz,
             span,
+            differential,
+            variant,
             ..PskDemodConfig::default()
         };
         let r = rate(fs);
@@ -560,6 +576,8 @@ fn public_types_are_send() {
     assert_sync::<PskDemodBlock<A<'static>>>();
     assert_send::<PskDemodConfig>();
     assert_sync::<PskDemodConfig>();
+    assert_send::<PskVariant>();
+    assert_sync::<PskVariant>();
     assert_send::<FramePolarity>();
     assert_sync::<FramePolarity>();
     assert_sync::<SliceConfig>();

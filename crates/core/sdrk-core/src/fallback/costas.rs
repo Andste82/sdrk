@@ -3,7 +3,8 @@
 //! Bit-exact with `Reference`. The loop is a recursion over the symbols (the phase of every
 //! symbol depends on the detector output of the previous one), so the kernel is not
 //! vectorized; per symbol it costs one interpolated table pair, a complex rotation, the
-//! detector, the loop filter and the lock metric (one division). The loop keeps the state in
+//! detector, the loop filter and the lock metric (one division; order 8 adds the octant
+//! decision of the 8PSK point to the detector and the metric). The loop keeps the state in
 //! locals and is specialized for the order, so the detector and the metric have no branch on
 //! it. `floor(v 2^32 + 0.5) as i64 as u32` is the `phase_step` of `fm_mod`, which equals that
 //! formula bit for bit without a library call to `floor`.
@@ -71,10 +72,10 @@ fn run<const ORDER: u32>(s: &mut CostasState, input: &[C32], output: &mut [C32])
 impl Costas for Fallback {
     fn costas(&self, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
         check_len(input.len(), output.len())?;
-        if s.order == 2 {
-            run::<2>(s, input, output)
-        } else {
-            run::<4>(s, input, output)
+        match s.order {
+            2 => run::<2>(s, input, output),
+            4 => run::<4>(s, input, output),
+            _ => run::<8>(s, input, output),
         }
     }
 }

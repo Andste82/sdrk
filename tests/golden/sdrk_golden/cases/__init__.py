@@ -29,6 +29,7 @@ from . import (  # noqa: F401
     power_db,
     proto,
     preemph_limit,
+    psk,
     q15_ops,
     quad_demod,
     real_to_complex,

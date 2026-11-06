@@ -1,14 +1,14 @@
-//! Carrier recovery for phase-shift keying: a Costas loop of order 2 (BPSK) or 4 (QPSK) that
-//! runs on one sample per symbol (after `symbol_sync`), removes the carrier phase and frequency
-//! offset and reports whether it is locked.
+//! Carrier recovery for phase-shift keying: a Costas loop of order 2 (BPSK), 4 (QPSK) or 8
+//! (8PSK) that runs on one sample per symbol (after `symbol_sync`), removes the carrier phase
+//! and frequency offset and reports whether it is locked.
 //!
 //! Per symbol the input is rotated by the phase of a numerically controlled oscillator
 //! (`y = x exp(-j phi)`, sine and cosine from the tables of `rotate`), a decision-directed phase
 //! detector measures the remaining phase error, and a proportional-integral loop filter corrects
 //! the frequency integrator and the phase. A lock detector smooths `cos(order arg y)` (for
-//! QPSK its negative, so that the points at 45 degrees give +1, D601). The arithmetic is fixed
-//! (float32 model, see [`Costas`] and `docs/kernels.md`), so `Fallback` and `Reference` are
-//! bit-identical.
+//! QPSK its negative, so that the points at 45 degrees give +1, D601; for 8PSK the metric of
+//! M40.1 §1, `cos(2 err)` against the nearest point). The arithmetic is fixed (float32 model,
+//! see [`Costas`] and `docs/kernels.md`), so `Fallback` and `Reference` are bit-identical.
 
 use core::f64::consts::TAU;
 
@@ -25,6 +25,18 @@ pub(crate) const LOCK_ALPHA: f32 = 0.01;
 pub(crate) const LOCK_ON: f32 = 0.5;
 /// The lock detector turns off below this level.
 pub(crate) const LOCK_OFF: f32 = 0.3;
+/// `cos(pi / 8)` rounded once to `f32`: the larger part of the 8PSK points.
+#[allow(
+    clippy::excessive_precision,
+    reason = "the literal is the shortest decimal that reads back as the f32 of cos(pi / 8)"
+)]
+pub(crate) const C8: f32 = 0.923_879_5;
+/// `sin(pi / 8)` rounded once to `f32`: the smaller part of the 8PSK points.
+#[allow(
+    clippy::excessive_precision,
+    reason = "the literal is the shortest decimal that reads back as the f32 of sin(pi / 8)"
+)]
+pub(crate) const S8: f32 = 0.382_683_43;
 
 /// The loop constants of [`CostasState`], computed in f64 by [`CostasState::new`] and kept as
 /// the `f32` values the loop uses.
@@ -57,8 +69,9 @@ pub struct CostasGains {
 /// let st = CostasState::new(2, 0.02, 0.7071, 0.05)?;
 /// assert_eq!((st.order(), st.phase(), st.frequency(), st.locked()), (2, 0, 0.0, false));
 /// assert_eq!(st.ratio(), Ratio::ONE);
-/// // Order 8 (8PSK) belongs to M40.1; a loop bandwidth above 0.2 is rejected.
-/// assert!(CostasState::new(8, 0.02, 0.7071, 0.05).is_err());
+/// // Order 8 is 8PSK; order 3 and a loop bandwidth above 0.2 are rejected.
+/// assert_eq!(CostasState::new(8, 0.02, 0.7071, 0.05)?.order(), 8);
+/// assert!(CostasState::new(3, 0.02, 0.7071, 0.05).is_err());
 /// assert!(CostasState::new(4, 0.3, 0.7071, 0.05).is_err());
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
@@ -88,13 +101,13 @@ impl CostasState {
     /// Creates a loop with phase 0, a zero frequency integrator and the lock detector at 0
     /// (unlocked).
     ///
-    /// `order` is 2 (BPSK) or 4 (QPSK); 8 (8PSK) is part of M40.1 and gives `Unsupported`
-    /// (D602), any other order `InvalidParameter`. `loop_bw` (0.0001 to 0.2) is the loop
-    /// bandwidth normalized to the symbol rate, `damping` 0.1 to 4 (1/√2 usual), `max_offset`
-    /// (0 to 0.25) the limit of the frequency integrator in cycles per symbol (as `f32`; a
-    /// value below 1e-30 is flushed to 0, so the integrator never holds a subnormal). The loop
-    /// constants, in f64 (the formulas of `symbol_sync` with `ted_gain` 1, without the factor
-    /// `sps` and divided by `2 pi`): `theta = loop_bw / (damping + 1 / (4 damping))`,
+    /// `order` is 2 (BPSK), 4 (QPSK) or 8 (8PSK, M40.1); any other order gives
+    /// `InvalidParameter`. `loop_bw` (0.0001 to 0.2) is the loop bandwidth normalized to the
+    /// symbol rate, `damping` 0.1 to 4 (1/√2 usual), `max_offset` (0 to 0.25) the limit of
+    /// the frequency integrator in cycles per symbol (as `f32`; a value below 1e-30 is flushed
+    /// to 0, so the integrator never holds a subnormal). The loop constants, in f64 (the
+    /// formulas of `symbol_sync` with `ted_gain` 1, without the factor `sps` and divided by
+    /// `2 pi`): `theta = loop_bw / (damping + 1 / (4 damping))`,
     /// `d = (1 + (2 damping) theta) + theta theta`, `kp = (((4 damping) theta) / d) / (2 pi)`,
     /// `ki = ((4 (theta theta)) / d) / (2 pi)`, then rounded to `f32`. Anything else, including
     /// NaN, gives `InvalidParameter`.
@@ -103,19 +116,14 @@ impl CostasState {
     /// use sdrk_core::kernels::costas::CostasState;
     /// assert!(CostasState::new(2, 0.0001, 0.1, 0.0).is_ok());
     /// assert!(CostasState::new(4, 0.2, 4.0, 0.25).is_ok());
+    /// assert!(CostasState::new(8, 0.02, 0.7071, 0.05).is_ok());
     /// assert!(CostasState::new(3, 0.02, 0.7071, 0.05).is_err());
     /// assert!(CostasState::new(4, 0.02, 0.7071, 0.3).is_err());
     /// assert!(CostasState::new(4, f64::NAN, 0.7071, 0.05).is_err());
     /// ```
     pub fn new(order: u32, loop_bw: f64, damping: f64, max_offset: f64) -> Result<Self> {
-        match order {
-            2 | 4 => {}
-            8 => {
-                return Err(Error::Unsupported(
-                    "costas order 8 (8psk) is not implemented yet",
-                ));
-            }
-            _ => return Err(invalid("costas order must be 2 or 4")),
+        if !matches!(order, 2 | 4 | 8) {
+            return Err(invalid("costas order must be 2, 4 or 8"));
         }
         if !(loop_bw.is_finite() && (0.0001..=0.2).contains(&loop_bw)) {
             return Err(invalid(
@@ -180,12 +188,15 @@ impl CostasState {
         f64::from(self.freq)
     }
 
-    /// Whether the lock detector reports lock (on above 0.5, off below 0.3).
+    /// Whether the lock detector reports lock (on above 0.5, off below 0.3). With order 8 the
+    /// level stays near 0.9 on noise, so lock is reported on any input (open item I40.1-1).
     pub fn locked(&self) -> bool {
         self.locked
     }
 
-    /// The smoothed lock metric `l` (about 1 when locked, about 0 on noise).
+    /// The smoothed lock metric `l` (about 1 when locked, about 0 on noise for orders 2 and 4;
+    /// for order 8 about 0.9 on noise, the mean `sin(pi / 4) / (pi / 4)` of `cos(2 err)` with
+    /// `err` uniform within an octant, open item I40.1-1).
     pub fn lock_level(&self) -> f32 {
         self.level
     }
@@ -208,7 +219,7 @@ impl CostasState {
         self.phase = phase;
     }
 
-    /// The order: 2 (BPSK) or 4 (QPSK).
+    /// The order: 2 (BPSK), 4 (QPSK) or 8 (8PSK).
     pub fn order(&self) -> u32 {
         self.order
     }
@@ -269,31 +280,62 @@ pub(crate) fn derotate(x: C32, c: f32, s: f32) -> C32 {
     C32::new(x.re * c + x.im * s, x.im * c - x.re * s)
 }
 
+/// The 8PSK point `(dr, di)` of the octant of `y`: point `k` (at `(2k + 1) pi / 8`) for the
+/// half-open octant `[k pi / 4, (k + 1) pi / 4)`. The quadrant comes from the signs (`re > 0,
+/// im >= 0`; `re <= 0, im > 0`; `re < 0, im <= 0`; `re >= 0, im < 0`), the half of it from
+/// `|re| > |im|`; zero and NaN give point 0 (D641).
+#[inline]
+pub(crate) fn octant_point(y: C32) -> (f32, f32) {
+    let wide = libm::fabsf(y.re) > libm::fabsf(y.im);
+    let tall = libm::fabsf(y.im) > libm::fabsf(y.re);
+    if y.re > 0.0 && y.im >= 0.0 {
+        if wide { (C8, S8) } else { (S8, C8) }
+    } else if y.re <= 0.0 && y.im > 0.0 {
+        if tall { (-S8, C8) } else { (-C8, S8) }
+    } else if y.re < 0.0 && y.im <= 0.0 {
+        if wide { (-C8, -S8) } else { (-S8, -C8) }
+    } else if y.re >= 0.0 && y.im < 0.0 {
+        if tall { (S8, -C8) } else { (C8, -S8) }
+    } else {
+        (C8, S8)
+    }
+}
+
 /// The phase detector of the contract; a non-finite value counts as 0 (D603).
 #[inline]
 pub(crate) fn detector(order: u32, y: C32) -> f32 {
-    let e = if order == 2 {
-        y.re * y.im
-    } else {
-        sign(y.re) * y.im - sign(y.im) * y.re
+    let e = match order {
+        2 => y.re * y.im,
+        4 => sign(y.re) * y.im - sign(y.im) * y.re,
+        _ => {
+            let (dr, di) = octant_point(y);
+            y.im * dr - y.re * di
+        }
     };
     if e.is_finite() { e } else { 0.0 }
 }
 
 /// The lock metric `c` of the contract (order 2: `cos(2 arg y)`, order 4: `-cos(4 arg y)`,
-/// D601); `None` when it is not finite (`y = 0`, NaN, overflow), and the detector keeps its
-/// level (D603).
+/// D601; order 8: `((r r) / p) 2 - 1 = cos(2 err)` with `r = re(y conj d)` against the octant
+/// point `d`, D640); `None` when it is not finite (`y = 0`, NaN, overflow), and the detector
+/// keeps its level (D603).
 #[allow(clippy::many_single_char_names)]
 #[inline]
 pub(crate) fn lock_metric(order: u32, y: C32) -> Option<f32> {
     let a = y.re * y.re;
     let b = y.im * y.im;
     let p = a + b;
-    let d = a - b;
-    let c = if order == 2 {
-        d / p
-    } else {
-        ((4.0 * a) * b - d * d) / (p * p)
+    let c = match order {
+        2 => (a - b) / p,
+        4 => {
+            let d = a - b;
+            ((4.0 * a) * b - d * d) / (p * p)
+        }
+        _ => {
+            let (dr, di) = octant_point(y);
+            let r = y.re * dr + y.im * di;
+            ((r * r) / p) * 2.0 - 1.0
+        }
     };
     c.is_finite().then_some(c)
 }
@@ -326,15 +368,62 @@ pub trait Costas {
     ///    cosine at `phi` and at `phi - 2^30`).
     /// 2. `y = (x.re c + x.im s, x.im c - x.re s)` (`x exp(-j phi)`); output `y`.
     /// 3. The detector `e`: order 2 `y.re y.im`; order 4 `sign(y.re) y.im - sign(y.im) y.re`
-    ///    (`sign` is 0 for zero and NaN); a non-finite `e` counts as 0.
+    ///    (`sign` is 0 for zero and NaN); order 8 `y.im dr - y.re di` with `(dr, di)` the 8PSK
+    ///    point of the octant of `y` (`(+-cos(pi/8), +-sin(pi/8))` or swapped, as `f32`; zero
+    ///    and NaN take point 0); a non-finite `e` counts as 0.
     /// 4. `freq = clamp(flush_denormal(freq + ki e), -max, max)`.
     /// 5. `phi += (floor((freq + kp e) 2^32 + 0.5) as i64) as u32` (the product and the
     ///    rounding in f64, wrapping).
     /// 6. Lock detector with `a = y.re y.re`, `b = y.im y.im`, `p = a + b`, `d = a - b`: the
-    ///    metric `c = d / p` (order 2) or `c = ((4 a) b - d d) / (p p)` (order 4); if `c` is
+    ///    metric `c = d / p` (order 2), `c = ((4 a) b - d d) / (p p)` (order 4) or
+    ///    `c = ((r r) / p) 2 - 1` with `r = y.re dr + y.im di` (order 8); if `c` is
     ///    finite, `l = flush_denormal(l + 0.01 (c - l))`, locked when `l > 0.5`, unlocked when
     ///    `l < 0.3`; otherwise the detector is unchanged.
     ///
     /// The lengths must be equal, otherwise `LengthMismatch` and nothing changes.
     fn costas(&self, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{C8, C32, S8, octant_point};
+
+    #[test]
+    fn the_8psk_constants_are_the_f64_values_rounded_once() {
+        let a = core::f64::consts::PI / 8.0;
+        assert_eq!(C8.to_bits(), (libm::cos(a) as f32).to_bits());
+        assert_eq!(S8.to_bits(), (libm::sin(a) as f32).to_bits());
+    }
+
+    #[test]
+    fn octant_points_follow_the_half_open_rule() {
+        let h = core::f32::consts::FRAC_1_SQRT_2;
+        let cases = [
+            // The boundaries k pi / 4 belong to octant k.
+            (C32::new(1.0, 0.0), (C8, S8)),
+            (C32::new(h, h), (S8, C8)),
+            (C32::new(0.0, 1.0), (-S8, C8)),
+            (C32::new(-h, h), (-C8, S8)),
+            (C32::new(-1.0, 0.0), (-C8, -S8)),
+            (C32::new(-h, -h), (-S8, -C8)),
+            (C32::new(0.0, -1.0), (S8, -C8)),
+            (C32::new(h, -h), (C8, -S8)),
+            // Signed zeros on the axes, zero and NaN.
+            (C32::new(-0.0, 1.0), (-S8, C8)),
+            (C32::new(-1.0, -0.0), (-C8, -S8)),
+            (C32::new(1.0, -0.0), (C8, S8)),
+            (C32::new(0.0, 0.0), (C8, S8)),
+            (C32::new(-0.0, -0.0), (C8, S8)),
+            (C32::new(f32::NAN, 1.0), (C8, S8)),
+            (C32::new(-1.0, f32::NAN), (C8, S8)),
+        ];
+        for (y, want) in cases {
+            let got = octant_point(y);
+            assert_eq!(
+                (got.0.to_bits(), got.1.to_bits()),
+                (want.0.to_bits(), want.1.to_bits()),
+                "{y}"
+            );
+        }
+    }
 }

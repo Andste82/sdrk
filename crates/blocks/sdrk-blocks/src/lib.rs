@@ -88,7 +88,7 @@ pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
-pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig};
+pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::real_part::RealPartBlock;
 pub use blocks::real_to_iq::RealToIqBlock;
@@ -97,7 +97,7 @@ pub use blocks::resample::{
 };
 pub use blocks::rotate::{RotateBlock, RotateConfig};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
-pub use blocks::slice::{SliceBlock, SliceConfig, SliceConstellation, SliceElem};
+pub use blocks::slice::{PSK8_GRAY, SliceBlock, SliceConfig, SliceConstellation, SliceElem};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};

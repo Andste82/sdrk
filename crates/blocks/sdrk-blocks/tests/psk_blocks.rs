@@ -4,7 +4,10 @@
 //! or the differential product -> soft bits), each equal to its kernels whole and in 20 cut
 //! plans of seed 559; the timing, rates and parameter checks; the extremes (NaN, infinity,
 //! silence, full scale); the loop `psk_mod` -> `psk_demod` without noise is error-free for
-//! BPSK and QPSK, coherent and differential; `frame_decode` with `polarity` both.
+//! BPSK and QPSK, coherent and differential; `frame_decode` with `polarity` both. M40.1: the
+//! `costas` order 8, the 8PSK and pi/4-DQPSK symbol tables, the `variant` combinations, the
+//! timing of 8PSK and OQPSK, the new options equal to their kernel chains whole and in 20 cut
+//! plans of seed 564, the noiseless loop and the extremes for 8PSK, pi/4-DQPSK and OQPSK.
 #![allow(
     clippy::approx_constant,
     clippy::assert_is_empty,
@@ -26,7 +29,8 @@ use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FramePolarity,
-    Packet, PacketFlags, ParamValue, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
+    PSK8_GRAY, Packet, PacketFlags, ParamValue, PskDemodBlock, PskDemodConfig, PskModBlock,
+    PskModConfig, PskVariant, SliceBlock, SliceConfig, SliceConstellation,
 };
 use sdrk_core::kernels::costas::{Costas, CostasState};
 use sdrk_core::kernels::filter::{Fir, FirState};
@@ -38,11 +42,20 @@ use sdrk_testkit::{Pcg32, VecStorage};
 /// Seed of the chunk-invariance tests of M40 (test 6) and of the random signals of this file.
 const SEED: u64 = 559;
 
+/// Seed of the chunk-invariance tests of M40.1 (test 5) and of the random signals of its new
+/// options.
+const M40_1_SEED: u64 = 564;
+
 const H: f32 = core::f32::consts::FRAC_1_SQRT_2;
 
 /// Random soft bits `+-1` (stream `stream` of the seed).
 fn soft_bits(n: usize, stream: u64) -> Vec<f32> {
-    let mut rng = Pcg32::new(SEED, stream);
+    soft_bits_seed(n, SEED, stream)
+}
+
+/// Random soft bits `+-1` (stream `stream` of `seed`).
+fn soft_bits_seed(n: usize, seed: u64, stream: u64) -> Vec<f32> {
+    let mut rng = Pcg32::new(seed, stream);
     (0..n)
         .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
         .collect()
@@ -65,25 +78,76 @@ fn point(k: u8) -> C32 {
 /// The symbols of §3, written out independently: Gray mapping, the differential phase in
 /// units of 45 degrees.
 fn symbols(bits: &[f32], order: u32, differential: bool) -> Vec<C32> {
-    let bps = if order == 4 { 2 } else { 1 };
+    symbols_v(bits, order, differential, PskVariant::Plain)
+}
+
+/// The point at `k pi / 8` (M40.1): the even ones are `point`, the odd ones the `f64` values
+/// rounded once.
+fn point16(k: u8) -> C32 {
+    if k.is_multiple_of(2) {
+        point(k / 2)
+    } else {
+        let a = f64::from(k & 15) * std::f64::consts::PI / 8.0;
+        C32::new(a.cos() as f32, a.sin() as f32)
+    }
+}
+
+/// The symbol index `k` of the 8PSK Gray code `g = b0 4 + b1 2 + b2`, the table of M40.1 §1.
+fn psk8_index(g: usize) -> u8 {
+    match g {
+        0b000 => 0,
+        0b001 => 1,
+        0b011 => 2,
+        0b010 => 3,
+        0b110 => 4,
+        0b111 => 5,
+        0b101 => 6,
+        _ => 7,
+    }
+}
+
+/// The symbols of M40 §3 and M40.1 §1 and §2 in units of 22.5 degrees: BPSK and QPSK as M40,
+/// 8PSK `(2 k + 1) pi / 8`, pi/4-DQPSK the increments `00 -> +pi/4`, `01 -> +3 pi/4`,
+/// `11 -> -3 pi/4`, `10 -> -pi/4`.
+fn symbols_v(bits: &[f32], order: u32, differential: bool, variant: PskVariant) -> Vec<C32> {
+    let bps = match order {
+        8 => 3,
+        4 => 2,
+        _ => 1,
+    };
     let mut phase = 0u8;
     bits.chunks_exact(bps)
         .map(|b| {
-            let k = if bps == 1 {
-                if b[0] > 0.0 { 0 } else { 4 }
-            } else {
-                match (b[0] > 0.0, b[1] > 0.0) {
-                    (true, true) => 1,
-                    (false, true) => 3,
-                    (false, false) => 5,
-                    (true, false) => 7,
+            let k = match bps {
+                1 => {
+                    if b[0] > 0.0 {
+                        0
+                    } else {
+                        8
+                    }
+                }
+                2 if variant == PskVariant::Pi4 => match (b[0] > 0.0, b[1] > 0.0) {
+                    (false, false) => 2,
+                    (false, true) => 6,
+                    (true, true) => 10,
+                    (true, false) => 14,
+                },
+                2 => match (b[0] > 0.0, b[1] > 0.0) {
+                    (true, true) => 2,
+                    (false, true) => 6,
+                    (false, false) => 10,
+                    (true, false) => 14,
+                },
+                _ => {
+                    let g = b.iter().fold(0, |acc, &v| acc * 2 + usize::from(v > 0.0));
+                    2 * psk8_index(g) + 1
                 }
             };
             if differential {
-                phase = (phase + k) & 7;
-                point(phase)
+                phase = (phase + k) & 15;
+                point16(phase)
             } else {
-                point(k)
+                point16(k)
             }
         })
         .collect()
@@ -102,11 +166,18 @@ fn mod_kernels(cfg: &PskModConfig, bits: &[f32]) -> Vec<C32> {
     let n = taps.len();
     let mut st =
         FirInterpState::<C32, _, _>::new(taps, vec![C32::default(); n.div_ceil(sps)], sps).unwrap();
-    let syms = symbols(bits, cfg.order, cfg.differential);
+    let syms = symbols_v(bits, cfg.order, cfg.differential, cfg.variant);
     let mut out = vec![C32::default(); syms.len() * sps];
     let p =
         <Sdrk as FirInterpolate<C32>>::fir_interpolate(&Sdrk, &mut st, &syms, &mut out).unwrap();
     assert_eq!(p.consumed, syms.len());
+    if cfg.variant == PskVariant::Offset {
+        // OQPSK: the imaginary part `sps / 2` samples later, zeros first
+        let im: Vec<f32> = out.iter().map(|x| x.im).collect();
+        for (i, x) in out.iter_mut().enumerate() {
+            x.im = if i >= sps / 2 { im[i - sps / 2] } else { 0.0 };
+        }
+    }
     out
 }
 
@@ -118,6 +189,13 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     let mut fir = FirState::<C32, _, _>::new(taps, vec![C32::default(); len - 1]).unwrap();
     let mut mf = vec![C32::default(); input.len()];
     <Sdrk as Fir<C32>>::fir(&Sdrk, &mut fir, input, &mut mf).unwrap();
+    if cfg.variant == PskVariant::Offset {
+        // OQPSK: the real part `n / 2` samples later, zeros first
+        let re: Vec<f32> = mf.iter().map(|x| x.re).collect();
+        for (i, x) in mf.iter_mut().enumerate() {
+            x.re = if i >= n / 2 { re[i - n / 2] } else { 0.0 };
+        }
+    }
     let sps = sdrk_blocks::SymbolSyncConfig {
         symbol_rate_hz: cfg.symbol_rate_hz,
         ..sdrk_blocks::SymbolSyncConfig::default()
@@ -146,9 +224,11 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     }
     let mut bits = Vec::new();
     for s in y {
-        bits.push(s.re);
-        if cfg.order == 4 {
-            bits.push(s.im);
+        match (cfg.order, cfg.variant) {
+            (8, _) => bits.extend_from_slice(&psk8_reference(1.0, s)),
+            (4, PskVariant::Pi4) => bits.extend_from_slice(&[-s.im, -s.re]),
+            (4, _) => bits.extend_from_slice(&[s.re, s.im]),
+            _ => bits.push(s.re),
         }
     }
     bits
@@ -157,15 +237,37 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
 /// A noisy, turned and frequency-shifted QPSK or BPSK signal at `sps` samples per symbol from
 /// `psk_mod` (the input of the demodulator tests).
 fn received(order: u32, differential: bool, sps: usize, n_sym: usize, stream: u64) -> Vec<C32> {
+    received_v(
+        order,
+        differential,
+        PskVariant::Plain,
+        sps,
+        n_sym,
+        SEED,
+        stream,
+    )
+}
+
+/// As `received` with a variant and the seed of the bits and the noise.
+fn received_v(
+    order: u32,
+    differential: bool,
+    variant: PskVariant,
+    sps: usize,
+    n_sym: usize,
+    seed: u64,
+    stream: u64,
+) -> Vec<C32> {
     let cfg = PskModConfig {
         order,
         samples_per_symbol: sps,
         differential,
+        variant,
         ..PskModConfig::default()
     };
     let bps = cfg.bits_per_symbol();
-    let tx = mod_kernels(&cfg, &soft_bits(n_sym * bps, stream));
-    let mut rng = Pcg32::new(SEED, 100 + stream);
+    let tx = mod_kernels(&cfg, &soft_bits_seed(n_sym * bps, seed, stream));
+    let mut rng = Pcg32::new(seed, 100 + stream);
     tx.iter()
         .enumerate()
         .map(|(i, x)| {
@@ -249,7 +351,7 @@ fn costas_block_parameters() {
     assert!(ok.validate().is_ok());
     let bad = [
         CostasConfig { order: 3, ..ok },
-        CostasConfig { order: 8, ..ok },
+        CostasConfig { order: 9, ..ok },
         CostasConfig {
             loop_bw: 0.00009,
             ..ok
@@ -407,7 +509,7 @@ fn psk_mod_symbol_centres_and_timing() {
             rolloff: 1.01,
             ..cfg
         },
-        PskModConfig { order: 8, ..cfg },
+        PskModConfig { order: 9, ..cfg },
     ] {
         assert!(
             PskModBlock::<VecStorage>::new(&bad, r, &mut VecStorage).is_err(),
@@ -607,21 +709,42 @@ fn best_lag(sent: &[f32], soft: &[f32]) -> (usize, usize) {
 
 #[test]
 fn psk_mod_to_psk_demod_without_noise_is_error_free() {
-    for (order, differential) in [(2u32, false), (2, true), (4, false), (4, true)] {
+    // M40, then the orders and variants of M40.1 (8PSK coherent and differential,
+    // pi/4-DQPSK, OQPSK)
+    for (order, differential, variant) in [
+        (2u32, false, PskVariant::Plain),
+        (2, true, PskVariant::Plain),
+        (4, false, PskVariant::Plain),
+        (4, true, PskVariant::Plain),
+        (8, false, PskVariant::Plain),
+        (8, true, PskVariant::Plain),
+        (4, true, PskVariant::Pi4),
+        (4, false, PskVariant::Offset),
+    ] {
         let sps = 4;
         let m = PskModConfig {
             order,
             samples_per_symbol: sps,
             differential,
+            variant,
             ..PskModConfig::default()
         };
         let d = PskDemodConfig {
             order,
             symbol_rate_hz: 1000.0,
             differential,
+            variant,
             ..PskDemodConfig::default()
         };
-        let bits = soft_bits(6000, 70 + u64::from(order) + u64::from(differential));
+        let bits = if variant == PskVariant::Plain && order != 8 {
+            soft_bits(6000, 70 + u64::from(order) + u64::from(differential))
+        } else {
+            soft_bits_seed(
+                6000,
+                M40_1_SEED,
+                70 + u64::from(order) + u64::from(differential),
+            )
+        };
         let bit_rate = rate(1000 * m.bits_per_symbol() as u64);
         let mut tx = PskModBlock::<VecStorage>::new(&m, bit_rate, &mut VecStorage).unwrap();
         let mut rx = PskDemodBlock::<VecStorage>::new(&d, rate(4000), &mut VecStorage).unwrap();
@@ -631,16 +754,17 @@ fn psk_mod_to_psk_demod_without_noise_is_error_free() {
         let (lag, errors) = best_lag(&bits, &soft);
         assert_eq!(
             errors, 0,
-            "order {order} differential {differential}: lag {lag}"
+            "order {order} differential {differential} {variant:?}: lag {lag}"
         );
         // the symbol centres have amplitude 1 (coherent; differential |y|^2 = 1) up to the
-        // intersymbol interference of the truncated pulse and the timing jitter
+        // intersymbol interference of the truncated pulse and the timing jitter (8PSK soft
+        // bits are distance differences, not amplitudes)
         let tail = &soft[soft.len() - 200..];
         let want = if order == 4 { H } else { 1.0 };
-        for s in tail {
+        for s in tail.iter().filter(|_| order != 8) {
             assert!(
                 (s.abs() - want).abs() < 0.1 * want,
-                "{order} {differential}: {s}"
+                "{order} {differential} {variant:?}: {s}"
             );
         }
         if !differential {
@@ -676,25 +800,42 @@ fn extremes_nan_infinity_silence_and_full_scale() {
 
     // psk_demod: silence gives zero soft bits; a burst of NaN and infinity in the middle of a
     // clean signal poisons only its neighbourhood, and the bits after it are right again.
-    for (order, differential) in [(2u32, false), (4, false), (4, true)] {
+    for (order, differential, variant) in [
+        (2u32, false, PskVariant::Plain),
+        (4, false, PskVariant::Plain),
+        (4, true, PskVariant::Plain),
+        (8, false, PskVariant::Plain),
+        (8, true, PskVariant::Plain),
+        (4, true, PskVariant::Pi4),
+        (4, false, PskVariant::Offset),
+    ] {
         let d = PskDemodConfig {
             order,
             symbol_rate_hz: 1000.0,
             differential,
+            variant,
             ..PskDemodConfig::default()
         };
         let mut rx = PskDemodBlock::<VecStorage>::new(&d, rate(4000), &mut VecStorage).unwrap();
         let silence = run_block(&mut rx, &vec![C32::default(); 4000], None);
         assert!(silence.len() > 990 * d.bits_per_symbol());
-        assert!(silence.iter().all(|s| *s == 0.0), "{order} {differential}");
+        assert!(
+            silence.iter().all(|s| *s == 0.0),
+            "{order} {differential} {variant:?}"
+        );
         assert!(!rx.locked());
         let m = PskModConfig {
             order,
             samples_per_symbol: 4,
             differential,
+            variant,
             ..PskModConfig::default()
         };
-        let bits = soft_bits(8000, 80 + u64::from(order));
+        let bits = if variant == PskVariant::Plain && order != 8 {
+            soft_bits(8000, 80 + u64::from(order))
+        } else {
+            soft_bits_seed(8000, M40_1_SEED, 80 + u64::from(order))
+        };
         let mut tx = PskModBlock::<VecStorage>::new(&m, rate(1000), &mut VecStorage).unwrap();
         let mut sig = run_block(&mut tx, &bits, None);
         let mid = sig.len() / 2;
@@ -720,7 +861,10 @@ fn extremes_nan_infinity_silence_and_full_scale() {
             .zip(bits.iter().skip(after))
             .filter(|(s, b)| (**s > 0.0) != (**b > 0.0))
             .count();
-        assert_eq!(errors, 0, "order {order} differential {differential}");
+        assert_eq!(
+            errors, 0,
+            "order {order} differential {differential} {variant:?}"
+        );
         assert!(soft[after + lag..].iter().all(|s| s.is_finite()));
     }
 }
@@ -767,4 +911,565 @@ fn frame_decode_with_both_polarities_reads_inverted_frames() {
     assert_eq!(got.len(), 2);
     assert_eq!(got[1].index, (normal.len() + 32) as u64);
     assert!(got.iter().all(|p| p.data() == b"polarity"));
+}
+
+/// The max-log soft bits of M40.1 §1 written out independently: the points from `f64` rounded
+/// once, the Gray code of each point from `PSK8_GRAY`, the minima in index order with `d < m`.
+fn psk8_reference(scale: f32, y: C32) -> [f32; 3] {
+    let mut code = [0u8; 8];
+    for (g, &k) in PSK8_GRAY.iter().enumerate() {
+        code[k as usize] = g as u8;
+    }
+    let dist: Vec<f32> = (0..8u32)
+        .map(|k| {
+            let a = f64::from(2 * k + 1) * core::f64::consts::PI / 8.0;
+            let (pr, pi) = (a.cos() as f32, a.sin() as f32);
+            let (dr, di) = (y.re - pr, y.im - pi);
+            dr * dr + di * di
+        })
+        .collect();
+    let mut out = [0.0f32; 3];
+    for (i, o) in out.iter_mut().enumerate() {
+        let mut m = [None::<f32>; 2];
+        for k in 0..8 {
+            let b = usize::from((code[k] >> (2 - i)) & 1);
+            if m[b].is_none_or(|v| dist[k] < v) {
+                m[b] = Some(dist[k]);
+            }
+        }
+        *o = scale * ((m[0].unwrap() - m[1].unwrap()) * 0.25);
+    }
+    out
+}
+
+#[test]
+fn slice_8psk_gives_max_log_soft_bits() {
+    let cfg = SliceConfig {
+        constellation: SliceConstellation::Psk8,
+        scale: 2.0,
+    };
+    let mut slice = SliceBlock::<C32, _>::new(&cfg, rate(1200), &mut VecStorage).unwrap();
+    // The 8 points, the 8 boundaries k pi / 4, both at 0.5, random symbols, zero and specials.
+    let mut input: Vec<C32> = Vec::new();
+    for amp in [1.0f64, 0.5] {
+        for k in 0..16u32 {
+            let a = f64::from(k) * core::f64::consts::PI / 8.0;
+            input.push(C32::new((amp * a.cos()) as f32, (amp * a.sin()) as f32));
+        }
+    }
+    let mut rng = Pcg32::new(564, 1);
+    for _ in 0..200 {
+        input.push(C32::new(rng.normal() as f32, rng.normal() as f32));
+    }
+    input.push(C32::new(0.0, 0.0));
+    let mut out = vec![0.0f32; 3 * input.len()];
+    let p = slice.process(&input, &mut out).unwrap();
+    assert_eq!((p.consumed, p.produced), (input.len(), 3 * input.len()));
+    let want: Vec<f32> = input.iter().flat_map(|&y| psk8_reference(2.0, y)).collect();
+    same_bits(&want, &out, "8psk");
+    // Each point gives its Gray code: point k (at (2k + 1) pi / 8) is input 2k + 1.
+    for (g, &k) in PSK8_GRAY.iter().enumerate() {
+        let b = &out[3 * (2 * k as usize + 1)..][..3];
+        let bits = b
+            .iter()
+            .fold(0usize, |acc, &v| acc * 2 + usize::from(v > 0.0));
+        assert_eq!(bits, g, "point {k}");
+    }
+    // NaN and infinity give NaN soft bits.
+    let mut nan = [0.0f32; 6];
+    slice
+        .process(
+            &[C32::new(f32::NAN, 0.0), C32::new(f32::INFINITY, 0.0)],
+            &mut nan,
+        )
+        .unwrap();
+    assert!(nan.iter().all(|b| b.is_nan()));
+    // Three soft bits per symbol, whole symbols only, C32 input only.
+    assert_eq!(slice.timing().ratio, Ratio::new(3, 1).unwrap());
+    let p = slice.process(&input, &mut out[..8]).unwrap();
+    assert_eq!((p.consumed, p.produced), (2, 6));
+    assert!(SliceBlock::<f32, _>::new(&cfg, rate(1200), &mut VecStorage).is_err());
+    assert_eq!(SliceConstellation::Psk8.bits_per_symbol(), 3);
+    assert_eq!(
+        SliceBlock::<C32, VecStorage>::rate_out(&cfg, rate(1200)).unwrap(),
+        rate(3600)
+    );
+    let mut c = SliceConfig::default();
+    c.set("constellation", ParamValue::Choice(4)).unwrap();
+    assert_eq!(c.constellation, SliceConstellation::Psk8);
+    assert_eq!(c.get("constellation"), Ok(ParamValue::Choice(4)));
+}
+
+// ---- M40.1: 8PSK, pi/4-DQPSK and OQPSK ---------------------------------------------------
+
+#[test]
+fn costas_block_takes_order_8() {
+    let cfg = CostasConfig {
+        order: 8,
+        loop_bw: 0.03,
+        ..CostasConfig::default()
+    };
+    assert!(cfg.validate().is_ok());
+    // one sample per symbol: 8PSK symbols turned by 0.2 rad plus 0.002 rad per symbol, noisy
+    let bits = soft_bits_seed(9000, M40_1_SEED, 1);
+    let mut rng = Pcg32::new(M40_1_SEED, 2);
+    let input: Vec<C32> = symbols_v(&bits, 8, false, PskVariant::Plain)
+        .iter()
+        .enumerate()
+        .map(|(k, s)| {
+            let (sn, cs) = (0.2 + 0.002 * k as f32).sin_cos();
+            C32::new(
+                s.re * cs - s.im * sn + 0.03 * rng.normal() as f32,
+                s.re * sn + s.im * cs + 0.03 * rng.normal() as f32,
+            )
+        })
+        .collect();
+    let mut st = CostasState::new(8, 0.03, 0.7071, 0.05).unwrap();
+    let mut want = vec![C32::default(); input.len()];
+    <Sdrk as Costas>::costas(&Sdrk, &mut st, &input, &mut want).unwrap();
+    check_block(
+        &want,
+        &input,
+        M40_1_SEED,
+        || CostasBlock::<VecStorage>::new(&cfg, rate(1000), &mut VecStorage).unwrap(),
+        "costas order 8",
+    );
+    let mut block = CostasBlock::<VecStorage>::new(&cfg, rate(1000), &mut VecStorage).unwrap();
+    let got = run_block(&mut block, &input, None);
+    assert!(block.locked());
+    assert!(
+        (block.frequency() - 0.002 / (2.0 * std::f64::consts::PI)).abs() < 2e-4,
+        "{}",
+        block.frequency()
+    );
+    // the tail sits on the 8PSK points (no rotation: the loop started at the right octant)
+    for (y, s) in got[2500..]
+        .iter()
+        .zip(&symbols_v(&bits, 8, false, PskVariant::Plain)[2500..])
+    {
+        assert!((y.re - s.re).hypot(y.im - s.im) < 0.15, "{y:?} {s:?}");
+    }
+    // the orders between 2 and 8 that are no PSK order, and the orders outside the range
+    for order in [3u32, 5, 6, 7] {
+        let mut c = CostasConfig::default();
+        assert!(
+            matches!(
+                c.set("order", ParamValue::I64(i64::from(order))),
+                Err(Error::InvalidParameter { name: "order", .. })
+            ),
+            "{order}"
+        );
+        assert!(matches!(
+            CostasConfig { order, ..cfg }.validate(),
+            Err(Error::InvalidParameter { name: "order", .. })
+        ));
+    }
+    for order in [0u32, 1, 9, 16] {
+        assert!(matches!(
+            CostasConfig { order, ..cfg }.validate(),
+            Err(Error::OutOfRange { name: "order", .. })
+        ));
+    }
+    let mut c = CostasConfig::default();
+    c.set("order", ParamValue::I64(8)).unwrap();
+    assert_eq!(c.get("order"), Ok(ParamValue::I64(8)));
+}
+
+/// The combinations of `order`, `differential`, `variant` and the samples per symbol (M40.1 §4,
+/// D648): `true` where the configuration is valid; otherwise it must be `InvalidParameter` of
+/// `variant` (the orders are all valid ones).
+const COMBINATIONS: &[(u32, bool, PskVariant, usize, bool)] = &[
+    (2, false, PskVariant::Plain, 4, true),
+    (8, false, PskVariant::Plain, 4, true),
+    (8, true, PskVariant::Plain, 5, true),
+    (4, true, PskVariant::Pi4, 4, true),
+    (4, true, PskVariant::Pi4, 5, true),
+    (4, false, PskVariant::Pi4, 4, false),
+    (2, true, PskVariant::Pi4, 4, false),
+    (8, true, PskVariant::Pi4, 4, false),
+    (4, false, PskVariant::Offset, 4, true),
+    (4, false, PskVariant::Offset, 2, true),
+    (4, false, PskVariant::Offset, 5, false),
+    (4, true, PskVariant::Offset, 4, false),
+    (2, false, PskVariant::Offset, 4, false),
+    (8, false, PskVariant::Offset, 4, false),
+];
+
+#[test]
+fn psk_variant_combinations_are_checked() {
+    for &(order, differential, variant, sps, ok) in COMBINATIONS {
+        let m = PskModConfig {
+            order,
+            samples_per_symbol: sps,
+            differential,
+            variant,
+            ..PskModConfig::default()
+        };
+        let d = PskDemodConfig {
+            order,
+            symbol_rate_hz: 1000.0,
+            differential,
+            variant,
+            ..PskDemodConfig::default()
+        };
+        let fs = rate(1000 * sps as u64);
+        let what = format!("{order} {differential} {variant:?} {sps}");
+        let rm = PskModBlock::<VecStorage>::new(&m, rate(1000), &mut VecStorage).map(|_| ());
+        let rd = PskDemodBlock::<VecStorage>::new(&d, fs, &mut VecStorage).map(|_| ());
+        for r in [m.validate(), rm, d.validate(fs), rd] {
+            if ok {
+                assert_eq!(r, Ok(()), "{what}");
+            } else {
+                assert!(
+                    matches!(
+                        r,
+                        Err(Error::InvalidParameter {
+                            name: "variant",
+                            ..
+                        })
+                    ),
+                    "{what}: {r:?}"
+                );
+            }
+        }
+    }
+    // The demodulator checks the rounded samples per symbol: 6.05 is 6 (even), 4.96 is 5.
+    let d = PskDemodConfig {
+        order: 4,
+        symbol_rate_hz: 1000.0,
+        variant: PskVariant::Offset,
+        ..PskDemodConfig::default()
+    };
+    assert!(d.validate(rate(6050)).is_ok());
+    assert!(matches!(
+        d.validate(rate(4960)),
+        Err(Error::InvalidParameter {
+            name: "variant",
+            ..
+        })
+    ));
+    // `set` takes every variant on its own; the combination is checked when building.
+    let mut m = PskModConfig::default();
+    let mut dd = PskDemodConfig::default();
+    for (i, v) in [PskVariant::Plain, PskVariant::Pi4, PskVariant::Offset]
+        .into_iter()
+        .enumerate()
+    {
+        m.set("variant", ParamValue::Choice(i as u16)).unwrap();
+        dd.set("variant", ParamValue::Choice(i as u16)).unwrap();
+        assert_eq!((m.variant, dd.variant), (v, v));
+        assert_eq!(m.get("variant"), Ok(ParamValue::Choice(i as u16)));
+        assert_eq!(dd.get("variant"), Ok(ParamValue::Choice(i as u16)));
+    }
+    assert_eq!(PskModConfig::default().variant, PskVariant::Plain);
+    assert_eq!(PskDemodConfig::default().variant, PskVariant::Plain);
+    assert!(m.set("variant", ParamValue::Choice(3)).is_err());
+    // the orders 5, 6 and 7 are no PSK order; 8 is
+    for order in [5u32, 6, 7] {
+        assert!(matches!(
+            PskModConfig {
+                order,
+                ..PskModConfig::default()
+            }
+            .validate(),
+            Err(Error::InvalidParameter { name: "order", .. })
+        ));
+        assert!(matches!(
+            PskDemodConfig {
+                order,
+                ..PskDemodConfig::default()
+            }
+            .validate(rate(8000)),
+            Err(Error::InvalidParameter { name: "order", .. })
+        ));
+    }
+}
+
+#[test]
+fn psk_mod_maps_8psk_and_pi4_symbols() {
+    // One symbol into a fresh block: the output is the pulse times the point.
+    let taps = rrc_taps(0.35, 8, 10, 8f64.sqrt());
+    let one = |cfg: &PskModConfig, bits: &[f32]| {
+        let mut b = PskModBlock::<VecStorage>::new(cfg, rate(9600), &mut VecStorage).unwrap();
+        let mut out = vec![C32::default(); 8];
+        let p = b.process(bits, &mut out).unwrap();
+        assert_eq!((p.consumed, p.produced), (bits.len(), 8));
+        out
+    };
+    let psk8 = PskModConfig {
+        order: 8,
+        samples_per_symbol: 8,
+        ..PskModConfig::default()
+    };
+    // 8PSK: g -> k by the table of §1, the point exp(j (2 pi k / 8 + pi / 8))
+    for (g, k) in [
+        (0b000, 0u32),
+        (0b001, 1),
+        (0b011, 2),
+        (0b010, 3),
+        (0b110, 4),
+        (0b111, 5),
+        (0b101, 6),
+        (0b100, 7),
+    ] {
+        let bits: Vec<f32> = (0..3)
+            .map(|i| if (g >> (2 - i)) & 1 == 1 { 1.0 } else { -1.0 })
+            .collect();
+        let a = f64::from(2 * k + 1) * std::f64::consts::PI / 8.0;
+        let p = C32::new(a.cos() as f32, a.sin() as f32);
+        let out = one(&psk8, &bits);
+        for (i, o) in out.iter().enumerate() {
+            assert_eq!(
+                *o,
+                C32::new(p.re * taps[i], p.im * taps[i]),
+                "g {g:03b}, sample {i}"
+            );
+        }
+    }
+    // pi/4-DQPSK from the start phase 0: 00 -> +pi/4, 01 -> +3 pi/4, 11 -> -3 pi/4,
+    // 10 -> -pi/4
+    let pi4 = PskModConfig {
+        order: 4,
+        samples_per_symbol: 8,
+        differential: true,
+        variant: PskVariant::Pi4,
+        ..PskModConfig::default()
+    };
+    for (bits, p) in [
+        ([-1.0f32, -1.0], C32::new(H, H)),
+        ([-1.0, 1.0], C32::new(-H, H)),
+        ([1.0, 1.0], C32::new(-H, -H)),
+        ([1.0, -1.0], C32::new(H, -H)),
+    ] {
+        let out = one(&pi4, &bits);
+        for (i, o) in out.iter().enumerate() {
+            assert_eq!(
+                *o,
+                C32::new(p.re * taps[i], p.im * taps[i]),
+                "{bits:?}, sample {i}"
+            );
+        }
+    }
+    // pi/4-DQPSK alternates between the axes and the diagonals: eight 00 pairs close the
+    // circle; differential 8PSK runs in steps of pi/8
+    let q = symbols_v(&[-1.0; 16], 4, true, PskVariant::Pi4);
+    assert_eq!(q[0], C32::new(H, H));
+    assert_eq!(q[1], C32::new(0.0, 1.0));
+    assert_eq!(q[7], C32::new(1.0, 0.0));
+    let e = symbols_v(&[-1.0; 6], 8, true, PskVariant::Plain);
+    assert_eq!(e[1], point16(2));
+}
+
+#[test]
+fn psk_mod_variants_equal_the_reference_whole_and_in_twenty_plans() {
+    for (i, (order, differential, variant, sps)) in [
+        (8u32, false, PskVariant::Plain, 4usize),
+        (8, true, PskVariant::Plain, 5),
+        (4, true, PskVariant::Pi4, 4),
+        (4, false, PskVariant::Offset, 4),
+        (4, false, PskVariant::Offset, 8),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let cfg = PskModConfig {
+            order,
+            samples_per_symbol: sps,
+            differential,
+            variant,
+            ..PskModConfig::default()
+        };
+        let bits = soft_bits_seed(6000, M40_1_SEED, 10 + i as u64);
+        let want = mod_kernels(&cfg, &bits);
+        check_block(
+            &want,
+            &bits,
+            M40_1_SEED,
+            || PskModBlock::<VecStorage>::new(&cfg, rate(9600), &mut VecStorage).unwrap(),
+            &format!("psk_mod {order} {differential} {variant:?} {sps}"),
+        );
+        // reset clears the phase and the quadrature delay
+        let mut b = PskModBlock::<VecStorage>::new(&cfg, rate(9600), &mut VecStorage).unwrap();
+        run_block(&mut b, &bits, None);
+        b.reset();
+        same_bits(&want, &run_block(&mut b, &bits, None), "after reset");
+    }
+}
+
+#[test]
+fn psk_variant_timing_and_rates() {
+    // psk_mod: 8PSK at 9600 bit/s and 8 samples per symbol is 25.6 kHz (ratio 8 / 3);
+    // OQPSK adds half a symbol (one bit) to the delay.
+    let psk8 = PskModConfig {
+        order: 8,
+        samples_per_symbol: 8,
+        ..PskModConfig::default()
+    };
+    let b = PskModBlock::<VecStorage>::new(&psk8, rate(9600), &mut VecStorage).unwrap();
+    assert_eq!(b.timing().ratio, Ratio::new(8, 3).unwrap());
+    assert_eq!(b.timing().delay, Delay::new(30, 2).unwrap());
+    assert_eq!(b.min_input(), 3);
+    assert_eq!(
+        PskModBlock::<VecStorage>::rate_out(&psk8, rate(9600)).unwrap(),
+        rate(25_600)
+    );
+    let oq = PskModConfig {
+        order: 4,
+        samples_per_symbol: 8,
+        span: 10,
+        variant: PskVariant::Offset,
+        ..PskModConfig::default()
+    };
+    let b = PskModBlock::<VecStorage>::new(&oq, rate(9600), &mut VecStorage).unwrap();
+    assert_eq!(b.timing().ratio, Ratio::new(4, 1).unwrap());
+    assert_eq!(b.timing().delay, Delay::new(22, 2).unwrap());
+    let pi4 = PskModConfig {
+        order: 4,
+        differential: true,
+        variant: PskVariant::Pi4,
+        ..oq
+    };
+    let b = PskModBlock::<VecStorage>::new(&pi4, rate(9600), &mut VecStorage).unwrap();
+    assert_eq!(b.timing().delay, Delay::new(20, 2).unwrap());
+    // psk_demod: 8PSK gives 3 bits per symbol; OQPSK has the delay of plain QPSK (D658).
+    let fs = rate(200_000);
+    let d8 = PskDemodConfig {
+        order: 8,
+        symbol_rate_hz: 25_000.0,
+        ..PskDemodConfig::default()
+    };
+    let b = PskDemodBlock::<VecStorage>::new(&d8, fs, &mut VecStorage).unwrap();
+    assert_eq!(b.timing().ratio, Ratio::new(3, 8).unwrap());
+    assert_eq!(b.timing().delay, Delay::new(82, 2).unwrap());
+    assert_eq!(
+        PskDemodBlock::<VecStorage>::rate_out(&d8, fs).unwrap(),
+        rate(75_000)
+    );
+    let doq = PskDemodConfig {
+        order: 4,
+        symbol_rate_hz: 25_000.0,
+        variant: PskVariant::Offset,
+        ..PskDemodConfig::default()
+    };
+    let b = PskDemodBlock::<VecStorage>::new(&doq, fs, &mut VecStorage).unwrap();
+    assert_eq!(b.timing().ratio, Ratio::new(1, 4).unwrap());
+    assert_eq!(b.timing().delay, Delay::new(82, 2).unwrap()); // as plain QPSK (D658)
+}
+
+#[test]
+fn psk_demod_variants_equal_the_kernels_whole_and_in_twenty_plans() {
+    for (i, (order, differential, variant, sps)) in [
+        (8u32, false, PskVariant::Plain, 4usize),
+        (8, true, PskVariant::Plain, 5),
+        (4, true, PskVariant::Pi4, 4),
+        (4, false, PskVariant::Offset, 4),
+        (4, false, PskVariant::Offset, 6),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let fs = rate(9600 * sps as u64);
+        let cfg = PskDemodConfig {
+            order,
+            symbol_rate_hz: 9600.0,
+            differential,
+            variant,
+            ..PskDemodConfig::default()
+        };
+        let input = received_v(
+            order,
+            differential,
+            variant,
+            sps,
+            3000,
+            M40_1_SEED,
+            20 + i as u64,
+        );
+        let want = demod_kernels(&cfg, fs, &input);
+        assert!(want.len() > 2900 * cfg.bits_per_symbol(), "case {i}");
+        check_block(
+            &want,
+            &input,
+            M40_1_SEED,
+            || PskDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap(),
+            &format!("psk_demod {order} {differential} {variant:?} {sps}"),
+        );
+        let mut b = PskDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+        run_block(&mut b, &input, None);
+        b.reset();
+        same_bits(&want, &run_block(&mut b, &input, None), "after reset");
+    }
+}
+
+#[test]
+fn psk_demod_8psk_keeps_soft_bits_that_do_not_fit() {
+    let fs = rate(38_400);
+    let cfg = PskDemodConfig {
+        order: 8,
+        symbol_rate_hz: 9600.0,
+        ..PskDemodConfig::default()
+    };
+    let input = received_v(8, false, PskVariant::Plain, 4, 2000, M40_1_SEED, 30);
+    let want = demod_kernels(&cfg, fs, &input);
+    let mut block = PskDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+    for room_len in [1usize, 2, 4, 7] {
+        block.reset();
+        let mut got = Vec::new();
+        let mut rest: &[C32] = &input;
+        let mut room = vec![0.0f32; room_len];
+        loop {
+            let p = block.process(rest, &mut room).unwrap();
+            got.extend_from_slice(&room[..p.produced]);
+            rest = &rest[p.consumed..];
+            if p.consumed == 0 && p.produced == 0 {
+                break;
+            }
+        }
+        assert!(rest.is_empty());
+        same_bits(&want, &got, &format!("room {room_len}"));
+    }
+}
+
+#[test]
+fn oqpsk_chain_delay_counts_the_half_symbol_once() {
+    // The delays that psk_mod and psk_demod report, summed as the pipeline sums a path, against
+    // the lag of the soft bits behind the sent bits over the chain (D658). The quadrature part
+    // is delayed in the transmitter and the in-phase part in the receiver, so OQPSK reports
+    // exactly half a symbol (one bit) more than plain QPSK, and both sums stay within one
+    // symbol of the measured lag (counting the half symbol in both blocks would not).
+    for sps in [4usize, 8] {
+        let mut sums = Vec::new();
+        for variant in [PskVariant::Plain, PskVariant::Offset] {
+            let m = PskModConfig {
+                order: 4,
+                samples_per_symbol: sps,
+                variant,
+                ..PskModConfig::default()
+            };
+            let d = PskDemodConfig {
+                order: 4,
+                symbol_rate_hz: 1000.0,
+                variant,
+                ..PskDemodConfig::default()
+            };
+            let bits = soft_bits_seed(6000, M40_1_SEED, 74);
+            let mut tx = PskModBlock::<VecStorage>::new(&m, rate(2000), &mut VecStorage).unwrap();
+            let mut rx =
+                PskDemodBlock::<VecStorage>::new(&d, rate(1000 * sps as u64), &mut VecStorage)
+                    .unwrap();
+            let sig = run_block(&mut tx, &bits, None);
+            let soft = run_block(&mut rx, &sig, None);
+            let (lag, errors) = best_lag(&bits, &soft);
+            assert_eq!(errors, 0, "sps {sps} {variant:?}: lag {lag}");
+            let (t, r) = (tx.timing().delay, rx.timing().delay);
+            // psk_mod counts input bits, psk_demod input samples (sps per 2 bits)
+            let sum = t.as_f64() + r.as_f64() * 2.0 / sps as f64;
+            assert!(
+                (sum - lag as f64).abs() < 2.0,
+                "sps {sps} {variant:?}: reported {sum} bits, measured {lag}"
+            );
+            sums.push(sum);
+        }
+        assert_eq!(sums[1] - sums[0], 1.0, "sps {sps}");
+    }
 }

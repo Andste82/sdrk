@@ -1,0 +1,35 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "slice_8psk_c32.expected.bin",
+      "len": 96
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "slice_8psk_c32.input.bin",
+      "len": 32
+    }
+  },
+  "case": "slice_8psk_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "model": "float32",
+  "notes": "slice constellation 8psk (M40.1 section 1): the inputs are exp(j k pi / 8) for k = 0 to 15 at amplitude 1, then at 0.5 (even k the decision boundaries k pi / 4 of the octants, odd k the 8 points), each part rounded once to float32; expected are the three soft bits b0, b1, b2 per symbol, scale ((m0 - m1) * 0.25) with m0 (m1) the smallest squared distance to the float32 points whose Gray bit is 0 (1), minima in index order with a strict comparison; exact float32 model",
+  "params": {
+    "bits_per_symbol": 3,
+    "constellation": "8psk",
+    "scale": 2.5,
+    "symbols": 32
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

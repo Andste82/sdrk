@@ -2,7 +2,8 @@
 //! matched pair, and the kernel `costas` through the facade `Sdrk`, `Fallback` and `Reference`.
 //!
 //! Every `costas` case is run in one piece, one symbol per call (which also checks the lock flag
-//! after every symbol) and in 20 chunk plans (seed 559, chunks of 1 to 700 symbols). Every run
+//! after every symbol) and in 20 chunk plans (seed 559 for the cases of M40, 564 for the 8PSK
+//! case of M40.1, chunks of 1 to 700 symbols). Every run
 //! must match the golden file bit for bit (the exact float32 model) and end in the stored state.
 //! The state is built from the parameters stored in the case, and its loop constants must equal
 //! the IEEE bits the generator computed. Every case checks its `snr_db_guard` against its own
@@ -33,12 +34,15 @@ use sha2::{Digest, Sha256};
 
 /// The seed of the chunk plans (test 6 of M40); plan `k` uses `PLAN_SEED * 100 + k`.
 const PLAN_SEED: u64 = 559;
+/// The seed of the chunk plans of the 8PSK case (test 5 of M40.1, D646).
+const PLAN_SEED_8PSK: u64 = 564;
 /// Chunk plans per case.
 const PLANS: u64 = 20;
 /// The largest chunk of the plans.
 const MAX_CHUNK: usize = 700;
 
-const CASES: [&str; 3] = [
+const CASES: [&str; 4] = [
+    "8psk_lock_c32_8192",
     "bpsk_lock_c32_8192",
     "qpsk_lock_c32_8192",
     "qpsk_offset_c32_8192",
@@ -227,7 +231,12 @@ fn run<K: Costas>(
     match plan {
         None => kernel.costas(&mut st, input, &mut out).unwrap(),
         Some(k) => {
-            let mut sizes = ChunkPlan::new(PLAN_SEED * 100 + k, MAX_CHUNK).sizes();
+            let seed = if st.order() == 8 {
+                PLAN_SEED_8PSK
+            } else {
+                PLAN_SEED
+            };
+            let mut sizes = ChunkPlan::new(seed * 100 + k, MAX_CHUNK).sizes();
             let mut pos = 0;
             while pos < input.len() {
                 let a = sizes.next().unwrap().min(input.len() - pos);
@@ -285,7 +294,25 @@ fn the_lock_flags_follow_the_model_symbol_by_symbol() {
     }
 }
 
-/// The loop of section 2 in f64 with exact sine and cosine of the `u32` phase.
+/// The half-open octant `[k pi / 4, (k + 1) pi / 4)` of `y` (M40.1, D641): the quadrant from
+/// the signs, the octant from the magnitudes; zero and NaN give 0.
+fn octant8(yr: f64, yi: f64) -> u32 {
+    let (ar, ai) = (yr.abs(), yi.abs());
+    if yr > 0.0 && yi >= 0.0 {
+        u32::from(ar <= ai)
+    } else if yr <= 0.0 && yi > 0.0 {
+        2 + u32::from(ai <= ar)
+    } else if yr < 0.0 && yi <= 0.0 {
+        4 + u32::from(ar <= ai)
+    } else if yr >= 0.0 && yi < 0.0 {
+        6 + u32::from(ai <= ar)
+    } else {
+        0
+    }
+}
+
+/// The loop of section 2 in f64 with exact sine and cosine of the `u32` phase (order 8 against
+/// the f64 points of the octants).
 fn costas_f64(case: &GoldenCase, input: &[C32]) -> Vec<Complex64> {
     let st = state_of(case);
     let g = st.gains();
@@ -308,10 +335,13 @@ fn costas_f64(case: &GoldenCase, input: &[C32]) -> Vec<Complex64> {
         let (xr, xi) = (f64::from(x.re), f64::from(x.im));
         let (yr, yi) = (xr * c + xi * s, xi * c - xr * s);
         out.push(Complex64::new(yr, yi));
-        let e = if order == 2 {
-            yr * yi
-        } else {
-            sg(yr) * yi - sg(yi) * yr
+        let e = match order {
+            2 => yr * yi,
+            4 => sg(yr) * yi - sg(yi) * yr,
+            _ => {
+                let a = f64::from(2 * octant8(yr, yi) + 1) * core::f64::consts::PI / 8.0;
+                yi * a.cos() - yr * a.sin()
+            }
         };
         freq = (freq + ki * e).clamp(-mx, mx);
         phase = phase.wrapping_add(((freq + kp * e) * 4_294_967_296.0 + 0.5).floor() as i64 as u32);

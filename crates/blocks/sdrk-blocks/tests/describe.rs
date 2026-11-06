@@ -218,7 +218,11 @@ fn parameters_are_well_formed() {
                     assert!(usize::from(default) < options.len());
                     let unique: BTreeSet<_> = options.iter().collect();
                     assert_eq!(unique.len(), options.len());
-                    assert!(options.iter().all(|o| is_snake_case(o)));
+                    // Choice options are values, not identifiers: a leading digit is allowed
+                    // (the constellation `8psk` of M40.1, D643).
+                    assert!(options.iter().all(|o| is_snake_case(o)
+                        || (o.starts_with(|c: char| c.is_ascii_digit())
+                            && is_snake_case(&format!("x{o}")))));
                 }
                 ParamKind::Bool { .. } | ParamKind::Format => {}
                 _ => panic!("{what}: new kind without a test"),
@@ -920,7 +924,7 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         slice.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["real", "bpsk", "qpsk", "fsk4"],
+            options: &["real", "bpsk", "qpsk", "fsk4", "8psk"],
             default: 1
         }
     );
@@ -1053,7 +1057,8 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             "samples_per_symbol",
             "rolloff",
             "span",
-            "differential"
+            "differential",
+            "variant"
         ]
     );
     assert_eq!(
@@ -1079,11 +1084,36 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             "differential",
             "sync_bw",
             "carrier_bw",
-            "max_offset"
+            "max_offset",
+            "variant"
         ]
     );
     for p in m.params.iter().chain(d.params).chain(costas.params) {
         assert_eq!(p.mutability, Mutability::Build, "{}", p.name);
+    }
+    // M40.1: the orders 2, 4 and 8, and the variant choice (last, build, default plain)
+    for desc in [m, d, costas] {
+        assert_eq!(
+            desc.param("order").unwrap().kind,
+            ParamKind::I64 {
+                min: 2,
+                max: 8,
+                default: Some(2)
+            },
+            "{}",
+            desc.kind
+        );
+    }
+    for desc in [m, d] {
+        assert_eq!(
+            desc.params.last().unwrap().kind,
+            ParamKind::Choice {
+                options: &["plain", "pi4", "offset"],
+                default: 0
+            },
+            "{}",
+            desc.kind
+        );
     }
     for word in [
         "agc",
@@ -1109,8 +1139,20 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     cfg.set("polarity", ParamValue::Choice(1)).unwrap();
     assert_eq!(cfg.polarity, FramePolarity::Both);
     assert_eq!(cfg.get("polarity"), Ok(ParamValue::Choice(1)));
-    // the order 3 lies inside the range of the description but is not an order
+    // the orders 3, 5, 6 and 7 lie inside the range of the description but are no orders
     for (kind, r) in [
+        (
+            "costas",
+            CostasConfig::default().set("order", ParamValue::I64(5)),
+        ),
+        (
+            "psk_mod",
+            PskModConfig::default().set("order", ParamValue::I64(6)),
+        ),
+        (
+            "psk_demod",
+            PskDemodConfig::default().set("order", ParamValue::I64(7)),
+        ),
         (
             "costas",
             CostasConfig::default().set("order", ParamValue::I64(3)),

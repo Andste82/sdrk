@@ -1,5 +1,5 @@
 //! `slice`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
-//! QPSK and 4-FSK levels. A stateless per-symbol map without a kernel.
+//! QPSK, 4-FSK levels and 8PSK (max-log soft bits). A stateless per-symbol map without a kernel.
 
 use core::marker::PhantomData;
 
@@ -15,8 +15,57 @@ use crate::error::{Error, Result};
 use crate::ports::StreamElem;
 use crate::storage::{Plan, Storage};
 
-/// The names of the `constellation` choice, in index order.
-const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4"];
+/// The names of the `constellation` choice, in index order (`8psk` of M40.1 appended, so the
+/// indices of M38 and M39 stay).
+const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4", "8psk"];
+
+/// The Gray mapping of 8PSK (M40.1 §1): entry `g = b0 4 + b1 2 + b2` (bit 0 first, the most
+/// significant) is the symbol index `k` of the point `exp(j (2 pi k / 8 + pi / 8))`:
+/// `000 -> 0, 001 -> 1, 011 -> 2, 010 -> 3, 110 -> 4, 111 -> 5, 101 -> 6, 100 -> 7`, so
+/// neighbouring points differ in one bit. Shared by `slice` (`8psk`), `psk_mod` and the tests.
+///
+/// ```
+/// use sdrk_blocks::PSK8_GRAY;
+/// assert_eq!(PSK8_GRAY, [0, 1, 3, 2, 7, 6, 4, 5]);
+/// // Neighbouring symbols differ in exactly one bit.
+/// let mut g_of_k = [0u8; 8];
+/// for (g, &k) in PSK8_GRAY.iter().enumerate() {
+///     g_of_k[k as usize] = g as u8;
+/// }
+/// for k in 0..8 {
+///     assert_eq!((g_of_k[k] ^ g_of_k[(k + 1) % 8]).count_ones(), 1);
+/// }
+/// ```
+pub const PSK8_GRAY: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
+
+/// The inverse of [`PSK8_GRAY`]: entry `k` is the Gray code `g` of the symbol index `k`.
+pub(crate) const PSK8_CODE: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
+
+/// `cos(pi / 8)` rounded once to `f32`.
+#[allow(
+    clippy::excessive_precision,
+    reason = "the literal is the shortest decimal that reads back as the f32 of cos(pi / 8)"
+)]
+pub(crate) const C8: f32 = 0.923_879_5;
+/// `sin(pi / 8)` rounded once to `f32`.
+#[allow(
+    clippy::excessive_precision,
+    reason = "the literal is the shortest decimal that reads back as the f32 of sin(pi / 8)"
+)]
+pub(crate) const S8: f32 = 0.382_683_43;
+
+/// The 8PSK points `exp(j (2k + 1) pi / 8)` in index order `k = 0 .. 7`, each part the `f32`
+/// of the exact value.
+pub(crate) const PSK8_POINTS: [(f32, f32); 8] = [
+    (C8, S8),
+    (S8, C8),
+    (-S8, C8),
+    (-C8, S8),
+    (-C8, -S8),
+    (-S8, -C8),
+    (S8, -C8),
+    (C8, -S8),
+];
 
 /// The `f32` nearest to 2/3: the threshold between the inner (±1/3) and the outer (±1) levels
 /// of 4-FSK.
@@ -37,17 +86,22 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         qpsk (C32 input, 2 bits, Gray: scale re for bit 0, then scale im for bit 1), fsk4 (f32 \
         input, the 4-FSK levels +1, +1/3, -1/3, -1 of fsk_mod, 2 bits: scale (-v) for bit 0, \
         which is 1 for the negative levels, then scale (|v| - 2/3) for bit 1, which is 1 for \
-        the outer levels). A soft \
-        bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
+        the outer levels), 8psk (C32 input, the points exp(j (2 pi k / 8 + pi / 8)) of psk_mod \
+        with the Gray code b0 b1 b2, 3 bits, max-log: scale (min |y - p|^2 over the points \
+        whose bit is 0 - the same minimum over the points whose bit is 1) / 4 for each bit). \
+        A soft bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
         this convention holds for the whole project (frame_decode reads it). Place it after \
         symbol_sync (and carrier recovery for PSK). A receiver that wants log-likelihood \
         ratios sets scale to 2 / sigma^2 of the noise per component. NaN and infinite \
-        symbols pass through as NaN and infinite soft bits. No state, delay 0; the output \
+        symbols pass through as NaN and infinite soft bits, except for 8psk: there an \
+        infinite symbol, or one so large that its squared distances overflow (a part above \
+        about 1.8e19), gives NaN soft bits (inf - inf). No state, delay 0; the output \
         rate is the symbol rate times the bits per symbol.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32, PortType::F32],
-        description: "Symbols, one sample per symbol: f32 for real, C32 for bpsk and qpsk.",
+        description: "Symbols, one sample per symbol: f32 for real and fsk4, C32 for bpsk, qpsk \
+            and 8psk.",
     }],
     outputs: &[PortDesc {
         name: "out",
@@ -62,10 +116,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 options: CONSTELLATION_OPTIONS,
                 default: 1,
             },
-            typical: "bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK",
+            typical: "bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, \
+                8psk for 8PSK",
             mutability: Mutability::Build,
             description: "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk \
-                (C32, 2 bits, re then im) or fsk4 (f32, 2 bits, -v then |v| - 2/3).",
+                (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3) or 8psk (C32, \
+                3 bits, max-log, Gray).",
         },
         ParamDesc {
             name: "scale",
@@ -101,6 +157,10 @@ pub enum SliceConstellation {
     /// 4-FSK levels `+1, +1/3, -1/3, -1` (`f32` input), two bits: `scale (-v)` (bit 0, 1 for
     /// the negative levels), `scale (|v| - 2/3)` (bit 1, 1 for the outer levels).
     Fsk4,
+    /// 8PSK (`C32` input), three bits `b0 b1 b2` of the Gray code [`PSK8_GRAY`], max-log:
+    /// `scale ((m0 - m1) / 4)` with `m0`, `m1` the smallest squared distance to the points
+    /// whose bit is 0 and 1 (M40.1).
+    Psk8,
 }
 
 impl SliceConstellation {
@@ -109,6 +169,7 @@ impl SliceConstellation {
         match self {
             Self::Real | Self::Bpsk => 1,
             Self::Qpsk | Self::Fsk4 => 2,
+            Self::Psk8 => 3,
         }
     }
 
@@ -123,7 +184,7 @@ impl SliceConstellation {
     pub const fn input_type(self) -> PortType {
         match self {
             Self::Real | Self::Fsk4 => PortType::F32,
-            Self::Bpsk | Self::Qpsk => PortType::C32,
+            Self::Bpsk | Self::Qpsk | Self::Psk8 => PortType::C32,
         }
     }
 
@@ -133,6 +194,7 @@ impl SliceConstellation {
             Self::Bpsk => 1,
             Self::Qpsk => 2,
             Self::Fsk4 => 3,
+            Self::Psk8 => 4,
         }
     }
 
@@ -141,6 +203,7 @@ impl SliceConstellation {
             0 => Self::Real,
             2 => Self::Qpsk,
             3 => Self::Fsk4,
+            4 => Self::Psk8,
             _ => Self::Bpsk,
         }
     }
@@ -225,7 +288,7 @@ impl SliceConfig {
 }
 
 /// An input sample type of [`SliceBlock`]: `f32` (constellations `real` and `fsk4`) or `C32`
-/// (`bpsk`, `qpsk`).
+/// (`bpsk`, `qpsk`, `8psk`).
 ///
 /// ```
 /// use sdrk_blocks::SliceElem;
@@ -278,12 +341,13 @@ pub(crate) fn soft_bits<T: SliceElem>(
     }
 }
 
-/// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk` and `qpsk`), `f32` soft
-/// bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and its magnitude is
-/// the confidence.
+/// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk`, `qpsk` and
+/// `8psk`), `f32` soft bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and
+/// its magnitude is the confidence.
 ///
 /// Each soft bit is one `f32` product `scale * component` (`scale` rounded once to `f32`); for
-/// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3).
+/// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3); for `8psk` they
+/// are `(m0 - m1) * 0.25` from the squared distances to the points (see [`SliceConstellation`]).
 /// A call takes `min(input.len(), output.len() / bits_per_symbol)` symbols. Timing: constant
 /// ratio `bits_per_symbol / 1`, delay 0. The block needs no storage.
 ///
@@ -319,7 +383,7 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
         } else {
             Err(Error::InvalidParameter {
                 name: "constellation",
-                reason: "real and fsk4 need f32 input; bpsk and qpsk need c32 input",
+                reason: "real and fsk4 need f32 input; bpsk, qpsk and 8psk need c32 input",
             })
         }
     }
@@ -328,7 +392,7 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
     ///
     /// # Errors
     /// `OutOfRange` for `scale`; `InvalidParameter` for a constellation that does not take
-    /// `T` (`real` and `fsk4` need `f32`, `bpsk` and `qpsk` need `C32`).
+    /// `T` (`real` and `fsk4` need `f32`, `bpsk`, `qpsk` and `8psk` need `C32`).
     pub fn new(config: &SliceConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         Self::check(config)?;
         Ok(Self {
@@ -378,6 +442,13 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
                 }
                 input.len().min(output.len() / 2)
             }
+            SliceConstellation::Psk8 => {
+                for (o, &x) in output.chunks_exact_mut(3).zip(input) {
+                    let (re, im) = x.parts();
+                    o.copy_from_slice(&psk8_bits(s, re, im));
+                }
+                input.len().min(output.len() / 3)
+            }
             _ => soft_bits(false, s, input, output),
         };
         Ok(Progress {
@@ -424,4 +495,79 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
 #[inline]
 pub(crate) fn fsk4_bits(s: f32, v: f32) -> (f32, f32) {
     (s * -v, s * (libm::fabsf(v) - TWO_THIRDS))
+}
+
+/// The three max-log soft bits `b0, b1, b2` of the 8PSK symbol `(re, im)` with the factor `s`
+/// (M40.1 §1): for bit `i`, `s ((m0 - m1) * 0.25)` with `m0` (`m1`) the smallest squared
+/// distance `dr dr + di di` (`dr = re - p.re`, `di = im - p.im`) to the points whose Gray bit
+/// `i` is 0 (1). Each minimum starts at the first point of its set in index order and takes a
+/// later point only when it is strictly nearer (`d < m`), so a tie keeps the lower index and a
+/// NaN distance propagates; an infinite input gives `inf - inf`, a NaN soft bit (D642). Shared
+/// by `slice` (`8psk`) and `psk_demod`.
+#[inline]
+pub(crate) fn psk8_bits(s: f32, re: f32, im: f32) -> [f32; 3] {
+    let mut dist = [0.0f32; 8];
+    for (d, &(pr, pi)) in dist.iter_mut().zip(&PSK8_POINTS) {
+        let dr = re - pr;
+        let di = im - pi;
+        *d = dr * dr + di * di;
+    }
+    let mut out = [0.0f32; 3];
+    for (bit, o) in out.iter_mut().enumerate() {
+        let shift = 2 - bit;
+        let (mut m0, mut m1) = (None::<f32>, None::<f32>);
+        for (&d, &g) in dist.iter().zip(&PSK8_CODE) {
+            let m = if (g >> shift) & 1 == 0 {
+                &mut m0
+            } else {
+                &mut m1
+            };
+            *m = match *m {
+                Some(v) if d < v => Some(d),
+                Some(v) => Some(v),
+                None => Some(d),
+            };
+        }
+        let (m0, m1) = (m0.unwrap_or(0.0), m1.unwrap_or(0.0));
+        *o = s * ((m0 - m1) * 0.25);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{C8, PSK8_CODE, PSK8_GRAY, PSK8_POINTS, S8, psk8_bits};
+
+    #[test]
+    fn the_8psk_tables_agree() {
+        let a = core::f64::consts::PI / 8.0;
+        assert_eq!(C8.to_bits(), (libm::cos(a) as f32).to_bits());
+        assert_eq!(S8.to_bits(), (libm::sin(a) as f32).to_bits());
+        for (k, &(re, im)) in PSK8_POINTS.iter().enumerate() {
+            let a = f64::from(2 * k as u32 + 1) * core::f64::consts::PI / 8.0;
+            assert_eq!(re.to_bits(), (libm::cos(a) as f32).to_bits(), "{k}");
+            assert_eq!(im.to_bits(), (libm::sin(a) as f32).to_bits(), "{k}");
+        }
+        for (g, &k) in PSK8_GRAY.iter().enumerate() {
+            assert_eq!(PSK8_CODE.get(usize::from(k)).copied(), Some(g as u8));
+        }
+    }
+
+    #[test]
+    fn every_point_slices_to_its_own_code() {
+        for (k, &(re, im)) in PSK8_POINTS.iter().enumerate() {
+            let g = PSK8_CODE.get(k).copied().unwrap_or(0);
+            let bits = psk8_bits(1.0, re, im);
+            for (i, b) in bits.iter().enumerate() {
+                assert_eq!(*b > 0.0, (g >> (2 - i)) & 1 == 1, "point {k}, bit {i}: {b}");
+            }
+        }
+        // NaN propagates; an infinite input gives NaN (inf - inf).
+        assert!(psk8_bits(1.0, f32::NAN, 0.5).iter().all(|b| b.is_nan()));
+        assert!(
+            psk8_bits(1.0, f32::INFINITY, 0.5)
+                .iter()
+                .all(|b| b.is_nan())
+        );
+    }
 }

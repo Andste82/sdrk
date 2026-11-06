@@ -1,4 +1,4 @@
-//! `costas`: carrier recovery for BPSK and QPSK at one sample per symbol (a Costas loop).
+//! `costas`: carrier recovery for BPSK, QPSK and 8PSK at one sample per symbol (a Costas loop).
 
 use core::marker::PhantomData;
 
@@ -32,19 +32,23 @@ pub(crate) const MAX_OFFSET_LIMIT: f64 = 0.25;
 /// Description of the `costas` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "costas",
-    summary: "Recovers the carrier of BPSK or QPSK symbols: removes phase and frequency offset.",
+    summary: "Recovers the carrier of BPSK, QPSK or 8PSK symbols: removes phase and frequency \
+        offset.",
     details: "A Costas loop at one sample per symbol: every symbol is turned by the phase of \
         an oscillator, a decision-directed detector (order 2: re im; order 4: sign(re) im - \
-        sign(im) re) measures the remaining phase error and a proportional-integral loop with \
-        the bandwidth loop_bw (relative to the symbol rate) and the damping corrects phase and \
-        frequency; the frequency integrator is limited to max_offset cycles per symbol. A lock \
-        detector reports lock above 0.5 of its smoothed metric and loses it below 0.3. Place \
-        it after symbol_sync (one sample per symbol, amplitude about 1, after an agc). The \
-        output is the derotated symbol; BPSK settles on the real axis, QPSK on the diagonals \
-        (the Gray points of psk_mod). The phase ambiguity (180 degrees for BPSK, 90 degrees \
-        for QPSK) is not resolved here: use framing with both polarities or differential \
-        coding. The order-4 detector has the slope sqrt(2) at amplitude 1, so a QPSK loop is \
-        about 1.4 times wider than loop_bw. No delay; one output per input.",
+        sign(im) re; order 8: im(y conj(d)) with d the 8PSK point of the octant of y) measures \
+        the remaining phase error and a proportional-integral loop with the bandwidth loop_bw \
+        (relative to the symbol rate) and the damping corrects phase and frequency; the \
+        frequency integrator is limited to max_offset cycles per symbol. A lock detector \
+        reports lock above 0.5 of its smoothed metric and loses it below 0.3 (the order-8 \
+        metric stays near 0.9 on noise as well, open item I40.1-1). Place it after \
+        symbol_sync (one sample per symbol, amplitude about 1, after an agc). The output is \
+        the derotated symbol; BPSK settles on the real axis, QPSK on the diagonals (the Gray \
+        points of psk_mod), 8PSK on the odd multiples of 22.5 degrees. The phase ambiguity \
+        (180 degrees for BPSK, 90 degrees for QPSK, 45 degrees for 8PSK) is not resolved \
+        here: use framing with both polarities or differential coding. The order-4 detector \
+        has the slope sqrt(2) at amplitude 1, so a QPSK loop is about 1.4 times wider than \
+        loop_bw. No delay; one output per input.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32],
@@ -61,12 +65,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             unit: Unit::None,
             kind: ParamKind::I64 {
                 min: 2,
-                max: 4,
+                max: 8,
                 default: Some(2),
             },
-            typical: "2 for BPSK, 4 for QPSK",
+            typical: "2 for BPSK, 4 for QPSK, 8 for 8PSK",
             mutability: Mutability::Build,
-            description: "Order of the phase-shift keying: 2 (BPSK) or 4 (QPSK).",
+            description: "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK).",
         },
         ParamDesc {
             name: "loop_bw",
@@ -116,11 +120,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// assert_eq!((cfg.order, cfg.loop_bw, cfg.max_offset), (2, 0.02, 0.05));
 /// assert!(cfg.validate().is_ok());
 /// assert!(CostasConfig { order: 3, ..cfg }.validate().is_err());
+/// assert!(CostasConfig { order: 8, ..cfg }.validate().is_ok());
 /// assert!(CostasConfig { loop_bw: 0.5, ..cfg }.validate().is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CostasConfig {
-    /// Order: 2 (BPSK) or 4 (QPSK).
+    /// Order: 2 (BPSK), 4 (QPSK) or 8 (8PSK).
     pub order: u32,
     /// Loop bandwidth normalized to the symbol rate (0.0001 to 0.2).
     pub loop_bw: f64,
@@ -156,19 +161,19 @@ pub(crate) fn check_f64(name: &'static str, v: f64, min: f64, max: f64) -> Resul
     }
 }
 
-/// The order of a PSK block: 2 or 4, otherwise `InvalidParameter` (3 is inside the range of
-/// the description but not a supported order).
+/// The order of a PSK block: 2, 4 or 8, otherwise `InvalidParameter` (3, 5, 6 and 7 are
+/// inside the range of the description but not supported orders) or `OutOfRange`.
 pub(crate) fn check_order(order: u32) -> Result<()> {
     match order {
-        2 | 4 => Ok(()),
-        o if (2..=4).contains(&o) => Err(Error::InvalidParameter {
+        2 | 4 | 8 => Ok(()),
+        o if (2..=8).contains(&o) => Err(Error::InvalidParameter {
             name: "order",
-            reason: "the order must be 2 (bpsk) or 4 (qpsk)",
+            reason: "the order must be 2 (bpsk), 4 (qpsk) or 8 (8psk)",
         }),
         o => Err(Error::OutOfRange {
             name: "order",
             min: 2.0,
-            max: 4.0,
+            max: 8.0,
             got: f64::from(o),
         }),
     }
@@ -178,7 +183,8 @@ impl CostasConfig {
     /// Checks the ranges.
     ///
     /// # Errors
-    /// `InvalidParameter` for the order 3, `OutOfRange` for any other value outside its range.
+    /// `InvalidParameter` for the orders 3, 5, 6 and 7, `OutOfRange` for any other value
+    /// outside its range.
     pub fn validate(&self) -> Result<()> {
         check_order(self.order)?;
         check_f64("loop_bw", self.loop_bw, MIN_LOOP_BW, MAX_LOOP_BW)?;
@@ -189,7 +195,8 @@ impl CostasConfig {
     /// Sets a parameter by its description name; checks kind and range.
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the order 3.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders 3,
+    /// 5, 6 and 7.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;

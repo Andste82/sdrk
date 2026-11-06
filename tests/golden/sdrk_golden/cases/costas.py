@@ -1,4 +1,4 @@
-"""Cases for the costas kernel (carrier recovery for BPSK and QPSK, M40 section 2).
+"""Cases for the costas kernel (carrier recovery for BPSK, QPSK and 8PSK, M40 section 2, M40.1 section 1).
 
 The Costas loop is a feedback system with discrete decisions (the signs of the order-4 detector and
 the lock detector), so the expected values come from an exact float32 model of the arithmetic fixed
@@ -7,7 +7,10 @@ table of ``rotate`` and its interpolation, the detector, the loop filter and the
 float32 with the ``f32model`` helpers, one operation at a time, and the phase step
 ``floor(v 2^32 + 0.5)`` in float64, with the rules the kernel documents in ``docs/kernels.md``:
 ``sign(0) = 0``, a non-finite detector output counts as 0, and a non-finite lock metric leaves the
-lock detector unchanged (D603); the order-4 lock metric is ``-cos(4 arg y)`` (D601).
+lock detector unchanged (D603); the order-4 lock metric is ``-cos(4 arg y)`` (D601). Order 8
+(M40.1) decides the 8PSK point ``d`` of the half-open octant of ``y`` from the signs and the
+comparison of the magnitudes (D641), measures ``e = y.im dr - y.re di`` and uses the metric
+``((r r) / p) 2 - 1`` with ``r = y.re dr + y.im di`` (D640).
 
 The signals use ``math.sin`` and ``math.cos`` one value at a time and the noise comes from
 ``rng.standard_normal``; nothing that feeds a committed byte uses NumPy transcendentals or BLAS, so
@@ -42,7 +45,14 @@ LOCK_ALPHA = fm.f32(0.01)
 LOCK_ON = fm.f32(0.5)
 LOCK_OFF = fm.f32(0.3)
 FOUR = fm.f32(4.0)
+TWO = fm.f32(2.0)
+ONE = fm.f32(1.0)
 ZERO = fm.f32(0.0)
+# The parts of the 8PSK points exp(j (2k + 1) pi / 8), rounded once to float32.
+C8 = fm.f32(math.cos(math.pi / 8.0))
+S8 = fm.f32(math.sin(math.pi / 8.0))
+# The Gray mapping of M40.1 section 1: g = b0 4 + b1 2 + b2 -> symbol index k.
+GRAY_TO_INDEX8 = (0, 1, 3, 2, 7, 6, 4, 5)
 GUARD_SKIP = 0
 
 
@@ -68,6 +78,32 @@ def _sign(x):
     return ZERO
 
 
+def _octant8(yr, yi):
+    """The index of the half-open octant ``[k pi / 4, (k + 1) pi / 4)`` of ``y`` (D641).
+
+    The quadrant from the signs (``re > 0, im >= 0``; ``re <= 0, im > 0``; ``re < 0, im <= 0``;
+    ``re >= 0, im < 0``), the octant from the magnitudes; zero and NaN give 0. Works on float32
+    and float64 values alike (the comparisons are exact).
+    """
+    ar, ai = abs(yr), abs(yi)
+    if yr > 0.0 and yi >= 0.0:
+        return 0 if ar > ai else 1
+    if yr <= 0.0 and yi > 0.0:
+        return 2 if ai > ar else 3
+    if yr < 0.0 and yi <= 0.0:
+        return 4 if ar > ai else 5
+    if yr >= 0.0 and yi < 0.0:
+        return 6 if ai > ar else 7
+    return 0
+
+
+def _point8_f32(k):
+    """The float32 parts of the 8PSK point ``k``."""
+    return (
+        (C8, S8), (S8, C8), (-S8, C8), (-C8, S8), (-C8, -S8), (-S8, -C8), (S8, -C8), (C8, -S8)
+    )[k]
+
+
 def costas_f32(x, order, kp64, ki64, max64):
     """Float32 model of section 2. Returns (output complex64, lock flags, final state)."""
     # The limit is flushed like the state it bounds (R6.3): a subnormal limit becomes 0.
@@ -84,8 +120,11 @@ def costas_f32(x, order, kp64, ki64, max64):
         out[n] = complex(float(yr), float(yi))
         if order == 2:
             e = fm.mul(yr, yi)
-        else:
+        elif order == 4:
             e = fm.sub(fm.mul(_sign(yr), yi), fm.mul(_sign(yi), yr))
+        else:
+            dr, di = _point8_f32(_octant8(yr, yi))
+            e = fm.sub(fm.mul(yi, dr), fm.mul(yr, di))
         if not fm.is_finite(e):
             e = ZERO
         freq = fm.flush_denormal(fm.add(freq, fm.mul(ki, e)))
@@ -99,8 +138,12 @@ def costas_f32(x, order, kp64, ki64, max64):
         p, d = fm.add(a, b), fm.sub(a, b)
         if order == 2:
             m = fm.div(d, p)
-        else:
+        elif order == 4:
             m = fm.div(fm.sub(fm.mul(fm.mul(FOUR, a), b), fm.mul(d, d)), fm.mul(p, p))
+        else:
+            dr, di = _point8_f32(_octant8(yr, yi))
+            r = fm.add(fm.mul(yr, dr), fm.mul(yi, di))
+            m = fm.sub(fm.mul(fm.div(fm.mul(r, r), p), TWO), ONE)
         if fm.is_finite(m):
             level = fm.flush_denormal(fm.add(level, fm.mul(LOCK_ALPHA, fm.sub(m, level))))
             if level > LOCK_ON:
@@ -123,9 +166,12 @@ def costas_f64(x, order, kp, ki, mx):
         out.append(complex(yr, yi))
         if order == 2:
             e = yr * yi
-        else:
+        elif order == 4:
             sg = lambda u: 1.0 if u > 0.0 else (-1.0 if u < 0.0 else 0.0)  # noqa: E731
             e = sg(yr) * yi - sg(yi) * yr
+        else:
+            a8 = (2 * _octant8(yr, yi) + 1) * math.pi / 8.0
+            e = yi * math.cos(a8) - yr * math.sin(a8)
         freq = min(max(freq + ki * e, -mx), mx)
         phase = (phase + int(math.floor((freq + kp * e) * 4294967296.0 + 0.5))) & MASK
     return out
@@ -144,10 +190,12 @@ def guard_db(model, f64_out):
 def psk_signal(rng, n, order, phase0, offset, ebn0_db):
     """Symbols (Gray, bit 1 positive) rotated by ``phase0 + 2 pi offset k`` plus complex noise.
 
-    BPSK ``2 b - 1``; QPSK ``((2 b0 - 1) + j (2 b1 - 1)) / sqrt(2)``; unit symbol energy, so the
-    noise has ``sigma^2 = 1 / (2 (bits per symbol) Eb/N0)`` per component.
+    BPSK ``2 b - 1``; QPSK ``((2 b0 - 1) + j (2 b1 - 1)) / sqrt(2)``; 8PSK
+    ``exp(j (2 pi k / 8 + pi / 8))`` with ``k`` from the Gray code ``b0 4 + b1 2 + b2`` (M40.1
+    section 1); unit symbol energy, so the noise has ``sigma^2 = 1 / (2 (bits per symbol) Eb/N0)``
+    per component.
     """
-    bps = 1 if order == 2 else 2
+    bps = {2: 1, 4: 2, 8: 3}[order]
     data = rng.integers(0, 2, n * bps).tolist()
     nre, nim = rng.standard_normal(n).tolist(), rng.standard_normal(n).tolist()
     sigma = math.sqrt(1.0 / (2.0 * bps * 10.0 ** (ebn0_db / 10.0)))
@@ -156,8 +204,12 @@ def psk_signal(rng, n, order, phase0, offset, ebn0_db):
     for k in range(n):
         if order == 2:
             sym = complex(2 * data[k] - 1, 0.0)
-        else:
+        elif order == 4:
             sym = complex((2 * data[2 * k] - 1) * r, (2 * data[2 * k + 1] - 1) * r)
+        else:
+            g = data[3 * k] * 4 + data[3 * k + 1] * 2 + data[3 * k + 2]
+            a8 = (2 * GRAY_TO_INDEX8[g] + 1) * math.pi / 8.0
+            sym = complex(math.cos(a8), math.sin(a8))
         # The phase in turns, reduced exactly before the scalar sine and cosine.
         turns = (phase0 / math.tau + offset * k) % 1.0
         w = complex(math.cos(math.tau * turns), math.sin(math.tau * turns))
@@ -203,6 +255,18 @@ def run_case(rng, order, offset, ebn0_db, notes):
         tolerance={"class": "bit_exact"},
         model="float32",
         notes=notes,
+    )
+
+
+@case(kernel="costas", name="8psk_lock_c32_8192", seed=560)
+def psk8_lock(rng):
+    return run_case(
+        rng, 8, 0.0, 14.0,
+        "8PSK exp(j (2 pi k / 8 + pi / 8)) with k from the Gray code b0 4 + b1 2 + b2 (M40.1 "
+        "section 1), one sample per symbol, rotated by a random start phase phase0_rad, complex "
+        "noise for Eb/N0 14 dB; order 8 (the decision-directed detector against the point of the "
+        "octant of y) with the block defaults; exact float32 model over the whole input; locked is "
+        "the lock flag after every symbol; snr_db_guard compares with the float64 loop (D111)",
     )
 
 

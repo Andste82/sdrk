@@ -28,9 +28,9 @@ use sdrk_blocks::{
     PskDemodConfig, PskModBlock, PskModConfig, QuadDemodBlock, QuadDemodConfig,
     RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
     ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
-    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
-    SymbolSyncConfig, ToComplexBlock,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3053,8 +3053,13 @@ impl Kind for SliceKind {
         Ok(Figures {
             rate_out,
             memory_bytes,
-            // One multiplication per soft bit.
-            cost: 1.0,
+            // One multiplication per soft bit; 8psk: eight squared distances, six minimum
+            // searches over four points and three products per symbol (D644).
+            cost: if cfg.constellation == SliceConstellation::Psk8 {
+                16.0
+            } else {
+                1.0
+            },
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,
@@ -3305,7 +3310,7 @@ impl Kind for PskModKind {
         Ok(Figures {
             rate_out: PskModBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: PskModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
-            // §3 of M40: 4 span per input sample.
+            // §3 of M40: 4 span per input sample, for every order and variant of M40.1 (D651).
             cost: 4.0 * cfg.span as f64,
             taps: block.num_taps(),
             delay: block.timing().delay,
@@ -3357,8 +3362,9 @@ impl Kind for PskDemodKind {
         Ok(Figures {
             rate_out: PskDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: PskDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
-            // §4 of M40: 4 span + 40 / sps per input sample.
-            cost: 4.0 * cfg.span as f64 + 40.0 / sps,
+            // §4 of M40: 4 span + 40 / sps per input sample; 8PSK adds the 16 per symbol of
+            // its max-log soft bits (D644), the other variants of M40.1 nothing (D651).
+            cost: 4.0 * cfg.span as f64 + if cfg.order == 8 { 56.0 } else { 40.0 } / sps,
             taps: block.num_taps(),
             delay: block.timing().delay,
             min_input: block.min_input(),

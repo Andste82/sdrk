@@ -1,5 +1,6 @@
-//! `psk_demod`: BPSK and QPSK demodulator (matched filter, symbol timing, carrier recovery or
-//! differential detection, soft bits).
+//! `psk_demod`: BPSK, QPSK and 8PSK demodulator (matched filter, symbol timing, carrier
+//! recovery or differential detection, soft bits), with the QPSK variants pi/4-DQPSK and
+//! offset QPSK.
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
@@ -11,7 +12,8 @@ use super::costas::{
     DEFAULT_DAMPING, DEFAULT_LOOP_BW, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MAX_OFFSET_LIMIT,
     MIN_LOOP_BW, check_f64, check_order,
 };
-use super::slice::soft_bits;
+use super::psk_mod::{PskVariant, VARIANT_PARAM, bits_of_order, check_variant};
+use super::slice::{psk8_bits, soft_bits};
 use super::symbol_sync::SymbolSyncBlock;
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -41,8 +43,8 @@ const RATE_REASON: &str = "the sample rate must be within 1 % of an integer mult
 /// Description of the `psk_demod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "psk_demod",
-    summary: "Demodulates BPSK or QPSK to soft bits: matched filter, symbol timing and carrier \
-        recovery.",
+    summary: "Demodulates BPSK, QPSK or 8PSK to soft bits: matched filter, symbol timing and \
+        carrier recovery.",
     details: "The input is the complex baseband at roughly the nominal level (an agc before \
         it) with fs / symbol_rate_hz within 1 % of an integer and at least 2 (otherwise the \
         rate is unsupported: resample first). A matched root-raised-cosine filter (rolloff, \
@@ -51,9 +53,14 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         max_deviation 0.005, ted_gain 1) and, for coherent detection, the Costas loop costas \
         (carrier_bw, damping 0.7071, max_offset cycles per symbol); with differential set the \
         loop is replaced by z_k = y_k conj(y_k-1) (y_-1 = 1). The symbols become soft bits as \
-        slice does (BPSK re; QPSK re then im): above 0 is a 1. The phase ambiguity of \
-        coherent detection (180 degrees for BPSK, 90 degrees for QPSK) is not resolved: use \
-        frame_decode with polarity both or differential coding. The output rate is the \
+        slice does (BPSK re; QPSK re then im; 8PSK the max-log soft bits of slice 8psk): \
+        above 0 is a 1. The variant pi4 (order 4, differential) maps z_k back to the bits of \
+        pi/4-DQPSK: -im for bit 0, then -re for bit 1. The variant offset (order 4, not \
+        differential, even samples per symbol) delays the in-phase part of the matched \
+        filter output by half a symbol before symbol_sync, which undoes the half-symbol \
+        offset of OQPSK. The phase ambiguity of coherent detection (180 degrees for BPSK, 90 \
+        degrees for QPSK, 45 degrees for 8PSK) is not resolved: use frame_decode with \
+        polarity both or differential coding. The output rate is the \
         symbol rate times the bits per symbol and follows the clock of the signal (variable \
         ratio).",
     inputs: &[PortDesc {
@@ -73,12 +80,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             unit: Unit::None,
             kind: ParamKind::I64 {
                 min: 2,
-                max: 4,
+                max: 8,
                 default: Some(2),
             },
-            typical: "2 for BPSK, 4 for QPSK",
+            typical: "2 for BPSK, 4 for QPSK, 8 for 8PSK",
             mutability: Mutability::Build,
-            description: "Order of the phase-shift keying: 2 (BPSK) or 4 (QPSK).",
+            description: "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK).",
         },
         ParamDesc {
             name: "symbol_rate_hz",
@@ -162,6 +169,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             description: "Limit of the carrier loop's frequency integrator in cycles per \
                 symbol.",
         },
+        VARIANT_PARAM,
     ],
     required: &["symbol_rate_hz"],
 };
@@ -178,7 +186,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PskDemodConfig {
-    /// Order: 2 (BPSK) or 4 (QPSK).
+    /// Order: 2 (BPSK), 4 (QPSK) or 8 (8PSK).
     pub order: u32,
     /// Symbol rate in Hz (required).
     pub symbol_rate_hz: f64,
@@ -194,12 +202,14 @@ pub struct PskDemodConfig {
     pub carrier_bw: f64,
     /// Limit of the frequency integrator in cycles per symbol (0 to 0.25).
     pub max_offset: f64,
+    /// The variant: plain, pi/4-DQPSK or offset QPSK (M40.1).
+    pub variant: PskVariant,
 }
 
 impl Default for PskDemodConfig {
     /// Order 2, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
     /// `rolloff` 0.35, `span` 10, coherent, `sync_bw` 0.01, `carrier_bw` 0.02, `max_offset`
-    /// 0.05.
+    /// 0.05, variant plain.
     fn default() -> Self {
         Self {
             order: 2,
@@ -210,14 +220,15 @@ impl Default for PskDemodConfig {
             sync_bw: 0.01,
             carrier_bw: DEFAULT_LOOP_BW,
             max_offset: DEFAULT_MAX_OFFSET,
+            variant: PskVariant::Plain,
         }
     }
 }
 
 impl PskDemodConfig {
-    /// Bits per symbol: 1 for order 2, 2 for order 4.
+    /// Bits per symbol: 1 for order 2, 2 for order 4, 3 for order 8.
     pub fn bits_per_symbol(&self) -> usize {
-        if self.order == 4 { 2 } else { 1 }
+        bits_of_order(self.order)
     }
 
     /// The configuration of the timing loop.
@@ -268,7 +279,14 @@ impl PskDemodConfig {
             }),
             other => other,
         }?;
-        Ok(n as usize)
+        let n = n as usize;
+        check_variant(
+            self.variant,
+            self.order,
+            self.differential,
+            n.is_multiple_of(2),
+        )?;
+        Ok(n)
     }
 
     /// The integer samples per symbol of the matched filter: `fs / symbol_rate_hz` rounded.
@@ -282,18 +300,22 @@ impl PskDemodConfig {
     /// Checks the configuration against the input sample rate.
     ///
     /// # Errors
-    /// `OutOfRange` for a value outside its range; `InvalidParameter` for the order 3 and for
-    /// a symbol rate whose samples per symbol are not within 1 % of an integer from 2 to 1024
-    /// or are below 2 (the pipeline reports it as `rate_unsupported` with the hint to
-    /// resample).
+    /// `OutOfRange` for a value outside its range; `InvalidParameter` for the orders 3, 5, 6
+    /// and 7, for a symbol rate whose samples per symbol are not within 1 % of an integer from
+    /// 2 to 1024 or are below 2 (the pipeline reports it as `rate_unsupported` with the hint to
+    /// resample) and for a `variant` that does not fit (`pi4` without order 4 and
+    /// `differential`, `offset` without order 4, with `differential` or with an odd rounded
+    /// number of samples per symbol; the pipeline reports it as `invalid_value`).
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
         self.derive(rate_in).map(|_| ())
     }
 
-    /// Sets a parameter by its description name; checks kind and range.
+    /// Sets a parameter by its description name; checks kind and range (the combination of
+    /// the parameters is checked by [`PskDemodConfig::validate`]).
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the order 3.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders
+    /// 3, 5, 6 and 7.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
@@ -310,6 +332,7 @@ impl PskDemodConfig {
             "sync_bw" => self.sync_bw = value.as_f64()?,
             "carrier_bw" => self.carrier_bw = value.as_f64()?,
             "max_offset" => self.max_offset = value.as_f64()?,
+            "variant" => self.variant = PskVariant::from_index(value.as_choice()?),
             _ => return unknown(),
         }
         Ok(())
@@ -329,23 +352,29 @@ impl PskDemodConfig {
             "sync_bw" => Ok(ParamValue::F64(self.sync_bw)),
             "carrier_bw" => Ok(ParamValue::F64(self.carrier_bw)),
             "max_offset" => Ok(ParamValue::F64(self.max_offset)),
+            "variant" => Ok(ParamValue::Choice(self.variant.index())),
             _ => unknown(),
         }
     }
 }
 
-/// BPSK and QPSK demodulator: `C32` in, `f32` soft bits out (`bits_per_symbol` per symbol,
-/// above 0 is a 1).
+/// BPSK, QPSK and 8PSK demodulator: `C32` in, `f32` soft bits out (`bits_per_symbol` per
+/// symbol, above 0 is a 1).
 ///
 /// Per piece of at most [`PSK_DEMOD_CHUNK`] input samples: the kernel `fir` (matched filter,
 /// taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded samples per symbol),
-/// the kernel `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), then the kernel
-/// `costas` (coherent) or the differential product `z_k = y_k conj(y_(k-1))` with
-/// `y_(-1) = 1` (`f32`: `(y.re p.re + y.im p.im, y.im p.re - y.re p.im)`), and the soft bits
-/// of `slice` (scale 1). Soft bits that do not fit into the output wait in a buffer and are
+/// for the variant `offset` a delay of the real part by `n / 2` samples (a ring of `n / 2`
+/// `f32`, zeros at the start), the kernel `symbol_sync` (Gardner at the exact
+/// `fs / symbol_rate_hz`), then the kernel `costas` of the order (coherent) or the
+/// differential product `z_k = y_k conj(y_(k-1))` with `y_(-1) = 1` (`f32`:
+/// `(y.re p.re + y.im p.im, y.im p.re - y.re p.im)`), and the soft bits of `slice` (scale 1:
+/// BPSK `re`, QPSK `re` then `im`, 8PSK the max-log bits of `8psk`; the variant `pi4` gives
+/// `-im` then `-re`). Soft bits that do not fit into the output wait in a buffer and are
 /// written first by the next call (which then consumes no input). Timing: variable ratio
-/// `symbol_rate bits / fs`, delay `span n / 2 + 1` input samples. Storage: the taps, the
-/// filter history and three work buffers (filter output, symbols, waiting soft bits).
+/// `symbol_rate bits / fs`, delay `span n / 2 + 1` input samples (also for `offset`: the
+/// in-phase delay realigns the early in-phase part with the quadrature part, D658).
+/// Storage: the taps, the filter history, three work buffers (filter output, symbols,
+/// waiting soft bits) and for `offset` the ring.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -390,6 +419,10 @@ pub struct PskDemodBlock<S: Storage> {
     pending: S::Buf<f32>,
     at: usize,
     len: usize,
+    /// The in-phase delay of `offset` (`n / 2` samples) and its position; `None` for the other
+    /// variants.
+    ring: Option<S::Buf<f32>>,
+    pos: usize,
 }
 
 impl<S: Storage> core::fmt::Debug for PskDemodBlock<S> {
@@ -421,6 +454,11 @@ impl<S: Storage> PskDemodBlock<S> {
         let b = storage.alloc::<C32>(PSK_DEMOD_CHUNK)?;
         let bps = config.bits_per_symbol();
         let pending = storage.alloc::<f32>(PSK_DEMOD_CHUNK * bps)?;
+        let ring = if config.variant == PskVariant::Offset {
+            Some(storage.alloc::<f32>(n / 2)?)
+        } else {
+            None
+        };
         let sync_cfg = config.sync();
         let block = SymbolSyncBlock::<C32, S>::new(&sync_cfg, rate_in, storage)?;
         let ratio = block.timing().ratio.mul(Ratio::new(bps as u64, 1)?)?;
@@ -447,6 +485,8 @@ impl<S: Storage> PskDemodBlock<S> {
             pending,
             at: 0,
             len: 0,
+            ring,
+            pos: 0,
         })
     }
 
@@ -464,6 +504,9 @@ impl<S: Storage> PskDemodBlock<S> {
         plan.add::<C32>(PSK_DEMOD_CHUNK)?;
         plan.add::<C32>(PSK_DEMOD_CHUNK)?;
         plan.add::<f32>(PSK_DEMOD_CHUNK * config.bits_per_symbol())?;
+        if config.variant == PskVariant::Offset {
+            plan.add::<f32>(n / 2)?;
+        }
         Ok(plan.bytes())
     }
 
@@ -487,7 +530,9 @@ impl<S: Storage> PskDemodBlock<S> {
         self.sps
     }
 
-    /// Whether the carrier loop reports lock (always false with `differential`).
+    /// Whether the carrier loop reports lock (always false with `differential`). The order-8
+    /// lock metric of M40.1 stays near 0.9 on noise too, so for 8PSK `true` does not prove a
+    /// signal (open item I40.1-1).
     pub fn locked(&self) -> bool {
         !self.config.differential && self.costas.locked()
     }
@@ -504,6 +549,16 @@ impl<S: Storage> PskDemodBlock<S> {
     /// The current estimate of the samples per symbol of the timing loop.
     pub fn sps_estimate(&self) -> f64 {
         self.sync.sps_estimate()
+    }
+
+    /// The soft-bit map of the order and the variant.
+    fn map(&self) -> SoftMap {
+        match (self.bps, self.config.variant) {
+            (3, _) => SoftMap::Psk8,
+            (2, PskVariant::Pi4) => SoftMap::Pi4,
+            (2, _) => SoftMap::Qpsk,
+            _ => SoftMap::Bpsk,
+        }
     }
 
     /// Writes waiting soft bits to `output`; returns how many.
@@ -524,6 +579,9 @@ impl<S: Storage> PskDemodBlock<S> {
         let m = piece.len();
         let mf = head_mut(self.a.as_mut(), m)?;
         <Sdrk as Fir<C32>>::fir(&Sdrk, &mut self.fir, piece, mf)?;
+        if let Some(ring) = self.ring.as_mut() {
+            self.pos = delay_re(ring.as_mut(), self.pos, mf)?;
+        }
         let p = <Sdrk as SymbolSync<C32>>::symbol_sync(
             &Sdrk,
             &mut self.sync,
@@ -566,7 +624,7 @@ impl<S: Storage> Block for PskDemodBlock<S> {
     fn process(&mut self, input: &[C32], output: &mut [f32]) -> Result<Progress> {
         let mut produced = self.flush(output)?;
         let mut consumed = 0usize;
-        let qpsk = self.bps == 2;
+        let map = self.map();
         while self.len == 0 && produced < output.len() {
             let m = (input.len() - consumed).min(PSK_DEMOD_CHUNK);
             if m == 0 {
@@ -576,11 +634,11 @@ impl<S: Storage> Block for PskDemodBlock<S> {
             consumed += m;
             let syms = head(self.a.as_ref(), ns)?;
             let room = tail_mut(output, produced)?;
-            let direct = soft_bits(qpsk, 1.0, syms, room);
+            let direct = demod_bits(map, syms, room);
             produced += direct * self.bps;
             let rest = tail(syms, direct)?;
             if !rest.is_empty() {
-                let n = soft_bits(qpsk, 1.0, rest, self.pending.as_mut());
+                let n = demod_bits(map, rest, self.pending.as_mut());
                 self.at = 0;
                 self.len = n * self.bps;
                 produced += self.flush(tail_mut(output, produced)?)?;
@@ -593,6 +651,9 @@ impl<S: Storage> Block for PskDemodBlock<S> {
         BlockTiming {
             ratio: self.ratio,
             kind: RatioKind::Variable,
+            // `offset` adds nothing: the in-phase delay only realigns the in-phase part, which
+            // is half a symbol early, with the quadrature part, the reference of the delay that
+            // `psk_mod` reports (D658).
             delay: Delay::new((self.config.span * self.sps + 2) as u64, 2).unwrap_or(Delay::ZERO),
         }
     }
@@ -604,6 +665,10 @@ impl<S: Storage> Block for PskDemodBlock<S> {
         self.prev = C32::new(1.0, 0.0);
         self.at = 0;
         self.len = 0;
+        if let Some(ring) = self.ring.as_mut() {
+            ring.as_mut().fill(0.0);
+        }
+        self.pos = 0;
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
@@ -619,5 +684,106 @@ impl<S: Storage> Block for PskDemodBlock<S> {
 
     fn min_input(&self) -> usize {
         self.min_input
+    }
+}
+
+/// The soft-bit maps of `psk_demod`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SoftMap {
+    /// `re` (BPSK).
+    Bpsk,
+    /// `re`, then `im` (QPSK, plain and offset).
+    Qpsk,
+    /// `-im`, then `-re`: the quadrants of `z_k` back to the bit pairs of pi/4-DQPSK
+    /// (`+pi/4` is `00`, `+3 pi/4` `01`, `-3 pi/4` `11`, `-pi/4` `10`).
+    Pi4,
+    /// The max-log soft bits of `slice` `8psk`.
+    Psk8,
+}
+
+/// The soft bits of the symbols in `input` (scale 1) with the map `map`; takes
+/// `min(input.len(), output.len() / bits)` symbols and returns that count.
+fn demod_bits(map: SoftMap, input: &[C32], output: &mut [f32]) -> usize {
+    match map {
+        SoftMap::Bpsk => soft_bits(false, 1.0, input, output),
+        SoftMap::Qpsk => soft_bits(true, 1.0, input, output),
+        SoftMap::Pi4 => {
+            for (o, z) in output.chunks_exact_mut(2).zip(input) {
+                if let [b0, b1] = o {
+                    *b0 = -z.im;
+                    *b1 = -z.re;
+                }
+            }
+            input.len().min(output.len() / 2)
+        }
+        SoftMap::Psk8 => {
+            for (o, z) in output.chunks_exact_mut(3).zip(input) {
+                o.copy_from_slice(&psk8_bits(1.0, z.re, z.im));
+            }
+            input.len().min(output.len() / 3)
+        }
+    }
+}
+
+/// Delays the real parts of `x` by `ring.len()` samples: each real part is swapped with the
+/// ring entry at the running position `pos`; returns the new position.
+fn delay_re(ring: &mut [f32], mut pos: usize, x: &mut [C32]) -> Result<usize> {
+    let n = ring.len();
+    if n == 0 {
+        return Ok(pos);
+    }
+    let mut done = 0usize;
+    while done < x.len() {
+        let seg = (n - pos).min(x.len() - done);
+        let r = head_mut(tail_mut(ring, pos)?, seg)?;
+        let y = head_mut(tail_mut(x, done)?, seg)?;
+        for (y, r) in y.iter_mut().zip(r.iter_mut()) {
+            core::mem::swap(&mut y.re, r);
+        }
+        done += seg;
+        pos += seg;
+        if pos == n {
+            pos = 0;
+        }
+    }
+    Ok(pos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::psk_mod::{phase_index, point16};
+    use super::{SoftMap, demod_bits};
+    use sdrk_core::C32;
+
+    /// M40.1 §2: every bit pair of pi/4-DQPSK steps the phase by its increment in the
+    /// transmitter, and the receiver maps the quadrant of `z_k` (the increment itself) back
+    /// to the same pair, for any previous phase.
+    #[test]
+    fn pi4_quadrants_map_back_to_their_bit_pairs() {
+        // (b0, b1), the increment in units of pi / 8
+        for (b0, b1, step) in [
+            (false, false, 2u8), // +pi/4
+            (false, true, 6),    // +3 pi/4
+            (true, true, 10),    // -3 pi/4
+            (true, false, 14),   // -pi/4
+        ] {
+            let soft = [if b0 { 1.0f32 } else { -1.0 }, if b1 { 1.0 } else { -1.0 }];
+            assert_eq!(phase_index(&soft, true), step, "{b0} {b1}");
+            for prev in (0u8..16).step_by(2) {
+                let (p, y) = (point16(prev), point16(prev.wrapping_add(step)));
+                let z = C32::new(y.re * p.re + y.im * p.im, y.im * p.re - y.re * p.im);
+                let mut out = [0.0f32; 2];
+                assert_eq!(demod_bits(SoftMap::Pi4, &[z], &mut out), 1);
+                assert_eq!(
+                    (out.first().map(|v| *v > 0.0), out.get(1).map(|v| *v > 0.0)),
+                    (Some(b0), Some(b1)),
+                    "{b0} {b1} from phase {prev}: {out:?}"
+                );
+            }
+        }
+        // the plain QPSK map is a different table: +pi/4 is 11 there
+        let mut out = [0.0f32; 2];
+        demod_bits(SoftMap::Qpsk, &[point16(2)], &mut out);
+        assert!(out.iter().all(|v| *v > 0.0));
     }
 }

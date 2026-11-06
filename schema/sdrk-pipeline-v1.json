@@ -1198,7 +1198,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Recovers the carrier of BPSK or QPSK symbols: removes phase and frequency offset.",
+            "description": "Recovers the carrier of BPSK, QPSK or 8PSK symbols: removes phase and frequency offset.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -1244,8 +1244,8 @@
                   },
                   "order": {
                     "default": 2,
-                    "description": "Order of the phase-shift keying: 2 (BPSK) or 4 (QPSK). Typical: 2 for BPSK, 4 for QPSK. Build-time.",
-                    "maximum": 4,
+                    "description": "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK). Typical: 2 for BPSK, 4 for QPSK, 8 for 8PSK. Build-time.",
+                    "maximum": 8,
                     "minimum": 2,
                     "type": "integer"
                   }
@@ -2623,7 +2623,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Demodulates BPSK or QPSK to soft bits: matched filter, symbol timing and carrier recovery.",
+            "description": "Demodulates BPSK, QPSK or 8PSK to soft bits: matched filter, symbol timing and carrier recovery.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -2667,8 +2667,8 @@
                   },
                   "order": {
                     "default": 2,
-                    "description": "Order of the phase-shift keying: 2 (BPSK) or 4 (QPSK). Typical: 2 for BPSK, 4 for QPSK. Build-time.",
-                    "maximum": 4,
+                    "description": "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK). Typical: 2 for BPSK, 4 for QPSK, 8 for 8PSK. Build-time.",
+                    "maximum": 8,
                     "minimum": 2,
                     "type": "integer"
                   },
@@ -2698,6 +2698,16 @@
                     "maximum": 0.1,
                     "minimum": 0.0001,
                     "type": "number"
+                  },
+                  "variant": {
+                    "default": "plain",
+                    "description": "plain, pi4 (pi/4-DQPSK: needs order 4 and differential) or offset (OQPSK: needs order 4, not differential and an even number of samples per symbol). Typical: plain; pi4 for pi/4-DQPSK (TETRA), offset for OQPSK (IEEE 802.15.4). Build-time.",
+                    "enum": [
+                      "plain",
+                      "pi4",
+                      "offset"
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -2714,7 +2724,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Turns soft bits into BPSK or QPSK symbols shaped with a root-raised-cosine pulse.",
+            "description": "Turns soft bits into BPSK, QPSK or 8PSK symbols shaped with a root-raised-cosine pulse.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -2744,8 +2754,8 @@
                   },
                   "order": {
                     "default": 2,
-                    "description": "Order of the phase-shift keying: 2 (BPSK, 1 bit per symbol) or 4 (QPSK, 2 bits per symbol). Typical: 2 for BPSK, 4 for QPSK. Build-time.",
-                    "maximum": 4,
+                    "description": "Order of the phase-shift keying: 2 (BPSK, 1 bit per symbol), 4 (QPSK, 2 bits per symbol) or 8 (8PSK, 3 bits per symbol). Typical: 2 for BPSK, 4 for QPSK, 8 for 8PSK. Build-time.",
+                    "maximum": 8,
                     "minimum": 2,
                     "type": "integer"
                   },
@@ -2768,6 +2778,16 @@
                     "maximum": 32,
                     "minimum": 4,
                     "type": "integer"
+                  },
+                  "variant": {
+                    "default": "plain",
+                    "description": "plain, pi4 (pi/4-DQPSK: needs order 4 and differential) or offset (OQPSK: needs order 4, not differential and an even number of samples per symbol). Typical: plain; pi4 for pi/4-DQPSK (TETRA), offset for OQPSK (IEEE 802.15.4). Build-time.",
+                    "enum": [
+                      "plain",
+                      "pi4",
+                      "offset"
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -3104,12 +3124,13 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im) or fsk4 (f32, 2 bits, -v then |v| - 2/3). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK. Build-time.",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3) or 8psk (C32, 3 bits, max-log, Gray). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK. Build-time.",
                     "enum": [
                       "real",
                       "bpsk",
                       "qpsk",
-                      "fsk4"
+                      "fsk4",
+                      "8psk"
                     ],
                     "type": "string"
                   },

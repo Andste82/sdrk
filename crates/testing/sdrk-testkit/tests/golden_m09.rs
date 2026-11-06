@@ -334,6 +334,7 @@ fn blocks_cases_are_present() {
             "resampler_rational_c32_48k_to_44k1",
             "resampler_tuned_c32_ppm",
             "resampler_tuned_cq15_ppm",
+            "slice_8psk_c32",
             "spectrum_c32_1024_hann_avg4",
             "spectrum_cq15_1024_bfp",
             "ssb_demod_lsb_c32_dec2",

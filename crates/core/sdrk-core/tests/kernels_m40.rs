@@ -1,6 +1,7 @@
-//! Tests of the M40 kernel of `sdrk-core`: `costas`. The construction rules, the loop constants,
-//! timing, the length check, lock and frequency tracking on clean BPSK and QPSK, the lock
-//! detector on and off, block-size invariance (pieces of 1 to N symbols), `reset`, silence, full
+//! Tests of the M40 kernel of `sdrk-core`: `costas` (with order 8 of M40.1). The construction
+//! rules, the loop constants, timing, the length check, lock and frequency tracking on clean
+//! BPSK, QPSK and 8PSK, the lock detector on and off (and the measured level of the order-8
+//! metric on noise, open item I40.1-1), block-size invariance (pieces of 1 to N symbols), `reset`, silence, full
 //! scale and beyond, non-finite input and the thread-safety of the public types. The comparison
 //! of `Fallback` with `Reference` runs only with the feature `reference`.
 
@@ -25,6 +26,8 @@ use sdrk_device::{ErrorKind, SdrkError};
 const DAMP: f64 = 0.7071;
 /// The seed of the randomized tests (M40 seeds 550 to 559); every signal mixes in a stream.
 const SEED: u64 = 559;
+/// The seed of the randomized order-8 tests of M40.1 (seeds 560 to 564, D646).
+const SEED8: u64 = 564;
 
 /// Deterministic generator (xorshift64*), uniform in [-1, 1).
 struct Rng(u64);
@@ -43,20 +46,30 @@ impl Rng {
     }
 }
 
-/// Symbols of `order` (BPSK `+-1`, QPSK `(+-1 +-j) / sqrt 2`) rotated by
-/// `phase0 + 2 pi offset k` (radians, cycles per symbol), plus uniform noise of `noise`.
+/// The 8PSK points `exp(j (2k + 1) pi / 8)` as `f32`.
+fn point8(k: u32) -> C32 {
+    let a = f64::from(2 * k + 1) * core::f64::consts::PI / 8.0;
+    C32::new(a.cos() as f32, a.sin() as f32)
+}
+
+/// Symbols of `order` (BPSK `+-1`, QPSK `(+-1 +-j) / sqrt 2`, 8PSK `exp(j (2k + 1) pi / 8)`)
+/// rotated by `phase0 + 2 pi offset k` (radians, cycles per symbol), plus uniform noise of
+/// `noise`. The order-8 signals draw from the seed of M40.1.
 fn symbols(seed: u64, n: usize, order: u32, phase0: f64, offset: f64, noise: f32) -> Vec<C32> {
-    let mut rng = Rng(SEED * 1000 + seed);
+    let base = if order == 8 { SEED8 } else { SEED };
+    let mut rng = Rng(base * 1000 + seed);
     let r = core::f32::consts::FRAC_1_SQRT_2;
     (0..n)
         .map(|k| {
-            let s = if order == 2 {
-                C32::new(if rng.bit() { 1.0 } else { -1.0 }, 0.0)
-            } else {
-                C32::new(
+            let s = match order {
+                2 => C32::new(if rng.bit() { 1.0 } else { -1.0 }, 0.0),
+                4 => C32::new(
                     if rng.bit() { r } else { -r },
                     if rng.bit() { r } else { -r },
-                )
+                ),
+                _ => point8(
+                    u32::from(rng.bit()) * 4 + u32::from(rng.bit()) * 2 + u32::from(rng.bit()),
+                ),
             };
             let turns = (phase0 / core::f64::consts::TAU + offset * k as f64).rem_euclid(1.0);
             let (sn, c) = (core::f64::consts::TAU * turns).sin_cos();
@@ -83,10 +96,11 @@ fn bits(x: &[C32]) -> Vec<(u32, u32)> {
 fn construction_rules() {
     assert!(CostasState::new(2, 0.02, DAMP, 0.05).is_ok());
     assert!(CostasState::new(4, 0.02, DAMP, 0.05).is_ok());
-    // Order 8 is M40.1: unsupported, not invalid.
-    let e = CostasState::new(8, 0.02, DAMP, 0.05).unwrap_err();
-    assert_eq!(e.kind(), ErrorKind::Unsupported);
-    for order in [0, 1, 3, 5, 16] {
+    // Order 8 (8PSK) since M40.1.
+    assert_eq!(CostasState::new(8, 0.02, DAMP, 0.05).unwrap().order(), 8);
+    for order in [0, 1, 3, 5, 6, 7, 9, 16] {
+        let e = CostasState::new(order, 0.02, DAMP, 0.05).unwrap_err();
+        assert_eq!(e.kind(), ErrorKind::InvalidArgument, "{order}");
         assert!(
             matches!(
                 CostasState::new(order, 0.02, DAMP, 0.05),
@@ -195,6 +209,118 @@ fn qpsk_locks_onto_the_diagonals_and_follows_an_offset() {
     }
 }
 
+/// The distance of `v` to the nearest 8PSK point.
+fn off_8psk(v: C32) -> f32 {
+    (0..8)
+        .map(|k| {
+            let p = point8(k);
+            ((v.re - p.re).powi(2) + (v.im - p.im).powi(2)).sqrt()
+        })
+        .fold(f32::INFINITY, f32::min)
+}
+
+#[test]
+fn psk8_locks_onto_the_octant_centres_and_follows_an_offset() {
+    for (k, (phase0, offset)) in [(0.1, 0.0), (1.9, 0.003), (-2.4, -0.005), (3.0, 0.008)]
+        .into_iter()
+        .enumerate()
+    {
+        let x = symbols(10 + k as u64, 6000, 8, phase0, offset, 0.0);
+        let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
+        let y = run(&mut st, &x);
+        assert!(st.locked(), "{phase0} {offset}");
+        assert!(
+            (st.frequency() - offset).abs() < 1e-4,
+            "{offset}: {}",
+            st.frequency()
+        );
+        for v in &y[5000..] {
+            assert!(off_8psk(*v) < 2e-3, "{phase0} {offset}: {v}");
+        }
+        assert!(st.lock_level() > 0.99);
+    }
+}
+
+#[test]
+fn psk8_detector_and_metric_follow_the_octants() {
+    // A loop with a large gain at phase 0 shows the sign of the detector in its phase step:
+    // a point a little past an octant centre turns the NCO forward, one a little before it
+    // backward. At the boundaries k pi / 4 the octant [k pi / 4, (k + 1) pi / 4) decides.
+    for k in 0..8u32 {
+        let centre = f64::from(2 * k + 1) * core::f64::consts::PI / 8.0;
+        for (delta, forward) in [(0.05, true), (-0.05, false)] {
+            let a = centre + delta;
+            let x = C32::new(a.cos() as f32, a.sin() as f32);
+            let mut st = CostasState::new(8, 0.2, 4.0, 0.25).unwrap();
+            run(&mut st, &[x]);
+            let step = st.phase() as i32;
+            assert_eq!(step > 0, forward, "octant {k}, delta {delta}: {step}");
+            // The metric is cos(2 delta): one step of the lock detector from 0.
+            let want = 0.01 * (2.0 * delta).cos();
+            assert!(
+                (f64::from(st.lock_level()) - want).abs() < 1e-6,
+                "octant {k}: {}",
+                st.lock_level()
+            );
+        }
+        // Exactly on the boundary k pi / 4 the half-open octant k decides (on the axes too,
+        // where one part is zero); its point lies pi / 8 ahead, so the NCO turns backward.
+        let b = f64::from(k) * core::f64::consts::FRAC_PI_4;
+        let x = match k {
+            0 => C32::new(1.0, 0.0),
+            2 => C32::new(0.0, 1.0),
+            4 => C32::new(-1.0, 0.0),
+            6 => C32::new(0.0, -1.0),
+            _ => {
+                let h = core::f32::consts::FRAC_1_SQRT_2;
+                C32::new(
+                    if b.cos() > 0.0 { h } else { -h },
+                    if b.sin() > 0.0 { h } else { -h },
+                )
+            }
+        };
+        let mut st = CostasState::new(8, 0.2, 4.0, 0.25).unwrap();
+        run(&mut st, &[x]);
+        assert!(
+            (st.phase() as i32) < 0,
+            "boundary {k}: {}",
+            st.phase() as i32
+        );
+    }
+}
+
+#[test]
+#[allow(
+    clippy::print_stdout,
+    reason = "the measured level of open item I40.1-1"
+)]
+fn psk8_metric_reports_lock_on_noise() {
+    // Open item I40.1-1: the order-8 metric of M40.1 §1 is cos(2 err) against the nearest
+    // point, |err| <= pi / 8, so it is at least cos(pi / 4) for every input and averages
+    // sin(pi / 4) / (pi / 4) = 0.900 on noise: the detector locks on noise and stays locked.
+    // The test pins the measured level until the maintainer decides.
+    let mut rng = Rng(SEED8 * 1000 + 41);
+    let noise: Vec<C32> = (0..20_000)
+        .map(|_| C32::new(rng.next(), rng.next()))
+        .collect();
+    let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
+    let mut levels = Vec::new();
+    let mut y = [C32::default(); 1];
+    for x in &noise {
+        Fallback
+            .costas(&mut st, core::slice::from_ref(x), &mut y)
+            .unwrap();
+        levels.push(st.lock_level());
+    }
+    let tail = &levels[2000..];
+    let mean = tail.iter().map(|&l| f64::from(l)).sum::<f64>() / tail.len() as f64;
+    let min = tail.iter().copied().fold(f32::INFINITY, f32::min);
+    println!("order-8 lock level on noise: mean {mean:.4}, min {min:.4}");
+    assert!((0.88..0.92).contains(&mean), "{mean}");
+    assert!(min > 0.85, "{min}");
+    assert!(st.locked());
+}
+
 #[test]
 fn the_frequency_integrator_stops_at_its_limit() {
     // An offset of 0.04 cycles per symbol against a limit of 0.01.
@@ -258,7 +384,7 @@ fn the_lock_detector_turns_off_on_noise() {
 
 #[test]
 fn output_does_not_depend_on_the_block_size() {
-    for order in [2, 4] {
+    for order in [2, 4, 8] {
         let x = symbols(50 + u64::from(order), 1500, order, 2.0, 0.006, 0.2);
         let mut whole = CostasState::new(order, 0.03, DAMP, 0.05).unwrap();
         let want = run(&mut whole, &x);
@@ -292,7 +418,7 @@ fn reset_returns_to_the_new_state() {
 
 #[test]
 fn silence_gives_zeros_and_a_resting_loop() {
-    for order in [2, 4] {
+    for order in [2, 4, 8] {
         let mut st = CostasState::new(order, 0.02, DAMP, 0.05).unwrap();
         st.set_phase(0x1234_5678);
         let y = run(&mut st, &[C32::new(0.0, 0.0); 500]);
@@ -308,7 +434,7 @@ fn silence_gives_zeros_and_a_resting_loop() {
 
 #[test]
 fn full_scale_and_beyond_keep_the_loop_bounded() {
-    for order in [2, 4] {
+    for order in [2, 4, 8] {
         for amp in [1.0f32, 1e18, 1e30, f32::MAX] {
             let x: Vec<C32> = symbols(70, 600, order, 0.8, 0.003, 0.0)
                 .iter()
@@ -324,7 +450,7 @@ fn full_scale_and_beyond_keep_the_loop_bounded() {
 
 #[test]
 fn non_finite_input_stays_in_its_own_symbols() {
-    for order in [2, 4] {
+    for order in [2, 4, 8] {
         let mut x = symbols(80, 2000, order, 0.4, 0.0, 0.02);
         for (i, v) in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY]
             .into_iter()
@@ -378,7 +504,7 @@ mod against_the_reference {
 
     #[test]
     fn fallback_equals_reference() {
-        for order in [2, 4] {
+        for order in [2, 4, 8] {
             for (k, offset) in [0.0, 0.01, -0.03].into_iter().enumerate() {
                 let mut x = symbols(90 + k as u64, 3000, order, 1.0, offset, 0.3);
                 for (j, s) in SPECIALS.iter().enumerate() {

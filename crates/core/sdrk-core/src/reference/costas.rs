@@ -50,13 +50,63 @@ fn rotate_back(x: C32, c: f32, s: f32) -> C32 {
     C32::new(re, im)
 }
 
-fn phase_error(order: u32, y: C32) -> f32 {
-    let e = if order == 2 {
-        y.re * y.im
+/// The 8PSK points `exp(j (2k + 1) pi / 8)`, each part rounded once to `f32`.
+#[allow(
+    clippy::excessive_precision,
+    reason = "the literals are the shortest decimals of the f32 values"
+)]
+const POINTS8: [(f32, f32); 8] = [
+    (0.923_879_5, 0.382_683_43),
+    (0.382_683_43, 0.923_879_5),
+    (-0.382_683_43, 0.923_879_5),
+    (-0.923_879_5, 0.382_683_43),
+    (-0.923_879_5, -0.382_683_43),
+    (-0.382_683_43, -0.923_879_5),
+    (0.382_683_43, -0.923_879_5),
+    (0.923_879_5, -0.382_683_43),
+];
+
+/// The index `k` of the half-open octant `[k pi / 4, (k + 1) pi / 4)` of `y`, written as the
+/// contract states it: the quadrant from the signs, then the comparison of the magnitudes;
+/// zero and NaN fall to 0.
+fn octant(y: C32) -> usize {
+    let (ar, ai) = (y.re.abs(), y.im.abs());
+    let q = if y.re > 0.0 && y.im >= 0.0 {
+        0
+    } else if y.re <= 0.0 && y.im > 0.0 {
+        1
+    } else if y.re < 0.0 && y.im <= 0.0 {
+        2
+    } else if y.re >= 0.0 && y.im < 0.0 {
+        3
     } else {
-        let a = sgn(y.re) * y.im;
-        let b = sgn(y.im) * y.re;
-        a - b
+        return 0;
+    };
+    // In quadrants 0 and 2 the first octant is the one nearer the real axis, in 1 and 3 the
+    // one nearer the imaginary axis.
+    let first = if q % 2 == 0 { ar > ai } else { ai > ar };
+    2 * q + usize::from(!first)
+}
+
+/// The point of the octant of `y`.
+fn point8(y: C32) -> (f32, f32) {
+    POINTS8.get(octant(y)).copied().unwrap_or((0.0, 0.0))
+}
+
+fn phase_error(order: u32, y: C32) -> f32 {
+    let e = match order {
+        2 => y.re * y.im,
+        4 => {
+            let a = sgn(y.re) * y.im;
+            let b = sgn(y.im) * y.re;
+            a - b
+        }
+        _ => {
+            let (dr, di) = point8(y);
+            let a = y.im * dr;
+            let b = y.re * di;
+            a - b
+        }
     };
     if e.is_finite() { e } else { 0.0 }
 }
@@ -66,15 +116,26 @@ fn metric(order: u32, y: C32) -> f32 {
     let im2 = y.im * y.im;
     let power = re2 + im2;
     let diff = re2 - im2;
-    if order == 2 {
-        diff / power
-    } else {
-        let four_re2 = 4.0 * re2;
-        let cross = four_re2 * im2;
-        let diff2 = diff * diff;
-        let num = cross - diff2;
-        let den = power * power;
-        num / den
+    match order {
+        2 => diff / power,
+        4 => {
+            let four_re2 = 4.0 * re2;
+            let cross = four_re2 * im2;
+            let diff2 = diff * diff;
+            let num = cross - diff2;
+            let den = power * power;
+            num / den
+        }
+        _ => {
+            let (dr, di) = point8(y);
+            let rr = y.re * dr;
+            let ii = y.im * di;
+            let r = rr + ii;
+            let r2 = r * r;
+            let ratio = r2 / power;
+            let twice = ratio * 2.0;
+            twice - 1.0
+        }
     }
 }
 

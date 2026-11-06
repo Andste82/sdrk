@@ -3,7 +3,9 @@
 //! `rate_unsupported` with the hint to resample, `invalid_value` for the order 3, the type
 //! checks), the parameter `polarity` of `frame_decode`, a push-mode `psk_mod` and `psk_demod`
 //! that equal the blocks, and packets through `frame_encode` -> `psk_mod` -> an inverted
-//! channel -> `psk_demod` -> `frame_decode` with `polarity` both.
+//! channel -> `psk_demod` -> `frame_decode` with `polarity` both. M40.1: `order` 8, the
+//! `variant` (`invalid_value` for the combinations that do not fit, the costs and delays) and
+//! push-mode 8PSK, pi/4-DQPSK and OQPSK in pieces of seed 564 equal to the blocks.
 #![allow(
     clippy::needless_pass_by_value,
     clippy::unwrap_used,
@@ -21,7 +23,7 @@
 mod common;
 
 use sdrk::{C32, Delay, Rate};
-use sdrk_blocks::{Block, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig};
+use sdrk_blocks::{Block, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant};
 use sdrk_pipeline::{
     BuildOptions, DiagCode, InputData, Packet, PacketFlags, Pipeline, Registry, VecStorage,
 };
@@ -32,6 +34,9 @@ use common::build;
 
 /// Seed of the random data of the M40 pipeline tests (the chunk-invariance seed of test 6).
 const SEED: u64 = 559;
+
+/// Seed of the chunk plans and the random data of the M40.1 pipeline tests (test 5).
+const M40_1_SEED: u64 = 564;
 
 /// A one-node flow of `kind` on an input of type `ty` at `rate` Hz.
 fn single(kind: &str, ty: &str, rate: u64, params: Value) -> Value {
@@ -94,7 +99,7 @@ fn costas_costs_30_and_keeps_the_rate() {
         ("nodes.n.params.order", DiagCode::InvalidValue)
     );
     for bad in [
-        json!({ "order": 8 }),
+        json!({ "order": 9 }),
         json!({ "loop_bw": 0.3 }),
         json!({ "damping": 0 }),
         json!({ "max_offset": 0.3 }),
@@ -249,7 +254,18 @@ fn push_all<I, O: Copy + Default + sdrk::Sample>(
     wrap: for<'a> fn(&'a [I]) -> InputData<'a>,
     stream: u64,
 ) -> Vec<O> {
-    let mut rng = Pcg32::new(SEED, stream);
+    push_all_seed(p, input, wrap, SEED, stream)
+}
+
+/// As `push_all` with the seed of the piece sizes.
+fn push_all_seed<I, O: Copy + Default + sdrk::Sample>(
+    p: &mut Pipeline,
+    input: &[I],
+    wrap: for<'a> fn(&'a [I]) -> InputData<'a>,
+    seed: u64,
+    stream: u64,
+) -> Vec<O> {
+    let mut rng = Pcg32::new(seed, stream);
     let mut got = Vec::new();
     let mut buf = vec![O::default(); 1 << 16];
     let mut at = 0;
@@ -413,5 +429,240 @@ fn inverted_bpsk_frames_are_found_with_polarity_both() {
             assert_eq!(g.data(), s.data());
             assert_eq!(g.flags, PacketFlags::CRC_OK);
         }
+    }
+}
+
+/// The constellation `8psk` of `slice` (M40.1): `c32` only, three soft bits per symbol, cost 16
+/// (D644); `f32` is `invalid_value` at `params.constellation`.
+#[test]
+fn slice_takes_8psk() {
+    let report = validate(&single(
+        "slice",
+        "c32",
+        4800,
+        json!({ "constellation": "8psk" }),
+    ));
+    assert!(report.is_ok(), "{}", report.to_json());
+    assert_eq!(report.nodes[0].rate_out, Rate::hz(14_400).unwrap());
+    assert_eq!(report.cost_per_input_sample, 16.0);
+    let (path, code, _) = first_error(&single(
+        "slice",
+        "f32",
+        4800,
+        json!({ "constellation": "8psk" }),
+    ));
+    assert_eq!(code, DiagCode::InvalidValue);
+    assert_eq!(path, "nodes.n.params.constellation");
+}
+
+/// M40.1 §4: `order` 8 on all three kinds (8PSK: `psk_mod` ratio `sps / 3`, `psk_demod` three
+/// soft bits per symbol and the cost `4 span + 56 / sps`, D651), the `variant` of `psk_mod`
+/// and `psk_demod` (`offset` adds half a symbol to the delay) and `invalid_value` at
+/// `params.variant` for the combinations that do not fit (D648).
+#[test]
+fn psk_kinds_take_order_8_and_the_variants() {
+    let report = validate(&single("costas", "c32", 25_000, json!({ "order": 8 })));
+    assert!(report.is_ok(), "{}", report.to_json());
+    for order in [3, 5, 6, 7] {
+        let (path, code, _) =
+            first_error(&single("costas", "c32", 1000, json!({ "order": order })));
+        assert_eq!(
+            (path.as_str(), code),
+            ("nodes.n.params.order", DiagCode::InvalidValue),
+            "{order}"
+        );
+    }
+    // psk_mod: rate, delay and cost
+    for (params, rate_out, delay) in [
+        (
+            json!({ "order": 8, "samples_per_symbol": 8 }),
+            25_600u64,
+            Delay::new(30, 2),
+        ),
+        (
+            json!({ "order": 4, "samples_per_symbol": 8, "variant": "offset" }),
+            38_400,
+            Delay::new(22, 2),
+        ),
+        (
+            json!({ "order": 4, "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
+            38_400,
+            Delay::new(20, 2),
+        ),
+    ] {
+        let report = validate(&single("psk_mod", "f32", 9600, params.clone()));
+        assert!(report.is_ok(), "{params}: {}", report.to_json());
+        assert_eq!(report.cost_per_input_sample, 40.0, "{params}");
+        let node = &report.nodes[0];
+        assert_eq!(node.rate_out, Rate::hz(rate_out).unwrap(), "{params}");
+        assert_eq!(
+            node.delay_samples_in.reduced(),
+            delay.unwrap().reduced(),
+            "{params}"
+        );
+    }
+    // psk_demod: 8PSK cost and rate; OQPSK delay
+    let report = validate(&single(
+        "psk_demod",
+        "c32",
+        200_000,
+        json!({ "order": 8, "symbol_rate_hz": 25_000 }),
+    ));
+    assert!(report.is_ok(), "{}", report.to_json());
+    assert_eq!(report.cost_per_input_sample, 40.0 + 56.0 / 8.0);
+    assert_eq!(report.nodes[0].rate_out, Rate::hz(75_000).unwrap());
+    let report = validate(&single(
+        "psk_demod",
+        "c32",
+        200_000,
+        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }),
+    ));
+    assert!(report.is_ok(), "{}", report.to_json());
+    assert_eq!(report.cost_per_input_sample, 40.0 + 40.0 / 8.0);
+    assert_eq!(
+        report.nodes[0].delay_samples_in.reduced(),
+        Delay::new(82, 2).unwrap().reduced() // as plain QPSK (D658)
+    );
+    // the combinations that do not fit: invalid_value at params.variant
+    for params in [
+        json!({ "order": 4, "samples_per_symbol": 8, "variant": "pi4" }),
+        json!({ "order": 2, "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
+        json!({ "order": 8, "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
+        json!({ "order": 4, "samples_per_symbol": 7, "variant": "offset" }),
+        json!({ "order": 4, "samples_per_symbol": 8, "differential": true, "variant": "offset" }),
+        json!({ "order": 8, "samples_per_symbol": 8, "variant": "offset" }),
+    ] {
+        let (path, code, _) = first_error(&single("psk_mod", "f32", 9600, params.clone()));
+        assert_eq!(
+            (path.as_str(), code),
+            ("nodes.n.params.variant", DiagCode::InvalidValue),
+            "{params}"
+        );
+    }
+    for (fs, params) in [
+        (
+            200_000,
+            json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "pi4" }),
+        ),
+        (
+            200_000,
+            json!({ "order": 8, "symbol_rate_hz": 25_000, "differential": true, "variant": "pi4" }),
+        ),
+        // 7 samples per symbol: the rate is fine, the odd count is the variant's error
+        (
+            175_000,
+            json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }),
+        ),
+        (
+            200_000,
+            json!({ "order": 4, "symbol_rate_hz": 25_000, "differential": true, "variant": "offset" }),
+        ),
+    ] {
+        let (path, code, _) = first_error(&single("psk_demod", "c32", fs, params.clone()));
+        assert_eq!(
+            (path.as_str(), code),
+            ("nodes.n.params.variant", DiagCode::InvalidValue),
+            "{params}"
+        );
+    }
+    assert!(
+        !validate(&single(
+            "psk_mod",
+            "f32",
+            9600,
+            json!({ "samples_per_symbol": 8, "variant": "oqpsk" })
+        ))
+        .is_ok()
+    );
+}
+
+/// Test 5 of M40.1 in the pipeline: push-mode `psk_mod` and `psk_demod` with 8PSK, pi/4-DQPSK
+/// and OQPSK in pieces of 1 to 1024 samples (seed 564) equal the blocks bit for bit.
+#[test]
+fn psk_variant_kinds_equal_the_blocks_in_pieces() {
+    for (i, (order, differential, variant, name)) in [
+        (8u32, false, PskVariant::Plain, "plain"),
+        (8, true, PskVariant::Plain, "plain"),
+        (4, true, PskVariant::Pi4, "pi4"),
+        (4, false, PskVariant::Offset, "offset"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let m = PskModConfig {
+            order,
+            samples_per_symbol: 8,
+            differential,
+            variant,
+            ..PskModConfig::default()
+        };
+        let bps = m.bits_per_symbol();
+        let mut rng = Pcg32::new(M40_1_SEED, 10 + i as u64);
+        let bits: Vec<f32> = (0..6000 * bps)
+            .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+            .collect();
+        let bit_rate = 25_000 * bps as u64;
+        let mut block =
+            PskModBlock::<VecStorage>::new(&m, Rate::hz(bit_rate).unwrap(), &mut VecStorage)
+                .unwrap();
+        let mut want = vec![C32::default(); 6000 * 8];
+        let p = block.process(&bits, &mut want).unwrap();
+        assert_eq!(p.consumed, bits.len());
+        let params = json!({
+            "order": order, "samples_per_symbol": 8, "differential": differential,
+            "variant": name
+        });
+        let mut tx = build(&single("psk_mod", "f32", bit_rate, params).to_string());
+        let sig: Vec<C32> = push_all_seed(
+            &mut tx,
+            &bits,
+            |x| InputData::F32(x),
+            M40_1_SEED,
+            20 + i as u64,
+        );
+        assert_eq!(sig, want, "psk_mod {order} {name}");
+
+        let d = PskDemodConfig {
+            order,
+            symbol_rate_hz: 25_000.0,
+            differential,
+            variant,
+            ..PskDemodConfig::default()
+        };
+        let fs = Rate::hz(200_000).unwrap();
+        let noisy: Vec<C32> = sig
+            .iter()
+            .map(|x| {
+                C32::new(
+                    x.re + 0.05 * rng.normal() as f32,
+                    x.im + 0.05 * rng.normal() as f32,
+                )
+            })
+            .collect();
+        let mut block = PskDemodBlock::<VecStorage>::new(&d, fs, &mut VecStorage).unwrap();
+        let mut want = vec![0.0f32; noisy.len()];
+        let p = block.process(&noisy, &mut want).unwrap();
+        assert_eq!(p.consumed, noisy.len());
+        want.truncate(p.produced);
+        assert!(want.len() > 5900 * bps, "{order} {name}");
+        let params = json!({
+            "order": order, "symbol_rate_hz": 25_000, "differential": differential,
+            "variant": name
+        });
+        let mut rx = build(&single("psk_demod", "c32", 200_000, params).to_string());
+        let soft: Vec<f32> = push_all_seed(
+            &mut rx,
+            &noisy,
+            |x| InputData::C32(x),
+            M40_1_SEED,
+            30 + i as u64,
+        );
+        assert_eq!(soft.len(), want.len(), "{order} {name}");
+        assert!(
+            soft.iter()
+                .zip(&want)
+                .all(|(a, b)| a.to_bits() == b.to_bits()),
+            "psk_demod {order} {name}: pipeline differs from the block"
+        );
     }
 }

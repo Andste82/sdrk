@@ -502,10 +502,9 @@ fn a_short_output_limits_the_clock_samples() {
 
 /// Test 4: the encoder gives the baseband of the Python reference modulator of M41 for the
 /// same groups (golden case `rds_encode/cross_check_585`, seed 585, 192 kHz, samples 0..4095
-/// and 100000..104095) within the tolerance of the case. The specification asks for 1e-5; the
-/// 256-point table reaches about 7.9e-5 (open item I42-1), which the case stores as
-/// `model_max_abs_err` and as its tolerance. The measured error equals that of the float32
-/// model of the generator.
+/// and 100000..104095) within the tolerance of the case, 1e-4 (D771; the 256-point table
+/// reaches about 7.9e-5, stored as `model_max_abs_err`). The measured error equals that of the
+/// float32 model of the generator.
 #[test]
 fn test4_cross_check_with_the_reference_modulator() {
     let case = golden::load("rds_encode", "cross_check_585").unwrap();

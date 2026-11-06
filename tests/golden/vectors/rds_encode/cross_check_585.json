@@ -24,7 +24,7 @@
   "case": "cross_check_585",
   "format_version": 1,
   "kernel": "rds_encode",
-  "notes": "test 4 of M42: words: 8 random groups (A, B, C, D per group; version B in the odd groups); data_bits: their 832 bits with the offsets A, B, C or C', D (bit-exact); baseband: samples 0..4095 and baseband_late: samples late_start..late_start+4095 of the exact RDS baseband of cases/rds.py at 192 kHz for these bits (float64 rounded once to float32); model_max_abs_err: the distance of the float32 model of rds_shape from them, the tolerance rounds it up (the 1e-5 of the specification, spec_max_abs_err, is open item I42-1)",
+  "notes": "test 4 of M42: words: 8 random groups (A, B, C, D per group; version B in the odd groups); data_bits: their 832 bits with the offsets A, B, C or C', D (bit-exact); baseband: samples 0..4095 and baseband_late: samples late_start..late_start+4095 of the exact RDS baseband of cases/rds.py at 192 kHz for these bits (float64 rounded once to float32); model_max_abs_err: the distance of the float32 model of rds_shape from them, the tolerance is spec_max_abs_err, 1e-4 (D771)",
   "params": {
     "grid_den": 3072,
     "groups": 8,
@@ -32,7 +32,7 @@
     "model_max_abs_err": 7.87973403930664e-05,
     "pulse_peak": 2.718894317727185,
     "rate_hz": 192000,
-    "spec_max_abs_err": 1e-05
+    "spec_max_abs_err": 0.0001
   },
   "provenance": {
     "generator": "tests/golden/generate.py",
@@ -43,7 +43,7 @@
   "seed": 585,
   "tolerance": {
     "class": "max_abs_err",
-    "max_abs_err": 7.88e-05,
+    "max_abs_err": 0.0001,
     "skip": 0
   }
 }

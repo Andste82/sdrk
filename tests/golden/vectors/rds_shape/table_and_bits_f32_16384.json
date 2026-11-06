@@ -20,7 +20,7 @@
   "format_version": 1,
   "kernel": "rds_shape",
   "model": "float32",
-  "notes": "192 kHz; random amplitudes +-1 (the bits after the differential coding) for every bit the 16384 samples use; table: the pulse p(x) = h(x + 1/4) - h(x - 1/4) of cases/rds.py at x = -2 + i / 256 for i = 0..1024, divided by its largest magnitude on that grid (grid_peak); expected: the exact float32 model of the kernel on the table rounded to float32 (module docstring); closed_form_max_abs_err: the largest difference of expected from the exact baseband of cases/rds.py for the same bits (open item I42-1)",
+  "notes": "192 kHz; random amplitudes +-1 (the bits after the differential coding) for every bit the 16384 samples use; table: the pulse p(x) = h(x + 1/4) - h(x - 1/4) of cases/rds.py at x = -2 + i / 256 for i = 0..1024, divided by its largest magnitude on that grid (grid_peak); expected: the exact float32 model of the kernel on the table rounded to float32 (module docstring); closed_form_max_abs_err: the largest difference of expected from the exact baseband of cases/rds.py for the same bits (D771)",
   "params": {
     "bit_rate_hz": 1187.5,
     "bits": 104,

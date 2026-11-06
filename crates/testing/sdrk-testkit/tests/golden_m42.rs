@@ -172,7 +172,7 @@ fn rds_shape_golden() {
     rds_pulse_table(&mut own).unwrap();
     let ours = shape_check(&Sdrk, &case, &own);
     assert_eq!(bit_exact(&facade, &ours), None);
-    // The distance from the exact baseband is recorded in the case (open item I42-1).
+    // The distance from the exact baseband is recorded in the case (D771).
     let err = case.param_f64("closed_form_max_abs_err").unwrap();
     assert!(err > 1e-5 && err < 1e-4, "{err:e}");
 }

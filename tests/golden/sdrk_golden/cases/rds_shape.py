@@ -18,7 +18,7 @@ expected output is the exact float32 model (``f32model``) of the kernel on the f
 
 ``closed_form_max_abs_err`` is the largest difference of the model output from the exact
 baseband of ``cases/rds.py`` (its pulse at the exact grid of 192 kHz, 3072 points per bit) for the
-same bits: the error of the 256-point table with linear interpolation (open item I42-1).
+same bits: the error of the 256-point table with linear interpolation (D771).
 """
 
 import math
@@ -109,5 +109,5 @@ def table_and_bits(rng):
         "at x = -2 + i / 256 for i = 0..1024, divided by its largest magnitude on that grid "
         "(grid_peak); expected: the exact float32 model of the kernel on the table rounded to "
         "float32 (module docstring); closed_form_max_abs_err: the largest difference of expected "
-        "from the exact baseband of cases/rds.py for the same bits (open item I42-1)",
+        "from the exact baseband of cases/rds.py for the same bits (D771)",
     )

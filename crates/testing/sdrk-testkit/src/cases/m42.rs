@@ -5,7 +5,7 @@
 //! and run the facade in 20 chunk plans (seed 580 for the shaper, 581 for the encoder; chunks of
 //! 1 to 500 samples); every run must give the output and the final state of the run in one
 //! call. `rds_shape_f32` also checks the shaper against the exact pulse sum in f64 (the error of
-//! the table, open item I42-1) and `stereo_encode_rds_c32` the RDS term against `stereo_encode`
+//! the table, D771) and `stereo_encode_rds_c32` the RDS term against `stereo_encode`
 //! and an f64 `sin(3 phi)`. The bits come from `Pcg32`; no files are read, so the cases run on
 //! microcontrollers too.
 
@@ -96,7 +96,7 @@ fn pulse_exact(x: f64) -> f64 {
 
 /// Fallback and Reference agree bit for bit (output, state, bits fetched) at 192 kHz and at
 /// 50 kHz (a non-integer number of samples per bit), the facade equals the fallback in 20 chunk
-/// plans, and the output is the exact pulse sum within 2e-4 (I42-1).
+/// plans, and the output is the exact pulse sum within 2e-4 (D771).
 pub(super) fn rds_shape_f32(arena: &mut Arena<'_>) -> Result<(), Failure> {
     const CASE: &str = "rds_shape_f32";
     let fail = |msg: &'static str| Failure::new(CASE, msg);

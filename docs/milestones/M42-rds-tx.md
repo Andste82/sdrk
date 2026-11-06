@@ -183,7 +183,7 @@ pub trait RdsShape { fn rds_shape<Tab>(&self, s: &mut RdsShapeState<Tab>, bits: 
 1. Golden: `rds_shape/table_and_bits_f32_16384` (seed 580, float32 model); `stereo_encode_rds/c32_16384` (seed 581).
 2. Spectrum: the RDS component of the multiplex lies within 57 kHz ± 2.4 kHz (outside at least 40 dB below its peak), and at exactly 57 kHz its level is at least 30 dB below that peak (the biphase coding has no carrier; seed 582).
 3. **Loop (`e2e_rds_loop`):** the flow (without `duc`, at 192 kHz, then `resample` to 240 kHz) → `fm_rds_receiver` chain from `quad_demod` on: PS and RT set by packets decode within 2 s and 6 s; 100 % valid groups at 40 dB SNR, ≥ 99 % at 25 dB (seeds 583, 584); a raw group sent by packet arrives unchanged; the stereo separation of M36 E2E-STEREO-TX still holds (30 dB).
-4. Cross-check: the Python reference modulator (M41 §5) and `rds_encode` give the same RDS baseband within 1e-5 for the same groups (seed 585).
+4. Cross-check: the Python reference modulator (M41 §5) and `rds_encode` give the same RDS baseband within 1e-4 for the same groups (seed 585; D771, maintainer decision: the 1e-5 of the first version needs a pulse table of 1024 points per bit, 16 KiB per encoder, for no audible or measurable gain).
 5. Chunk invariance with 20 plans (seed 586).
 
 ## Acceptance
@@ -196,7 +196,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-pr
 - [x] Kernels `rds_shape` and `stereo_encode_rds` with reference, fallback, delegation, contracts (D752 to D758)
 - [x] Blocks and kinds `rds_encode` (`Clocked`), `fm_stereo_rds_mod` (`Two`) (D759 to D763, D767)
 - [x] Flow `fm_stereo_rds_transmitter` with YAML twin (D769)
-- [x] Tests (seeds 580–586; D755, D756, D764 to D766, D768); test 4 against the measured bound, open item I42-1
+- [x] Tests (seeds 580–586; D755, D756, D764 to D766, D768); test 4 within 1e-4 (D771)
 - [x] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log (D750 to D770)
 
 ## Status
@@ -206,7 +206,7 @@ Done: `sdrk_proto::rds::Carousel` in its own section of `rds.rs` (D750, D751); t
 Deviations from the specification, recorded in the decisions log:
 - §3: the pulse table has 1025 entries (the end point `p(2 Tb)` included, otherwise the last interval interpolates to 0) and is computed from the closed form of `h` (D664) rather than an 8192-point inverse FFT, which needs 128 KiB of scratch in a heap-free crate and differs from the closed form by 1.3e-4 to 1.5e-2 (D752).
 - §3, §4: the pulse table is normalized to a peak of 1 as §3 says, but overlapping pulses take the RDS baseband to at most 1.058, so with the defaults (`main + pilot + rds = 1`) and full-scale audio the multiplex reaches at most about 1.002 rather than 1; kept, neither the baseband nor the default `rds` is scaled (D770).
-- Test 4: the bound 1e-5 cannot hold with 256 points per bit and linear interpolation (7.88e-5 measured); the test checks the measured value until the maintainer decides open item I42-1.
+- Test 4: the bound 1e-5 of the first specification cannot hold with 256 points per bit and linear interpolation (7.88e-5 measured; 4.8e-6 would need 1024 points per bit, a 16 KiB table); by the maintainer's decision D771 the bound is 1e-4 and the table stays at 256 points per bit (open item I42-1, closed).
 - §1: `Carousel::new` returns `Result` and rejects `pty > 31` (R4.2; D750).
 - §3, §4: `stereo_encode_rds` has its own state `StereoEncodeRdsState` and its own trait, and the `bits` callback of `rds_shape` and the position arithmetic are fixed so Python and Rust do the same IEEE operations (D753, D754).
 - §4: a two-input node whose ports accept different type lists (`c32`, `f32`) is checked port by port, not pairwise (D763).
@@ -224,7 +224,7 @@ Measured (local runs in the test profile, Linux x86-64; all pass):
 | 2: spectrum (seed 582) | peak at 56039 Hz; outside 57 kHz +- 2.4 kHz at most -52.0 dB (limit -40 dB); at 57 kHz -39.6 dB (limit -30 dB) (D765) |
 | 3: `e2e_rds_loop` 40 dB (seed 583) | PS at 0.8 s, RT at 0.9 s (limits 2 s, 6 s); 62 of 62 groups `CRC_OK` (limit 100 %); the raw group arrives unchanged as group 35; separation L 45.4 dB, R 38.7 dB (limit 30 dB) (D768) |
 | 3: `e2e_rds_loop_25_db` (seed 584) | PS at 0.8 s, RT at 0.9 s; 62 of 62 groups `CRC_OK` (limit 99 %); the raw group unchanged (D768) |
-| 4: cross-check `rds_encode/cross_check_585` (seed 585) | 7.880e-5 against the exact baseband of the Python modulator (spec 1e-5, open item I42-1; D764) |
+| 4: cross-check `rds_encode/cross_check_585` (seed 585) | 7.880e-5 against the exact baseband of the Python modulator (limit 1e-4, D771) |
 | 5: chunk invariance (seed 586) | bit-exact in 20 cut plans with packets at fixed clock positions, and equal to an independent model for all 20 plans and four clock types (D766) |
 | Peaks (seed 586) | baseband at most 1.0578 (table bound 1.0578), multiplex at the defaults at most 1.0021 (bound 1.0023) (D770) |
 | `Carousel` against `RdsState` | every group parses back to the name and the radiotext that were set, the A/B flag toggles on a change |
@@ -241,4 +241,4 @@ Not done or not run:
 - `rds_shape` and `stereo_encode_rds` have no SIMD code of their own (D757).
 - `cargo clippy -D warnings` on the bench workspace (it stops in the unchanged dependency `cref-sys`; CI does not run clippy there).
 
-Open items: I42-1 (the bound 1e-5 of test 4).
+Open items: none (I42-1 is closed by D771).

@@ -13,12 +13,11 @@ baseband within ``max_abs_err``.
 
 ``model_max_abs_err`` is the distance of the float32 model of the kernel ``rds_shape``
 (``cases/rds_shape.py``, the 256-point table with linear interpolation) from the stored
-baseband: the bound that the block can reach. The specification asks for 1e-5
-(``spec_max_abs_err``); that bound needs a finer table (open item I42-1), so the tolerance is the
-measured value rounded up to three significant digits.
+baseband: the bound that the block can reach. The tolerance is ``spec_max_abs_err``, 1e-4: the
+bound of test 4 by the maintainer's decision D771 (the first specification asked for 1e-5,
+which the 256-point table cannot reach).
 """
 
-import math
 
 import numpy as np
 
@@ -29,7 +28,7 @@ RATE_HZ = 192000
 GROUPS = 8
 WINDOW = 4096
 LATE_START = 100000
-SPEC_MAX_ABS_ERR = 1e-5
+SPEC_MAX_ABS_ERR = 1e-4
 
 
 def group_bits(words):
@@ -41,11 +40,6 @@ def group_bits(words):
         out.extend((block >> (25 - i)) & 1 for i in range(26))
     return out
 
-
-def round_up(v, digits=3):
-    """``v > 0`` rounded up to ``digits`` significant digits."""
-    e = math.floor(math.log10(v)) - (digits - 1)
-    return float(f"{math.ceil(v / 10.0**e)}e{e}")
 
 
 @case(kernel="rds_encode", name="cross_check_585", seed=585)
@@ -89,12 +83,11 @@ def cross_check(rng):
             "baseband": Array("f32", early),
             "baseband_late": Array("f32", late),
         },
-        tolerance={"class": "max_abs_err", "max_abs_err": round_up(err), "skip": 0},
+        tolerance={"class": "max_abs_err", "max_abs_err": SPEC_MAX_ABS_ERR, "skip": 0},
         notes="test 4 of M42: words: 8 random groups (A, B, C, D per group; version B in the odd "
         "groups); data_bits: their 832 bits with the offsets A, B, C or C', D (bit-exact); "
         "baseband: samples 0..4095 and baseband_late: samples late_start..late_start+4095 of the "
         "exact RDS baseband of cases/rds.py at 192 kHz for these bits (float64 rounded once to "
         "float32); model_max_abs_err: the distance of the float32 model of rds_shape from them, "
-        "the tolerance rounds it up (the 1e-5 of the specification, spec_max_abs_err, is open "
-        "item I42-1)",
+        "the tolerance is spec_max_abs_err, 1e-4 (D771)",
     )

@@ -20,6 +20,13 @@
 //! ([`VALID_SHIFT`]) and [`VERSION_B`] when block C' was seen. [`Group::from_packet`] reads
 //! such a packet back and [`RdsState`] collects the text of the groups 0A, 0B, 2A and 2B.
 //!
+//! The text is in the basic RDS character set of IEC 62106, Annex E (formerly EN 50067,
+//! Annex E): ASCII with a few exceptions below 0x80, accented letters and symbols above.
+//! [`decode_char`] and [`encode_char`] map one byte, [`RdsText`] reads a whole name or text
+//! (in the RDS set, in UTF-8 for stations that send it, or detected with [`Charset::Auto`])
+//! into ASCII or UTF-8 in caller storage, and [`encode_text`] turns a string into RDS bytes.
+//! The table is 256 bytes of flash (the code points of 0x80 to 0xFF as `u16`).
+//!
 //! ```
 //! use sdrk_proto::rds::{self, Offset};
 //!
@@ -31,7 +38,10 @@
 //! assert_eq!(Offset::from_syndrome(rds::syndrome(block ^ (1 << 20))), None);
 //! ```
 
+use core::fmt::{self, Write as _};
+
 use crate::packet::{Packet, PacketFlags};
+use crate::{Error, Result};
 
 /// The generator polynomial `x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + 1` (bit `k` = `x^k`).
 pub const GENERATOR: u16 = 0x5B9;
@@ -380,8 +390,12 @@ impl Group {
     }
 }
 
-/// The text character of an RDS byte: 0x20 to 0x7E are ASCII, everything else is `?` (the
-/// full RDS character table is not implemented).
+/// The plain ASCII view of an RDS byte used by [`RdsState::ps`] and [`RdsState::rt`]: 0x20 to
+/// 0x7E are kept, everything else is `?`.
+///
+/// This is not the RDS character set: four of the kept bytes are other characters there (0x24
+/// `¤`, 0x5E `―`, 0x60 `║`, 0x7E `¯`) and the bytes from 0x80 on are accented letters and
+/// symbols. [`decode_char`] and [`RdsText`] give the real characters.
 ///
 /// ```
 /// use sdrk_proto::rds::map_char;
@@ -390,6 +404,372 @@ impl Group {
 /// ```
 pub const fn map_char(b: u8) -> u8 {
     if b >= 0x20 && b <= 0x7E { b } else { b'?' }
+}
+
+/// The code points of the bytes 0x80 to 0xFF of the basic RDS character set (IEC 62106,
+/// Annex E, Figure E.1), one row of the figure per line; 0xFF is no character and decodes to a
+/// space. The bytes below 0x80 are ASCII with five exceptions, handled in [`decode_char`].
+#[rustfmt::skip]
+static HIGH: [u16; 128] = [
+    // 0x80: á à é è í ì ó ò ú ù Ñ Ç Ş ß ¡ Ĳ
+    0x00E1, 0x00E0, 0x00E9, 0x00E8, 0x00ED, 0x00EC, 0x00F3, 0x00F2,
+    0x00FA, 0x00F9, 0x00D1, 0x00C7, 0x015E, 0x00DF, 0x00A1, 0x0132,
+    // 0x90: â ä ê ë î ï ô ö û ü ñ ç ş ğ ı ĳ
+    0x00E2, 0x00E4, 0x00EA, 0x00EB, 0x00EE, 0x00EF, 0x00F4, 0x00F6,
+    0x00FB, 0x00FC, 0x00F1, 0x00E7, 0x015F, 0x011F, 0x0131, 0x0133,
+    // 0xA0: ª α © ‰ Ğ ě ň ő π € £ $ ← ↑ → ↓
+    0x00AA, 0x03B1, 0x00A9, 0x2030, 0x011E, 0x011B, 0x0148, 0x0151,
+    0x03C0, 0x20AC, 0x00A3, 0x0024, 0x2190, 0x2191, 0x2192, 0x2193,
+    // 0xB0: º ¹ ² ³ ± İ ń ű µ ¿ ÷ ° ¼ ½ ¾ §
+    0x00BA, 0x00B9, 0x00B2, 0x00B3, 0x00B1, 0x0130, 0x0144, 0x0171,
+    0x00B5, 0x00BF, 0x00F7, 0x00B0, 0x00BC, 0x00BD, 0x00BE, 0x00A7,
+    // 0xC0: Á À É È Í Ì Ó Ò Ú Ù Ř Č Š Ž Ð Ŀ
+    0x00C1, 0x00C0, 0x00C9, 0x00C8, 0x00CD, 0x00CC, 0x00D3, 0x00D2,
+    0x00DA, 0x00D9, 0x0158, 0x010C, 0x0160, 0x017D, 0x00D0, 0x013F,
+    // 0xD0: Â Ä Ê Ë Î Ï Ô Ö Û Ü ř č š ž đ ŀ
+    0x00C2, 0x00C4, 0x00CA, 0x00CB, 0x00CE, 0x00CF, 0x00D4, 0x00D6,
+    0x00DB, 0x00DC, 0x0159, 0x010D, 0x0161, 0x017E, 0x0111, 0x0140,
+    // 0xE0: Ã Å Æ Œ ŷ Ý Õ Ø Þ Ŋ Ŕ Ć Ś Ź Ŧ ð
+    0x00C3, 0x00C5, 0x00C6, 0x0152, 0x0177, 0x00DD, 0x00D5, 0x00D8,
+    0x00DE, 0x014A, 0x0154, 0x0106, 0x015A, 0x0179, 0x0166, 0x00F0,
+    // 0xF0: ã å æ œ ŵ ý õ ø þ ŋ ŕ ć ś ź ŧ, 0xFF space
+    0x00E3, 0x00E5, 0x00E6, 0x0153, 0x0175, 0x00FD, 0x00F5, 0x00F8,
+    0x00FE, 0x014B, 0x0155, 0x0107, 0x015B, 0x017A, 0x0167, 0x0020,
+];
+
+/// The character of a byte in the basic RDS character set of IEC 62106, Annex E, Figure E.1
+/// (formerly EN 50067, Annex E), the set of the programme service name and the radiotext.
+///
+/// - 0x20 to 0x7D are ASCII except 0x24, the currency sign `¤` (U+00A4; the dollar sign is
+///   0xAB), 0x5E, the horizontal bar `―` (U+2015), and 0x60, the double vertical line `║`
+///   (U+2551); 0x7E is the macron `¯` (U+00AF).
+/// - 0x80 to 0xFE are the accented letters, the Greek letters, the symbols and the arrows of
+///   the figure.
+/// - The control codes 0x00 to 0x1F and 0x7F and the unused 0xFF decode to a space. Four of
+///   them mean something in a radiotext: 0x0A a preferred line break, 0x0B the end of a
+///   headline, 0x0D the end of the text (where [`RdsState`] ends the radiotext) and 0x1F a
+///   soft hyphen. A caller that wants them reads the raw bytes ([`RdsText::bytes`]).
+///
+/// ```
+/// use sdrk_proto::rds::decode_char;
+/// assert_eq!(decode_char(b'A'), 'A');
+/// assert_eq!(decode_char(0x99), 'ü');
+/// assert_eq!(decode_char(0x8D), 'ß');
+/// assert_eq!(decode_char(0xAB), '$');
+/// assert_eq!(decode_char(0x24), '¤');
+/// assert_eq!(decode_char(0x0D), ' ');
+/// ```
+pub const fn decode_char(b: u8) -> char {
+    let code = match b {
+        0x24 => 0x00A4,
+        0x5E => 0x2015,
+        0x60 => 0x2551,
+        0x7E => 0x00AF,
+        0x20..=0x7D => b as u32,
+        #[allow(clippy::indexing_slicing)] // `b - 0x80 < 128`
+        0x80..=0xFF => HIGH[(b - 0x80) as usize] as u32,
+        _ => 0x20,
+    };
+    match char::from_u32(code) {
+        Some(c) => c,
+        None => ' ',
+    }
+}
+
+/// The byte of `c` in the basic RDS character set ([`decode_char`]), `None` if the set has no
+/// such character.
+///
+/// The space is 0x20 (the control codes that also decode to a space are never chosen), the
+/// dollar sign `$` is 0xAB, and the ASCII characters `^`, `` ` `` and `~` have no code (their
+/// places hold `―`, `║` and `¯`). Every byte except the control codes and 0xFF is the code
+/// of exactly one character, so `encode_char(decode_char(b)) == Some(b)` for them.
+///
+/// ```
+/// use sdrk_proto::rds::{decode_char, encode_char};
+/// assert_eq!(encode_char('ü'), Some(0x99));
+/// assert_eq!(encode_char('$'), Some(0xAB));
+/// assert_eq!(encode_char(' '), Some(0x20));
+/// assert_eq!(encode_char('~'), None);
+/// assert_eq!(decode_char(encode_char('€').unwrap_or(b'?')), '€');
+/// ```
+pub fn encode_char(c: char) -> Option<u8> {
+    match c {
+        '$' => Some(0xAB),
+        '^' | '`' | '~' => None,
+        ' '..='}' => Some(c as u8),
+        '\u{A4}' => Some(0x24),
+        '\u{2015}' => Some(0x5E),
+        '\u{2551}' => Some(0x60),
+        '\u{AF}' => Some(0x7E),
+        _ => {
+            let code = u32::from(c);
+            HIGH.iter()
+                .take(127)
+                .position(|&u| u32::from(u) == code)
+                .map(|i| 0x80 + i as u8)
+        }
+    }
+}
+
+/// How the bytes of an [`RdsText`] are read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum Charset {
+    /// The basic RDS character set of the standard ([`decode_char`]).
+    #[default]
+    Rds,
+    /// UTF-8, which some stations send against the standard. An invalid sequence becomes the
+    /// replacement character U+FFFD and the ASCII control codes become spaces, as in the RDS
+    /// table.
+    Utf8,
+    /// UTF-8 when the bytes contain a multi-byte sequence (a byte of 0x80 or more) and are
+    /// valid UTF-8 as a whole, else the RDS character set. A text of ASCII bytes only is read
+    /// with the RDS table.
+    Auto,
+}
+
+/// A programme service name or a radiotext as raw bytes, with the character set to read them
+/// in ([`Charset::Rds`] unless [`RdsText::with_charset`] chose another).
+///
+/// [`RdsState::ps_text`] and [`RdsState::rt_text`] give one; [`RdsText::new`] wraps any bytes.
+/// Nothing is copied: the conversions write into caller storage.
+///
+/// ```
+/// use sdrk_proto::rds::{Charset, RdsText};
+///
+/// // "Württemberg" in the RDS character set (0x99 is ü).
+/// let raw = b"W\x99rttemberg";
+/// let text = RdsText::new(raw);
+/// assert_eq!(text.chars().nth(1), Some('ü'));
+/// let mut buf = [0u8; 32];
+/// assert_eq!(text.to_utf8(&mut buf)?, "Württemberg");
+/// assert_eq!(text.to_ascii(&mut buf)?, "W?rttemberg");
+/// // A station that sends UTF-8: `Auto` notices it.
+/// let utf8 = RdsText::new("Württemberg".as_bytes()).with_charset(Charset::Auto);
+/// assert_eq!(utf8.charset(), Charset::Utf8);
+/// assert_eq!(utf8.to_utf8(&mut buf)?, "Württemberg");
+/// # Ok::<(), sdrk_proto::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RdsText<'a> {
+    bytes: &'a [u8],
+    utf8: bool,
+}
+
+impl<'a> RdsText<'a> {
+    /// The text of `bytes` in the RDS character set.
+    pub const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, utf8: false }
+    }
+
+    /// The same bytes read with `charset`; [`Charset::Auto`] decides here, from the bytes.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::{Charset, RdsText};
+    /// // A lone 0xC3 is no valid UTF-8, so `Auto` keeps the RDS table (0xC3 is È).
+    /// let t = RdsText::new(b"\xC3 ok").with_charset(Charset::Auto);
+    /// assert_eq!(t.charset(), Charset::Rds);
+    /// assert_eq!(t.chars().next(), Some('È'));
+    /// ```
+    #[must_use]
+    pub fn with_charset(self, charset: Charset) -> Self {
+        let utf8 = match charset {
+            Charset::Utf8 => true,
+            Charset::Auto => {
+                self.bytes.iter().any(|&b| b >= 0x80) && core::str::from_utf8(self.bytes).is_ok()
+            }
+            _ => false,
+        };
+        Self { utf8, ..self }
+    }
+
+    /// The character set the text is read in: [`Charset::Rds`] or [`Charset::Utf8`], never
+    /// [`Charset::Auto`].
+    pub const fn charset(&self) -> Charset {
+        if self.utf8 {
+            Charset::Utf8
+        } else {
+            Charset::Rds
+        }
+    }
+
+    /// The raw bytes as received.
+    pub const fn bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+
+    /// The characters of the text.
+    pub fn chars(&self) -> RdsChars<'a> {
+        let inner = if self.utf8 {
+            CharsInner::Utf8 {
+                chunks: self.bytes.utf8_chunks(),
+                valid: "".chars(),
+                invalid: false,
+            }
+        } else {
+            CharsInner::Rds(self.bytes.iter())
+        };
+        RdsChars { inner }
+    }
+
+    /// The number of characters, the room [`RdsText::to_ascii`] needs (in the RDS character
+    /// set the number of bytes).
+    pub fn char_count(&self) -> usize {
+        if self.utf8 {
+            self.chars().count()
+        } else {
+            self.bytes.len()
+        }
+    }
+
+    /// The length of the text in UTF-8, the room [`RdsText::to_utf8`] needs.
+    pub fn utf8_len(&self) -> usize {
+        self.chars().map(char::len_utf8).sum()
+    }
+
+    /// The text in ASCII, one byte per character: characters outside ASCII become `?`. Fails
+    /// with `BufferTooSmall` when `out` is shorter than [`RdsText::char_count`] (nothing is
+    /// truncated).
+    ///
+    /// ```
+    /// use sdrk_proto::{Error, rds::RdsText};
+    /// let text = RdsText::new(b"gr\x97\x8Dten");
+    /// let mut buf = [0u8; 8];
+    /// assert_eq!(text.to_ascii(&mut buf)?, "gr??ten");
+    /// assert_eq!(text.to_ascii(&mut buf[..6]), Err(Error::BufferTooSmall { needed: 7, got: 6 }));
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn to_ascii<'b>(&self, out: &'b mut [u8]) -> Result<&'b str> {
+        let needed = self.char_count();
+        let got = out.len();
+        let dst = out
+            .get_mut(..needed)
+            .ok_or(Error::BufferTooSmall { needed, got })?;
+        for (o, c) in dst.iter_mut().zip(self.chars()) {
+            *o = if c.is_ascii() { c as u8 } else { b'?' };
+        }
+        core::str::from_utf8(dst).map_err(|_| Error::InvalidArgument("text is not ascii"))
+    }
+
+    /// The text in UTF-8. Fails with `BufferTooSmall` when `out` is shorter than
+    /// [`RdsText::utf8_len`] (nothing is truncated).
+    ///
+    /// ```
+    /// use sdrk_proto::{Error, rds::RdsText};
+    /// let text = RdsText::new(b"gr\x97\x8Dten");
+    /// let mut buf = [0u8; 16];
+    /// assert_eq!(text.to_utf8(&mut buf)?, "größten");
+    /// assert_eq!(text.utf8_len(), 9);
+    /// assert_eq!(text.to_utf8(&mut buf[..8]), Err(Error::BufferTooSmall { needed: 9, got: 8 }));
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn to_utf8<'b>(&self, out: &'b mut [u8]) -> Result<&'b str> {
+        let needed = self.utf8_len();
+        let got = out.len();
+        let dst = out
+            .get_mut(..needed)
+            .ok_or(Error::BufferTooSmall { needed, got })?;
+        let mut at = 0;
+        for c in self.chars() {
+            let len = c.len_utf8();
+            let slot = dst
+                .get_mut(at..at + len)
+                .ok_or(Error::BufferTooSmall { needed, got })?;
+            c.encode_utf8(slot);
+            at += len;
+        }
+        core::str::from_utf8(dst).map_err(|_| Error::InvalidArgument("text is not utf-8"))
+    }
+}
+
+/// Writes the characters of the text (as [`RdsText::chars`]).
+///
+/// ```
+/// use sdrk_proto::rds::RdsText;
+/// assert_eq!(format!("{}", RdsText::new(b"Caf\x82")), "Café");
+/// ```
+impl fmt::Display for RdsText<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.chars().try_for_each(|c| f.write_char(c))
+    }
+}
+
+/// The characters of an [`RdsText`], from [`RdsText::chars`].
+#[derive(Debug, Clone)]
+pub struct RdsChars<'a> {
+    inner: CharsInner<'a>,
+}
+
+#[derive(Debug, Clone)]
+enum CharsInner<'a> {
+    Rds(core::slice::Iter<'a, u8>),
+    Utf8 {
+        chunks: core::str::Utf8Chunks<'a>,
+        valid: core::str::Chars<'a>,
+        /// Whether the current chunk ends with an invalid sequence.
+        invalid: bool,
+    },
+}
+
+impl Iterator for RdsChars<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        match &mut self.inner {
+            CharsInner::Rds(bytes) => bytes.next().map(|&b| decode_char(b)),
+            CharsInner::Utf8 {
+                chunks,
+                valid,
+                invalid,
+            } => loop {
+                if let Some(c) = valid.next() {
+                    return Some(if c.is_ascii_control() { ' ' } else { c });
+                }
+                if *invalid {
+                    *invalid = false;
+                    return Some(char::REPLACEMENT_CHARACTER);
+                }
+                let chunk = chunks.next()?;
+                *valid = chunk.valid().chars();
+                *invalid = !chunk.invalid().is_empty();
+            },
+        }
+    }
+}
+
+impl core::iter::FusedIterator for RdsChars<'_> {}
+
+/// Encodes `text` in the basic RDS character set ([`encode_char`]) into `out` and returns the
+/// number of bytes written, one per character.
+///
+/// # Errors
+/// `BufferTooSmall` when `out` has fewer bytes than `text` has characters (nothing is
+/// written); `InvalidArgument` for a character the set does not have (`^`, `` ` ``, `~`,
+/// most of Unicode; the bytes before it are written). A caller that prefers a replacement
+/// maps the characters with [`encode_char`] itself.
+///
+/// ```
+/// use sdrk_proto::{Error, rds::{self, RdsText}};
+/// let mut buf = [0u8; 8];
+/// let n = rds::encode_text("Grüße", &mut buf)?;
+/// assert_eq!(&buf[..n], b"Gr\x99\x8De");
+/// assert_eq!(RdsText::new(&buf[..n]).to_string(), "Grüße");
+/// assert!(rds::encode_text("a~b", &mut buf).is_err());
+/// assert_eq!(rds::encode_text("123456789", &mut buf), Err(Error::BufferTooSmall { needed: 9, got: 8 }));
+/// # Ok::<(), Error>(())
+/// ```
+pub fn encode_text(text: &str, out: &mut [u8]) -> Result<usize> {
+    let needed = text.chars().count();
+    let got = out.len();
+    let dst = out
+        .get_mut(..needed)
+        .ok_or(Error::BufferTooSmall { needed, got })?;
+    for (o, c) in dst.iter_mut().zip(text.chars()) {
+        *o = encode_char(c).ok_or(Error::InvalidArgument(
+            "character not in the rds character set",
+        ))?;
+    }
+    Ok(needed)
 }
 
 /// The carriage return that ends a radiotext.
@@ -414,7 +794,10 @@ const RT_SEGMENTS: usize = 16;
 ///   clears the text. The text ends at the first carriage return (0x0D); [`RdsState::rt`]
 ///   gives it once every segment up to the one with the carriage return arrived (or all 16
 ///   segments when there is none).
-/// - Characters 0x20 to 0x7E are kept, others become `?` ([`map_char`]).
+/// - The raw bytes are kept. [`RdsState::ps`] and [`RdsState::rt`] give the plain ASCII view
+///   (0x20 to 0x7E kept, others `?`, [`map_char`]); [`RdsState::ps_text`] and
+///   [`RdsState::rt_text`] give the bytes as an [`RdsText`] for the real characters of the RDS
+///   character set ([`decode_char`]) or UTF-8.
 ///
 /// ```
 /// use sdrk_proto::rds::{Group, RdsState};
@@ -430,14 +813,26 @@ const RT_SEGMENTS: usize = 16;
 /// // 2A segment 0 with the carriage return completes a short text.
 /// s.update(&Group::new([0xD123, 0x2140, u16::from_be_bytes(*b"Hi"), 0x0D20]));
 /// assert_eq!(s.rt(), "Hi");
+///
+/// // The characters of the RDS character set: 0x99 is ü.
+/// s.update(&Group::new([0xD123, 0x2150, u16::from_be_bytes(*b"Gr"), 0x990D]));
+/// assert_eq!(s.rt(), "Gr?");
+/// let mut buf = [0u8; 2 * sdrk_proto::rds::RT_LEN];
+/// assert_eq!(s.rt_text().map(|t| t.to_utf8(&mut buf)), Some(Ok("Grü")));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RdsState {
     pi: Option<u16>,
     pty: Option<u8>,
     tp: Option<bool>,
+    /// The name as received.
+    ps_raw: [u8; PS_LEN],
+    /// The name through [`map_char`], for [`RdsState::ps`].
     ps: [u8; PS_LEN],
     ps_seen: u8,
+    /// The radiotext as received.
+    rt_raw: [u8; RT_LEN],
+    /// The radiotext through [`map_char`] (the carriage return kept), for [`RdsState::rt`].
     rt: [u8; RT_LEN],
     rt_seen: u16,
     /// Version and A/B flag of the text in `rt`.
@@ -457,8 +852,10 @@ impl RdsState {
             pi: None,
             pty: None,
             tp: None,
+            ps_raw: [b' '; PS_LEN],
             ps: [b' '; PS_LEN],
             ps_seen: 0,
+            rt_raw: [b' '; RT_LEN],
             rt: [b' '; RT_LEN],
             rt_seen: 0,
             rt_kind: None,
@@ -491,12 +888,32 @@ impl RdsState {
     }
 
     /// The programme service name (8 characters), or `""` until all four segments arrived.
+    /// Bytes outside 0x20 to 0x7E are `?` ([`map_char`]); [`RdsState::ps_text`] has the real
+    /// characters.
     pub fn ps(&self) -> &str {
         if self.ps_ready() {
             core::str::from_utf8(&self.ps).unwrap_or("")
         } else {
             ""
         }
+    }
+
+    /// The programme service name as received (8 bytes), once all four segments arrived.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::{Group, RdsState};
+    /// let mut s = RdsState::new();
+    /// for (a, pair) in [*b"SW", *b"R1", [b' ', 0x99], *b"rt"].into_iter().enumerate() {
+    ///     assert!(s.ps_text().is_none());
+    ///     s.update(&Group::new([0xD3C1, 0x0048 | a as u16, 0xE0E0, u16::from_be_bytes(pair)]));
+    /// }
+    /// assert_eq!(s.ps(), "SWR1 ?rt");
+    /// let ps = s.ps_text().unwrap_or(sdrk_proto::rds::RdsText::new(b""));
+    /// assert_eq!(ps.to_string(), "SWR1 ürt");
+    /// assert_eq!(ps.bytes(), b"SWR1 \x99rt");
+    /// ```
+    pub fn ps_text(&self) -> Option<RdsText<'_>> {
+        self.ps_ready().then(|| RdsText::new(&self.ps_raw))
     }
 
     /// The characters per radiotext segment of the current text.
@@ -529,12 +946,21 @@ impl RdsState {
         self.rt_len().is_some()
     }
 
-    /// The radiotext up to its carriage return, or `""` until it is complete.
+    /// The radiotext up to its carriage return, or `""` until it is complete. Bytes outside
+    /// 0x20 to 0x7E are `?` ([`map_char`]); [`RdsState::rt_text`] has the real characters.
     pub fn rt(&self) -> &str {
         self.rt_len()
             .and_then(|n| self.rt.get(..n))
             .and_then(|t| core::str::from_utf8(t).ok())
             .unwrap_or("")
+    }
+
+    /// The radiotext as received, up to its carriage return (not included), once it is
+    /// complete (see [`RdsState`]).
+    pub fn rt_text(&self) -> Option<RdsText<'_>> {
+        self.rt_len()
+            .and_then(|n| self.rt_raw.get(..n))
+            .map(RdsText::new)
     }
 
     /// The programme identification of `g`, if it can be read.
@@ -569,7 +995,10 @@ impl RdsState {
         match group.group_type() {
             (0, _) if d_ok => {
                 let at = usize::from(b & 0x3) * 2;
-                if let Some(dst) = self.ps.get_mut(at..at + 2) {
+                if let (Some(raw), Some(dst)) =
+                    (self.ps_raw.get_mut(at..at + 2), self.ps.get_mut(at..at + 2))
+                {
+                    raw.copy_from_slice(&[d0, d1]);
                     dst.copy_from_slice(&[map_char(d0), map_char(d1)]);
                     self.ps_seen |= 1 << (b & 0x3);
                 }
@@ -577,6 +1006,7 @@ impl RdsState {
             (2, version) if d_ok && (version == Version::B || c_ok) => {
                 let kind = (version, b & 0x10 != 0);
                 if self.rt_kind != Some(kind) {
+                    self.rt_raw = [b' '; RT_LEN];
                     self.rt = [b' '; RT_LEN];
                     self.rt_seen = 0;
                     self.rt_kind = Some(kind);
@@ -584,12 +1014,19 @@ impl RdsState {
                 let seg = usize::from(b & 0xF);
                 let [c0, c1] = group.block(2).to_be_bytes();
                 let text = |c: u8| if c == CR { CR } else { map_char(c) };
-                if version == Version::A {
-                    if let Some(dst) = self.rt.get_mut(seg * 4..seg * 4 + 4) {
-                        dst.copy_from_slice(&[text(c0), text(c1), text(d0), text(d1)]);
+                let (at, raw): (usize, &[u8]) = if version == Version::A {
+                    (seg * 4, &[c0, c1, d0, d1])
+                } else {
+                    (seg * 2, &[d0, d1])
+                };
+                let n = raw.len();
+                if let (Some(r), Some(dst)) =
+                    (self.rt_raw.get_mut(at..at + n), self.rt.get_mut(at..at + n))
+                {
+                    r.copy_from_slice(raw);
+                    for (d, &c) in dst.iter_mut().zip(raw) {
+                        *d = text(c);
                     }
-                } else if let Some(dst) = self.rt.get_mut(seg * 2..seg * 2 + 2) {
-                    dst.copy_from_slice(&[text(d0), text(d1)]);
                 }
                 self.rt_seen |= 1 << seg;
             }

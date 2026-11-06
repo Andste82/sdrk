@@ -100,12 +100,15 @@ function describe(variant, mod) {
     backends: mod.backends,
     version: mod.version,
     SdrkError: mod.errorClass(),
+    RdsDecoder: mod.RdsDecoder,
+    rdsDecodeText: mod.rdsDecodeText,
+    rdsEncodeText: mod.rdsEncodeText,
   });
 }
 
 /**
  * Loads a build and returns its API: `{ variant, Pipeline, validate, schema, backends, version,
- * SdrkError }`. The first successful call also binds the module-level exports of this package.
+ * SdrkError, RdsDecoder, rdsDecodeText, rdsEncodeText }`. The first successful call also binds the module-level exports of this package.
  *
  * @param {{ variant?: "auto" | "simd" | "scalar" | "relaxed", wasm?: BufferSource | WebAssembly.Module | URL | Response | Promise<Response> }} [options]
  *   `variant`: "auto" (the default) picks `simd` where SIMD128 is available and `scalar`
@@ -137,6 +140,9 @@ export async function init(options = {}) {
     backends = api.backends;
     version = api.version;
     SdrkError = api.SdrkError;
+    RdsDecoder = api.RdsDecoder;
+    rdsDecodeText = api.rdsDecodeText;
+    rdsEncodeText = api.rdsEncodeText;
   }
   return api;
 }
@@ -153,3 +159,6 @@ export let schema;
 export let backends;
 export let version;
 export let SdrkError;
+export let RdsDecoder;
+export let rdsDecodeText;
+export let rdsEncodeText;

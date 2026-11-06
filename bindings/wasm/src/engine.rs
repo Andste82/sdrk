@@ -15,6 +15,7 @@ use sdrk_pipeline::{
     BuildOptions, Event, EventKind, InputData, Packet, PacketFlags, ParamTime, Pipeline, PortKind,
     PullSource, Registry, Report,
 };
+use sdrk_proto::rds::{Charset, Group, RdsState, RdsText};
 use serde_json::Value;
 
 /// Largest number of elements one `readStream` or `pull` call moves through the output buffer.
@@ -1322,4 +1323,134 @@ pub fn packet_from(index: u64, flags: u32, data: &str) -> Result<Packet> {
         .map_err(|e| WasmError::invalid(format!("packet data: {e}")))?;
     Packet::new(index, PacketFlags::from_bits(flags), &bytes)
         .map_err(|e| WasmError::invalid(format!("packet data: {e}")))
+}
+
+// ------------------------------------------------------------------------------------- RDS
+
+/// The character set of a text of the JavaScript RDS helpers: `"rds"` (the RDS table of IEC
+/// 62106, the default), `"utf8"` or `"auto"` (UTF-8 when the bytes are valid UTF-8 with a
+/// multi-byte sequence, else the RDS table; see `sdrk_proto::rds::Charset`).
+///
+/// ```
+/// use sdrk_proto::rds::Charset;
+/// assert_eq!(sdrk_wasm::engine::charset(None)?, Charset::Rds);
+/// assert_eq!(sdrk_wasm::engine::charset(Some("auto"))?, Charset::Auto);
+/// assert!(sdrk_wasm::engine::charset(Some("latin1")).is_err());
+/// # Ok::<(), sdrk_wasm::engine::WasmError>(())
+/// ```
+///
+/// # Errors
+/// `InvalidArgument` for another name.
+pub fn charset(name: Option<&str>) -> Result<Charset> {
+    match name {
+        None | Some("rds") => Ok(Charset::Rds),
+        Some("utf8") => Ok(Charset::Utf8),
+        Some("auto") => Ok(Charset::Auto),
+        Some(other) => Err(WasmError::invalid(format!(
+            "charset `{other}`: use \"rds\", \"utf8\" or \"auto\""
+        ))),
+    }
+}
+
+/// RDS bytes as text in the given character set (`rdsDecodeText` of the package).
+///
+/// ```
+/// use sdrk_proto::rds::Charset;
+/// let t = sdrk_wasm::engine::rds_decode_text(b"W\x99rttemberg", Charset::Rds);
+/// assert_eq!(t, "Württemberg");
+/// ```
+#[must_use]
+pub fn rds_decode_text(bytes: &[u8], charset: Charset) -> String {
+    RdsText::new(bytes).with_charset(charset).to_string()
+}
+
+/// Text as RDS bytes (`rdsEncodeText` of the package).
+///
+/// ```
+/// assert_eq!(sdrk_wasm::engine::rds_encode_text("Württemberg")?, b"W\x99rttemberg");
+/// assert!(sdrk_wasm::engine::rds_encode_text("~").is_err());
+/// # Ok::<(), sdrk_wasm::engine::WasmError>(())
+/// ```
+///
+/// # Errors
+/// `InvalidArgument` for a character without an RDS code.
+pub fn rds_encode_text(text: &str) -> Result<Vec<u8>> {
+    // Every RDS code is one byte and every character at least one UTF-8 byte.
+    let mut out = vec![0u8; text.len()];
+    let n = sdrk_proto::rds::encode_text(text, &mut out)
+        .map_err(|e| WasmError::invalid(format!("rds text: {e}")))?;
+    out.truncate(n);
+    Ok(out)
+}
+
+/// The station data of RDS groups (`RdsDecoder` of the package): `sdrk_proto::rds::RdsState`
+/// plus the count of groups and of groups with `CRC_OK`.
+///
+/// ```
+/// use sdrk_proto::rds::{Charset, Group};
+/// let mut d = sdrk_wasm::engine::RdsDecoder::default();
+/// for (a, pair) in [*b"SW", *b"R1", *b"  ", *b"  "].into_iter().enumerate() {
+///     d.push(&Group::new([0xD3C2, 0x0548 | a as u16, 0xE0E0, u16::from_be_bytes(pair)]).to_packet(0)?);
+/// }
+/// assert_eq!(d.ps(Charset::Rds).as_deref(), Some("SWR1    "));
+/// assert_eq!((d.groups(), d.ok_groups()), (4, 4));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct RdsDecoder {
+    state: RdsState,
+    groups: u64,
+    ok_groups: u64,
+}
+
+impl RdsDecoder {
+    /// Takes one packet of `rds_decode`; a packet that is no RDS group is ignored.
+    pub fn push(&mut self, packet: &Packet) {
+        if let Some(group) = Group::from_packet(packet) {
+            self.groups += 1;
+            if packet.flags.contains(PacketFlags::CRC_OK) {
+                self.ok_groups += 1;
+            }
+            self.state.update(&group);
+        }
+    }
+
+    /// Forgets the station and the counts.
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    /// The state of `sdrk_proto::rds`.
+    #[must_use]
+    pub fn state(&self) -> &RdsState {
+        &self.state
+    }
+
+    /// The programme service name once complete.
+    #[must_use]
+    pub fn ps(&self, charset: Charset) -> Option<String> {
+        self.state
+            .ps_text()
+            .map(|t| t.with_charset(charset).to_string())
+    }
+
+    /// The radiotext once complete.
+    #[must_use]
+    pub fn rt(&self, charset: Charset) -> Option<String> {
+        self.state
+            .rt_text()
+            .map(|t| t.with_charset(charset).to_string())
+    }
+
+    /// Groups pushed.
+    #[must_use]
+    pub fn groups(&self) -> u64 {
+        self.groups
+    }
+
+    /// Groups pushed with `CRC_OK`.
+    #[must_use]
+    pub fn ok_groups(&self) -> u64 {
+        self.ok_groups
+    }
 }

@@ -312,3 +312,51 @@ test("pull mode with a packet source: null means idle, not the end", async () =>
   tx.free();
   rx.free();
 });
+
+test("RDS: the decoder over rds_decode packets and the text helpers of sdrk_proto::rds", async () => {
+  const { RdsDecoder, rdsDecodeText, rdsEncodeText } = await api();
+  // The RDS table of IEC 62106: 0x99 is ü, 0x97 ö, 0x8D ß, 0xAB $; 0x24 is ¤.
+  assert.equal(rdsDecodeText(new Uint8Array([0x57, 0x99, 0x72]), "rds"), "Wür");
+  assert.equal(rdsDecodeText(new Uint8Array([0x67, 0x72, 0x97, 0x8d, 0x74, 0x65, 0x6e])), "größten");
+  assert.equal(rdsDecodeText(new Uint8Array([0x24, 0xab])), "¤$");
+  // UTF-8 from a station that does not follow the standard.
+  const utf8 = new TextEncoder().encode("größten");
+  assert.equal(rdsDecodeText(utf8, "auto"), "größten");
+  assert.notEqual(rdsDecodeText(utf8, "rds"), "größten");
+  assert.throws(() => rdsDecodeText(new Uint8Array([0x41]), "latin1"), /charset/);
+  assert.deepEqual(Array.from(rdsEncodeText("Wü$")), [0x57, 0x99, 0xab]);
+  assert.throws(() => rdsEncodeText("~"));
+
+  // Four 0A groups give the name, two 2A groups the text; as hex packets like readPackets.
+  const hex = (w) => w.map((v) => v.toString(16).padStart(4, "0")).join("");
+  const ok = 1 | (0b1111 << 16);
+  const name = rdsEncodeText("SWR1 BW ");
+  const packets = [0, 1, 2, 3].map((seg) => ({
+    index: 0n,
+    flags: ok,
+    data: hex([0xd3c2, 0x0548 | seg, 0xe0e0, (name[2 * seg] << 8) | name[2 * seg + 1]]),
+  }));
+  const text = [...rdsEncodeText("Württemberg"), 0x0d, 0x20, 0x20, 0x20, 0x20];
+  for (let seg = 0; seg < 3; seg++) {
+    const c = (text[4 * seg] << 8) | text[4 * seg + 1];
+    const d = (text[4 * seg + 2] << 8) | text[4 * seg + 3];
+    packets.push({ index: 0n, flags: ok, data: hex([0xd3c2, 0x2540 | seg, c, d]) });
+  }
+  const rds = new RdsDecoder();
+  try {
+    assert.equal(rds.ps(), undefined);
+    assert.equal(rds.push(packets), 7);
+    assert.equal(rds.pi(), 0xd3c2);
+    assert.equal(rds.pty(), 10);
+    assert.equal(rds.tp(), true);
+    assert.equal(rds.ps("rds"), "SWR1 BW ");
+    assert.equal(rds.rt("rds"), "Württemberg");
+    assert.equal(rds.groups(), 7);
+    assert.equal(rds.okGroups(), 7);
+    rds.reset();
+    assert.equal(rds.pi(), undefined);
+    assert.equal(rds.groups(), 0);
+  } finally {
+    rds.free();
+  }
+});

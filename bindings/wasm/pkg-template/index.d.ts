@@ -34,11 +34,15 @@ export interface Api {
   readonly backends: typeof backends;
   readonly version: typeof version;
   readonly SdrkError: typeof SdrkError;
+  readonly RdsDecoder: typeof RdsDecoder;
+  readonly rdsDecodeText: typeof rdsDecodeText;
+  readonly rdsEncodeText: typeof rdsEncodeText;
 }
 
 /**
  * Loads a build and returns its API. The first call also binds the exports `Pipeline`,
- * `validate`, `schema`, `backends`, `version` and `SdrkError` of this module.
+ * `validate`, `schema`, `backends`, `version`, `SdrkError`, `RdsDecoder`, `rdsDecodeText` and
+ * `rdsEncodeText` of this module.
  */
 export function init(options?: InitOptions): Promise<Api>;
 /** True if this engine runs WebAssembly SIMD128. */
@@ -336,3 +340,38 @@ export function schema(): string;
 export function validate(flowJson: string): Report;
 /** The backend of every kernel in this build ("simd", "fallback", "chained"). */
 export function backends(): Record<string, string>;
+
+/**
+ * The character set of an RDS text: "rds" (the RDS table of IEC 62106 Annex E, the default),
+ * "utf8", or "auto" (UTF-8 when the bytes are valid UTF-8 with a multi-byte sequence, which some
+ * stations send against the standard; else the RDS table).
+ */
+export type RdsCharset = "rds" | "utf8" | "auto";
+/** RDS bytes as text. Throws {@link SdrkError} for an unknown charset. */
+export function rdsDecodeText(bytes: Uint8Array, charset?: RdsCharset): string;
+/** Text as RDS bytes. Throws {@link SdrkError} for a character without an RDS code. */
+export function rdsEncodeText(text: string): Uint8Array;
+
+/**
+ * Station data from the RDS groups of an `rds_decode` output (`sdrk_proto::rds::RdsState`): PI,
+ * PTY, TP, and the programme service name and radiotext once complete.
+ */
+export class RdsDecoder {
+  constructor();
+  /** Takes packets as `readPackets` returns them; others than RDS groups are ignored. */
+  push(packets: PacketIn[]): number;
+  /** Forgets the station and the counts (after tuning to another station). */
+  reset(): void;
+  pi(): number | undefined;
+  pty(): number | undefined;
+  tp(): boolean | undefined;
+  /** The programme service name (8 characters) once all segments arrived. */
+  ps(charset?: RdsCharset): string | undefined;
+  /** The radiotext once complete (up to the carriage return). */
+  rt(charset?: RdsCharset): string | undefined;
+  /** Groups taken, and groups taken with CRC_OK. */
+  groups(): number;
+  okGroups(): number;
+  /** Releases the memory of the decoder. */
+  free(): void;
+}

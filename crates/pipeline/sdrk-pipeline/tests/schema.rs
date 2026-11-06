@@ -30,7 +30,7 @@ use serde_json::{Value, json};
 
 use common::{flow, workspace_file};
 
-const FLOWS: [&str; 23] = [
+const FLOWS: [&str; 27] = [
     "fm_receiver",
     "spectrum_only",
     "resample_audio",
@@ -54,6 +54,10 @@ const FLOWS: [&str; 23] = [
     "qpsk_transmitter",
     "qpsk_receiver",
     "fm_rds_receiver",
+    "aprs_receiver",
+    "aprs_transmitter",
+    "ook_receiver",
+    "adsb_receiver",
 ];
 
 fn schema() -> Value {

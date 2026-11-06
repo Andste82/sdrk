@@ -1,0 +1,222 @@
+{
+  "arrays": {
+    "audio": {
+      "dtype": "i8",
+      "file": "aprs_bell202_20_frames.audio.bin",
+      "len": 375190
+    },
+    "frames": {
+      "dtype": "u8",
+      "file": "aprs_bell202_20_frames.frames.bin",
+      "len": 821
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "aprs_bell202_20_frames.lengths.bin",
+      "len": 20
+    }
+  },
+  "case": "aprs_bell202_20_frames",
+  "format_version": 1,
+  "kernel": "flows",
+  "notes": "Bell 202 AFSK (mark 1200 Hz, space 2200 Hz, 1200 Bd, NRZI, HDLC with CRC-16/X-25) of 20 AX.25 UI frames at 48 kHz; per frame 4 to 12 opening and 1 to 3 closing flags, bit rate within 200 ppm, tones within 0.5 %, twist -3 to +3 dB, amplitude 0.25 to 0.6, random start phase, 20 to 60 ms of silence after it; noise sigma 0.01 on everything; audio is i8, value = raw * scale; frames holds the frames without FCS back to back, lengths their lengths; frame_starts is the first sample of each frame's flags; the receiver must decode all 20 frames",
+  "params": {
+    "frame_starts": [
+      2400,
+      18590,
+      39101,
+      59073,
+      75944,
+      93956,
+      115913,
+      134715,
+      156443,
+      175718,
+      196665,
+      212721,
+      229780,
+      250638,
+      269856,
+      284025,
+      297335,
+      318570,
+      342255,
+      357488
+    ],
+    "frames": [
+      {
+        "amplitude": 0.5066,
+        "baud": 1199.9035,
+        "preamble_flags": 8,
+        "tail_flags": 3,
+        "tone_factor": 1.001971,
+        "twist_db": 1.01
+      },
+      {
+        "amplitude": 0.3053,
+        "baud": 1199.8039,
+        "preamble_flags": 5,
+        "tail_flags": 2,
+        "tone_factor": 0.996178,
+        "twist_db": 0.51
+      },
+      {
+        "amplitude": 0.3052,
+        "baud": 1199.9466,
+        "preamble_flags": 7,
+        "tail_flags": 3,
+        "tone_factor": 0.997198,
+        "twist_db": 1.85
+      },
+      {
+        "amplitude": 0.3415,
+        "baud": 1199.9087,
+        "preamble_flags": 5,
+        "tail_flags": 1,
+        "tone_factor": 1.004151,
+        "twist_db": 2.59
+      },
+      {
+        "amplitude": 0.3572,
+        "baud": 1200.0915,
+        "preamble_flags": 4,
+        "tail_flags": 3,
+        "tone_factor": 0.997912,
+        "twist_db": 0.9
+      },
+      {
+        "amplitude": 0.3934,
+        "baud": 1199.8617,
+        "preamble_flags": 9,
+        "tail_flags": 1,
+        "tone_factor": 1.000846,
+        "twist_db": -2.65
+      },
+      {
+        "amplitude": 0.339,
+        "baud": 1199.9628,
+        "preamble_flags": 9,
+        "tail_flags": 1,
+        "tone_factor": 1.002532,
+        "twist_db": 2.54
+      },
+      {
+        "amplitude": 0.36,
+        "baud": 1200.0954,
+        "preamble_flags": 7,
+        "tail_flags": 3,
+        "tone_factor": 0.99789,
+        "twist_db": -2.2
+      },
+      {
+        "amplitude": 0.4863,
+        "baud": 1199.8013,
+        "preamble_flags": 5,
+        "tail_flags": 3,
+        "tone_factor": 1.004545,
+        "twist_db": 1.07
+      },
+      {
+        "amplitude": 0.4343,
+        "baud": 1199.8272,
+        "preamble_flags": 8,
+        "tail_flags": 3,
+        "tone_factor": 0.996027,
+        "twist_db": 2.11
+      },
+      {
+        "amplitude": 0.3616,
+        "baud": 1200.2229,
+        "preamble_flags": 11,
+        "tail_flags": 2,
+        "tone_factor": 0.999542,
+        "twist_db": 0.18
+      },
+      {
+        "amplitude": 0.4452,
+        "baud": 1199.9805,
+        "preamble_flags": 7,
+        "tail_flags": 2,
+        "tone_factor": 0.99793,
+        "twist_db": -0.13
+      },
+      {
+        "amplitude": 0.5158,
+        "baud": 1199.9144,
+        "preamble_flags": 9,
+        "tail_flags": 3,
+        "tone_factor": 0.995562,
+        "twist_db": -0.24
+      },
+      {
+        "amplitude": 0.4888,
+        "baud": 1199.897,
+        "preamble_flags": 10,
+        "tail_flags": 3,
+        "tone_factor": 0.995209,
+        "twist_db": -2.35
+      },
+      {
+        "amplitude": 0.3897,
+        "baud": 1200.1956,
+        "preamble_flags": 4,
+        "tail_flags": 2,
+        "tone_factor": 1.001846,
+        "twist_db": 2.52
+      },
+      {
+        "amplitude": 0.4267,
+        "baud": 1200.0303,
+        "preamble_flags": 4,
+        "tail_flags": 2,
+        "tone_factor": 0.99568,
+        "twist_db": -2.05
+      },
+      {
+        "amplitude": 0.5812,
+        "baud": 1199.8773,
+        "preamble_flags": 5,
+        "tail_flags": 2,
+        "tone_factor": 0.995132,
+        "twist_db": -1.55
+      },
+      {
+        "amplitude": 0.3615,
+        "baud": 1200.1558,
+        "preamble_flags": 12,
+        "tail_flags": 3,
+        "tone_factor": 1.001209,
+        "twist_db": -1.52
+      },
+      {
+        "amplitude": 0.3552,
+        "baud": 1200.1139,
+        "preamble_flags": 9,
+        "tail_flags": 1,
+        "tone_factor": 0.996567,
+        "twist_db": -0.66
+      },
+      {
+        "amplitude": 0.5363,
+        "baud": 1200.0432,
+        "preamble_flags": 4,
+        "tail_flags": 1,
+        "tone_factor": 0.997351,
+        "twist_db": 2.63
+      }
+    ],
+    "noise_sigma": 0.01,
+    "rate_hz": 48000,
+    "scale": 0.0078125
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 542,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

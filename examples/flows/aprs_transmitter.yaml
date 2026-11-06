@@ -1,0 +1,68 @@
+# SDRk pipeline: send AX.25/APRS packets as Bell 202 AFSK audio, in pull mode (YAML twin of
+# aprs_transmitter.json). The caller asks for audio samples with Pipeline::pull_samples; the
+# packets are supplied on demand. Use it with the aprs_receiver flow, or feed the audio to an
+# FM transmitter (for example nfm_transmitter) or a sound card connected to a radio.
+#
+# AFSK is FSK of an audio tone: the transmitter modulates 2-FSK with 500 Hz deviation around
+# 0 Hz at 12 kHz, moves it up to 1700 Hz (the centre between mark 1200 Hz and space 2200 Hz)
+# and takes the real part, which is the AFSK audio, then resamples to 48 kHz. hdlc_encode sends
+# the bits NRZI-coded (a 0 changes the tone, a 1 keeps it), so which tone a level gives does
+# not matter for a receiver.
+sdrk: 1
+name: aprs-transmitter
+description: "Frame packets as HDLC (AX.25/APRS) and send them as Bell 202 AFSK at 1200 Bd (mark 1200 Hz, space 2200 Hz) on 48 kHz audio for an FM transmitter or a sound card, in pull mode."
+# f32 pipeline (the FSK and HDLC kinds have no Q15 variant); at most 4096 packets per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # A packet input has no samples of its own: its rate_hz is the rate of the bit stream the
+  # encoder makes from it, here 1200 bit/s. A packet is a complete AX.25 frame (address fields,
+  # control, PID and information) without the FCS, which the encoder adds.
+  msg:
+    type: packets
+    rate_hz: 1200
+    description: "AX.25 frames to send (address fields, control, PID and information), 2 to 256 bytes each, without the FCS"
+nodes:
+  # HDLC encoder: 32 opening flags 0x7E (about 210 ms, the defaults; the TXDELAY of a TNC, for
+  # receivers and squelches that need time to open), the frame with bit stuffing and the
+  # CRC-16/X-25 FCS, 4 closing flags, NRZI coding (the default nrzi true) and one +1/-1 sample
+  # per bit. In pull mode the gaps between packets are filled with flags, which keep the
+  # receiver's timing loop locked.
+  enc:
+    kind: hdlc_encode
+  # 2-FSK modulator: 10 samples per bit (12 kHz), rectangular frequency pulses (bt 0, the
+  # default) and 500 Hz deviation around 0 Hz; the phase is continuous, as Bell 202 needs.
+  mod:
+    kind: fsk_mod
+    params:
+      deviation_hz: 500
+      samples_per_symbol: 10
+  # The real part of the shifted signal: the AFSK audio with the amplitude 1.
+  re:
+    kind: real_part
+  # 12 kHz -> 48 kHz with the default filter (cutoff 0.45 of the lower rate, 5400 Hz).
+  resamp:
+    kind: resample
+    params:
+      rate_out_hz: 48000
+  # Move the FSK signal up to 1700 Hz: level +1 (+500 Hz) becomes 2200 Hz, level -1 (-500 Hz)
+  # becomes 1200 Hz.
+  shift:
+    kind: rotate
+    params:
+      frequency_hz: 1700
+# Encoder, modulator, shift to the audio band, real part, resampler.
+edges:
+  - { from: msg, to: enc }
+  - { from: enc, to: mod }
+  - { from: mod, to: shift }
+  - { from: shift, to: re }
+  - { from: re, to: resamp }
+  - { from: resamp, to: audio }
+# Real f32 audio at 48 kHz; the encoder never runs dry in pull mode (flags between packets),
+# so no underrun.
+outputs:
+  audio:
+    type: stream
+    underrun: zeros

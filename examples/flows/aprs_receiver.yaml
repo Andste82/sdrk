@@ -1,0 +1,75 @@
+# SDRk pipeline: receive AX.25/APRS packets from Bell 202 AFSK audio (YAML twin of
+# aprs_receiver.json). YAML is accepted as input; JSON stays the canonical format.
+#
+# APRS on 144.390 MHz (North America), 144.800 MHz (Europe) and most other VHF packet radio
+# channels sends AX.25 frames as audio tones on an FM voice channel: Bell 202 AFSK, 1200 Bd,
+# mark 1200 Hz and space 2200 Hz. This flow takes that audio (the output of an FM receiver flow
+# such as nfm_receiver, or a sound card on the speaker output of a radio), moves the centre of
+# the two tones (1700 Hz) to 0 Hz, demodulates them as 2-FSK with 500 Hz deviation and finds
+# the HDLC frames. The bits are NRZI-coded (a 0 is a change of tone, a 1 no change), so it does
+# not matter which tone gives which sign after the demodulator: with the shift of -1700 Hz the
+# mark tone lands at -500 Hz and the space tone at +500 Hz, and hdlc_decode only looks at the
+# changes. The packets are complete AX.25 frames without the FCS; sdrk_proto::ax25::Header
+# reads their address fields (printed as SRC>DST,DIGI1,DIGI2:).
+sdrk: 1
+name: aprs-receiver
+description: "Receive AX.25/APRS packets sent as Bell 202 AFSK at 1200 Bd (mark 1200 Hz, space 2200 Hz) from 48 kHz audio of an FM receiver or a sound card."
+# f32 pipeline (the FSK and HDLC kinds have no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # Real audio at 48 kHz, for example from a sound card or from the audio output of an FM
+  # receiver flow. The level does not matter much: the FM discriminator of fsk_demod only
+  # looks at the frequency.
+  audio:
+    type: f32
+    rate_hz: 48000
+    description: "Audio at 48 kHz from an FM receiver or a sound card"
+nodes:
+  # The real audio as complex samples (imaginary part 0): the spectrum now has the tones at
+  # +-1200 Hz and +-2200 Hz.
+  cplx:
+    kind: to_complex
+  # HDLC decoder: NRZI decoding (the default nrzi true), flags 0x7E, bit unstuffing and the
+  # CRC-16/X-25 frame check; only frames with a correct FCS are output (emit_bad false, the
+  # default), with the flag CRC_OK.
+  dec:
+    kind: hdlc_decode
+  # 2-FSK demodulator at 10 samples per symbol (12 kHz / 1200 Bd): the discriminator scaled so
+  # that +-500 Hz read +-1, a boxcar matched filter of 10 taps, the Gardner timing loop and one
+  # soft bit per symbol. A sound-card clock some hundred ppm off is followed by the timing
+  # loop.
+  demod:
+    kind: fsk_demod
+    params:
+      deviation_hz: 500
+      symbol_rate_hz: 1200
+  # Low-pass and decimation by 4 (48 kHz -> 12 kHz): the cutoff of 1800 Hz keeps both tones
+  # (now at -500 Hz and +500 Hz) with the spread of the 1200 Bd keying and removes the mirror
+  # tones at -2900 Hz and -3900 Hz that the real input brought along.
+  lpf:
+    kind: decimate
+    params:
+      cutoff_hz: 1800
+      factor: 4
+  # Move the centre of the two tones, 1700 Hz, to 0 Hz.
+  shift:
+    kind: rotate
+    params:
+      frequency_hz: -1700
+# Complex, shift, channel filter, demodulator, decoder.
+edges:
+  - { from: audio, to: cplx }
+  - { from: cplx, to: shift }
+  - { from: shift, to: lpf }
+  - { from: lpf, to: demod }
+  - { from: demod, to: dec }
+  - { from: dec, to: packets }
+outputs:
+  # The decoded frames; the reader empties the queue after every push. The index of a packet is
+  # the index of the soft bit at 1200 Bd right after its opening flag.
+  packets:
+    type: packets
+    queue: 64
+    description: "The AX.25 frames with CRC_OK and the input index of the first bit after their opening flag"

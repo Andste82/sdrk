@@ -1,0 +1,216 @@
+# M45 — Band receiver for the ISM bands: polyphase channelizer and pulse detection
+
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M39.1](M39.1-afsk-ook-adsb.md) · Next: [M46](M46-ism-sensors.md)
+
+## Goal
+
+Receive every short-range device that transmits anywhere in an ISM band, at the same time and without knowing its frequency: the whole 433 MHz band (433.05 to 434.79 MHz, 1.74 MHz) with one receiver, and in the same way the 868 MHz band (868.0 to 868.6 MHz, plus the sensor channels up to 869.0 MHz) with a second receiver or instead of the first. A new kernel `channelize` (polyphase filter bank) splits the band into overlapping narrow channels; a block `band_pulse_detect` runs a pulse detector in every channel (on-off keying and two-level FSK, after the method of rtl_433's `pulse_detect_package`), merges what neighbouring channels see of the same transmission, and emits each transmission as a packet with its pulse and gap widths, its frequency, level and time. The device protocols are M46.
+
+## Why
+
+Cheap sensors (weather stations, thermometers, door and window contacts, remote controls) use crystals or SAW resonators with tolerances of tens of kHz, so their exact frequency is unknown, and several of them may transmit at the same moment on different frequencies. A receiver that tunes to one frequency, or that takes the envelope of the whole band (rtl_433 at 250 kS/s covers only about ±125 kHz around 433.92 MHz, and a wider envelope collects the noise of the whole band), misses or loses them. A channelizer gives every point of the band the sensitivity of a narrow channel, for the whole band at once.
+
+## Order
+
+M45 depends on M39.1 (the level tracking after rtl_433 in `ook_demod`, the packet conventions of M37 and M39.1) and through it on M39 and M37. It can run in parallel with M42, M43 and M44.
+## Ground rules (identical in every milestone — read them completely before you start)
+
+These rules apply to every line of code in this repository. They are repeated in every milestone file so that each milestone is self-contained. If a rule and a milestone-specific instruction ever conflict, stop and ask; do not guess.
+
+### R1 — Work order and scope
+
+1. A milestone starts when every milestone named in its *Depends on* line is delivered (merged on `main`); up to M25.1 the order is strictly numeric. Milestones that do not depend on each other may be implemented in parallel, each on its own branch; the second one to merge rebases onto the first. A milestone may only use what its dependencies (and their dependencies) delivered. Never implement items of a later milestone "while you are at it".
+2. Every milestone must leave the repository in a state where **all** of these commands succeed from a clean checkout:
+   - `cargo fmt --all -- --check`
+   - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+   - `cargo test --workspace --all-features`
+   - `cargo xtask check` (exists from M00 on; runs the architecture checks in R2–R6)
+   - `cargo xtask bare-metal` (exists from M00 on; builds every heap-free crate for `thumbv7em-none-eabihf`)
+   - plus every additional command listed in the milestone's *Acceptance* section.
+3. **Host platforms:** everything (build, tests, `xtask`, golden generator) must work on Linux x86_64, Linux arm64 (Raspberry Pi, 64-bit OS) and Windows x86_64. No shell scripts or Makefiles; tools are Rust (`xtask`) or the Python golden generator; paths are built with `Path::join`; line endings are fixed by `.gitattributes`. CI builds the workspace and runs the whole test suite, `xtask` and the golden generator on all three hosts; the variants that depend only on the CPU architecture (SIMD levels fixed at compile time, builds without the static tables, the fallback-only build) run on one host per architecture (x86-64 on Linux, AArch64 on Linux arm64).
+4. When something is ambiguous, choose the simplest solution that satisfies the written tests, and record the decision in `docs/decisions-log.md` (one line: date, milestone, decision, reason). Never silently change a public API defined by an earlier milestone; if a change is unavoidable, update every caller and the affected docs in the same milestone and log it.
+5. Naming: write **SDRk** only in prose, code comments (incl. rustdoc) and documentation; everything else in code is lowercase `sdrk` (identifiers, crate/package/module/file names, string literals such as error messages). Exception: fixed upper-case machine tokens — the `SDRK_` environment-variable prefix, the emulator protocol markers `SDRK-SUITE`/`SDRK-CASE`/`SDRK-PANIC` and the wire magic `b"SDRK"`.
+6. Plan (living document): https://claude.ai/code/artifact/694f271a-ba38-4b7c-b2fa-fb2e919d35c1 — snapshot in [`docs/PLAN.md`](../PLAN.md). The plan explains *why*; the milestones say *what exactly* to build.
+
+### R2 — Layers and dependencies
+
+The folder of a crate is its layer. A crate may depend only on crates in **lower** layers (or, for the testkit, on any library layer). `cargo xtask check` enforces this by reading `cargo metadata` and the crate paths.
+
+| Layer (folder) | Crates | May depend on (workspace crates) | `no_std`, no heap |
+| --- | --- | --- | --- |
+| `crates/core` (lowest) | `sdrk-device` | — | yes |
+| `crates/core` | `sdrk-core` | `sdrk-device` | yes |
+| `crates/backends` | `sdrk-backend-*` | `sdrk-core`, `sdrk-device` | yes |
+| `crates/facade` | `sdrk` | core, backends | yes |
+| `crates/proto` | `sdrk-proto` | `sdrk-device` | yes |
+| `crates/blocks` | `sdrk-blocks` | facade, core, proto | yes |
+| `crates/pipeline` | `sdrk-pipeline` | blocks, proto, facade, core | no (std/alloc allowed) |
+| `crates/io` | `sdrk-io` | core (types only) | no |
+| `crates/testing` | `sdrk-testkit` | any library crate above | `no_std` by default; feature `std` adds file I/O and proptest helpers |
+| `bindings/*`, `examples/*`, `targets/*`, `benches/*`, `xtask` | — | anything | no |
+
+Additional rules:
+- Within `crates/core` the rank is by crate name: `sdrk-device` (rank 0) < `sdrk-core` (rank 1); `sdrk-core → sdrk-device` is allowed, the reverse is not. All other layers are one rank per folder.
+- Backends never depend on each other. Only the facade `sdrk` knows the backends.
+- `sdrk-proto` (from M37 on) holds protocol logic without signal processing (bit and byte framing, checksums, packet types); it depends on `sdrk-device` only, and nothing below `crates/blocks` depends on it.
+- Only `sdrk-testkit` and test code use the `reference` feature of `sdrk-core`.
+- External crates allowed in heap-free crates: `num-complex` (default-features = false, features = ["bytemuck"]), `libm`, `bytemuck`, `heapless`, `fearless_simd` (backends only). Anything else needs a line in `docs/decisions-log.md` and must pass `cargo deny`.
+
+### R3 — `no_std` and no heap (applies to every crate marked "yes" above)
+
+1. The crate root starts with `#![no_std]`. The crate never writes `extern crate alloc;` and never uses `Vec`, `Box`, `String`, `Rc`, `Arc`, `BTreeMap` or anything else that allocates. `cargo xtask bare-metal` builds these crates for `thumbv7em-none-eabihf`, which has no global allocator, so any accidental allocation fails the build.
+2. Memory is provided by the caller. State types are generic over their storage: a field that holds samples has a type parameter `S: AsRef<[T]> + AsMut<[T]>` (read-only data: `S: AsRef<[T]>`). On a microcontroller the caller passes `[T; N]` or `&mut [T]`; in upper layers the caller may pass `Vec<T>`. Constructors validate lengths and return `Err`, never panic.
+3. Fixed-capacity containers come from `heapless` when needed.
+4. No function may keep more than 4 KiB on its stack (WASM and MCU stacks are small). Large buffers belong in caller-provided storage. `clippy.toml` sets `stack-size-threshold = 4096` and the workspace enables `clippy::large_stack_frames` and `clippy::large_stack_arrays` as errors.
+5. Math functions come from `libm` (e.g. `libm::sinf`, `libm::atan2f`, `libm::log10f`), never from `f32::sin()` & co. This keeps code `no_std` **and** makes results identical on every platform because `libm` is pure Rust.
+6. Upper layers (`pipeline`, `io`, `bindings`, `examples`, `xtask`, testkit feature `std`) may use `std` and allocate. The only `std` use allowed below the heap boundary besides the testkit's `std` feature is runtime CPU-feature detection in backend crates behind their `std` feature (M13); it never allocates. The pipeline allocates only while *building*; after `build()` returns, processing must not allocate (tested with a counting global allocator in M10).
+
+### R4 — Clean interfaces
+
+1. Each crate exposes a small, documented public API through `lib.rs` re-exports; everything else is `pub(crate)`. Module layout inside a crate is an implementation detail.
+2. Public enums that may grow are `#[non_exhaustive]`. Public structs with invariants have private fields, a validating constructor (`new(...) -> Result<Self>`) and getters.
+3. Kernels follow the **one trait per kernel** pattern defined in M02: the trait is generic over the sample type, `Fallback` (in `sdrk-core`) implements it for every supported sample type, `Reference` (feature `reference`) implements it as the f64/integer specification, backends implement only the variants they accelerate, and the facade type `sdrk::Sdrk` implements all of them by delegating to the chosen implementation.
+4. Kernel calls never allocate, never block, never read a clock, never use randomness, and never print.
+5. Every public item has a rustdoc comment; every public function with non-trivial behaviour has a doc example that compiles (`#![deny(missing_docs)]` in every library crate; `cargo test --doc` runs the examples).
+6. All public types are `Send`; state types and blocks are also `Sync` unless they need interior mutability (they should not). Add compile-time assertions in each crate's tests: `fn _assert_send<T: Send>() {}` called for every public type.
+
+### R5 — One error-handling scheme for the whole workspace
+
+1. The lowest crate `sdrk-device` defines the shared classification:
+   ```rust
+   #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+   #[non_exhaustive]
+   pub enum ErrorKind {
+       InvalidArgument, LengthMismatch, BufferTooSmall, OutOfRange, Unsupported,
+       CapacityExceeded, InvalidState, ResourceLimit, Parse, Validation,
+       Io, Device, Timeout, Disconnected, Internal,
+   }
+   pub trait SdrkError: core::error::Error {
+       fn kind(&self) -> ErrorKind;
+   }
+   ```
+2. Every library crate defines **its own** `pub enum Error` (`#[non_exhaustive]`, `Debug`, `Clone`, `PartialEq`) and `pub type Result<T, E = Error> = core::result::Result<T, E>;`. The enum implements `core::fmt::Display` (lowercase message, no trailing period), `core::error::Error` and `SdrkError`. Heap-free crates keep their error variants allocation-free (`&'static str` and integers only). Upper crates may carry `String` paths (e.g. `nodes.ddc.params.frequency_hz`).
+3. Wrapping: an upper crate's error has a variant like `Core(sdrk_core::Error)` with `From` impls; `kind()` forwards to the inner error. `source()` returns the wrapped error.
+4. **No panics in library code for any input that can reach a public API.** Every library crate root contains:
+   `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented, clippy::indexing_slicing)]`
+   Tests may opt out with `#[cfg_attr(test, allow(...))]` on the test module only. Validate lengths and parameters once at the public entry point; inner loops then iterate with `zip`, `chunks_exact`, `iter_mut` instead of indexing. Where indexing is unavoidable, use `.get()` and return `Error::Internal` if it ever fails.
+5. Integer arithmetic that may overflow is written explicitly as `wrapping_*`, `saturating_*` or `checked_*`. The test profile keeps `overflow-checks = true`.
+
+### R6 — Determinism and global state
+
+1. No global mutable state: no `static mut`, no `static` with interior mutability (`Cell`, `RefCell`, `Mutex`, atomics, `OnceCell`, `LazyLock`), no `lazy_static`. Lookup tables are `const`/`static` immutable data, generated by `build.rs` where needed. `cargo xtask check` greps the source of library crates for these patterns and fails.
+2. Same backend + same input = bit-identical output, independent of how the input is split into blocks. Every stateful kernel and block gets a block-size-invariance test (testkit helper from M03).
+3. No reliance on CPU floating-point modes (flush-to-zero, rounding modes). Feedback states are flushed explicitly: `sdrk_core::num::flush_denormal(x)` returns 0.0 when `|x| < 1e-30`.
+4. No hash-map iteration order in any output; use `BTreeMap` or ordered `Vec`s in upper layers.
+5. Fused multiply-add is used only where the numeric contract allows it; the reference and the fallback never use FMA.
+6. Little-endian only: `sdrk-device` contains `#[cfg(target_endian = "big")] compile_error!("sdrk supports little-endian targets only");`.
+
+### R7 — Numeric conventions (from the plan's Decisions table)
+
+| Topic | Rule |
+| --- | --- |
+| Q15 format | `Q15(i16)`, value = raw / 32768, range −1 … 1 − 2⁻¹⁵ |
+| Rounding | round half up: add ½ LSB, then arithmetic right shift (`(x + (1 << (s - 1))) >> s` on a signed integer) |
+| Overflow | always saturate to `[-32768, 32767]`, never wrap |
+| Multiply | `sat16((a as i32 * b as i32 + (1 << 14)) >> 15)`; therefore `-1 × -1 = 32767` |
+| Accumulation | reference and fallback accumulate Q30 products in `i64`, round and saturate once at the end; accelerated variants may use narrower accumulators if their headroom is documented |
+| f32 → Q15 | computed in **f64**: `v = (x as f64) * 32768.0`; NaN → 0; otherwise `floor(v + 0.5)` clamped to `[-32768, 32767]` (so +1.0 → 32767, ±∞ → ±limit). Doing this in f32 would round twice and differ from the Python model |
+| Q15 → f32 | `raw as f32 / 32768.0` (exact) |
+| Complex Q15 | `CQ15 { re: Q15, im: Q15 }`, `#[repr(C)]`, I before Q — byte-identical to interleaved little-endian `cs16` |
+| Denormals | flush feedback state to 0.0 below 1e-30 (R6.3) |
+| Kernel classes | *bit-exact* kernels: fallback output equals the reference output bit for bit (Q15 and f32). *tolerance* kernels: output must reach the minimum SNR stated in the kernel's numeric contract (`docs/kernels.md`) against the f64 reference |
+
+### R8 — Test vectors and golden samples (full specification in M04)
+
+1. Golden samples live in `tests/golden/vectors/<kernel>/<case>.json` plus binary arrays `<case>.<array>.bin`. They are produced **only** by `tests/golden/generate.py` (Python 3.12, NumPy and SciPy with versions pinned exactly in `tests/golden/requirements.txt`). Never edit them by hand; never generate them with code from this repository.
+2. Every case is deterministic: fixed seed via `numpy.random.default_rng(seed)`, fixed sizes, parameters stored in the JSON. Regenerating must produce byte-identical files (`python tests/golden/generate.py --check`).
+3. Expected values are computed in float64 (`cf64`/`f64`). For bit-exact Q15 cases the generator computes the expected result with the integer model in `tests/golden/sdrk_golden/q15.py`, which implements R7 in NumPy `int64`.
+4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
+5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
+6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
+
+### R9 — Definition of done (every milestone)
+
+- All commands in R1.2 and the milestone's *Acceptance* section pass locally.
+- Every new public item is documented with an example; `docs/` files named in the milestone are updated.
+- New kernels have: a reference, a fallback, a facade delegation, golden cases, a block-size-invariance test (if stateful), extreme-input tests (silence, full scale, NaN/∞ for f32 inputs) and an entry in the testkit suite.
+- `CHANGELOG.md` has an entry under "Unreleased" for every user-visible change.
+- `docs/decisions-log.md` lists every judgement call made during the milestone.
+
+
+
+## Scope
+
+**In:** kernel `channelize` (C32) in `sdrk-core` with Fallback, Reference, facade delegation, SIMD path, contract; the prototype filter design `design::channelizer_prototype`; `sdrk_proto::pulses` (the pulse-train packet format); block `BandPulseDetectBlock` and kind `band_pulse_detect`; flows `ism433_pulses` and `ism868_pulses` (pulse packets as JSON Lines) with YAML twins; a testkit generator of short-range transmissions (`ism::Transmission`: OOK with PWM, PPM or Manchester coding, two-level FSK, any frequency in the band, level, timing tolerance); golden cases; tests; `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/testing.md`, `examples/README.md`, `CHANGELOG.md`.
+
+**Out:** the device protocols and their JSON fields (M46); a general channelizer block with frame outputs per channel (backlog: the block here keeps the channels inside); retuning a device while the flow runs (one receiver per band); wideband multi-band operation above the device rate (one flow per band and receiver); transmitting.
+
+## Specification
+
+General rules of M19 apply. The two receivers are separate flows; a user with two receivers runs both flows (or one flow with two inputs, M34).
+
+### 1. Kernel `channelize`
+
+```rust
+pub struct ChannelizeState<T, S> { /* prototype taps (M·L), history, phase, FFT plan of size M */ }
+impl ChannelizeState<..> {
+    /// M channels (power of two, 4 … 256), prototype taps M·L (L taps per branch, 4 … 32), outputs
+    /// oversampled by 2: one output vector of M channel samples per M/2 input samples.
+    pub fn new(taps: S, channels: usize, history: H, fft: FftState<..>) -> Result<Self>;
+    pub fn reset(&mut self);
+}
+pub trait Channelize<T> { fn channelize(&self, s: &mut ChannelizeState<..>, input: &[T], output: &mut [T]) -> Result<Progress>; }
+```
+
+- The polyphase analysis filter bank with 2× oversampling (the "M/2 hop" form): per M/2 new input samples, the M branch filters of L taps each produce M values, which are circularly shifted according to the output index parity (so that every channel keeps its phase) and transformed by an M-point FFT (the `fft` kernel of the backend). Channel `k` (0 … M−1, FFT order: 0 is the band centre, `k > M/2` are the negative frequencies) is centred at `k·fs/M` and has a complex output at `2·fs/M`.
+- `output` is filled in groups of M values (channel 0 … M−1 of one time step); `Progress` counts input samples consumed and output values produced; a call consumes whole hops only and keeps the rest in the history.
+- Class *tolerance*: SNR ≥ 100 dB against an f64 model of the same filter bank (the FFT is a tolerance kernel); the fallback, the facade and the SIMD path agree within that; chunk invariance is exact (the same hop boundaries in every chunking).
+
+`design::channelizer_prototype(channels, taps_per_branch, attenuation_db) -> taps` (f64, length M·L): a Kaiser-windowed low-pass with the passband edge at `0.5·fs/M` (the channel spacing is `fs/M`; each channel passes ±half a spacing flat), the stopband from `1.0·fs/M` with `attenuation_db` (default 60), normalized to unit gain at DC. With 2× oversampling the output rate `2·fs/M` keeps the stopband edge free of aliasing, and a narrowband signal anywhere in the band lies inside the flat passband of at least one channel (the channels overlap by half a spacing on each side). Golden case for the design (`max_abs_err` 1e-12).
+
+### 2. `sdrk_proto::pulses`
+
+A pulse train as a packet payload: header (version, modulation `ook` or `fsk`, channel index, frequency offset of the burst from the band centre in Hz as `i32`, level in dB×10 as `i16`, noise level in dB×10, sample rate of the widths in Hz as `u32`), then the widths as pairs (pulse, gap) in samples of that rate (`u32` each, little endian); for FSK "pulse" is the time at the upper frequency and "gap" at the lower. `Packet::index` is the input sample of the burst start; `encode`, `decode` with length and version checks; a JSON form for `sdrk_io` packet files (`{"mod":"ook","freq_hz":…,"rssi_db":…,"pulses":[[p,g],…]}`).
+
+### 3. Block and kind `band_pulse_detect`
+
+`BandPulseDetectBlock`: C32 → `Packets`. Per piece of input: `channelize`, then for every channel the magnitude, a first-order low-pass of the envelope (after rtl_433 `baseband_low_pass_filter`, cutoff a fixed fraction of the channel rate) and the pulse detector of rtl_433 `pulse_detect_package` adapted per channel: noise level tracked while idle (rate 1/1024 per sample), signal level during a pulse (1/64), threshold midway with the hysteresis rtl_433 uses, a lead-in before the first pulse, `min_snr_db` above the noise to start a burst, end of a burst after a gap longer than `max_gap_ms` or `gap_ratio` times the longest pulse, glitch removal of pulses and gaps shorter than `min_pulse_us`. For FSK (`modulation` `fsk` or `auto`): during a burst the instantaneous frequency of the channel signal (phase difference) is sliced at its running mean into the two levels, as rtl_433's FSK pulse detector does.
+
+Merging: a transmission whose spectrum covers two neighbouring channels is seen in both; bursts of neighbouring channels that overlap in time by more than half of the shorter one are one transmission, and the block emits only the one with the higher level (its channel index and the frequency estimate from the phase rotation of the channel signal during the burst). Two transmissions on frequencies at least two channel spacings apart are emitted separately even when they overlap in time.
+
+Parameters: `channels` (I64, build, 16), `taps_per_branch` (I64, build, 8), `modulation` (Choice `ook`/`fsk`/`auto`, build, `auto`), `min_snr_db` (dB, **runtime**, 9; rtl_433's default), `min_pulse_us` (µs, build, 40), `max_gap_ms` (ms, build, 10), `gap_ratio` (None, build, 10), `max_pulses` (I64, build, 1200), `center_hz` (Hz, build, 0; the RF centre, only for the reported absolute frequency). `rate_unsupported` if the channel rate `2·fs/channels` is below 100 kHz. Cost: `channelize` (`L + log2(M)·5/2` per input sample, record the formula) plus 12 per channel output. The packets are emitted when a burst ends; the block's latency is at most `max_gap_ms` plus the filter delay.
+
+### 4. Flows
+
+- `ism433_pulses` (+ YAML): `rf` `cu8` (RTL-SDR) at 2 MHz centred at 433.92 MHz → `conv` (to C32) → `det` = `band_pulse_detect` (`channels` 16: 125 kHz spacing, 250 kHz channel rate; `center_hz` 433920000) → `pulses` packets (JSON Lines); the YAML comment shows the HackRF variant (`cs8`, the same rate) and explains that the band 433.05 … 434.79 MHz lies inside ±1 MHz.
+- `ism868_pulses` (+ YAML): `rf` `cu8` at 2 MHz centred at 868.5 MHz → `det` = `band_pulse_detect` (`channels` 8: 250 kHz spacing for the wider FSK sensors, `modulation` `auto`, `center_hz` 868500000) → `pulses`; the comment names the sensor channels inside (868.3 MHz and nearby) and that 868.95 MHz devices need the centre moved up.
+
+### 5. Testkit `ism` generator
+
+`ism::Transmission { coding: Pwm { short_us, long_us, gap_us } | Ppm { pulse_us, short_gap_us, long_gap_us } | Manchester { half_bit_us } | Fsk { bit_us, deviation_hz }, bits, repeats, repeat_gap_us, freq_offset_hz, level_db, timing_error }` renders a burst at a sample rate into a C32 buffer (OOK with 2 µs rise and fall, FSK continuous phase); `ism::Scene` places many transmissions at given times and frequencies and adds noise, a common clock error and a few interferers (a CW carrier, a short wideband burst). All deterministic with a seed.
+
+## Tests
+
+1. `channelize`: golden cases (seeds 626, 627: 16 and 64 channels, a tone per channel and noise), the f64 model within 100 dB, chunk invariance with 20 plans (seed 628), the facade and the SIMD path against the fallback; a tone swept across the band in 200 steps appears with at most 0.1 dB ripple in the strongest channel (flat passband) and at least 60 dB down in channels two spacings away.
+2. `channelizer_prototype` golden case; `sdrk_proto::pulses` round trip, version and length errors.
+3. **Every frequency (OOK):** 300 PWM transmissions of 40 bits (seed 629) at frequencies uniform over 433.05 … 434.79 MHz, including 20 placed exactly on channel boundaries and 20 at the band edges, levels 10 … 40 dB above the noise in the channel bandwidth, one at a time: every transmission at 12 dB or more is emitted once (no duplicates from neighbouring channels), with all pulse and gap widths within ±1 sample of the channel rate plus the generator's timing, and the frequency within 10 kHz.
+4. **Simultaneous transmissions:** 100 scenes of 2 or 3 overlapping transmissions (OOK and FSK mixed) at least 250 kHz apart (seed 630): every one is emitted with its own pulse train.
+5. **FSK:** 200 FSK transmissions (bit rates 4.8 … 38.4 kbit/s, deviations 20 … 90 kHz) over 868.0 … 869.0 MHz with the 868 flow (seed 631): all at 12 dB or more emitted with their bit transitions within ±1 sample.
+6. **Sensitivity against a single tuned channel:** a transmission at a channel centre is detected at the same level (within 1 dB, 200 trials per level, seed 632) as with a `ddc` to that frequency and the same detector; the channelizer costs no sensitivity.
+7. **False alarms:** 60 s of noise with a CW carrier and wideband bursts (seed 633) give no pulse packets except for the bursts themselves (at most one per burst, never from the carrier).
+8. Flow tests: both flows validate, build, run on a `cu8` scene file of the generator (seed 634) and write JSON Lines that `sdrk_io::packets` reads back; chunk invariance of the block with 20 plans (seed 635).
+
+## Acceptance
+
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-proto`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the `channelize` entries).
+
+## Deliverables checklist
+
+- [ ] Kernel `channelize` with reference, fallback, delegation, SIMD path, contract; `design::channelizer_prototype`
+- [ ] `sdrk_proto::pulses`
+- [ ] Block and kind `band_pulse_detect`; schema
+- [ ] Testkit `ism` generator
+- [ ] Flows `ism433_pulses`, `ism868_pulses` with YAML twins
+- [ ] Tests (seeds 626–635)
+- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/testing.md`, `examples/README.md`, CHANGELOG, decisions log

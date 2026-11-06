@@ -23,6 +23,8 @@ pub enum Error {
     },
     /// An argument has an invalid value (kind: `InvalidArgument`).
     InvalidArgument(&'static str),
+    /// Received bytes do not form a valid header or field (kind: `Parse`).
+    Parse(&'static str),
 }
 
 /// The name the milestone specification uses for [`Error`].
@@ -41,6 +43,7 @@ impl fmt::Display for Error {
                 write!(f, "buffer too small: needed {needed}, got {got}")
             }
             Self::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),
+            Self::Parse(msg) => write!(f, "parse error: {msg}"),
         }
     }
 }
@@ -53,6 +56,7 @@ impl SdrkError for Error {
             Self::TooLong { .. } => ErrorKind::OutOfRange,
             Self::BufferTooSmall { .. } => ErrorKind::BufferTooSmall,
             Self::InvalidArgument(_) => ErrorKind::InvalidArgument,
+            Self::Parse(_) => ErrorKind::Parse,
         }
     }
 }

@@ -1,0 +1,77 @@
+{
+  "sdrk": 1,
+  "name": "aprs-receiver",
+  "description": "Receive AX.25/APRS packets sent as Bell 202 AFSK at 1200 Bd (mark 1200 Hz, space 2200 Hz) from 48 kHz audio of an FM receiver or a sound card.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "audio": {
+      "type": "f32",
+      "rate_hz": 48000,
+      "description": "Audio at 48 kHz from an FM receiver or a sound card"
+    }
+  },
+  "nodes": {
+    "cplx": {
+      "kind": "to_complex"
+    },
+    "dec": {
+      "kind": "hdlc_decode"
+    },
+    "demod": {
+      "kind": "fsk_demod",
+      "params": {
+        "deviation_hz": 500,
+        "symbol_rate_hz": 1200
+      }
+    },
+    "lpf": {
+      "kind": "decimate",
+      "params": {
+        "cutoff_hz": 1800,
+        "factor": 4
+      }
+    },
+    "shift": {
+      "kind": "rotate",
+      "params": {
+        "frequency_hz": -1700
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "audio",
+      "to": "cplx"
+    },
+    {
+      "from": "cplx",
+      "to": "shift"
+    },
+    {
+      "from": "shift",
+      "to": "lpf"
+    },
+    {
+      "from": "lpf",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "packets"
+    }
+  ],
+  "outputs": {
+    "packets": {
+      "type": "packets",
+      "queue": 64,
+      "description": "The AX.25 frames with CRC_OK and the input index of the first bit after their opening flag"
+    }
+  }
+}

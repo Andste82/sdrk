@@ -10,11 +10,12 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind, ConvertKind,
-    ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind,
-    DucKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind,
-    FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind, HalfbandDecimateKind, ImagPartKind,
-    InterpolateKind, Kind, MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind,
+    AddKind, AdsbDecodeKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind,
+    ConvertKind, ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind,
+    DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
+    FmStereoModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind,
+    HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind, InterpolateKind, Kind,
+    MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, OokDemodKind, OokModKind,
     PreemphLimitKind, PskDemodKind, PskModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind,
     RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SliceKind, SpectrumKind,
     SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, SymbolSyncKind,
@@ -214,7 +215,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 53);
+/// assert_eq!(registry.descriptions().count(), 58);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -295,6 +296,11 @@ impl Registry {
         register::<PskDemodKind>(&mut factories);
         register::<RdsDemodKind>(&mut factories);
         register::<RdsDecodeKind>(&mut factories);
+        register::<HdlcDecodeKind>(&mut factories);
+        register::<HdlcEncodeKind>(&mut factories);
+        register::<OokModKind>(&mut factories);
+        register::<OokDemodKind>(&mut factories);
+        register::<AdsbDecodeKind>(&mut factories);
         Self { factories }
     }
 

@@ -6,7 +6,7 @@ from typing import Callable
 import numpy as np
 
 MAX_CASE_BYTES = 512 * 1024
-MAX_TOTAL_BYTES = 16 * 1024 * 1024
+MAX_TOTAL_BYTES = 32 * 1024 * 1024
 
 DTYPES = ("u8", "i8", "i16", "i32", "f32", "f64", "ci16", "cf32", "cf64")
 

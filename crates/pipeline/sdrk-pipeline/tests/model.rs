@@ -34,7 +34,7 @@ use serde_json::json;
 
 use common::flow;
 
-const FLOWS: [&str; 22] = [
+const FLOWS: [&str; 26] = [
     "fm_receiver",
     "spectrum_only",
     "resample_audio",
@@ -57,6 +57,10 @@ const FLOWS: [&str; 22] = [
     "qpsk_transmitter",
     "qpsk_receiver",
     "fm_rds_receiver",
+    "aprs_receiver",
+    "aprs_transmitter",
+    "ook_receiver",
+    "adsb_receiver",
 ];
 
 #[test]

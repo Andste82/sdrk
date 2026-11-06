@@ -31,23 +31,25 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig,
-    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
-    BiquadRealBlock, Block, BlockDescription, ConvertBlock, ConvertConfig, ConvertOutBlock,
-    ConvertOutConfig, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock,
-    DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig,
-    FrameEncodeBlock, FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock,
-    FskModConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock,
-    Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind,
-    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
-    PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
-    RdsDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
-    ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
-    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
+    AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
+    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
+    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, CostasBlock, CostasConfig,
+    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig,
+    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock,
+    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
+    FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
+    HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock,
+    InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
+    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock,
+    OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -67,10 +69,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_fifty_three_unique_kinds() {
+fn there_are_fifty_eight_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 53);
-    assert_eq!(all_descriptions().len(), 53);
+    assert_eq!(kinds.len(), 58);
+    assert_eq!(all_descriptions().len(), 58);
     for kind in [
         "convert",
         "convert_out",
@@ -125,6 +127,11 @@ fn there_are_fifty_three_unique_kinds() {
         "psk_demod",
         "rds_demod",
         "rds_decode",
+        "hdlc_decode",
+        "hdlc_encode",
+        "ook_mod",
+        "ook_demod",
+        "adsb_decode",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -346,6 +353,11 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("psk_demod", |n| PskDemodConfig::default().get(n), &[]);
     defaults_match("rds_demod", |n| RdsDemodConfig::default().get(n), &[]);
     defaults_match("rds_decode", |n| RdsDecodeConfig::default().get(n), &[]);
+    defaults_match("hdlc_decode", |n| HdlcDecodeConfig::default().get(n), &[]);
+    defaults_match("hdlc_encode", |n| HdlcEncodeConfig::default().get(n), &[]);
+    defaults_match("ook_mod", |n| OokModConfig::default().get(n), &[]);
+    defaults_match("ook_demod", |n| OokDemodConfig::default().get(n), &[]);
+    defaults_match("adsb_decode", |n| AdsbDecodeConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -451,6 +463,11 @@ fn configs_accept_every_described_parameter() {
     round_trip!("psk_demod", PskDemodConfig);
     round_trip!("rds_demod", RdsDemodConfig);
     round_trip!("rds_decode", RdsDecodeConfig);
+    round_trip!("hdlc_decode", HdlcDecodeConfig);
+    round_trip!("hdlc_encode", HdlcEncodeConfig);
+    round_trip!("ook_mod", OokModConfig);
+    round_trip!("ook_demod", OokDemodConfig);
+    round_trip!("adsb_decode", AdsbDecodeConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -764,6 +781,30 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "rds_decode",
         &mut RdsDecodeBlock::new(&RdsDecodeConfig::default(), rate(1187), &mut s).unwrap(),
+    );
+    check_block_params(
+        "hdlc_decode",
+        &mut HdlcDecodeBlock::new(&HdlcDecodeConfig::default(), rate(1200), &mut s).unwrap(),
+    );
+    check_block_params(
+        "hdlc_encode",
+        &mut HdlcEncodeBlock::new(&HdlcEncodeConfig::default(), rate(1200), &mut s).unwrap(),
+    );
+    let ook = OokModConfig {
+        samples_per_symbol: 500,
+        ..OokModConfig::default()
+    };
+    check_block_params(
+        "ook_mod",
+        &mut OokModBlock::new(&ook, rate(2_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "ook_demod",
+        &mut OokDemodBlock::new(&OokDemodConfig::default(), rate(250_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "adsb_decode",
+        &mut AdsbDecodeBlock::new(&AdsbDecodeConfig::default(), rate(2_000_000), &mut s).unwrap(),
     );
     let tuned = ResampleConfig {
         tunable: true,
@@ -1254,6 +1295,116 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     }
     let b = CostasBlock::new(&CostasConfig::default(), rate(1000), &mut VecStorage).unwrap();
     assert!(std::ptr::eq(b.description(), costas));
+}
+
+/// The kinds of M39.1: `hdlc_decode` turns `f32` soft bits into packets and `hdlc_encode`
+/// packets into `f32`; `ook_mod` turns `f32` into `c32` and `ook_demod` `c32` into `f32`;
+/// `adsb_decode` turns `c32` into packets; all their parameters are build parameters; the
+/// details name the line code, the chain and the frame rules.
+#[test]
+fn the_m39_1_kinds_describe_their_ports_and_parameters() {
+    let names = |d: &BlockDescription| -> Vec<(&str, Mutability)> {
+        d.params.iter().map(|p| (p.name, p.mutability)).collect()
+    };
+    let d = find("hdlc_decode");
+    assert_eq!(d.inputs[0].types, [PortType::F32]);
+    assert_eq!(d.outputs[0].types, [PortType::Packets]);
+    assert!(d.required.is_empty());
+    assert_eq!(
+        names(d),
+        [("nrzi", Mutability::Build), ("emit_bad", Mutability::Build)]
+    );
+    for word in [
+        "0x7E",
+        "NRZI",
+        "CRC-16/X-25",
+        "CRC_OK",
+        "CRC_FAIL",
+        "first bit after",
+    ] {
+        assert!(d.details.contains(word), "hdlc_decode details: {word}");
+    }
+    let e = find("hdlc_encode");
+    assert_eq!(e.inputs[0].types, [PortType::Packets]);
+    assert_eq!(e.outputs[0].types, [PortType::F32]);
+    assert!(e.required.is_empty());
+    assert_eq!(
+        names(e),
+        [
+            ("nrzi", Mutability::Build),
+            ("preamble_flags", Mutability::Build),
+            ("tail_flags", Mutability::Build),
+        ]
+    );
+    assert_eq!(
+        e.param("preamble_flags").unwrap().kind,
+        ParamKind::I64 {
+            min: 1,
+            max: 1024,
+            default: Some(32)
+        }
+    );
+    for word in ["source", "flags", "stuffed", "rate_hz"] {
+        assert!(e.details.contains(word), "hdlc_encode details: {word}");
+    }
+    let m = find("ook_mod");
+    assert_eq!(m.inputs[0].types, [PortType::F32]);
+    assert_eq!(m.outputs[0].types, [PortType::C32]);
+    assert_eq!(m.required, ["samples_per_symbol"]);
+    assert_eq!(
+        names(m),
+        [
+            ("samples_per_symbol", Mutability::Build),
+            ("level", Mutability::Build),
+        ]
+    );
+    for word in ["fir_interpolate_real", "interleave", "boxcar"] {
+        assert!(m.details.contains(word), "ook_mod details: {word}");
+    }
+    let o = find("ook_demod");
+    assert_eq!(o.inputs[0].types, [PortType::C32]);
+    assert_eq!(o.outputs[0].types, [PortType::F32]);
+    assert_eq!(o.required, ["symbol_rate_hz"]);
+    assert_eq!(
+        names(o),
+        [
+            ("symbol_rate_hz", Mutability::Build),
+            ("track_symbols", Mutability::Build),
+        ]
+    );
+    for word in [
+        "mag",
+        "symbol_sync",
+        "Gardner",
+        "lo + 0.45 (hi - lo)",
+        "frame_decode",
+        "4 times",
+    ] {
+        assert!(o.details.contains(word), "ook_demod details: {word}");
+    }
+    let a = find("adsb_decode");
+    assert_eq!(a.inputs[0].types, [PortType::C32]);
+    assert_eq!(a.outputs[0].types, [PortType::Packets]);
+    assert!(a.required.is_empty());
+    assert_eq!(names(a), [("min_snr_db", Mutability::Build)]);
+    assert_eq!(
+        a.param("min_snr_db").unwrap().kind,
+        ParamKind::F64 {
+            min: 0.0,
+            max: 60.0,
+            default: Some(6.0)
+        }
+    );
+    for word in [
+        "2 MHz",
+        "CRC-24",
+        "DF 17",
+        "bit 16",
+        "median",
+        "rate_unsupported",
+    ] {
+        assert!(a.details.contains(word), "adsb_decode details: {word}");
+    }
 }
 
 #[test]

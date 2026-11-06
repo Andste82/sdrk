@@ -1,0 +1,277 @@
+{
+  "arrays": {
+    "rf": {
+      "dtype": "u8",
+      "file": "adsb_short_frames.rf.bin",
+      "len": 48000
+    }
+  },
+  "case": "adsb_short_frames",
+  "format_version": 1,
+  "kernel": "flows",
+  "notes": "Mode S frames at 2 MHz in 24000 cu8 samples, 20 to 30 dB above noise of sigma 0.018, pulses as in adsb_df17_200_frames: 6 DF 17 frames and one DF 11 frame with the plain CRC-24 parity (residue 0), then in random order 20 short frames (DF 4, DF 5, DF 11; parity = CRC-24 xor address) with one of these 7 addresses and 4 with an address not seen before; out is crc_ok (CRC_OK), address_parity (flag bit 16, 7 bytes) or dropped (no packet)",
+  "params": {
+    "frames": [
+      {
+        "df": 17,
+        "hex": "8D0DD96BBBB7DF3AD0341A517FC4",
+        "icao": 907627,
+        "index": 395,
+        "level_db": 22.552,
+        "out": "crc_ok"
+      },
+      {
+        "df": 17,
+        "hex": "8DEEB56D3915A1640CEA628B8776",
+        "icao": 15644013,
+        "index": 1020,
+        "level_db": 28.928,
+        "out": "crc_ok"
+      },
+      {
+        "df": 17,
+        "hex": "8D2745156E8F8F8D43BEE7F3C78F",
+        "icao": 2573589,
+        "index": 1562,
+        "level_db": 29.616,
+        "out": "crc_ok"
+      },
+      {
+        "df": 17,
+        "hex": "8D2EA770B7BA26ADD773C2F3D832",
+        "icao": 3057520,
+        "index": 2088,
+        "level_db": 28.392,
+        "out": "crc_ok"
+      },
+      {
+        "df": 17,
+        "hex": "8D9D2ABC15A5CE7064F2CB6CAAF7",
+        "icao": 10300092,
+        "index": 2853,
+        "level_db": 29.336,
+        "out": "crc_ok"
+      },
+      {
+        "df": 17,
+        "hex": "8DDAC489BE099EFD114104E4D148",
+        "icao": 14337161,
+        "index": 3681,
+        "level_db": 20.715,
+        "out": "crc_ok"
+      },
+      {
+        "df": 11,
+        "hex": "5DF1A42F90F440",
+        "icao": 15836207,
+        "index": 4196,
+        "level_db": 26.378,
+        "out": "crc_ok"
+      },
+      {
+        "df": 5,
+        "hex": "2B7B15AC08B85C",
+        "icao": 15644013,
+        "index": 5371,
+        "level_db": 26.943,
+        "out": "address_parity"
+      },
+      {
+        "df": 5,
+        "hex": "2D65917B9DAAAC",
+        "icao": 2499729,
+        "index": 5958,
+        "level_db": 25.023,
+        "out": "dropped"
+      },
+      {
+        "df": 5,
+        "hex": "28E7A146C08C4F",
+        "icao": 3057520,
+        "index": 6907,
+        "level_db": 27.719,
+        "out": "address_parity"
+      },
+      {
+        "df": 11,
+        "hex": "5D189A1ABAA89B",
+        "icao": 1612314,
+        "index": 8083,
+        "level_db": 24.764,
+        "out": "dropped"
+      },
+      {
+        "df": 11,
+        "hex": "5DF1A42F61506F",
+        "icao": 15836207,
+        "index": 9108,
+        "level_db": 22.162,
+        "out": "address_parity"
+      },
+      {
+        "df": 11,
+        "hex": "5DDAC48933BD6D",
+        "icao": 14337161,
+        "index": 9797,
+        "level_db": 29.373,
+        "out": "address_parity"
+      },
+      {
+        "df": 5,
+        "hex": "2A74488861456E",
+        "icao": 3720407,
+        "index": 10398,
+        "level_db": 23.494,
+        "out": "dropped"
+      },
+      {
+        "df": 4,
+        "hex": "2573BBDF99A460",
+        "icao": 2573589,
+        "index": 11023,
+        "level_db": 23.854,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "233103898EC09C",
+        "icao": 907627,
+        "index": 11705,
+        "level_db": 29.372,
+        "out": "address_parity"
+      },
+      {
+        "df": 5,
+        "hex": "2CE7A373846D31",
+        "icao": 2573589,
+        "index": 12213,
+        "level_db": 27.842,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "203815A8481D9F",
+        "icao": 15644013,
+        "index": 13258,
+        "level_db": 25.895,
+        "out": "address_parity"
+      },
+      {
+        "df": 11,
+        "hex": "5DC340E4A8D3FE",
+        "icao": 12796132,
+        "index": 13883,
+        "level_db": 25.125,
+        "out": "dropped"
+      },
+      {
+        "df": 4,
+        "hex": "2719219302A429",
+        "icao": 2573589,
+        "index": 14982,
+        "level_db": 23.545,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "205F1E06C25D92",
+        "icao": 15644013,
+        "index": 15735,
+        "level_db": 27.401,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "268C0EEF4B9C3C",
+        "icao": 3057520,
+        "index": 16890,
+        "level_db": 20.647,
+        "out": "address_parity"
+      },
+      {
+        "df": 5,
+        "hex": "2B60A38BB3FE38",
+        "icao": 907627,
+        "index": 17386,
+        "level_db": 28.071,
+        "out": "address_parity"
+      },
+      {
+        "df": 5,
+        "hex": "292F75B6499EEC",
+        "icao": 14337161,
+        "index": 18023,
+        "level_db": 20.55,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "2067B511AECBEF",
+        "icao": 3057520,
+        "index": 18797,
+        "level_db": 24.784,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "23D7CF634F539D",
+        "icao": 907627,
+        "index": 19342,
+        "level_db": 29.983,
+        "out": "address_parity"
+      },
+      {
+        "df": 11,
+        "hex": "5D0DD96BDBE22C",
+        "icao": 907627,
+        "index": 19928,
+        "level_db": 25.583,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "21682998BCAAAD",
+        "icao": 15836207,
+        "index": 21307,
+        "level_db": 24.679,
+        "out": "address_parity"
+      },
+      {
+        "df": 11,
+        "hex": "5DF1A42F61506F",
+        "icao": 15836207,
+        "index": 22015,
+        "level_db": 24.604,
+        "out": "address_parity"
+      },
+      {
+        "df": 11,
+        "hex": "5D0DD96BDBE22C",
+        "icao": 907627,
+        "index": 22569,
+        "level_db": 27.452,
+        "out": "address_parity"
+      },
+      {
+        "df": 4,
+        "hex": "24212EE09550DE",
+        "icao": 10300092,
+        "index": 23079,
+        "level_db": 25.716,
+        "out": "address_parity"
+      }
+    ],
+    "noise_sigma": 0.018,
+    "rate_hz": 2000000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 545,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

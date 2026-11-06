@@ -1,0 +1,1632 @@
+{
+  "arrays": {
+    "rf": {
+      "dtype": "u8",
+      "file": "adsb_df17_200_frames.rf.bin",
+      "len": 300000
+    }
+  },
+  "case": "adsb_df17_200_frames",
+  "format_version": 1,
+  "kernel": "flows",
+  "notes": "200 DF 17 frames (CA 5, random address and ME, CRC-24 parity) at 2 MHz in 150000 cu8 samples; pulses of one sample at p, p + 2, p + 7, p + 9 and p + 16 + 2 k (bit 1) or p + 17 + 2 k (bit 0); amplitudes 10 to 30 dB above the noise (A^2 / (2 sigma^2), uniform in dB), random carrier phase, offset up to 100 kHz; noise sigma 0.018 per component, 40 bursts of 32 to 1024 samples 0 to 12 dB above it; frames lists index (= p), the 14 bytes, the address, level_db and snr_db (over the noise plus the strongest burst overlapping p - 256 .. p + 240); every frame with snr_db above min_snr_db must decode with CRC_OK at its index, and no other CRC_OK frame may appear",
+  "params": {
+    "bursts": [
+      {
+        "length": 965,
+        "level_db": 0.647,
+        "start": 125183
+      },
+      {
+        "length": 668,
+        "level_db": 10.965,
+        "start": 115477
+      },
+      {
+        "length": 407,
+        "level_db": 9.713,
+        "start": 28582
+      },
+      {
+        "length": 157,
+        "level_db": 5.399,
+        "start": 83567
+      },
+      {
+        "length": 385,
+        "level_db": 3.775,
+        "start": 1266
+      },
+      {
+        "length": 895,
+        "level_db": 5.298,
+        "start": 68269
+      },
+      {
+        "length": 651,
+        "level_db": 3.334,
+        "start": 115054
+      },
+      {
+        "length": 71,
+        "level_db": 11.972,
+        "start": 147333
+      },
+      {
+        "length": 596,
+        "level_db": 9.839,
+        "start": 139967
+      },
+      {
+        "length": 253,
+        "level_db": 1.476,
+        "start": 104538
+      },
+      {
+        "length": 254,
+        "level_db": 3.72,
+        "start": 92323
+      },
+      {
+        "length": 577,
+        "level_db": 8.807,
+        "start": 51669
+      },
+      {
+        "length": 956,
+        "level_db": 7.302,
+        "start": 102058
+      },
+      {
+        "length": 110,
+        "level_db": 3.167,
+        "start": 126490
+      },
+      {
+        "length": 746,
+        "level_db": 1.241,
+        "start": 64843
+      },
+      {
+        "length": 382,
+        "level_db": 3.628,
+        "start": 66037
+      },
+      {
+        "length": 884,
+        "level_db": 4.204,
+        "start": 107311
+      },
+      {
+        "length": 870,
+        "level_db": 4.725,
+        "start": 6880
+      },
+      {
+        "length": 697,
+        "level_db": 2.103,
+        "start": 134740
+      },
+      {
+        "length": 705,
+        "level_db": 9.357,
+        "start": 49918
+      },
+      {
+        "length": 492,
+        "level_db": 3.133,
+        "start": 89478
+      },
+      {
+        "length": 647,
+        "level_db": 10.518,
+        "start": 88180
+      },
+      {
+        "length": 995,
+        "level_db": 8.117,
+        "start": 102608
+      },
+      {
+        "length": 1014,
+        "level_db": 10.412,
+        "start": 115419
+      },
+      {
+        "length": 63,
+        "level_db": 5.054,
+        "start": 48618
+      },
+      {
+        "length": 857,
+        "level_db": 2.453,
+        "start": 51398
+      },
+      {
+        "length": 446,
+        "level_db": 6.371,
+        "start": 93013
+      },
+      {
+        "length": 61,
+        "level_db": 5.142,
+        "start": 60284
+      },
+      {
+        "length": 917,
+        "level_db": 3.749,
+        "start": 27830
+      },
+      {
+        "length": 341,
+        "level_db": 5.202,
+        "start": 67459
+      },
+      {
+        "length": 268,
+        "level_db": 10.312,
+        "start": 55920
+      },
+      {
+        "length": 230,
+        "level_db": 7.433,
+        "start": 45447
+      },
+      {
+        "length": 672,
+        "level_db": 11.306,
+        "start": 665
+      },
+      {
+        "length": 992,
+        "level_db": 10.983,
+        "start": 125172
+      },
+      {
+        "length": 80,
+        "level_db": 3.645,
+        "start": 49447
+      },
+      {
+        "length": 592,
+        "level_db": 8.063,
+        "start": 25651
+      },
+      {
+        "length": 414,
+        "level_db": 3.534,
+        "start": 84973
+      },
+      {
+        "length": 1008,
+        "level_db": 6.696,
+        "start": 77706
+      },
+      {
+        "length": 810,
+        "level_db": 5.9,
+        "start": 66735
+      },
+      {
+        "length": 936,
+        "level_db": 6.844,
+        "start": 30288
+      }
+    ],
+    "frames": [
+      {
+        "hex": "8DBE1C513214EF656F6812878110",
+        "icao": 12459089,
+        "index": 316,
+        "level_db": 12.804,
+        "snr_db": 12.804
+      },
+      {
+        "hex": "8D584EAB660B9E2E91CCB72E87D6",
+        "icao": 5787307,
+        "index": 1007,
+        "level_db": 13.655,
+        "snr_db": 2.039
+      },
+      {
+        "hex": "8D95EC4C641DC79E89C48783A462",
+        "icao": 9825356,
+        "index": 2672,
+        "level_db": 19.066,
+        "snr_db": 19.066
+      },
+      {
+        "hex": "8D820D9D91E114989912E01C0E89",
+        "icao": 8523165,
+        "index": 3732,
+        "level_db": 17.642,
+        "snr_db": 17.642
+      },
+      {
+        "hex": "8DDDDE229AA8C0C9BCAB6C7201B4",
+        "icao": 14540322,
+        "index": 4481,
+        "level_db": 17.548,
+        "snr_db": 17.548
+      },
+      {
+        "hex": "8D3638921FC03D996F4735B2B94A",
+        "icao": 3553426,
+        "index": 5126,
+        "level_db": 11.521,
+        "snr_db": 11.521
+      },
+      {
+        "hex": "8D38625ECDDFAD2C75993ECE57F8",
+        "icao": 3695198,
+        "index": 5856,
+        "level_db": 29.6,
+        "snr_db": 29.6
+      },
+      {
+        "hex": "8DC9C877CD3D9C638ABA1BAF7126",
+        "icao": 13224055,
+        "index": 6622,
+        "level_db": 26.833,
+        "snr_db": 26.833
+      },
+      {
+        "hex": "8D802B8CDBF4DAAF843D4A820238",
+        "icao": 8399756,
+        "index": 7262,
+        "level_db": 24.332,
+        "snr_db": 18.346
+      },
+      {
+        "hex": "8D1B6CE23912544FF5F859EB7143",
+        "icao": 1797346,
+        "index": 7792,
+        "level_db": 21.024,
+        "snr_db": 15.038
+      },
+      {
+        "hex": "8D94EC97A327E388EC4FA82B8D16",
+        "icao": 9759895,
+        "index": 9116,
+        "level_db": 25.018,
+        "snr_db": 25.018
+      },
+      {
+        "hex": "8D58F70DCFD683DFF3FC42CF29AB",
+        "icao": 5830413,
+        "index": 9758,
+        "level_db": 19.39,
+        "snr_db": 19.39
+      },
+      {
+        "hex": "8DB339777C5C7A8AECC084383E0E",
+        "icao": 11745655,
+        "index": 10439,
+        "level_db": 22.298,
+        "snr_db": 22.298
+      },
+      {
+        "hex": "8D72BEA12D60386CFD747A79F16C",
+        "icao": 7519905,
+        "index": 11448,
+        "level_db": 21.157,
+        "snr_db": 21.157
+      },
+      {
+        "hex": "8DA5341A60A6542C18A7F429FBDE",
+        "icao": 10826778,
+        "index": 11973,
+        "level_db": 17.706,
+        "snr_db": 17.706
+      },
+      {
+        "hex": "8D2589F3150A01E1094857ACCBF3",
+        "icao": 2460147,
+        "index": 13252,
+        "level_db": 17.636,
+        "snr_db": 17.636
+      },
+      {
+        "hex": "8DEE06D82EA70CCA9CC1A7D8B3DD",
+        "icao": 15599320,
+        "index": 13794,
+        "level_db": 16.869,
+        "snr_db": 16.869
+      },
+      {
+        "hex": "8D19FA93F06DF2DED3A23A5ECF11",
+        "icao": 1702547,
+        "index": 14647,
+        "level_db": 13.739,
+        "snr_db": 13.739
+      },
+      {
+        "hex": "8D07D3C1BC29BD91AF6A43973E19",
+        "icao": 512961,
+        "index": 15166,
+        "level_db": 20.804,
+        "snr_db": 20.804
+      },
+      {
+        "hex": "8D01DC4D2919ACB18CACD73E7361",
+        "icao": 121933,
+        "index": 15712,
+        "level_db": 20.087,
+        "snr_db": 20.087
+      },
+      {
+        "hex": "8DBA7B5EE3B76FB4B02E37C6E71C",
+        "icao": 12221278,
+        "index": 16349,
+        "level_db": 22.182,
+        "snr_db": 22.182
+      },
+      {
+        "hex": "8D54A13BDF055D34D55F39828854",
+        "icao": 5546299,
+        "index": 16870,
+        "level_db": 17.851,
+        "snr_db": 17.851
+      },
+      {
+        "hex": "8DC7641950EE355DCC85191E2CFB",
+        "icao": 13067289,
+        "index": 17430,
+        "level_db": 27.658,
+        "snr_db": 27.658
+      },
+      {
+        "hex": "8DE8A5CD38ED328B478E24C3401B",
+        "icao": 15246797,
+        "index": 17992,
+        "level_db": 28.49,
+        "snr_db": 28.49
+      },
+      {
+        "hex": "8D5107201967604615C3E5DF0B82",
+        "icao": 5310240,
+        "index": 19559,
+        "level_db": 10.029,
+        "snr_db": 10.029
+      },
+      {
+        "hex": "8DBA3E4B8C482BFD106A1CA5F371",
+        "icao": 12205643,
+        "index": 20069,
+        "level_db": 25.906,
+        "snr_db": 25.906
+      },
+      {
+        "hex": "8DF43CBDDECF981BE0C7009FF006",
+        "icao": 16006333,
+        "index": 20765,
+        "level_db": 11.136,
+        "snr_db": 11.136
+      },
+      {
+        "hex": "8D548608D1D48C24A98512046A4D",
+        "icao": 5539336,
+        "index": 21277,
+        "level_db": 29.5,
+        "snr_db": 29.5
+      },
+      {
+        "hex": "8D2F0B2A24693B90B71737DFA311",
+        "icao": 3083050,
+        "index": 21948,
+        "level_db": 25.294,
+        "snr_db": 25.294
+      },
+      {
+        "hex": "8DC64078BF7462F3E94BCCF54C2F",
+        "icao": 12992632,
+        "index": 22768,
+        "level_db": 29.978,
+        "snr_db": 29.978
+      },
+      {
+        "hex": "8DF1AE53FFBAA07D3A6C853C136B",
+        "icao": 15838803,
+        "index": 23275,
+        "level_db": 22.722,
+        "snr_db": 22.722
+      },
+      {
+        "hex": "8D2296DEF2F7ACE06BBA45DDB8FA",
+        "icao": 2266846,
+        "index": 23991,
+        "level_db": 25.565,
+        "snr_db": 25.565
+      },
+      {
+        "hex": "8D267B21190017DF7A4EEBC653B4",
+        "icao": 2521889,
+        "index": 24579,
+        "level_db": 26.854,
+        "snr_db": 26.854
+      },
+      {
+        "hex": "8D67A0FA0A38E5D877B247BD5A37",
+        "icao": 6791418,
+        "index": 25703,
+        "level_db": 28.925,
+        "snr_db": 20.232
+      },
+      {
+        "hex": "8D4721C9F2F2423E793CBC232BDB",
+        "icao": 4661705,
+        "index": 26421,
+        "level_db": 29.785,
+        "snr_db": 21.091
+      },
+      {
+        "hex": "8DEAA46A4165ADD9DBFA5E9E80E0",
+        "icao": 15377514,
+        "index": 26947,
+        "level_db": 17.202,
+        "snr_db": 17.202
+      },
+      {
+        "hex": "8D4993C0E9DABE8C0D845ED7FF17",
+        "icao": 4821952,
+        "index": 27604,
+        "level_db": 10.565,
+        "snr_db": 5.287
+      },
+      {
+        "hex": "8DDD840574D0B32638A55861F918",
+        "icao": 14517253,
+        "index": 28521,
+        "level_db": 11.91,
+        "snr_db": 1.756
+      },
+      {
+        "hex": "8D3D1135F4F4806DB7EC91A33D69",
+        "icao": 4002101,
+        "index": 29024,
+        "level_db": 24.842,
+        "snr_db": 14.688
+      },
+      {
+        "hex": "8DCECF61768FA0FE0BCC6ABEE73A",
+        "icao": 13553505,
+        "index": 29831,
+        "level_db": 15.484,
+        "snr_db": 15.484
+      },
+      {
+        "hex": "8DDABC5EB70BDD42575297C20B46",
+        "icao": 14335070,
+        "index": 30404,
+        "level_db": 15.05,
+        "snr_db": 7.39
+      },
+      {
+        "hex": "8D36DA0B6F1DA8AB56B28E5A7931",
+        "icao": 3594763,
+        "index": 30961,
+        "level_db": 27.913,
+        "snr_db": 20.253
+      },
+      {
+        "hex": "8D4FE9DCFE243AF821A627B23EF9",
+        "icao": 5237212,
+        "index": 31572,
+        "level_db": 20.513,
+        "snr_db": 20.513
+      },
+      {
+        "hex": "8D4217499BE62FC035DFA91AB2C0",
+        "icao": 4331337,
+        "index": 32176,
+        "level_db": 12.335,
+        "snr_db": 12.335
+      },
+      {
+        "hex": "8DB6BC59AB524AC6CDA03899038A",
+        "icao": 11975769,
+        "index": 33308,
+        "level_db": 25.632,
+        "snr_db": 25.632
+      },
+      {
+        "hex": "8DC5E79B97534E7668DF364F62C4",
+        "icao": 12969883,
+        "index": 33806,
+        "level_db": 16.736,
+        "snr_db": 16.736
+      },
+      {
+        "hex": "8D9FAE950BE5BA54A1CD0B5B5FFE",
+        "icao": 10464917,
+        "index": 34545,
+        "level_db": 28.718,
+        "snr_db": 28.718
+      },
+      {
+        "hex": "8DF23A78C36FBA0A7C8B3618EBB0",
+        "icao": 15874680,
+        "index": 35070,
+        "level_db": 19.277,
+        "snr_db": 19.277
+      },
+      {
+        "hex": "8D3B867E8F549A5CAD2C37655943",
+        "icao": 3901054,
+        "index": 35785,
+        "level_db": 29.351,
+        "snr_db": 29.351
+      },
+      {
+        "hex": "8D2CE1CBD3896C2B7F051AF4FB1B",
+        "icao": 2941387,
+        "index": 36372,
+        "level_db": 22.141,
+        "snr_db": 22.141
+      },
+      {
+        "hex": "8DD240AAFFAF72C2ECC6A305C41B",
+        "icao": 13779114,
+        "index": 37236,
+        "level_db": 27.263,
+        "snr_db": 27.263
+      },
+      {
+        "hex": "8D21BE841843EBF40C6AED30F858",
+        "icao": 2211460,
+        "index": 37744,
+        "level_db": 19.805,
+        "snr_db": 19.805
+      },
+      {
+        "hex": "8D6690EE4281BFF7A96A7520CC4D",
+        "icao": 6721774,
+        "index": 38248,
+        "level_db": 23.997,
+        "snr_db": 23.997
+      },
+      {
+        "hex": "8DB6BF0C7D2189E7D6B23011FA2D",
+        "icao": 11976460,
+        "index": 39168,
+        "level_db": 18.064,
+        "snr_db": 18.064
+      },
+      {
+        "hex": "8D6B96D89B7B22B3F20977173C5F",
+        "icao": 7050968,
+        "index": 40239,
+        "level_db": 12.844,
+        "snr_db": 12.844
+      },
+      {
+        "hex": "8D2890082BBA44BA947F21746B5A",
+        "icao": 2658312,
+        "index": 40809,
+        "level_db": 15.134,
+        "snr_db": 15.134
+      },
+      {
+        "hex": "8DC793BD40A1BD4E7AC201D73726",
+        "icao": 13079485,
+        "index": 41420,
+        "level_db": 14.973,
+        "snr_db": 14.973
+      },
+      {
+        "hex": "8DC11A461912635090BC2E9CBC55",
+        "icao": 12655174,
+        "index": 42111,
+        "level_db": 28.766,
+        "snr_db": 28.766
+      },
+      {
+        "hex": "8D75CD775F19D961CFD3D228CBD9",
+        "icao": 7720311,
+        "index": 43050,
+        "level_db": 14.159,
+        "snr_db": 14.159
+      },
+      {
+        "hex": "8D3AD59C1E3E2165359BAD3CFECB",
+        "icao": 3855772,
+        "index": 43647,
+        "level_db": 19.516,
+        "snr_db": 19.516
+      },
+      {
+        "hex": "8D9DE94C2C09F4790BBCA91B813A",
+        "icao": 10348876,
+        "index": 44208,
+        "level_db": 21.805,
+        "snr_db": 21.805
+      },
+      {
+        "hex": "8D079F0043C091F5F011AE9A4F2C",
+        "icao": 499456,
+        "index": 45122,
+        "level_db": 29.954,
+        "snr_db": 29.954
+      },
+      {
+        "hex": "8D168A29908B29C6B2C0BFDD434E",
+        "icao": 1477161,
+        "index": 45980,
+        "level_db": 19.466,
+        "snr_db": 19.466
+      },
+      {
+        "hex": "8D07B714B7102BFF7A3F59F060E0",
+        "icao": 505620,
+        "index": 46641,
+        "level_db": 25.918,
+        "snr_db": 25.918
+      },
+      {
+        "hex": "8DC4B8EF62F08BA1F73E4C94B1DD",
+        "icao": 12892399,
+        "index": 47188,
+        "level_db": 22.523,
+        "snr_db": 22.523
+      },
+      {
+        "hex": "8D0CC4BACE5F1F7B1181AEFFED86",
+        "icao": 836794,
+        "index": 47816,
+        "level_db": 16.072,
+        "snr_db": 16.072
+      },
+      {
+        "hex": "8DAC77FE8EE94EDE57CF22C7ACF9",
+        "icao": 11302910,
+        "index": 48480,
+        "level_db": 18.079,
+        "snr_db": 11.845
+      },
+      {
+        "hex": "8D600F5E18EB611FBF4D6AC05D40",
+        "icao": 6295390,
+        "index": 49145,
+        "level_db": 10.174,
+        "snr_db": 10.174
+      },
+      {
+        "hex": "8DF0E9F8F2D7ECD97A7110E99CA9",
+        "icao": 15788536,
+        "index": 49918,
+        "level_db": 22.614,
+        "snr_db": 12.781
+      },
+      {
+        "hex": "8DFB0DDF525520D4E31C9589379B",
+        "icao": 16453087,
+        "index": 50813,
+        "level_db": 23.938,
+        "snr_db": 14.105
+      },
+      {
+        "hex": "8D0DADAF96B1ED22D745908D1173",
+        "icao": 896431,
+        "index": 51496,
+        "level_db": 26.714,
+        "snr_db": 17.37
+      },
+      {
+        "hex": "8DAC828EFB867745A14AC18A88E3",
+        "icao": 11305614,
+        "index": 52473,
+        "level_db": 24.524,
+        "snr_db": 15.18
+      },
+      {
+        "hex": "8D410F86E9595AE592F333F881A4",
+        "icao": 4263814,
+        "index": 52978,
+        "level_db": 18.456,
+        "snr_db": 18.456
+      },
+      {
+        "hex": "8D0646EF3FB88C123D75EF1F9499",
+        "icao": 411375,
+        "index": 53667,
+        "level_db": 18.63,
+        "snr_db": 18.63
+      },
+      {
+        "hex": "8DD96AB4FCAF22FFCC9C6EBBE75A",
+        "icao": 14248628,
+        "index": 54602,
+        "level_db": 15.164,
+        "snr_db": 15.164
+      },
+      {
+        "hex": "8D1E87CB3E18B24F148737680934",
+        "icao": 2000843,
+        "index": 55155,
+        "level_db": 18.267,
+        "snr_db": 18.267
+      },
+      {
+        "hex": "8D0FA67C32D603DBA18943594863",
+        "icao": 1025660,
+        "index": 55760,
+        "level_db": 16.286,
+        "snr_db": 5.588
+      },
+      {
+        "hex": "8D146A0A163F35CC79D08FF3CCE7",
+        "icao": 1337866,
+        "index": 56393,
+        "level_db": 26.587,
+        "snr_db": 15.889
+      },
+      {
+        "hex": "8D8E7BABA21833B5B4BE1769CA1A",
+        "icao": 9337771,
+        "index": 57033,
+        "level_db": 29.897,
+        "snr_db": 29.897
+      },
+      {
+        "hex": "8D2BEB9A8808F51D30CBFBD42298",
+        "icao": 2878362,
+        "index": 58207,
+        "level_db": 16.555,
+        "snr_db": 16.555
+      },
+      {
+        "hex": "8D67A5E10373E0E7A8A1FAE5FC8B",
+        "icao": 6792673,
+        "index": 58782,
+        "level_db": 25.1,
+        "snr_db": 25.1
+      },
+      {
+        "hex": "8DB84C1C0270DF2C635122B726E1",
+        "icao": 12078108,
+        "index": 59383,
+        "level_db": 26.231,
+        "snr_db": 26.231
+      },
+      {
+        "hex": "8D1A18DE49B32A93924FB77EF3E1",
+        "icao": 1710302,
+        "index": 60219,
+        "level_db": 10.485,
+        "snr_db": 4.183
+      },
+      {
+        "hex": "8D519A657914BB09D7A5C3BFA332",
+        "icao": 5347941,
+        "index": 61287,
+        "level_db": 16.205,
+        "snr_db": 16.205
+      },
+      {
+        "hex": "8D0D68BEC78E9E10E12071ADFB00",
+        "icao": 878782,
+        "index": 62148,
+        "level_db": 20.488,
+        "snr_db": 20.488
+      },
+      {
+        "hex": "8D6A881637E20F86210DAF6CA71F",
+        "icao": 6981654,
+        "index": 63082,
+        "level_db": 26.778,
+        "snr_db": 26.778
+      },
+      {
+        "hex": "8D920F592A8412CF580028B82198",
+        "icao": 9572185,
+        "index": 63801,
+        "level_db": 20.681,
+        "snr_db": 20.681
+      },
+      {
+        "hex": "8D1431BD09683375019EF0CE29C7",
+        "icao": 1323453,
+        "index": 64300,
+        "level_db": 19.22,
+        "snr_db": 19.22
+      },
+      {
+        "hex": "8DF7343A31894D6E26A0B4F39DF2",
+        "icao": 16200762,
+        "index": 65370,
+        "level_db": 29.653,
+        "snr_db": 25.978
+      },
+      {
+        "hex": "8DBE7C96ABB98B3F14CF2FEF1EAB",
+        "icao": 12483734,
+        "index": 65953,
+        "level_db": 10.688,
+        "snr_db": 5.495
+      },
+      {
+        "hex": "8DD39132C4421DFE3DBB04BE013F",
+        "icao": 13865266,
+        "index": 66635,
+        "level_db": 24.305,
+        "snr_db": 17.411
+      },
+      {
+        "hex": "8D5E89BB35C35FEF8391003345DD",
+        "icao": 6195643,
+        "index": 67501,
+        "level_db": 22.94,
+        "snr_db": 16.046
+      },
+      {
+        "hex": "8D06AE955CD417103A4E04E97C34",
+        "icao": 437909,
+        "index": 68415,
+        "level_db": 24.918,
+        "snr_db": 18.497
+      },
+      {
+        "hex": "8D4F4EE3FBF9C99CB1C1EE4491AD",
+        "icao": 5197539,
+        "index": 69697,
+        "level_db": 16.81,
+        "snr_db": 16.81
+      },
+      {
+        "hex": "8DBEA87327236CF7A476AAA9AAAA",
+        "icao": 12494963,
+        "index": 70550,
+        "level_db": 20.675,
+        "snr_db": 20.675
+      },
+      {
+        "hex": "8D945F52068EAA958D46549294C5",
+        "icao": 9723730,
+        "index": 71121,
+        "level_db": 27.191,
+        "snr_db": 27.191
+      },
+      {
+        "hex": "8D580B793E2F53C266567BA935E7",
+        "icao": 5770105,
+        "index": 71865,
+        "level_db": 22.878,
+        "snr_db": 22.878
+      },
+      {
+        "hex": "8D33A0D6289469CEC3F62D9331FF",
+        "icao": 3383510,
+        "index": 72468,
+        "level_db": 24.73,
+        "snr_db": 24.73
+      },
+      {
+        "hex": "8DB32D5A4ABC0FE822D9D7762D40",
+        "icao": 11742554,
+        "index": 73043,
+        "level_db": 29.765,
+        "snr_db": 29.765
+      },
+      {
+        "hex": "8D7412142E3D7B6A52088AA92EC0",
+        "icao": 7606804,
+        "index": 73812,
+        "level_db": 19.783,
+        "snr_db": 19.783
+      },
+      {
+        "hex": "8D1181FBBD53F0B21B894FA2F9C3",
+        "icao": 1147387,
+        "index": 74498,
+        "level_db": 25.599,
+        "snr_db": 25.599
+      },
+      {
+        "hex": "8DB444E404A2F7662FA479CCB2CA",
+        "icao": 11814116,
+        "index": 75346,
+        "level_db": 16.509,
+        "snr_db": 16.509
+      },
+      {
+        "hex": "8DF68D07D11108414AA2D6F496ED",
+        "icao": 16157959,
+        "index": 76761,
+        "level_db": 26.288,
+        "snr_db": 26.288
+      },
+      {
+        "hex": "8D47019C7C046FE12077B88DAD7F",
+        "icao": 4653468,
+        "index": 78106,
+        "level_db": 15.26,
+        "snr_db": 7.722
+      },
+      {
+        "hex": "8D01F3473ECF532588A77C3E7E3F",
+        "icao": 127815,
+        "index": 78745,
+        "level_db": 11.142,
+        "snr_db": 3.603
+      },
+      {
+        "hex": "8D8E65DFE70E932DD021A412A953",
+        "icao": 9332191,
+        "index": 79326,
+        "level_db": 18.506,
+        "snr_db": 18.506
+      },
+      {
+        "hex": "8DD36285458CC9F21E04D8CD0D64",
+        "icao": 13853317,
+        "index": 79889,
+        "level_db": 16.114,
+        "snr_db": 16.114
+      },
+      {
+        "hex": "8D1C516B05C978F2A2F5136FFD75",
+        "icao": 1855851,
+        "index": 80455,
+        "level_db": 13.12,
+        "snr_db": 13.12
+      },
+      {
+        "hex": "8DA6924DF8BE092FB8D706AB8E1D",
+        "icao": 10916429,
+        "index": 80978,
+        "level_db": 24.477,
+        "snr_db": 24.477
+      },
+      {
+        "hex": "8DDEDF65A3F297AAACE81A8CEDC2",
+        "icao": 14606181,
+        "index": 81827,
+        "level_db": 17.02,
+        "snr_db": 17.02
+      },
+      {
+        "hex": "8D8A49B9274BDB752073C471528E",
+        "icao": 9062841,
+        "index": 82784,
+        "level_db": 22.139,
+        "snr_db": 22.139
+      },
+      {
+        "hex": "8DECB1C50D7D488D86FB68332C5C",
+        "icao": 15512005,
+        "index": 83557,
+        "level_db": 21.353,
+        "snr_db": 14.853
+      },
+      {
+        "hex": "8D45BA6FD216258C8A83A4F1FBEB",
+        "icao": 4569711,
+        "index": 84355,
+        "level_db": 19.435,
+        "snr_db": 19.435
+      },
+      {
+        "hex": "8DD482D6ADCD8B9D2C91FF093458",
+        "icao": 13927126,
+        "index": 84925,
+        "level_db": 10.501,
+        "snr_db": 5.373
+      },
+      {
+        "hex": "8DC7F0201C4A633A76E9EB16DE40",
+        "icao": 13103136,
+        "index": 85498,
+        "level_db": 24.847,
+        "snr_db": 19.719
+      },
+      {
+        "hex": "8D226AA897EF40894FC86907E1E2",
+        "icao": 2255528,
+        "index": 86051,
+        "level_db": 22.512,
+        "snr_db": 22.512
+      },
+      {
+        "hex": "8DF5E0E5B7520D7718AEACEB6D8D",
+        "icao": 16113893,
+        "index": 86613,
+        "level_db": 24.243,
+        "snr_db": 24.243
+      },
+      {
+        "hex": "8DB5D5BA1AFF20C75ABEDC838C34",
+        "icao": 11916730,
+        "index": 87583,
+        "level_db": 17.859,
+        "snr_db": 17.859
+      },
+      {
+        "hex": "8D57F2F9A573BF999583B2531B5E",
+        "icao": 5763833,
+        "index": 88082,
+        "level_db": 19.981,
+        "snr_db": 9.093
+      },
+      {
+        "hex": "8D520836D138A06F9FBB1137BD2B",
+        "icao": 5376054,
+        "index": 88652,
+        "level_db": 28.793,
+        "snr_db": 17.906
+      },
+      {
+        "hex": "8D1442813EAFE855E8A164A0AAEC",
+        "icao": 1327745,
+        "index": 89157,
+        "level_db": 12.273,
+        "snr_db": 12.273
+      },
+      {
+        "hex": "8DFD1A857E8DFCA2B458F8148C94",
+        "icao": 16587397,
+        "index": 89767,
+        "level_db": 25.104,
+        "snr_db": 20.251
+      },
+      {
+        "hex": "8D542F64947D097C71543F005B83",
+        "icao": 5517156,
+        "index": 90344,
+        "level_db": 29.047,
+        "snr_db": 29.047
+      },
+      {
+        "hex": "8DF253F98EA96DE8569CA4262884",
+        "icao": 15881209,
+        "index": 91073,
+        "level_db": 28.343,
+        "snr_db": 28.343
+      },
+      {
+        "hex": "8D8BC2AFE50B04296C176624933B",
+        "icao": 9159343,
+        "index": 91577,
+        "level_db": 24.182,
+        "snr_db": 24.182
+      },
+      {
+        "hex": "8D586E9394FA9EB1E2A882B388A6",
+        "icao": 5795475,
+        "index": 92139,
+        "level_db": 28.822,
+        "snr_db": 23.564
+      },
+      {
+        "hex": "8DFFA198FEE645A56F5F9BEEBC58",
+        "icao": 16753048,
+        "index": 93170,
+        "level_db": 22.957,
+        "snr_db": 15.685
+      },
+      {
+        "hex": "8DAFB07BFB5E1C1A0B1FAF680B54",
+        "icao": 11513979,
+        "index": 93911,
+        "level_db": 27.257,
+        "snr_db": 27.257
+      },
+      {
+        "hex": "8DC7620CFA4F3AC9F8F5927AEBE2",
+        "icao": 13066764,
+        "index": 94933,
+        "level_db": 26.071,
+        "snr_db": 26.071
+      },
+      {
+        "hex": "8D453668E7D01C758297750BC73B",
+        "icao": 4535912,
+        "index": 95467,
+        "level_db": 28.119,
+        "snr_db": 28.119
+      },
+      {
+        "hex": "8DBF08948288D2788833ABF135A2",
+        "icao": 12519572,
+        "index": 96297,
+        "level_db": 10.152,
+        "snr_db": 10.152
+      },
+      {
+        "hex": "8D3576F6735256651BEA3F74ED2E",
+        "icao": 3503862,
+        "index": 96853,
+        "level_db": 17.557,
+        "snr_db": 17.557
+      },
+      {
+        "hex": "8D1D1A9E1AC957E89225E6BCAE1A",
+        "icao": 1907358,
+        "index": 97363,
+        "level_db": 28.663,
+        "snr_db": 28.663
+      },
+      {
+        "hex": "8D6E7AA7D622F9B8F5E4E311E606",
+        "icao": 7240359,
+        "index": 98061,
+        "level_db": 22.152,
+        "snr_db": 22.152
+      },
+      {
+        "hex": "8DF176C7441C7E7A68CC6C6D15DB",
+        "icao": 15824583,
+        "index": 98695,
+        "level_db": 11.076,
+        "snr_db": 11.076
+      },
+      {
+        "hex": "8DBC71DBCF6E88A12ADDA99456D3",
+        "icao": 12349915,
+        "index": 99344,
+        "level_db": 24.588,
+        "snr_db": 24.588
+      },
+      {
+        "hex": "8DD7FCDE1A41627C0742EF6B007B",
+        "icao": 14154974,
+        "index": 100185,
+        "level_db": 15.344,
+        "snr_db": 15.344
+      },
+      {
+        "hex": "8D639C51A67AB24986AD5752337F",
+        "icao": 6528081,
+        "index": 100877,
+        "level_db": 16.123,
+        "snr_db": 16.123
+      },
+      {
+        "hex": "8D31AE26919CC2684E8D312B6B48",
+        "icao": 3255846,
+        "index": 101403,
+        "level_db": 18.701,
+        "snr_db": 18.701
+      },
+      {
+        "hex": "8D216193F01A72AE31DF987454DF",
+        "icao": 2187667,
+        "index": 102407,
+        "level_db": 18.073,
+        "snr_db": 9.333
+      },
+      {
+        "hex": "8D27CDE1E99DF943EADF6D9F2099",
+        "icao": 2608609,
+        "index": 103342,
+        "level_db": 23.031,
+        "snr_db": 14.291
+      },
+      {
+        "hex": "8DBBBB834BC6E83EBAD3CDFEB0F1",
+        "icao": 12303235,
+        "index": 104320,
+        "level_db": 26.28,
+        "snr_db": 22.47
+      },
+      {
+        "hex": "8D5EEF6B9EC1C1032CD489A1B62B",
+        "icao": 6221675,
+        "index": 105805,
+        "level_db": 19.258,
+        "snr_db": 19.258
+      },
+      {
+        "hex": "8D87F31C453F34D0D2A38A2D2335",
+        "icao": 8909596,
+        "index": 106492,
+        "level_db": 19.718,
+        "snr_db": 19.718
+      },
+      {
+        "hex": "8D4B0EAF50AD9FD133A38FFDDA32",
+        "icao": 4918959,
+        "index": 107113,
+        "level_db": 18.29,
+        "snr_db": 12.687
+      },
+      {
+        "hex": "8D653EC643C7C821DE678D1D715E",
+        "icao": 6635206,
+        "index": 107807,
+        "level_db": 17.188,
+        "snr_db": 11.586
+      },
+      {
+        "hex": "8D9B17D158EAEA13ADE0D96C80A8",
+        "icao": 10164177,
+        "index": 108623,
+        "level_db": 10.23,
+        "snr_db": 10.23
+      },
+      {
+        "hex": "8D8905948C9549B2DFFC199DAE63",
+        "icao": 8979860,
+        "index": 109125,
+        "level_db": 21.497,
+        "snr_db": 21.497
+      },
+      {
+        "hex": "8D286AF1574C95A425E5BF193F1D",
+        "icao": 2648817,
+        "index": 109965,
+        "level_db": 29.715,
+        "snr_db": 29.715
+      },
+      {
+        "hex": "8D4D4C576970030272457B89D7DB",
+        "icao": 5065815,
+        "index": 110467,
+        "level_db": 15.27,
+        "snr_db": 15.27
+      },
+      {
+        "hex": "8D365008C8DA17D51465AAF3ABE0",
+        "icao": 3559432,
+        "index": 111176,
+        "level_db": 10.278,
+        "snr_db": 10.278
+      },
+      {
+        "hex": "8D9ED94CCEC8B44107126454BB17",
+        "icao": 10410316,
+        "index": 111778,
+        "level_db": 13.402,
+        "snr_db": 13.402
+      },
+      {
+        "hex": "8D6845BE64ECBCBFDE5C9639FE26",
+        "icao": 6833598,
+        "index": 112898,
+        "level_db": 22.175,
+        "snr_db": 22.175
+      },
+      {
+        "hex": "8D7B57B69C7E028E9AB9663CE1F6",
+        "icao": 8083382,
+        "index": 113731,
+        "level_db": 22.465,
+        "snr_db": 22.465
+      },
+      {
+        "hex": "8DB06F7CEDADE56905F88A19EBC8",
+        "icao": 11562876,
+        "index": 114351,
+        "level_db": 22.012,
+        "snr_db": 22.012
+      },
+      {
+        "hex": "8DAB22E6CDD462C4316019A80E32",
+        "icao": 11215590,
+        "index": 114871,
+        "level_db": 28.331,
+        "snr_db": 23.342
+      },
+      {
+        "hex": "8D9D76D397E38BFB410CA8FF3841",
+        "icao": 10319571,
+        "index": 115586,
+        "level_db": 16.721,
+        "snr_db": 5.421
+      },
+      {
+        "hex": "8D8BB7E0EF56B84418FBE0871916",
+        "icao": 9156576,
+        "index": 116113,
+        "level_db": 23.787,
+        "snr_db": 12.487
+      },
+      {
+        "hex": "8D3B0EE832A4981962F066D95BE3",
+        "icao": 3870440,
+        "index": 117175,
+        "level_db": 17.979,
+        "snr_db": 17.979
+      },
+      {
+        "hex": "8D0714C12957E89F29877622031E",
+        "icao": 464065,
+        "index": 117849,
+        "level_db": 20.648,
+        "snr_db": 20.648
+      },
+      {
+        "hex": "8D9C2E96F1B81A4ED4409AA2704C",
+        "icao": 10235542,
+        "index": 118717,
+        "level_db": 11.122,
+        "snr_db": 11.122
+      },
+      {
+        "hex": "8D4E9627FCFF1A9BDAFECAE5EC35",
+        "icao": 5150247,
+        "index": 119435,
+        "level_db": 15.381,
+        "snr_db": 15.381
+      },
+      {
+        "hex": "8D5BF0C4A11E48009F4357AE7C29",
+        "icao": 6025412,
+        "index": 120170,
+        "level_db": 27.994,
+        "snr_db": 27.994
+      },
+      {
+        "hex": "8D2662E5A734417B8D6E90C7F307",
+        "icao": 2515685,
+        "index": 120701,
+        "level_db": 11.297,
+        "snr_db": 11.297
+      },
+      {
+        "hex": "8DCF7235F257E6E598EA1EB2520B",
+        "icao": 13595189,
+        "index": 121326,
+        "level_db": 27.954,
+        "snr_db": 27.954
+      },
+      {
+        "hex": "8D26ED1277E3EC2D5DCEC6627D4E",
+        "icao": 2551058,
+        "index": 121849,
+        "level_db": 18.093,
+        "snr_db": 18.093
+      },
+      {
+        "hex": "8D32FC479B0CA0102F76871F91F1",
+        "icao": 3341383,
+        "index": 123030,
+        "level_db": 24.564,
+        "snr_db": 24.564
+      },
+      {
+        "hex": "8DA88A40D6D22C9A635D1740F869",
+        "icao": 11045440,
+        "index": 123728,
+        "level_db": 24.97,
+        "snr_db": 24.97
+      },
+      {
+        "hex": "8D8A4DB96790E58D4B32492F3263",
+        "icao": 9063865,
+        "index": 124562,
+        "level_db": 14.438,
+        "snr_db": 14.438
+      },
+      {
+        "hex": "8D27C18DC56B51F22FE57557A8B0",
+        "icao": 2605453,
+        "index": 125202,
+        "level_db": 16.339,
+        "snr_db": 5.023
+      },
+      {
+        "hex": "8D5E83577CB6D8EF0B227637A67A",
+        "icao": 6194007,
+        "index": 126036,
+        "level_db": 11.068,
+        "snr_db": -0.248
+      },
+      {
+        "hex": "8D90EBA33D1192C1BFEAA91C124B",
+        "icao": 9497507,
+        "index": 127320,
+        "level_db": 29.334,
+        "snr_db": 29.334
+      },
+      {
+        "hex": "8D662AE77ADA6D3B98557149794B",
+        "icao": 6695655,
+        "index": 128223,
+        "level_db": 12.272,
+        "snr_db": 12.272
+      },
+      {
+        "hex": "8D218128EBD17FF925F9B7B89FB1",
+        "icao": 2195752,
+        "index": 128937,
+        "level_db": 14.023,
+        "snr_db": 14.023
+      },
+      {
+        "hex": "8D85531634E4126B49999A369E53",
+        "icao": 8737558,
+        "index": 129916,
+        "level_db": 10.081,
+        "snr_db": 10.081
+      },
+      {
+        "hex": "8DD933BA00C92CCE2E5C498793C4",
+        "icao": 14234554,
+        "index": 130840,
+        "level_db": 17.97,
+        "snr_db": 17.97
+      },
+      {
+        "hex": "8D5AEF5D7863573BC4C4161A90FF",
+        "icao": 5959517,
+        "index": 131433,
+        "level_db": 24.877,
+        "snr_db": 24.877
+      },
+      {
+        "hex": "8DB76F6D37DE7EA8C7CE43A1E999",
+        "icao": 12021613,
+        "index": 132014,
+        "level_db": 25.031,
+        "snr_db": 25.031
+      },
+      {
+        "hex": "8D5A0680678FC2D5DE9D6FE372DA",
+        "icao": 5899904,
+        "index": 132863,
+        "level_db": 16.999,
+        "snr_db": 16.999
+      },
+      {
+        "hex": "8DD3648415CF84DCD910CA7A9A19",
+        "icao": 13853828,
+        "index": 133429,
+        "level_db": 12.395,
+        "snr_db": 12.395
+      },
+      {
+        "hex": "8D0630667161452E0C2FEE617FB3",
+        "icao": 405606,
+        "index": 133963,
+        "level_db": 19.785,
+        "snr_db": 19.785
+      },
+      {
+        "hex": "8D3275F453B2511DAB45BCA2A047",
+        "icao": 3306996,
+        "index": 134667,
+        "level_db": 27.294,
+        "snr_db": 23.106
+      },
+      {
+        "hex": "8DC33D1E467B5A1C9C0CE8206A78",
+        "icao": 12795166,
+        "index": 135544,
+        "level_db": 19.472,
+        "snr_db": 15.283
+      },
+      {
+        "hex": "8DF696F2B3EF647C99FB88362E28",
+        "icao": 16160498,
+        "index": 136295,
+        "level_db": 25.525,
+        "snr_db": 25.525
+      },
+      {
+        "hex": "8DA800DC8E25EA4528B6AB5E093A",
+        "icao": 11010268,
+        "index": 137623,
+        "level_db": 11.412,
+        "snr_db": 11.412
+      },
+      {
+        "hex": "8D5B272128FE8B11996CB6177041",
+        "icao": 5973793,
+        "index": 138303,
+        "level_db": 12.722,
+        "snr_db": 12.722
+      },
+      {
+        "hex": "8DC1A4348FCF21639F35AB8FFDC8",
+        "icao": 12690484,
+        "index": 139022,
+        "level_db": 29.086,
+        "snr_db": 29.086
+      },
+      {
+        "hex": "8DF0B6AF98331E194295C1BD5078",
+        "icao": 15775407,
+        "index": 139597,
+        "level_db": 18.298,
+        "snr_db": 18.298
+      },
+      {
+        "hex": "8D49110EE297500D71C961F2E7CF",
+        "icao": 4788494,
+        "index": 140206,
+        "level_db": 22.154,
+        "snr_db": 11.886
+      },
+      {
+        "hex": "8DF394B56AE4AE82EFE117C3F942",
+        "icao": 15963317,
+        "index": 140865,
+        "level_db": 12.601,
+        "snr_db": 12.601
+      },
+      {
+        "hex": "8DCFEF170925DC3D0FB98E86A498",
+        "icao": 13627159,
+        "index": 142284,
+        "level_db": 12.548,
+        "snr_db": 12.548
+      },
+      {
+        "hex": "8DF33425A0D25BCEE83806505756",
+        "icao": 15938597,
+        "index": 143215,
+        "level_db": 11.426,
+        "snr_db": 11.426
+      },
+      {
+        "hex": "8D6319D7AC5D8D8BAAE5AB23F5C8",
+        "icao": 6494679,
+        "index": 144107,
+        "level_db": 14.223,
+        "snr_db": 14.223
+      },
+      {
+        "hex": "8DFBBF45290BC5B54480CC4EF9EF",
+        "icao": 16498501,
+        "index": 144864,
+        "level_db": 18.529,
+        "snr_db": 18.529
+      },
+      {
+        "hex": "8DCDD4861EA7539058B5EB45822D",
+        "icao": 13489286,
+        "index": 145709,
+        "level_db": 23.533,
+        "snr_db": 23.533
+      },
+      {
+        "hex": "8DDC6BC6C3144A20E5464B47B94C",
+        "icao": 14445510,
+        "index": 146277,
+        "level_db": 25.664,
+        "snr_db": 25.664
+      },
+      {
+        "hex": "8D250816215A782BD5BEDB594AEC",
+        "icao": 2426902,
+        "index": 147025,
+        "level_db": 17.077,
+        "snr_db": 17.077
+      },
+      {
+        "hex": "8DA53AC9E58F841DB3EBD59DE7B9",
+        "icao": 10828489,
+        "index": 147527,
+        "level_db": 27.355,
+        "snr_db": 15.116
+      },
+      {
+        "hex": "8D568C7E9F159D777E0A0F830AED",
+        "icao": 5672062,
+        "index": 148528,
+        "level_db": 24.364,
+        "snr_db": 24.364
+      },
+      {
+        "hex": "8DBFEB55225E862E4834838DCCEA",
+        "icao": 12577621,
+        "index": 149134,
+        "level_db": 17.353,
+        "snr_db": 17.353
+      }
+    ],
+    "min_snr_db": 10.0,
+    "noise_sigma": 0.018,
+    "rate_hz": 2000000
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 544,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

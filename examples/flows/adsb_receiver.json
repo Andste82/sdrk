@@ -1,0 +1,38 @@
+{
+  "sdrk": 1,
+  "name": "adsb-receiver",
+  "description": "Decode Mode S and ADS-B downlink frames at 1090 MHz from a 2 MS/s unsigned 8-bit baseband (RTL-SDR).",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2000000,
+      "description": "IQ at exactly 2 MS/s tuned to 1090 MHz"
+    }
+  },
+  "nodes": {
+    "dec": {
+      "kind": "adsb_decode"
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "packets"
+    }
+  ],
+  "outputs": {
+    "packets": {
+      "type": "packets",
+      "queue": 256,
+      "description": "The frames: 14 bytes of DF 17 and 18 with a correct CRC-24 (CRC_OK), 7 bytes of short frames with flag bit 16, and the input index of their preamble"
+    }
+  }
+}

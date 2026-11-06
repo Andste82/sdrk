@@ -345,12 +345,23 @@ test("RDS: the decoder over rds_decode packets and the text helpers of sdrk_prot
   const rds = new RdsDecoder();
   try {
     assert.equal(rds.ps(), undefined);
+    assert.equal(rds.psPartial(), undefined);
+    // Segments 2 and 0 of the name first: the display fills.
+    rds.push([packets[2], packets[0]]);
+    assert.equal(rds.psPartial("rds"), "SW   B  "); // segments 0 ("SW") and 2 (" B")
+    assert.equal(rds.ps(), undefined);
+    // RT segment 1 alone: spaces where segment 0 goes.
+    rds.push([packets[5]]);
+    assert.equal(rds.rtPartial("rds").slice(0, 8), "    temb");
+    rds.reset();
     assert.equal(rds.push(packets), 7);
     assert.equal(rds.pi(), 0xd3c2);
     assert.equal(rds.pty(), 10);
     assert.equal(rds.tp(), true);
     assert.equal(rds.ps("rds"), "SWR1 BW ");
     assert.equal(rds.rt("rds"), "Württemberg");
+    assert.equal(rds.psPartial("rds"), "SWR1 BW ");
+    assert.equal(rds.rtPartial("rds"), "Württemberg");
     assert.equal(rds.groups(), 7);
     assert.equal(rds.okGroups(), 7);
     rds.reset();

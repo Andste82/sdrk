@@ -917,6 +917,28 @@ impl RdsDecoder {
         Ok(self.inner.rt(rds_charset(charset.as_deref())?))
     }
 
+    /// The programme service name as far as it arrived, with spaces for the segments not
+    /// received yet, for a display that fills while they come in; `undefined` before the first.
+    #[wasm_bindgen(js_name = psPartial)]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "wasm-bindgen hands an optional JavaScript string over as an owned value"
+    )]
+    pub fn ps_partial(&self, charset: Option<String>) -> Result<Option<String>, JsValue> {
+        Ok(self.inner.ps_partial(rds_charset(charset.as_deref())?))
+    }
+
+    /// The radiotext as far as it arrived (up to a received carriage return), with spaces for
+    /// the segments not received yet; `undefined` before the first.
+    #[wasm_bindgen(js_name = rtPartial)]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "wasm-bindgen hands an optional JavaScript string over as an owned value"
+    )]
+    pub fn rt_partial(&self, charset: Option<String>) -> Result<Option<String>, JsValue> {
+        Ok(self.inner.rt_partial(rds_charset(charset.as_deref())?))
+    }
+
     /// Groups taken.
     pub fn groups(&self) -> f64 {
         self.inner.groups() as f64

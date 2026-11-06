@@ -369,6 +369,10 @@ export class RdsDecoder {
   ps(charset?: RdsCharset): string | undefined;
   /** The radiotext once complete (up to the carriage return). */
   rt(charset?: RdsCharset): string | undefined;
+  /** The name as far as it arrived, spaces for missing segments (a display that fills). */
+  psPartial(charset?: RdsCharset): string | undefined;
+  /** The radiotext as far as it arrived, spaces for missing segments. */
+  rtPartial(charset?: RdsCharset): string | undefined;
   /** Groups taken, and groups taken with CRC_OK. */
   groups(): number;
   okGroups(): number;

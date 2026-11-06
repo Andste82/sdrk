@@ -49,6 +49,7 @@ mod halfband_family;
 mod math_family;
 mod noise_family;
 mod proto_family;
+mod rds_family;
 mod stereo_family;
 mod stereo_tx_family;
 mod symbol_family;
@@ -349,7 +350,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 196] = [
+pub const KERNELS: [&str; 198] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -546,6 +547,8 @@ pub const KERNELS: [&str; 196] = [
     "symbol_sync_real",
     "costas",
     "costas_fallback",
+    "rds_demod_block",
+    "rds_decode_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -737,6 +740,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "symbol_sync_real" => Box::new(symbol_family::SymbolSyncK::f32(rng, layout)),
         "costas" => Box::new(costas_family::CostasK::new(rng, layout, false)),
         "costas_fallback" => Box::new(costas_family::CostasK::new(rng, layout, true)),
+        "rds_demod_block" => Box::new(rds_family::RdsDemodBlockK::new(rng, layout)),
+        "rds_decode_block" => Box::new(rds_family::RdsDecodeBlockK::new(rng, layout)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

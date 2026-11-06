@@ -40,7 +40,7 @@ use sdrk_blocks::{
 };
 use sdrk_blocks::{
     CostasBlock, CostasConfig, FramePolarity, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant,
+    PskModConfig, PskVariant, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -363,6 +363,20 @@ fn psk_blocks_storage_is_exact() {
             |a| PskDemodBlock::new(&cfg, r, a).map(|_| ()),
         );
     }
+    // M41: rds_demod at three rates, rds_decode needs no storage
+    for fs in [128_000u64, 240_000, 1_000_000] {
+        let cfg = RdsDemodConfig::default();
+        let r = rate(fs);
+        check_exact_storage(
+            RdsDemodBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(),
+            |a| RdsDemodBlock::new(&cfg, r, a).map(|_| ()),
+        );
+    }
+    let cfg = RdsDecodeConfig::default();
+    check_exact_storage(
+        RdsDecodeBlock::<A<'_>>::storage_bytes(&cfg, rate(1187)).unwrap(),
+        |a| RdsDecodeBlock::new(&cfg, rate(1187), a).map(|_| ()),
+    );
 }
 
 #[test]
@@ -577,6 +591,16 @@ fn public_types_are_send() {
     assert_send::<PskDemodConfig>();
     assert_sync::<PskDemodConfig>();
     assert_send::<PskVariant>();
+    assert_send::<RdsDemodBlock<A<'static>>>();
+    assert_send::<RdsDemodBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<RdsDemodBlock<A<'static>>>();
+    assert_send::<RdsDemodConfig>();
+    assert_sync::<RdsDemodConfig>();
+    assert_send::<RdsDecodeBlock<A<'static>>>();
+    assert_send::<RdsDecodeBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<RdsDecodeBlock<A<'static>>>();
+    assert_send::<RdsDecodeConfig>();
+    assert_sync::<RdsDecodeConfig>();
     assert_sync::<PskVariant>();
     assert_send::<FramePolarity>();
     assert_sync::<FramePolarity>();

@@ -32,6 +32,7 @@ from . import (  # noqa: F401
     psk,
     q15_ops,
     quad_demod,
+    rds,
     real_to_complex,
     resample,
     rotate,

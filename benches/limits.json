@@ -4551,5 +4551,65 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "rds_demod_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample of the 240 kHz multiplex)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample of the 240 kHz multiplex)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample of the 240 kHz multiplex)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample of the 240 kHz multiplex)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample of the 240 kHz multiplex)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample of the 240 kHz multiplex)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`rds_demod_block` picks the SIMD paths of its kernels at run time in the run-time-detection build and calls them through the dispatch, while the `avx2` build calls them directly, so their counts differ by the dispatch and the code generation; reported as information"
+    }
+  },
+  "rds_decode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, one soft bit per sample)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`rds_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

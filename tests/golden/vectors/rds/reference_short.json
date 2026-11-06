@@ -1,0 +1,85 @@
+{
+  "arrays": {
+    "baseband": {
+      "dtype": "f32",
+      "file": "reference_short.baseband.bin",
+      "len": 4096
+    },
+    "baseband_late": {
+      "dtype": "f32",
+      "file": "reference_short.baseband_late.bin",
+      "len": 2048
+    },
+    "blocks": {
+      "dtype": "i32",
+      "file": "reference_short.blocks.bin",
+      "len": 128
+    },
+    "checkwords": {
+      "dtype": "i32",
+      "file": "reference_short.checkwords.bin",
+      "len": 128
+    },
+    "data_bits": {
+      "dtype": "u8",
+      "file": "reference_short.data_bits.bin",
+      "len": 3328
+    },
+    "mpx": {
+      "dtype": "f32",
+      "file": "reference_short.mpx.bin",
+      "len": 4096
+    },
+    "mpx_late": {
+      "dtype": "f32",
+      "file": "reference_short.mpx_late.bin",
+      "len": 2048
+    },
+    "rf": {
+      "dtype": "ci16",
+      "file": "reference_short.rf.bin",
+      "len": 8192
+    },
+    "tx_bits": {
+      "dtype": "u8",
+      "file": "reference_short.tx_bits.bin",
+      "len": 3328
+    }
+  },
+  "case": "reference_short",
+  "format_version": 1,
+  "kernel": "rds",
+  "notes": "the RDS reference signal of M41 section 5 (module docstring of cases/rds.py), no noise; blocks and checkwords: the 32 groups of one carousel period, 4 words per group (bit-exact); data_bits and tx_bits: their 3328 bits before and after the differential coding (bit-exact); baseband and mpx: samples 0..4095 at 240 kHz, baseband_late and mpx_late: samples late_start..late_start+2047 of the endless carousel (float64 model rounded once to float32, max_abs_err applies); rf: the cs16 output samples 0..8191 at 480 kHz without noise (at most rf_max_lsb LSB apart, math.cos versus libm); pulse_peak is the grid peak of p before normalization",
+  "params": {
+    "deviation_hz": 75000.0,
+    "grid_den": 3840,
+    "grid_num": 19,
+    "groups": 32,
+    "late_start": 1000003,
+    "main_level": 0.45,
+    "mpx_rate_hz": 240000,
+    "pi": 53539,
+    "pilot_level": 0.1,
+    "ps": "SDRK TST",
+    "pty": 10,
+    "pulse_peak": 2.718895201539741,
+    "rds_level": 0.04,
+    "rf_amplitude": 0.5,
+    "rf_max_lsb": 1,
+    "rf_rate_hz": 480000,
+    "rt": "Hello from sdrk!",
+    "tp": 0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 570,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-06,
+    "skip": 0
+  }
+}

@@ -16,6 +16,7 @@
 //! - [`meters`]: tone fit, SINAD, frequency estimate and spectral mask,
 //! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
 //! - [`drift`]: `TwoClockSim`, the two-clock buffer simulation of the clock drift tests (M28),
+//! - [`rds`]: the RDS reference signal of M41, re-synthesized after `tests/golden/sdrk_golden/cases/rds.py`,
 //! - [`rng`]: deterministic PCG32 random numbers,
 //! - [`ber`]: `BerMeter`, the PRBS bit error rate meter (M38),
 //! - `r#gen` (`gen` is a reserved word in edition 2024): signal generators that depend only on the absolute sample index (including the BPSK/QPSK test signal `PskTest` of M38),
@@ -72,6 +73,7 @@ pub mod golden;
 pub mod invariance;
 pub mod meters;
 pub mod metrics;
+pub mod rds;
 pub mod rng;
 #[cfg(feature = "std")]
 pub mod storage;

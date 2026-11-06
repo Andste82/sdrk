@@ -42,11 +42,12 @@ use sdrk_blocks::{
     FskModConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock,
     Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, ParamKind,
     ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
-    PskModBlock, PskModConfig, QuadDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
-    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
+    ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
+    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -66,10 +67,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_fifty_one_unique_kinds() {
+fn there_are_fifty_three_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 51);
-    assert_eq!(all_descriptions().len(), 51);
+    assert_eq!(kinds.len(), 53);
+    assert_eq!(all_descriptions().len(), 53);
     for kind in [
         "convert",
         "convert_out",
@@ -122,6 +123,8 @@ fn there_are_fifty_one_unique_kinds() {
         "costas",
         "psk_mod",
         "psk_demod",
+        "rds_demod",
+        "rds_decode",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -341,6 +344,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("costas", |n| CostasConfig::default().get(n), &[]);
     defaults_match("psk_mod", |n| PskModConfig::default().get(n), &[]);
     defaults_match("psk_demod", |n| PskDemodConfig::default().get(n), &[]);
+    defaults_match("rds_demod", |n| RdsDemodConfig::default().get(n), &[]);
+    defaults_match("rds_decode", |n| RdsDecodeConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -444,6 +449,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("costas", CostasConfig);
     round_trip!("psk_mod", PskModConfig);
     round_trip!("psk_demod", PskDemodConfig);
+    round_trip!("rds_demod", RdsDemodConfig);
+    round_trip!("rds_decode", RdsDecodeConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -750,6 +757,14 @@ fn blocks_accept_and_report_every_described_parameter() {
         "psk_demod",
         &mut PskDemodBlock::new(&pd, rate(200_000), &mut s).unwrap(),
     );
+    check_block_params(
+        "rds_demod",
+        &mut RdsDemodBlock::new(&RdsDemodConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "rds_decode",
+        &mut RdsDecodeBlock::new(&RdsDecodeConfig::default(), rate(1187), &mut s).unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -1018,6 +1033,72 @@ fn the_fsk_kinds_describe_their_ports_and_parameters() {
     );
     for word in ["SSB", "offset_hz", "offset_ppm", "256", "hold"] {
         assert!(a.details.contains(word), "afc details: {word}");
+    }
+}
+
+/// The kinds of M41: `rds_demod` (`f32` multiplex to `f32` soft bits, `sync_bw` and
+/// `carrier_bw` with the default 0.01) and `rds_decode` (`f32` soft bits to packets, `emit_bad`
+/// and `max_bad` 0 to 50 with the default 10), all build parameters, none required.
+#[test]
+fn the_rds_kinds_describe_their_ports_and_parameters() {
+    let d = find("rds_demod");
+    assert_eq!(d.inputs[0].types, [PortType::F32]);
+    assert_eq!(d.outputs[0].types, [PortType::F32]);
+    assert!(d.required.is_empty());
+    let names: Vec<_> = d.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("sync_bw", Mutability::Build),
+            ("carrier_bw", Mutability::Build)
+        ]
+    );
+    for p in d.params {
+        assert!(
+            matches!(p.kind, ParamKind::F64 { default: Some(v), .. } if v == 0.01),
+            "{}",
+            p.name
+        );
+    }
+    for word in [
+        "57",
+        "2375",
+        "floor(fs / 19000)",
+        "1.2",
+        "-u_k u_k-1",
+        "128 kHz",
+    ] {
+        assert!(d.details.contains(word), "rds_demod details: {word}");
+    }
+    let g = find("rds_decode");
+    assert_eq!(g.inputs[0].types, [PortType::F32]);
+    assert_eq!(g.outputs[0].types, [PortType::Packets]);
+    assert!(g.required.is_empty());
+    let names: Vec<_> = g.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("emit_bad", Mutability::Build),
+            ("max_bad", Mutability::Build)
+        ]
+    );
+    assert_eq!(
+        g.param("max_bad").unwrap().kind,
+        ParamKind::I64 {
+            min: 0,
+            max: 50,
+            default: Some(10)
+        }
+    );
+    for word in [
+        "CRC_OK",
+        "CRC_FAIL",
+        "C'",
+        "16 to 19",
+        "bit 20",
+        "first bit of block A",
+    ] {
+        assert!(g.details.contains(word), "rds_decode details: {word}");
     }
 }
 

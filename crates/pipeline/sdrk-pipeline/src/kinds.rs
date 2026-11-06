@@ -26,11 +26,12 @@ use sdrk_blocks::{
     MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
     NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
     PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
-    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
+    RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation,
+    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
+    SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3416,6 +3417,116 @@ impl Kind for PskDemodKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(PskDemodBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- rds_demod
+
+pub(crate) struct RdsDemodKind;
+
+impl Kind for RdsDemodKind {
+    type Cfg = RdsDemodConfig;
+
+    const KIND: &'static str = "rds_demod";
+    fn kernels() -> &'static [&'static str] {
+        &[
+            "interleave",
+            "rotate",
+            "fir_decimate",
+            "symbol_sync",
+            "costas",
+        ]
+    }
+    fn default_cfg() -> RdsDemodConfig {
+        RdsDemodConfig::default()
+    }
+    fn set(cfg: &mut RdsDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &RdsDemodConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("rds_demod needs the real f32 multiplex"));
+        }
+        // An input rate below 128 kHz is `OutOfRange` of `sample_rate`: `rate_unsupported`.
+        let block = RdsDemodBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: RdsDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: RdsDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // §2 of M41: 6 + 60 / d per input sample.
+            cost: 6.0 + 60.0 / block.decimation() as f64,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &RdsDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(RdsDemodBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- rds_decode
+
+pub(crate) struct RdsDecodeKind;
+
+impl Kind for RdsDecodeKind {
+    type Cfg = RdsDecodeConfig;
+
+    const KIND: &'static str = "rds_decode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> RdsDecodeConfig {
+        RdsDecodeConfig::default()
+    }
+    fn set(cfg: &mut RdsDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &RdsDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("rds_decode needs real f32 soft bits"));
+        }
+        // The packet stream gets the nominal rate `rate / 104`, which sizes its buffer.
+        let block = RdsDecodeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: RdsDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // §3 of M41: a shift, the syndrome update and a compare per input sample.
+            cost: 2.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &RdsDecodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(RdsDecodeBlock::new(
             cfg, rate, st,
         )?)))
     }

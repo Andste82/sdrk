@@ -1,0 +1,72 @@
+# SDRk pipeline: receive one FM broadcast station in stereo and decode its RDS groups (YAML
+# twin of fm_rds_receiver.json). YAML is accepted as input; JSON stays the canonical format.
+sdrk: 1
+name: fm-rds-receiver
+description: "Receive one FM broadcast station in stereo with its RDS groups: 48 kHz stereo audio (left in re, right in im) and one packet per RDS group."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# Signed 16-bit IQ at 480 kHz with the station at 0 Hz (the RDS reference signal of M41). For
+# a recording at another rate or format, change the input and the decimation of the tuner so
+# that the tuner output stays at 240 kHz or more (rds_demod needs at least 128 kHz).
+inputs:
+  rf:
+    format: cs16
+    rate_hz: 480000
+    description: "IQ at 480 kHz with the station at 0 Hz"
+nodes:
+  # RDS block synchronization: offset words and syndromes, one packet per group of four
+  # blocks (A, B, C, D as big-endian 16-bit words). Only groups whose four blocks are valid
+  # come out (CRC_OK); emit_bad true also delivers the others (CRC_FAIL, the validity of each
+  # block in bits 16 to 19 of the flags). Sync is lost after more than max_bad (10) invalid
+  # blocks among the last 50.
+  groups:
+    kind: rds_decode
+    params: {}
+  # FM discriminator for the RDS branch: the multiplex with 1.0 = 75 kHz deviation.
+  quad:
+    kind: quad_demod
+    params:
+      deviation_hz: 75000
+  # FM stereo decoder as in fm_stereo_receiver.yaml, at 240 kHz: decimation 5 gives 48 kHz
+  # audio (the default 10 is meant for 480 kHz).
+  stereo:
+    kind: fm_stereo_demod
+    params:
+      audio_decimation: 5
+  # The 57 kHz RDS subcarrier to soft data bits at 1187.5 bit/s: mixing, channel filter,
+  # chip timing (Gardner), BPSK carrier loop, biphase and differential decoding. The node is
+  # not called "rds" because nodes and outputs share one namespace and "rds" is the output.
+  subcarrier:
+    kind: rds_demod
+    params: {}
+  # Digital down converter: decimate by 2 to 240 kHz with a 100 kHz channel. A station off
+  # the centre is tuned with --set tune.frequency_hz=... (the RF offset of the station).
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 100000
+      decimation: 2
+      frequency_hz: 0
+# The tuner feeds both branches: the stereo audio and the RDS chain.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: stereo }
+  - { from: tune, to: quad }
+  - { from: stereo, to: audio }
+  - { from: quad, to: subcarrier }
+  - { from: subcarrier, to: groups }
+  - { from: groups, to: rds }
+# Stereo audio samples (errors when full) and the RDS groups (sdrk_proto::rds::Group and
+# RdsState turn them into the programme service name and the radiotext). About 11 groups
+# arrive per second, so a queue of 256 lasts more than 20 s without reading.
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error
+  rds:
+    type: packets
+    queue: 256
+    description: "One packet per RDS group: the blocks A, B, C, D big-endian, CRC_OK, validity in bits 16 to 19 of the flags"

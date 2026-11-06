@@ -1,5 +1,7 @@
 //! Protocol logic of SDRk without signal processing: the packet type, CRCs, a simple test
-//! framing, PN9 data whitening and the PRBS generators of the bit error rate tests.
+//! framing, PN9 data whitening, the PRBS generators of the bit error rate tests and the
+//! Radio Data System (`rds`: checkwords, syndromes, groups, programme service name and
+//! radiotext).
 //!
 //! Layer `crates/proto`, heap-free; depends on `sdrk-device` only. Digital modes end in bytes:
 //! a decoder turns bits into [`Packet`]s, an encoder turns packets back into bits. The blocks
@@ -30,6 +32,7 @@ mod error;
 pub mod frame;
 mod packet;
 pub mod prbs;
+pub mod rds;
 pub mod whiten;
 
 pub use error::{Error, ProtoError, Result};

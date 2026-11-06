@@ -90,6 +90,10 @@ pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLi
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
 pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
+pub use blocks::rds_decode::{RdsDecodeBlock, RdsDecodeConfig};
+pub use blocks::rds_demod::{
+    RDS_DEMOD_CHUNK, RDS_DEMOD_MIN_RATE_HZ, RdsDemodBlock, RdsDemodConfig,
+};
 pub use blocks::real_part::RealPartBlock;
 pub use blocks::real_to_iq::RealToIqBlock;
 pub use blocks::resample::{

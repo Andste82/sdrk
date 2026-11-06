@@ -170,6 +170,9 @@
 //! | `dot_complex_c32` | quick | 16 KiB |
 //! | `equalize_c32` | quick | 48 KiB |
 //! | `extremes_m43` | full | about 19 KiB |
+//! | `rds_shape_f32` | quick | about 21 KiB |
+//! | `stereo_encode_rds_c32` | quick | about 48 KiB |
+//! | `extremes_m42` | full | about 11 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -233,6 +236,7 @@ mod m35;
 mod m36;
 mod m38;
 mod m40;
+mod m42;
 mod m43;
 
 pub use m27::{
@@ -240,7 +244,7 @@ pub use m27::{
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 187] = [
+pub(crate) static CASES: [TestCase; 190] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -1175,6 +1179,21 @@ pub(crate) static CASES: [TestCase; 187] = [
         name: "extremes_m43",
         tier: Tier::Full,
         run: m43::extremes_m43,
+    },
+    TestCase {
+        name: "rds_shape_f32",
+        tier: Tier::Quick,
+        run: m42::rds_shape_f32,
+    },
+    TestCase {
+        name: "stereo_encode_rds_c32",
+        tier: Tier::Quick,
+        run: m42::stereo_encode_rds_c32,
+    },
+    TestCase {
+        name: "extremes_m42",
+        tier: Tier::Full,
+        run: m42::extremes_m42,
     },
 ];
 

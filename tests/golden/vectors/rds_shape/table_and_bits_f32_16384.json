@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "bits": {
+      "dtype": "i8",
+      "file": "table_and_bits_f32_16384.bits.bin",
+      "len": 104
+    },
+    "expected": {
+      "dtype": "f32",
+      "file": "table_and_bits_f32_16384.expected.bin",
+      "len": 16384
+    },
+    "table": {
+      "dtype": "f64",
+      "file": "table_and_bits_f32_16384.table.bin",
+      "len": 1025
+    }
+  },
+  "case": "table_and_bits_f32_16384",
+  "format_version": 1,
+  "kernel": "rds_shape",
+  "model": "float32",
+  "notes": "192 kHz; random amplitudes +-1 (the bits after the differential coding) for every bit the 16384 samples use; table: the pulse p(x) = h(x + 1/4) - h(x - 1/4) of cases/rds.py at x = -2 + i / 256 for i = 0..1024, divided by its largest magnitude on that grid (grid_peak); expected: the exact float32 model of the kernel on the table rounded to float32 (module docstring); closed_form_max_abs_err: the largest difference of expected from the exact baseband of cases/rds.py for the same bits (open item I42-1)",
+  "params": {
+    "bit_rate_hz": 1187.5,
+    "bits": 104,
+    "closed_form_max_abs_err": 7.858746630562408e-05,
+    "grid_peak": 2.7188817250408297,
+    "per_bit": 256,
+    "rate_hz": 192000,
+    "table_len": 1025
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 580,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

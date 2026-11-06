@@ -20,6 +20,7 @@ pub mod mix;
 pub mod modulate;
 pub mod noise_blank;
 pub mod preemph_limit;
+pub mod rds;
 pub mod spectrum;
 pub mod squelch;
 pub mod stereo;

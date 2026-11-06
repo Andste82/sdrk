@@ -1,0 +1,89 @@
+# FM broadcast stereo transmitter with RDS in pull mode (YAML twin of
+# fm_stereo_rds_transmitter.json). The caller asks for bytes with Pipeline::pull; the audio is
+# supplied on demand, the station name and the radiotext are pushed as packets on the input
+# text (Pipeline::push_packets) whenever they change. Use it with the fm_rds_receiver flow.
+sdrk: 1
+name: fm-stereo-rds-transmitter
+description: "Modulate 48 kHz stereo audio (left in re, right in im) to FM stereo with RDS (station name and radiotext from packets) and output a 1.92 MHz signed 8-bit baseband for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+inputs:
+  # Stereo audio as complex samples: re is the left channel, im the right channel.
+  audio:
+    type: c32
+    rate_hz: 48000
+    description: "stereo audio (left in re, right in im)"
+  # Control packets of the RDS encoder, by their first byte: 0x01 + 8 bytes the station name
+  # (PS), 0x02 + up to 64 bytes the radiotext (RT; an empty one stops the RT groups), 0x03 +
+  # 8 bytes one raw group (the blocks A, B, C, D big-endian, sent before the next carousel
+  # group). Other packets are counted (reading ignored_packets) and ignored. The input has no
+  # rate_hz: the encoder takes its clock from the audio. Packets act from the next group on
+  # (one group every 87.6 ms); in pull mode push them between two pull calls.
+  text:
+    type: packets
+    description: "RDS control packets: 0x01 + 8 bytes station name, 0x02 + up to 64 bytes radiotext, 0x03 + 8 bytes one raw group"
+nodes:
+  # Digital up converter: x10 to 1.92 MS/s and shift to +600 kHz.
+  duc:
+    kind: duc
+    params:
+      frequency_hz: 600000
+      interpolation: 10
+  # FM modulator: 75 kHz deviation for a multiplex signal of full scale.
+  mod:
+    kind: fm_mod
+    params:
+      deviation_hz: 75000
+  # Stereo encoder with RDS: the multiplex of fm_stereo_mod (main 0.87 for the sum and the
+  # difference on 38 kHz, pilot 0.09 at 19 kHz) plus rds times the RDS baseband on 57 kHz,
+  # locked to three times the pilot phase. main + pilot + rds = 1; the RDS baseband peaks at
+  # about 1.06, so the multiplex can reach about 1.003 for a short moment. pilot and rds can be
+  # changed while the flow runs (set_param); rds 0 turns RDS off.
+  mpx:
+    kind: fm_stereo_rds_mod
+    params:
+      main: 0.87
+      pilot: 0.09
+      pilot_hz: 19000
+      rds: 0.04
+  # Pre-emphasis and peak limiter on both channels with one gain, after the resampler (D487).
+  pre:
+    kind: preemph_limit
+    params:
+      limit: 1.0
+      preemphasis_us: 50
+  # RDS encoder: PI 0xD123 (53539), programme type 10 (pop music), no traffic programme. The
+  # audio at port a is only the clock (its values are not read): one baseband sample per audio
+  # sample, 1187.5 bit/s, the groups 0A (station name) and 2A (radiotext) in turn, raw groups
+  # from packets first.
+  rds:
+    kind: rds_encode
+    params:
+      pi: 53539
+      pty: 10
+      tp: false
+  # 48 kHz -> 192 kHz (ratio 4/1) before the limiter; the resampler treats re and im alike.
+  up:
+    kind: resample
+    params:
+      rate_out_hz: 192000
+# The limited audio feeds the multiplex and clocks the encoder; the packets go to port b of the
+# encoder, the RDS baseband to port b of the multiplex.
+edges:
+  - { from: audio, to: up }
+  - { from: up, to: pre }
+  - { from: pre, to: mpx }
+  - { from: pre, to: rds }
+  - { from: text, to: rds, port: b }
+  - { from: rds, to: mpx, port: b }
+  - { from: mpx, to: mod }
+  - { from: mod, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

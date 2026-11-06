@@ -11,7 +11,8 @@ use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
 use crate::kernels::stereo::{
-    StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
+    StereoEncode, StereoEncodeRds, StereoEncodeRdsState, StereoEncodeState, StereoMatrix,
+    StereoPll, StereoPllState,
 };
 use crate::num::{flush_denormal, round_shift, sat16};
 use crate::tables::{COS_F32, COS_Q15};
@@ -218,6 +219,40 @@ impl StereoEncode for Reference {
             state
                 .nco
                 .set_phase(phase.wrapping_add(state.nco.increment()));
+        }
+        Ok(())
+    }
+}
+
+/// `sin(3 phi)` of `stereo_encode_rds` from the cosine table.
+fn rds_sine(phase: u32) -> f32 {
+    cos_f32(phase.wrapping_mul(3).wrapping_sub(QUARTER))
+}
+
+/// The RDS term added last to one multiplex sample.
+fn add_rds(mpx: f32, level: f32, b: f32, s3: f32) -> f32 {
+    let scaled = level * b;
+    let term = scaled * s3;
+    mpx + term
+}
+
+impl StereoEncodeRds for Reference {
+    fn stereo_encode_rds(
+        &self,
+        state: &mut StereoEncodeRdsState,
+        input: &[C32],
+        rds: &[f32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        check_len(input.len(), rds.len())?;
+        check_len(input.len(), output.len())?;
+        let enc = &mut state.enc;
+        for ((o, &x), &b) in output.iter_mut().zip(input).zip(rds) {
+            let phase = enc.nco.phase();
+            let (s1, s2) = encode_sines(phase);
+            let mpx = encode_sample(x, enc.main, enc.pilot, s1, s2);
+            *o = add_rds(mpx, state.rds, b, rds_sine(phase));
+            enc.nco.set_phase(phase.wrapping_add(enc.nco.increment()));
         }
         Ok(())
     }

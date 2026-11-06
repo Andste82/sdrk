@@ -2052,6 +2052,68 @@
           },
           {
             "additionalProperties": false,
+            "description": "Stereo encoder with RDS: stereo audio and the RDS baseband to the FM multiplex signal.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "fm_stereo_rds_mod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "main": {
+                    "default": 0.87,
+                    "description": "Gain of the sum and of the difference signal. Typical: 0.87 (with pilot 0.09 and rds 0.04: sum 1.0, peak about 1.002). Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "pilot": {
+                    "default": 0.09,
+                    "description": "Amplitude of the pilot; 0 turns it off. Typical: 0.09 (9 % of the deviation), 0 for mono. Runtime.",
+                    "maximum": 0.2,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "pilot_hz": {
+                    "default": 19000.0,
+                    "description": "Frequency of the pilot; the subcarriers are at two and three times this frequency. Unit: Hz. Typical: 19000 (broadcast). Build-time.",
+                    "maximum": 20000.0,
+                    "minimum": 18000.0,
+                    "type": "number"
+                  },
+                  "rds": {
+                    "default": 0.04,
+                    "description": "Gain of the RDS baseband on the 57 kHz subcarrier; 0 turns RDS off. Typical: 0.04 (4 % of the deviation, about 3 kHz). Runtime.",
+                    "maximum": 0.2,
+                    "minimum": 0.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Finds frames of the test framing in a stream of soft bits and outputs their packets.",
             "properties": {
               "align": {
@@ -3274,6 +3336,62 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "RDS encoder: the group carousel and control packets to the shaped biphase RDS baseband at the clock rate.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "rds_encode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "pi": {
+                    "description": "Programme identification code, sent in block A of every carousel group. Typical: 53539 (0xD123). Build-time.",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pty": {
+                    "default": 0,
+                    "description": "Programme type, sent in block B of every carousel group. Typical: 0 (none), 10 (pop music). Build-time.",
+                    "maximum": 31,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "tp": {
+                    "default": false,
+                    "description": "Traffic programme flag, sent in block B of every carousel group. Typical: false. Build-time.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "pi"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
             ],
             "type": "object"
           },

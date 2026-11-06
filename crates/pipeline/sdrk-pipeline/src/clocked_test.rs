@@ -1,7 +1,7 @@
 //! Tests of a clocked node (`Clocked<f32, Packets>` input) in a pipeline.
 //!
-//! No kind of the standard registry has a clocked input yet, so the tests register a small
-//! test kind: for every clock sample it outputs the next byte of the first queued packet as
+//! The tests register a small test kind (independent of `rds_encode`, the clocked kind of the
+//! standard registry since M42): for every clock sample it outputs the next byte of the first queued packet as
 //! an `f32` value, and -1.0 when no packet is queued.
 #![allow(
     clippy::unwrap_used,

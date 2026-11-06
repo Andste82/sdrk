@@ -1007,3 +1007,50 @@ fn m43_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     assert_eq!(a.phase(), b.phase());
     Ok(())
 }
+
+#[test]
+fn backend_table_lists_the_m42_kernels() {
+    // The RDS shaper and the encoder with RDS stay with the fallback on every backend.
+    assert_eq!(backend_for("rds_shape", SampleType::F32), "fallback");
+    assert_eq!(backend_for("rds_shape", SampleType::C32), "none");
+    assert_eq!(
+        backend_for("stereo_encode_rds", SampleType::C32),
+        "fallback"
+    );
+    assert_eq!(backend_for("stereo_encode_rds", SampleType::F32), "none");
+}
+
+#[test]
+fn m42_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::Rate;
+    use sdrk::kernels::rds::{RDS_TABLE_LEN, RdsShape, RdsShapeState, rds_pulse_table};
+    use sdrk::kernels::stereo::{StereoEncodeRds, StereoEncodeRdsState};
+
+    let mut seed = 582u64;
+    let input: Vec<C32> = (0..3000)
+        .map(|_| {
+            let a = lcg(&mut seed) as f32 / 4_294_967_296.0 * 2.0 - 1.0;
+            let b = lcg(&mut seed) as f32 / 4_294_967_296.0 * 2.0 - 1.0;
+            C32::new(a, b)
+        })
+        .collect();
+    let mut table = vec![0.0f32; RDS_TABLE_LEN];
+    rds_pulse_table(&mut table)?;
+    let mut a = RdsShapeState::new(&table[..], Rate::hz(192_000)?)?;
+    let mut b = a.clone();
+    let (mut ra, mut rb) = (vec![0.0f32; 3000], vec![0.0f32; 3000]);
+    let (mut sa, mut sb) = (seed, seed);
+    Sdrk.rds_shape(&mut a, &mut || (lcg(&mut sa) >> 31) as i8 * 2 - 1, &mut ra)?;
+    Fallback.rds_shape(&mut b, &mut || (lcg(&mut sb) >> 31) as i8 * 2 - 1, &mut rb)?;
+    let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+    assert_eq!(bits(&ra), bits(&rb));
+    assert_eq!(a, b);
+    let mut a = StereoEncodeRdsState::new(19_000.0, 0.87, 0.09, 0.04, Rate::hz(192_000)?)?;
+    let mut b = a;
+    let (mut ya, mut yb) = (vec![0.0f32; 3000], vec![0.0f32; 3000]);
+    Sdrk.stereo_encode_rds(&mut a, &input, &ra, &mut ya)?;
+    Fallback.stereo_encode_rds(&mut b, &input, &ra, &mut yb)?;
+    assert_eq!(bits(&ya), bits(&yb));
+    assert_eq!(a, b);
+    Ok(())
+}

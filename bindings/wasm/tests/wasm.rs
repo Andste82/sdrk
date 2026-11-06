@@ -50,6 +50,8 @@ const APRS_RECEIVER: &str = include_str!("../../../examples/flows/aprs_receiver.
 const APRS_TRANSMITTER: &str = include_str!("../../../examples/flows/aprs_transmitter.json");
 const OOK_RECEIVER: &str = include_str!("../../../examples/flows/ook_receiver.json");
 const ADSB_RECEIVER: &str = include_str!("../../../examples/flows/adsb_receiver.json");
+const FM_STEREO_RDS_TRANSMITTER: &str =
+    include_str!("../../../examples/flows/fm_stereo_rds_transmitter.json");
 
 fn get(value: &JsValue, key: &str) -> JsValue {
     Reflect::get(value, &JsValue::from_str(key)).unwrap()
@@ -168,6 +170,7 @@ fn every_example_flow_validates_clean() {
         ("aprs_transmitter", APRS_TRANSMITTER),
         ("ook_receiver", OOK_RECEIVER),
         ("adsb_receiver", ADSB_RECEIVER),
+        ("fm_stereo_rds_transmitter", FM_STEREO_RDS_TRANSMITTER),
     ] {
         let report = validate(flow).unwrap();
         assert_eq!(array_len(&report, "errors"), 0, "{name}");

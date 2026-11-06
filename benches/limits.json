@@ -4256,6 +4256,66 @@
       "waiver": "`stereo_encode` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
   },
+  "rds_shape": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`rds_shape` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "stereo_encode_rds": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`stereo_encode_rds` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
   "crc16_ccitt_false": {
     "sse2": {
       "status": "release"

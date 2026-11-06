@@ -36,6 +36,8 @@ from . import (  # noqa: F401
     q15_ops,
     quad_demod,
     rds,
+    rds_encode,
+    rds_shape,
     real_to_complex,
     resample,
     rotate,

@@ -1,0 +1,112 @@
+{
+  "sdrk": 1,
+  "name": "fm-stereo-rds-transmitter",
+  "description": "Modulate 48 kHz stereo audio (left in re, right in im) to FM stereo with RDS (station name and radiotext from packets) and output a 1.92 MHz signed 8-bit baseband for a transmitter, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4800
+  },
+  "inputs": {
+    "audio": {
+      "type": "c32",
+      "rate_hz": 48000,
+      "description": "stereo audio (left in re, right in im)"
+    },
+    "text": {
+      "type": "packets",
+      "description": "RDS control packets: 0x01 + 8 bytes station name, 0x02 + up to 64 bytes radiotext, 0x03 + 8 bytes one raw group"
+    }
+  },
+  "nodes": {
+    "duc": {
+      "kind": "duc",
+      "params": {
+        "frequency_hz": 600000,
+        "interpolation": 10
+      }
+    },
+    "mod": {
+      "kind": "fm_mod",
+      "params": {
+        "deviation_hz": 75000
+      }
+    },
+    "mpx": {
+      "kind": "fm_stereo_rds_mod",
+      "params": {
+        "main": 0.87,
+        "pilot": 0.09,
+        "pilot_hz": 19000,
+        "rds": 0.04
+      }
+    },
+    "pre": {
+      "kind": "preemph_limit",
+      "params": {
+        "limit": 1.0,
+        "preemphasis_us": 50
+      }
+    },
+    "rds": {
+      "kind": "rds_encode",
+      "params": {
+        "pi": 53539,
+        "pty": 10,
+        "tp": false
+      }
+    },
+    "up": {
+      "kind": "resample",
+      "params": {
+        "rate_out_hz": 192000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "audio",
+      "to": "up"
+    },
+    {
+      "from": "up",
+      "to": "pre"
+    },
+    {
+      "from": "pre",
+      "to": "mpx"
+    },
+    {
+      "from": "pre",
+      "to": "rds"
+    },
+    {
+      "from": "text",
+      "to": "rds",
+      "port": "b"
+    },
+    {
+      "from": "rds",
+      "to": "mpx",
+      "port": "b"
+    },
+    {
+      "from": "mpx",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "duc"
+    },
+    {
+      "from": "duc",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs8",
+      "underrun": "zeros"
+    }
+  }
+}

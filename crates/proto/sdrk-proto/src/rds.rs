@@ -1089,3 +1089,349 @@ impl RdsState {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Carousel (M42)
+// ---------------------------------------------------------------------------------------------
+
+/// Raw groups that [`Carousel::push_raw`] can queue.
+pub const RAW_QUEUE: usize = 16;
+
+/// Block C of group 0A: the "no alternative frequencies" filler (code 224, twice).
+pub const NO_AF: u16 = 0xE0E0;
+
+/// The 26-bit blocks of a group: each information word followed by its checkword with the offset
+/// A, B, C (C' when bit 11 of block B marks a version B group) and D, as sent most significant
+/// bit first.
+///
+/// ```
+/// use sdrk_proto::rds::{self, group_blocks26, Offset};
+/// let b = group_blocks26([0xD123, 0x0148, 0xE0E0, 0x5344]);
+/// assert_eq!(b[0], rds::block26(0xD123, Offset::A));
+/// assert_eq!(b[2], rds::block26(0xE0E0, Offset::C));
+/// // Version B: the third block carries C'.
+/// let b = group_blocks26([0xD123, 0x0948, 0xD123, 0x5344]);
+/// assert_eq!(b[2], rds::block26(0xD123, Offset::CPrime));
+/// ```
+pub const fn group_blocks26(words: [u16; 4]) -> [u32; 4] {
+    let [a, b, c, d] = words;
+    let third = if b & 0x0800 != 0 {
+        Offset::CPrime
+    } else {
+        Offset::C
+    };
+    [
+        block26(a, Offset::A),
+        block26(b, Offset::B),
+        block26(c, third),
+        block26(d, Offset::D),
+    ]
+}
+
+/// Whether a radiotext is sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RtState {
+    /// No text was ever set (the first text keeps the A/B flag).
+    Never,
+    /// A text was set, then the empty text (no groups 2A).
+    Off,
+    /// Groups 2A carry the text.
+    On,
+}
+
+/// The group generator of an RDS transmitter: the programme service name in groups 0A and the
+/// radiotext in groups 2A, plus raw groups from the caller.
+///
+/// [`Carousel::next_group`] returns the queued raw groups first (first in, first out, at most
+/// [`RAW_QUEUE`]); otherwise it alternates one group 0A (the four name segments in turn) and one
+/// group 2A (the 16 radiotext segments in turn), starting with 0A segment 0. While the radiotext
+/// is empty only groups 0A are sent. Raw groups do not advance the alternation.
+///
+/// - Group 0A: block B carries the group type 0, version A, TP, PTY, TA = 0, M/S = 1 (music),
+///   the decoder-identification bit 0 and the segment address; block C is [`NO_AF`]; block D two
+///   characters of the name.
+/// - Group 2A: block B carries the group type 2, version A, TP, PTY, the text A/B flag and the
+///   segment address; blocks C and D four characters of the 64-byte text.
+///
+/// The name starts as 8 spaces. [`Carousel::set_rt`] pads a text shorter than 64 bytes with a
+/// carriage return (0x0D) and spaces; a text that differs from the last one sent toggles the A/B
+/// flag (the first text keeps flag 0) and restarts the radiotext at segment 0.
+///
+/// ```
+/// use sdrk_proto::rds::{Carousel, Group, RdsState};
+///
+/// let mut c = Carousel::new(0xD123, 10, false)?;
+/// c.set_ps(b"SDRK TST");
+/// c.set_rt(b"Hello from sdrk!")?;
+/// let mut rx = RdsState::new();
+/// for _ in 0..32 {
+///     rx.update(&Group::new(c.next_group()));
+/// }
+/// assert_eq!(rx.ps(), "SDRK TST");
+/// assert_eq!(rx.rt(), "Hello from sdrk!");
+/// // A raw group goes out before the next carousel group.
+/// c.push_raw(Group::new([0xD123, 0x4000, 1, 2]))?;
+/// assert_eq!(c.next_group(), [0xD123, 0x4000, 1, 2]);
+/// # Ok::<(), sdrk_proto::Error>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Carousel {
+    pi: u16,
+    pty: u8,
+    tp: bool,
+    ps: [u8; PS_LEN],
+    rt: [u8; RT_LEN],
+    rt_state: RtState,
+    ab: bool,
+    ps_seg: u8,
+    rt_seg: u8,
+    /// Whether the last carousel group was a 0A (the next one is then a 2A if there is a text).
+    last_ps: bool,
+    raw: [[u16; 4]; RAW_QUEUE],
+    raw_head: u8,
+    raw_len: u8,
+}
+
+impl Carousel {
+    /// A carousel for the station `pi` with the programme type `pty` (0 to 31) and the traffic
+    /// programme flag `tp`; the name is 8 spaces, the radiotext empty, no raw group queued.
+    ///
+    /// # Errors
+    /// `InvalidArgument` when `pty` is above 31.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::Carousel;
+    /// let mut c = Carousel::new(0xD123, 10, true)?;
+    /// // Group 0A segment 0 of the name "        ": TP in bit 10, PTY 10, M/S = 1.
+    /// assert_eq!(c.next_group(), [0xD123, 0x0548, 0xE0E0, 0x2020]);
+    /// assert!(Carousel::new(0xD123, 32, false).is_err());
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    pub fn new(pi: u16, pty: u8, tp: bool) -> crate::Result<Self> {
+        if pty > 31 {
+            return Err(crate::Error::InvalidArgument(
+                "rds programme type must be 0 to 31",
+            ));
+        }
+        Ok(Self {
+            pi,
+            pty,
+            tp,
+            ps: [b' '; PS_LEN],
+            rt: [b' '; RT_LEN],
+            rt_state: RtState::Never,
+            ab: false,
+            ps_seg: 0,
+            rt_seg: 0,
+            last_ps: false,
+            raw: [[0; 4]; RAW_QUEUE],
+            raw_head: 0,
+            raw_len: 0,
+        })
+    }
+
+    /// The programme identification.
+    pub const fn pi(&self) -> u16 {
+        self.pi
+    }
+
+    /// The programme type.
+    pub const fn pty(&self) -> u8 {
+        self.pty
+    }
+
+    /// The traffic programme flag.
+    pub const fn tp(&self) -> bool {
+        self.tp
+    }
+
+    /// Sets the programme service name (8 bytes, sent as they are) from the next group 0A on.
+    pub fn set_ps(&mut self, ps: &[u8; PS_LEN]) {
+        self.ps = *ps;
+    }
+
+    /// The programme service name.
+    pub const fn ps(&self) -> &[u8; PS_LEN] {
+        &self.ps
+    }
+
+    /// Sets the radiotext: at most 64 bytes, a shorter text is followed by a carriage return
+    /// and spaces. A text that differs from the last one set toggles the A/B flag (not for the
+    /// first text) and restarts the radiotext at segment 0; the same text again changes
+    /// nothing. An empty text stops the groups 2A (the flag and the last text are kept, so the
+    /// next text compares with it).
+    ///
+    /// # Errors
+    /// `TooLong` for more than 64 bytes; nothing changes then.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::Carousel;
+    /// let mut c = Carousel::new(0xD123, 10, false)?;
+    /// c.set_rt(b"Hi")?;
+    /// assert_eq!(&c.rt()[..4], b"Hi\r ");
+    /// assert!(!c.ab_flag());
+    /// c.set_rt(b"Ho")?;
+    /// assert!(c.ab_flag());
+    /// c.set_rt(b"Ho")?;
+    /// assert!(c.ab_flag());
+    /// assert!(c.set_rt(&[b'x'; 65]).is_err());
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    pub fn set_rt(&mut self, text: &[u8]) -> crate::Result<()> {
+        if text.len() > RT_LEN {
+            return Err(crate::Error::TooLong {
+                len: text.len(),
+                max: RT_LEN,
+            });
+        }
+        if text.is_empty() {
+            if self.rt_state == RtState::On {
+                self.rt_state = RtState::Off;
+            }
+            return Ok(());
+        }
+        let mut padded = [b' '; RT_LEN];
+        for (d, &s) in padded.iter_mut().zip(text) {
+            *d = s;
+        }
+        if let Some(cr) = padded.get_mut(text.len()) {
+            *cr = CR;
+        }
+        let seen = self.rt_state != RtState::Never;
+        if seen && padded == self.rt {
+            self.rt_state = RtState::On;
+            return Ok(());
+        }
+        if seen {
+            self.ab = !self.ab;
+        }
+        self.rt = padded;
+        self.rt_state = RtState::On;
+        self.rt_seg = 0;
+        Ok(())
+    }
+
+    /// The 64 radiotext bytes as sent (with the carriage return and the padding); spaces before
+    /// the first text.
+    pub const fn rt(&self) -> &[u8; RT_LEN] {
+        &self.rt
+    }
+
+    /// Whether groups 2A are sent (a non-empty radiotext is set).
+    pub fn rt_active(&self) -> bool {
+        self.rt_state == RtState::On
+    }
+
+    /// The text A/B flag of the groups 2A.
+    pub const fn ab_flag(&self) -> bool {
+        self.ab
+    }
+
+    /// Queues a raw group; its four words are sent unchanged (the validity flags are ignored)
+    /// before the next carousel group.
+    ///
+    /// # Errors
+    /// `BufferTooSmall` when [`RAW_QUEUE`] groups are already queued; nothing changes then.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::{Carousel, Group, RAW_QUEUE};
+    /// let mut c = Carousel::new(0xD123, 0, false)?;
+    /// for i in 0..RAW_QUEUE as u16 {
+    ///     c.push_raw(Group::new([0xD123, 0x4000, i, 0]))?;
+    /// }
+    /// assert!(c.is_raw_full());
+    /// assert!(c.push_raw(Group::new([0; 4])).is_err());
+    /// assert_eq!(c.next_group()[2], 0);
+    /// assert_eq!(c.raw_len(), RAW_QUEUE - 1);
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    pub fn push_raw(&mut self, group: Group) -> crate::Result<()> {
+        if self.is_raw_full() {
+            return Err(crate::Error::BufferTooSmall {
+                needed: RAW_QUEUE + 1,
+                got: RAW_QUEUE,
+            });
+        }
+        let at = (usize::from(self.raw_head) + usize::from(self.raw_len)) % RAW_QUEUE;
+        if let Some(slot) = self.raw.get_mut(at) {
+            *slot = group.blocks;
+            self.raw_len += 1;
+        }
+        Ok(())
+    }
+
+    /// Restarts the alternation at group 0A segment 0 (the next carousel group is the first one
+    /// a new carousel would send); the name, the radiotext, the A/B flag and the queued raw
+    /// groups are kept. The encoder block calls it on `reset`.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::Carousel;
+    /// let mut c = Carousel::new(0xD123, 10, false)?;
+    /// c.set_rt(b"Hi")?;
+    /// let first = c.next_group();
+    /// c.next_group();
+    /// c.restart();
+    /// assert_eq!(c.next_group(), first);
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    pub fn restart(&mut self) {
+        self.ps_seg = 0;
+        self.rt_seg = 0;
+        self.last_ps = false;
+    }
+
+    /// The raw groups queued.
+    pub const fn raw_len(&self) -> usize {
+        self.raw_len as usize
+    }
+
+    /// Whether the raw queue is full.
+    pub const fn is_raw_full(&self) -> bool {
+        self.raw_len as usize >= RAW_QUEUE
+    }
+
+    /// Block B common to the groups 0A and 2A: group type, version A, TP and PTY.
+    const fn block_b(&self, group_type: u16) -> u16 {
+        (group_type << 12) | ((self.tp as u16) << 10) | ((self.pty as u16) << 5)
+    }
+
+    fn pair(bytes: &[u8], at: usize) -> u16 {
+        match bytes.get(at..at + 2) {
+            Some(&[a, b]) => u16::from_be_bytes([a, b]),
+            _ => 0x2020,
+        }
+    }
+
+    /// The next group: a queued raw group, else the next group 0A or 2A (see [`Carousel`]).
+    pub fn next_group(&mut self) -> [u16; 4] {
+        if self.raw_len > 0 {
+            let g = self
+                .raw
+                .get(usize::from(self.raw_head))
+                .copied()
+                .unwrap_or([0; 4]);
+            self.raw_head = ((usize::from(self.raw_head) + 1) % RAW_QUEUE) as u8;
+            self.raw_len -= 1;
+            return g;
+        }
+        if self.last_ps && self.rt_state == RtState::On {
+            self.last_ps = false;
+            let seg = usize::from(self.rt_seg);
+            self.rt_seg = ((seg + 1) % RT_SEGMENTS) as u8;
+            let b = self.block_b(2) | (u16::from(self.ab) << 4) | seg as u16;
+            [
+                self.pi,
+                b,
+                Self::pair(&self.rt, 4 * seg),
+                Self::pair(&self.rt, 4 * seg + 2),
+            ]
+        } else {
+            self.last_ps = true;
+            let seg = usize::from(self.ps_seg);
+            self.ps_seg = ((seg + 1) % 4) as u8;
+            // TA = 0, M/S = 1, DI bit 0 for every segment.
+            let b = self.block_b(0) | (1 << 3) | seg as u16;
+            [self.pi, b, NO_AF, Self::pair(&self.ps, 2 * seg)]
+        }
+    }
+}

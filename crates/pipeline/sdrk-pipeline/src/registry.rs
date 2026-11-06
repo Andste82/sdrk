@@ -13,13 +13,13 @@ use crate::kinds::{
     AddKind, AdsbDecodeKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind,
     ConvertKind, ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind,
     DelayKind, DucKind, EqualizeKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
-    FmStereoModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind,
-    HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind, InterpolateKind, Kind,
-    MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, OokDemodKind, OokModKind,
-    PreemphLimitKind, PskDemodKind, PskModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind,
-    RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SliceKind, SpectrumKind,
-    SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, SymbolSyncKind,
-    ToComplexKind,
+    FmStereoModKind, FmStereoRdsModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind,
+    FskModKind, HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind,
+    InterpolateKind, Kind, MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind,
+    OokDemodKind, OokModKind, PreemphLimitKind, PskDemodKind, PskModKind, QuadDemodKind,
+    RdsDecodeKind, RdsDemodKind, RdsEncodeKind, RealPartKind, RealToIqKind, ResampleKind,
+    RotateKind, ScaleKind, SliceKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind,
+    StereoMatrixKind, StereoPllKind, SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -215,7 +215,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 59);
+/// assert_eq!(registry.descriptions().count(), 61);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -302,6 +302,8 @@ impl Registry {
         register::<OokDemodKind>(&mut factories);
         register::<AdsbDecodeKind>(&mut factories);
         register::<EqualizeKind>(&mut factories);
+        register::<RdsEncodeKind>(&mut factories);
+        register::<FmStereoRdsModKind>(&mut factories);
         Self { factories }
     }
 

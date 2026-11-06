@@ -1380,15 +1380,17 @@ impl<'a> Stage2<'a> {
     }
 
     /// The rate, clock and type checks of the two inputs of a node; true if they pass. The
-    /// diagnostics sit at the `to` of the edge of port `b`.
-    fn pair_ok(&mut self, name: &str, kb: usize, a: usize, b: usize) -> bool {
+    /// diagnostics sit at the `to` of the edge of port `b`. `same_type`: the ports accept the
+    /// same types, so both streams must have the same one (`add`, `mul`); ports with different
+    /// type lists (`fm_stereo_rds_mod`: `c32` and `f32`) were checked one by one already.
+    fn pair_ok(&mut self, name: &str, kb: usize, a: usize, b: usize, same_type: bool) -> bool {
         let (Some(sa), Some(sb)) = (self.streams.get(a), self.streams.get(b)) else {
             return false;
         };
         let (ta, tb, ra, rb, oa, ob) = (sa.ty, sb.ty, sa.rate, sb.rate, sa.origin, sb.origin);
         let path = format!("edges[{kb}].to");
         let mut ok = true;
-        if ta != tb {
+        if same_type && ta != tb {
             self.report.error(
                 path.clone(),
                 DiagCode::TypeMismatch,
@@ -1588,7 +1590,8 @@ impl<'a> Stage2<'a> {
             // the pair checks and the alignment apply to stream ports only.
             src_b = Some(b);
         } else if let Some((kb, b)) = second {
-            if !self.pair_ok(name, kb, src, b) {
+            let same_type = ports.first().map(|p| p.accepts) == ports.get(1).map(|p| p.accepts);
+            if !self.pair_ok(name, kb, src, b, same_type) {
                 self.produced.insert(name.to_string(), Produced::Failed);
                 return;
             }

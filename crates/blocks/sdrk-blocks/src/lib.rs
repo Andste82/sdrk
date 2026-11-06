@@ -75,6 +75,7 @@ pub use blocks::fm_demod::{FM_DEMOD_CHUNK, FmDemodBlock, FmDemodConfig};
 pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
 pub use blocks::fm_stereo_mod::{FmStereoModBlock, FmStereoModConfig};
+pub use blocks::fm_stereo_rds_mod::{FmStereoRdsModBlock, FmStereoRdsModConfig};
 pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig, FramePolarity};
 pub use blocks::frame_encode::{FrameEncodeBlock, FrameEncodeConfig, FrameIdle};
 pub use blocks::fsk_demod::{
@@ -105,6 +106,9 @@ pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::rds_decode::{RdsDecodeBlock, RdsDecodeConfig};
 pub use blocks::rds_demod::{
     RDS_DEMOD_CHUNK, RDS_DEMOD_MIN_RATE_HZ, RdsDemodBlock, RdsDemodConfig,
+};
+pub use blocks::rds_encode::{
+    RDS_PACKET_GROUP, RDS_PACKET_PS, RDS_PACKET_RT, RdsEncodeBlock, RdsEncodeConfig,
 };
 pub use blocks::real_part::RealPartBlock;
 pub use blocks::real_to_iq::RealToIqBlock;

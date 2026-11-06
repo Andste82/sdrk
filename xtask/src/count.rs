@@ -890,7 +890,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 202] = [
+pub static KERNELS: [KernelSpec; 204] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1116,6 +1116,8 @@ pub static KERNELS: [KernelSpec; 202] = [
     spec("dot_complex_fallback", Family::FallbackVsCmsis, false),
     spec("equalize", Family::Own, false),
     spec("equalize_fallback", Family::FallbackVsGnuRadio, false),
+    spec("rds_shape", Family::Own, false),
+    spec("stereo_encode_rds", Family::Own, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4551,7 +4553,12 @@ mod tests {
     fn the_stereo_transmit_kernels_are_information_against_the_fallback_at_every_level() {
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
-        let names = ["preemph_limit_stereo", "stereo_encode"];
+        let names = [
+            "preemph_limit_stereo",
+            "stereo_encode",
+            "rds_shape",
+            "stereo_encode_rds",
+        ];
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
             for k in names {
                 assert_eq!(

@@ -3989,6 +3989,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "rds_shape": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 169.41,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 168.41,
+              "ratio": 0.99
+            }
+          ],
+          "other_instr_per_sample": 169.41,
+          "ours_instr_per_sample": 168.41,
+          "ratio": 0.99,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "real_to_complex": {
           "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, simd128)",
           "goal": true,
@@ -4598,6 +4621,29 @@
           ],
           "other_instr_per_sample": 37.54,
           "ours_instr_per_sample": 37.54,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "stereo_encode_rds": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 53.05,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 53.05,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 53.05,
+          "ours_instr_per_sample": 53.05,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

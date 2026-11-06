@@ -112,3 +112,84 @@ def c32_case(_rng):
         "and its interpolation; snr_db_guard compares with the float64 formula with exact sines "
         "(D34). The seed is not used (no random input)",
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# stereo_encode_rds (M42 section 4)
+# ---------------------------------------------------------------------------------------------
+
+RDS_MAIN = 0.87
+RDS_LEVEL = 0.04
+
+
+def encode_rds_f32(left, right, rds, main, pilot, level, inc, phase0):
+    """Float32 model of ``stereo_encode_rds``: the multiplex of ``encode_f32`` plus
+    ``(level b) s3`` with ``s3 = sin(3 phi)`` at the tripled phase minus a quarter turn, added
+    last. Returns the output and the phase after the last sample."""
+    base, phase_end = encode_f32(left, right, main, pilot, inc, phase0)
+    level = fm.f32(level)
+    out = np.zeros(len(base), dtype=np.float32)
+    phase = phase0
+    for i, (m, b) in enumerate(zip(base.tolist(), np.asarray(rds, dtype=np.float32).tolist())):
+        s3 = _interp_f32(((3 * phase) - QUARTER) & MASK)
+        out[i] = fm.add(m, fm.mul(fm.mul(level, b), s3))
+        phase = (phase + inc) & MASK
+    return out, phase_end
+
+
+def encode_rds_f64(left, right, rds, main, pilot, level, inc, phase0):
+    """The same formula in float64 with exact sines of the exact phase."""
+    base = encode_f64(left, right, main, pilot, inc, phase0)
+    out = []
+    for i, (m, b) in enumerate(zip(base, np.asarray(rds, dtype=np.float64).tolist())):
+        phi = 2.0 * math.pi * (((phase0 + i * inc) & MASK) / TWO32)
+        out.append(m + level * b * math.sin(3.0 * phi))
+    return out
+
+
+@case(kernel="stereo_encode_rds", name="c32_16384", seed=581)
+def c32_rds_case(rng):
+    from . import rds as rdsmod
+
+    n = 16384
+    left = tone(n, 1000, 0.6)
+    right = tone(n, 3000, 0.4)
+    nb = rdsmod.bits_needed(n, RATE_HZ)
+    amps = (2 * rng.integers(0, 2, size=nb) - 1).astype(np.float64)
+    b = rdsmod.rds_baseband(amps, 0, n, RATE_HZ).astype(np.float32)
+    inc = increment(PILOT_HZ / RATE_HZ)
+    main, pilot, level = (float(np.float32(v)) for v in (RDS_MAIN, PILOT, RDS_LEVEL))
+    out, phase_end = encode_rds_f32(left, right, b, main, pilot, level, inc, PHASE0)
+    assert float(np.max(np.abs(out))) <= 1.0
+    f64 = encode_rds_f64(left, right, b, main, pilot, level, inc, PHASE0)
+    guard = guard_db(out.astype(np.float64).tolist(), f64)
+    x = np.zeros(n, dtype=np.complex64)
+    x.real = left
+    x.imag = right
+    return dict(
+        params={
+            "rate_hz": RATE_HZ,
+            "pilot_hz": PILOT_HZ,
+            "main": RDS_MAIN,
+            "pilot": PILOT,
+            "rds": RDS_LEVEL,
+            "phase0": PHASE0,
+            "inc": inc,
+            "phase_end": phase_end,
+            "cos_f32_sha256": COS_F32_SHA256,
+            "snr_db_guard": guard,
+        },
+        arrays={
+            "input": Array("cf32", x),
+            "rds": Array("f32", b),
+            "expected": Array("f32", out),
+        },
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; rds: the RDS baseband of "
+        "cases/rds.py (rds_baseband at 192 kHz) of random amplitudes +-1, rounded to float32; "
+        "pilot 19 kHz with the start phase 0x40000000, main 0.87, pilot 0.09, rds 0.04; exact "
+        "float32 model of stereo_encode plus (rds b) sin(3 phi) from the cosine table of rotate "
+        "at the tripled phase, added last; snr_db_guard compares with the float64 formula with "
+        "exact sines (D34)",
+    )

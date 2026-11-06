@@ -584,5 +584,9 @@ where
         self.block.consumed_packets()
     }
 
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        self.block.reading(index)
+    }
+
     forward_node!();
 }

@@ -1,0 +1,46 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "c32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_16384.input.bin",
+      "len": 16384
+    },
+    "rds": {
+      "dtype": "f32",
+      "file": "c32_16384.rds.bin",
+      "len": 16384
+    }
+  },
+  "case": "c32_16384",
+  "format_version": 1,
+  "kernel": "stereo_encode_rds",
+  "model": "float32",
+  "notes": "192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; rds: the RDS baseband of cases/rds.py (rds_baseband at 192 kHz) of random amplitudes +-1, rounded to float32; pilot 19 kHz with the start phase 0x40000000, main 0.87, pilot 0.09, rds 0.04; exact float32 model of stereo_encode plus (rds b) sin(3 phi) from the cosine table of rotate at the tripled phase, added last; snr_db_guard compares with the float64 formula with exact sines (D34)",
+  "params": {
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "inc": 425022805,
+    "main": 0.87,
+    "phase0": 1073741824,
+    "phase_end": 2505392128,
+    "pilot": 0.09,
+    "pilot_hz": 19000.0,
+    "rate_hz": 192000,
+    "rds": 0.04,
+    "snr_db_guard": 136.3
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 581,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

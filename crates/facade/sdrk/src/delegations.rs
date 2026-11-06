@@ -34,10 +34,12 @@ use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
 use sdrk_core::kernels::preemph_limit::{
     PreemphLimit, PreemphLimitState, PreemphLimitStereo, PreemphLimitStereoState,
 };
+use sdrk_core::kernels::rds::{RdsShape, RdsShapeState};
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::kernels::squelch::{Squelch, SquelchState};
 use sdrk_core::kernels::stereo::{
-    StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
+    StereoEncode, StereoEncodeRds, StereoEncodeRdsState, StereoEncodeState, StereoMatrix,
+    StereoPll, StereoPllState,
 };
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
 use sdrk_device::SampleFormat;
@@ -162,6 +164,8 @@ crate::delegate! {
         ("auto_notch", f32, Fallback),
         ("preemph_limit_stereo", C32, Fallback),
         ("stereo_encode", C32, Fallback),
+        ("rds_shape", f32, Fallback),
+        ("stereo_encode_rds", C32, Fallback),
         ("costas", C32, Fallback),
         ("equalize", C32, Fast),
         ("ddc", C32, Chained),
@@ -243,6 +247,36 @@ impl StereoEncode for crate::Sdrk {
         output: &mut [f32],
     ) -> Result<()> {
         <Fallback as StereoEncode>::stereo_encode(&Fallback, state, input, output)
+    }
+}
+
+// `RdsShape` and `StereoEncodeRds` (M42) have no sample-type parameter, so they are delegated by
+// hand like `StereoEncode`; the rows above register them in the `backend_for` table. The shaper
+// reads four interpolated table values per sample at an f64 position and fetches a bit through a
+// callback about every 162 samples, the encoder is `stereo_encode` plus a third table lookup:
+// both stay with the fallback on every backend.
+impl RdsShape for crate::Sdrk {
+    #[inline]
+    fn rds_shape<Tab: AsRef<[f32]>>(
+        &self,
+        s: &mut RdsShapeState<Tab>,
+        bits: &mut dyn FnMut() -> i8,
+        output: &mut [f32],
+    ) -> Result<()> {
+        <Fallback as RdsShape>::rds_shape(&Fallback, s, bits, output)
+    }
+}
+
+impl StereoEncodeRds for crate::Sdrk {
+    #[inline]
+    fn stereo_encode_rds(
+        &self,
+        state: &mut StereoEncodeRdsState,
+        input: &[C32],
+        rds: &[f32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        <Fallback as StereoEncodeRds>::stereo_encode_rds(&Fallback, state, input, rds, output)
     }
 }
 

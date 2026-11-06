@@ -51,6 +51,7 @@ mod math_family;
 mod noise_family;
 mod proto_family;
 mod rds_family;
+mod rds_tx_family;
 mod stereo_family;
 mod stereo_tx_family;
 mod symbol_family;
@@ -351,7 +352,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 202] = [
+pub const KERNELS: [&str; 204] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -554,6 +555,8 @@ pub const KERNELS: [&str; 202] = [
     "dot_complex_fallback",
     "equalize",
     "equalize_fallback",
+    "rds_shape",
+    "stereo_encode_rds",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -722,6 +725,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "preemph_limit_stereo" => Box::new(stereo_tx_family::PreemphStereoK::new(rng, layout)),
         "stereo_encode" => Box::new(stereo_tx_family::StereoEncodeK::new(rng, layout)),
+        "rds_shape" => Box::new(rds_tx_family::RdsShapeK::new(rng, layout)),
+        "stereo_encode_rds" => Box::new(rds_tx_family::StereoEncodeRdsK::new(rng, layout)),
         "crc16_ccitt_false" => Box::new(proto_family::CrcK::new(
             rng,
             layout,

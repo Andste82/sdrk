@@ -39,14 +39,15 @@ use sdrk_blocks::{
     DeemphasisConfig, DelayConfig, DucBlock, DucConfig, EqConstellation, EqualizeBlock,
     EqualizeConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
     FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
-    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FramePolarity,
-    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig,
-    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
-    MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
-    NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamKind,
-    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
-    PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
-    RdsDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
+    FmStereoRdsModBlock, FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig,
+    FrameEncodeBlock, FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock,
+    FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig,
+    ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability,
+    NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock,
+    OokDemodConfig, OokModBlock, OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock,
+    PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, QuadDemodConfig,
+    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
+    RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
     ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock,
     SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
     SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
@@ -70,10 +71,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_fifty_nine_unique_kinds() {
+fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 59);
-    assert_eq!(all_descriptions().len(), 59);
+    assert_eq!(kinds.len(), 61);
+    assert_eq!(all_descriptions().len(), 61);
     for kind in [
         "convert",
         "convert_out",
@@ -134,6 +135,8 @@ fn there_are_fifty_nine_unique_kinds() {
         "ook_demod",
         "adsb_decode",
         "equalize",
+        "rds_encode",
+        "fm_stereo_rds_mod",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -361,6 +364,12 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("ook_demod", |n| OokDemodConfig::default().get(n), &[]);
     defaults_match("adsb_decode", |n| AdsbDecodeConfig::default().get(n), &[]);
     defaults_match("equalize", |n| EqualizeConfig::default().get(n), &[]);
+    defaults_match("rds_encode", |n| RdsEncodeConfig::default().get(n), &[]);
+    defaults_match(
+        "fm_stereo_rds_mod",
+        |n| FmStereoRdsModConfig::default().get(n),
+        &[],
+    );
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -472,6 +481,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("ook_demod", OokDemodConfig);
     round_trip!("adsb_decode", AdsbDecodeConfig);
     round_trip!("equalize", EqualizeConfig);
+    round_trip!("rds_encode", RdsEncodeConfig);
+    round_trip!("fm_stereo_rds_mod", FmStereoRdsModConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -825,6 +836,19 @@ fn blocks_accept_and_report_every_described_parameter() {
         "psk_demod",
         &mut PskDemodBlock::new(&pd, rate(200_000), &mut s).unwrap(),
     );
+    let enc = RdsEncodeConfig {
+        pi: 0xD123,
+        ..RdsEncodeConfig::default()
+    };
+    check_block_params(
+        "rds_encode",
+        &mut RdsEncodeBlock::<C32, _>::new(&enc, rate(192_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "fm_stereo_rds_mod",
+        &mut FmStereoRdsModBlock::new(&FmStereoRdsModConfig::default(), rate(192_000), &mut s)
+            .unwrap(),
+    );
     let tuned = ResampleConfig {
         tunable: true,
         ..ResampleConfig::default()
@@ -1159,6 +1183,79 @@ fn the_rds_kinds_describe_their_ports_and_parameters() {
         "first bit of block A",
     ] {
         assert!(g.details.contains(word), "rds_decode details: {word}");
+    }
+}
+
+/// The kinds of M42: `rds_encode` (a clock of any stream type at port a, packets at port b,
+/// `f32` out; `pi` required, `pty` and `tp` build parameters) and `fm_stereo_rds_mod` (`c32`
+/// audio and the `f32` RDS baseband to the `f32` multiplex; `main` 0.87 by default, `pilot` and
+/// `rds` at runtime).
+#[test]
+fn the_rds_tx_kinds_describe_their_ports_and_parameters() {
+    let e = find("rds_encode");
+    assert_eq!(
+        e.inputs[0].types,
+        [PortType::C32, PortType::CQ15, PortType::F32, PortType::Q15]
+    );
+    assert_eq!(e.inputs[1].types, [PortType::Packets]);
+    assert_eq!(e.outputs[0].types, [PortType::F32]);
+    assert_eq!(e.required, ["pi"]);
+    let names: Vec<_> = e.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("pi", Mutability::Build),
+            ("pty", Mutability::Build),
+            ("tp", Mutability::Build)
+        ]
+    );
+    assert_eq!(
+        e.param("pi").unwrap().kind,
+        ParamKind::I64 {
+            min: 0,
+            max: 65_535,
+            default: None
+        }
+    );
+    for word in [
+        "0x01",
+        "0x02",
+        "0x03",
+        "ignored_packets",
+        "16",
+        "4750 Hz",
+        "C'",
+    ] {
+        assert!(e.details.contains(word), "rds_encode details: {word}");
+    }
+    let m = find("fm_stereo_rds_mod");
+    assert_eq!(m.inputs[0].types, [PortType::C32]);
+    assert_eq!(m.inputs[1].types, [PortType::F32]);
+    assert_eq!(m.outputs[0].types, [PortType::F32]);
+    assert!(m.required.is_empty());
+    let names: Vec<_> = m.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("pilot_hz", Mutability::Build),
+            ("main", Mutability::Build),
+            ("pilot", Mutability::Runtime),
+            ("rds", Mutability::Runtime)
+        ]
+    );
+    assert!(matches!(
+        m.param("main").unwrap().kind,
+        ParamKind::F64 { default: Some(v), .. } if v == 0.87
+    ));
+    assert!(matches!(
+        m.param("rds").unwrap().kind,
+        ParamKind::F64 { min, max, default: Some(v) } if min == 0.0 && max == 0.2 && v == 0.04
+    ));
+    for word in ["sin(3 phi)", "120 kHz", "rds_encode"] {
+        assert!(
+            m.details.contains(word),
+            "fm_stereo_rds_mod details: {word}"
+        );
     }
 }
 

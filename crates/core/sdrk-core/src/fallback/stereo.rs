@@ -16,7 +16,8 @@ use crate::fallback::mix::{interp_f32, interp_f32_pair, interp_q15};
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::stereo::{
-    StereoEncode, StereoEncodeState, StereoMatrix, StereoPll, StereoPllState,
+    StereoEncode, StereoEncodeRds, StereoEncodeRdsState, StereoEncodeState, StereoMatrix,
+    StereoPll, StereoPllState,
 };
 use crate::num::flush_denormal;
 use crate::types::{C32, CQ15, Q15};
@@ -312,6 +313,42 @@ impl StereoEncode for Fallback {
             phase = phase.wrapping_add(inc);
         }
         state.nco.set_phase(phase);
+        Ok(())
+    }
+}
+
+impl StereoEncodeRds for Fallback {
+    fn stereo_encode_rds(
+        &self,
+        state: &mut StereoEncodeRdsState,
+        input: &[C32],
+        rds: &[f32],
+        output: &mut [f32],
+    ) -> Result<()> {
+        check_len(input.len(), rds.len())?;
+        check_len(input.len(), output.len())?;
+        let enc = &mut state.enc;
+        let (main, pilot, level, inc) = (enc.main, enc.pilot, state.rds, enc.nco.increment());
+        let mut phase = enc.nco.phase();
+        for ((o, x), &b) in output.iter_mut().zip(input).zip(rds) {
+            // The index is below 4096 and the table has 4097 entries: never `None`.
+            let (Some(s1), Some(s2), Some(s3)) = (
+                interp_f32(phase.wrapping_sub(QUARTER)),
+                interp_f32(phase.wrapping_mul(2).wrapping_sub(QUARTER)),
+                interp_f32(phase.wrapping_mul(3).wrapping_sub(QUARTER)),
+            ) else {
+                return Err(table_error());
+            };
+            #[allow(
+                clippy::manual_midpoint,
+                reason = "the contract fixes the f32 sum, then the halving; `midpoint` rounds differently"
+            )]
+            let m = (x.re + x.im) * 0.5;
+            let d = (x.re - x.im) * 0.5;
+            *o = ((main * m + main * d * s2) + pilot * s1) + (level * b) * s3;
+            phase = phase.wrapping_add(inc);
+        }
+        enc.nco.set_phase(phase);
         Ok(())
     }
 }

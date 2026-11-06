@@ -20,26 +20,29 @@ use sdrk_blocks::{
     DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
     EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
     FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
-    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock,
-    FskDemodConfig, FskModBlock, FskModConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
-    HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock,
-    HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock,
-    MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig,
-    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock,
-    OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
-    RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation,
-    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
-    SymbolSyncConfig, ToComplexBlock,
+    FmStereoRdsModBlock, FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig,
+    FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
+    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
+    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock,
+    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
+    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
+    PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
+    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
+    RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
 
 use crate::model::Precision;
-use crate::node::{FrameNode, Node, PacketInNode, PacketOutNode, PairNode, StreamNode};
+use crate::node::{
+    ClockedNode, FrameNode, Node, PacketInNode, PacketOutNode, PairNode, StreamNode,
+};
 use crate::params::{check_params, to_param};
 use crate::registry::{BlockFactory, Checked, PortKind};
 use crate::storage::VecStorage;
@@ -3850,6 +3853,121 @@ impl Kind for AdsbDecodeKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(PacketOutNode::new(AdsbDecodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- rds_encode
+
+pub(crate) struct RdsEncodeKind;
+
+impl Kind for RdsEncodeKind {
+    type Cfg = RdsEncodeConfig;
+
+    const KIND: &'static str = "rds_encode";
+    fn kernels() -> &'static [&'static str] {
+        &["rds_shape"]
+    }
+    fn default_cfg() -> RdsEncodeConfig {
+        RdsEncodeConfig::default()
+    }
+    fn set(cfg: &mut RdsEncodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &RdsEncodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        // The clock type does not change the figures (its values are not read).
+        Ok(Figures {
+            rate_out: RdsEncodeBlock::<f32, VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: RdsEncodeBlock::<f32, VecStorage>::storage_bytes(cfg, rate)?,
+            // Four interpolated table lookups and four products per sample (rds_shape).
+            cost: 12.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &RdsEncodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        match input {
+            PortType::C32 => rds_encode_node::<C32>(*cfg, rate, st),
+            PortType::CQ15 => rds_encode_node::<CQ15>(*cfg, rate, st),
+            PortType::Q15 => rds_encode_node::<Q15>(*cfg, rate, st),
+            PortType::F32 => rds_encode_node::<f32>(*cfg, rate, st),
+            _ => Err(mismatch("rds_encode needs a sample stream as its clock")),
+        }
+    }
+}
+
+/// The node of `rds_encode` with the clock type `A` (one function per type keeps the frame of
+/// `build` small).
+#[inline(never)]
+fn rds_encode_node<A: crate::node::NodeSlice>(
+    cfg: RdsEncodeConfig,
+    rate: Rate,
+    st: &mut VecStorage,
+) -> BlockResult<Box<dyn Node>> {
+    Ok(Box::new(ClockedNode::new(RdsEncodeBlock::<A, _>::new(
+        &cfg, rate, st,
+    )?)))
+}
+
+// ------------------------------------------------------------- fm_stereo_rds_mod
+
+pub(crate) struct FmStereoRdsModKind;
+
+impl Kind for FmStereoRdsModKind {
+    type Cfg = FmStereoRdsModConfig;
+
+    const KIND: &'static str = "fm_stereo_rds_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["stereo_encode_rds"]
+    }
+    fn default_cfg() -> FmStereoRdsModConfig {
+        FmStereoRdsModConfig::default()
+    }
+    fn set(cfg: &mut FmStereoRdsModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &FmStereoRdsModConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("fm_stereo_rds_mod needs c32 samples"));
+        }
+        Ok(Figures {
+            rate_out: FmStereoRdsModBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: FmStereoRdsModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // fm_stereo_mod (10) plus the third table lookup and two products.
+            cost: 14.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &FmStereoRdsModConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PairNode::new(FmStereoRdsModBlock::new(
             cfg, rate, st,
         )?)))
     }

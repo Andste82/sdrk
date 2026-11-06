@@ -608,3 +608,155 @@ pub trait StereoEncode {
         output: &mut [f32],
     ) -> Result<()>;
 }
+
+// ---------------------------------------------------------------------------------------------
+// stereo_encode_rds (M42)
+// ---------------------------------------------------------------------------------------------
+
+fn check_rds(rds: f32) -> Result<()> {
+    if (0.0..=0.2).contains(&rds) {
+        Ok(())
+    } else {
+        Err(invalid("rds level must be in [0, 0.2]"))
+    }
+}
+
+/// State of the stereo encoder with RDS: the [`StereoEncodeState`] of `stereo_encode` and the
+/// RDS level (the amplitude of the RDS subcarrier per unit of the baseband).
+///
+/// ```
+/// use sdrk_core::{kernels::stereo::StereoEncodeRdsState, Rate};
+/// let st = StereoEncodeRdsState::new(19_000.0, 0.87, 0.09, 0.04, Rate::hz(192_000)?)?;
+/// assert_eq!((st.main(), st.pilot(), st.rds(), st.phase()), (0.87, 0.09, 0.04, 0));
+/// assert!(StereoEncodeRdsState::new(19_000.0, 0.87, 0.09, 0.3, Rate::hz(192_000)?).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StereoEncodeRdsState {
+    pub(crate) enc: StereoEncodeState,
+    pub(crate) rds: f32,
+}
+
+impl StereoEncodeRdsState {
+    /// Creates an encoder with the pilot phase 0: the parameters of [`StereoEncodeState::new`]
+    /// plus `rds` in `[0, 0.2]` (0.04 for broadcast); anything else (NaN included) is
+    /// `InvalidParameter`. `main + pilot + rds` is not checked (the peak of the multiplex is at
+    /// most that sum when the audio and the RDS baseband stay within 1).
+    pub fn new(pilot_hz: f64, main: f32, pilot: f32, rds: f32, rate: Rate) -> Result<Self> {
+        let enc = StereoEncodeState::new(pilot_hz, main, pilot, rate)?;
+        check_rds(rds)?;
+        Ok(Self { enc, rds })
+    }
+
+    /// Changes the RDS level from the next sample; `0` turns RDS off. It must be in
+    /// `[0, 0.2]`; on an error nothing changes.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::stereo::StereoEncodeRdsState, Rate};
+    /// let mut st = StereoEncodeRdsState::new(19_000.0, 0.87, 0.09, 0.04, Rate::hz(192_000)?)?;
+    /// st.set_rds(0.0)?;
+    /// assert_eq!(st.rds(), 0.0);
+    /// assert!(st.set_rds(f32::NAN).is_err());
+    /// assert_eq!(st.rds(), 0.0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_rds(&mut self, rds: f32) -> Result<()> {
+        check_rds(rds)?;
+        self.rds = rds;
+        Ok(())
+    }
+
+    /// The RDS level.
+    pub fn rds(&self) -> f32 {
+        self.rds
+    }
+
+    /// Changes the pilot amplitude from the next sample (see [`StereoEncodeState::set_pilot`]).
+    ///
+    /// # Errors
+    /// `InvalidParameter` outside `[0, 0.2]`; nothing changes then.
+    pub fn set_pilot(&mut self, pilot: f32) -> Result<()> {
+        self.enc.set_pilot(pilot)
+    }
+
+    /// The pilot amplitude.
+    pub fn pilot(&self) -> f32 {
+        self.enc.pilot()
+    }
+
+    /// The gain of the sum and difference signals.
+    pub fn main(&self) -> f32 {
+        self.enc.main()
+    }
+
+    /// The pilot phase before the next sample, in units of `2^-32` turn.
+    pub fn phase(&self) -> u32 {
+        self.enc.phase()
+    }
+
+    /// Sets the pilot phase (for tests and to align the pilot with another signal).
+    pub fn set_phase(&mut self, phase: u32) {
+        self.enc.set_phase(phase);
+    }
+
+    /// The pilot phase increment per sample.
+    pub fn increment(&self) -> u32 {
+        self.enc.increment()
+    }
+
+    /// The state of the stereo part.
+    pub fn encoder(&self) -> &StereoEncodeState {
+        &self.enc
+    }
+
+    /// Sets the pilot phase to 0; frequency and levels are kept.
+    pub fn reset(&mut self) {
+        self.enc.reset();
+    }
+}
+
+impl Timing for StereoEncodeRdsState {
+    fn ratio(&self) -> Ratio {
+        Ratio::ONE
+    }
+
+    /// Zero; the output belongs to the input samples at the same index.
+    fn group_delay(&self) -> Delay {
+        Delay::ZERO
+    }
+}
+
+/// Stereo encoder with RDS: stereo audio and the RDS baseband to the FM multiplex signal.
+///
+/// ```
+/// use sdrk_core::kernels::stereo::{StereoEncode, StereoEncodeRds, StereoEncodeRdsState};
+/// use sdrk_core::{Fallback, Rate, C32};
+/// let mut st = StereoEncodeRdsState::new(19_000.0, 0.87, 0.09, 0.0, Rate::hz(192_000)?)?;
+/// let input = [C32::new(0.5, -0.25); 64];
+/// let rds = [1.0f32; 64];
+/// let mut out = [0.0f32; 64];
+/// Fallback.stereo_encode_rds(&mut st, &input, &rds, &mut out)?;
+/// // With the RDS level 0 the output is that of `stereo_encode`.
+/// let mut plain = *st.encoder();
+/// plain.reset();
+/// let mut want = [0.0f32; 64];
+/// Fallback.stereo_encode(&mut plain, &input, &mut want)?;
+/// assert_eq!(out, want);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait StereoEncodeRds {
+    /// The multiplex of [`StereoEncode::stereo_encode`] plus the RDS subcarrier, added last:
+    /// `mpx = stereo_encode + (rds_level b) s3` with `b = rds[n]` and `s3 = sin(3 phi)` from
+    /// the cosine table of `rotate` with its interpolation at the phase
+    /// `phi.wrapping_mul(3).wrapping_sub(2^30)` (f32, no FMA, the product `rds_level b` first).
+    /// The RDS carrier is locked to three times the pilot phase. A NaN or infinite input
+    /// passes into the output of that sample only. The three lengths must be equal, otherwise
+    /// `LengthMismatch` and nothing changes.
+    fn stereo_encode_rds(
+        &self,
+        state: &mut StereoEncodeRdsState,
+        input: &[C32],
+        rds: &[f32],
+        output: &mut [f32],
+    ) -> Result<()>;
+}

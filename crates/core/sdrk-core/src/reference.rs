@@ -66,6 +66,7 @@ mod mix;
 mod modulate;
 mod noise_blank;
 mod preemph_limit;
+mod rds;
 mod spectrum;
 mod squelch;
 mod stereo;

@@ -970,3 +970,40 @@ fn m36_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     assert_eq!(a, b);
     Ok(())
 }
+
+#[test]
+fn m43_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::dot::DotComplex;
+    use sdrk::kernels::equalize::{EqParams, Equalize, EqualizeState};
+
+    assert_eq!(backend_for("dot_complex", SampleType::C32), ACCEL);
+    assert_eq!(backend_for("equalize", SampleType::C32), ACCEL);
+    assert_eq!(backend_for("dot_complex", SampleType::CQ15), "none");
+    assert_eq!(backend_for("equalize", SampleType::CQ15), "none");
+
+    let mut seed = 597u64;
+    let mut draw = || lcg(&mut seed) as f32 / 4_294_967_296.0 * 2.0 - 1.0;
+    let input: Vec<C32> = (0..3000).map(|_| C32::new(draw(), draw())).collect();
+    for n in [0usize, 1, 7, 8, 9, 11, 63, 100] {
+        let (x, w) = (&input[..n], &input[1000..1000 + n]);
+        let (a, b) = (Sdrk.dot_complex(x, w)?, Fallback.dot_complex(x, w)?);
+        assert_eq!(flat(&[a]), flat(&[b]), "{n}");
+    }
+    let mut a = EqualizeState::new(
+        [C32::default(); 14],
+        [C32::default(); 14],
+        EqParams {
+            feedback_taps: 3,
+            ..EqParams::default()
+        },
+    )?;
+    let mut b = a.clone();
+    let (mut ya, mut yb) = (vec![C32::default(); 3000], vec![C32::default(); 3000]);
+    Sdrk.equalize(&mut a, &input, &mut ya)?;
+    Fallback.equalize(&mut b, &input, &mut yb)?;
+    assert_eq!(flat(&ya), flat(&yb));
+    assert_eq!(flat(a.weights()), flat(b.weights()));
+    assert_eq!(flat(a.history()), flat(b.history()));
+    assert_eq!(a.phase(), b.phase());
+    Ok(())
+}

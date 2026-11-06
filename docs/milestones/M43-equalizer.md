@@ -145,6 +145,8 @@ Additional rules:
 
 **Out:** fractionally spaced equalization (T/2; backlog), decision-feedback equalizers (backlog), RLS (backlog), Q15 (backlog).
 
+> **Amendment 2026-11-06 (maintainer decision of 2026-11-06, D830):** the decision-feedback equalizer moves from Out to In: `equalize` has feedback taps (`feedback_taps`, 0 = linear), the block parameter `feedback_taps` and the `psk_demod` option `equalizer_feedback_taps`.
+
 ## Specification
 
 ### 1. Kernel `equalize`
@@ -174,17 +176,29 @@ One input sample per symbol. Per symbol, with the history `u` (newest first) and
 
 Timing ratio 1, delay `(N − 1)/2` symbols. The float32 model is exact (bit-exact class) with the f64 guard. The filter part (step 1) uses the `dot` kernel of the backend where it is accelerated; the update loop stays scalar unless the SIMD path is equal bit for bit (it must be: element-wise products and one sum order; if the backend's `dot` sums in another order, the kernel calls the fallback `dot`; record the decision).
 
+> **Amendment 2026-11-06 (maintainer decision of 2026-11-06, D800 to D803):** step 1 does not sum in ascending `i`. The filter part is the new reusable kernel `dot_complex` (`kernels::dot::DotComplex`, `C32`, bit-exact on every backend and level), and `y` is formed in its order: eight partial sums per component, element `i` to partial sum `i mod 8`, the product `(u.re w.re − u.im w.im, u.re w.im + u.im w.re)` without FMA, then the fixed tree `(s0 + s2) + (s1 + s3)` with `s_k = acc_k + acc_{k+4}` (see `docs/kernels.md`). The `dot` kernel is not used: it multiplies by real taps and its `C32` SIMD paths are a tolerance kernel. Because every backend's `dot_complex` gives the bits of the fallback, the SIMD backend uses its own for the filter part and the fallback call of the last sentence above is never needed.
+
+> **Amendment 2026-11-06 (maintainer decision of 2026-11-06 to adapt the solutions of other projects, D826 to D833):** the constructor is `EqualizeState::new(weights, history, params)` with `EqParams { constellation, feedback_taps, mu_cma, mu_dd, cma_symbols, phase_bw }`; the weights and the history hold `N + M` values (`N` forward taps, then `M` feedback taps, D830, D831). Per symbol (the exact order is the contract in `docs/kernels.md`): `y = Σ w[i] h[i]` over the joint vector `h` (the forward symbols, then the fed-back decisions) with one `dot_complex` call; a decision-directed phase tracker turns the output back, `z = y e^(-jθ)`, and the decision `d` is made on `z` (D829); CMA `e = clip(y (|y|² − R2))` with each component clipped to `[-1, 1]` (GNU Radio's `adaptive_algorithm_cma`, D827); decision mode `e = (z − d) e^(jθ)`; both updates are normalized, `w[i] = w[i] − (mu / (Σ|h|² + 1e-6)) e conj(h[i])` (liquid-dsp's `eqlms`, GNU Radio's `adaptive_algorithm_nlms`, D826), so `mu_cma` and `mu_dd` are normalized step sizes from 1e-5 to 1; the tracker is a second-order loop on `Im(z conj(d))` with the gains of `costas` for `phase_bw` (0 = off) and the damping 0.7071, its frequency limited to ±0.125 cycles per symbol, the rotation exactly the identity at phase 0 (D829, D833); the decisions `d e^(jθ)` are fed back in decision mode only (D830); the output is `z`; `mse` is the decision error power of `z` (D831).
+
 ### 2. Block and kind `equalize`
 
 `EqualizeBlock`: C32 → C32 (symbols). Parameters: `taps` (I64, build, 11), `constellation` (Choice `bpsk`/`qpsk`/`8psk`, build, `qpsk`), `mu_cma` (None, **runtime**, 0.001), `mu_dd` (None, **runtime**, 0.0005), `cma_symbols` (I64, build, 2000). Cost `8·taps`. **Chain position:** after `symbol_sync` and after `costas`. CMA converges whatever the carrier phase does, and the decision mode needs the phase that `costas` corrected; an equalizer before `costas` would make decisions on rotating symbols.
+
+> **Amendment 2026-11-06 (maintainer decision of 2026-11-06, D825, D828 to D830):** parameters `taps` (I64, build, 11), `feedback_taps` (I64, build, 0, 0 to 63), `constellation`, `mu_cma` (runtime, 0.05, 1e-5 to 1), `mu_dd` (runtime, 0.02, 1e-5 to 1), `cma_symbols` (I64, build, 1000), `phase_bw` (F64, build, 0.02; 0 or 1e-4 to 0.2). Cost `8·(taps + feedback_taps)`. **Chain position:** after `symbol_sync` and before `costas`, the order of GNU Radio's PSK receiver (`pfb_clock_sync` → `linear_equalizer` → `costas_loop_cc`) and of liquid-dsp's blind equalizer example (`eqlms` → PLL): CMA needs no carrier phase, the phase tracker of the kernel gives the decision mode its phase, and `costas` after it removes what remains; a carrier loop before the equalizer runs on symbols whose inter-symbol interference makes it slip (I43-3).
 
 ### 3. `psk_demod` option
 
 `equalizer_taps` (I64, build, 0; 0 = off, else odd 3 … 63): inserts `equalize` (constellation from `order`, defaults above) after `costas`. In differential mode the equalizer runs in CMA only (`cma_symbols` = infinite).
 
+> **Amendment 2026-11-06 (D815):** in differential mode there is no `costas`; the equalizer runs on the symbols of `symbol_sync` before the differential product, in CMA only. In `offset` mode it runs after that mode's carrier loop. Whether the equalizer belongs before the carrier loop in coherent mode is open (I43-3).
+>
+> **Amendment 2026-11-06 (maintainer decision of 2026-11-06, D825, D828 to D830):** in coherent mode `equalize` runs between `symbol_sync` and `costas`, with the defaults of §2 as amended and its phase tracker at `carrier_bw`; in differential mode without the tracker (`phase_bw` 0). The option `equalizer_feedback_taps` (I64, build, 0, 0 to 63, only with `equalizer_taps` above 0) gives the equalizer feedback taps.
+
 ### 4. `channel::Multipath`
 
 `Multipath::new(taps: &[(delay_samples: f64, gain: C64)])` with a fractional delay by the windowed-sinc interpolator of M38; presets `Multipath::mild()` (`[(0, 1), (1.3, 0.3·e^{j1}), (2.7, 0.1·e^{−j2})]` at the symbol rate) and `Multipath::severe()` (`[(0, 1), (0.8, 0.6·e^{j0.5}), (2.1, 0.4·e^{−j1.5}), (4.0, 0.2)]`), delays in symbols, scaled by `sps`.
+
+> **Amendment 2026-11-06 (D810):** the presets take the samples per symbol as an argument, `Multipath::mild(sps)` and `Multipath::severe(sps)`, and return `Result`.
 
 ## Tests
 
@@ -195,14 +209,84 @@ Timing ratio 1, delay `(N − 1)/2` symbols. The float32 model is exact (bit-exa
 5. SIMD: the filter part on every backend equals the fallback bit for bit; `cargo xtask count` entries.
 6. Chunk invariance with 20 plans (seed 595).
 
+> **Amendment 2026-11-06 (D818, D819, D824):** "within 2 dB" in tests 2 and 3 means `BER <= theory(Eb/N0 - 2 dB)` over 10^6 counted bits without slips (D818). Test 4 runs inside `psk_demod` with `equalizer_taps` 11; the constant CMA phase means a spread of the window phases of at most 0.05 rad (D819). The part of test 2 without the equalizer needs at least 500 000 bits pushed after the training and a synchronized meter (D824). The criteria with the equalizer in tests 2, 3 and 4 are not met and wait for maintainer decisions (I43-1 to I43-3).
+>
+> **Amendment 2026-11-06 (maintainer decision of 2026-11-06, D834 to D836):** test 2 with the equalizer runs `equalizer_taps` 15 with `equalizer_feedback_taps` 5 (a decision feedback equalizer, the answer to the spectral null of `severe`); "within 2 dB" stays D818. Test 4: `mse` is the decision error of the phase-corrected output (D831), and the constant CMA phase is the phase of the centre weight read every 50 symbols from symbol 250 to the end of the CMA mode (1000), within 0.05 rad (D835). All criteria are met; no test is ignored.
+
 ## Acceptance
 
 R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64`.
 
 ## Deliverables checklist
 
-- [ ] Kernel `equalize` with reference, fallback, delegation, contract
-- [ ] Block and kind `equalize`; `psk_demod` option `equalizer_taps`
-- [ ] `channel::Multipath` with presets
-- [ ] Tests (seeds 590–595)
-- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/backends.md`, `docs/testing.md`, CHANGELOG, decisions log
+- [x] Kernel `equalize` with reference, fallback, delegation, contract (D803 to D809); the new reusable kernel `dot_complex` for its filter part (D800 to D802)
+- [x] Block and kind `equalize`; `psk_demod` option `equalizer_taps` (D814 to D817)
+- [x] `channel::Multipath` with presets (D810)
+- [x] Tests (seeds 590–595, and 596/597 for `dot_complex`) (D811 to D813, D818, D819, D824, D832, D834 to D836); every criterion of tests 1 to 6 is met; the count entries of test 5 are registered but not counted yet (see Status)
+- [x] The adaptation of the solutions of other projects (maintainer decision of 2026-11-06): the order before `costas`, NLMS, the clipped CMA error, the phase tracker, the decision feedback and the GNU Radio reference of `equalize_fallback` (D825 to D839)
+- [x] `docs/kernels.md`, `docs/blocks.md`, `docs/backends.md`, `docs/testing.md`, CHANGELOG, decisions log (D800 to D838); count entries registered (D821 to D823, D838), not yet counted (see Status)
+
+## Status
+
+Done: the reusable bit-exact kernel `dot_complex` (`kernels::dot::DotComplex`, `C32`, not conjugated, eight partial sums per component; Reference, Fallback, facade delegation, the SIMD paths of `sdrk-backend-simd`, contract in `docs/kernels.md`, rows in `docs/backends.md`; D800 to D802); the kernel `equalize` (CMA then decision-directed, both normalized by the window power (NLMS), the CMA error clipped, a decision-directed phase tracker on the output, optional decision feedback; its filter part over forward and feedback taps on `dot_complex`, the `mse`, the mode switch and the rules for non-finite values and silence; D803 to D809, D826 to D831, D833, D839); `channel::Multipath` with the presets (D810); the golden cases `equalize/cma_qpsk_c32_16384` (590), `equalize/dd_8psk_c32_16384` (591), `dot_complex/c32_13` (596) and `dot_complex/c32_1021` (597) (D811, D812, D832); the suite cases `dot_complex_c32` and `equalize_c32` (D813, D832); the block and kind `equalize` with `feedback_taps` and `phase_bw` (D814, D828 to D830); the `psk_demod` options `equalizer_taps` and `equalizer_feedback_taps`, the equalizer between `symbol_sync` and `costas` (D815 to D817, D825, D830); tests 2 to 6, all run by default (D818, D819, D824, D834 to D836); the count entries `dot_complex`, `dot_complex_fallback`, `equalize` and `equalize_fallback` with their references, `equalize_fallback` against a C translation of GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` (D821 to D823, D838); `docs/kernels.md`, `docs/blocks.md`, `docs/backends.md`, `docs/testing.md`, `docs/pipeline.md`, `docs/performance.md`, the schema, CHANGELOG and the decisions log.
+
+The adaptation of the solutions of other projects (maintainer decision of 2026-11-06), with the sources read:
+
+| Change | Source | Decision |
+| --- | --- | --- |
+| The equalizer before the carrier loop in `psk_demod` | GNU Radio `gr-digital/examples/mpsk_stage6.grc` (`pfb_clock_sync_ccf` -> `linear_equalizer` with `adaptive_algorithm_cma` -> `costas_loop_cc`); liquid-dsp `examples/eqlms_cccf_blind_example.c` (`eqlms_cccf_step_blind`, then the `nco_crcf` PLL) | D825 |
+| Both updates normalized by the window power, `mu / (P + 1e-6)` | liquid-dsp `src/equalization/src/eqlms.proto.c` `EQLMS(_step)` (`mu conj(alpha) r[i] / x2_sum`, skipped at zero power); GNU Radio `adaptive_algorithm_nlms::update_taps` | D826 |
+| The CMA error `y (abs(y)^2 - R2)` clipped to `[-1, 1]` per component | GNU Radio `adaptive_algorithm_cma::error` | D827 |
+| Normalized defaults and a fixed CMA symbol count | liquid-dsp's range of `mu` (its blind example 0.08); GNU Radio and MATLAB switch after a fixed count | D828 |
+| Decision mode before the carrier loop: a phase tracker in the kernel, the decision on `z = y e^(-j theta)`, the error turned back by `e^(j theta)` | own decision (the references have no decision mode before a carrier loop) | D829, D833 |
+| Decision feedback: one joint vector, one NLMS error and update, hard decisions in decision mode only | GNU Radio `lib/decision_feedback_equalizer_impl.cc` (`d_filt_buf` of the decision history and the forward window); MATLAB `comm.DecisionFeedbackEqualizer` documentation | D830, D834 |
+| The scalar reference of `equalize_fallback` | GNU Radio `lib/linear_equalizer_impl.cc`, `adaptive_algorithm_nlms.h`, `constellation_qpsk`, `fir_filter_ccc` of gr-filter | D838 |
+
+Deviations from the specification, recorded in the decisions log:
+- §1 step 1: `y` is summed in the order of the new kernel `dot_complex`, not in ascending `i` (amendment above, maintainer decision of 2026-11-06; D800 to D803); the `dot` kernel is not used.
+- §1 leaves open when `mse` is updated, how the mode switch counts and what non-finite values do: `mse` follows the decision error in CMA mode too (D804, of the phase-corrected output since D831), every symbol in CMA mode counts towards `cma_symbols` (D805), a non-finite input enters the history as 0 (D806).
+- §1, §2, §3 and the Scope as amended on 2026-11-06 (maintainer decision): NLMS step sizes from 1e-5 to 1 with new defaults, the clipped CMA error, the phase tracker, the decision feedback, the order before `costas` (D825 to D833, D839).
+- §4: the presets take the samples per symbol as an argument, `Multipath::mild(sps)` and `Multipath::severe(sps)`, instead of no argument (D810).
+- §3: in differential mode the equalizer runs on the symbols of `symbol_sync` before the differential product (there is no `costas`); in `offset` mode after its carrier loop (D815).
+- Test 4 runs inside `psk_demod`; the constant CMA phase is read from the centre weight (D819, D835).
+- "Within 2 dB" is `BER <= theory(Eb/N0 - 2 dB)` over 10^6 counted bits without slips (D818, D834).
+
+Measured (local runs in the test profile, Linux x86-64):
+
+| Test | Limit | Measured | Result |
+| --- | --- | --- | --- |
+| 1: golden `equalize` (590, 591) | bit-exact against the float32 model; f64 guard | bit-exact; guard 130.1 and 127.8 dB (D832) | passes |
+| 1: golden `dot_complex` (596, 597) | bit-exact against the float32 model; f64 guard | bit-exact; guard 143.0 and 131.7 dB (D812) | passes |
+| 2: QPSK through `severe`, 14 dB, without the equalizer (592) | BER above 1e-2 (at least 500 000 bits pushed, D824) | BER 9.3e-2 over 260 349 counted bits, 498 slips | passes |
+| 2: with `equalizer_taps` 15 and `equalizer_feedback_taps` 5 | BER at most 9.0e-9 over 10^6 bits, no slips (D818) | 0 errors in 10^6 bits, no slips; mean `mse` -15.34 dB, equivalent Eb/N0 12.33 dB | passes |
+| 2: comparison, linear with `equalizer_taps` 15 | information | BER 5.5e-4 in 10^6 bits, no slips; mean `mse` -10.80 dB, equivalent Eb/N0 7.79 dB | (I43-1: a linear equalizer cannot reach it) |
+| 3: 8PSK through `mild`, 16 dB, `equalizer_taps` 11 (593) | BER at most 8.7e-7 over 10^6 bits, no slips (D818) | 0 errors in 10^6 bits, no slips; mean `mse` -19.29 dB, equivalent Eb/N0 14.52 dB | passes |
+| 4: `mse` on `mild`, 20 dB, 11 taps (594) | below -20 dB within 2000 symbols | first below -20 dB after symbol 1029; smallest within 2000 -21.42 dB; final -21.46 dB | passes |
+| 4: CMA phase constant | spread of the centre-weight phase at most 0.05 rad (D835) | 0.0104 rad over 16 readings from symbol 250 to 1000 | passes |
+| 5: SIMD filter part | `dot_complex` and `equalize` of every backend bit for bit equal to the fallback | equal (suite case `dot_complex_c32`, `sdrk-backend-simd/tests/equalize.rs`, facade tests) | passes |
+| 6: chunk invariance, 20 plans (595) | bit-exact whole and in 20 cut plans | `equalize` (with feedback and tracker) and `psk_demod` with the equalizer bit-exact | passes |
+
+Comparisons behind the decisions (an f64 model of the loop on the `symbol_sync` output of the test signals, D828, D829, D834):
+
+| Arrangement | `severe` 14 dB, 15 taps | `severe` 14 dB, 15 + 5 taps | 8PSK `mild` 16 dB, 11 taps |
+| --- | --- | --- | --- |
+| Carrier loop before the equalizer (the first order of §2) | BER 9.0e-2, 1572 slips (I43-1) | — | BER 0.28, 3926 slips (I43-3) |
+| CMA only before the carrier loop (GNU Radio's tutorial) | 6.6e-4 | not possible (feedback needs decisions) | 1 error in 10^6 bits (above the edge 8.7e-7) |
+| CMA, then decisions with the phase tracker (D829) | 5.5e-4 | 0 in 10^6 bits | 0 in 10^6 bits |
+
+| Tracker on `severe`, 15 + 5 taps, 3 10^5 bits | no carrier phase | 0.785 rad | 0.785 rad and 0.0005 cycles per symbol | 0.3 rad and 0.002 cycles per symbol |
+| --- | --- | --- | --- | --- |
+| Without the tracker (decision mode as in liquid-dsp's example) | 0 | 5 errors | BER 0.12 | BER 2.9e-3 |
+| With the tracker, `phase_bw` 0.02 | 0 | 0 | 0 | 0 |
+
+Counts: not run yet. The four entries are registered in `xtask/src/count.rs` and `benches/limits.json` with their references (D821 to D823, D838; `equalize_fallback` against GNU Radio's `linear_equalizer`, `dev` until the first count), but no row exists in `benches/results/*.json`, the judged levels of `dot_complex`, `dot_complex_fallback` and `equalize_fallback` are `dev`, and there are no cycles per sample for `dot_complex`, `dot_complex_fallback`, `equalize` and `equalize_fallback` in `docs/performance.md`. The acceptance command `cargo xtask count --platform x86_64` (with `--kernel dot_complex,dot_complex_fallback,equalize,equalize_fallback --merge`, and the x86_64-avx512, aarch64 and wasm32 platforms) and `cargo measure` / `benches/cycle_tables.py` are left to the final gate of the milestone; afterwards the `dev` levels become the measured gate result (or a waiver with an open item) and the cycles per sample go into this section and `docs/performance.md`. The C translation `benches/refs/gr-equalizer.c` was compiled and linked locally against the VOLK 3.3.0 headers, and the wrapper test `gnuradio_linear_equalizer` of `cref-sys` and the accuracy test of the measurement binary passed with it; `build.sh` itself has not run.
+
+Verified locally on Linux x86-64: the M43 test files of `sdrk-core` (`kernels_m43`), `sdrk-backend-simd` (`equalize`), `sdrk` (`facade`), `sdrk-blocks` (`equalize_blocks`, `psk_blocks`, `describe`), `sdrk-pipeline` (`equalize_kinds`, `psk_kinds`) and `sdrk-testkit` (`golden_m43`, `suite_m43`, `channel_multipath_m43`, `psk_ber_m43` with all its tests, the M40 and M40.1 BER tests), `cargo clippy` on the touched crates, `cargo xtask check`, `cargo xtask schema --check` and `python tests/golden/generate.py --check` (Python 3.12, the pinned NumPy and SciPy).
+
+Not done or not run:
+- The counts and cycle measurements (above).
+- The whole workspace test suite, the emulator, the wasm tests and the other hosts; CI and the final gate run them.
+
+Open items: none of M43; I43-1 to I43-4 are closed (D837, `docs/open-items.md`).
+
+Gate and counts: see below.

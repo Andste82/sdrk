@@ -17,6 +17,7 @@ pub mod decimate;
 pub mod deemphasis;
 pub mod delay;
 pub mod duc;
+pub mod equalize;
 pub mod fir;
 pub mod fm_demod;
 pub mod fm_mod;

@@ -14,7 +14,10 @@
 //! - [`GrCrc`]: the generic table-driven CRC `gr::digital::crc` of gr-digital (`gr-crc.c`, cfg
 //!   `has_grcrc`), the reference of the CRCs of `sdrk-proto`;
 //! - [`GrCostasLoopCc`]: the loop of `digital.costas_loop_cc` with `gr::blocks::control_loop`
-//!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`.
+//!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`;
+//! - [`GrLinearEqualizer`]: `digital.linear_equalizer` with `adaptive_algorithm_nlms`, the QPSK
+//!   decision and VOLK's generic dot products (`gr-equalizer.c`, cfg `has_grequalizer`), the
+//!   reference of the `equalize` fallback.
 //!
 //! A constructor returns `None` when its library is not linked.
 
@@ -550,5 +553,144 @@ impl GrCostasLoopCc {
         }
         #[cfg(not(has_grcostas))]
         let _ = n;
+    }
+}
+
+#[cfg(has_grequalizer)]
+mod equalizer_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_linear_equalizer_init(
+            state: *mut super::LinearEqualizerState,
+            num_taps: core::ffi::c_uint,
+            step_size: f32,
+            taps: *const [f32; 2],
+            capacity: core::ffi::c_uint,
+        ) -> core::ffi::c_int;
+        pub fn sdrk_gr_linear_equalizer_free(state: *mut super::LinearEqualizerState);
+        pub fn sdrk_gr_linear_equalizer_work(
+            state: *mut super::LinearEqualizerState,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// The members of the C translation of `linear_equalizer` (`gr-equalizer.c`).
+#[repr(C)]
+#[derive(Debug)]
+pub struct LinearEqualizerState {
+    num_taps: core::ffi::c_uint,
+    step_size: f32,
+    taps: *mut [f32; 2],
+    aligned: *mut [f32; 2],
+    buffer: *mut [f32; 2],
+    capacity: core::ffi::c_uint,
+    error: [f32; 2],
+    decision: [f32; 2],
+    points: [[f32; 2]; 4],
+}
+
+impl Default for LinearEqualizerState {
+    fn default() -> Self {
+        LinearEqualizerState {
+            num_taps: 0,
+            step_size: 0.0,
+            taps: core::ptr::null_mut(),
+            aligned: core::ptr::null_mut(),
+            buffer: core::ptr::null_mut(),
+            capacity: 0,
+            error: [0.0; 2],
+            decision: [0.0; 2],
+            points: [[0.0; 2]; 4],
+        }
+    }
+}
+
+/// GNU Radio's `linear_equalizer(num_taps, 1, adaptive_algorithm_nlms(qpsk, step_size))` with
+/// `set_taps(taps)`, without a training sequence (decision-directed from the start): per symbol
+/// the FIR of the last `num_taps` samples, the QPSK decision (points `+-sqrt 2 +-j sqrt 2`), the
+/// error `d - y`, the input power of the window and the NLMS update of every tap.
+pub struct GrLinearEqualizer {
+    #[cfg_attr(not(has_grequalizer), allow(dead_code))]
+    state: Box<LinearEqualizerState>,
+    capacity: usize,
+}
+
+// SAFETY: the C object owns its buffers and is used by one thread at a time.
+unsafe impl Send for GrLinearEqualizer {}
+
+impl GrLinearEqualizer {
+    /// The block for `taps` (natural order) and the normalized step size, for at most
+    /// `capacity` samples per call; `None` without the library or when the C side cannot
+    /// allocate.
+    #[must_use]
+    pub fn new(taps: &[[f32; 2]], step_size: f32, capacity: usize) -> Option<Self> {
+        if !cfg!(has_grequalizer) || taps.is_empty() {
+            return None;
+        }
+        #[cfg_attr(not(has_grequalizer), allow(unused_mut))]
+        let mut state = Box::new(LinearEqualizerState::default());
+        #[cfg(has_grequalizer)]
+        {
+            let n = u32::try_from(taps.len()).ok()?;
+            let c = u32::try_from(capacity).ok()?;
+            // SAFETY: `taps` holds `n` pairs; the state is the C object, initialized here.
+            let r = unsafe {
+                equalizer_ffi::sdrk_gr_linear_equalizer_init(
+                    &raw mut *state,
+                    n,
+                    step_size,
+                    taps.as_ptr(),
+                    c,
+                )
+            };
+            if r != 0 {
+                return None;
+            }
+        }
+        #[cfg(not(has_grequalizer))]
+        let _ = step_size;
+        Some(GrLinearEqualizer { state, capacity })
+    }
+
+    /// `work` over `input` (at most the capacity of [`GrLinearEqualizer::new`]).
+    ///
+    /// # Panics
+    /// If the buffers differ in length or hold more than the capacity.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(
+            input.len(),
+            output.len(),
+            "linear_equalizer: length mismatch"
+        );
+        assert!(
+            input.len() <= self.capacity,
+            "linear_equalizer: above the capacity"
+        );
+        let n = u32::try_from(input.len()).expect("linear_equalizer: too many samples");
+        #[cfg(has_grequalizer)]
+        // SAFETY: both buffers hold `n` pairs (at most the capacity) and do not overlap; the
+        // state was initialized by `new`.
+        unsafe {
+            equalizer_ffi::sdrk_gr_linear_equalizer_work(
+                &raw mut *self.state,
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                n,
+            );
+        }
+        #[cfg(not(has_grequalizer))]
+        let _ = n;
+    }
+}
+
+impl Drop for GrLinearEqualizer {
+    fn drop(&mut self) {
+        #[cfg(has_grequalizer)]
+        // SAFETY: the state was initialized by `new` and is freed once.
+        unsafe {
+            equalizer_ffi::sdrk_gr_linear_equalizer_free(&raw mut *self.state);
+        }
     }
 }

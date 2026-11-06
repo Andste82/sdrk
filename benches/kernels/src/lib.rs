@@ -44,6 +44,7 @@ use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod am_family;
 mod costas_family;
+mod equalize_family;
 mod fir_family;
 mod halfband_family;
 mod math_family;
@@ -350,7 +351,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 198] = [
+pub const KERNELS: [&str; 202] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -549,6 +550,10 @@ pub const KERNELS: [&str; 198] = [
     "costas_fallback",
     "rds_demod_block",
     "rds_decode_block",
+    "dot_complex",
+    "dot_complex_fallback",
+    "equalize",
+    "equalize_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -742,6 +747,11 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "costas_fallback" => Box::new(costas_family::CostasK::new(rng, layout, true)),
         "rds_demod_block" => Box::new(rds_family::RdsDemodBlockK::new(rng, layout)),
         "rds_decode_block" => Box::new(rds_family::RdsDecodeBlockK::new(rng, layout)),
+        "dot_complex" | "dot_complex_fallback" => {
+            Box::new(equalize_family::DotComplexK::new(rng, layout, entry))
+        }
+        "equalize" => Box::new(equalize_family::EqualizeK::new(rng, layout, false)),
+        "equalize_fallback" => Box::new(equalize_family::EqualizeK::new(rng, layout, true)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),
@@ -6409,6 +6419,10 @@ mod biquad_tests {
             "quad_demod_cq15_fallback",
             "agc",
             "agc_fallback",
+            "dot_complex",
+            "dot_complex_fallback",
+            "equalize",
+            "equalize_fallback",
         ] {
             let mut kernel = prepare(
                 name,

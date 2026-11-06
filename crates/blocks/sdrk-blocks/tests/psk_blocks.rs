@@ -34,6 +34,7 @@ use sdrk_blocks::{
     PskModConfig, PskVariant, SliceBlock, SliceConfig, SliceConstellation,
 };
 use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk_core::kernels::mix::{Nco, Rotate};
@@ -200,7 +201,8 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     let mut sync =
         SymbolSyncState::<C32>::new(sps, Ted::Gardner, cfg.sync_bw, 0.7071, 0.005, 1.0).unwrap();
     if cfg.variant == PskVariant::Offset {
-        return soft_of(cfg, offset_kernels(cfg, n, &mut sync, &mf));
+        let y = offset_kernels(cfg, n, &mut sync, &mf);
+        return soft_of(cfg, eq_kernel(cfg, y));
     }
     let mut syms = vec![C32::default(); input.len()];
     let p = <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, &mut sync, &mf, &mut syms).unwrap();
@@ -208,6 +210,7 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     syms.truncate(p.produced);
     let mut y = vec![C32::default(); syms.len()];
     if cfg.differential {
+        let syms = eq_kernel(cfg, syms.clone());
         let mut prev = C32::new(1.0, 0.0);
         for (z, &s) in y.iter_mut().zip(&syms) {
             *z = C32::new(
@@ -217,10 +220,51 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
             prev = s;
         }
     } else {
+        // The equalizer before the carrier loop (D825).
+        let syms = eq_kernel(cfg, syms);
         let mut st = CostasState::new(cfg.order, cfg.carrier_bw, 0.7071, cfg.max_offset).unwrap();
         <Sdrk as Costas>::costas(&Sdrk, &mut st, &syms, &mut y).unwrap();
     }
     soft_of(cfg, y)
+}
+
+/// The equalizer of `psk_demod` (M43 §3) as one kernel call: nothing for `equalizer_taps` 0,
+/// otherwise `equalize` with `equalizer_feedback_taps`, the constellation of the order,
+/// `mu_cma` 0.05, `mu_dd` 0.02, 1000 CMA symbols and the phase tracker at `carrier_bw` (CMA
+/// only, `u32::MAX`, and no tracker with `differential`).
+fn eq_kernel(cfg: &PskDemodConfig, x: Vec<C32>) -> Vec<C32> {
+    let t = cfg.equalizer_taps;
+    if t == 0 {
+        return x;
+    }
+    let c = match cfg.order {
+        2 => EqConstellation::Bpsk,
+        4 => EqConstellation::Qpsk,
+        _ => EqConstellation::Psk8,
+    };
+    let f = cfg.equalizer_feedback_taps;
+    let cma = if cfg.differential { u32::MAX } else { 1000 };
+    let phase_bw = if cfg.differential {
+        0.0
+    } else {
+        cfg.carrier_bw
+    };
+    let mut st = EqualizeState::new(
+        vec![C32::default(); t + f],
+        vec![C32::default(); t + f],
+        EqParams {
+            constellation: c,
+            feedback_taps: f,
+            mu_cma: 0.05,
+            mu_dd: 0.02,
+            cma_symbols: cma,
+            phase_bw,
+        },
+    )
+    .unwrap();
+    let mut y = vec![C32::default(); x.len()];
+    <Sdrk as Equalize>::equalize(&Sdrk, &mut st, &x, &mut y).unwrap();
+    y
 }
 
 /// The soft bits of the symbols `y` for the order and variant of `cfg`.
@@ -1556,5 +1600,179 @@ fn oqpsk_chain_delay_counts_the_half_symbol_once() {
             sums.push(sum);
         }
         assert_eq!(sums[1] - sums[0], 1.0, "sps {sps}");
+    }
+}
+
+// ---- M43: the option `equalizer_taps` of `psk_demod` -------------------------------------
+
+/// Seed of the chunk plans and the random signals of the M43 tests (test 6).
+const M43_SEED: u64 = 595;
+
+/// M43 §3: `equalizer_taps` 0 (the default) leaves `psk_demod` bit-identical to the chain of
+/// M40 and M40.1 (`demod_kernels` without the equalizer), with the same timing and storage.
+#[test]
+fn psk_demod_with_equalizer_taps_0_is_unchanged() {
+    for (i, (order, differential, variant, sps)) in [
+        (2u32, false, PskVariant::Plain, 4usize),
+        (4, false, PskVariant::Plain, 8),
+        (4, true, PskVariant::Plain, 5),
+        (8, false, PskVariant::Plain, 4),
+        (4, true, PskVariant::Pi4, 4),
+        (4, false, PskVariant::Offset, 4),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let fs = rate(9600 * sps as u64);
+        let base = PskDemodConfig {
+            order,
+            symbol_rate_hz: 9600.0,
+            differential,
+            variant,
+            ..PskDemodConfig::default()
+        };
+        assert_eq!(base.equalizer_taps, 0);
+        assert!(base.equalizer().is_none());
+        let input = received_v(order, differential, variant, sps, 2000, M43_SEED, i as u64);
+        let want = demod_kernels(&base, fs, &input);
+        let mut b = PskDemodBlock::<VecStorage>::new(&base, fs, &mut VecStorage).unwrap();
+        same_bits(
+            &want,
+            &run_block(&mut b, &input, None),
+            &format!("case {i}"),
+        );
+        assert!(b.equalizer().is_none());
+        // the timing of M40 and M40.1 (`offset` as plain QPSK, D658)
+        let delay = (base.span * sps + 2) as u64;
+        assert_eq!(b.timing().delay, Delay::new(delay, 2).unwrap(), "case {i}");
+    }
+}
+
+/// M43 §3: with `equalizer_taps` the block equals the kernel chain with `equalize` before
+/// `costas` (D825; for `offset` after its loop, for `differential` before the product in CMA
+/// only), whole and in 20 cut plans of seed 595, and again after `reset`.
+#[test]
+fn psk_demod_with_equalizer_equals_the_kernels_whole_and_in_twenty_plans() {
+    for (i, (order, differential, variant, sps, (taps, feedback))) in [
+        (4u32, false, PskVariant::Plain, 4usize, (11usize, 0usize)),
+        (2, false, PskVariant::Plain, 5, (3, 2)),
+        (8, false, PskVariant::Plain, 4, (15, 3)),
+        (2, true, PskVariant::Plain, 4, (7, 0)),
+        (4, true, PskVariant::Pi4, 4, (11, 0)),
+        (4, false, PskVariant::Offset, 4, (11, 2)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let fs = rate(9600 * sps as u64);
+        let cfg = PskDemodConfig {
+            order,
+            symbol_rate_hz: 9600.0,
+            differential,
+            variant,
+            equalizer_taps: taps,
+            equalizer_feedback_taps: feedback,
+            ..PskDemodConfig::default()
+        };
+        let input = received_v(
+            order,
+            differential,
+            variant,
+            sps,
+            3000,
+            M43_SEED,
+            10 + i as u64,
+        );
+        let want = demod_kernels(&cfg, fs, &input);
+        assert!(want.len() > 2900 * cfg.bits_per_symbol(), "case {i}");
+        let what = format!("psk_demod {order} {differential} {variant:?} taps {taps}");
+        check_block(
+            &want,
+            &input,
+            M43_SEED,
+            || PskDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap(),
+            &what,
+        );
+        let mut b = PskDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+        run_block(&mut b, &input, None);
+        let eq = b.equalizer().unwrap();
+        assert_eq!((eq.taps(), eq.feedback_taps()), (taps, feedback));
+        // coherent: CMA for 1000 symbols, then decisions; differential: CMA only
+        let mode = if differential {
+            EqMode::Cma
+        } else {
+            EqMode::Decision
+        };
+        assert_eq!(eq.mode(), mode, "{what}");
+        assert_eq!(eq.cma_symbols(), if differential { u32::MAX } else { 1000 });
+        assert_eq!((eq.mu_cma(), eq.mu_dd()), (0.05, 0.02));
+        let bw = if differential { 0.0 } else { cfg.carrier_bw };
+        assert_eq!(eq.params().phase_bw, bw);
+        b.reset();
+        assert_eq!(b.equalizer().unwrap().mode(), EqMode::Cma);
+        same_bits(&want, &run_block(&mut b, &input, None), "after reset");
+        // the equalizer adds (taps - 1) / 2 symbols to the delay
+        assert_eq!(
+            b.timing().delay,
+            Delay::new((cfg.span * sps + 2 + (taps - 1) * sps) as u64, 2).unwrap(),
+            "{what}"
+        );
+    }
+}
+
+/// M43 §3: with the equalizer on a clean signal `psk_demod` still decodes without errors, and
+/// the reported delay of `psk_mod` -> `psk_demod` stays within one symbol of the measured lag.
+#[test]
+fn psk_demod_with_equalizer_decodes_a_clean_signal() {
+    for (order, differential, variant, taps) in [
+        (2u32, false, PskVariant::Plain, 11usize),
+        (2, true, PskVariant::Plain, 11),
+        (4, false, PskVariant::Plain, 11),
+        (4, true, PskVariant::Plain, 15),
+        (8, false, PskVariant::Plain, 11),
+        (8, true, PskVariant::Plain, 3),
+        (4, true, PskVariant::Pi4, 11),
+        (4, false, PskVariant::Offset, 11),
+    ] {
+        let sps = 4;
+        let m = PskModConfig {
+            order,
+            samples_per_symbol: sps,
+            differential,
+            variant,
+            ..PskModConfig::default()
+        };
+        let d = PskDemodConfig {
+            order,
+            symbol_rate_hz: 1000.0,
+            differential,
+            variant,
+            equalizer_taps: taps,
+            ..PskDemodConfig::default()
+        };
+        let bits = soft_bits_seed(
+            9000,
+            M43_SEED,
+            40 + u64::from(order) + u64::from(differential),
+        );
+        let bit_rate = rate(1000 * m.bits_per_symbol() as u64);
+        let mut tx = PskModBlock::<VecStorage>::new(&m, bit_rate, &mut VecStorage).unwrap();
+        let mut rx = PskDemodBlock::<VecStorage>::new(&d, rate(4000), &mut VecStorage).unwrap();
+        let sig = run_block(&mut tx, &bits, None);
+        let soft = run_block(&mut rx, &sig, None);
+        let what = format!("order {order} differential {differential} {variant:?} taps {taps}");
+        let (lag, errors) = best_lag(&bits, &soft);
+        assert_eq!(errors, 0, "{what}: lag {lag}");
+        let (t, r) = (tx.timing().delay, rx.timing().delay);
+        let bps = m.bits_per_symbol() as f64;
+        let sum = t.as_f64() + r.as_f64() * bps / sps as f64;
+        assert!(
+            (sum - lag as f64).abs() <= bps + 1.0,
+            "{what}: reported {sum} bits, measured {lag}"
+        );
+        if !differential {
+            assert!(rx.locked(), "{what}");
+            assert!(rx.equalizer().unwrap().mse() < 0.05, "{what}");
+        }
     }
 }

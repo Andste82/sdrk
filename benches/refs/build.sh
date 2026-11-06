@@ -14,9 +14,10 @@
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
 # | VOLK generic | 3.3.0 (the `generic` protokernels of `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`, and their 16-bit interleave loop), see volk-generic.c | LGPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one library per level) | the scalar references of the `interleave` and `deinterleave` fallbacks |
-# | VOLK without FMA | 3.3.0 (the protokernel of `volk_32fc_x2_multiply_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | the gate of `mul` `C32` at the levels where VOLK's dispatcher picks a fused implementation (D287) |
+# | VOLK without FMA | 3.3.0 (the protokernels of `volk_32fc_x2_multiply_32fc` and `volk_32fc_x2_dot_prod_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | information for `mul` `C32` (its gate from D287 until D326) and the gate of `dot_complex` (D821) at the levels where VOLK's dispatcher picks a fused implementation |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 # | GNU Radio `costas_loop_cc` | main at ec1bf15 (costas_loop_cc_impl.cc of gr-digital, control_loop of gr-blocks), see gr-costas.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `costas_fallback` |
+# | GNU Radio `linear_equalizer` | main at ec1bf15 (linear_equalizer_impl.cc and the NLMS of adaptive_algorithm_nlms.h of gr-digital, the decision of constellation_qpsk, fir_filter_ccc of gr-filter, VOLK's generic dot products), see gr-equalizer.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `equalize_fallback` (D838) |
 # | GNU Radio `pwr_squelch_cc` | main at ec1bf15 (squelch_base_cc_impl.cc and pwr_squelch_cc_impl of gr-analog), see gr-squelch.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `squelch` |
 # | GNU Radio `rotator` | main at ec1bf15 (rotator.h of gr-blocks, the scalar `rotate`), see gr-rotator.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of the `C32` `rotate` fallback |
 # | GNU Radio `frequency_modulator_fc` | main at ec1bf15 (frequency_modulator_fc_impl.cc of gr-analog with `gr::fxpt` and its sine table), see gr-fm-mod.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `fm_mod` |
@@ -153,7 +154,7 @@ stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/airspy-iqconv.c" \
-    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -296,6 +297,15 @@ build_gr_fallback() {
 build_gr_costas() {
     $cc $GR_AGC_FLAGS -c "$here/gr-costas.c" -o "$work/gr-costas.o"
     $ar rcs "$prefix/lib/libgrcostas.a" "$work/gr-costas.o"
+}
+
+# The loop of GNU Radio's linear_equalizer with the NLMS of adaptive_algorithm_nlms and VOLK's
+# generic dot products from the unpacked VOLK release (so it runs after build_volk or
+# build_volk_wasm), compiled with the same generic flags as agc_cc: the reference of the
+# equalize fallback.
+build_gr_equalizer() {
+    $cc $GR_AGC_FLAGS -I "$work/volk/include" -I "$work/volk/kernels" -c "$here/gr-equalizer.c" -o "$work/gr-equalizer.o"
+    $ar rcs "$prefix/lib/libgrequalizer.a" "$work/gr-equalizer.o"
 }
 
 # GNU Radio's generic CRC (gr::digital::crc of gr-digital), compiled with the same generic
@@ -622,10 +632,10 @@ build_airspy() {
     done
 }
 
-# VOLK's complex product without fused multiply-add (volk-nofma.c), one library per level with
-# FMA: libvolknofma-<level>.a. The protokernel from the unpacked VOLK release (so it runs after
-# build_volk), compiled with the flags of the other per-level references (no contraction, the
-# instruction set of the measured level).
+# VOLK's complex product and complex dot product without fused multiply-add (volk-nofma.c), one
+# library per level with FMA: libvolknofma-<level>.a. The protokernels from the unpacked VOLK
+# release (so it runs after build_volk), compiled with the flags of the other per-level
+# references (no contraction, the instruction set of the measured level).
 build_volk_nofma() {
     local entry level march
     for entry in $(biquad_levels); do
@@ -670,6 +680,7 @@ case $platform in
         build_gr_fallback
         build_gr_crc
         build_gr_costas
+        build_gr_equalizer
         build_liquid_dcblock
         build_liquid_nco
         build_liquid_ampmodem
@@ -680,7 +691,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grcostas liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grcostas grequalizer liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     aarch64)
         build_volk
@@ -692,6 +703,7 @@ case $platform in
         build_gr_fallback
         build_gr_crc
         build_gr_costas
+        build_gr_equalizer
         build_liquid_dcblock
         build_liquid_nco
         build_liquid_ampmodem
@@ -702,7 +714,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grcostas liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grcostas grequalizer liquiddc liquidnco liquidam kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     wasm32)
         build_volk_wasm
@@ -712,6 +724,7 @@ case $platform in
         build_gr_fallback
         build_gr_crc
         build_gr_costas
+        build_gr_equalizer
         build_liquid_dcblock
         build_liquid_nco
         build_liquid_ampmodem
@@ -721,7 +734,7 @@ case $platform in
         build_liquid_halfband
         build_airspy
         build_volk_generic
-        libraries=(volk kissfft gragc grsquelch grfallback grcrc grcostas liquiddc liquidnco liquidam kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
+        libraries=(volk kissfft gragc grsquelch grfallback grcrc grcostas grequalizer liquiddc liquidnco liquidam kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -747,6 +760,7 @@ esac
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
             grcostas) entry="\"gnuradio_costas_loop_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-costas.c" | cut -d ' ' -f 1)\", \"build\": \"gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): $GR_AGC_FLAGS\" }" ;;
+            grequalizer) entry="\"gnuradio_linear_equalizer\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-equalizer.c" | cut -d ' ' -f 1)\", \"build\": \"gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK $VOLK_VERSION generic dot products): $GR_AGC_FLAGS\" }" ;;
             grcrc) entry="\"gnuradio_crc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-crc.c" | cut -d ' ' -f 1)\", \"build\": \"gr-crc.c (gr::digital::crc): $GR_AGC_FLAGS\" }" ;;
             liquiddc) entry="\"liquid_dsp_dc_blocker\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(cat "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"liquid-dotprod.c liquid-dcblock.c (portable dot products): $GR_AGC_FLAGS\" }" ;;
             liquidnco) entry="\"liquid_dsp_nco\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-nco.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-nco.c (nco_crcf, LIQUID_VCO_INTERP): $GR_AGC_FLAGS\" }" ;;
@@ -758,7 +772,7 @@ esac
             emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;
             cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c and cmsis-dsp.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
-            volknofma) entry="\"volk_nofma\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-nofma.c" | cut -d ' ' -f 1)\", \"build\": \"volk-nofma.c over volk_32fc_x2_multiply_32fc.h ($([ "$platform" = aarch64 ] && echo neon || echo u_avx)): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ' | tr ' ' '\n' | grep -E '^(avx2|avx512|neon):' | tr '\n' ' ' | sed 's/ $//')\" }" ;;
+            volknofma) entry="\"volk_nofma\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-nofma.c" | cut -d ' ' -f 1)\", \"build\": \"volk-nofma.c over volk_32fc_x2_multiply_32fc.h and volk_32fc_x2_dot_prod_32fc.h ($([ "$platform" = aarch64 ] && echo neon || echo u_avx)): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ' | tr ' ' '\n' | grep -E '^(avx2|avx512|neon):' | tr '\n' ' ' | sed 's/ $//')\" }" ;;
             volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h and volk_16ic_deinterleave_16i_x2.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac

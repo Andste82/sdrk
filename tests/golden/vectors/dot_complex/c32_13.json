@@ -1,0 +1,40 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "c32_13.expected.bin",
+      "len": 256
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "c32_13.input.bin",
+      "len": 268
+    },
+    "weights": {
+      "dtype": "cf32",
+      "file": "c32_13.weights.bin",
+      "len": 13
+    }
+  },
+  "case": "c32_13",
+  "format_version": 1,
+  "kernel": "dot_complex",
+  "model": "float32",
+  "notes": "expected[r] = dot_complex(input[r : r + 13], weights) for r = 0 .. 255 (not conjugated), the order of the contract: 8 partial sums per component, element i to partial sum i mod 8 (13 = 8 * 1 + 5, so the last block is partial), the product (x.re w.re - x.im w.im, x.re w.im + x.im w.re) without FMA, then (s0 + s2) + (s1 + s3) with s_k = acc_k + acc_(k+4); input complex normal 0.3 per component, weights uniform in [-0.5, 0.5) per component; snr_db_guard compares with the exactly rounded float64 sum (D111)",
+  "params": {
+    "partials": 8,
+    "rows": 256,
+    "snr_db_guard": 143.0,
+    "taps": 13
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 596,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

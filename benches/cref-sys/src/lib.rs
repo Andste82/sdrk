@@ -31,9 +31,9 @@
 //! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
 //!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
 //!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
-//! - [`volk_nofma`]: VOLK 3.3.0's complex product without fused multiply-add, the protokernel
-//!   compiled with `-ffp-contract=off` for the levels `avx2`, `avx512` and `neon`
-//!   (LGPL-3.0-or-later).
+//! - [`volk_nofma`]: VOLK 3.3.0's complex product and complex dot product without fused
+//!   multiply-add, the protokernels compiled with `-ffp-contract=off` for the levels `avx2`,
+//!   `avx512` and `neon` (LGPL-3.0-or-later).
 //! - [`volk_generic`]: VOLK 3.3.0's portable `generic` interleave and deinterleave
 //!   protokernels, compiled with `-O3 -ffp-contract=off` for every level (LGPL-3.0-or-later).
 //!
@@ -53,7 +53,7 @@ pub mod volk_nofma;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use gnuradio::{
-    CostasLoopState, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc,
+    CostasLoopState, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
     GrQuadratureDemodCf, GrRotator,
 };
 pub use halfband::{

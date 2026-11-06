@@ -417,7 +417,7 @@ impl<T: Sample, S: Storage> SymbolSyncBlock<T, S> {
 
 /// Input that surely yields an output: the largest strobe step `1.25 omega` (D534) with
 /// `omega` at its upper limit, plus the interpolation window.
-fn min_input(sps: f64, max_deviation: f64) -> usize {
+pub(crate) fn min_input(sps: f64, max_deviation: f64) -> usize {
     let step = libm::ceil(sps * (1.0 + max_deviation) * 1.25);
     (step as usize).saturating_add(3)
 }

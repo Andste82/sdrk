@@ -9,6 +9,7 @@ pub mod costas;
 pub mod decim;
 pub mod demod;
 pub mod dot;
+pub mod equalize;
 pub mod fft;
 pub mod filter;
 pub mod fused;

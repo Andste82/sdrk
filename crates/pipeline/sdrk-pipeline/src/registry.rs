@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::kinds::{
     AddKind, AdsbDecodeKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind,
     ConvertKind, ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind,
-    DelayKind, DucKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
+    DelayKind, DucKind, EqualizeKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
     FmStereoModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind,
     HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind, InterpolateKind, Kind,
     MagKind, MakeComplexKind, MulKind, NcoKind, NoiseBlankKind, OokDemodKind, OokModKind,
@@ -215,7 +215,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 58);
+/// assert_eq!(registry.descriptions().count(), 59);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -301,6 +301,7 @@ impl Registry {
         register::<OokModKind>(&mut factories);
         register::<OokDemodKind>(&mut factories);
         register::<AdsbDecodeKind>(&mut factories);
+        register::<EqualizeKind>(&mut factories);
         Self { factories }
     }
 

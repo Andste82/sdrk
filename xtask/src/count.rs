@@ -680,6 +680,12 @@ pub enum Family {
     /// and VOLK's protokernel without fused operations ([`Reference::VolkNoFma`], the gate of
     /// D287) is information at those levels.
     VolkNoFma,
+    /// A VOLK kernel exists, and at the levels with FMA (`avx2`, `avx512`, `neon`) the
+    /// dispatcher picks a fused implementation (`volk_32fc_x2_dot_prod_32fc`: `a_avx_fma`,
+    /// `neonv8`) that the bit-exact contract of ours forbids (`dot_complex`, D821): there VOLK's
+    /// protokernel without fused operations ([`Reference::VolkNoFma`]) is the gate, as for `mul`
+    /// under D287, and VOLK's dispatch is information; at the other levels as [`Family::Volk`].
+    VolkNoFmaGate,
     /// A VOLK kernel does the same work up to a constant offset (`convert_cu8`: VOLK converts
     /// signed bytes only): it is the gate, and our fallback is reported as information.
     VolkAndOwn,
@@ -884,7 +890,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 198] = [
+pub static KERNELS: [KernelSpec; 202] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1106,6 +1112,10 @@ pub static KERNELS: [KernelSpec; 198] = [
     spec("costas_fallback", Family::FallbackVsGnuRadio, false),
     proto("rds_demod_block", Family::Own),
     proto("rds_decode_block", Family::Own),
+    spec("dot_complex", Family::VolkNoFmaGate, true),
+    spec("dot_complex_fallback", Family::FallbackVsCmsis, false),
+    spec("equalize", Family::Own, false),
+    spec("equalize_fallback", Family::FallbackVsGnuRadio, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -1492,7 +1502,18 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
             }
             (Reference::Volk, extras)
         }
-        Family::Volk | Family::VolkAndOwn | Family::VolkNative | Family::VolkNoFma => {
+        Family::VolkNoFmaGate if matches!(plan.level, "avx2" | "avx512" | "neon") => {
+            let mut extras = vec![Reference::Volk];
+            if plan.cheapest_volk {
+                extras.push(Reference::VolkCheapest);
+            }
+            (Reference::VolkNoFma, extras)
+        }
+        Family::Volk
+        | Family::VolkAndOwn
+        | Family::VolkNative
+        | Family::VolkNoFma
+        | Family::VolkNoFmaGate => {
             let mut extras = Vec::new();
             if plan.cheapest_volk {
                 extras.push(Reference::VolkCheapest);
@@ -1532,7 +1553,8 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
 /// `multiply_conjugate`, `8i_s32f_convert_32f` and `8i_convert_16i`: their portable `generic`
 /// code remains. The compiler vectorizes that of the two conversions with SSE2, a fair reference; `rotator2` and
 /// `atan2` have no SSE implementation at all and their `generic` code is scalar, so those entries
-/// are `info`.
+/// are `info`. `volk_32fc_x2_dot_prod_32fc` starts at SSE3, so its scalar `generic` code
+/// remains as well, and `dot_complex` is `info` at this level (D821).
 const VOLK_SSE2_CONFIG: &str = "\
 volk_8i_s32f_convert_32f generic generic
 volk_16i_s32f_convert_32f a_sse u_sse
@@ -1552,6 +1574,7 @@ volk_32f_log2_32f generic generic
 volk_32f_s32f_multiply_32f a_sse u_sse
 volk_32f_s32f_add_32f a_sse u_sse
 volk_32f_x2_dot_prod_32f a_sse u_sse
+volk_32fc_x2_dot_prod_32fc generic generic
 volk_32fc_deinterleave_32f_x2 a_sse generic
 volk_32f_x2_add_32f a_sse u_sse
 volk_32f_x2_subtract_32f a_sse generic
@@ -1583,6 +1606,7 @@ volk_32f_log2_32f a_sse4_1 u_sse4_1
 volk_32f_s32f_multiply_32f a_sse u_sse
 volk_32f_s32f_add_32f a_sse u_sse
 volk_32f_x2_dot_prod_32f a_sse4_1 u_sse4_1
+volk_32fc_x2_dot_prod_32fc a_sse3 u_sse3
 volk_32fc_deinterleave_32f_x2 a_sse generic
 volk_32f_x2_add_32f a_sse u_sse
 volk_32f_x2_subtract_32f a_sse generic
@@ -1618,6 +1642,7 @@ volk_32f_log2_32f a_avx2_fma u_avx2_fma
 volk_32f_s32f_multiply_32f a_avx u_avx
 volk_32f_s32f_add_32f a_avx u_avx
 volk_32f_x2_dot_prod_32f a_avx2_fma u_avx2_fma
+volk_32fc_x2_dot_prod_32fc a_avx_fma u_avx_fma
 volk_32fc_deinterleave_32f_x2 a_avx u_avx
 volk_32f_x2_add_32f a_avx u_avx
 volk_32f_x2_subtract_32f a_avx u_avx
@@ -1653,6 +1678,7 @@ volk_32f_log2_32f neonv8 neonv8
 volk_32f_s32f_multiply_32f neonv8 neonv8
 volk_32f_s32f_add_32f neonv8 neonv8
 volk_32f_x2_dot_prod_32f neonv8 neonv8
+volk_32fc_x2_dot_prod_32fc neonv8 neonv8
 volk_32fc_deinterleave_32f_x2 neonv8 neonv8
 volk_32f_x2_add_32f neonv8 neonv8
 volk_32f_x2_subtract_32f neonv8 neonv8
@@ -1667,7 +1693,7 @@ volk_16ic_deinterleave_16i_x2 neonv8 neonv8
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 27] = [
+const VOLK_FUNCTIONS: [&str; 28] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
     "volk_8i_convert_16i",
@@ -1686,6 +1712,7 @@ const VOLK_FUNCTIONS: [&str; 27] = [
     "volk_32f_s32f_multiply_32f",
     "volk_32f_s32f_add_32f",
     "volk_32f_x2_dot_prod_32f",
+    "volk_32fc_x2_dot_prod_32fc",
     "volk_32fc_deinterleave_32f_x2",
     "volk_32f_x2_add_32f",
     "volk_32f_x2_subtract_32f",
@@ -4661,6 +4688,100 @@ mod tests {
         }
         // The filter design `rrc` is not a kernel and has no entry (D606).
         assert!(KERNELS.iter().all(|s| !s.name.starts_with("rrc")));
+    }
+
+    #[test]
+    fn the_m43_entries_have_the_comparisons_of_their_decisions() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        // `dot_complex`: VOLK's protokernel without FMA where VOLK's dispatch fuses (D821), with
+        // the dispatch as information; VOLK's dispatch elsewhere.
+        for level in ["avx2", "avx512"] {
+            assert_eq!(
+                comparisons(plan(level), kernel("dot_complex")),
+                (Reference::VolkNoFma, vec![Reference::Volk]),
+                "dot_complex at {level}"
+            );
+        }
+        assert_eq!(
+            comparisons(plan("neon"), kernel("dot_complex")),
+            (
+                Reference::VolkNoFma,
+                vec![Reference::Volk, Reference::VolkCheapest]
+            )
+        );
+        for level in ["sse2", "sse4.2", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), kernel("dot_complex")),
+                (Reference::Volk, Vec::new()),
+                "dot_complex at {level}"
+            );
+        }
+        assert_eq!(
+            comparisons(plan("avx2-runtime"), kernel("dot_complex")).0,
+            Reference::OwnLevel("avx2")
+        );
+        assert!(kernel("dot_complex").small_n);
+        // `dot_complex_fallback` against CMSIS-DSP's `arm_cmplx_dot_prod_f32` (D822).
+        let fallback = kernel("dot_complex_fallback");
+        assert_eq!(fallback.family.measured(), "fallback");
+        // `equalize`: the facade against our fallback (information, D823); the fallback entry
+        // against GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` (D838).
+        let eq = kernel("equalize");
+        let eq_fallback = kernel("equalize_fallback");
+        assert_eq!(eq.family.measured(), "ours");
+        assert_eq!(eq_fallback.family.measured(), "fallback");
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), fallback),
+                (Reference::Cmsis, Vec::new()),
+                "dot_complex_fallback at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), eq),
+                (Reference::Fallback, Vec::new()),
+                "equalize at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), eq_fallback).0,
+                Reference::GnuRadio,
+                "equalize_fallback at {level}"
+            );
+        }
+        assert!(eq.family.measured_at(plan("avx2-runtime")));
+        assert!(!eq_fallback.family.measured_at(plan("avx2-runtime")));
+        assert!(!fallback.family.measured_at(plan("avx2-runtime")));
+        // Every level of the four entries is listed in `benches/limits.json`, the ones that are
+        // not judged with a waiver.
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        for name in [
+            "dot_complex",
+            "dot_complex_fallback",
+            "equalize",
+            "equalize_fallback",
+        ] {
+            for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
+                let Some(limit) = limits.get(name, p.level) else {
+                    assert!(
+                        p.baseline.is_some(),
+                        "{name} at {}: no entry in limits.json",
+                        p.level
+                    );
+                    continue;
+                };
+                if limit.status == Status::Info {
+                    assert!(limit.waiver.is_some(), "{name} at {}", p.level);
+                }
+            }
+        }
+        // The VOLK pins name the complex dot product on every pinned level.
+        for pin in [VolkPin::Sse2, VolkPin::Sse42, VolkPin::Avx2, VolkPin::Neon] {
+            assert!(
+                pin.config().contains("volk_32fc_x2_dot_prod_32fc "),
+                "{pin:?}"
+            );
+        }
+        assert!(VOLK_FUNCTIONS.contains(&"volk_32fc_x2_dot_prod_32fc"));
     }
 
     #[test]

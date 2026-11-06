@@ -4611,5 +4611,97 @@
       "status": "info",
       "waiver": "`rds_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "dot_complex": {
+    "sse2": {
+      "status": "info",
+      "waiver": "VOLK has no SSE2 implementation of `volk_32fc_x2_dot_prod_32fc` (its first is SSE3): the dispatcher of its `sse2_64_mmx` machine takes the scalar `generic` protokernel, so the comparison is no SIMD reference of this level and is information (D821)"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "dev"
+    },
+    "avx512": {
+      "status": "dev"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
+  "dot_complex_fallback": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "dev"
+    },
+    "avx512": {
+      "status": "dev"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "dev"
+    }
+  },
+  "equalize": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`equalize` (`C32`, 11 taps, QPSK, the block defaults) has no SIMD library reference (D823, D838): liquid-dsp's `eqlms_cccf` has no decision feedback, no phase tracker and a blind mode that projects onto the unit circle instead of the CMA error, and the C translation of GNU Radio's `linear_equalizer` (`benches/refs/gr-equalizer.c`) runs VOLK's generic dot products, the scalar reference of `equalize_fallback`; the facade runs the SIMD `dot_complex` for the filter part and the scalar update of `sdrk-core`, so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`equalize` (`C32`, 11 taps, QPSK, the block defaults) has no SIMD library reference (D823, D838): liquid-dsp's `eqlms_cccf` has no decision feedback, no phase tracker and a blind mode that projects onto the unit circle instead of the CMA error, and the C translation of GNU Radio's `linear_equalizer` (`benches/refs/gr-equalizer.c`) runs VOLK's generic dot products, the scalar reference of `equalize_fallback`; the facade runs the SIMD `dot_complex` for the filter part and the scalar update of `sdrk-core`, so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`equalize` (`C32`, 11 taps, QPSK, the block defaults) has no SIMD library reference (D823, D838): liquid-dsp's `eqlms_cccf` has no decision feedback, no phase tracker and a blind mode that projects onto the unit circle instead of the CMA error, and the C translation of GNU Radio's `linear_equalizer` (`benches/refs/gr-equalizer.c`) runs VOLK's generic dot products, the scalar reference of `equalize_fallback`; the facade runs the SIMD `dot_complex` for the filter part and the scalar update of `sdrk-core`, so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`equalize` (`C32`, 11 taps, QPSK, the block defaults) has no SIMD library reference (D823, D838): liquid-dsp's `eqlms_cccf` has no decision feedback, no phase tracker and a blind mode that projects onto the unit circle instead of the CMA error, and the C translation of GNU Radio's `linear_equalizer` (`benches/refs/gr-equalizer.c`) runs VOLK's generic dot products, the scalar reference of `equalize_fallback`; the facade runs the SIMD `dot_complex` for the filter part and the scalar update of `sdrk-core`, so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`equalize` (`C32`, 11 taps, QPSK, the block defaults) has no SIMD library reference (D823, D838): liquid-dsp's `eqlms_cccf` has no decision feedback, no phase tracker and a blind mode that projects onto the unit circle instead of the CMA error, and the C translation of GNU Radio's `linear_equalizer` (`benches/refs/gr-equalizer.c`) runs VOLK's generic dot products, the scalar reference of `equalize_fallback`; the facade runs the SIMD `dot_complex` for the filter part and the scalar update of `sdrk-core`, so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`equalize` (`C32`, 11 taps, QPSK, the block defaults) has no SIMD library reference (D823, D838): liquid-dsp's `eqlms_cccf` has no decision feedback, no phase tracker and a blind mode that projects onto the unit circle instead of the CMA error, and the C translation of GNU Radio's `linear_equalizer` (`benches/refs/gr-equalizer.c`) runs VOLK's generic dot products, the scalar reference of `equalize_fallback`; the facade runs the SIMD `dot_complex` for the filter part and the scalar update of `sdrk-core`, so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`equalize`: the run-time-detection build dispatches the filter part (`dot_complex`) once per symbol and runs the weight update and the decision compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by the dispatch and by code generation; reported as information (D823)"
+    }
+  },
+  "equalize_fallback": {
+    "sse2": {
+      "status": "dev"
+    },
+    "sse4.2": {
+      "status": "dev"
+    },
+    "avx2": {
+      "status": "dev"
+    },
+    "avx512": {
+      "status": "dev"
+    },
+    "neon": {
+      "status": "dev"
+    },
+    "simd128": {
+      "status": "dev"
+    }
   }
 }

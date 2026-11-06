@@ -5,6 +5,7 @@
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
 use sdrk_core::kernels::costas::{Costas, CostasGains, CostasState};
+use sdrk_core::kernels::equalize::{Equalize, EqualizeState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
@@ -14,9 +15,13 @@ use super::costas::{
     DEFAULT_DAMPING, DEFAULT_LOOP_BW, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MAX_OFFSET_LIMIT,
     MIN_LOOP_BW, check_f64, check_order,
 };
+use super::equalize::{
+    DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS, EqualizeConfig,
+    constellation_of_order,
+};
 use super::psk_mod::{PskVariant, VARIANT_PARAM, bits_of_order, check_variant};
 use super::slice::{psk8_bits, soft_bits};
-use super::symbol_sync::SymbolSyncBlock;
+use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -76,7 +81,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         coherent detection (180 degrees for BPSK, 90 degrees for QPSK, 45 degrees for 8PSK) \
         is not resolved: use frame_decode with polarity both or differential coding. The \
         output rate is the symbol rate times the bits per symbol and follows the clock of the \
-        signal (variable ratio).",
+        signal (variable ratio). With equalizer_taps above 0 an equalize stage (taps \
+        equalizer_taps, feedback_taps equalizer_feedback_taps, the constellation of order, \
+        mu_cma 0.05, mu_dd 0.02, 1000 CMA symbols, phase_bw carrier_bw) runs between \
+        symbol_sync and costas and removes the inter-symbol interference of multipath and \
+        filters; with differential it runs before the differential product in CMA only and \
+        without its phase tracker, with offset after the carrier loop of offset; it adds \
+        (equalizer_taps - 1) / 2 symbols of delay.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32],
@@ -184,6 +195,32 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 symbol.",
         },
         VARIANT_PARAM,
+        ParamDesc {
+            name: "equalizer_taps",
+            unit: Unit::None,
+            kind: ParamKind::I64 {
+                min: 0,
+                max: EQ_TAPS.1 as i64,
+                default: Some(0),
+            },
+            typical: "0 (off); 11 to 15 against multipath",
+            mutability: Mutability::Build,
+            description: "Forward taps of the adaptive equalizer between the timing loop and \
+                the carrier loop: 0 (off) or odd from 3 to 63.",
+        },
+        ParamDesc {
+            name: "equalizer_feedback_taps",
+            unit: Unit::None,
+            kind: ParamKind::I64 {
+                min: 0,
+                max: EQ_FEEDBACK_MAX as i64,
+                default: Some(0),
+            },
+            typical: "0 (linear); 5 for channels with deep spectral nulls",
+            mutability: Mutability::Build,
+            description: "Feedback taps of the equalizer (a decision feedback equalizer, 0 to \
+                63); only with equalizer_taps above 0.",
+        },
     ],
     required: &["symbol_rate_hz"],
 };
@@ -218,12 +255,18 @@ pub struct PskDemodConfig {
     pub max_offset: f64,
     /// The variant: plain, pi/4-DQPSK or offset QPSK (M40.1).
     pub variant: PskVariant,
+    /// Forward taps of the equalizer between the timing loop and the carrier loop (M43): 0
+    /// (off) or odd from 3 to 63.
+    pub equalizer_taps: usize,
+    /// Feedback taps of the equalizer (0 to 63; 0 = linear); only with `equalizer_taps` above
+    /// 0.
+    pub equalizer_feedback_taps: usize,
 }
 
 impl Default for PskDemodConfig {
     /// Order 2, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
     /// `rolloff` 0.35, `span` 10, coherent, `sync_bw` 0.01, `carrier_bw` 0.02, `max_offset`
-    /// 0.05, variant plain.
+    /// 0.05, variant plain, no equalizer.
     fn default() -> Self {
         Self {
             order: 2,
@@ -235,7 +278,36 @@ impl Default for PskDemodConfig {
             carrier_bw: DEFAULT_LOOP_BW,
             max_offset: DEFAULT_MAX_OFFSET,
             variant: PskVariant::Plain,
+            equalizer_taps: 0,
+            equalizer_feedback_taps: 0,
         }
+    }
+}
+
+/// `equalizer_taps`: 0 or odd from 3 to 63; `OutOfRange` above 63, `InvalidParameter` for 1
+/// and the even counts (inside the range of the description but not allowed).
+/// `equalizer_feedback_taps`: 0 to 63 (`OutOfRange` above), and 0 without the equalizer
+/// (`InvalidParameter`).
+fn check_feedback_taps(feedback: usize, taps: usize) -> Result<()> {
+    check_count("equalizer_feedback_taps", feedback, 0, EQ_FEEDBACK_MAX)?;
+    if feedback != 0 && taps == 0 {
+        return Err(Error::InvalidParameter {
+            name: "equalizer_feedback_taps",
+            reason: "the equalizer feedback taps need equalizer_taps above 0",
+        });
+    }
+    Ok(())
+}
+
+fn check_equalizer_taps(taps: usize) -> Result<()> {
+    check_count("equalizer_taps", taps, 0, EQ_TAPS.1)?;
+    if taps == 0 || (taps >= EQ_TAPS.0 && !taps.is_multiple_of(2)) {
+        Ok(())
+    } else {
+        Err(Error::InvalidParameter {
+            name: "equalizer_taps",
+            reason: "the equalizer taps must be 0 (off) or odd from 3 to 63",
+        })
     }
 }
 
@@ -257,9 +329,35 @@ impl PskDemodConfig {
         }
     }
 
+    /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward and
+    /// feedback taps, the constellation of the order, the step sizes and CMA symbols of the
+    /// `equalize` defaults and the phase tracker at `carrier_bw`; with `differential` CMA only
+    /// (`cma_symbols` `u32::MAX`, D815) and without the tracker (`phase_bw` 0, D827).
+    pub fn equalizer(&self) -> Option<EqualizeConfig> {
+        (self.equalizer_taps != 0).then(|| EqualizeConfig {
+            taps: self.equalizer_taps,
+            feedback_taps: self.equalizer_feedback_taps,
+            constellation: constellation_of_order(self.order),
+            mu_cma: DEFAULT_MU_CMA,
+            mu_dd: DEFAULT_MU_DD,
+            cma_symbols: if self.differential {
+                u32::MAX
+            } else {
+                DEFAULT_CMA_SYMBOLS
+            },
+            phase_bw: if self.differential {
+                0.0
+            } else {
+                self.carrier_bw
+            },
+        })
+    }
+
     /// The ranges, and the integer samples per symbol of the matched filter.
     fn derive(&self, rate_in: Rate) -> Result<usize> {
         check_order(self.order)?;
+        check_equalizer_taps(self.equalizer_taps)?;
+        check_feedback_taps(self.equalizer_feedback_taps, self.equalizer_taps)?;
         check_f64(
             "symbol_rate_hz",
             self.symbol_rate_hz,
@@ -317,7 +415,8 @@ impl PskDemodConfig {
     /// `OutOfRange` for a value outside its range; `InvalidParameter` for the orders 3, 5, 6
     /// and 7, for a symbol rate whose samples per symbol are not within 1 % of an integer from
     /// 2 to 1024 or are below 2 (the pipeline reports it as `rate_unsupported` with the hint to
-    /// resample) and for a `variant` that does not fit (`pi4` without order 4 and
+    /// resample), for an `equalizer_taps` of 1 or an even count, and for a `variant` that does
+    /// not fit (`pi4` without order 4 and
     /// `differential`, `offset` without order 4, with `differential` or with an odd rounded
     /// number of samples per symbol; the pipeline reports it as `invalid_value`).
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
@@ -329,7 +428,7 @@ impl PskDemodConfig {
     ///
     /// # Errors
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders
-    /// 3, 5, 6 and 7.
+    /// 3, 5, 6 and 7 and for an `equalizer_taps` of 1 or an even count.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
@@ -347,6 +446,12 @@ impl PskDemodConfig {
             "carrier_bw" => self.carrier_bw = value.as_f64()?,
             "max_offset" => self.max_offset = value.as_f64()?,
             "variant" => self.variant = PskVariant::from_index(value.as_choice()?),
+            "equalizer_taps" => {
+                let t = value.as_usize()?;
+                check_equalizer_taps(t)?;
+                self.equalizer_taps = t;
+            }
+            "equalizer_feedback_taps" => self.equalizer_feedback_taps = value.as_usize()?,
             _ => return unknown(),
         }
         Ok(())
@@ -367,6 +472,8 @@ impl PskDemodConfig {
             "carrier_bw" => Ok(ParamValue::F64(self.carrier_bw)),
             "max_offset" => Ok(ParamValue::F64(self.max_offset)),
             "variant" => Ok(ParamValue::Choice(self.variant.index())),
+            "equalizer_taps" => Ok(ParamValue::I64(self.equalizer_taps as i64)),
+            "equalizer_feedback_taps" => Ok(ParamValue::I64(self.equalizer_feedback_taps as i64)),
             _ => unknown(),
         }
     }
@@ -390,9 +497,18 @@ impl PskDemodConfig {
 /// next call (which then consumes no input). Timing: variable ratio
 /// `symbol_rate bits / fs`, delay `span n / 2 + 1` input samples (also for `offset`: the
 /// in-phase delay realigns the early in-phase part with the quadrature part, D658).
-/// Storage: the taps, the filter history, three work buffers (filter output, symbols,
-/// waiting soft bits) and for `offset` one buffer of `4 + n / 2 + PSK_DEMOD_CHUNK` `C32`
-/// (the interpolation window, the ring of the in-phase delay and the derotated run).
+/// Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32` (filter
+/// output, symbols, waiting soft bits as `f32`), for `offset` one buffer of `4 + n / 2 + PSK_DEMOD_CHUNK` `C32`
+/// (the interpolation window, the ring of the in-phase delay and the derotated run) and for
+/// `equalizer_taps` `t > 0` the `t + f` weights and the `t + f` history values of the equalizer
+/// (`f` = `equalizer_feedback_taps`).
+///
+/// With `equalizer_taps` above 0 (M43 §3 as amended, D825) the kernel `equalize` (the
+/// constellation of the order, `equalizer_feedback_taps` feedback taps, `mu_cma` 0.05, `mu_dd`
+/// 0.02, 1000 CMA symbols, its phase tracker at `carrier_bw`) runs on the symbols of
+/// `symbol_sync` before `costas`; for `offset` after its loop; with `differential` before the
+/// differential product with `cma_symbols` `u32::MAX` (CMA only) and `phase_bw` 0. It adds
+/// `(t - 1) / 2` symbols to the delay; with `equalizer_taps` 0 the block is unchanged.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -420,25 +536,42 @@ impl PskDemodConfig {
 /// ```
 pub struct PskDemodBlock<S: Storage> {
     config: PskDemodConfig,
-    bps: usize,
-    sps: usize,
+    /// Bits per symbol and the rounded samples per symbol (`u32`, and `min_input` computed
+    /// from the timing loop, keep the block within 512 bytes with the equalizer, D817).
+    bps: u32,
+    sps: u32,
     ratio: Ratio,
-    min_input: usize,
     fir: FirState<C32, S::Buf<f32>, S::Buf<C32>>,
     sync: SymbolSyncState<C32>,
     costas: CostasState,
     /// The previous symbol of the differential detector.
     prev: C32,
-    /// Matched-filter output, then the symbols after the carrier loop.
-    a: S::Buf<C32>,
-    /// The symbols of `symbol_sync`.
-    b: S::Buf<C32>,
-    /// Soft bits that did not fit into the output, `pending[at..len]`.
-    pending: S::Buf<f32>,
-    at: usize,
-    len: usize,
+    /// One work buffer `[a | b | pending]` (see [`split_work`]): `a` the matched-filter
+    /// output, then the symbols after the carrier loop; `b` the symbols of `symbol_sync`;
+    /// `pending` (as `f32`) the soft bits that did not fit into the output, `pending[at..len]`.
+    work: S::Buf<C32>,
+    at: u32,
+    len: u32,
     /// The carrier loop of `offset`; `None` for the other variants.
     offset: Option<OffsetLoop<S>>,
+    /// The equalizer before the carrier loop; `None` for `equalizer_taps` 0.
+    eq: Option<EqState<S>>,
+}
+
+/// The state of the equalizer of `psk_demod` on the storage `S`.
+type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C32>>;
+
+/// The timing loop of `psk_demod` (through `SymbolSyncBlock`, which checks the rate) and the
+/// ratio of soft bits per input sample.
+fn timing_loop<S: Storage>(
+    config: &PskDemodConfig,
+    rate_in: Rate,
+    bps: usize,
+    storage: &mut S,
+) -> Result<(Ratio, SymbolSyncState<C32>)> {
+    let block = SymbolSyncBlock::<C32, S>::new(&config.sync(), rate_in, storage)?;
+    let ratio = block.timing().ratio.mul(Ratio::new(bps as u64, 1)?)?;
+    Ok((ratio, *block.state()))
 }
 
 impl<S: Storage> core::fmt::Debug for PskDemodBlock<S> {
@@ -466,20 +599,18 @@ impl<S: Storage> PskDemodBlock<S> {
             *t = (rrc.tap(k) * gain) as f32;
         }
         let hist = storage.alloc::<C32>(taps_len - 1)?;
-        let a = storage.alloc::<C32>(PSK_DEMOD_CHUNK)?;
-        let b = storage.alloc::<C32>(PSK_DEMOD_CHUNK)?;
         let bps = config.bits_per_symbol();
-        let pending = storage.alloc::<f32>(PSK_DEMOD_CHUNK * bps)?;
+        let work = storage.alloc::<C32>(work_len(bps))?;
         let offset = if config.variant == PskVariant::Offset {
             Some(OffsetLoop::new(n, storage)?)
         } else {
             None
         };
-        let sync_cfg = config.sync();
-        let block = SymbolSyncBlock::<C32, S>::new(&sync_cfg, rate_in, storage)?;
-        let ratio = block.timing().ratio.mul(Ratio::new(bps as u64, 1)?)?;
-        let min_input = block.min_input();
-        let sync = *block.state();
+        let eq = match config.equalizer() {
+            Some(e) => Some(e.state(storage)?),
+            None => None,
+        };
+        let (ratio, sync) = timing_loop(config, rate_in, bps, storage)?;
         let costas = CostasState::new(
             config.order,
             config.carrier_bw,
@@ -488,20 +619,18 @@ impl<S: Storage> PskDemodBlock<S> {
         )?;
         Ok(Self {
             config: *config,
-            bps,
-            sps: n,
+            bps: to_u32(bps)?,
+            sps: to_u32(n)?,
             ratio,
-            min_input,
             fir: FirState::new(taps, hist)?,
             sync,
             costas,
             prev: C32::new(1.0, 0.0),
-            a,
-            b,
-            pending,
+            work,
             at: 0,
             len: 0,
             offset,
+            eq,
         })
     }
 
@@ -516,11 +645,12 @@ impl<S: Storage> PskDemodBlock<S> {
         let mut plan = Plan::default();
         plan.add::<f32>(taps)?;
         plan.add::<C32>(taps - 1)?;
-        plan.add::<C32>(PSK_DEMOD_CHUNK)?;
-        plan.add::<C32>(PSK_DEMOD_CHUNK)?;
-        plan.add::<f32>(PSK_DEMOD_CHUNK * config.bits_per_symbol())?;
+        plan.add::<C32>(work_len(config.bits_per_symbol()))?;
         if config.variant == PskVariant::Offset {
             plan.add::<C32>(WINDOW + n / 2 + PSK_DEMOD_CHUNK)?;
+        }
+        if let Some(e) = config.equalizer() {
+            e.plan(&mut plan)?;
         }
         Ok(plan.bytes())
     }
@@ -542,7 +672,7 @@ impl<S: Storage> PskDemodBlock<S> {
 
     /// The integer samples per symbol of the matched filter.
     pub fn samples_per_symbol(&self) -> usize {
-        self.sps
+        self.sps as usize
     }
 
     /// Whether the carrier loop reports lock (always false with `differential`).
@@ -571,6 +701,11 @@ impl<S: Storage> PskDemodBlock<S> {
         }
     }
 
+    /// The state of the equalizer (`None` for `equalizer_taps` 0).
+    pub fn equalizer(&self) -> Option<&EqState<S>> {
+        self.eq.as_ref()
+    }
+
     /// The current estimate of the samples per symbol of the timing loop.
     pub fn sps_estimate(&self) -> f64 {
         self.sync.sps_estimate()
@@ -588,10 +723,13 @@ impl<S: Storage> PskDemodBlock<S> {
 
     /// Writes waiting soft bits to `output`; returns how many.
     fn flush(&mut self, output: &mut [f32]) -> Result<usize> {
-        let waiting = head(tail(self.pending.as_ref(), self.at)?, self.len - self.at)?;
+        let (at, len) = (self.at as usize, self.len as usize);
+        let (_, _, pending) = split_work(self.work.as_mut())?;
+        let waiting = head(tail(pending, at)?, len - at)?;
         let k = waiting.len().min(output.len());
         head_mut(output, k)?.copy_from_slice(head(waiting, k)?);
-        self.at += k;
+        // `k <= len <= PSK_DEMOD_CHUNK bits`.
+        self.at += k as u32;
         if self.at == self.len {
             self.at = 0;
             self.len = 0;
@@ -599,51 +737,82 @@ impl<S: Storage> PskDemodBlock<S> {
         Ok(k)
     }
 
-    /// One piece of `m` input samples: the symbols in `a[..ns]`; returns `ns`.
-    fn symbols(&mut self, piece: &[C32]) -> Result<usize> {
+    /// One piece of `m` input samples: the symbols in `a[..ns]`, or in `b[..ns]` when the
+    /// second value is true (coherent detection with the equalizer); returns `ns`.
+    #[allow(clippy::many_single_char_names)]
+    fn symbols(&mut self, piece: &[C32]) -> Result<(usize, bool)> {
         let m = piece.len();
-        let mf = head_mut(self.a.as_mut(), m)?;
-        <Sdrk as Fir<C32>>::fir(&Sdrk, &mut self.fir, piece, mf)?;
+        let (a, b, _) = split_work(self.work.as_mut())?;
+        <Sdrk as Fir<C32>>::fir(&Sdrk, &mut self.fir, piece, head_mut(a, m)?)?;
         if let Some(o) = self.offset.as_mut() {
             let gains = self.costas.gains();
-            let ns = o.symbols(
-                &gains,
-                &mut self.sync,
-                head(self.a.as_ref(), m)?,
-                self.b.as_mut(),
-            )?;
-            let syms = head(self.b.as_ref(), ns)?;
-            head_mut(self.a.as_mut(), ns)?.copy_from_slice(syms);
-            return Ok(ns);
+            let ns = o.symbols(&gains, &mut self.sync, head(a, m)?, b)?;
+            let syms = head(b, ns)?;
+            let out = head_mut(a, ns)?;
+            match self.eq.as_mut() {
+                Some(eq) => <Sdrk as Equalize>::equalize(&Sdrk, eq, syms, out)?,
+                None => out.copy_from_slice(syms),
+            }
+            return Ok((ns, false));
         }
-        let p = <Sdrk as SymbolSync<C32>>::symbol_sync(
-            &Sdrk,
-            &mut self.sync,
-            head(self.a.as_ref(), m)?,
-            self.b.as_mut(),
-        )?;
+        let p = <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, &mut self.sync, head(a, m)?, b)?;
         if p.consumed != m {
             return Err(Error::Core(sdrk_core::Error::Internal(
                 "psk_demod timing loop did not take the whole piece",
             )));
         }
-        let ns = p.produced;
-        let syms = head(self.b.as_ref(), ns)?;
-        let out = head_mut(self.a.as_mut(), ns)?;
-        if self.config.differential {
-            let mut prev = self.prev;
-            for (z, &y) in out.iter_mut().zip(syms) {
-                *z = C32::new(
-                    y.re * prev.re + y.im * prev.im,
-                    y.im * prev.re - y.re * prev.im,
-                );
-                prev = y;
+        let carrier = Carrier::<S> {
+            differential: self.config.differential,
+            prev: &mut self.prev,
+            costas: &mut self.costas,
+            eq: self.eq.as_mut(),
+        };
+        carrier.run(a, b, p.produced)
+    }
+}
+
+/// The stage after the timing loop of `psk_demod` (plain and `pi4`): the equalizer, then the
+/// differential product or `costas`.
+struct Carrier<'a, S: Storage> {
+    differential: bool,
+    prev: &'a mut C32,
+    costas: &'a mut CostasState,
+    eq: Option<&'a mut EqState<S>>,
+}
+
+impl<S: Storage> Carrier<'_, S> {
+    /// The `ns` symbols of `symbol_sync` in `b`; the result in `a[..ns]`, or in `b[..ns]` when
+    /// the returned flag is true (coherent detection with the equalizer).
+    fn run(self, a: &mut [C32], b: &mut [C32], ns: usize) -> Result<(usize, bool)> {
+        let syms = head(b, ns)?;
+        let out = head_mut(a, ns)?;
+        if self.differential {
+            let mut prev = *self.prev;
+            if let Some(eq) = self.eq {
+                // CMA only before the differential product, which then runs in place.
+                <Sdrk as Equalize>::equalize(&Sdrk, eq, syms, out)?;
+                for z in out.iter_mut() {
+                    let y = *z;
+                    *z = differential(y, prev);
+                    prev = y;
+                }
+            } else {
+                for (z, &y) in out.iter_mut().zip(syms) {
+                    *z = differential(y, prev);
+                    prev = y;
+                }
             }
-            self.prev = prev;
+            *self.prev = prev;
+            Ok((ns, false))
+        } else if let Some(eq) = self.eq {
+            // The equalizer before the carrier loop (D825): `b` -> `a` -> `b`.
+            <Sdrk as Equalize>::equalize(&Sdrk, eq, syms, out)?;
+            <Sdrk as Costas>::costas(&Sdrk, self.costas, head(a, ns)?, head_mut(b, ns)?)?;
+            Ok((ns, true))
         } else {
-            <Sdrk as Costas>::costas(&Sdrk, &mut self.costas, syms, out)?;
+            <Sdrk as Costas>::costas(&Sdrk, self.costas, syms, out)?;
+            Ok((ns, false))
         }
-        Ok(ns)
     }
 }
 
@@ -664,17 +833,19 @@ impl<S: Storage> Block for PskDemodBlock<S> {
             if m == 0 {
                 break;
             }
-            let ns = self.symbols(head(tail(input, consumed)?, m)?)?;
+            let (ns, in_b) = self.symbols(head(tail(input, consumed)?, m)?)?;
             consumed += m;
-            let syms = head(self.a.as_ref(), ns)?;
+            let bps = self.bps as usize;
+            let (a, b, pending) = split_work(self.work.as_mut())?;
+            let syms = head(if in_b { b } else { a }, ns)?;
             let room = tail_mut(output, produced)?;
             let direct = demod_bits(map, syms, room);
-            produced += direct * self.bps;
+            produced += direct * bps;
             let rest = tail(syms, direct)?;
             if !rest.is_empty() {
-                let n = demod_bits(map, rest, self.pending.as_mut());
+                let n = demod_bits(map, rest, pending);
                 self.at = 0;
-                self.len = n * self.bps;
+                self.len = to_u32(n * bps)?;
                 produced += self.flush(tail_mut(output, produced)?)?;
             }
         }
@@ -688,7 +859,15 @@ impl<S: Storage> Block for PskDemodBlock<S> {
             // `offset` adds nothing: the in-phase delay only realigns the in-phase part, which
             // is half a symbol early, with the quadrature part, the reference of the delay that
             // `psk_mod` reports (D658).
-            delay: Delay::new((self.config.span * self.sps + 2) as u64, 2).unwrap_or(Delay::ZERO),
+            // The equalizer adds `(taps - 1) / 2` symbols of `sps` input samples.
+            delay: Delay::new(
+                (self.config.span * self.sps as usize
+                    + 2
+                    + self.config.equalizer_taps.saturating_sub(1) * self.sps as usize)
+                    as u64,
+                2,
+            )
+            .unwrap_or(Delay::ZERO),
         }
     }
 
@@ -701,6 +880,9 @@ impl<S: Storage> Block for PskDemodBlock<S> {
         self.len = 0;
         if let Some(o) = self.offset.as_mut() {
             o.reset();
+        }
+        if let Some(eq) = self.eq.as_mut() {
+            eq.reset();
         }
     }
 
@@ -716,7 +898,9 @@ impl<S: Storage> Block for PskDemodBlock<S> {
     }
 
     fn min_input(&self) -> usize {
-        self.min_input
+        // That of the timing loop (`SymbolSyncBlock::min_input`) at its exact samples per
+        // symbol.
+        sync_min_input(self.sync.sps(), SYNC_MAX_DEVIATION)
     }
 }
 
@@ -756,6 +940,36 @@ fn demod_bits(map: SoftMap, input: &[C32], output: &mut [f32]) -> usize {
             input.len().min(output.len() / 3)
         }
     }
+}
+
+/// The length in `C32` of the work buffer `[a | b | pending]`: two pieces of symbols and
+/// `PSK_DEMOD_CHUNK bps` soft bits as `f32` pairs.
+fn work_len(bps: usize) -> usize {
+    2 * PSK_DEMOD_CHUNK + (PSK_DEMOD_CHUNK * bps).div_ceil(2)
+}
+
+/// Splits the work buffer into `a` and `b` (`PSK_DEMOD_CHUNK` symbols each) and the soft-bit
+/// buffer `pending` (`f32`).
+fn split_work(work: &mut [C32]) -> Result<(&mut [C32], &mut [C32], &mut [f32])> {
+    let bad = || Error::Core(sdrk_core::Error::Internal("psk_demod work buffer"));
+    let (a, rest) = work.split_at_mut_checked(PSK_DEMOD_CHUNK).ok_or_else(bad)?;
+    let (b, pending) = rest.split_at_mut_checked(PSK_DEMOD_CHUNK).ok_or_else(bad)?;
+    Ok((a, b, bytemuck::cast_slice_mut(pending)))
+}
+
+/// `v` as `u32`, or an internal error.
+fn to_u32(v: usize) -> Result<u32> {
+    u32::try_from(v).map_err(|_| Error::Core(sdrk_core::Error::Internal("psk_demod count")))
+}
+
+/// The differential product `y conj(prev)` in `f32`:
+/// `(y.re prev.re + y.im prev.im, y.im prev.re - y.re prev.im)`.
+#[inline]
+fn differential(y: C32, prev: C32) -> C32 {
+    C32::new(
+        y.re * prev.re + y.im * prev.im,
+        y.im * prev.re - y.re * prev.im,
+    )
 }
 
 /// `floor(v 2^32 + 0.5)` as a wrapping phase step (through `i64`, as `costas` rounds).

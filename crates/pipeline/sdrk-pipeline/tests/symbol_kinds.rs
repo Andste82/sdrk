@@ -79,7 +79,7 @@ fn the_kinds_are_registered() {
     let f = registry.factory("slice").unwrap();
     assert!(f.kernels().is_empty());
     assert_eq!(f.description().kind, "slice");
-    assert_eq!(registry.descriptions().count(), 58);
+    assert_eq!(registry.descriptions().count(), 59);
 }
 
 #[test]

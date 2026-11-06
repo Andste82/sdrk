@@ -85,7 +85,7 @@ pub trait Storage {
 ```
 
 - **`ArenaStorage`** carves the buffers out of one caller-provided byte slice by bump allocation (`Buf<T> = &'a mut [T]`, no `unsafe`: the padding comes from `align_offset`, the cast from `bytemuck::try_cast_slice_mut`). It is the storage of microcontrollers, the suite and the examples. A request that does not fit is `Error::Storage { needed, available }` (kind `CapacityExceeded`) and changes nothing.
-- **`Vec` storage** is what the upper layers use; `sdrk-pipeline` implements `Storage` with `Buf<T> = Vec<T>` and the testkit has `VecStorage` (feature `std`) for tests.
+- **Heap storage** is what the upper layers use; `sdrk-pipeline` implements `Storage` with `Buf<T> = Box<[T]>` (a buffer never changes its length, so a boxed slice saves the 8 bytes of a `Vec` capacity per buffer handle, D772) and the testkit has `VecStorage` (feature `std`, also `Box<[T]>`) for tests.
 - **`storage_bytes(config, rate_in)`** is exact for an `ArenaStorage` whose slice starts at a 16-byte aligned address: the buffers are allocated in a fixed order and each starts at the next multiple of its element alignment. `ARENA_ALIGN` is 16 and `AlignedBytes<N>` is a `#[repr(C, align(16))]` byte array for stack arenas and statics. A slice that is not aligned may need up to 15 bytes more. The tests build every block in an arena of exactly `storage_bytes` bytes and also check that one byte less fails with a `Storage` error.
 - All big data lives in the storage; the block structs themselves hold a few slices and counters and are at most 512 bytes (tested).
 

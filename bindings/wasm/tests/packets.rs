@@ -239,3 +239,43 @@ fn the_jsonl_limit_is_the_packet_capacity() {
         "InvalidArgument"
     );
 }
+
+/// The RDS helpers of the package (`RdsDecoder`, `rdsDecodeText`, `rdsEncodeText`) through the
+/// engine: the table of `sdrk_proto::rds`, the charsets and the counts.
+#[test]
+fn rds_helpers_use_the_rds_character_set() {
+    use sdrk_proto::rds::{Charset, Group};
+    use sdrk_wasm::engine::{RdsDecoder, charset, rds_decode_text, rds_encode_text};
+
+    assert_eq!(
+        rds_decode_text(b"W\x99rttemberg", Charset::Rds),
+        "Württemberg"
+    );
+    assert_eq!(
+        rds_decode_text("größten".as_bytes(), Charset::Auto),
+        "größten"
+    );
+    assert_eq!(charset(Some("utf8")).unwrap(), Charset::Utf8);
+    assert_eq!(charset(Some("x")).unwrap_err().kind, "InvalidArgument");
+    assert_eq!(rds_encode_text("Wü$").unwrap(), vec![0x57, 0x99, 0xab]);
+    assert_eq!(rds_encode_text("~").unwrap_err().kind, "InvalidArgument");
+
+    let mut d = RdsDecoder::default();
+    let name = rds_encode_text("SWR1 BW ").unwrap();
+    for seg in 0..4u16 {
+        let i = usize::from(seg) * 2;
+        let g = Group::new([
+            0xD3C2,
+            0x0548 | seg,
+            0xE0E0,
+            u16::from_be_bytes([name[i], name[i + 1]]),
+        ]);
+        d.push(&g.to_packet(0).unwrap());
+    }
+    // A packet that is no group is ignored.
+    d.push(&Packet::new(0, PacketFlags::CRC_OK, b"short").unwrap());
+    assert_eq!(d.ps(Charset::Rds).as_deref(), Some("SWR1 BW "));
+    assert_eq!((d.groups(), d.ok_groups()), (4, 4));
+    d.reset();
+    assert_eq!((d.groups(), d.state().pi()), (0, None));
+}

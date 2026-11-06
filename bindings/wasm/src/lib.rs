@@ -809,3 +809,122 @@ fn copy_in_prefix(src: &JsValue, dst: LanesMut<'_>, len: usize) {
         LanesMut::Packets(_) => {}
     }
 }
+
+/// Character set argument of the RDS helpers: `"rds"` (default), `"utf8"` or `"auto"`.
+fn rds_charset(name: Option<&str>) -> Result<sdrk_proto::rds::Charset, JsValue> {
+    engine::charset(name).map_err(|e| fail(&e))
+}
+
+/// RDS bytes as text: `charset` `"rds"` (the RDS table of IEC 62106, default), `"utf8"` or
+/// `"auto"` (UTF-8 when the bytes are valid UTF-8 with a multi-byte sequence).
+///
+/// ```js
+/// rdsDecodeText(new Uint8Array([0x57, 0x99, 0x72]), "rds"); // "Wür"
+/// ```
+#[wasm_bindgen(js_name = rdsDecodeText)]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen hands an optional JavaScript string over as an owned value"
+)]
+pub fn rds_decode_text(bytes: &[u8], charset: Option<String>) -> Result<String, JsValue> {
+    Ok(engine::rds_decode_text(
+        bytes,
+        rds_charset(charset.as_deref())?,
+    ))
+}
+
+/// Text as RDS bytes (the RDS table of IEC 62106); throws for a character without a code.
+///
+/// ```js
+/// rdsEncodeText("Württemberg"); // Uint8Array [0x57, 0x99, ...]
+/// ```
+#[wasm_bindgen(js_name = rdsEncodeText)]
+pub fn rds_encode_text(text: &str) -> Result<Vec<u8>, JsValue> {
+    engine::rds_encode_text(text).map_err(|e| fail(&e))
+}
+
+/// Station data from the RDS groups of an `rds_decode` output: `sdrk_proto::rds::RdsState`
+/// (PI, PTY, TP, the programme service name and the radiotext once complete).
+///
+/// ```js
+/// const rds = new RdsDecoder();
+/// rds.push(pipeline.readPackets("rds"));
+/// console.log(rds.ps("auto"), rds.rt("auto"), rds.pi());
+/// ```
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct RdsDecoder {
+    inner: engine::RdsDecoder,
+}
+
+#[wasm_bindgen]
+impl RdsDecoder {
+    /// An empty decoder.
+    #[wasm_bindgen(constructor)]
+    #[must_use]
+    pub fn new() -> RdsDecoder {
+        RdsDecoder::default()
+    }
+
+    /// Takes an `Array` of packets (`{ index, flags, data }`, as `readPackets` returns them);
+    /// packets that are no RDS group are ignored. Returns the number of packets taken.
+    pub fn push(&mut self, packets: &JsValue) -> Result<f64, JsValue> {
+        let array = packets
+            .dyn_ref::<Array>()
+            .ok_or_else(|| invalid("packets must be an Array of { index, flags, data }"))?;
+        for i in 0..array.length() {
+            let p = parse_packet(&array.get(i), i as usize).map_err(|e| fail(&e))?;
+            self.inner.push(&p);
+        }
+        Ok(f64::from(array.length()))
+    }
+
+    /// Forgets the station and the counts (call it after tuning to another station).
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+
+    /// The programme identification, or `undefined`.
+    pub fn pi(&self) -> Option<u16> {
+        self.inner.state().pi()
+    }
+
+    /// The programme type 0 … 31, or `undefined`.
+    pub fn pty(&self) -> Option<u8> {
+        self.inner.state().pty()
+    }
+
+    /// The traffic programme flag, or `undefined`.
+    pub fn tp(&self) -> Option<bool> {
+        self.inner.state().tp()
+    }
+
+    /// The programme service name once all four segments arrived, else `undefined`.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "wasm-bindgen hands an optional JavaScript string over as an owned value"
+    )]
+    pub fn ps(&self, charset: Option<String>) -> Result<Option<String>, JsValue> {
+        Ok(self.inner.ps(rds_charset(charset.as_deref())?))
+    }
+
+    /// The radiotext once complete, else `undefined`.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "wasm-bindgen hands an optional JavaScript string over as an owned value"
+    )]
+    pub fn rt(&self, charset: Option<String>) -> Result<Option<String>, JsValue> {
+        Ok(self.inner.rt(rds_charset(charset.as_deref())?))
+    }
+
+    /// Groups taken.
+    pub fn groups(&self) -> f64 {
+        self.inner.groups() as f64
+    }
+
+    /// Groups taken with `CRC_OK`.
+    #[wasm_bindgen(js_name = okGroups)]
+    pub fn ok_groups(&self) -> f64 {
+        self.inner.ok_groups() as f64
+    }
+}

@@ -1324,6 +1324,7 @@ dependencies = [
  "sdrk-device",
  "sdrk-io",
  "sdrk-pipeline",
+ "sdrk-proto",
  "sdrk-testkit",
  "serde_json",
  "wasm-bindgen",

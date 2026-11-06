@@ -79,6 +79,14 @@ Packet inputs and outputs (`"type": "packets"`, M37, see [pipeline.md](pipeline.
 - `readPackets(output)` returns every packet waiting in the output as an `Array`, oldest first, with `index` as a `bigint` like every other 64-bit value the library returns. It copies through an output buffer of `chunkSize(output)` packets (`max_chunk`, at most 4096) and builds one object per packet.
 - `push`, `readStream` and `pull` on a packet port throw `InvalidArgument` (the message points to `pushPackets` and `readPackets`); `pushPackets` and `readPackets` on a sample port throw `InvalidArgument` too. `available` and `dropped` count packets.
 
+### RDS
+
+The package exposes the RDS helpers of `sdrk_proto::rds` so that a page shows the station data of an `rds_decode` output with the same rules and the same character set as Rust (D694):
+
+- `new RdsDecoder()`: `push(pipeline.readPackets("rds"))` takes the packets (others than RDS groups are ignored); `pi()`, `pty()`, `tp()` (or `undefined`), `ps(charset)` and `rt(charset)` give the programme service name and the radiotext once complete (`RdsState::ps_text` / `rt_text`), `groups()` and `okGroups()` count the packets; `reset()` after tuning to another station, `free()` at the end.
+- `rdsDecodeText(bytes, charset)` turns RDS bytes into text, `rdsEncodeText(text)` text into RDS bytes (throws for a character without a code).
+- `charset` is `"rds"` (the RDS table of IEC 62106 Annex E, the default), `"utf8"`, or `"auto"` (UTF-8 when the bytes are valid UTF-8 with a multi-byte sequence, which some stations send against the standard).
+
 ### Metadata, 64-bit values and time
 
 `meta` of `push` is `{ start?, flags?, anchor?, txTimeNs? }`. Without `start` the block follows the previous one (the next index of the input), so that a block with only an `anchor` or `flags` does not create a gap. `flags` is an OR of `BlockFlags` (`GapBefore = 1`, `Overflow = 2`, `Underrun = 4`, `BurstStart = 8`, `BurstEnd = 16`, `Late = 32`, `Retuned = 64`). An `anchor` is `{ index, unixNs, source? }` with `source` one of `"device"`, `"host"`, `"gps"`, `"unknown"` (default). 64-bit values (`index`, `start`, `txTimeNs`, `unixNs`, `firstSample`, `missing`, `count`, the counters of `stats()`) are `bigint` in everything the library returns; where it takes a value, a `number` that is an integer in the safe range is accepted as well.

@@ -6,7 +6,7 @@ The plan explains **why** and in which phases; the milestones say **exactly what
 
 ## Order and dependencies
 
-Up to M25.1 the milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. **From M26 on, a milestone depends only on the milestones named in its *Depends on* line** (rule R1.1 of those files): milestones that do not depend on each other may be implemented in parallel, each on its own branch, and the second one to merge rebases onto the first. State on `main`: M00 to M15, M19 to M25, M24.1 and M25.1 (release 0.1.0) are delivered; M26 to M44 and the backends M16 to M18 are planned. M16 to M18 come after M29 (the backends then also cover the primitive blocks; their kernels are unchanged by M26 to M29). From M37 on, rule R2 includes the crate `sdrk-proto` (`crates/proto`).
+Up to M25.1 the milestones are strictly sequential: each depends on all previous ones, and each must build and pass all tests on its own before the next one starts. **From M26 on, a milestone depends only on the milestones named in its *Depends on* line** (rule R1.1 of those files): milestones that do not depend on each other may be implemented in parallel, each on its own branch, and the second one to merge rebases onto the first. State on `main`: M00 to M15, M19 to M25, M24.1 and M25.1 (release 0.1.0) are delivered; M26 to M46 and the backends M16 to M18 are planned. M16 to M18 come after M29 (the backends then also cover the primitive blocks; their kernels are unchanged by M26 to M29). From M37 on, rule R2 includes the crate `sdrk-proto` (`crates/proto`).
 
 **Block names:** M24.1 fixes the naming scheme of block kinds (`docs/blocks.md`, section "Names") and renames four kinds: `resampler` → `resample`, `halfband` → `halfband_decimate`, `real_to_complex` → `real_to_iq`, `fm_stereo` → `fm_stereo_demod` (a hard break: the old names are not accepted, maintainer decision of 2026-11-01). The milestone files before M24.1 are records and use the old names; every later milestone uses the scheme and the table of reserved names.
 
@@ -61,6 +61,8 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M42 | [M42-rds-tx.md](M42-rds-tx.md) | 10 | RDS transmit: group carousel, `rds_encode` (`Clocked`), `fm_stereo_rds_mod`, flow `fm_stereo_rds_transmitter` |
 | M43 | [M43-equalizer.md](M43-equalizer.md) | 10 | Adaptive equalizer `equalize` (CMA, decision-directed), testkit multipath |
 | M44 | [M44-qam.md](M44-qam.md) | 10 | 16-QAM and 64-QAM RX+TX |
+| M45 | [M45-ism-band-receiver.md](M45-ism-band-receiver.md) | 10 | ISM band receiver: kernel `channelize` (polyphase filter bank), `band_pulse_detect` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
+| M46 | [M46-ism-sensors.md](M46-ism-sensors.md) | 10 | Sensor decoders: slicers (PWM, PPM, Manchester, NRZ), `sensor_decode` with readings as JSON, at least four 433 MHz and two 868 MHz devices (clean-room, no GPL code), flows `ism433_sensors`, `ism868_sensors` |
 | — | [BACKLOG.md](BACKLOG.md) | 7–10, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -98,6 +100,8 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M42 RDS transmit | M41, M36, M37 | M43, M44 |
 | M43 Equalizer | M40.1 | M41, M42 |
 | M44 QAM | M43 | M41, M42 |
+| M45 ISM band receiver | M39.1 | M42, M43, M44 |
+| M46 ISM sensor decoders | M45 | M42, M43, M44 |
 | M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
@@ -161,10 +165,12 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 590–599 | M43 |
 | 600–619 | M44 |
 | 620–625 | the golden gap cases of D356 (`resample_real` and `power_db` `Q15`, `convert_out` `rs8`/`ru8`; first numbered 469 to 474, which collided with M31 to M33, D357) |
-| 626–999 | free, for backlog milestones |
+| 626–635 | M45 |
+| 636–649 | M46 |
+| 650–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory
 
-- `M00-…` to `M44-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2).
+- `M00-…` to `M46-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2).
 - `BACKLOG.md`: work after M18 and M44.

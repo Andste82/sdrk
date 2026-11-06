@@ -6,17 +6,19 @@
 //!   Eb/N0 + 1 dB) is only checked where the theory expects at least 10 errors in the counted
 //!   bits; at 14 dB it expects about 0.9, so 0 errors are a valid result (D654).
 //! - **Test 3, pi/4-DQPSK** (seed 562): within 1 dB of the Gray DQPSK theory with differential
-//!   detection (the formula of M40, D619) at Eb/N0 6 and 8 dB; the envelope check of §Tests 3.
+//!   detection (the formula of M40, D619) at Eb/N0 6 and 8 dB; the envelope check of §Tests 3
+//!   (`min |y| >= 0.12` for roll-off 0.35, D685).
 //! - **Test 4, OQPSK** (seed 563): within a factor 1.5 of plain QPSK measured through the same
-//!   chain and seed with the carrier on the axes (no carrier offset, no carrier phase; D657,
-//!   I40.1-3) at Eb/N0 6 and 8 dB (not of `Q(sqrt(2 Eb/N0))`: OQPSK measures 1.61 times that
-//!   at 8 dB); the envelope check of §Tests 4. A further test runs OQPSK with a constant
-//!   carrier phase (the `Channel` of a run) to show the receiver needs the carrier on the axes.
+//!   chain and seed, both with the carrier offset and drift of M40 (D657, D688), at Eb/N0 6
+//!   and 8 dB; the envelope check of §Tests 4. A further test runs OQPSK with the constant
+//!   carrier phases 0.3 rad and pi/4 (the `Channel` of a run) and checks the acquisition of
+//!   the OQPSK carrier loop of `psk_demod` (D686 to D688). The order-8 lock detector of
+//!   `psk_demod` locks on 8PSK and stays unlocked on noise (D659).
 //!
 //! The chain is the one of `psk_ber_m40.rs` (D618): PRBS-15 bits (register all ones) as soft
 //! bits `+-1` -> `PskModBlock` (4 samples per symbol, roll-off 0.35, span 10) -> the carrier
-//! of the run's `Channel` (8PSK and pi/4-DQPSK: the `FrequencyOffset` of 0.002 cycles per
-//! symbol of M40; OQPSK and its QPSK yardstick: none) -> `ClockDrift` of 50 ppm ->
+//! of the run's `Channel` (the `FrequencyOffset` of 0.002 cycles per symbol of M40, or a
+//! constant phase) -> `ClockDrift` of 50 ppm ->
 //! `Awgn::from_ebn0` -> `PskDemodBlock` with its defaults. The soft bits of the first 2000
 //! symbols are skipped; then `BerMeter`s count until one has 10^6 bits after its
 //! synchronization. The phase ambiguity of coherent detection is removed by one meter per
@@ -376,7 +378,7 @@ const M40_CHANNEL: Channel = Channel {
     phase: 0.0,
 };
 
-/// No carrier offset and no carrier phase (the OQPSK runs, I40.1-3).
+/// No carrier offset and no carrier phase (the yardstick of the constant-phase runs).
 const ALIGNED: Channel = Channel {
     offset_cps: 0.0,
     phase: 0.0,
@@ -544,14 +546,14 @@ fn pi4_dqpsk_ber_within_1_db_of_theory() {
     check("pi4-dqpsk", &r, dqpsk_theory, one_db(dqpsk_theory));
 }
 
-/// Test 4 (D657): the OQPSK BER within a factor 1.5 of the plain QPSK BER measured through the
-/// same chain, both with the carrier on the axes (I40.1-3: the receiver of §3 does not
-/// correct a carrier phase); the figures against `Q(sqrt(2 Eb/N0))` are printed.
+/// Test 4 (D657, D688): the OQPSK BER within a factor 1.5 of the plain QPSK BER measured
+/// through the same chain and seed, both with the carrier offset of 0.002 cycles per symbol
+/// and the 50 ppm drift of M40 (D618); the figures against `Q(sqrt(2 Eb/N0))` are printed.
 #[test]
 fn oqpsk_ber_within_1_5_of_qpsk() {
     let (o, q) = std::thread::scope(|s| {
-        let o = s.spawn(|| ber_run(Mode::Offset, &[6.0, 8.0], 563, ALIGNED, BER_BITS, true));
-        let q = s.spawn(|| ber_run(Mode::Qpsk, &[6.0, 8.0], 563, ALIGNED, BER_BITS, true));
+        let o = s.spawn(|| ber_run(Mode::Offset, &[6.0, 8.0], 563, M40_CHANNEL, BER_BITS, true));
+        let q = s.spawn(|| ber_run(Mode::Qpsk, &[6.0, 8.0], 563, M40_CHANNEL, BER_BITS, true));
         (o.join().unwrap(), q.join().unwrap())
     });
     // Plain QPSK is the yardstick: only its slips are checked.
@@ -562,11 +564,14 @@ fn oqpsk_ber_within_1_5_of_qpsk() {
     });
 }
 
-/// I40.1-3: the OQPSK receiver needs the carrier phase on the axes. A constant phase of
-/// 0.3 rad costs about a factor 8 at 8 dB; at pi/4 or with a carrier offset of 2e-4 cycles
-/// per symbol no meter stays synchronized. Pins the measured behaviour over 2 10^5 bits.
+/// D688: the OQPSK receiver corrects a constant carrier phase (0.3 rad and pi/4, no offset)
+/// as plain QPSK does: at 8 dB over 2 10^5 bits each run synchronizes one meter, without
+/// slips, within a factor 1.5 of plain QPSK with the carrier on the axes. Acquisition: from a
+/// cold start, with the phase pi/4 plus the carrier offset of 0.002 cycles per symbol, the
+/// lock detector of `psk_demod` turns on within 1000 symbols and stays on, and the frequency
+/// estimate ends within 2e-4 of the offset.
 #[test]
-fn oqpsk_needs_the_carrier_on_the_axes() {
+fn oqpsk_corrects_constant_phases_and_acquires() {
     const BITS: u64 = 200_000;
     let channels = [
         ALIGNED,
@@ -578,37 +583,93 @@ fn oqpsk_needs_the_carrier_on_the_axes() {
             offset_cps: 0.0,
             phase: core::f64::consts::FRAC_PI_4,
         },
-        Channel {
-            offset_cps: 2e-4,
-            phase: 0.0,
-        },
     ];
     let r: Vec<_> = std::thread::scope(|s| {
-        let h: Vec<_> = channels
+        let mut h: Vec<_> = channels
             .iter()
-            .map(|&c| s.spawn(move || ber_run(Mode::Offset, &[8.0], 563, c, BITS, false)[0]))
+            .map(|&c| s.spawn(move || ber_run(Mode::Offset, &[8.0], 563, c, BITS, true)[0]))
             .collect();
+        h.push(s.spawn(|| ber_run(Mode::Qpsk, &[8.0], 563, ALIGNED, BITS, true)[0]));
         h.into_iter().map(|h| h.join().unwrap()).collect()
     });
-    let t = coherent_theory(8.0);
-    // Aligned: the full count near the theory.
-    assert!(
-        r[0].2 >= BITS && r[0].1 < 2.0 * t && r[0].3 == 0,
-        "{:?}",
-        r[0]
-    );
-    // 0.3 rad: the full count, but several times the theory.
-    assert!(r[1].2 >= BITS && r[1].1 > 4.0 * t, "{:?}", r[1]);
-    // pi/4 and a carrier offset: no meter reaches the count, and the meters slip.
-    for x in &r[2..] {
-        assert!(x.2 < BITS && x.3 > 0, "{x:?}");
+    let qber = r[3].1;
+    for (c, x) in channels.iter().zip(&r) {
+        eprintln!(
+            "oqpsk phase {}: BER {:.4e}, {:.3} times aligned qpsk {qber:.4e}",
+            c.phase,
+            x.1,
+            x.1 / qber
+        );
+        assert!(x.2 >= BITS && x.3 == 0, "{x:?}");
+        assert!(
+            x.1 <= 1.5 * qber && x.1 >= qber / 1.5,
+            "{x:?} against {qber}"
+        );
     }
+    // Acquisition, without noise: the transmitted OQPSK turned by pi/4 and shifted by the
+    // offset of M40, the 50 ppm drift.
+    let m = Mode::Offset.mod_config(SPS);
+    let bits = prbs_soft(2 * 6000);
+    let bit_rate = Rate::hz(SYMBOL_RATE * 2).unwrap();
+    let mut tx = PskModBlock::<VecStorage>::new(&m, bit_rate, &mut VecStorage).unwrap();
+    let mut sig = vec![C32::default(); 6000 * SPS];
+    tx.process(&bits, &mut sig).unwrap();
+    let h = core::f64::consts::FRAC_1_SQRT_2;
+    let turn = Complex64::new(h, h);
+    let wide: Vec<Complex64> = sig
+        .iter()
+        .map(|c| turn * Complex64::new(f64::from(c.re), f64::from(c.im)))
+        .collect();
+    let fs = (SYMBOL_RATE as usize * SPS) as f64;
+    let mut offset = FrequencyOffset::new(OFFSET * SYMBOL_RATE as f64, fs).unwrap();
+    let mut shifted = Vec::new();
+    offset.process(&wide, &mut shifted);
+    let mut clean = Vec::new();
+    ClockDrift::new(DRIFT_PPM)
+        .unwrap()
+        .process(&shifted, &mut clean);
+    let input: Vec<C32> = clean
+        .iter()
+        .map(|c| C32::new(c.re as f32, c.im as f32))
+        .collect();
+    let cfg = PskDemodConfig {
+        order: 4,
+        symbol_rate_hz: SYMBOL_RATE as f64,
+        variant: PskVariant::Offset,
+        ..PskDemodConfig::default()
+    };
+    let mut rx = PskDemodBlock::<VecStorage>::new(
+        &cfg,
+        Rate::hz(SYMBOL_RATE * SPS as u64).unwrap(),
+        &mut VecStorage,
+    )
+    .unwrap();
+    let mut soft = [0.0f32; 2];
+    let mut first = None;
+    let mut symbols = 0usize;
+    for piece in input.chunks(SPS) {
+        let p = rx.process(piece, &mut soft).unwrap();
+        assert_eq!(p.consumed, piece.len());
+        symbols += p.produced / 2;
+        match (rx.locked(), first) {
+            (true, None) => first = Some(symbols),
+            (false, Some(f)) => panic!("lost lock at symbol {symbols} after locking at {f}"),
+            _ => {}
+        }
+    }
+    let first = first.expect("never locked");
+    eprintln!(
+        "oqpsk acquisition (pi/4, {OFFSET} cycles per symbol): locked at symbol {first}, \
+         frequency {:.6}",
+        rx.frequency()
+    );
+    assert!(first <= 1000, "{first}");
+    assert!((rx.frequency() - OFFSET).abs() < 2e-4, "{}", rx.frequency());
 }
 
-/// The pi/4-DQPSK envelope (§Tests 3, D656, I40.1-2): its transitions never pass through the
-/// origin, but the minimum `|y|` for roll-off 0.35 is 0.135, not the 0.2 of the
-/// specification; the test checks the achievable 0.12 and that plain QPSK on the same bits
-/// does pass through the origin.
+/// The pi/4-DQPSK envelope (§Tests 3, D656, D685): its transitions never pass through the
+/// origin, `min |y| >= 0.12` for roll-off 0.35 over all samples (measured 0.135), and plain
+/// QPSK on the same bits does pass through the origin.
 #[test]
 fn pi4_dqpsk_envelope_stays_away_from_the_origin() {
     let (min, mean) = envelope(Mode::Pi4);
@@ -633,10 +694,11 @@ fn oqpsk_envelope_varies_less_than_qpsk() {
     assert!(min / mean > qmin / qmean);
 }
 
-/// I40.1-1 at the block: on noise alone `psk_demod` with order 8 reports lock (the order-8
-/// metric of §1 stays near 0.9), while order 4 does not. Noise of unit power, seed 561.
+/// D659 at the block: `psk_demod` with order 8 locks on 8PSK (the noiseless `psk_mod` output
+/// turned by 1 rad) and, as order 4, never reports lock on noise alone (noise of unit power,
+/// seed 561).
 #[test]
-fn psk8_demod_reports_lock_on_noise() {
+fn psk8_demod_locks_on_8psk_and_not_on_noise() {
     let fs = Rate::hz(SYMBOL_RATE * SPS as u64).unwrap();
     let mut awgn = Awgn::new(core::f64::consts::FRAC_1_SQRT_2, 561).unwrap();
     let zeros = vec![Complex64::new(0.0, 0.0); 40_000 * SPS];
@@ -664,8 +726,42 @@ fn psk8_demod_reports_lock_on_noise() {
             on += usize::from(rx.locked());
         }
         eprintln!("order {order} on noise: locked after {on} of {calls} calls");
-        locked.push((on, calls));
+        locked.push(on);
     }
-    assert_eq!(locked[0].0, 0, "order 4 must stay unlocked on noise");
-    assert!(locked[1].0 + 1 >= locked[1].1, "order 8: {:?}", locked[1]);
+    assert_eq!(locked, [0, 0], "no order may lock on noise");
+    // 8PSK: 6000 symbols, turned by 1 rad; locked at the end and after every call from
+    // symbol 1000 on.
+    let m = Mode::Psk8.mod_config(SPS);
+    let bits = prbs_soft(3 * 6000);
+    let mut tx =
+        PskModBlock::<VecStorage>::new(&m, Rate::hz(SYMBOL_RATE * 3).unwrap(), &mut VecStorage)
+            .unwrap();
+    let mut sig = vec![C32::default(); 6000 * SPS];
+    tx.process(&bits, &mut sig).unwrap();
+    let (s, c) = 1.0f32.sin_cos();
+    let input: Vec<C32> = sig
+        .iter()
+        .map(|x| C32::new(x.re * c - x.im * s, x.re * s + x.im * c))
+        .collect();
+    let cfg = PskDemodConfig {
+        order: 8,
+        symbol_rate_hz: SYMBOL_RATE as f64,
+        ..PskDemodConfig::default()
+    };
+    let mut rx = PskDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+    let mut soft = [0.0f32; 3];
+    let mut symbols = 0usize;
+    let mut first = None;
+    for piece in input.chunks(SPS) {
+        let p = rx.process(piece, &mut soft).unwrap();
+        symbols += p.produced / 3;
+        if rx.locked() && first.is_none() {
+            first = Some(symbols);
+        }
+        if symbols >= 1000 {
+            assert!(rx.locked(), "order 8 lost lock at symbol {symbols}");
+        }
+    }
+    eprintln!("order 8 on 8psk: locked at symbol {first:?}");
+    assert!(rx.locked());
 }

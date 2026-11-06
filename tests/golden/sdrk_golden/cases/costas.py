@@ -10,7 +10,8 @@ float32 with the ``f32model`` helpers, one operation at a time, and the phase st
 lock detector unchanged (D603); the order-4 lock metric is ``-cos(4 arg y)`` (D601). Order 8
 (M40.1) decides the 8PSK point ``d`` of the half-open octant of ``y`` from the signs and the
 comparison of the magnitudes (D641), measures ``e = y.im dr - y.re di`` and uses the metric
-``((r r) / p) 2 - 1`` with ``r = y.re dr + y.im di`` (D640).
+``cos(8 err) = T4(u)``, computed as ``((8 w) (w - 1)) + 1`` with ``w = u u``,
+``u = ((r r) / p) 2 - 1`` and ``r = y.re dr + y.im di`` (D640, D659).
 
 The signals use ``math.sin`` and ``math.cos`` one value at a time and the noise comes from
 ``rng.standard_normal``; nothing that feeds a committed byte uses NumPy transcendentals or BLAS, so
@@ -46,6 +47,7 @@ LOCK_ON = fm.f32(0.5)
 LOCK_OFF = fm.f32(0.3)
 FOUR = fm.f32(4.0)
 TWO = fm.f32(2.0)
+EIGHT = fm.f32(8.0)
 ONE = fm.f32(1.0)
 ZERO = fm.f32(0.0)
 # The parts of the 8PSK points exp(j (2k + 1) pi / 8), rounded once to float32.
@@ -143,7 +145,9 @@ def costas_f32(x, order, kp64, ki64, max64):
         else:
             dr, di = _point8_f32(_octant8(yr, yi))
             r = fm.add(fm.mul(yr, dr), fm.mul(yi, di))
-            m = fm.sub(fm.mul(fm.div(fm.mul(r, r), p), TWO), ONE)
+            u = fm.sub(fm.mul(fm.div(fm.mul(r, r), p), TWO), ONE)
+            w = fm.mul(u, u)
+            m = fm.add(fm.mul(fm.mul(EIGHT, w), fm.sub(w, ONE)), ONE)
         if fm.is_finite(m):
             level = fm.flush_denormal(fm.add(level, fm.mul(LOCK_ALPHA, fm.sub(m, level))))
             if level > LOCK_ON:

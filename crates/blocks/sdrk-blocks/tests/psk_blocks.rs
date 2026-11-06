@@ -19,7 +19,8 @@
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
-    clippy::cast_lossless
+    clippy::cast_lossless,
+    clippy::many_single_char_names
 )]
 
 mod common;
@@ -35,6 +36,7 @@ use sdrk_blocks::{
 use sdrk_core::kernels::costas::{Costas, CostasState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
+use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState, Ted};
 use sdrk_device::Rate;
 use sdrk_testkit::{Pcg32, VecStorage};
@@ -189,13 +191,6 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     let mut fir = FirState::<C32, _, _>::new(taps, vec![C32::default(); len - 1]).unwrap();
     let mut mf = vec![C32::default(); input.len()];
     <Sdrk as Fir<C32>>::fir(&Sdrk, &mut fir, input, &mut mf).unwrap();
-    if cfg.variant == PskVariant::Offset {
-        // OQPSK: the real part `n / 2` samples later, zeros first
-        let re: Vec<f32> = mf.iter().map(|x| x.re).collect();
-        for (i, x) in mf.iter_mut().enumerate() {
-            x.re = if i >= n / 2 { re[i - n / 2] } else { 0.0 };
-        }
-    }
     let sps = sdrk_blocks::SymbolSyncConfig {
         symbol_rate_hz: cfg.symbol_rate_hz,
         ..sdrk_blocks::SymbolSyncConfig::default()
@@ -204,6 +199,9 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     .unwrap();
     let mut sync =
         SymbolSyncState::<C32>::new(sps, Ted::Gardner, cfg.sync_bw, 0.7071, 0.005, 1.0).unwrap();
+    if cfg.variant == PskVariant::Offset {
+        return soft_of(cfg, offset_kernels(cfg, n, &mut sync, &mf));
+    }
     let mut syms = vec![C32::default(); input.len()];
     let p = <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, &mut sync, &mf, &mut syms).unwrap();
     assert_eq!(p.consumed, input.len());
@@ -222,6 +220,11 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
         let mut st = CostasState::new(cfg.order, cfg.carrier_bw, 0.7071, cfg.max_offset).unwrap();
         <Sdrk as Costas>::costas(&Sdrk, &mut st, &syms, &mut y).unwrap();
     }
+    soft_of(cfg, y)
+}
+
+/// The soft bits of the symbols `y` for the order and variant of `cfg`.
+fn soft_of(cfg: &PskDemodConfig, y: Vec<C32>) -> Vec<f32> {
     let mut bits = Vec::new();
     for s in y {
         match (cfg.order, cfg.variant) {
@@ -232,6 +235,81 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
         }
     }
     bits
+}
+
+/// The OQPSK receiver of `psk_demod` (D686, D687) one sample at a time: `rotate` of the
+/// sample with the oscillator `(phase, -freq / sps)`, the ring of `n / 2` samples, the
+/// realigned sample `(re r_(n-h), im r_n)` into `symbol_sync`, and after each strobe the phase
+/// error `sign(y.re) z.im - sign(y.im) z.re` with `z` the cubic interpolation of the last four
+/// `(re r_n, im r_(n-h))` at the strobe's `mu`, the loop filter with the gains of `costas`
+/// order 4 and the jump `-kp e` of the phase. Returns the realigned symbols.
+fn offset_kernels(
+    cfg: &PskDemodConfig,
+    n: usize,
+    sync: &mut SymbolSyncState<C32>,
+    mf: &[C32],
+) -> Vec<C32> {
+    let g = CostasState::new(4, cfg.carrier_bw, 0.7071, cfg.max_offset)
+        .unwrap()
+        .gains();
+    let step = |v: f64| (v * 4_294_967_296.0 + 0.5).floor() as i64 as u32;
+    let sign = |x: f32| {
+        if x > 0.0 {
+            1.0
+        } else if x < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }
+    };
+    let interp = |w: [f32; 4], mu: f32| {
+        let c1 = ((-(w[0] * (1.0 / 3.0)) - w[1] * 0.5) + w[2]) - w[3] * (1.0 / 6.0);
+        let c2 = (w[0] * 0.5 - w[1]) + w[2] * 0.5;
+        let c3 = ((-(w[0] * (1.0 / 6.0)) + w[1] * 0.5) - w[2] * 0.5) + w[3] * (1.0 / 6.0);
+        ((c3 * mu + c2) * mu + c1) * mu + w[1]
+    };
+    let mut ring = vec![C32::default(); n / 2];
+    let mut window = [C32::default(); 4];
+    let (mut phase, mut freq) = (0u32, 0.0f32);
+    let (mut mu, mut remaining) = (0.0f32, 0usize);
+    let mut syms = Vec::new();
+    for (k, &x) in mf.iter().enumerate() {
+        if remaining == 0 {
+            let t = sync.next_strobe();
+            mu = (t - t.floor()) as f32;
+            remaining = (t.floor() as i64 + 3).max(1) as usize;
+        }
+        let mut nco = Nco::from_increment(step(-f64::from(freq) / sync.sps()));
+        nco.set_phase(phase);
+        let mut r = [C32::default()];
+        <Sdrk as Rotate<C32>>::rotate(&Sdrk, &mut nco, &[x], &mut r).unwrap();
+        phase = nco.phase();
+        let r = r[0];
+        let old = std::mem::replace(&mut ring[k % (n / 2)], r);
+        window = [window[1], window[2], window[3], C32::new(r.re, old.im)];
+        let mut y = [C32::default(); 2];
+        let p =
+            <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, sync, &[C32::new(old.re, r.im)], &mut y)
+                .unwrap();
+        assert_eq!(p.consumed, 1);
+        remaining -= 1;
+        assert_eq!(p.produced == 1, remaining == 0, "sample {k}");
+        if p.produced == 1 {
+            let y = y[0];
+            let z = C32::new(
+                interp(window.map(|w| w.re), mu),
+                interp(window.map(|w| w.im), mu),
+            );
+            let e = sign(y.re) * z.im - sign(y.im) * z.re;
+            let e = if e.is_finite() { e } else { 0.0 };
+            let f = freq + g.ki * e;
+            let f = if f.abs() < 1e-30 { 0.0 } else { f };
+            freq = f.clamp(-g.max_offset, g.max_offset);
+            phase = phase.wrapping_sub(step(f64::from(g.kp * e)));
+            syms.push(y);
+        }
+    }
+    syms
 }
 
 /// A noisy, turned and frequency-shifted QPSK or BPSK signal at `sps` samples per symbol from
@@ -759,11 +837,18 @@ fn psk_mod_to_psk_demod_without_noise_is_error_free() {
         // the symbol centres have amplitude 1 (coherent; differential |y|^2 = 1) up to the
         // intersymbol interference of the truncated pulse and the timing jitter (8PSK soft
         // bits are distance differences, not amplitudes)
+        // OQPSK: 0.2, for the phase jitter of its detector, whose terms at the other rail's
+        // transition carry data (D687; measured 0.57 to 0.77 for H = 0.707 over 10^4 symbols)
         let tail = &soft[soft.len() - 200..];
         let want = if order == 4 { H } else { 1.0 };
+        let tol = if variant == PskVariant::Offset {
+            0.2
+        } else {
+            0.1
+        };
         for s in tail.iter().filter(|_| order != 8) {
             assert!(
-                (s.abs() - want).abs() < 0.1 * want,
+                (s.abs() - want).abs() < tol * want,
                 "{order} {differential} {variant:?}: {s}"
             );
         }

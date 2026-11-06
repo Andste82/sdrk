@@ -1,9 +1,9 @@
 //! Tests of the M40 kernel of `sdrk-core`: `costas` (with order 8 of M40.1). The construction
 //! rules, the loop constants, timing, the length check, lock and frequency tracking on clean
-//! BPSK, QPSK and 8PSK, the lock detector on and off (and the measured level of the order-8
-//! metric on noise, open item I40.1-1), block-size invariance (pieces of 1 to N symbols), `reset`, silence, full
-//! scale and beyond, non-finite input and the thread-safety of the public types. The comparison
-//! of `Fallback` with `Reference` runs only with the feature `reference`.
+//! BPSK, QPSK and 8PSK, the lock detector on and off (for order 8 too, D659), block-size
+//! invariance (pieces of 1 to N symbols), `reset`, silence, full scale and beyond, non-finite
+//! input and the thread-safety of the public types. The comparison of `Fallback` with
+//! `Reference` runs only with the feature `reference`.
 
 #![allow(
     clippy::unwrap_used,
@@ -255,8 +255,8 @@ fn psk8_detector_and_metric_follow_the_octants() {
             run(&mut st, &[x]);
             let step = st.phase() as i32;
             assert_eq!(step > 0, forward, "octant {k}, delta {delta}: {step}");
-            // The metric is cos(2 delta): one step of the lock detector from 0.
-            let want = 0.01 * (2.0 * delta).cos();
+            // The metric is cos(8 delta) (D659): one step of the lock detector from 0.
+            let want = 0.01 * (8.0 * delta).cos();
             assert!(
                 (f64::from(st.lock_level()) - want).abs() < 1e-6,
                 "octant {k}: {}",
@@ -292,17 +292,24 @@ fn psk8_detector_and_metric_follow_the_octants() {
 #[test]
 #[allow(
     clippy::print_stdout,
-    reason = "the measured level of open item I40.1-1"
+    reason = "the measured lock levels of the order-8 metric (D659)"
 )]
-fn psk8_metric_reports_lock_on_noise() {
-    // Open item I40.1-1: the order-8 metric of M40.1 §1 is cos(2 err) against the nearest
-    // point, |err| <= pi / 8, so it is at least cos(pi / 4) for every input and averages
-    // sin(pi / 4) / (pi / 4) = 0.900 on noise: the detector locks on noise and stays locked.
-    // The test pins the measured level until the maintainer decides.
+fn psk8_locks_on_8psk_and_unlocks_on_noise() {
+    // D659 (maintainer decision on I40.1-1): the order-8 metric is cos(8 err) against the
+    // nearest point, 1 on the points and about 0 on noise, so the order-8 detector behaves as
+    // orders 2 and 4: it locks on noisy 8PSK and turns off on noise.
+    let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
+    run(&mut st, &symbols(42, 3000, 8, 1.1, 0.002, 0.05));
+    assert!(st.locked(), "level {}", st.lock_level());
+    let signal = st.lock_level();
+    assert!(signal > 0.9, "{signal}");
     let mut rng = Rng(SEED8 * 1000 + 41);
     let noise: Vec<C32> = (0..20_000)
         .map(|_| C32::new(rng.next(), rng.next()))
         .collect();
+    run(&mut st, &noise[..1500]);
+    assert!(!st.locked(), "level {}", st.lock_level());
+    // A fresh loop on noise never locks; the level stays near 0.
     let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
     let mut levels = Vec::new();
     let mut y = [C32::default(); 1];
@@ -310,16 +317,19 @@ fn psk8_metric_reports_lock_on_noise() {
         Fallback
             .costas(&mut st, core::slice::from_ref(x), &mut y)
             .unwrap();
+        assert!(!st.locked(), "locked on noise, level {}", st.lock_level());
         levels.push(st.lock_level());
     }
     let tail = &levels[2000..];
     let mean = tail.iter().map(|&l| f64::from(l)).sum::<f64>() / tail.len() as f64;
-    let min = tail.iter().copied().fold(f32::INFINITY, f32::min);
-    println!("order-8 lock level on noise: mean {mean:.4}, min {min:.4}");
-    assert!((0.88..0.92).contains(&mean), "{mean}");
-    assert!(min > 0.85, "{min}");
-    assert!(st.locked());
+    let max = tail.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    println!("order-8 lock level: 8PSK {signal:.4}; noise mean {mean:.4}, max {max:.4}");
+    assert!(mean.abs() < 0.05, "{mean}");
+    assert!(max < LOCK_ON_LEVEL, "{max}");
 }
+
+/// The level above which the lock detector turns on.
+const LOCK_ON_LEVEL: f32 = 0.5;
 
 #[test]
 fn the_frequency_integrator_stops_at_its_limit() {

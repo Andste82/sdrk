@@ -4,7 +4,8 @@
 //! symbol depends on the detector output of the previous one), so the kernel is not
 //! vectorized; per symbol it costs one interpolated table pair, a complex rotation, the
 //! detector, the loop filter and the lock metric (one division; order 8 adds the octant
-//! decision of the 8PSK point to the detector and the metric). The loop keeps the state in
+//! decision of the 8PSK point to the detector and the metric, and the three products of
+//! `T4` to the metric, D659). The loop keeps the state in
 //! locals and is specialized for the order, so the detector and the metric have no branch on
 //! it. `floor(v 2^32 + 0.5) as i64 as u32` is the `phase_step` of `fm_mod`, which equals that
 //! formula bit for bit without a library call to `floor`.

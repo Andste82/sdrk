@@ -25,7 +25,7 @@ use sdrk_blocks::{
     InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
     MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
     NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, QuadDemodBlock, QuadDemodConfig,
+    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig,
     RESAMPLE_TUNED_PHASES, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
     ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
     SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
@@ -64,6 +64,12 @@ pub(crate) trait Kind: Send + Sync + 'static {
     const KIND: &'static str;
     /// Names of the kernels the block calls.
     fn kernels() -> &'static [&'static str];
+    /// Names of the kernels a node with these raw params calls (the backend check); by
+    /// default [`Kind::kernels`].
+    fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
+        let _ = params;
+        Self::kernels()
+    }
     /// The configuration with every default.
     fn default_cfg() -> Self::Cfg;
     /// Sets one parameter (kind and absolute range are checked).
@@ -218,6 +224,10 @@ impl<K: Kind> BlockFactory for Factory<K> {
 
     fn kernels(&self) -> &'static [&'static str] {
         K::kernels()
+    }
+
+    fn kernels_for(&self, params: &Map<String, Value>) -> &'static [&'static str] {
+        K::kernels_for(params)
     }
 
     fn build(
@@ -3340,6 +3350,15 @@ impl Kind for PskDemodKind {
     fn kernels() -> &'static [&'static str] {
         &["fir", "symbol_sync", "costas"]
     }
+    /// `offset` runs its own carrier loop with `rotate` instead of `costas` (D686), so its
+    /// backend check looks at `rotate` (D689); every other variant keeps the kind's list.
+    fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
+        if params.get("variant").and_then(Value::as_str) == Some("offset") {
+            &["fir", "symbol_sync", "rotate"]
+        } else {
+            Self::kernels()
+        }
+    }
     fn default_cfg() -> PskDemodConfig {
         PskDemodConfig::default()
     }
@@ -3363,8 +3382,15 @@ impl Kind for PskDemodKind {
             rate_out: PskDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: PskDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // §4 of M40: 4 span + 40 / sps per input sample; 8PSK adds the 16 per symbol of
-            // its max-log soft bits (D644), the other variants of M40.1 nothing (D651).
-            cost: 4.0 * cfg.span as f64 + if cfg.order == 8 { 56.0 } else { 40.0 } / sps,
+            // its max-log soft bits (D644), `pi4` nothing (D651), `offset` the 6 per sample of
+            // the derotation of its carrier loop (the cost of `rotate`, D686).
+            cost: 4.0 * cfg.span as f64
+                + if cfg.order == 8 { 56.0 } else { 40.0 } / sps
+                + if cfg.variant == PskVariant::Offset {
+                    6.0
+                } else {
+                    0.0
+                },
             taps: block.num_taps(),
             delay: block.timing().delay,
             min_input: block.min_input(),

@@ -134,7 +134,14 @@ fn metric(order: u32, y: C32) -> f32 {
             let r2 = r * r;
             let ratio = r2 / power;
             let twice = ratio * 2.0;
-            twice - 1.0
+            // u = cos(2 err); the metric is T4(u) = 8 u^4 - 8 u^2 + 1 = cos(8 err), written
+            // as ((8 w) (w - 1)) + 1 with w = u u.
+            let u = twice - 1.0;
+            let w = u * u;
+            let eight_w = 8.0 * w;
+            let w_less_one = w - 1.0;
+            let prod = eight_w * w_less_one;
+            prod + 1.0
         }
     }
 }

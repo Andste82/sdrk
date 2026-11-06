@@ -6,8 +6,9 @@
 //! (`y = x exp(-j phi)`, sine and cosine from the tables of `rotate`), a decision-directed phase
 //! detector measures the remaining phase error, and a proportional-integral loop filter corrects
 //! the frequency integrator and the phase. A lock detector smooths `cos(order arg y)` (for
-//! QPSK its negative, so that the points at 45 degrees give +1, D601; for 8PSK the metric of
-//! M40.1 §1, `cos(2 err)` against the nearest point). The arithmetic is fixed (float32 model,
+//! QPSK its negative, so that the points at 45 degrees give +1, D601; for 8PSK `cos(8 err)`
+//! against the nearest point, the Chebyshev polynomial `T4` of the `cos(2 err)` of M40.1 §1,
+//! D659). The arithmetic is fixed (float32 model,
 //! see [`Costas`] and `docs/kernels.md`), so `Fallback` and `Reference` are bit-identical.
 
 use core::f64::consts::TAU;
@@ -188,15 +189,12 @@ impl CostasState {
         f64::from(self.freq)
     }
 
-    /// Whether the lock detector reports lock (on above 0.5, off below 0.3). With order 8 the
-    /// level stays near 0.9 on noise, so lock is reported on any input (open item I40.1-1).
+    /// Whether the lock detector reports lock (on above 0.5, off below 0.3).
     pub fn locked(&self) -> bool {
         self.locked
     }
 
-    /// The smoothed lock metric `l` (about 1 when locked, about 0 on noise for orders 2 and 4;
-    /// for order 8 about 0.9 on noise, the mean `sin(pi / 4) / (pi / 4)` of `cos(2 err)` with
-    /// `err` uniform within an octant, open item I40.1-1).
+    /// The smoothed lock metric `l` (about 1 when locked, about 0 on noise, for every order).
     pub fn lock_level(&self) -> f32 {
         self.level
     }
@@ -316,8 +314,9 @@ pub(crate) fn detector(order: u32, y: C32) -> f32 {
 }
 
 /// The lock metric `c` of the contract (order 2: `cos(2 arg y)`, order 4: `-cos(4 arg y)`,
-/// D601; order 8: `((r r) / p) 2 - 1 = cos(2 err)` with `r = re(y conj d)` against the octant
-/// point `d`, D640); `None` when it is not finite (`y = 0`, NaN, overflow), and the detector
+/// D601; order 8: `cos(8 err)` as `((8 w) (w - 1)) + 1` with `w = u u` and
+/// `u = ((r r) / p) 2 - 1 = cos(2 err)`, `r = re(y conj d)` against the octant point `d`,
+/// D640, D659); `None` when it is not finite (`y = 0`, NaN, overflow), and the detector
 /// keeps its level (D603).
 #[allow(clippy::many_single_char_names)]
 #[inline]
@@ -334,7 +333,9 @@ pub(crate) fn lock_metric(order: u32, y: C32) -> Option<f32> {
         _ => {
             let (dr, di) = octant_point(y);
             let r = y.re * dr + y.im * di;
-            ((r * r) / p) * 2.0 - 1.0
+            let u = ((r * r) / p) * 2.0 - 1.0;
+            let w = u * u;
+            ((8.0 * w) * (w - 1.0)) + 1.0
         }
     };
     c.is_finite().then_some(c)
@@ -376,7 +377,8 @@ pub trait Costas {
     ///    rounding in f64, wrapping).
     /// 6. Lock detector with `a = y.re y.re`, `b = y.im y.im`, `p = a + b`, `d = a - b`: the
     ///    metric `c = d / p` (order 2), `c = ((4 a) b - d d) / (p p)` (order 4) or
-    ///    `c = ((r r) / p) 2 - 1` with `r = y.re dr + y.im di` (order 8); if `c` is
+    ///    `c = ((8 w) (w - 1)) + 1` with `w = u u`, `u = ((r r) / p) 2 - 1` and
+    ///    `r = y.re dr + y.im di` (order 8, `cos(8 err)`: `T4(u) = 8 u^4 - 8 u^2 + 1`); if `c` is
     ///    finite, `l = flush_denormal(l + 0.01 (c - l))`, locked when `l > 0.5`, unlocked when
     ///    `l < 0.3`; otherwise the detector is unchanged.
     ///

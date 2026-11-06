@@ -88,6 +88,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Changed
 
+- M42 (D772): `sdrk_pipeline::VecStorage` and `sdrk_testkit::VecStorage` hand out boxed slices (`Box<[T]>`) instead of `Vec<T>`; a block holds 8 bytes less per buffer, and `PskDemodBlock` (with the equalizer of M43) is back within the 512-byte limit of every block.
 - M39.1 (maintainer decision D729): the total budget of the golden vectors (R8.6, `MAX_TOTAL_BYTES`) is 32 MiB instead of 16 MiB; the limit of 512 KiB per case stays.
 - M42: the pipeline checks the two input types of a node pairwise only when both ports accept the same types, so a kind may take `c32` at port `a` and `f32` at port `b` (`fm_stereo_rds_mod`); `ClockedNode` forwards the readings of its block to the statistics (D763). `sdrk_blocks::all_descriptions()` and `Registry::standard()` list 55 kinds.
 - M40.1: `PskModConfig` and `PskDemodConfig` have the new public field `variant` (`PskVariant`, default `Plain`): struct literals without `..Default::default()` must name it (D648). The `costas` block, `psk_mod` and `psk_demod` accept `order` 8; order 3 stays `invalid_value`, and orders 5, 6 and 7, which were `out_of_range` above the old maximum of 4, are now `invalid_value` (`InvalidParameter` instead of `OutOfRange`, D640).

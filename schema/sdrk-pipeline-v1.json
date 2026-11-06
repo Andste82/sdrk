@@ -704,6 +704,47 @@
           },
           {
             "additionalProperties": false,
+            "description": "Decodes Mode S and ADS-B downlink frames from complex samples at exactly 2 MHz.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "adsb_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "min_snr_db": {
+                    "default": 6.0,
+                    "description": "How far the mean pulse amplitude of a preamble must lie above the median magnitude of the 256 samples before it, in dB (amplitude ratio 10^(dB / 20)). Unit: dB. Typical: 6; 10 to suppress weak and false preambles. Build-time.",
+                    "maximum": 60.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Automatic frequency control: measures the carrier offset of a signal and shifts it to 0 Hz.",
             "properties": {
               "align": {
@@ -2239,6 +2280,103 @@
           },
           {
             "additionalProperties": false,
+            "description": "Finds HDLC frames (AX.25, APRS) in a stream of soft bits and outputs their packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "hdlc_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "emit_bad": {
+                    "default": false,
+                    "description": "Also output frames whose FCS does not match, with the flag CRC_FAIL. Typical: false; true to count or inspect damaged frames. Build-time.",
+                    "type": "boolean"
+                  },
+                  "nrzi": {
+                    "default": true,
+                    "description": "NRZI decode the bits before the HDLC decoder (a change of level is a 0). Typical: true for AX.25 and APRS. Build-time.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Frames packets as HDLC (AX.25, APRS) and outputs one +1/-1 sample per bit.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "hdlc_encode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "nrzi": {
+                    "default": true,
+                    "description": "NRZI code the bits (a 0 changes the level, a 1 keeps it). Typical: true for AX.25 and APRS. Build-time.",
+                    "type": "boolean"
+                  },
+                  "preamble_flags": {
+                    "default": 32,
+                    "description": "Flags sent before every frame, 1 to 1024. Typical: 32 (about 210 ms at 1200 Bd); more for slow receivers. Build-time.",
+                    "maximum": 1024,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "tail_flags": {
+                    "default": 4,
+                    "description": "Flags sent after every frame, 1 to 64. Typical: 4. Build-time.",
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Outputs the imaginary part of a complex stream as a real stream.",
             "properties": {
               "align": {
@@ -2556,6 +2694,108 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Demodulates on-off keying to soft bits with an adaptive threshold.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "ook_demod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "symbol_rate_hz": {
+                    "description": "Nominal symbol rate in Hz, rounded to 1/1000 Hz; the sample rate divided by it must lie between 4 and 1024. Required. Unit: Hz. Typical: 2000 for a 433 MHz sensor. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "track_symbols": {
+                    "default": 32,
+                    "description": "Time constant of the level trackers in symbols: the on level moves by d = 1 - exp(-2 / track_symbols) of its distance per symbol decided 1, the off level by 1 - exp(-1 / (8 track_symbols)) per symbol decided 0; also the length of the lead-in and the run of equal decisions after which the other level follows. Typical: 32; 8 for short bursts. Build-time.",
+                    "maximum": 100000,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "symbol_rate_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Modulates soft bits to on-off keying: the carrier on for a 1, off for a 0.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "ook_mod"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "level": {
+                    "default": 0.9,
+                    "description": "Amplitude of a 1 bit, 0 to 1. Typical: 0.9. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "samples_per_symbol": {
+                    "description": "Output samples per bit, 1 to 4096. Required. Typical: 500 for 2000 bit/s at 1 MHz. Build-time.",
+                    "maximum": 4096,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "samples_per_symbol"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
             ],
             "type": "object"
           },

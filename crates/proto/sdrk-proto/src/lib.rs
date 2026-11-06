@@ -1,7 +1,8 @@
 //! Protocol logic of SDRk without signal processing: the packet type, CRCs, a simple test
-//! framing, PN9 data whitening, the PRBS generators of the bit error rate tests and the
-//! Radio Data System (`rds`: checkwords, syndromes, groups, programme service name and
-//! radiotext).
+//! framing, PN9 data whitening, the PRBS generators of the bit error rate tests, the Radio
+//! Data System (`rds`: checkwords, syndromes, groups, programme service name and radiotext),
+//! NRZI and HDLC framing with the AX.25 address header (APRS), and the fields and parity of
+//! Mode S frames (ADS-B).
 //!
 //! Layer `crates/proto`, heap-free; depends on `sdrk-device` only. Digital modes end in bytes:
 //! a decoder turns bits into [`Packet`]s, an encoder turns packets back into bits. The blocks
@@ -27,9 +28,13 @@
     clippy::indexing_slicing
 )]
 
+pub mod adsb;
+pub mod ax25;
 pub mod crc;
 mod error;
 pub mod frame;
+pub mod hdlc;
+pub mod nrzi;
 mod packet;
 pub mod prbs;
 pub mod rds;

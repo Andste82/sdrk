@@ -11,27 +11,29 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig,
-    AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
-    BiquadRealBlock, Block, BlockDescription, BlockSample, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock,
-    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
-    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
-    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, FirBlock, FirConfig,
-    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
-    FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, ImagPartBlock,
-    InterpolateBlock, InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig,
-    MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
-    NoiseBlankConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
-    RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation,
-    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
-    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
-    SymbolSyncConfig, ToComplexBlock,
+    AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
+    AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
+    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
+    BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock,
+    CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
+    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
+    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig,
+    FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
+    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
+    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock,
+    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
+    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
+    PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
+    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RealPartBlock, RealToIqBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
+    ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
+    ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3527,6 +3529,266 @@ impl Kind for RdsDecodeKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(PacketOutNode::new(RdsDecodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ---------------------------------------------------------------- hdlc_encode
+
+pub(crate) struct HdlcEncodeKind;
+
+impl Kind for HdlcEncodeKind {
+    type Cfg = HdlcEncodeConfig;
+
+    const KIND: &'static str = "hdlc_encode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> HdlcEncodeConfig {
+        HdlcEncodeConfig::default()
+    }
+    fn set(cfg: &mut HdlcEncodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &HdlcEncodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch("hdlc_encode needs packets"));
+        }
+        // `rate` is the `rate_hz` of the packet input: the rate of the encoded stream.
+        Ok(Figures {
+            rate_out: HdlcEncodeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: HdlcEncodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The bit step of the encoder and the NRZI level per output sample (D692).
+            cost: 2.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &HdlcEncodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketInNode::new(HdlcEncodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ---------------------------------------------------------------- hdlc_decode
+
+pub(crate) struct HdlcDecodeKind;
+
+impl Kind for HdlcDecodeKind {
+    type Cfg = HdlcDecodeConfig;
+
+    const KIND: &'static str = "hdlc_decode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> HdlcDecodeConfig {
+        HdlcDecodeConfig::default()
+    }
+    fn set(cfg: &mut HdlcDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &HdlcDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("hdlc_decode needs real f32 soft bits"));
+        }
+        // The packet stream gets the nominal rate `rate * max_per_input` (1/40).
+        let block = HdlcDecodeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: HdlcDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The NRZI compare and the bit step of the decoder per input sample (D692).
+            cost: 2.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &HdlcDecodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(HdlcDecodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- ook_mod
+
+pub(crate) struct OokModKind;
+
+impl Kind for OokModKind {
+    type Cfg = OokModConfig;
+
+    const KIND: &'static str = "ook_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate_real", "interleave"]
+    }
+    fn default_cfg() -> OokModConfig {
+        OokModConfig::default()
+    }
+    fn set(cfg: &mut OokModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &OokModConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("ook_mod needs f32 soft bits"));
+        }
+        let block = OokModBlock::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: OokModBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: OokModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The level map, then one tap and one interleave per output sample (D692).
+            cost: 1.0 + 2.0 * cfg.samples_per_symbol as f64,
+            taps: cfg.samples_per_symbol,
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &OokModConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(OokModBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// ------------------------------------------------------------------ ook_demod
+
+pub(crate) struct OokDemodKind;
+
+impl Kind for OokDemodKind {
+    type Cfg = OokDemodConfig;
+
+    const KIND: &'static str = "ook_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["mag", "resample_real", "symbol_sync"]
+    }
+    fn default_cfg() -> OokDemodConfig {
+        OokDemodConfig::default()
+    }
+    fn set(cfg: &mut OokDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &OokDemodConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("ook_demod needs c32 samples"));
+        }
+        // Fewer than 4 samples per symbol is `OutOfRange` of `symbol_rate_hz`, which the
+        // factory reports as `rate_unsupported`.
+        let sps = cfg.sps(rate)?;
+        let block = OokDemodBlock::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: OokDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: OokDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // Magnitude, boxcar, the gain, the timing loop and the level trackers per symbol
+            // (D692, D700).
+            cost: 5.0 + sps.round() + 28.0 / sps,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &OokDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(OokDemodBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ---------------------------------------------------------------- adsb_decode
+
+pub(crate) struct AdsbDecodeKind;
+
+impl Kind for AdsbDecodeKind {
+    type Cfg = AdsbDecodeConfig;
+
+    const KIND: &'static str = "adsb_decode";
+    fn kernels() -> &'static [&'static str] {
+        &["mag"]
+    }
+    fn default_cfg() -> AdsbDecodeConfig {
+        AdsbDecodeConfig::default()
+    }
+    fn set(cfg: &mut AdsbDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &AdsbDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("adsb_decode needs c32 samples"));
+        }
+        // A rate other than 2 MHz is `Unsupported`, which the factory reports as
+        // `rate_unsupported`.
+        let block = AdsbDecodeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: AdsbDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // Magnitude, the preamble test and the histogram step per input sample (D692).
+            cost: 10.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &AdsbDecodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(AdsbDecodeBlock::new(
             cfg, rate, st,
         )?)))
     }

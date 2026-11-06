@@ -1,0 +1,75 @@
+{
+  "sdrk": 1,
+  "name": "aprs-transmitter",
+  "description": "Frame packets as HDLC (AX.25/APRS) and send them as Bell 202 AFSK at 1200 Bd (mark 1200 Hz, space 2200 Hz) on 48 kHz audio for an FM transmitter or a sound card, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "msg": {
+      "type": "packets",
+      "rate_hz": 1200,
+      "description": "AX.25 frames to send (address fields, control, PID and information), 2 to 256 bytes each, without the FCS"
+    }
+  },
+  "nodes": {
+    "enc": {
+      "kind": "hdlc_encode"
+    },
+    "mod": {
+      "kind": "fsk_mod",
+      "params": {
+        "deviation_hz": 500,
+        "samples_per_symbol": 10
+      }
+    },
+    "re": {
+      "kind": "real_part"
+    },
+    "resamp": {
+      "kind": "resample",
+      "params": {
+        "rate_out_hz": 48000
+      }
+    },
+    "shift": {
+      "kind": "rotate",
+      "params": {
+        "frequency_hz": 1700
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "msg",
+      "to": "enc"
+    },
+    {
+      "from": "enc",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "shift"
+    },
+    {
+      "from": "shift",
+      "to": "re"
+    },
+    {
+      "from": "re",
+      "to": "resamp"
+    },
+    {
+      "from": "resamp",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "underrun": "zeros"
+    }
+  }
+}

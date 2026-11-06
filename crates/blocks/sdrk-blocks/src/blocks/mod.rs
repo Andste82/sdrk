@@ -1,6 +1,7 @@
 //! The blocks.
 
 pub mod add;
+pub mod adsb_decode;
 pub mod afc;
 pub mod agc;
 pub mod am_demod;
@@ -26,6 +27,8 @@ pub mod frame_encode;
 pub mod fsk_demod;
 pub mod fsk_mod;
 pub mod halfband_decimate;
+pub mod hdlc_decode;
+pub mod hdlc_encode;
 pub mod imag_part;
 pub mod interpolate;
 pub mod mag;
@@ -33,6 +36,8 @@ pub mod make_complex;
 pub mod mul;
 pub mod nco;
 pub mod noise_blank;
+pub mod ook_demod;
+pub mod ook_mod;
 pub mod preemph_limit;
 pub mod psk_demod;
 pub mod psk_mod;

@@ -50,6 +50,10 @@ mod storage;
 
 pub use block::{Block, BlockTiming, FrameMeta, ParamValue};
 pub use blocks::add::{AddBlock, AddRealBlock};
+pub use blocks::adsb_decode::{
+    ADSB_ADDRESS_PARITY, ADSB_CHUNK, ADSB_ICAO_CAPACITY, ADSB_ICAO_SLOTS, ADSB_ICAO_TTL,
+    AdsbDecodeBlock, AdsbDecodeConfig,
+};
 pub use blocks::afc::{AFC_PIECE, AfcBlock, AfcConfig};
 pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
@@ -79,6 +83,8 @@ pub use blocks::fsk_mod::{FSK_MOD_CHUNK, FskModBlock, FskModConfig};
 pub use blocks::halfband_decimate::{
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock,
 };
+pub use blocks::hdlc_decode::{HdlcDecodeBlock, HdlcDecodeConfig};
+pub use blocks::hdlc_encode::{HdlcEncodeBlock, HdlcEncodeConfig};
 pub use blocks::imag_part::ImagPartBlock;
 pub use blocks::interpolate::{InterpolateBlock, InterpolateConfig, InterpolateRealBlock};
 pub use blocks::mag::{MagBlock, MagConfig};
@@ -86,6 +92,10 @@ pub use blocks::make_complex::MakeComplexBlock;
 pub use blocks::mul::{MulBlock, MulRealBlock};
 pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};
+pub use blocks::ook_demod::{
+    OOK_DEMOD_CHUNK, OOK_LOW_RATIO, OOK_MIN_SWING, OokDemodBlock, OokDemodConfig, TED_GAIN_OOK,
+};
+pub use blocks::ook_mod::{OOK_MOD_CHUNK, OokModBlock, OokModConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
 pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};

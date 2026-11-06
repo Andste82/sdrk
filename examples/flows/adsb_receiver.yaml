@@ -1,0 +1,42 @@
+# SDRk pipeline: decode Mode S and ADS-B frames at 1090 MHz (YAML twin of adsb_receiver.json).
+# YAML is accepted as input; JSON stays the canonical format.
+#
+# Aircraft transponders answer on 1090 MHz with pulse-position modulated frames at 1 Mbit/s:
+# a preamble of four pulses in 8 us, then 56 or 112 bits of 1 us, each a pulse in its first
+# (1) or second (0) half. ADS-B (extended squitter, DF 17, and DF 18 of other transmitters)
+# broadcasts identity, position and velocity in 112-bit frames protected by a CRC-24.
+# adsb_decode works on the magnitude at exactly 2 MS/s (two samples per bit), the rate of an
+# RTL-SDR tuned to 1090 MHz with --rate 2000000; any other rate is rate_unsupported. It outputs
+# the DF 17 and 18 frames whose CRC-24 is correct (14 bytes, flag CRC_OK) and the short frames
+# (7 bytes, flag bit 16; their parity is overlaid with the address and is not checked). Frames
+# with CRC errors are dropped; error correction and position decoding (CPR) are not part of
+# the flow. examples/README.md shows how to print the ICAO address and the DF.
+sdrk: 1
+name: adsb-receiver
+description: "Decode Mode S and ADS-B downlink frames at 1090 MHz from a 2 MS/s unsigned 8-bit baseband (RTL-SDR)."
+# f32 pipeline (adsb_decode has no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # Unsigned 8-bit IQ at exactly 2 MS/s, tuned to 1090 MHz.
+  rf:
+    format: cu8
+    rate_hz: 2000000
+    description: "IQ at exactly 2 MS/s tuned to 1090 MHz"
+nodes:
+  # Mode S decoder: a preamble needs its four pulses above every gap sample and their mean at
+  # least min_snr_db (6 dB, the default) above the median magnitude of the last 256 samples;
+  # set min_snr_db to 10 to suppress weak and false preambles in a busy band.
+  dec:
+    kind: adsb_decode
+edges:
+  - { from: rf, to: dec }
+  - { from: dec, to: packets }
+outputs:
+  # The frames; the index of a packet is the input sample index of its preamble. The decoder
+  # can find one frame in every 128 samples, so a push of 4096 samples can give up to 32.
+  packets:
+    type: packets
+    queue: 256
+    description: "The frames: 14 bytes of DF 17 and 18 with a correct CRC-24 (CRC_OK), 7 bytes of short frames with flag bit 16, and the input index of their preamble"

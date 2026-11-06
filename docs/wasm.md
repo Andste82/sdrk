@@ -83,7 +83,7 @@ Packet inputs and outputs (`"type": "packets"`, M37, see [pipeline.md](pipeline.
 
 The package exposes the RDS helpers of `sdrk_proto::rds` so that a page shows the station data of an `rds_decode` output with the same rules and the same character set as Rust (D694):
 
-- `new RdsDecoder()`: `push(pipeline.readPackets("rds"))` takes the packets (others than RDS groups are ignored); `pi()`, `pty()`, `tp()` (or `undefined`), `ps(charset)` and `rt(charset)` give the programme service name and the radiotext once complete (`RdsState::ps_text` / `rt_text`), `groups()` and `okGroups()` count the packets; `reset()` after tuning to another station, `free()` at the end.
+- `new RdsDecoder()`: `push(pipeline.readPackets("rds"))` takes the packets (others than RDS groups are ignored); `pi()`, `pty()`, `tp()` (or `undefined`), `ps(charset)` and `rt(charset)` give the programme service name and the radiotext once complete (`RdsState::ps_text` / `rt_text`), `psPartial(charset)` and `rtPartial(charset)` as far as they arrived, with spaces for the segments not received yet, for a display that fills (`RdsState::ps_partial` / `rt_partial`), `groups()` and `okGroups()` count the packets; `reset()` after tuning to another station, `free()` at the end.
 - `rdsDecodeText(bytes, charset)` turns RDS bytes into text, `rdsEncodeText(text)` text into RDS bytes (throws for a character without a code).
 - `charset` is `"rds"` (the RDS table of IEC 62106 Annex E, the default), `"utf8"`, or `"auto"` (UTF-8 when the bytes are valid UTF-8 with a multi-byte sequence, which some stations send against the standard).
 

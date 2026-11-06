@@ -916,6 +916,24 @@ impl RdsState {
         self.ps_ready().then(|| RdsText::new(&self.ps_raw))
     }
 
+    /// The programme service name as far as it arrived, for a display that fills while the
+    /// segments come in: the 8 raw bytes with spaces for segments not received yet; `None`
+    /// before the first segment. Equal to [`RdsState::ps_text`] once complete.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::{Group, RdsState};
+    ///
+    /// let mut s = RdsState::new();
+    /// assert!(s.ps_partial().is_none());
+    /// s.update(&Group::new([0xD123, 0x0141, 0xE0E0, u16::from_be_bytes(*b"RK")]));
+    /// assert_eq!(s.ps_partial().map(|t| t.to_string()).as_deref(), Some("  RK    "));
+    /// assert!(s.ps_text().is_none());
+    /// ```
+    #[must_use]
+    pub fn ps_partial(&self) -> Option<RdsText<'_>> {
+        (self.ps_seen != 0).then(|| RdsText::new(&self.ps_raw))
+    }
+
     /// The characters per radiotext segment of the current text.
     fn rt_chars(&self) -> usize {
         match self.rt_kind {
@@ -961,6 +979,43 @@ impl RdsState {
         self.rt_len()
             .and_then(|n| self.rt_raw.get(..n))
             .map(RdsText::new)
+    }
+
+    /// The radiotext as far as it arrived, for a display that fills while the segments come
+    /// in: the raw bytes up to the first carriage return in a received segment (else the full
+    /// 64 or 32 characters of the version), with spaces for segments not received yet; `None`
+    /// before the first segment of the current text. Equal to [`RdsState::rt_text`] once
+    /// complete.
+    ///
+    /// ```
+    /// use sdrk_proto::rds::{Group, RdsState};
+    ///
+    /// let mut s = RdsState::new();
+    /// // 2A segment 1 ("o fr") before segment 0 ("Hell").
+    /// s.update(&Group::new([0xD123, 0x2141, u16::from_be_bytes(*b"o "), u16::from_be_bytes(*b"fr")]));
+    /// let partial = s.rt_partial().map(|t| t.to_string()).unwrap_or_default();
+    /// assert!(partial.starts_with("    o fr"));
+    /// assert!(s.rt_text().is_none());
+    /// ```
+    #[must_use]
+    pub fn rt_partial(&self) -> Option<RdsText<'_>> {
+        self.rt_kind?;
+        if self.rt_seen == 0 {
+            return None;
+        }
+        let n = self.rt_chars();
+        let end = (0..RT_SEGMENTS)
+            .filter(|seg| (self.rt_seen >> seg) & 1 == 1)
+            .find_map(|seg| {
+                let start = seg * n;
+                self.rt
+                    .get(start..start + n)?
+                    .iter()
+                    .position(|&c| c == CR)
+                    .map(|p| start + p)
+            })
+            .unwrap_or(RT_SEGMENTS * n);
+        self.rt_raw.get(..end).map(RdsText::new)
     }
 
     /// The programme identification of `g`, if it can be read.

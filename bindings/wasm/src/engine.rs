@@ -1442,6 +1442,22 @@ impl RdsDecoder {
             .map(|t| t.with_charset(charset).to_string())
     }
 
+    /// The programme service name as far as it arrived (spaces for missing segments).
+    #[must_use]
+    pub fn ps_partial(&self, charset: Charset) -> Option<String> {
+        self.state
+            .ps_partial()
+            .map(|t| t.with_charset(charset).to_string())
+    }
+
+    /// The radiotext as far as it arrived (spaces for missing segments).
+    #[must_use]
+    pub fn rt_partial(&self, charset: Charset) -> Option<String> {
+        self.state
+            .rt_partial()
+            .map(|t| t.with_charset(charset).to_string())
+    }
+
     /// Groups pushed.
     #[must_use]
     pub fn groups(&self) -> u64 {

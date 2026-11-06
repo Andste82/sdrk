@@ -282,3 +282,61 @@ fn new_public_types_are_send_and_sync() {
     assert_send_sync::<RdsText<'static>>();
     assert_send_sync::<RdsChars<'static>>();
 }
+
+/// The partial PS and RT for a display that fills while the segments arrive.
+#[test]
+fn partial_texts_grow_with_the_segments() {
+    use sdrk_proto::rds::{Group, RdsState};
+    let ps = |s: &RdsState| s.ps_partial().map(|t| t.to_string());
+    let rt = |s: &RdsState| s.rt_partial().map(|t| t.to_string());
+    let mut s = RdsState::new();
+    assert_eq!((ps(&s), rt(&s)), (None, None));
+    // PS segments 2 and 0 of "W\x99rtt BW" (RDS bytes: 0x99 is ü).
+    let name = *b"W\x99rtt BW";
+    for seg in [2u16, 0] {
+        let i = usize::from(seg) * 2;
+        s.update(&Group::new([
+            0xD3C2,
+            0x0540 | seg,
+            0xE0E0,
+            u16::from_be_bytes([name[i], name[i + 1]]),
+        ]));
+    }
+    assert_eq!(ps(&s).as_deref(), Some("Wü  t   "));
+    assert_eq!(s.ps_text(), None);
+    for seg in [1u16, 3] {
+        let i = usize::from(seg) * 2;
+        s.update(&Group::new([
+            0xD3C2,
+            0x0540 | seg,
+            0xE0E0,
+            u16::from_be_bytes([name[i], name[i + 1]]),
+        ]));
+    }
+    assert_eq!(ps(&s).as_deref(), Some("Württ BW"));
+    assert_eq!(
+        s.ps_text().map(|t| t.to_string()).as_deref(),
+        Some("Württ BW")
+    );
+
+    // RT "Gr\x97\x8dten\r" (größten) over 2A segments 1 then 0: the end is known from segment 1.
+    let text = *b"Gr\x97\x8dten\r   ";
+    let rt_group = |seg: usize| {
+        let c = u16::from_be_bytes([text[4 * seg], text[4 * seg + 1]]);
+        let d = u16::from_be_bytes([text[4 * seg + 2], text[4 * seg + 3]]);
+        Group::new([0xD3C2, 0x2540 | seg as u16, c, d])
+    };
+    s.update(&rt_group(1));
+    assert_eq!(rt(&s).as_deref(), Some("    ten"));
+    assert_eq!(s.rt_text(), None);
+    s.update(&rt_group(0));
+    assert_eq!(rt(&s).as_deref(), Some("Größten"));
+    assert_eq!(
+        s.rt_text().map(|t| t.to_string()).as_deref(),
+        Some("Größten")
+    );
+    // Before the carriage return is seen the partial text spans all 64 characters.
+    let mut u = RdsState::new();
+    u.update(&rt_group(0));
+    assert_eq!(u.rt_partial().map(|t| t.bytes().len()), Some(64));
+}

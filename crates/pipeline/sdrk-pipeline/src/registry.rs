@@ -147,6 +147,15 @@ pub trait BlockFactory: Send + Sync {
     }
     /// Names of the kernels the block calls (used by backend preferences in a later milestone).
     fn kernels(&self) -> &'static [&'static str];
+    /// Names of the kernels a node with these params calls, for the backend check of
+    /// `backend.require` and `backend.prefer`. The default is [`BlockFactory::kernels`]; a kind
+    /// whose kernels depend on a parameter (`psk_demod` with `variant` `offset`, D689)
+    /// overrides it. The params are the raw ones of the node; an invalid value falls back to
+    /// the default list (the params check reports it).
+    fn kernels_for(&self, params: &Map<String, Value>) -> &'static [&'static str] {
+        let _ = params;
+        self.kernels()
+    }
     /// Builds the node from a checked configuration.
     fn build(
         &self,

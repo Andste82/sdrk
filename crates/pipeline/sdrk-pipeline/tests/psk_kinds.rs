@@ -81,6 +81,90 @@ fn the_kinds_are_registered_with_their_kernels() {
     assert_eq!(registry.descriptions().count(), 51);
 }
 
+/// A `psk_demod` node of 8 samples per symbol at 200 kHz with `params` and `backend`.
+fn psk_demod_with_backend(params: Value, backend: Value) -> Value {
+    let mut doc = single("psk_demod", "c32", 200_000, params);
+    doc["nodes"]["n"]["backend"] = backend;
+    doc
+}
+
+/// The messages of the `backend_unavailable` diagnostics (errors and warnings) of `doc`.
+fn backend_messages(doc: &Value) -> Vec<String> {
+    let report = validate(doc);
+    report
+        .errors
+        .iter()
+        .chain(report.warnings.iter())
+        .filter(|d| d.code == DiagCode::BackendUnavailable)
+        .map(|d| d.message.clone())
+        .collect()
+}
+
+/// D689: the backend check of `psk_demod` `offset` looks at the kernels it runs (`rotate`
+/// instead of `costas`, D686); the other variants keep the list of the kind.
+#[test]
+fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
+    let registry = Registry::standard();
+    let factory = registry.factory("psk_demod").unwrap();
+    let raw = |v: Value| v.as_object().unwrap().clone();
+    let offset = raw(json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }));
+    assert_eq!(
+        factory.kernels_for(&offset),
+        ["fir", "symbol_sync", "rotate"]
+    );
+    for params in [
+        json!({ "order": 4, "symbol_rate_hz": 25_000 }),
+        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "plain" }),
+        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "pi4", "differential": true }),
+        json!({ "order": 8, "symbol_rate_hz": 25_000 }),
+        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": 3 }),
+    ] {
+        assert_eq!(
+            factory.kernels_for(&raw(params.clone())),
+            ["fir", "symbol_sync", "costas"],
+            "{params}"
+        );
+    }
+
+    let params = json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" });
+    let rotate = sdrk::backend_for("rotate", sdrk::SampleType::C32);
+    for key in ["require", "prefer"] {
+        // Requiring the backend of `costas` reports `rotate` whenever `rotate` runs elsewhere.
+        let costas = sdrk::backend_for("costas", sdrk::SampleType::C32);
+        let messages = backend_messages(&psk_demod_with_backend(
+            params.clone(),
+            json!({ key: costas }),
+        ));
+        let rotate_reported = messages.iter().any(|m| m.contains("rotate ("));
+        assert_eq!(rotate_reported, rotate != costas, "{key}: {messages:?}");
+        // `costas` never appears for `offset`, whatever is required.
+        for wanted in ["simd", "fallback"] {
+            let messages = backend_messages(&psk_demod_with_backend(
+                params.clone(),
+                json!({ key: wanted }),
+            ));
+            assert!(
+                messages.iter().all(|m| !m.contains("costas")),
+                "{key} {wanted}: {messages:?}"
+            );
+        }
+    }
+    // Plain QPSK still reports `costas` when another backend is required.
+    let other = if sdrk::backend_for("costas", sdrk::SampleType::C32) == "simd" {
+        "fallback"
+    } else {
+        "simd"
+    };
+    let messages = backend_messages(&psk_demod_with_backend(
+        json!({ "order": 4, "symbol_rate_hz": 25_000 }),
+        json!({ "require": other }),
+    ));
+    assert!(
+        messages.iter().any(|m| m.contains("costas (")),
+        "{messages:?}"
+    );
+}
+
 #[test]
 fn costas_costs_30_and_keeps_the_rate() {
     let report = validate(&single("costas", "c32", 25_000, json!({ "order": 4 })));
@@ -518,7 +602,8 @@ fn psk_kinds_take_order_8_and_the_variants() {
         json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }),
     ));
     assert!(report.is_ok(), "{}", report.to_json());
-    assert_eq!(report.cost_per_input_sample, 40.0 + 40.0 / 8.0);
+    // the derotation of the OQPSK carrier loop adds 6 per sample (D686)
+    assert_eq!(report.cost_per_input_sample, 40.0 + 40.0 / 8.0 + 6.0);
     assert_eq!(
         report.nodes[0].delay_samples_in.reduced(),
         Delay::new(82, 2).unwrap().reduced() // as plain QPSK (D658)

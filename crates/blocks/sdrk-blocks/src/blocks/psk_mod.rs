@@ -52,9 +52,8 @@ pub enum PskVariant {
     /// `+3 pi/4` (`01`), `-3 pi/4` (`11`) or `-pi/4` (`10`), bit 0 first.
     Pi4,
     /// Offset QPSK (OQPSK): order 4, not differential, an even `samples_per_symbol`; the
-    /// transmitter delays the quadrature part by half a symbol, the receiver the in-phase part.
-    /// The receiver corrects the carrier only after that delay, so it needs the carrier phase
-    /// on the axes and no carrier offset (open item I40.1-3).
+    /// transmitter delays the quadrature part by half a symbol, the receiver the in-phase part,
+    /// after derotating the signal sample by sample with its own carrier loop (D686).
     Offset,
 }
 

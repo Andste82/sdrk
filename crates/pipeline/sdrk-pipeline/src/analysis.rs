@@ -1600,10 +1600,10 @@ impl<'a> Stage2<'a> {
             src = a2;
             src_b = Some(b2);
         }
-        if let Some(backend) = &node.backend {
-            self.check_backend(&path, factory, backend);
-        }
         let params = Self::params_map(&node.params);
+        if let Some(backend) = &node.backend {
+            self.check_backend(&path, factory.kernels_for(&params), backend);
+        }
         let id = |p: &str| p.to_string();
         let idx = self.check_node(name, &node.kind, false, &params, src, &path, &id);
         if let (Some(i), Some(b)) = (idx, src_b) {
@@ -1620,13 +1620,13 @@ impl<'a> Stage2<'a> {
             .insert(name.to_string(), result.unwrap_or(Produced::Failed));
     }
 
-    /// Compares the backend that the facade uses for the kernels of the node with the
-    /// preference: `require` is an error, `prefer` a warning.
+    /// Compares the backend that the facade uses for the kernels of the node (those of
+    /// `BlockFactory::kernels_for` with its params) with the preference: `require` is an error, `prefer` a warning.
     ///
     /// A kernel exists for the complex or for the real sample type of the precision, whichever
     /// the facade lists; a fused kernel (`chained`) is built from the single kernels of the
     /// list and is not judged itself.
-    fn check_backend(&mut self, path: &str, factory: &dyn BlockFactory, backend: &BackendSpec) {
+    fn check_backend(&mut self, path: &str, kernels: &[&'static str], backend: &BackendSpec) {
         let (complex, real) = match self.spec.settings.precision {
             Precision::F32 => (sdrk::SampleType::C32, sdrk::SampleType::F32),
             Precision::Q15 => (sdrk::SampleType::CQ15, sdrk::SampleType::Q15),
@@ -1635,8 +1635,7 @@ impl<'a> Stage2<'a> {
             let Some(wanted) = wanted else {
                 continue;
             };
-            let missing: Vec<String> = factory
-                .kernels()
+            let missing: Vec<String> = kernels
                 .iter()
                 .filter_map(|k| {
                     let c = sdrk::backend_for(k, complex);

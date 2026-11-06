@@ -40,8 +40,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the remaining phase error and a proportional-integral loop with the bandwidth loop_bw \
         (relative to the symbol rate) and the damping corrects phase and frequency; the \
         frequency integrator is limited to max_offset cycles per symbol. A lock detector \
-        reports lock above 0.5 of its smoothed metric and loses it below 0.3 (the order-8 \
-        metric stays near 0.9 on noise as well, open item I40.1-1). Place it after \
+        reports lock above 0.5 of its smoothed metric and loses it below 0.3 (the metric is \
+        about 1 on the points and about 0 on noise for every order). Place it after \
         symbol_sync (one sample per symbol, amplitude about 1, after an agc). The output is \
         the derotated symbol; BPSK settles on the real axis, QPSK on the diagonals (the Gray \
         points of psk_mod), 8PSK on the odd multiples of 22.5 degrees. The phase ambiguity \

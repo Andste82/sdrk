@@ -57,6 +57,7 @@ mod convert;
 mod convert_out;
 mod demod;
 mod dot;
+mod equalize;
 mod fft;
 mod fir;
 mod halfband;

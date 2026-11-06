@@ -3,11 +3,11 @@
 //!
 //! # Impairments (M38)
 //!
-//! [`Awgn`], [`FrequencyOffset`] and [`ClockDrift`] work on `Complex64` sample streams
-//! through the trait [`Impairment`]; [`ChannelChain`] applies a list of them in order. Each
-//! keeps its state between calls, so a stream processed in chunks gives the same samples as
-//! processed at once, and all randomness comes from a seeded [`Pcg32`]. A real signal is
-//! passed as the real part.
+//! [`Awgn`], [`FrequencyOffset`], [`ClockDrift`] and [`Multipath`] (M43) work on `Complex64`
+//! sample streams through the trait [`Impairment`]; [`ChannelChain`] applies a list of them in
+//! order. Each keeps its state between calls, so a stream processed in chunks gives the same
+//! samples as processed at once, and all randomness comes from a seeded [`Pcg32`]. A real
+//! signal is passed as the real part.
 //!
 //! # Loopback
 //!
@@ -505,8 +505,8 @@ impl RxStream for LoopbackRx {
 /// A sample-stream impairment of a test channel (M38).
 pub trait Impairment: Send {
     /// Processes `input` and appends the resulting samples to `output` (the same number of
-    /// samples, except for [`ClockDrift`], which resamples). The state carries over to the
-    /// next call.
+    /// samples, except for [`ClockDrift`], which resamples, and [`Multipath`], whose first
+    /// [`lag`](Multipath::lag) inputs give no output). The state carries over to the next call.
     fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>);
 }
 
@@ -726,20 +726,12 @@ impl ClockDrift {
                 "the drift must be finite and below 1e5 ppm",
             ));
         }
-        let mut rot = vec![[(0.0, 0.0); 3]; DRIFT_TAPS];
-        for (k, row) in rot.iter_mut().enumerate() {
-            for (q, e) in row.iter_mut().enumerate() {
-                let a =
-                    (q + 1) as f64 * core::f64::consts::PI * k as f64 / DRIFT_TAPS_PER_SIDE as f64;
-                *e = (libm::cos(a), libm::sin(a));
-            }
-        }
         Ok(Self {
             ratio: 1.0 + ppm * 1e-6,
             hist: Vec::new(),
             base: 0,
             next: 0,
-            rot,
+            rot: sinc_rotations(),
         })
     }
 
@@ -765,41 +757,60 @@ impl ClockDrift {
         q / self.ratio
     }
 
-    /// The 64 taps for the fractional position `mu` in `[0, 1)`: tap `k` weights the input
-    /// `floor(p) - 31 + k`, at the distance `u = k - 31 - mu`.
+    /// The 64 taps for the fractional position `mu` in `[0, 1)` (see [`sinc_taps`]).
     fn taps(&self, mu: f64) -> [f64; DRIFT_TAPS] {
-        let mut taps = [0.0; DRIFT_TAPS];
-        let half = DRIFT_TAPS_PER_SIDE as f64;
-        // sin(pi u) = (-1)^k sin(pi mu) = (-1)^k sin(pi (1 - mu)); the smaller argument keeps
-        // the relative precision when mu is close to 1 (1 - mu is exact there)
-        let s = libm::sin(core::f64::consts::PI * if mu > 0.5 { 1.0 - mu } else { mu });
-        // window angle theta_k = pi u / 32 = theta_0 + pi k / 32
-        let theta0 = core::f64::consts::PI * (-(half - 1.0) - mu) / half;
-        let mut base = [(0.0, 0.0); 3];
-        for (q, b) in base.iter_mut().enumerate() {
-            let a = (q + 1) as f64 * theta0;
-            *b = (libm::cos(a), libm::sin(a));
-        }
-        let [w0, w1, w2, w3] = BLACKMAN_HARRIS;
-        for (k, (t, rk)) in taps.iter_mut().zip(self.rot.iter()).enumerate() {
-            let u = k as f64 - (half - 1.0) - mu;
-            if u == 0.0 {
-                *t = 1.0;
-                continue;
-            }
-            if libm::fabs(u) >= half {
-                *t = 0.0;
-                continue;
-            }
-            let mut w = w0;
-            for (((c0, s0), (ck, sk)), wq) in base.iter().zip(rk).zip([w1, w2, w3]) {
-                w += wq * (c0 * ck - s0 * sk);
-            }
-            let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
-            *t = sign * s / (core::f64::consts::PI * u) * w;
-        }
-        taps
+        sinc_taps(&self.rot, mu)
     }
+}
+
+/// `cos` and `sin` of `q pi k / 32` for each tap `k = 0..64` and `q = 1..=3` (the window
+/// recurrences of [`sinc_taps`]).
+fn sinc_rotations() -> Vec<[(f64, f64); 3]> {
+    let mut rot = vec![[(0.0, 0.0); 3]; DRIFT_TAPS];
+    for (k, row) in rot.iter_mut().enumerate() {
+        for (q, e) in row.iter_mut().enumerate() {
+            let a = (q + 1) as f64 * core::f64::consts::PI * k as f64 / DRIFT_TAPS_PER_SIDE as f64;
+            *e = (libm::cos(a), libm::sin(a));
+        }
+    }
+    rot
+}
+
+/// The 64 taps of the windowed-sinc interpolator of M38 (shared by [`ClockDrift`] and
+/// [`Multipath`]) for the fractional position `mu` in `[0, 1)`: tap `k` weights the input
+/// `floor(p) - 31 + k`, at the distance `u = k - 31 - mu`; `rot` is [`sinc_rotations`].
+fn sinc_taps(rot: &[[(f64, f64); 3]], mu: f64) -> [f64; DRIFT_TAPS] {
+    let mut taps = [0.0; DRIFT_TAPS];
+    let half = DRIFT_TAPS_PER_SIDE as f64;
+    // sin(pi u) = (-1)^k sin(pi mu) = (-1)^k sin(pi (1 - mu)); the smaller argument keeps
+    // the relative precision when mu is close to 1 (1 - mu is exact there)
+    let s = libm::sin(core::f64::consts::PI * if mu > 0.5 { 1.0 - mu } else { mu });
+    // window angle theta_k = pi u / 32 = theta_0 + pi k / 32
+    let theta0 = core::f64::consts::PI * (-(half - 1.0) - mu) / half;
+    let mut base = [(0.0, 0.0); 3];
+    for (q, b) in base.iter_mut().enumerate() {
+        let a = (q + 1) as f64 * theta0;
+        *b = (libm::cos(a), libm::sin(a));
+    }
+    let [w0, w1, w2, w3] = BLACKMAN_HARRIS;
+    for (k, (t, rk)) in taps.iter_mut().zip(rot.iter()).enumerate() {
+        let u = k as f64 - (half - 1.0) - mu;
+        if u == 0.0 {
+            *t = 1.0;
+            continue;
+        }
+        if libm::fabs(u) >= half {
+            *t = 0.0;
+            continue;
+        }
+        let mut w = w0;
+        for (((c0, s0), (ck, sk)), wq) in base.iter().zip(rk).zip([w1, w2, w3]) {
+            w += wq * (c0 * ck - s0 * sk);
+        }
+        let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
+        *t = sign * s / (core::f64::consts::PI * u) * w;
+    }
+    taps
 }
 
 impl Impairment for ClockDrift {
@@ -838,6 +849,229 @@ impl Impairment for ClockDrift {
                 .min(self.hist.len());
             self.hist.drain(..drop);
             self.base += drop as u64;
+        }
+    }
+}
+
+/// `m e^(j ph)` with the `libm` cosine and sine.
+fn polar(m: f64, ph: f64) -> Complex64 {
+    Complex64::new(m * libm::cos(ph), m * libm::sin(ph))
+}
+
+/// Largest delay of a [`Multipath`] tap, in samples.
+pub const MULTIPATH_MAX_DELAY: f64 = 65_536.0;
+
+/// A static multipath channel (M43): the output is the sum of delayed and weighted copies of
+/// the input, `y[n] = sum_t g_t x(n - d_t)` over the taps `(d_t, g_t)` (the delay in samples,
+/// `0 <= d_t <=` [`MULTIPATH_MAX_DELAY`], the complex gain). Input samples before index 0 are
+/// zero. An integer delay shifts the index exactly; a fractional delay is applied with the
+/// windowed-sinc interpolator of [`ClockDrift`] (32 taps per side, 4-term Blackman–Harris
+/// window), all in f64. The taps are combined into one impulse response at construction.
+///
+/// A fractional delay below 32 samples needs input samples after `n`, so output `n` is produced
+/// once input `n + lag()` has arrived: the first [`lag`](Multipath::lag) inputs produce no output
+/// (as for [`ClockDrift`], a lag in processing, not in position). Integer delays have lag 0.
+///
+/// The presets [`mild`](Multipath::mild) and [`severe`](Multipath::severe) take their delays in
+/// symbols ([`Multipath::MILD`], [`Multipath::SEVERE`]) and scale them by the samples per
+/// symbol `sps`.
+///
+/// ```
+/// use num_complex::Complex64;
+/// use sdrk_testkit::channel::{Impairment, Multipath};
+/// // A direct path and an echo of half the amplitude two samples later.
+/// let mut ch = Multipath::new(&[(0.0, Complex64::new(1.0, 0.0)), (2.0, Complex64::new(0.5, 0.0))])?;
+/// assert_eq!(ch.lag(), 0);
+/// let mut y = Vec::new();
+/// ch.process(&[Complex64::new(1.0, 0.0), Complex64::new(0.0, 0.0), Complex64::new(0.0, 0.0)], &mut y);
+/// assert_eq!(y, [Complex64::new(1.0, 0.0), Complex64::new(0.0, 0.0), Complex64::new(0.5, 0.0)]);
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+#[derive(Debug, Clone)]
+pub struct Multipath {
+    /// The combined impulse response: `h[m]` weights the input `n + lag - m` of output `n`.
+    h: Vec<Complex64>,
+    lag: usize,
+    /// The last `h.len()` inputs, oldest first (zeros before the first input).
+    hist: std::collections::VecDeque<Complex64>,
+    /// Inputs still to be taken before the first output.
+    pending: usize,
+}
+
+impl Multipath {
+    /// The preset `mild` of M43 section 4: `(delay in symbols, magnitude, phase in radians)` of
+    /// each tap, `1`, `0.3 e^(j1)` after 1.3 symbols and `0.1 e^(-j2)` after 2.7 symbols.
+    pub const MILD: [(f64, f64, f64); 3] = [(0.0, 1.0, 0.0), (1.3, 0.3, 1.0), (2.7, 0.1, -2.0)];
+
+    /// The preset `severe` of M43 section 4: `1`, `0.6 e^(j0.5)` after 0.8 symbols,
+    /// `0.4 e^(-j1.5)` after 2.1 symbols and `0.2` after 4 symbols.
+    pub const SEVERE: [(f64, f64, f64); 4] = [
+        (0.0, 1.0, 0.0),
+        (0.8, 0.6, 0.5),
+        (2.1, 0.4, -1.5),
+        (4.0, 0.2, 0.0),
+    ];
+
+    /// A channel with the taps `(delay in samples, gain)`.
+    ///
+    /// # Errors
+    /// `InvalidParameter` if there is no tap, a delay is not finite or outside
+    /// `0 ..= MULTIPATH_MAX_DELAY`, or a gain is not finite.
+    ///
+    /// ```
+    /// use num_complex::Complex64;
+    /// use sdrk_testkit::channel::Multipath;
+    /// let one = Complex64::new(1.0, 0.0);
+    /// assert_eq!(Multipath::new(&[(0.0, one), (2.5, one)])?.lag(), 29);
+    /// assert!(Multipath::new(&[]).is_err());
+    /// assert!(Multipath::new(&[(-1.0, one)]).is_err());
+    /// assert!(Multipath::new(&[(1.0, Complex64::new(f64::NAN, 0.0))]).is_err());
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn new(taps: &[(f64, Complex64)]) -> Result<Self, Error> {
+        let valid = |(d, g): &(f64, Complex64)| {
+            d.is_finite()
+                && (0.0..=MULTIPATH_MAX_DELAY).contains(d)
+                && g.re.is_finite()
+                && g.im.is_finite()
+        };
+        if taps.is_empty() || !taps.iter().all(valid) {
+            return Err(Error::InvalidParameter(
+                "multipath needs at least one tap, delays from 0 to 65536 samples and finite gains",
+            ));
+        }
+        // The contributions (lag, gain): lag j weights the input n - j of output n.
+        let rot = sinc_rotations();
+        let mut parts: Vec<(i64, Complex64)> = Vec::new();
+        let half = DRIFT_TAPS_PER_SIDE as i64;
+        for &(d, g) in taps {
+            let whole = libm::floor(d);
+            let frac = d - whole;
+            let whole = whole as i64;
+            if frac == 0.0 {
+                parts.push((whole, g));
+                continue;
+            }
+            // p = n - d: floor(p) = n - whole - 1 and mu = p - floor(p) = 1 - frac; tap k weights
+            // the input floor(p) - 31 + k, which is n - (whole + 32 - k).
+            for (k, c) in sinc_taps(&rot, 1.0 - frac).iter().enumerate() {
+                if *c != 0.0 {
+                    parts.push((whole + half - k as i64, g * *c));
+                }
+            }
+        }
+        let min = parts.iter().map(|p| p.0).min().unwrap_or(0);
+        let max = parts.iter().map(|p| p.0).max().unwrap_or(0);
+        let lag = usize::try_from(-min.min(0)).unwrap_or(0);
+        let len = usize::try_from(max - min.min(0) + 1).unwrap_or(1);
+        let mut h = vec![Complex64::new(0.0, 0.0); len];
+        for (j, g) in parts {
+            if let Some(v) = usize::try_from(j + lag as i64)
+                .ok()
+                .and_then(|m| h.get_mut(m))
+            {
+                *v += g;
+            }
+        }
+        let hist = core::iter::repeat_n(Complex64::new(0.0, 0.0), len).collect();
+        Ok(Self {
+            h,
+            lag,
+            hist,
+            pending: lag,
+        })
+    }
+
+    /// The preset `taps` (delay in symbols, magnitude, phase) with the delays scaled by `sps`.
+    fn preset(taps: &[(f64, f64, f64)], sps: f64) -> Result<Self, Error> {
+        if !(sps.is_finite() && sps > 0.0) {
+            return Err(Error::InvalidParameter(
+                "the samples per symbol must be finite and positive",
+            ));
+        }
+        let scaled: Vec<(f64, Complex64)> = taps
+            .iter()
+            .map(|&(d, m, ph)| (d * sps, polar(m, ph)))
+            .collect();
+        Self::new(&scaled)
+    }
+
+    /// The preset [`MILD`](Multipath::MILD) at `sps` samples per symbol (`sps` 1 for a channel on
+    /// the symbol stream).
+    ///
+    /// # Errors
+    /// `InvalidParameter` if `sps` is not finite and positive, or a scaled delay exceeds
+    /// [`MULTIPATH_MAX_DELAY`].
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::Multipath;
+    /// let ch = Multipath::mild(4.0)?; // delays 0, 5.2 and 10.8 samples
+    /// assert_eq!(ch.lag(), 31 - 5);
+    /// assert!(Multipath::mild(0.0).is_err());
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn mild(sps: f64) -> Result<Self, Error> {
+        Self::preset(&Self::MILD, sps)
+    }
+
+    /// The preset [`SEVERE`](Multipath::SEVERE) at `sps` samples per symbol.
+    ///
+    /// # Errors
+    /// As [`mild`](Multipath::mild).
+    ///
+    /// ```
+    /// use sdrk_testkit::channel::Multipath;
+    /// let ch = Multipath::severe(1.0)?; // delays 0, 0.8, 2.1 and 4 symbols
+    /// assert_eq!(ch.lag(), 31);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn severe(sps: f64) -> Result<Self, Error> {
+        Self::preset(&Self::SEVERE, sps)
+    }
+
+    /// The processing lag: output `n` is produced once input `n + lag` has arrived (0 when all
+    /// delays are whole samples, otherwise `31 - floor(d)` for the smallest fractional delay
+    /// `d` below 32 samples).
+    ///
+    /// ```
+    /// use num_complex::Complex64;
+    /// use sdrk_testkit::channel::Multipath;
+    /// assert_eq!(Multipath::new(&[(40.5, Complex64::new(1.0, 0.0))])?.lag(), 0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn lag(&self) -> usize {
+        self.lag
+    }
+
+    /// The combined impulse response: element `m` weights the input `n + lag - m` of output `n`.
+    ///
+    /// ```
+    /// use num_complex::Complex64;
+    /// use sdrk_testkit::channel::Multipath;
+    /// let ch = Multipath::new(&[(1.0, Complex64::new(0.0, 2.0))])?;
+    /// assert_eq!(ch.response(), [Complex64::new(0.0, 0.0), Complex64::new(0.0, 2.0)]);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn response(&self) -> &[Complex64] {
+        &self.h
+    }
+}
+
+impl Impairment for Multipath {
+    fn process(&mut self, input: &[Complex64], output: &mut Vec<Complex64>) {
+        output.reserve(input.len());
+        for x in input {
+            self.hist.pop_front();
+            self.hist.push_back(*x);
+            if self.pending > 0 {
+                self.pending -= 1;
+                continue;
+            }
+            let mut acc = Complex64::new(0.0, 0.0);
+            for (g, v) in self.h.iter().zip(self.hist.iter().rev()) {
+                acc += *g * *v;
+            }
+            output.push(acc);
         }
     }
 }

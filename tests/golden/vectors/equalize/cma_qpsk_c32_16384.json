@@ -1,0 +1,76 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "cma_qpsk_c32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "cma_qpsk_c32_16384.input.bin",
+      "len": 16384
+    },
+    "weights": {
+      "dtype": "cf32",
+      "file": "cma_qpsk_c32_16384.weights.bin",
+      "len": 11
+    }
+  },
+  "case": "cma_qpsk_c32_16384",
+  "format_version": 1,
+  "kernel": "equalize",
+  "model": "float32",
+  "notes": "QPSK ((2 b0 - 1) + j (2 b1 - 1)) / sqrt(2), one sample per symbol, through the symbol-spaced channel 0.1 e^(j2) z^1 + 1 + 0.35 e^(j0.8) z^-1 + 0.15 e^(-j2) z^-2 (channel: [lag, magnitude, phase]), turned by a random constant carrier phase (phase_rad), plus complex noise for Eb/N0 20 dB per transmitted symbol energy; equalize with 11 taps, no feedback, mu_cma 0.05 (normalized), cma_symbols 2^32 - 1 (CMA only, never switches) and the phase tracker at phase_bw 0.02; exact float32 model over the whole input in one call; weights are the final weights, final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the dispersion mean((|y|^2 - 1)^2) of the last 4096 inputs and outputs is information; snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "channel": [
+      [
+        -1,
+        0.1,
+        2.0
+      ],
+      [
+        0,
+        1.0,
+        0.0
+      ],
+      [
+        1,
+        0.35,
+        0.8
+      ],
+      [
+        2,
+        0.15,
+        -2.0
+      ]
+    ],
+    "cma_symbols": 4294967295,
+    "constellation": "qpsk",
+    "dispersion_in_last_4096": 0.353351,
+    "dispersion_out_last_4096": 0.012048,
+    "ebn0_db": 20.0,
+    "feedback_taps": 0,
+    "final_frequency_bits": 926884093,
+    "final_mode": "cma",
+    "final_mse_bits": 1003207650,
+    "final_phase": 4085682990,
+    "guard_skip": 0,
+    "mu_cma": 0.05,
+    "mu_dd": 0.02,
+    "phase_bw": 0.02,
+    "phase_rad": 4.416463685927648,
+    "sigma": 0.05,
+    "snr_db_guard": 130.1,
+    "taps": 11
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 590,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

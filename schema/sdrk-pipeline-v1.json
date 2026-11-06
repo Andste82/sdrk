@@ -1665,6 +1665,92 @@
           },
           {
             "additionalProperties": false,
+            "description": "Adaptive equalizer: removes the inter-symbol interference of multipath and filters from PSK symbols.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "equalize"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "cma_symbols": {
+                    "default": 1000,
+                    "description": "Symbols in CMA mode before the switch to decision mode (0: decision mode from the start, 4294967295: never). Typical: 1000; 0 for decision mode only, 4294967295 for CMA only. Build-time.",
+                    "maximum": 4294967295,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "constellation": {
+                    "default": "qpsk",
+                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod). Typical: qpsk; the constellation of the transmitter. Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk"
+                    ],
+                    "type": "string"
+                  },
+                  "feedback_taps": {
+                    "default": 0,
+                    "description": "Number of feedback weights of the decision feedback equalizer (0 to 63, 0 = linear); they act in decision mode only. Typical: 0; 3 to 5 for channels with deep spectral nulls. Build-time.",
+                    "maximum": 63,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "mu_cma": {
+                    "default": 0.05,
+                    "description": "Normalized step size of the CMA update (used as f32); a change applies from the next symbol. Typical: 0.05. Runtime.",
+                    "maximum": 1.0,
+                    "minimum": 0.00001,
+                    "type": "number"
+                  },
+                  "mu_dd": {
+                    "default": 0.02,
+                    "description": "Normalized step size of the decision-directed update (used as f32); a change applies from the next symbol. Typical: 0.02. Runtime.",
+                    "maximum": 1.0,
+                    "minimum": 0.00001,
+                    "type": "number"
+                  },
+                  "phase_bw": {
+                    "default": 0.02,
+                    "description": "Loop bandwidth of the decision-directed phase tracker normalized to the symbol rate: 0 (off) or 0.0001 to 0.2 (damping 0.7071). Typical: 0.02; 0 without a carrier loop after it or for differential detection. Build-time.",
+                    "maximum": 0.2,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "taps": {
+                    "default": 11,
+                    "description": "Number of forward weights, odd, 3 to 63; it must span the echoes of the channel on both sides of the main path. Typical: 11; 15 to 21 for long echoes. Build-time.",
+                    "maximum": 63,
+                    "minimum": 3,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Low-pass FIR filter designed from cutoff, transition width and attenuation.",
             "properties": {
               "align": {
@@ -2897,6 +2983,20 @@
                     "default": false,
                     "description": "Differential detection instead of the carrier loop. Typical: false; true for differentially coded signals (no carrier loop). Build-time.",
                     "type": "boolean"
+                  },
+                  "equalizer_feedback_taps": {
+                    "default": 0,
+                    "description": "Feedback taps of the equalizer (a decision feedback equalizer, 0 to 63); only with equalizer_taps above 0. Typical: 0 (linear); 5 for channels with deep spectral nulls. Build-time.",
+                    "maximum": 63,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "equalizer_taps": {
+                    "default": 0,
+                    "description": "Forward taps of the adaptive equalizer between the timing loop and the carrier loop: 0 (off) or odd from 3 to 63. Typical: 0 (off); 11 to 15 against multipath. Build-time.",
+                    "maximum": 63,
+                    "minimum": 0,
+                    "type": "integer"
                   },
                   "max_offset": {
                     "default": 0.05,

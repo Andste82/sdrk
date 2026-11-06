@@ -34,7 +34,7 @@ pub(super) fn interp_f32(p: u32) -> Option<f32> {
 /// the fraction computed once: `p - QUARTER` has the same low 20 bits and the table index
 /// `(idx + 3072) mod 4096` of the top 12 bits.
 #[inline]
-pub(super) fn interp_f32_pair(p: u32) -> Option<(f32, f32)> {
+pub(crate) fn interp_f32_pair(p: u32) -> Option<(f32, f32)> {
     let idx = (p >> 20) as usize;
     let sidx = (idx + 3072) & 4095;
     let f = (p & 0xF_FFFF) as f32 * (1.0 / 1_048_576.0);

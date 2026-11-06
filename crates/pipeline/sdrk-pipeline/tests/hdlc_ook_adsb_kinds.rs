@@ -83,7 +83,7 @@ fn the_kinds_are_registered_with_their_kernels() {
         assert_eq!(f.kernels(), kernels, "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    assert_eq!(registry.descriptions().count(), 58);
+    assert_eq!(registry.descriptions().count(), 59);
 }
 
 /// The HDLC loop: packets at 1200 bit/s through `hdlc_encode` and `hdlc_decode`.

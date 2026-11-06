@@ -15,10 +15,10 @@ use crate::num::flush_denormal;
 use crate::tables::COS_F32;
 use crate::types::C32;
 
-const QUARTER: u32 = 1 << 30;
+pub(super) const QUARTER: u32 = 1 << 30;
 
 /// Cosine of the phase from the f32 table, linear interpolation in f32 without FMA.
-fn cos_f32(phase: u32) -> f32 {
+pub(super) fn cos_f32(phase: u32) -> f32 {
     let idx = (phase >> 20) as usize;
     let frac = (phase & 0xF_FFFF) as f32 * (1.0 / 1_048_576.0);
     let (a, b) = match COS_F32.get(idx..idx + 2) {
@@ -40,7 +40,7 @@ fn sgn(x: f32) -> f32 {
 }
 
 /// `x exp(-j phi)` with `c = cos phi`, `s = sin phi`.
-fn rotate_back(x: C32, c: f32, s: f32) -> C32 {
+pub(super) fn rotate_back(x: C32, c: f32, s: f32) -> C32 {
     let rr = x.re * c;
     let ii = x.im * s;
     let re = rr + ii;
@@ -148,7 +148,7 @@ fn metric(order: u32, y: C32) -> f32 {
 
 /// `floor(v 2^32 + 0.5)` of the phase correction as `u32` through `i64`, as the contract
 /// writes it.
-fn correction(v: f32) -> u32 {
+pub(super) fn correction(v: f32) -> u32 {
     let w = f64::from(v) * 4_294_967_296.0 + 0.5;
     libm::floor(w) as i64 as u32
 }

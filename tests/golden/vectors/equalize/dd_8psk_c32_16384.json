@@ -1,0 +1,71 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "dd_8psk_c32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "dd_8psk_c32_16384.input.bin",
+      "len": 16384
+    },
+    "weights": {
+      "dtype": "cf32",
+      "file": "dd_8psk_c32_16384.weights.bin",
+      "len": 14
+    }
+  },
+  "case": "dd_8psk_c32_16384",
+  "format_version": 1,
+  "kernel": "equalize",
+  "model": "float32",
+  "notes": "8PSK exp(j (2 pi k / 8 + pi / 8)) with k from the Gray code b0 4 + b1 2 + b2 (M40.1), one sample per symbol, through the symbol-spaced channel 1 + 0.2 e^(j0.7) z^-1 + 0.08 e^(-j1.9) z^-2 (channel: [lag, magnitude, phase]), turned by the carrier phase 0.25 rad, plus complex noise for Eb/N0 22 dB per transmitted symbol energy; equalize with 11 forward and 3 feedback taps (a decision feedback equalizer), mu_dd 0.02 (normalized), cma_symbols 0 (decision mode from the start) and the phase tracker at phase_bw 0.01; exact float32 model over the whole input in one call; weights are the final 14 weights (11 forward, 3 feedback), final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the generator asserts that every decision of the second half is the transmitted symbol delayed by 5 (symbol_errors_second_half) and that mse ends below 0.01; snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "channel": [
+      [
+        0,
+        1.0,
+        0.0
+      ],
+      [
+        1,
+        0.2,
+        0.7
+      ],
+      [
+        2,
+        0.08,
+        -1.9
+      ]
+    ],
+    "cma_symbols": 0,
+    "constellation": "8psk",
+    "delay": 5,
+    "ebn0_db": 22.0,
+    "feedback_taps": 3,
+    "final_frequency_bits": 3039674783,
+    "final_mode": "decision",
+    "final_mse_bits": 989944691,
+    "final_phase": 170402484,
+    "guard_skip": 0,
+    "mu_cma": 0.05,
+    "mu_dd": 0.02,
+    "phase_bw": 0.01,
+    "phase_rad": 0.25,
+    "sigma": 0.0324283143893366,
+    "snr_db_guard": 127.8,
+    "symbol_errors_second_half": 0,
+    "taps": 11
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 591,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

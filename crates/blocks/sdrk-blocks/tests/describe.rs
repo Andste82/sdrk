@@ -36,20 +36,21 @@ use sdrk_blocks::{
     AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
     ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, CostasBlock, CostasConfig,
     DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig,
-    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, Error, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock,
-    FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
-    HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock,
-    InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
-    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock,
-    OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock,
-    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
-    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, EqConstellation, EqualizeBlock,
+    EqualizeConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
+    FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
+    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FramePolarity,
+    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig,
+    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
+    MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
+    NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamKind,
+    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
+    PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
+    ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
+    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -69,10 +70,10 @@ fn text_ok(what: &str, s: &str) {
 }
 
 #[test]
-fn there_are_fifty_eight_unique_kinds() {
+fn there_are_fifty_nine_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 58);
-    assert_eq!(all_descriptions().len(), 58);
+    assert_eq!(kinds.len(), 59);
+    assert_eq!(all_descriptions().len(), 59);
     for kind in [
         "convert",
         "convert_out",
@@ -132,6 +133,7 @@ fn there_are_fifty_eight_unique_kinds() {
         "ook_mod",
         "ook_demod",
         "adsb_decode",
+        "equalize",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -358,6 +360,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("ook_mod", |n| OokModConfig::default().get(n), &[]);
     defaults_match("ook_demod", |n| OokDemodConfig::default().get(n), &[]);
     defaults_match("adsb_decode", |n| AdsbDecodeConfig::default().get(n), &[]);
+    defaults_match("equalize", |n| EqualizeConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -468,6 +471,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("ook_mod", OokModConfig);
     round_trip!("ook_demod", OokDemodConfig);
     round_trip!("adsb_decode", AdsbDecodeConfig);
+    round_trip!("equalize", EqualizeConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -805,6 +809,21 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "adsb_decode",
         &mut AdsbDecodeBlock::new(&AdsbDecodeConfig::default(), rate(2_000_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "equalize",
+        &mut EqualizeBlock::new(&EqualizeConfig::default(), rate(25_000), &mut s).unwrap(),
+    );
+    let pd = PskDemodConfig {
+        order: 8,
+        symbol_rate_hz: 25_000.0,
+        equalizer_taps: 15,
+        equalizer_feedback_taps: 5,
+        ..PskDemodConfig::default()
+    };
+    check_block_params(
+        "psk_demod",
+        &mut PskDemodBlock::new(&pd, rate(200_000), &mut s).unwrap(),
     );
     let tuned = ResampleConfig {
         tunable: true,
@@ -1207,7 +1226,9 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             "sync_bw",
             "carrier_bw",
             "max_offset",
-            "variant"
+            "variant",
+            "equalizer_taps",
+            "equalizer_feedback_taps"
         ]
     );
     for p in m.params.iter().chain(d.params).chain(costas.params) {
@@ -1228,7 +1249,7 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     }
     for desc in [m, d] {
         assert_eq!(
-            desc.params.last().unwrap().kind,
+            desc.param("variant").unwrap().kind,
             ParamKind::Choice {
                 options: &["plain", "pi4", "offset"],
                 default: 0
@@ -1405,6 +1426,194 @@ fn the_m39_1_kinds_describe_their_ports_and_parameters() {
     ] {
         assert!(a.details.contains(word), "adsb_decode details: {word}");
     }
+}
+
+/// The kind of M43 §2: `equalize` (`c32` symbols to `c32`, `taps`, `feedback_taps`,
+/// `constellation`, `cma_symbols` and `phase_bw` build, `mu_cma` and `mu_dd` runtime, the chain
+/// position in the details) and the options `equalizer_taps` (§3: build, 0 to 63, default 0;
+/// 1 and the even counts are `InvalidParameter`) and `equalizer_feedback_taps` (last, build, 0 to
+/// 63, default 0, only with `equalizer_taps`) of `psk_demod`.
+#[test]
+fn the_equalizer_kind_describes_its_ports_and_parameters() {
+    let eq = find("equalize");
+    assert_eq!(eq.inputs[0].types, [PortType::C32]);
+    assert_eq!(eq.outputs[0].types, [PortType::C32]);
+    assert!(eq.required.is_empty());
+    let names: Vec<_> = eq.params.iter().map(|p| (p.name, p.mutability)).collect();
+    assert_eq!(
+        names,
+        [
+            ("taps", Mutability::Build),
+            ("feedback_taps", Mutability::Build),
+            ("constellation", Mutability::Build),
+            ("mu_cma", Mutability::Runtime),
+            ("mu_dd", Mutability::Runtime),
+            ("cma_symbols", Mutability::Build),
+            ("phase_bw", Mutability::Build),
+        ]
+    );
+    assert_eq!(
+        eq.param("taps").unwrap().kind,
+        ParamKind::I64 {
+            min: 3,
+            max: 63,
+            default: Some(11)
+        }
+    );
+    assert_eq!(
+        eq.param("constellation").unwrap().kind,
+        ParamKind::Choice {
+            options: &["bpsk", "qpsk", "8psk"],
+            default: 1
+        }
+    );
+    assert_eq!(
+        eq.param("feedback_taps").unwrap().kind,
+        ParamKind::I64 {
+            min: 0,
+            max: 63,
+            default: Some(0)
+        }
+    );
+    for (name, default) in [("mu_cma", 0.05), ("mu_dd", 0.02)] {
+        assert_eq!(
+            eq.param(name).unwrap().kind,
+            ParamKind::F64 {
+                min: 1e-5,
+                max: 1.0,
+                default: Some(default)
+            },
+            "{name}"
+        );
+    }
+    assert_eq!(
+        eq.param("cma_symbols").unwrap().kind,
+        ParamKind::I64 {
+            min: 0,
+            max: i64::from(u32::MAX),
+            default: Some(1000)
+        }
+    );
+    assert_eq!(
+        eq.param("phase_bw").unwrap().kind,
+        ParamKind::F64 {
+            min: 0.0,
+            max: 0.2,
+            default: Some(0.02)
+        }
+    );
+    // the chain position of §2 as amended (D825)
+    for word in [
+        "after symbol_sync and before costas",
+        "CMA needs no carrier phase",
+        "costas after it removes what remains",
+    ] {
+        assert!(eq.details.contains(word), "equalize details: {word}");
+    }
+    let mut cfg = EqualizeConfig::default();
+    for c in [2u16, 0, 1] {
+        cfg.set("constellation", ParamValue::Choice(c)).unwrap();
+        assert_eq!(cfg.get("constellation"), Ok(ParamValue::Choice(c)));
+    }
+    cfg.set("constellation", ParamValue::Choice(2)).unwrap();
+    assert_eq!(cfg.constellation, EqConstellation::Psk8);
+    for t in [4i64, 10, 62] {
+        assert!(
+            matches!(
+                cfg.set("taps", ParamValue::I64(t)),
+                Err(Error::InvalidParameter { name: "taps", .. })
+            ),
+            "{t}"
+        );
+    }
+    assert!(matches!(
+        cfg.set("taps", ParamValue::I64(1)),
+        Err(Error::OutOfRange { .. })
+    ));
+    assert_eq!(cfg.taps, 11);
+    cfg.set("cma_symbols", ParamValue::I64(i64::from(u32::MAX)))
+        .unwrap();
+    assert_eq!(cfg.cma_symbols, u32::MAX);
+    let b = EqualizeBlock::new(&EqualizeConfig::default(), rate(1000), &mut VecStorage).unwrap();
+    assert!(std::ptr::eq(b.description(), eq));
+
+    let d = find("psk_demod");
+    let last = d.params.last().unwrap();
+    assert_eq!(
+        (last.name, last.mutability, last.kind),
+        (
+            "equalizer_feedback_taps",
+            Mutability::Build,
+            ParamKind::I64 {
+                min: 0,
+                max: 63,
+                default: Some(0)
+            }
+        )
+    );
+    assert_eq!(
+        d.param("equalizer_taps").unwrap().kind,
+        ParamKind::I64 {
+            min: 0,
+            max: 63,
+            default: Some(0)
+        }
+    );
+    assert!(d.details.contains("equalize"), "psk_demod details");
+    let mut pd = PskDemodConfig::default();
+    for t in [1i64, 2, 4, 62] {
+        assert!(
+            matches!(
+                pd.set("equalizer_taps", ParamValue::I64(t)),
+                Err(Error::InvalidParameter {
+                    name: "equalizer_taps",
+                    ..
+                })
+            ),
+            "{t}"
+        );
+    }
+    assert!(matches!(
+        pd.set("equalizer_taps", ParamValue::I64(65)),
+        Err(Error::OutOfRange { .. })
+    ));
+    for t in [0i64, 3, 15, 63] {
+        pd.set("equalizer_taps", ParamValue::I64(t)).unwrap();
+        assert_eq!(pd.get("equalizer_taps"), Ok(ParamValue::I64(t)));
+    }
+    // feedback taps: 0 to 63, and only with the equalizer
+    pd.set("equalizer_feedback_taps", ParamValue::I64(5))
+        .unwrap();
+    assert_eq!(pd.get("equalizer_feedback_taps"), Ok(ParamValue::I64(5)));
+    assert!(matches!(
+        pd.set("equalizer_feedback_taps", ParamValue::I64(64)),
+        Err(Error::OutOfRange { .. })
+    ));
+    let lone = PskDemodConfig {
+        symbol_rate_hz: 1000.0,
+        equalizer_feedback_taps: 3,
+        ..PskDemodConfig::default()
+    };
+    assert!(matches!(
+        lone.validate(rate(4000)),
+        Err(Error::InvalidParameter {
+            name: "equalizer_feedback_taps",
+            ..
+        })
+    ));
+    // validate rejects an even count set directly in the config
+    let cfg = PskDemodConfig {
+        symbol_rate_hz: 1000.0,
+        equalizer_taps: 8,
+        ..PskDemodConfig::default()
+    };
+    assert!(matches!(
+        cfg.validate(rate(4000)),
+        Err(Error::InvalidParameter {
+            name: "equalizer_taps",
+            ..
+        })
+    ));
 }
 
 #[test]

@@ -32,11 +32,16 @@
 //! of eight samples first (independent, so the compiler computes them in one vector) and adds
 //! them to the chain in ascending order: the same roundings in the same order, fewer
 //! instructions.
+//!
+//! `dot_complex` `C32` keeps the eight partial sums of the contract per component in two arrays
+//! and adds the products of a block of eight samples to them element by element: the partial
+//! sums are independent chains, so the compiler may keep them in vector registers, and the
+//! sums are the ones of the contract whatever it does (no reassociation, no FMA).
 
 use crate::Fallback;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::dot::{Dot, DotReal};
+use crate::kernels::dot::{DOT_COMPLEX_PARTIALS, Dot, DotComplex, DotReal};
 use crate::num::Acc64;
 use crate::types::{C32, CQ15, Q15};
 
@@ -53,6 +58,51 @@ impl Dot<C32> for Fallback {
             im += s.im * h;
         }
         Ok(C32::new(re, im))
+    }
+}
+
+/// `acc[k] = acc[k] + x[k] w[k]` for the `k` of one block (at most eight samples), the product
+/// in the order of the contract.
+#[inline]
+fn dot_complex_block(
+    re: &mut [f32; DOT_COMPLEX_PARTIALS],
+    im: &mut [f32; DOT_COMPLEX_PARTIALS],
+    x: &[C32],
+    w: &[C32],
+) {
+    for (((r, i), a), b) in re.iter_mut().zip(im.iter_mut()).zip(x).zip(w) {
+        *r += a.re * b.re - a.im * b.im;
+        *i += a.re * b.im + a.im * b.re;
+    }
+}
+
+/// The final sum of the eight partial sums of `dot_complex` (the tree of the contract).
+#[inline]
+pub(crate) fn dot_complex_tree(a: [f32; DOT_COMPLEX_PARTIALS]) -> f32 {
+    let [a0, a1, a2, a3, a4, a5, a6, a7] = a;
+    let (s0, s1, s2, s3) = (a0 + a4, a1 + a5, a2 + a6, a3 + a7);
+    (s0 + s2) + (s1 + s3)
+}
+
+/// `dot_complex` `C32` for slices of equal length (the order of the contract).
+#[inline]
+pub(crate) fn dot_complex_c32(x: &[C32], w: &[C32]) -> C32 {
+    let mut re = [0.0f32; DOT_COMPLEX_PARTIALS];
+    let mut im = [0.0f32; DOT_COMPLEX_PARTIALS];
+    let (xc, xr) = x.as_chunks::<DOT_COMPLEX_PARTIALS>();
+    let (wc, wr) = w.as_chunks::<DOT_COMPLEX_PARTIALS>();
+    for (xs, ws) in xc.iter().zip(wc) {
+        dot_complex_block(&mut re, &mut im, xs, ws);
+    }
+    dot_complex_block(&mut re, &mut im, xr, wr);
+    C32::new(dot_complex_tree(re), dot_complex_tree(im))
+}
+
+impl DotComplex<C32> for Fallback {
+    #[inline]
+    fn dot_complex(&self, x: &[C32], w: &[C32]) -> Result<C32> {
+        check_len(x.len(), w.len())?;
+        Ok(dot_complex_c32(x, w))
     }
 }
 

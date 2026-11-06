@@ -4,8 +4,8 @@
 
 use cref_sys::cmsis_dsp as cm;
 use cref_sys::{
-    GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrQuadratureDemodCf, GrRotator,
-    LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
+    GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
+    GrQuadratureDemodCf, GrRotator, LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
 };
 use std::f64::consts::PI;
 
@@ -618,4 +618,75 @@ fn gnuradio_costas_loop() {
         assert_close(f64::from(v[1].abs()), r, 1e-2);
     }
     assert!(GrCostasLoopCc::new(0.02, 8).is_none());
+}
+
+#[test]
+fn gnuradio_linear_equalizer() {
+    let mut taps = vec![[0.0f32; 2]; 11];
+    taps[5] = [1.0, 0.0];
+    let Some(mut eq) = GrLinearEqualizer::new(&taps, 0.02, 2048) else {
+        eprintln!("skipped: the GNU Radio linear_equalizer is not linked");
+        return;
+    };
+    // QPSK of amplitude 1 through 1 + 0.3 e^(j0.6) z^-1: decision-directed NLMS against the
+    // points +-sqrt 2 +-j sqrt 2 learns the echo and the gain 2.
+    let r = std::f64::consts::FRAC_1_SQRT_2;
+    let mut x = 0x2545_f491_u32;
+    let s: Vec<(f64, f64)> = (0..6000)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            (
+                if x & 1 == 1 { r } else { -r },
+                if x & 2 == 2 { r } else { -r },
+            )
+        })
+        .collect();
+    let (gr, gi) = (0.3 * 0.6f64.cos(), 0.3 * 0.6f64.sin());
+    let input: Vec<[f32; 2]> = (0..s.len())
+        .map(|k| {
+            let (mut re, mut im) = s[k];
+            if k > 0 {
+                let (pr, pi) = s[k - 1];
+                re += gr * pr - gi * pi;
+                im += gr * pi + gi * pr;
+            }
+            [re as f32, im as f32]
+        })
+        .collect();
+    let mut out = vec![[0.0f32; 2]; input.len()];
+    for (i, o) in input.chunks(2000).zip(out.chunks_mut(2000)) {
+        eq.work(i, o);
+    }
+    let sq2 = std::f64::consts::SQRT_2;
+    for v in &out[5000..] {
+        assert_close(f64::from(v[0].abs()), sq2, 0.05);
+        assert_close(f64::from(v[1].abs()), sq2, 0.05);
+    }
+}
+
+#[test]
+fn volk_nofma_complex_dot_product() {
+    require!(cref_sys::volk_nofma::AVAILABLE, "VOLK without FMA");
+    // 37 samples: nine blocks of four and the scalar tail of one.
+    let (a, b) = (pairs(&signal(74, 9)), pairs(&signal(74, 10)));
+    let mut want = [0.0f64; 2];
+    for (x, y) in a.iter().zip(&b) {
+        let (xr, xi, yr, yi) = (
+            f64::from(x[0]),
+            f64::from(x[1]),
+            f64::from(y[0]),
+            f64::from(y[1]),
+        );
+        want[0] += xr * yr - xi * yi;
+        want[1] += xr * yi + xi * yr;
+    }
+    let got = cref_sys::volk_nofma::dot_prod_32fc(&a, &b).expect("linked");
+    assert_close(f64::from(got[0]), want[0], 1e-5);
+    assert_close(f64::from(got[1]), want[1], 1e-5);
+    assert!(matches!(
+        cref_sys::volk_nofma::protokernel(),
+        Some("u_avx" | "neon")
+    ));
 }

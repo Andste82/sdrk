@@ -139,11 +139,7 @@ impl CostasState {
                 "costas maximum offset must be between 0 and 0.25 cycles per symbol",
             ));
         }
-        let theta = loop_bw / (damping + 1.0 / (4.0 * damping));
-        let d = (1.0 + (2.0 * damping) * theta) + theta * theta;
-        let kp = (((4.0 * damping) * theta) / d) / TAU;
-        let ki = ((4.0 * (theta * theta)) / d) / TAU;
-        let (kp, ki) = (kp as f32, ki as f32);
+        let (kp, ki) = loop_gains(loop_bw, damping);
         if !(kp.is_finite() && ki.is_finite()) {
             return Err(invalid("costas loop gains must be finite"));
         }
@@ -257,6 +253,19 @@ impl Timing for CostasState {
     fn group_delay(&self) -> Delay {
         Delay::ZERO
     }
+}
+
+/// The proportional and integral gains of the carrier loop in cycles per symbol per unit of
+/// the detector output, computed in f64 and rounded to `f32`:
+/// `theta = loop_bw / (damping + 1 / (4 damping))`, `d = (1 + (2 damping) theta) + theta theta`,
+/// `kp = (((4 damping) theta) / d) / (2 pi)`, `ki = ((4 (theta theta)) / d) / (2 pi)`. Shared
+/// by `costas` and the phase tracker of `equalize` (M43).
+pub(crate) fn loop_gains(loop_bw: f64, damping: f64) -> (f32, f32) {
+    let theta = loop_bw / (damping + 1.0 / (4.0 * damping));
+    let d = (1.0 + (2.0 * damping) * theta) + theta * theta;
+    let kp = (((4.0 * damping) * theta) / d) / TAU;
+    let ki = ((4.0 * (theta * theta)) / d) / TAU;
+    (kp as f32, ki as f32)
 }
 
 /// `sign(x)`: 1 above zero, -1 below, 0 for zero and NaN.

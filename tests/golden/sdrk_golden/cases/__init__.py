@@ -14,6 +14,8 @@ from . import (  # noqa: F401
     deemphasis,
     design,
     dot,
+    dot_complex,
+    equalize,
     fft,
     fir,
     fir_decimate,

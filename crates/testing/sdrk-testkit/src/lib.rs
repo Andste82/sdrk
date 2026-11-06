@@ -27,7 +27,7 @@
 //! - [`virtual_rx`]: a minimal virtual receiver,
 //! - [`virtual_tx`]: a virtual transmitter that records writes and injects statuses,
 //! - [`conformance`]: `check_rx` and `check_tx`, the conformance checks for stream implementations,
-//! - `channel` (feature `std`): the `Loopback` channel simulator (delay, attenuation, frequency offset, noise) and the impairments `Awgn`, `FrequencyOffset`, `ClockDrift` and `ChannelChain` (M38),
+//! - `channel` (feature `std`): the `Loopback` channel simulator (delay, attenuation, frequency offset, noise) and the impairments `Awgn`, `FrequencyOffset`, `ClockDrift` and `ChannelChain` (M38) and `Multipath` (M43),
 //! - [`suite`]: the runner that executes registered cases on any target.
 //!
 //! ```

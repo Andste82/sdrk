@@ -15,7 +15,8 @@ use sdrk_core::kernels::demod::{
     DcBlock, DcBlockReal, DcBlockRealState, DcBlockState, Deemphasis, DeemphasisState, QuadDemod,
     QuadDemodState,
 };
-use sdrk_core::kernels::dot::{Dot, DotReal};
+use sdrk_core::kernels::dot::{Dot, DotComplex, DotReal};
+use sdrk_core::kernels::equalize::{Equalize, EqualizeState};
 use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, FftScale, RealFft, RealFftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::fused::{Ddc, Duc, FmDemod};
@@ -150,6 +151,7 @@ crate::delegate! {
     Dot<CQ15>::dot(&self, x: &[CQ15], taps: &[Q15]) -> Result<CQ15> => Fast;
     DotReal<f32>::dot_real(&self, x: &[f32], taps: &[f32]) -> Result<f32> => Fast;
     DotReal<Q15>::dot_real(&self, x: &[Q15], taps: &[Q15]) -> Result<Q15> => Fast;
+    DotComplex<C32>::dot_complex(&self, x: &[C32], w: &[C32]) -> Result<C32> => Fast;
     @extra [
         ("interleave", C32, Fast),
         ("deinterleave", C32, Fast),
@@ -161,6 +163,7 @@ crate::delegate! {
         ("preemph_limit_stereo", C32, Fallback),
         ("stereo_encode", C32, Fallback),
         ("costas", C32, Fallback),
+        ("equalize", C32, Fast),
         ("ddc", C32, Chained),
         ("ddc", CQ15, Chained),
         ("duc", C32, Chained),
@@ -250,6 +253,27 @@ impl Costas for crate::Sdrk {
     #[inline]
     fn costas(&self, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
         <Fallback as Costas>::costas(&Fallback, s, input, output)
+    }
+}
+
+// `Equalize` has no sample-type parameter (the signature of the spec, `C32` only), so it is
+// delegated by hand like `Costas`; the row above registers it in the `backend_for` table. The
+// loop is a recursion over the symbols; the SIMD backend accelerates its filter part with its
+// bit-exact `dot_complex` and keeps the scalar weight update, so every backend gives the bits of
+// the fallback.
+impl Equalize for crate::Sdrk {
+    #[inline]
+    fn equalize<W, H>(
+        &self,
+        s: &mut EqualizeState<W, H>,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> Result<()>
+    where
+        W: AsRef<[C32]> + AsMut<[C32]>,
+        H: AsRef<[C32]> + AsMut<[C32]>,
+    {
+        <Fast as Equalize>::equalize(&Fast, s, input, output)
     }
 }
 

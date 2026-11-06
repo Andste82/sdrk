@@ -55,6 +55,7 @@ mod costas;
 mod decim;
 mod demod;
 mod dot;
+mod equalize;
 mod fft;
 mod filter;
 mod fused;

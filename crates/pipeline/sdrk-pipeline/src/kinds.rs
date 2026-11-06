@@ -18,22 +18,22 @@ use sdrk_blocks::{
     CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
     DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
     DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FrameDecodeBlock, FrameDecodeConfig,
-    FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
-    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock,
-    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
-    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
-    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RealPartBlock, RealToIqBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
-    ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
-    ToComplexBlock,
+    EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
+    FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
+    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock,
+    FskDemodConfig, FskModBlock, FskModConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
+    HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock,
+    HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock,
+    MagBlock, MagConfig, MakeComplexBlock, MulBlock, MulRealBlock, NcoBlock, NcoConfig,
+    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock,
+    OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
+    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock,
+    RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation,
+    SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig,
+    SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
+    SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3293,6 +3293,58 @@ impl Kind for CostasKind {
     }
 }
 
+// -------------------------------------------------------------------- equalize
+
+pub(crate) struct EqualizeKind;
+
+impl Kind for EqualizeKind {
+    type Cfg = EqualizeConfig;
+
+    const KIND: &'static str = "equalize";
+    fn kernels() -> &'static [&'static str] {
+        &["equalize"]
+    }
+    fn default_cfg() -> EqualizeConfig {
+        EqualizeConfig::default()
+    }
+    fn set(cfg: &mut EqualizeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &EqualizeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("equalize needs c32 symbols"));
+        }
+        let block = EqualizeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: EqualizeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: EqualizeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // §2 of M43: 8 per weight and symbol (the filter and the update), forward and
+            // feedback weights (D830).
+            cost: 8.0 * (cfg.taps + cfg.feedback_taps) as f64,
+            taps: cfg.taps,
+            delay: block.timing().delay,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &EqualizeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(EqualizeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
 // ---------------------------------------------------------------------- psk_mod
 
 pub(crate) struct PskModKind;
@@ -3355,11 +3407,18 @@ impl Kind for PskDemodKind {
     }
     /// `offset` runs its own carrier loop with `rotate` instead of `costas` (D686), so its
     /// backend check looks at `rotate` (D689); every other variant keeps the kind's list.
+    /// `equalizer_taps` above 0 adds `equalize` (M43 §3, D816), before `costas` (D825).
     fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
-        if params.get("variant").and_then(Value::as_str) == Some("offset") {
-            &["fir", "symbol_sync", "rotate"]
-        } else {
-            Self::kernels()
+        let offset = params.get("variant").and_then(Value::as_str) == Some("offset");
+        let eq = params
+            .get("equalizer_taps")
+            .and_then(Value::as_i64)
+            .is_some_and(|t| t != 0);
+        match (offset, eq) {
+            (true, true) => &["fir", "symbol_sync", "rotate", "equalize"],
+            (true, false) => &["fir", "symbol_sync", "rotate"],
+            (false, true) => &["fir", "symbol_sync", "equalize", "costas"],
+            (false, false) => Self::kernels(),
         }
     }
     fn default_cfg() -> PskDemodConfig {
@@ -3393,7 +3452,9 @@ impl Kind for PskDemodKind {
                     6.0
                 } else {
                     0.0
-                },
+                }
+                // M43: the equalizer costs 8 per weight and symbol (§2, D816, D830).
+                + 8.0 * (cfg.equalizer_taps + cfg.equalizer_feedback_taps) as f64 / sps,
             taps: block.num_taps(),
             delay: block.timing().delay,
             min_input: block.min_input(),

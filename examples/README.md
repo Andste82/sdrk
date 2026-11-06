@@ -43,6 +43,8 @@ for chunk in cs16_bytes.chunks(4 * 4096) {
 }
 ```
 
+`ps()` and `rt()` are the ASCII view (bytes outside 0x20 to 0x7E as `?`). `state.ps_text()` and `state.rt_text()` give the same texts with the characters of the RDS character set (umlauts, `€`, `$` at 0xAB): `t.to_string()`, `t.to_utf8(&mut buf)` into caller storage, or `t.with_charset(Charset::Auto)` for stations that send UTF-8 (D690 to D693).
+
 ## `fm-transmitter`
 
 ```sh

@@ -1376,7 +1376,7 @@ fn the_m39_1_kinds_describe_their_ports_and_parameters() {
         "mag",
         "symbol_sync",
         "Gardner",
-        "(hi + lo) / 2",
+        "lo + 0.45 (hi - lo)",
         "frame_decode",
         "4 times",
     ] {

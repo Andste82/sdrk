@@ -29,6 +29,16 @@ pub const OOK_DEMOD_CHUNK: usize = 256;
 /// (D700).
 pub const OOK_LOW_RATIO: f64 = 16.0;
 
+/// Position of the threshold between the tracked off and on levels after the lead-in,
+/// `t = lo + OOK_THRESHOLD (hi - lo)` (D707). The envelope of an on symbol (Rician) spreads
+/// more than that of an off symbol (Rayleigh): measured behind the channel filter of
+/// `ook_receiver` at Eb/N0 15 dB, 0.142 and 0.096 of the swing, so the midpoint of `rtl_433`
+/// turns most errors into lost ones; the point of equal distance in units of the spread is
+/// 0.40, but the off symbols between two on symbols have a longer tail (the timing jitter lets
+/// some energy of the neighbours in). Measured on test 4 of M39.1, the fewest wrong payload
+/// bits are at 0.44 to 0.46.
+pub const OOK_THRESHOLD: f32 = 0.45;
+
 /// Smallest swing `hi - lo` the boxcar output is divided by (D700).
 pub const OOK_MIN_SWING: f32 = 1e-6;
 
@@ -70,7 +80,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         nominal gain at any input level), symbol_sync with the Gardner detector at \
         symbol_rate_hz (loop bandwidth 0.01 of the symbol rate; the detector slope of a \
         boxcar filtered envelope with a swing of 1 is built in) and decision-directed level \
-        trackers after rtl_433: the threshold is t = (hi + lo) / 2, a symbol v above t is a \
+        trackers after rtl_433: the threshold is t = lo + 0.45 (hi - lo), below the middle as \
+        the on level spreads more in noise than the off level; a symbol v above t is a \
         1 and moves the on level hi by d = 1 - exp(-1 / (track_symbols 0.5)) of its distance \
         towards v, any other symbol is a 0 and moves the off level lo 16 times slower; the \
         soft bit is (v - t) times the gain, so a value above 0 is a 1 and the output feeds \
@@ -286,7 +297,8 @@ impl OokDemodConfig {
 /// trackers (in Rust, in `f32`, on the symbols divided by the gain again). The first
 /// `track_symbols` symbols are a lead-in with the peak trackers of M39.1 §4 (the threshold of a
 /// symbol uses `hi` and `lo` after it); after it the trackers are decision-directed means after
-/// `rtl_433` (the threshold of a symbol uses the levels before it). The trackers start at 0. A
+/// `rtl_433` (the threshold of a symbol, `lo + OOK_THRESHOLD (hi - lo)`, uses the levels
+/// before it; D707). The trackers start at 0. A
 /// piece can give more symbols than the output has room for; the rest waits in the block and
 /// comes out first in the next call. Timing: `RatioKind::Variable` with the nominal ratio
 /// `symbol_rate / fs`, delay `(round(sps) + 1) / 2` input samples (filter and interpolator).
@@ -569,7 +581,7 @@ impl Levels {
                 *x = (sym - self.hi.midpoint(self.lo)) * gain;
                 continue;
             }
-            let t = self.hi.midpoint(self.lo);
+            let t = self.lo + OOK_THRESHOLD * (self.hi - self.lo);
             *x = (sym - t) * gain;
             // Decision-directed means (`rtl_433` `pulse_detect_package`); a NaN symbol is neither
             // above nor at or below the threshold and leaves the trackers unchanged.

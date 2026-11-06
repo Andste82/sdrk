@@ -93,7 +93,8 @@ pub use blocks::mul::{MulBlock, MulRealBlock};
 pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};
 pub use blocks::ook_demod::{
-    OOK_DEMOD_CHUNK, OOK_LOW_RATIO, OOK_MIN_SWING, OokDemodBlock, OokDemodConfig, TED_GAIN_OOK,
+    OOK_DEMOD_CHUNK, OOK_LOW_RATIO, OOK_MIN_SWING, OOK_THRESHOLD, OokDemodBlock, OokDemodConfig,
+    TED_GAIN_OOK,
 };
 pub use blocks::ook_mod::{OOK_MOD_CHUNK, OokModBlock, OokModConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};

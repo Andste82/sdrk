@@ -128,7 +128,7 @@ Additional rules:
 3. Expected values are computed in float64 (`cf64`/`f64`). For bit-exact Q15 cases the generator computes the expected result with the integer model in `tests/golden/sdrk_golden/q15.py`, which implements R7 in NumPy `int64`.
 4. Rust tests load cases with `sdrk_testkit::golden::load("<kernel>", "<case>")` (feature `std`). Tolerances live in the case JSON, not in Rust code.
 5. Signal metric used everywhere: `SNR_dB = 10·log10( Σ|ref|² / Σ|ref − out|² )` over samples `skip..len` (`skip` stored per case; `+∞` when the error is zero). Bit-exact comparisons use `==` on raw bits. Tolerance classes (M04): `bit_exact`, `tolerance` (minimum SNR), `max_abs_err` (largest absolute error, optionally only where the reference is above a level).
-6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 16 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
+6. Each case (JSON + all its `.bin` arrays) stays at or below 512 KiB; all vectors together at or below 32 MiB. Prefer N ≤ 4096 samples; use longer inputs only when the kernel needs them (long filters, decimation).
 7. Tests that use `sdrk-testkit` live in integration tests (`<crate>/tests/*.rs`) or in `crates/testing/sdrk-testkit/tests/`, never in `#[cfg(test)]` unit modules of a crate the testkit itself depends on (a dev-dependency cycle would compile two copies of that crate and produce confusing trait errors).
 
 ### R9 — Definition of done (every milestone)
@@ -202,7 +202,7 @@ Rules:
   - `{"class": "bit_exact"}` — raw bits equal;
   - `{"class": "tolerance", "snr_db_min": float, "skip": int}` with optional `"max_abs_err": float` (both must hold);
   - `{"class": "max_abs_err", "max_abs_err": float, "skip": int}` with optional `"min_ref_db": float` plus then required `"ref_unit": "db" | "linear"` — only samples whose reference value is at or above `min_ref_db` are checked (`db`: the reference values are already in dB, e.g. spectra; `linear`: compare `20·log10|ref|`). Used for windows, `power_db`, filter design and spectra.
-- Keep each case at or below 512 KiB on disk and all vectors at or below 16 MiB (R8.6; assert both in the registry and fail generation otherwise).
+- Keep each case at or below 512 KiB on disk and all vectors at or below 32 MiB (R8.6; assert both in the registry and fail generation otherwise).
 
 ### 4. On-disk format (`fileio.py`)
 

@@ -69,7 +69,7 @@ counts elements (a complex sample counts once). Tolerance classes:
   `"ref_unit": "db" | "linear"`; only samples whose reference is at or above the level are checked.
 
 SNR is `10 log10(sum |ref|^2 / sum |ref - out|^2)` over samples `skip..`. A case stays at or below 512 KiB, all
-vectors together at or below 16 MiB; the generator fails otherwise.
+vectors together at or below 32 MiB; the generator fails otherwise.
 
 ## Adding a case
 

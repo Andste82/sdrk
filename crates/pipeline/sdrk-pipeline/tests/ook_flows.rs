@@ -7,10 +7,9 @@
 //!   Gaussian noise at Eb/N0 15 dB (seed 543) -> `cu8` -> `ook_receiver`: the packet error
 //!   rate over 500 frames is below 1 %. Eb is the mean energy per bit (a 1 carries twice Eb,
 //!   a 0 nothing); the signal is scaled by 0.1 before the channel so that signal and noise fit
-//!   the `cu8` input without clipping (D697). The threshold is not met (PER 0.268 with the
-//!   trackers and the swing normalization of D700; 0.010 with a 15 kHz channel filter instead of
-//!   the 50 kHz of §4; open item I39.1-2), so both runs are ignored; the chain without noise runs
-//!   instead.
+//!   the `cu8` input without clipping (D697). The flow has the channel filter of D706 (cutoff
+//!   15 kHz, transition 10 kHz) and `ook_demod` the threshold of D707; measured PER 0 (500 of
+//!   500 frames). The chain without noise decodes every frame at the 10 kHz offset.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -77,7 +76,8 @@ fn the_flow_has_the_parameters_of_the_spec() {
     let n = &rx["nodes"];
     assert_eq!(n["tune"]["kind"], "ddc");
     assert_eq!(n["tune"]["params"]["decimation"], 4);
-    assert_eq!(n["tune"]["params"]["cutoff_hz"], 50_000);
+    assert_eq!(n["tune"]["params"]["cutoff_hz"], 15_000);
+    assert_eq!(n["tune"]["params"]["transition_hz"], 10_000);
     assert_eq!(n["demod"]["kind"], "ook_demod");
     assert_eq!(n["demod"]["params"]["symbol_rate_hz"], 2000);
     assert_eq!(n["dec"]["kind"], "frame_decode");
@@ -169,18 +169,11 @@ fn read_packets(p: &mut Pipeline, into: &mut Vec<Packet>) {
 }
 
 /// `frames` packets through the transmitter, the channel (the offset, then noise at
-/// `ebn0_db` if given) and the receiver (`ook_receiver`, with the channel filter cutoff
-/// `cutoff_hz` instead of its 50 kHz if given); returns the packet error rate.
-fn ook_loop(frames: usize, ebn0_db: Option<f64>, cutoff_hz: Option<u32>) -> f64 {
+/// `ebn0_db` if given) and the receiver `ook_receiver`; returns the packet error rate.
+fn ook_loop(frames: usize, ebn0_db: Option<f64>) -> f64 {
     let packets = random_packets(frames, 1);
     let mut tx = build(OOK_TRANSMITTER);
-    let mut rx_flow = flow("ook_receiver");
-    if let Some(cutoff) = cutoff_hz {
-        let mut v: Value = serde_json::from_str(&rx_flow).unwrap();
-        v["nodes"]["tune"]["params"]["cutoff_hz"] = cutoff.into();
-        rx_flow = v.to_string();
-    }
-    let mut rx = build(&rx_flow);
+    let mut rx = build(&flow("ook_receiver"));
     let mut source = Sender {
         packets: packets.clone(),
         next: 0,
@@ -230,8 +223,7 @@ fn ook_loop(frames: usize, ebn0_db: Option<f64>, cutoff_hz: Option<u32>) -> f64 
     }
     let per = 1.0 - f64::from(ok) / frames as f64;
     eprintln!(
-        "OOK loop (Eb/N0 {ebn0_db:?} dB, offset {OFFSET_HZ} Hz, cutoff {cutoff_hz:?} Hz): {frames} \
-         frames sent, {} decoded \
+        "OOK loop (Eb/N0 {ebn0_db:?} dB, offset {OFFSET_HZ} Hz): {frames} frames sent, {} decoded \
          with CRC_OK, {ok} with the payload sent (PER {per:.4}); {total} samples at 1 MHz, mean \
          signal power {:.3e} (nominal {signal_power:.3e} with the gaps counted as off)",
         got.len(),
@@ -244,28 +236,16 @@ fn ook_loop(frames: usize, ebn0_db: Option<f64>, cutoff_hz: Option<u32>) -> f64 
 /// (60 frames; the chain itself, apart from the threshold of test 4).
 #[test]
 fn ook_loop_without_noise_decodes_every_frame() {
-    let per = ook_loop(60, None, None);
+    let per = ook_loop(60, None);
     assert!(per == 0.0, "PER {per}");
 }
 
-/// Test 4. The threshold of §4 is not met: with the decision-directed mean trackers and the
-/// swing normalization of D700 the PER is 0.268 (0.584 with the peak trackers of §4); behind the
-/// 50 kHz channel filter even the ideal threshold with ideal timing gives about 0.13 (open item
-/// I39.1-2).
+/// Test 4: PER below 1 % over 500 frames at Eb/N0 15 dB and a 10 kHz offset through the
+/// shipped `ook_receiver` (channel filter 15 kHz with a 10 kHz transition, D706; the threshold
+/// of `ook_demod` at 0.45 of the swing, D707). Measured: PER 0 (0.010 with the default
+/// transition and the midpoint threshold).
 #[test]
-#[ignore = "open item I39.1-2: PER 0.268 instead of below 0.01 at Eb/N0 15 dB"]
 fn ook_loop_500_frames_at_15_db() {
-    let per = ook_loop(FRAMES, Some(EBN0_DB), None);
+    let per = ook_loop(FRAMES, Some(EBN0_DB));
     assert!(per < MAX_PER, "PER {per}");
-}
-
-/// Test 4 with a channel filter of 15 kHz instead of the 50 kHz of `ook_receiver` (the 10 kHz
-/// offset stays in the pass band), for comparison only: the cutoff of the flow is fixed by
-/// §4, and this run shows what a narrower filter gives (I39.1-2). Measured: PER 0.010 (5 of
-/// 500 frames), not below the 1 % of test 4.
-#[test]
-#[ignore = "comparison for open item I39.1-2: test 4 with a 15 kHz channel filter"]
-fn ook_loop_500_frames_at_15_db_with_a_15_khz_channel_filter() {
-    let per = ook_loop(FRAMES, Some(EBN0_DB), Some(15_000));
-    eprintln!("PER {per:.4} with a 15 kHz channel filter");
 }

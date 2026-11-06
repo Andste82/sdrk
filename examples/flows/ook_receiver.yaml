@@ -29,21 +29,27 @@ nodes:
     kind: frame_decode
   # OOK demodulator at 125 samples per symbol (250 kHz / 2000 bit/s): the magnitude, a boxcar
   # matched filter of 125 taps, the Gardner timing loop and one soft bit per symbol: the value
-  # minus the middle between the tracked on and off levels (track_symbols 32, the default; 8
-  # follows short bursts faster).
+  # minus the threshold at 0.45 of the way from the tracked off to the on level
+  # (track_symbols 32, the default; 8 follows short bursts faster).
   demod:
     kind: ook_demod
     params:
       symbol_rate_hz: 2000
-  # Digital down converter: decimate by 4 (1 MS/s -> 250 kHz) with a 50 kHz channel filter,
-  # wide enough for a transmitter up to about 45 kHz off. A narrower filter lets less noise
-  # through but needs the carrier closer to 0 Hz. Set frequency_hz to the offset of the
-  # transmitter from the tuner centre.
+  # Digital down converter: decimate by 4 (1 MS/s -> 250 kHz) with a 15 kHz channel filter
+  # whose stop band starts at 25 kHz (transition 10 kHz; the default transition of 25 kHz
+  # would let the noise up to 40 kHz through). The magnitude is taken before the matched
+  # filter of ook_demod, so all the noise inside the channel filter reaches the decision:
+  # 15 kHz keeps a transmitter 10 kHz off (a common error of cheap devices) in the pass band
+  # and lets far less noise through than the 50 kHz first planned (packet error rate below
+  # 1 % at Eb/N0 15 dB instead of about 27 %). A wider cutoff catches devices further off
+  # frequency at the price of sensitivity. Set frequency_hz to the offset of the transmitter
+  # from the tuner centre.
   tune:
     kind: ddc
     params:
-      cutoff_hz: 50000
+      cutoff_hz: 15000
       decimation: 4
+      transition_hz: 10000
 # Channel filter, demodulator, decoder.
 edges:
   - { from: rf, to: tune }

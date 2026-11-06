@@ -32,8 +32,8 @@ use sdrk::{C32, Delay, Ratio, RatioKind};
 use sdrk_blocks::{
     ADSB_ADDRESS_PARITY, AdsbDecodeBlock, AdsbDecodeConfig, ArenaStorage, Block, Error,
     HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, OOK_LOW_RATIO,
-    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, Packet, PacketFlags, Packets,
-    ParamValue, StreamElem, TED_GAIN_OOK,
+    OOK_THRESHOLD, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, Packet, PacketFlags,
+    Packets, ParamValue, StreamElem, TED_GAIN_OOK,
 };
 use sdrk_proto::crc::crc24_adsb;
 use sdrk_proto::hdlc;
@@ -560,8 +560,8 @@ fn ook_demod_recovers_the_bits_of_ook_mod_with_a_carrier_offset() {
 #[test]
 fn ook_demod_soft_bits_follow_the_threshold_rule() {
     // Without noise and with the loop locked, alternating symbols 0.8 and 0 give the mean
-    // levels hi = 0.8 and lo = 0, the threshold 0.4 and soft bits of +-0.4 times the gain
-    // 1 / 0.8: +-0.5 (D700).
+    // levels hi = 0.8 and lo = 0, the threshold lo + OOK_THRESHOLD (hi - lo) = 0.36 and soft
+    // bits of 0.44 and -0.36 times the gain 1 / 0.8: 0.55 and -0.45 (D700, D707).
     let bits: Vec<f32> = (0..2000)
         .map(|k| if k % 2 == 0 { 1.0 } else { -1.0 })
         .collect();
@@ -569,8 +569,14 @@ fn ook_demod_soft_bits_follow_the_threshold_rule() {
     let mut dem = ook_demod(1000.0, 8000);
     let soft = run_block(&mut dem, &x, None);
     for v in &soft[1500..1990] {
-        assert!((v.abs() - 0.5).abs() < 0.02, "{v}");
+        let want = if *v > 0.0 {
+            1.0 - OOK_THRESHOLD
+        } else {
+            -OOK_THRESHOLD
+        };
+        assert!((v - want).abs() < 0.02, "{v}");
     }
+    assert_eq!(OOK_THRESHOLD, 0.45);
     let (hi, lo) = dem.levels();
     assert!((hi - 0.8).abs() < 0.01 && lo.abs() < 0.01, "{hi} {lo}");
     assert!((dem.swing() - 0.8).abs() < 0.02, "{}", dem.swing());
@@ -632,7 +638,7 @@ fn ook_demod_trackers_follow_the_means_and_normalize_the_swing() {
 #[test]
 fn ook_demod_trackers_recover_when_the_off_level_rises_above_the_threshold() {
     // 1000 alternating symbols 0.8 / 0, then the off level steps to 0.5 (above the
-    // threshold 0.4): every symbol is a 1 at first, and after more than track_symbols ones in
+    // threshold 0.36): every symbol is a 1 at first, and after more than track_symbols ones in
     // a row the off level follows them slowly, until the threshold lies between 0.5 and 0.8
     // again.
     let sps = 8;
@@ -656,6 +662,58 @@ fn ook_demod_trackers_recover_when_the_off_level_rises_above_the_threshold() {
         (hi - 0.8).abs() < 0.05 && (lo - 0.5).abs() < 0.05,
         "{hi} {lo}"
     );
+}
+
+/// The timing loop locks within the 32 alternating preamble bits of the test framing of
+/// `frame_encode` at the rates of `ook_receiver` (2000 bit/s, 125 samples per symbol): a burst
+/// after silence at 16 start phases over one symbol, every bit from the sync word on (bit 32
+/// of the burst) is right (D707: with the loop bandwidth 0.01 the last wrong bit is bit 17 at
+/// the worst phase; 0.003 leaves 21 wrong bits after the sync word at phase 0).
+#[test]
+#[allow(clippy::print_stderr)]
+fn ook_demod_locks_within_the_preamble_of_the_test_framing() {
+    let sps = 125;
+    let mut rng = Pcg32::new(SEED, 40);
+    let burst: Vec<f32> = (0..232)
+        .map(|k| {
+            let one = if k < 32 {
+                k % 2 == 0
+            } else {
+                rng.next_u32() & 1 == 1
+            };
+            if one { 1.0 } else { -1.0 }
+        })
+        .collect();
+    let clean = run_block(&mut ook_mod(sps, 0.8, 2000), &burst, None);
+    let mut worst = 0;
+    for phase in 0..16 {
+        let lead = 4000 + phase * sps / 16;
+        let mut x = vec![C32::default(); lead];
+        x.extend(clean.iter().map(|s| C32::new(s.re * 0.6, s.re * 0.8)));
+        x.extend(vec![C32::default(); 4000]);
+        let soft = run_block(&mut ook_demod(2000.0, 250_000), &x, None);
+        // The alignment with the fewest errors from the sync word on, then the first bit from
+        // which every bit is right.
+        let errors_at = |o: usize| {
+            burst[32..]
+                .iter()
+                .zip(&soft[o + 32..])
+                .filter(|(w, g)| (**w > 0.0) != (**g > 0.0))
+                .count()
+        };
+        let base = lead / sps;
+        let o = (base - 3..base + 4).min_by_key(|&o| errors_at(o)).unwrap();
+        let lock = (0..burst.len())
+            .rev()
+            .find(|&k| (burst[k] > 0.0) != (soft[o + k] > 0.0))
+            .map_or(0, |k| k + 1);
+        worst = worst.max(lock);
+        assert_eq!(errors_at(o), 0, "phase {phase}/16: lock at bit {lock}");
+    }
+    eprintln!(
+        "ook_demod lock: every bit right from bit {worst} of the burst on (worst of 16 phases)"
+    );
+    assert!(worst <= 32, "{worst}");
 }
 
 #[test]

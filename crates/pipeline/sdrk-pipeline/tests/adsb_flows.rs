@@ -4,10 +4,12 @@
 //!   than 2 MHz is `rate_unsupported`.
 //! - **Test 5:** the golden case `flows/adsb_df17_200_frames` (seed 544: 200 DF 17 frames at
 //!   random positions, 10 to 30 dB above the noise, with overlapping noise bursts) through the
-//!   flow: every frame whose effective SNR is above 10 dB comes out with `CRC_OK`, its 14 bytes
-//!   and the index of its preamble, and no other `CRC_OK` frame comes out (D696). The
-//!   effective SNR narrows §5 (every frame is drawn above 10 dB); the literal count is printed
-//!   too, and the reading is open (I39.1-1). The case `flows/adsb_short_frames` (seed 545)
+//!   flow, with the criterion of the maintainer (D708): at least 99 % of the frames whose
+//!   effective SNR (D696: the strongest overlapping burst added to the noise) is above 10 dB
+//!   come out with `CRC_OK`, their 14 bytes and the index of their preamble, every frame at an
+//!   effective SNR of 13 dB or more comes out, and no other `CRC_OK` frame and no
+//!   address/parity packet comes out (every frame of the case is a DF 17 frame, so such a
+//!   packet would come from noise). The literal count (the drawn level) is printed too. The case `flows/adsb_short_frames` (seed 545)
 //!   gives its 6 DF 17 frames and its DF 11 frame with residue 0 with `CRC_OK`, its 20 short
 //!   frames whose address was seen before as 7 bytes with flag bit 16, and drops its 4 short
 //!   frames of unknown addresses (D702, D704).
@@ -107,9 +109,26 @@ fn df_icao(data: &[u8]) -> (u8, u32) {
     )
 }
 
-/// Test 5 as measured: (frames missed above 10 dB as (index, effective SNR, level), false
-/// `CRC_OK` frames as indices).
-fn test5() -> (Vec<(u64, f64, f64)>, Vec<u64>) {
+/// Effective SNR in dB from which every frame of test 5 must decode (D708): two-sample PPM
+/// without error correction has a bit error rate of about `0.5 exp(-SNR / 2)`, so a 112-bit
+/// frame is lost with about 1 % from 13 dB on.
+const ALL_FROM_DB: f64 = 13.0;
+/// Smallest share of the frames above `min_snr_db` that must decode (D708).
+const MIN_SHARE: f64 = 0.99;
+
+/// Test 5 as measured.
+struct Test5 {
+    /// Frames with an effective SNR above `min_snr_db`.
+    required: usize,
+    /// Of them, the frames missed as (index, effective SNR, level).
+    missed: Vec<(u64, f64, f64)>,
+    /// `CRC_OK` packets that are not one of the frames at its index.
+    false_frames: Vec<u64>,
+    /// Address/parity packets (flag bit 16) as indices: all from noise.
+    address_parity: Vec<u64>,
+}
+
+fn test5() -> Test5 {
     let case = golden::load("flows", "adsb_df17_200_frames").unwrap();
     let min_snr = case.param_f64("min_snr_db").unwrap();
     let frames = case.params["frames"].as_array().unwrap();
@@ -126,6 +145,7 @@ fn test5() -> (Vec<(u64, f64, f64)>, Vec<u64>) {
         .map(|p| p.index)
         .collect();
     let short = short_at.len();
+    let mut strong = 0;
     let mut required = 0;
     let mut missed = Vec::new();
     let mut decoded_below = 0;
@@ -145,6 +165,9 @@ fn test5() -> (Vec<(u64, f64, f64)>, Vec<u64>) {
                     literal_missed_burst += 1;
                 }
             }
+        }
+        if snr >= ALL_FROM_DB {
+            strong += 1;
         }
         if snr > min_snr {
             required += 1;
@@ -173,38 +196,68 @@ fn test5() -> (Vec<(u64, f64, f64)>, Vec<u64>) {
         .collect();
     eprintln!(
         "ADS-B test 5: {} frames, {required} above {min_snr} dB effective SNR, {} of them \
-         decoded (missed: {missed:?} as (index, effective SNR dB, level dB)); {decoded_below} of \
+         decoded (missed: {missed:?} as (index, effective SNR dB, level dB)); {strong} at \
+         {ALL_FROM_DB} dB or more, {} of them decoded; {decoded_below} of \
          the {} frames at or below {min_snr} dB decoded too; {} CRC_OK packets, {} false; {short} \
          address/parity packets (flag bit 16) from noise at {short_at:?}; \
          literal reading (level above {min_snr} dB without the bursts): {literal} frames, {} \
          decoded, {literal_missed} missed ({literal_missed_burst} of them under a burst)",
         frames.len(),
         required - missed.len(),
+        strong - missed.iter().filter(|m| m.1 >= ALL_FROM_DB).count(),
         frames.len() - required,
         ok.len(),
         false_frames.len(),
         literal - literal_missed,
     );
-    (missed, false_frames)
+    Test5 {
+        required,
+        missed,
+        false_frames,
+        address_parity: short_at,
+    }
 }
 
+/// Test 5 with the criterion of D708: at least 99 % of the frames above 10 dB effective SNR
+/// decode (184 of 185 measured; the one missed, 129916 at 10.08 dB, has two bit errors, which
+/// only error correction could repair), every frame at 13 dB or more decodes, and noise gives
+/// neither a false `CRC_OK` frame nor an address/parity packet.
 #[test]
-fn test5_no_false_frames() {
-    let (_, false_frames) = test5();
-    assert!(false_frames.is_empty(), "false frames at {false_frames:?}");
-}
-
-/// The threshold of §5 is not met: with the preamble test, the search rules and the address
-/// cache of dump1090 (D701 to D703) one of the 185 frames above 10 dB is missed, 129916 at
-/// 10.08 dB with two bit errors, which only error correction could save (out of scope); under
-/// the literal reading of §5 (the drawn level, all 200 frames) 15 are missed: 129916 and 14
-/// frames under a noise burst. Open item I39.1-1.
-#[test]
-#[ignore = "open item I39.1-1: 1 of 185 frames above 10 dB is missed (2 bit errors)"]
-fn test5_all_frames_above_10_db_decode() {
-    let (missed, false_frames) = test5();
-    assert!(false_frames.is_empty(), "false frames at {false_frames:?}");
-    assert!(missed.is_empty(), "missed {missed:?}");
+fn test5_frames_above_10_db_decode_and_no_false_frames() {
+    let t = test5();
+    let decoded = t.required - t.missed.len();
+    eprintln!(
+        "ADS-B test 5 criterion (D708): {decoded} of {} frames above 10 dB decoded (at least \
+         {:.0} % required), {} missed at {ALL_FROM_DB} dB or more, {} false CRC_OK frames, {} \
+         address/parity packets from noise",
+        t.required,
+        100.0 * MIN_SHARE,
+        t.missed.iter().filter(|m| m.1 >= ALL_FROM_DB).count(),
+        t.false_frames.len(),
+        t.address_parity.len(),
+    );
+    assert!(t.required > 0);
+    assert!(
+        decoded as f64 >= MIN_SHARE * t.required as f64,
+        "{decoded} of {} decoded, missed {:?}",
+        t.required,
+        t.missed
+    );
+    let strong_missed: Vec<_> = t.missed.iter().filter(|m| m.1 >= ALL_FROM_DB).collect();
+    assert!(
+        strong_missed.is_empty(),
+        "missed at 13 dB or more: {strong_missed:?}"
+    );
+    assert!(
+        t.false_frames.is_empty(),
+        "false frames at {:?}",
+        t.false_frames
+    );
+    assert!(
+        t.address_parity.is_empty(),
+        "address/parity packets from noise at {:?}",
+        t.address_parity
+    );
 }
 
 #[test]

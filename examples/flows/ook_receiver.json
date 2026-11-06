@@ -26,8 +26,9 @@
     "tune": {
       "kind": "ddc",
       "params": {
-        "cutoff_hz": 50000,
-        "decimation": 4
+        "cutoff_hz": 15000,
+        "decimation": 4,
+        "transition_hz": 10000
       }
     }
   },

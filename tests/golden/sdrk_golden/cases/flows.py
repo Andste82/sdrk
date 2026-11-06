@@ -22,8 +22,9 @@ samples ``p, p + 2, p + 7, p + 9`` and at ``p + 16 + 2 k`` (bit ``k`` = 1) or ``
 (bit ``k`` = 0), complex white Gaussian noise of sigma 0.018 per component and 40 noise bursts
 (32 to 1024 samples, 0 to 12 dB above the noise) at random positions that overlap some frames.
 Each frame records its effective SNR: its pulse power over the noise power with the strongest
-burst that overlaps the window ``p - 256 .. p + 240`` (the median window and the frame); the
-test requires every frame whose effective SNR is above 10 dB (D696). ``cu8`` is
+burst that overlaps the window ``p - 256 .. p + 240`` (the median window and the frame; D696);
+the test requires at least 99 % of the frames whose effective SNR is above 10 dB and every
+frame from 13 dB (D708; the case notes keep the wording of D696). ``cu8`` is
 ``round(x 128 + 127.5)`` saturated to 0 ... 255, the inverse of the ``cu8`` mapping of
 ``docs/device.md``.
 

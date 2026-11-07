@@ -1914,37 +1914,37 @@
               "label": "information: volk",
               "other_instr_per_sample": 2.78,
               "other_snr_db": 123.16,
-              "ours_instr_per_sample": 2.29,
-              "ratio": 0.82
+              "ours_instr_per_sample": 2.35,
+              "ratio": 0.84
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "n = 64",
               "other_instr_per_sample": 4.48,
               "other_snr_db": null,
-              "ours_instr_per_sample": 4.67,
-              "ratio": 1.04
+              "ours_instr_per_sample": 4.77,
+              "ratio": 1.06
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "n = 100",
               "other_instr_per_sample": 3.95,
               "other_snr_db": null,
-              "ours_instr_per_sample": 4.6,
-              "ratio": 1.16
+              "ours_instr_per_sample": 4.7,
+              "ratio": 1.19
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 3.02,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.29,
-              "ratio": 0.76
+              "ours_instr_per_sample": 2.35,
+              "ratio": 0.78
             }
           ],
           "other_instr_per_sample": 3.02,
-          "ours_instr_per_sample": 2.29,
-          "ratio": 0.76,
+          "ours_instr_per_sample": 2.35,
+          "ratio": 0.78,
           "snr_db": {
             "other": 123.23,
             "ours": 123.5

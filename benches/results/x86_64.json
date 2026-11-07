@@ -1914,37 +1914,37 @@
               "label": "information: volk",
               "other_instr_per_sample": 2.79,
               "other_snr_db": 123.16,
-              "ours_instr_per_sample": 2.29,
-              "ratio": 0.82
+              "ours_instr_per_sample": 2.35,
+              "ratio": 0.85
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "n = 64",
               "other_instr_per_sample": 4.5,
               "other_snr_db": null,
-              "ours_instr_per_sample": 4.72,
-              "ratio": 1.05
+              "ours_instr_per_sample": 4.97,
+              "ratio": 1.1
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "n = 100",
               "other_instr_per_sample": 3.96,
               "other_snr_db": null,
-              "ours_instr_per_sample": 4.64,
-              "ratio": 1.17
+              "ours_instr_per_sample": 4.84,
+              "ratio": 1.22
             },
             {
               "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 3.02,
               "other_snr_db": null,
-              "ours_instr_per_sample": 2.29,
-              "ratio": 0.76
+              "ours_instr_per_sample": 2.35,
+              "ratio": 0.78
             }
           ],
           "other_instr_per_sample": 3.02,
-          "ours_instr_per_sample": 2.29,
-          "ratio": 0.76,
+          "ours_instr_per_sample": 2.35,
+          "ratio": 0.78,
           "snr_db": {
             "other": 123.23,
             "ours": 123.5
@@ -5600,15 +5600,15 @@
         "dot_complex": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 2.29,
-          "ours_instr_per_sample": 2.42,
-          "ratio": 1.06,
+          "other_instr_per_sample": 2.35,
+          "ours_instr_per_sample": 2.36,
+          "ratio": 1.0,
           "snr_db": {
             "other": 123.5,
             "ours": 123.5
           },
           "status": "release",
-          "verdict": "waived"
+          "verdict": "pass"
         },
         "dot_cq15": {
           "compared_with": "ours at avx2",

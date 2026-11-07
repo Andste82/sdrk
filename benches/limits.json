@@ -4694,8 +4694,7 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     },
     "avx2-runtime": {
-      "status": "release",
-      "waiver": "the run-time-detection build counts 2.42 instructions per sample against 2.29 of the fixed `avx2` build (1.06): the whole call runs in the dispatched function, and the difference is about one instruction per block of eight samples on the count's 4096 samples, far above the fixed cost of the dispatch (about 21 instructions per call, I30-2); the cause in the code generation of the dispatched AVX2 path is not found yet, open item I43-5"
+      "status": "release"
     }
   },
   "dot_complex_fallback": {

@@ -572,6 +572,8 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `equalize` | adaptive equalizer (CMA, then decision-directed NLMS, optional decision feedback, phase tracker); options `equalizer_taps` and `equalizer_feedback_taps` of `psk_demod` | M43 (delivered) |
 | `morse_encode`, `morse_decode` | Morse code (CW): text to the key envelope, the envelope to words | M47 (delivered) |
 | `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 |
+| `band_pulse_detect` | pulse detection in every channel of a band, merged across channels | M45 |
+| `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45.1 (draft) |
 | `sync_detect` | sample-level sync-word correlator | backlog |
 
 ## The blocks

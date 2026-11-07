@@ -1964,8 +1964,8 @@
             "other": 119.18,
             "ours": 123.5
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "dot_cq15": {
           "compared_with": "sdrk fallback",
@@ -2219,8 +2219,8 @@
             "other": 127.5,
             "ours": 999.0
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",

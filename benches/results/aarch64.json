@@ -2109,8 +2109,8 @@
             "other": 123.23,
             "ours": 123.5
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "dot_complex_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
@@ -2132,8 +2132,8 @@
             "other": 119.18,
             "ours": 123.5
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "dot_cq15": {
           "compared_with": "sdrk fallback",
@@ -2395,8 +2395,8 @@
             "other": 127.23,
             "ours": 999.0
           },
-          "status": "dev",
-          "verdict": "warn"
+          "status": "release",
+          "verdict": "pass"
         },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",

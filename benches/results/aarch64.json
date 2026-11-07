@@ -3788,6 +3788,32 @@
           "status": "release",
           "verdict": "pass"
         },
+        "morse_decode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 62.86,
+          "ours_instr_per_sample": 62.86,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "morse_encode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 19.46,
+          "ours_instr_per_sample": 19.46,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "mul": {
           "compared_with": "volk_32fc_x2_multiply_32fc",
           "goal": true,

@@ -515,6 +515,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `rds_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_shape` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 0.99 info |
 | `stereo_encode_rds` C32 and f32 to f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `morse_encode_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `morse_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `dot_complex` C32 (VOLK `volk_32fc_x2_dot_prod_32fc`) | 0.62 info | 0.88 | 0.78 | 0.78 | 0.88 | 0.33 info |
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 0.96 | 0.58 | 0.65 | 0.49 | 0.78 | 0.37 |
 | `equalize` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
@@ -720,6 +722,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `rds_decode_block` (our code, per input sample) | 39.08 / 39.08 | 38.42 / 38.42 | 37.88 / 37.88 | 38.77 | 37.83 / 37.83 | 32.85 / 32.85 | 84.97 / 84.97 |
 | `rds_shape` f32 (our fallback) | 113.16 / 113.16 | 110.16 / 110.16 | 79.16 / 79.16 | 113.16 | 72.16 / 72.16 | 82.13 / 82.13 | 168.41 / 169.41 |
 | `stereo_encode_rds` C32 and f32 to f32 (our fallback) | 70.03 / 70.03 | 60.03 / 60.03 | 24.17 / 24.17 | 70.03 | 8.28 / 8.28 | 49.02 / 49.02 | 53.05 / 53.05 |
+| `morse_encode_block` (our code, per output sample) | 20.17 / 20.17 | 20.17 / 20.17 | 19.97 / 19.97 | 20.17 | 18.37 / 18.37 | 19.46 / 19.46 | 49.57 / 49.57 |
+| `morse_decode_block` (our code, per input sample) | 73.68 / 73.68 | 72.93 / 72.93 | 69.08 / 69.08 | 73.68 | 68.17 / 68.17 | 62.86 / 62.86 | 149.15 / 149.15 |
 | `dot_complex` C32 (VOLK `volk_32fc_x2_dot_prod_32fc`) | 5.29 / 8.53 | 5.29 / 6.03 | 2.35 / 3.02 | 2.36 | 2.35 / 3.02 | 3.53 / 4.03 | 13.20 / 40.55 |
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 14.41 / 15.02 | 8.66 / 15.02 | 8.41 / 13.02 | - | 6.41 / 13.02 | 9.03 / 11.52 | 13.20 / 35.30 |
 | `equalize` C32 (our fallback) | 502.98 / 502.98 | 496.45 / 496.45 | 533.11 / 533.11 | 502.21 | 492.09 / 492.09 | 437.31 / 437.31 | 1027.31 / 1027.31 |
@@ -925,6 +929,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `rds_decode_block` (our code, per input sample) | exact | exact | exact | exact | exact | exact |
 | `rds_shape` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 | `stereo_encode_rds` C32 and f32 to f32 (our fallback) | exact | exact | exact | exact | exact | exact |
+| `morse_encode_block` (our code, per output sample) | exact | exact | exact | exact | exact | exact |
+| `morse_decode_block` (our code, per input sample) | exact | exact | exact | exact | exact | exact |
 | `dot_complex` C32 (VOLK `volk_32fc_x2_dot_prod_32fc`) | 123.5 / 122.7 | 123.5 / 122.7 | 123.5 / 123.2 | 123.5 / 123.2 | 123.5 / 123.2 | 123.5 / 122.7 |
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 123.5 / 119.2 | 123.5 / 119.2 | 123.5 / 119.2 | 123.5 / 119.2 | 123.5 / 119.2 | 123.5 / 119.2 |
 | `equalize` C32 (our fallback) | exact | exact | exact | exact | exact | exact |
@@ -933,6 +939,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
 The M40 entries `costas` and `costas_fallback` were counted on all four platforms (`cargo xtask count --platform <p> --kernel costas --kernel costas_fallback --merge`, 2026-11-05) and measured with `cargo measure costas` and `cargo measure costas_fallback` on every level with a core model (D608). The fallback counts 0.69 to 0.89 of the instructions of GNU Radio's `costas_loop_cc` but simulates 1.03 to 1.53 of its cycles (3.22 on `alderlake` at `avx2`): both loops are bound by the latency from one symbol to the next, and ours has the longer chain (the table lookup with the integer-to-float conversion of the fraction, the derotation, the detector, the flushed and clamped integrator and the exact `f64` phase step of the contract) where GNU Radio's `sincosf` call overlaps with the rest. The cycle ratios against the libraries are not gated. M40.1 (order 8, D645) changed the order dispatch of the fallback (one loop per order 2, 4 and 8); both entries were counted again on all four platforms (2026-11-06) with the same instructions per symbol (116.03 `sse2`, 112.03 `sse4.2`, 96.03 `avx2`, 95.03 `avx512`, 89.03 `neon`, 228.05 `simd128`; GNU Radio 151.96, 151.96, 137.67, 137.67, 105.13, 255.33) and measured on every level with a core model with the same cycles up to 0.01 (`znver2` at `sse2` 99.06, `cortex-a76` at `neon` 77.05). The workload stays QPSK at order 4; order 8 has no entry of its own (GNU Radio's `costas_loop_cc` has another order-8 detector).
+
+The M47 entries `morse_encode_block` and `morse_decode_block` (our blocks, per output and per input sample of an 8 kHz envelope; no library has them, so information against our own code, D910) were counted on all four platforms (`cargo xtask count --platform <p> --kernel morse_encode_block --kernel morse_decode_block --merge`, 2026-11-07) and measured with `cargo measure` on every level with a core model. Cycles per sample, whole-loop, reference / counter model: the encoder 6.60 / 7.58 (`sse2`, `sse4.2`), 4.44 / 4.50 (`avx2`), 4.20 / 4.64 (`avx512`) and 8.56 / 9.45 (`neon`, `cortex-a72` / `cortex-a76`); the decoder 16.81 / 20.53 (`sse2`), 16.62 / 20.31 (`sse4.2`), 13.06 / 16.08 (`avx2`), 13.19 / 17.03 (`avx512`) and 22.26 / 28.43 (`neon`). The decoder had 147.92 instructions per sample at `avx2` before the speed round of D909 and has 69.08 now; the cycles above are those of the final code. Both blocks are scalar code with a dependency from one sample to the next (the smoother, the level trackers, the run counter), so the levels differ only by code generation.
 
 The M43 entries `dot_complex`, `dot_complex_fallback`, `equalize` and `equalize_fallback` were counted on all four platforms (`cargo xtask count --platform <p> --kernel dot_complex --kernel dot_complex_fallback --kernel equalize --kernel equalize_fallback --merge`, 2026-11-07) and measured with `cargo measure dot_complex` and `cargo measure equalize` on every level with a core model, after the performance round of D840 to D845. All judged entries are within the release limit and are `release`. `dot_complex` simulates 0.24 to 0.86 of the cycles of its fallback and 0.58 (`znver3`) to 1.03 (`cortex-a72`) of VOLK's protokernel without FMA. `equalize` runs the fallback on every backend (D841), so the facade entry equals the fallback (1.00, D321 holds). `equalize_fallback` counts 0.54 to 0.89 of the instructions of GNU Radio's `linear_equalizer` and simulates 0.12 to 0.93 of its cycles on x86 and 0.81 on `cortex-a76`; on `cortex-a72` it simulates 1.14 (262.11 against 229.47), the cost of the phase tracker and the smoothed `mse` that GNU Radio's loop does not have (D845: about 81 cycles per symbol on `cortex-a72`). Before D840 the fallback simulated 1.18 to 2.32 of GNU Radio's cycles where it was not below and the SIMD entry was slower than the fallback at every level. `dot_complex` at `avx2` and `avx512` counts 2.35 (after the two-block loop of `dot_complex_avx2`, 2.29 before; the cycles are unchanged), and at `avx2-runtime` 2.36 against 2.35 of the fixed `avx2` build (1.00, limit 1.02): the run-time build no longer needs a waiver (open item I43-5, closed).
 
@@ -1133,6 +1141,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_ref_fir_decimate_cq15` | 60.59 | 60.59 | 1.00 | 86.10 | 86.10 | 1.00 | sdrk fallback |
 | `halfband_ref_shifted` | 9.73 | 17.92 | 0.54 | 11.08 | 21.03 | 0.53 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 19.61 | 42.48 | 0.46 | 20.38 | 50.24 | 0.41 | sdrk fallback |
+| `morse_decode_block` | 16.81 | 16.81 | 1.00 | 20.53 | 20.53 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 6.60 | 6.60 | 1.00 | 7.58 | 7.58 | 1.00 | sdrk fallback |
 | `noise_blank` | 15.92 | 15.92 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.48 | 11.48 | 1.00 | sdrk fallback |
@@ -1344,6 +1354,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_ref_fir_decimate_cq15` | 19.30 | 60.59 | 0.32 | 19.62 | 86.10 | 0.23 | sdrk fallback |
 | `halfband_ref_shifted` | 9.48 | 18.49 | 0.51 | 11.20 | 21.34 | 0.52 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 16.03 | 26.84 | 0.60 | 17.15 | 25.98 | 0.66 | sdrk fallback |
+| `morse_decode_block` | 16.62 | 16.62 | 1.00 | 20.31 | 20.31 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 6.60 | 6.60 | 1.00 | 7.58 | 7.58 | 1.00 | sdrk fallback |
 | `noise_blank` | 15.92 | 15.92 | 1.00 | 11.82 | 11.82 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
 | `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.29 | 11.29 | 1.00 | sdrk fallback |
@@ -1556,6 +1568,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `halfband_ref_fir_decimate_cq15` | 38.17 | 38.17 | 1.00 | 30.85 | 30.85 | 1.00 | sdrk fallback |
 | `halfband_ref_shifted` | 5.77 | 63.72 | 0.09 | 5.42 | 16.42 | 0.33 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 10.03 | 15.87 | 0.63 | 10.21 | 16.35 | 0.62 | sdrk fallback |
+| `morse_decode_block` | 13.06 | 13.06 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 4.44 | 4.44 | 1.00 | 4.50 | 4.50 | 1.00 | sdrk fallback |
 | `noise_blank` | 11.58 | 11.58 | 1.00 | 11.37 | 11.37 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 8.48 | 8.48 | 1.00 | 9.30 | 9.30 | 1.00 | sdrk fallback |
 | `preemph_limit` | 15.40 | 15.40 | 1.00 | 13.20 | 13.20 | 1.00 | sdrk fallback |
@@ -1768,6 +1782,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `halfband_ref_fir_decimate_cq15` | 31.77 | 35.48 | 0.90 | 27.90 | 22.29 | 1.25 | sdrk fallback |
 | `halfband_ref_shifted` | 4.34 | 63.18 | 0.07 | 5.89 | 15.50 | 0.38 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 9.90 | 14.77 | 0.67 | 11.64 | 16.35 | 0.71 | sdrk fallback |
+| `morse_decode_block` | 13.19 | 13.19 | 1.00 | 17.03 | 17.03 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 4.20 | 4.20 | 1.00 | 4.64 | 4.64 | 1.00 | sdrk fallback |
 | `noise_blank` | 11.45 | 11.45 | 1.00 | 11.30 | 11.30 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 8.41 | 8.41 | 1.00 | 9.24 | 9.24 | 1.00 | sdrk fallback |
 | `preemph_limit` | 19.20 | 19.20 | 1.00 | 12.19 | 12.19 | 1.00 | sdrk fallback |
@@ -1980,6 +1996,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `halfband_ref_fir_decimate_cq15` | 78.43 | 60.69 | 1.29 | 75.20 | 56.59 | 1.33 | sdrk fallback |
 | `halfband_ref_shifted` | 18.84 | 41.30 | 0.46 | 19.08 | 33.38 | 0.57 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 23.39 | 36.11 | 0.65 | 21.74 | 32.32 | 0.67 | sdrk fallback |
+| `morse_decode_block` | 22.26 | 22.26 | 1.00 | 28.43 | 28.43 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 8.56 | 8.56 | 1.00 | 9.45 | 9.45 | 1.00 | sdrk fallback |
 | `noise_blank` | 17.64 | 17.64 | 1.00 | 8.80 | 8.80 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.51 | 9.51 | 1.00 | 10.53 | 10.53 | 1.00 | sdrk fallback |
 | `preemph_limit` | 20.93 | 20.93 | 1.00 | 16.43 | 16.43 | 1.00 | sdrk fallback |

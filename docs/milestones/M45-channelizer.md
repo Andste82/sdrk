@@ -1,22 +1,20 @@
-# M45.1 — Channelizer as a pipeline block: lane streams, `channelize`, `channel_select`
+# M45 — Channelizer: polyphase filter bank, lane streams, `channelize` and `channel_select`
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M45](M45-ism-band-receiver.md) · Next: [M46](M46-ism-sensors.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M34](M34-multi-input.md) · Next: [M45.1](M45.1-ism-band-receiver.md)
 
-> **Status: draft.** Written on 2026-11-07 from a design discussion with the maintainer; not yet reviewed. The thresholds marked *(to be confirmed)* are first estimates and are fixed by the implementation through the decisions log.
+> **Status: draft.** Written on 2026-11-07 from a design discussion with the maintainer (the kernel `channelize` and its prototype design moved here from the ISM band receiver, which became M45.1); not yet reviewed. The thresholds marked *(to be confirmed)* are first estimates and are fixed by the implementation through the decisions log.
 
 ## Goal
 
-Make the polyphase channelizer of M45 a block of its own that any flow can use, for any band: the ISM search grid of M45 (overlapping strips for transmitters of unknown frequency) as well as fixed channel plans such as PMR446 (16 channels of 12.5 kHz). A new port type `Lanes<T>` carries M channels side by side through one output, so one channelizer node feeds any number of readers; a small kind `channel_select` turns one lane into an ordinary stream. `band_pulse_detect` of M45 is split into `channelize` → `band_pulse_detect` and reads the lanes. A new flow `pmr446_monitor` demodulates eight PMR446 channels at the same time and sums their audio.
+A polyphase channelizer that any flow can use, for any band: the search grid of the ISM band receiver (M45.1: overlapping strips for transmitters of unknown frequency) as well as fixed channel plans such as PMR446 (16 channels of 12.5 kHz). A new kernel `channelize` splits a band into M channels at once; its prototype filter takes the passband and stopband edges as parameters, so the same kernel serves both uses. A new port type `Lanes<T>` carries the M channels side by side through one output, so one channelizer node feeds any number of readers; the kind `channel_select` turns one lane into an ordinary stream. The flow `pmr446_monitor` demodulates eight PMR446 channels at the same time and sums their audio.
 
 ## Why
 
-Today a node has exactly one output that carries one stream. A channelizer produces M streams at once; without a way to pass them on, every application that needs one hides its own channelizer inside a special block (as `band_pulse_detect` does), and a flow that listens to several channels of a band needs one `ddc` per channel, each filtering the full input rate. A lane stream keeps the edge model of the pipeline unchanged (one output per node, fan-out to any number of readers sharing one buffer) and lets the type check reject a lane stream wired into a stream block. One channelizer then serves pulse detection, monitoring, recording and audio channels from the same filter bank, at the cost `L + log2(M)·5/2` per input sample of the kernel, independent of the number of channels used.
-
-The only band-specific part of M45 is the prototype filter: M45 fixes its edges for overlapping search strips. A fixed channel plan needs a sharper filter that suppresses the neighbouring channels; with the edges as parameters (M45 §1, amended together with this draft) the same kernel serves both.
+A flow that listens to several channels of a band today needs one `ddc` per channel, each filtering the full input rate; a polyphase filter bank computes all M channels for `L + log2(M)·5/2` per input sample, independent of the number of channels used. But a node has exactly one output that carries one stream, and a channelizer produces M streams at once. Without a way to pass them on, every application would hide its own channelizer inside a special block. A lane stream keeps the edge model of the pipeline unchanged (one output per node, fan-out to any number of readers sharing one buffer) and lets the type check reject a lane stream wired into a stream block. One channelizer then serves pulse detection (M45.1), monitoring, recording and audio channels from the same filter bank.
 
 ## Order
 
-M45.1 depends on M45 (the kernel `channelize`, `design::channelizer_prototype` with edge parameters, `band_pulse_detect`, the testkit `ism` generator) and through it on M39.1. It can run in parallel with M46 if M46 does not change `band_pulse_detect`; otherwise M46 rebases onto M45.1 (the kind loses two parameters, §5).
+M45 depends on M34 (the pipeline kinds `add` and the multi-input pipeline used by `pmr446_monitor`) and through it on M26, M29 and M30; the kernel uses the FFT of M07 and the squelch of M19. It can run in parallel with M35 to M44 and M47. M45.1 (ISM band receiver) builds on it.
 ## Ground rules (identical in every milestone — read them completely before you start)
 
 These rules apply to every line of code in this repository. They are repeated in every milestone file so that each milestone is self-contained. If a rule and a milestone-specific instruction ever conflict, stop and ask; do not guess.
@@ -146,15 +144,34 @@ Additional rules:
 
 ## Scope
 
-**In:** the port type `Lanes<T>` in `sdrk-blocks` (C32 only in this milestone); lane streams in the pipeline (port kind, node views, node wrapper, runner buffers, rate, delay and type checks, report, schema); the block and kind `channelize` (`ChannelizeBlock`, C32 → `Lanes<C32>`); the block and kind `channel_select` (`ChannelSelectBlock`, `Lanes<C32>` → C32); `band_pulse_detect` reading `Lanes<C32>` (the channelizer moves out of the block); the flows `ism433_pulses` and `ism868_pulses` rewritten with a `channelize` node; the new flow `pmr446_monitor` (+ YAML); a testkit generator of NFM channel scenes; golden cases; tests; `docs/blocks.md`, `docs/pipeline.md`, `docs/kernels.md` (the prototype edges), `docs/testing.md`, `examples/README.md`, `CHANGELOG.md`.
+**In:** kernel `channelize` (C32) in `sdrk-core` with Fallback, Reference, facade delegation, SIMD path, contract; the prototype filter design `design::channelizer_prototype` with edge parameters; the port type `Lanes<T>` in `sdrk-blocks` (C32 only in this milestone); lane streams in the pipeline (port kind, node views, node wrapper, runner buffers, rate, delay and type checks, report, schema); the block and kind `channelize` (`ChannelizeBlock`, C32 → `Lanes<C32>`); the block and kind `channel_select` (`ChannelSelectBlock`, `Lanes<C32>` → C32); the flow `pmr446_monitor` (+ YAML); a testkit generator of NFM channel scenes; golden cases; tests; `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/testing.md`, `docs/performance.md`, `examples/README.md`, `CHANGELOG.md`.
 
-**Out:** lane streams of other element types (`CQ15`, `f32`; backlog); blocks that process all lanes at once (lane-wise `quad_demod`, `squelch`, `fm_demod`, a `lane_sum`; backlog: they would put the channels into SIMD lanes and shorten flows such as `pmr446_monitor` to a few nodes); a `lanes` pipeline output type (writing all lanes to a file; backlog); a synthesis filter bank (many channels into one transmit stream; backlog); output ports on nodes (`from_port`); templates or `for_each` in flow descriptions (backlog: the repetition in `pmr446_monitor` is the motivating case); retuning while the flow runs.
+**Out:** the ISM band receiver and `band_pulse_detect` (M45.1); lane streams of other element types (`CQ15`, `f32`; backlog); blocks that process all lanes at once (lane-wise `quad_demod`, `squelch`, `fm_demod`, a `lane_sum`; backlog: they would put the channels into SIMD lanes and shorten flows such as `pmr446_monitor` to a few nodes); a `lanes` pipeline output type (writing all lanes to a file; backlog); a synthesis filter bank (many channels into one transmit stream; backlog); output ports on nodes (`from_port`); templates or `for_each` in flow descriptions (backlog: the repetition in `pmr446_monitor` is the motivating case); retuning while the flow runs.
 
 ## Specification
 
 General rules of M19 apply. Rule of thumb for the whole milestone: a lane stream behaves exactly like a stream whose element is one *time step* of M values; every rate, delay, buffer size and count of a lane port is in time steps.
 
-### 1. Port type `Lanes<T>` (`sdrk-blocks`, `ports.rs`)
+### 1. Kernel `channelize`
+
+```rust
+pub struct ChannelizeState<T, S> { /* prototype taps (M·L), history, phase, FFT plan of size M */ }
+impl ChannelizeState<..> {
+    /// M channels (power of two, 4 … 256), prototype taps M·L (L taps per branch, 4 … 32), outputs
+    /// oversampled by 2: one output vector of M channel samples per M/2 input samples.
+    pub fn new(taps: S, channels: usize, history: H, fft: FftState<..>) -> Result<Self>;
+    pub fn reset(&mut self);
+}
+pub trait Channelize<T> { fn channelize(&self, s: &mut ChannelizeState<..>, input: &[T], output: &mut [T]) -> Result<Progress>; }
+```
+
+- The polyphase analysis filter bank with 2× oversampling (the "M/2 hop" form): per M/2 new input samples, the M branch filters of L taps each produce M values, which are circularly shifted according to the output index parity (so that every channel keeps its phase) and transformed by an M-point FFT (the `fft` kernel of the backend). Channel `k` (0 … M−1, FFT order: 0 is the band centre, `k > M/2` are the negative frequencies) is centred at `k·fs/M` and has a complex output at `2·fs/M`.
+- `output` is filled in groups of M values (channel 0 … M−1 of one time step); `Progress` counts input samples consumed and output values produced; a call consumes whole hops only and keeps the rest in the history.
+- Class *tolerance*: SNR ≥ 100 dB against an f64 model of the same filter bank (the FFT is a tolerance kernel); the fallback, the facade and the SIMD path agree within that; chunk invariance is exact (the same hop boundaries in every chunking).
+
+`design::channelizer_prototype(channels, taps_per_branch, passband, stopband, attenuation_db) -> taps` (f64, length M·L): a Kaiser-windowed low-pass with the passband edge at `passband·fs/M` and the stopband from `stopband·fs/M` (both fractions of the channel spacing `fs/M`, `0 < passband < stopband ≤ 1.5`; 1.5 is the largest edge that does not alias into the passband at the output rate `2·fs/M`) with `attenuation_db` (default 60), normalized to unit gain at DC; other edges are `InvalidParameter`. The edges are parameters so that the same kernel serves the search grid of the ISM band receiver (M45.1) and fixed channel plans (§6: PMR446 with 0.4 / 0.6, sharp neighbour rejection). The search grid uses `passband` 0.5, `stopband` 1.0: each channel passes ±half a spacing flat, the stopband edge stays free of aliasing at 2× oversampling, and a narrowband signal anywhere in the band lies inside the flat passband of at least one channel (the channels overlap by half a spacing on each side). Golden cases for the design with 0.5 / 1.0 and 0.4 / 0.6 (`max_abs_err` 1e-12).
+
+### 2. Port type `Lanes<T>` (`sdrk-blocks`, `ports.rs`)
 
 ```rust
 /// M streams of `T` side by side: time step after time step, each step M values (lane 0 … M−1).
@@ -183,11 +200,10 @@ impl<T: StreamElem> Ports for Lanes<T> {
 
 - The width is a run-time value (it comes from the flow), not a type parameter. `LanesRef::new` with a length that is not a multiple of the width, or with width 0, is `LengthMismatch` / `InvalidParameter`.
 - `Progress` of a block with a lane port counts time steps on that port.
-- `describe::PortType` gets `Lanes { elem: LaneElem, width_param: &'static str }` (like `Frame { len_param }`): the description names the element type and the parameter that sets the width (`"channels"` for `channelize`). A reading block (`channel_select`, `band_pulse_detect`) declares `width_param: ""`: it takes the width of its input.
+- `describe::PortType` gets `Lanes { elem: LaneElem, width_param: &'static str }` (like `Frame { len_param }`): the description names the element type and the parameter that sets the width (`"channels"` for `channelize`). A reading block (`channel_select`, `band_pulse_detect` of M45.1) declares `width_param: ""`: it takes the width of its input.
 - `Lanes<T>` is **not** a `ChainItem` in this milestone: `ChainBufs::bytes(len)` has no width. A Rust user wires `ChannelizeBlock` and `ChannelSelectBlock` by hand (an example in the rustdoc of `ChannelSelectBlock` shows it with two buffers). If the implementer finds a clean way to carry the width through `Chain`, it may be added and logged.
-- Compile tests in `tests/ports.rs`: `<Lanes<C32> as Ports>::COUNT == 1`; a test-only block `Lanes<C32>` → `C32` that sums the lanes; a lane view is rejected where a `StreamElem` is required (`compile_fail`).
 
-### 2. Lane streams in the pipeline (`sdrk-pipeline`)
+### 3. Lane streams in the pipeline (`sdrk-pipeline`)
 
 - `PortKind::Lanes { elem: PortType, width: usize }` next to `Stream` and `Frames`; `Checked::output` of `channelize` is `Lanes { elem: C32, width: channels }`.
 - `NodeInput::Lanes { data: &[C32], width }` and `NodeOutput::Lanes { data: &mut [C32], width }`; a node wrapper `LanesNode<B>` for blocks with a lane port on either side (or `StreamNode` extended; implementation choice, logged). A variant mismatch inside `process` stays an `Internal` error that cannot happen after a successful build.
@@ -199,9 +215,9 @@ impl<T: StreamElem> Ports for Lanes<T> {
 - **Clock domain:** a lane stream has the clock domain of its source, like a stream.
 - **Schema:** `cargo xtask schema` regenerates `schema/sdrk-pipeline-v1.json`; the port tables of `docs/blocks.md` write the type as `lanes<c32>`.
 
-### 3. Kind `channelize`
+### 4. Kind `channelize`
 
-`ChannelizeBlock`: `C32` → `Lanes<C32>`, a thin block over the M45 kernel `channelize` and `design::channelizer_prototype`.
+`ChannelizeBlock`: `C32` → `Lanes<C32>`, a thin block over the kernel `channelize` and `design::channelizer_prototype`.
 
 | Parameter | Unit | Kind | Default | Range |
 | --- | --- | --- | --- | --- |
@@ -211,14 +227,14 @@ impl<T: StreamElem> Ports for Lanes<T> {
 | `stopband` | none (fraction of the channel spacing) | F64, build | 1.0 | (`passband`, 1.5] |
 | `attenuation_db` | dB | F64, build | 60 | 20 … 120 |
 
-- The prototype is `channelizer_prototype(channels, taps_per_branch, passband, stopband, attenuation_db)` (M45 §1 as amended); the defaults are the ISM search grid of M45. The upper limit 1.5 of `stopband` is the largest edge that does not alias into the passband at the oversampled output rate `2·fs/M`.
-- If the Kaiser estimate for the requested edges and attenuation needs more than `channels · taps_per_branch` taps, the check fails with `rate_unsupported` at `nodes.<name>.params.taps_per_branch`, and the message names the required `taps_per_branch` (so a user who asks for a sharp filter learns the number). Example: 16 channels, 0.4 / 0.6, 60 dB needs about 290 taps, so `taps_per_branch` ≥ 19.
+- The defaults are the ISM search grid of M45.1. The upper limit 1.5 of `stopband` is the largest edge that does not alias into the passband at the oversampled output rate `2·fs/M`.
+- If the Kaiser estimate for the requested edges and attenuation needs more than `channels · taps_per_branch` taps, the check fails with `rate_unsupported` at `nodes.<name>.params.taps_per_branch`, and the message names the required `taps_per_branch` (so a user who asks for a sharp filter learns the number). Examples with 16 channels and 60 dB: 0.5 / 1.0 needs about 117 taps (`taps_per_branch` ≥ 8, the default fits), 0.4 / 0.6 about 291 taps (`taps_per_branch` ≥ 19).
 - Lane `k` is the channel at `k·fs/M` from the input centre in FFT order (lane 0 is the centre, lanes above M/2 are the negative frequencies), as the kernel defines it.
-- Timing: ratio `2/M` (one step per M/2 input samples, `Constant`), delay `(M·L − 1)/2` input samples, `min_input` M/2. Cost: the kernel's `L + log2(M)·5/2` per input sample (the formula of M45, recorded there).
+- Timing: ratio `2/M` (one step per M/2 input samples, `Constant`), delay `(M·L − 1)/2` input samples, `min_input` M/2. Cost: the kernel's `L + log2(M)·5/2` per input sample (record the formula).
 - Storage: taps, history and FFT plan of the kernel; `storage_bytes` exact as for every block.
 - C32 only; any other input type is `type_mismatch`.
 
-### 4. Kind `channel_select`
+### 5. Kind `channel_select`
 
 `ChannelSelectBlock`: `Lanes<C32>` → `C32`; copies one lane into a stream.
 
@@ -229,15 +245,7 @@ impl<T: StreamElem> Ports for Lanes<T> {
 - `channel` is the **signed** channel number: 0 is the centre channel, −1 the one below, +1 the one above (the user thinks in offsets; the block maps it to the FFT lane `channel mod M`). Outside the range for the width of its input: `rate_unsupported` at `nodes.<name>.params.channel`, the message names the width and the valid range. (A new error code instead is a judgement call; log it.)
 - Timing: ratio 1 (one sample per step), delay 0, `min_input` 1 step. Cost 1 per step.
 - Several `channel_select` nodes may read the same `channelize` node, also with the same `channel`.
-- The block is a strided copy; no kernel. If the SIMD backend's `deinterleave`-type kernels make a gather of every M-th value faster, the implementer may use them (`backend.require` then names them).
-
-### 5. `band_pulse_detect` on lanes
-
-- The block's input becomes `Lanes<C32>`; `channelize` is no longer called inside it. The parameters `channels` and `taps_per_branch` move to the `channelize` node; all other parameters stay.
-- `rate_unsupported` (at `nodes.<name>`) if the step rate of the input is below 100 kHz (the M45 rule, now on the step rate).
-- The merging of neighbouring channels uses the width of the input; the reported channel index and frequency are unchanged (the frequency needs the channel spacing, which the block takes from the step rate: spacing = step rate / 2).
-- Cost: 12 per lane value (the M45 figure without the kernel part).
-- The flows `ism433_pulses` and `ism868_pulses` get a node `chan` (`channelize`, `channels` 16 resp. 8, `taps_per_branch` 8, default edges) before `det`; their YAML twins likewise. All M45 tests of the block and the flows keep passing with the channelizer moved out; the block-level tests of M45 build `ChannelizeBlock` + `BandPulseDetectBlock` by hand.
+- The block is a strided copy; no kernel. If a SIMD gather of every M-th value is faster, the implementer may add it as a kernel (`backend.require` then names it).
 
 ### 6. Flow `pmr446_monitor` (+ YAML)
 
@@ -251,38 +259,38 @@ PMR446 analogue channels 1 … 16 are at `446.00625 + 0.0125·(n − 1)` MHz. Wi
 
 ### 7. Testkit: NFM channel scenes
 
-`nfm::ChannelScene { spacing_hz, channels: [(offset_index, audio: Tone | Noise | Silence, deviation_hz, level_db)], fs, noise_db }` renders an NFM baseband with continuous phase per channel, deterministic with a seed. Used by the tests of §8 and the flow test.
+`nfm::ChannelScene { spacing_hz, channels: [(offset_index, audio: Tone | Noise | Silence, deviation_hz, level_db)], fs, noise_db }` renders an NFM baseband with continuous phase per channel, deterministic with a seed. Used by the tests below.
 
 ## Tests
 
-Seeds 660 … 669.
+Seeds 660 … 679.
 
-1. `Lanes`: compile tests of §1; `LanesRef::new` errors; `steps`, `step(i)`; skip counts whole steps.
-2. The tap estimate of §3 (the golden cases of the design with both edge pairs are in M45): against SciPy `kaiserord` for 20 configurations (golden case, seed 660; equal tap counts); seed 661 is reserved for a further design case if the implementation needs one.
-3. `channelize` block: equals the M45 kernel output value for value (C32, the same plan); chunk invariance with 20 plans (seed 662); with 0.4/0.6, 60 dB, M 16, L 24: a tone swept over ±0.4 spacing of a channel stays within 0.1 dB, and a tone at 0.6 spacing or more from the channel centre is at least 60 dB down *(to be confirmed)*; `rate_unsupported` names the required `taps_per_branch` (3 cases).
-4. `channel_select`: for every lane of M 4, 16 and 256 the output equals `step(i)[lane]` of the input; signed mapping (−M/2, −1, 0, +1, M/2 − 1); out-of-range is `rate_unsupported` with the range in the message; chunk invariance (seed 663).
-5. Pipeline: a `channelize` node with four `channel_select` readers builds, the readers share one buffer (the report shows one lane buffer), and their outputs equal a reference computed outside the pipeline; `chan → quad_demod`, `ddc → channel_select` and `chan → <stream output>` are `type_mismatch` with the lane type in the message; the report entry of `chan` has `"lanes": 16` and the step rate; no allocation after build (counting allocator, as in M10); chunk invariance of the whole graph with 20 plans (seed 664).
-6. `band_pulse_detect` on lanes: the M45 tests 3 to 8 pass unchanged on the rewritten flows (their seeds 629 … 635); the block-level variant with hand-wired `ChannelizeBlock` gives the same packets as the flow.
-7. PMR adjacent-channel rejection: a scene with a 1 kHz tone at full deviation (2.5 kHz) on channel 5 and noise-modulated NFM 10 dB stronger on channels 4 and 6 (seed 665): the demodulated audio of channel 5 has a SINAD of at least 20 dB *(to be confirmed)*; with channels 4 and 6 at the same level as 5, at least 30 dB *(to be confirmed)*.
-8. PMR eight channels: eight channels with eight different tones (300 … 2400 Hz), one at a time and all at once (seed 666): every channel's tone appears in the audio output of the flow; with all squelches closed (noise only, seed 667) the output is silent (no squelch opens in 60 s of noise *(to be confirmed)*).
+1. `channelize` kernel: golden cases (seeds 660, 661: 16 and 64 channels, a tone per channel and noise, edges 0.5 / 1.0), the f64 model within 100 dB, chunk invariance with 20 plans (seed 662), the facade and the SIMD path against the fallback; a tone swept across the band in 200 steps appears with at most 0.1 dB ripple in the strongest channel (flat passband) and at least 60 dB down in channels two spacings away (0.5 / 1.0); with 0.4 / 0.6, 60 dB, M 16, L 24: a tone swept over ±0.4 spacing of a channel stays within 0.1 dB, and a tone at 0.6 spacing or more from the channel centre is at least 60 dB down *(to be confirmed)*.
+2. `channelizer_prototype`: golden cases with 0.5 / 1.0 and 0.4 / 0.6 (`max_abs_err` 1e-12); the tap estimate of §4 against SciPy `kaiserord` for 20 configurations (golden case, seed 663; equal tap counts); invalid edges are `InvalidParameter`.
+3. `Lanes`: `<Lanes<C32> as Ports>::COUNT == 1`; a test-only block `Lanes<C32>` → `C32` that sums the lanes; a lane view is rejected where a `StreamElem` is required (`compile_fail`); `LanesRef::new` errors; `steps`, `step(i)`; skip counts whole steps.
+4. `channelize` block: equals the kernel output value for value (C32, the same plan); chunk invariance with 20 plans (seed 664); `rate_unsupported` names the required `taps_per_branch` (3 cases).
+5. `channel_select`: for every lane of M 4, 16 and 256 the output equals `step(i)[lane]` of the input; signed mapping (−M/2, −1, 0, +1, M/2 − 1); out-of-range is `rate_unsupported` with the range in the message; chunk invariance (seed 665).
+6. Pipeline: a `channelize` node with four `channel_select` readers builds, the readers share one buffer (the report shows one lane buffer), and their outputs equal a reference computed outside the pipeline; `chan → quad_demod`, `ddc → channel_select` and `chan → <stream output>` are `type_mismatch` with the lane type in the message; the report entry of `chan` has `"lanes": 16` and the step rate; no allocation after build (counting allocator, as in M10); chunk invariance of the whole graph with 20 plans (seed 666).
+7. PMR adjacent-channel rejection: a scene with a 1 kHz tone at full deviation (2.5 kHz) on channel 5 and noise-modulated NFM 10 dB stronger on channels 4 and 6 (seed 667): the demodulated audio of channel 5 has a SINAD of at least 20 dB *(to be confirmed)*; with channels 4 and 6 at the same level as 5, at least 30 dB *(to be confirmed)*.
+8. PMR eight channels: eight channels with eight different tones (300 … 2400 Hz), one at a time and all at once (seed 668): every channel's tone appears in the audio output of the flow; with all squelches closed (noise only, seed 669) the output is silent (no squelch opens in 60 s of noise *(to be confirmed)*).
 9. Cost: one `channelize` node with 8 `channel_select` readers against eight `ddc` nodes for the same eight channels, both from 200 kS/s: the report cost and `cargo xtask count` (cycles per sample at avx2 by llvm-mca, instructions where no cycles exist) of both are recorded in `docs/performance.md`; no threshold, the numbers are the deliverable.
-10. Flow tests: `pmr446_monitor` and the rewritten ISM flows validate, build and run on scene files (seed 668 for PMR, the M45 seed 634 for ISM); the YAML twins parse to the same specs; chunk invariance of `pmr446_monitor` with 20 plans (seed 669).
+10. Flow tests: `pmr446_monitor` validates, builds and runs on a scene file (seed 670); the YAML twin parses to the same spec; chunk invariance with 20 plans (seed 671).
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the `channelize` and `channel_select` entries).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the `channelize` kernel and the `channelize` and `channel_select` blocks).
 
 ## Deliverables checklist
 
+- [ ] Kernel `channelize` with reference, fallback, delegation, SIMD path, contract; `design::channelizer_prototype` with edges
 - [ ] `Lanes<T>`, `LanesRef`, `LanesMut`, `PortType::Lanes`; compile tests
 - [ ] Lane streams in the pipeline: `PortKind::Lanes`, node views, node wrapper, runner buffers, checks, report; schema
 - [ ] Block and kind `channelize`
 - [ ] Block and kind `channel_select`
-- [ ] `band_pulse_detect` on lanes; `ism433_pulses`, `ism868_pulses` rewritten (+ YAML)
 - [ ] Flow `pmr446_monitor` (+ YAML)
 - [ ] Testkit `nfm::ChannelScene`
-- [ ] Tests (seeds 660–669); cost comparison in `docs/performance.md`
-- [ ] `docs/blocks.md`, `docs/pipeline.md`, `docs/kernels.md`, `docs/testing.md`, `examples/README.md`, CHANGELOG, decisions log
+- [ ] Tests (seeds 660–671); cost comparison in `docs/performance.md`
+- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/backends.md`, `docs/testing.md`, `examples/README.md`, CHANGELOG, decisions log
 
 ## Status
 

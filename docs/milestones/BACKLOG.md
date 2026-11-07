@@ -43,7 +43,8 @@ The RISC-V Vector backend is milestone [M17](M17-rvv-backend.md), the Arm DSP-ex
 ## Later (prepared, not scheduled)
 
 - Multi-threaded runner that sleeps when idle, using node groups (M11) as the partitioning unit; node groups on MCU cores.
-- Data-parallel blocks for OFDM and channelizers (polyphase filter bank channelizer; the kernel `channelize` comes with M45, a general channelizer block with one output per channel stays here).
+- Data-parallel blocks for OFDM and channelizers (polyphase filter bank channelizer; the kernel `channelize` comes with M45, the block with lane streams and `channel_select` with M45.1; blocks that process all lanes at once (lane-wise demodulators, squelch, a `lane_sum`), lane streams of `CQ15` and `f32`, a `lanes` output type and a synthesis filter bank stay here).
+- Repetition in flow descriptions: definitions of parameterized sub-flows, or a `for_each` over a list of values, expanded flat before validation (motivating case: the eight identical channel chains of `pmr446_monitor`, M45.1).
 - Network splits using the wire format (M11) over TCP/WebSocket; with it packets across a split (from M37, D587): a packet message in a version 2 of the wire format, and the rate of the stream an encoder makes from the packets carried with a cut edge by `split_by_groups`.
 - Metrics and tracing of a running pipeline (per-node load, buffer fill over time) for applications.
 - GPU groups (e.g. wgpu, VkFFT), first as an experiment in a separate repository. Lowest priority of the whole backlog.

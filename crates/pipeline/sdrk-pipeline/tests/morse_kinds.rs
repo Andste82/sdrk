@@ -29,8 +29,8 @@ use serde_json::{Value, json};
 use common::build;
 
 /// The costs of the two kinds in operations per sample (D909).
-const ENCODE_COST: f64 = 19.0;
-const DECODE_COST: f64 = 148.0;
+const ENCODE_COST: f64 = 20.0;
+const DECODE_COST: f64 = 69.0;
 
 /// A one-node flow of `kind` on an input of type `ty` at `rate` Hz; `out` is a stream or
 /// packets output.

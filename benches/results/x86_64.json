@@ -3496,6 +3496,32 @@
           "status": "release",
           "verdict": "pass"
         },
+        "morse_decode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 69.08,
+          "ours_instr_per_sample": 69.08,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "morse_encode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 19.97,
+          "ours_instr_per_sample": 19.97,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "mul": {
           "compared_with": "volk_32fc_x2_multiply_32fc",
           "goal": true,
@@ -6038,6 +6064,32 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "morse_decode_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 69.08,
+          "ours_instr_per_sample": 73.68,
+          "ratio": 1.07,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "morse_encode_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 19.97,
+          "ours_instr_per_sample": 20.17,
+          "ratio": 1.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "mul": {
           "compared_with": "ours at avx2",
@@ -10112,6 +10164,32 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "morse_decode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 73.68,
+          "ours_instr_per_sample": 73.68,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "morse_encode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 20.17,
+          "ours_instr_per_sample": 20.17,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "mul": {
           "compared_with": "volk_32fc_x2_multiply_32fc",
@@ -15212,6 +15290,32 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "morse_decode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 72.93,
+          "ours_instr_per_sample": 72.93,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "morse_encode_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 20.17,
+          "ours_instr_per_sample": 20.17,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "mul": {
           "compared_with": "volk_32fc_x2_multiply_32fc",

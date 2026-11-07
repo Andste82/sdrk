@@ -1,0 +1,63 @@
+{
+  "sdrk": 1,
+  "name": "cw-receiver",
+  "description": "Receive Morse code (CW) from a 240 kS/s unsigned 8-bit baseband with the carrier 10 kHz above the centre and output the words as text packets.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 240000,
+      "description": "IQ at 240 kS/s with the carrier near +10 kHz"
+    }
+  },
+  "nodes": {
+    "dec": {
+      "kind": "morse_decode",
+      "params": {
+        "wpm": 20,
+        "wpm_max": 40
+      }
+    },
+    "env": {
+      "kind": "mag"
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 500,
+        "decimation": 30,
+        "frequency_hz": 10000,
+        "max_taps": 2048,
+        "transition_hz": 600
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "env"
+    },
+    {
+      "from": "env",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "words"
+    }
+  ],
+  "outputs": {
+    "words": {
+      "type": "packets",
+      "queue": 64,
+      "description": "The decoded words as upper case ASCII text, one packet each, with the input index of their first key-down sample"
+    }
+  }
+}

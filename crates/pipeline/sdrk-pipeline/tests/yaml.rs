@@ -21,7 +21,7 @@ use sdrk_pipeline::{BuildOptions, DiagCode, Error, InputData, PipelineSpec, Regi
 
 use common::{cu8_recording, workspace_file};
 
-const FLOWS: [&str; 28] = [
+const FLOWS: [&str; 32] = [
     "fm_receiver",
     "spectrum_only",
     "resample_audio",
@@ -50,6 +50,10 @@ const FLOWS: [&str; 28] = [
     "ook_receiver",
     "adsb_receiver",
     "fm_stereo_rds_transmitter",
+    "cw_transmitter",
+    "cw_receiver",
+    "cw_tone_transmitter",
+    "cw_tone_receiver",
 ];
 
 fn text(name: &str, ext: &str) -> String {

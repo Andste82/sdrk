@@ -91,6 +91,8 @@ pub use blocks::imag_part::ImagPartBlock;
 pub use blocks::interpolate::{InterpolateBlock, InterpolateConfig, InterpolateRealBlock};
 pub use blocks::mag::{MagBlock, MagConfig};
 pub use blocks::make_complex::MakeComplexBlock;
+pub use blocks::morse_decode::{MorseDecodeBlock, MorseDecodeConfig};
+pub use blocks::morse_encode::{MorseEncodeBlock, MorseEncodeConfig};
 pub use blocks::mul::{MulBlock, MulRealBlock};
 pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};

@@ -1,0 +1,58 @@
+# SDRk pipeline: send text as Morse code (CW) as a keyed carrier, in pull mode (YAML twin of
+# cw_transmitter.json). The caller asks for bytes with Pipeline::pull; the text is supplied as
+# packets on demand. Use it with the cw_receiver flow.
+#
+# Continuous wave telegraphy switches a carrier on and off: a dot is one unit of carrier, a dash
+# three, and the gaps are one, three and seven units; the unit lasts 1.2 / wpm seconds. This flow
+# makes the key envelope of the text at 8 kS/s, turns it into a complex signal and interpolates
+# it to 240 kS/s with the carrier 10 kHz above the tuner centre of the transmitter. Every packet
+# ends with a word gap; between the packets, and while there is no packet, the carrier is off.
+sdrk: 1
+name: cw-transmitter
+description: "Send text as Morse code (CW) at 20 words per minute as a carrier 10 kHz above the centre, 240 kS/s signed 8-bit IQ, in pull mode."
+# f32 pipeline (the Morse kinds have no Q15 variant); chunks of 4096 samples.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # A packet input has no samples of its own: its rate_hz is the rate of the key envelope the
+  # encoder makes from it, here 8000 samples per second (the unit at 20 words per minute is 480
+  # samples). A packet is a text of up to 256 bytes: letters, digits and . , : ? ' - / ( ) " = + @;
+  # a space is a word gap, + = ( are the prosigns AR BT KN and the byte 0x04 is SK.
+  msg:
+    type: packets
+    rate_hz: 8000
+    description: "Text to send, up to 256 bytes per packet; every packet ends with a word gap"
+nodes:
+  # Key envelope: 1.0 key down, 0.0 key up, with raised-cosine edges of 5 ms (no key clicks).
+  # wpm can be 5 to 60; char_wpm above wpm gives Farnsworth timing.
+  keys:
+    kind: morse_encode
+    params:
+      wpm: 20
+  # The envelope as a complex signal with a zero imaginary part: the carrier at 0 Hz.
+  cplx:
+    kind: to_complex
+  # Interpolation by 30 (8 kS/s to 240 kS/s) and the shift to +10 kHz. The image filter is
+  # narrow, so it needs about 1100 taps (max_taps 2048); the keyed carrier is only a few hundred
+  # hertz wide. frequency_hz can be changed while the flow runs (set_param).
+  up:
+    kind: duc
+    params:
+      cutoff_hz: 500
+      frequency_hz: 10000
+      interpolation: 30
+      max_taps: 2048
+      transition_hz: 600
+# Key envelope, complex, up converter.
+edges:
+  - { from: msg, to: keys }
+  - { from: keys, to: cplx }
+  - { from: cplx, to: up }
+  - { from: up, to: rf }
+# Raw signed 8-bit IQ; carrier off when no text is waiting.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

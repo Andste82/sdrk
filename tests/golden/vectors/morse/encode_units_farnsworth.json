@@ -1,0 +1,61 @@
+{
+  "arrays": {
+    "char_gap": {
+      "dtype": "i32",
+      "file": "encode_units_farnsworth.char_gap.bin",
+      "len": 6
+    },
+    "char_wpm": {
+      "dtype": "f32",
+      "file": "encode_units_farnsworth.char_wpm.bin",
+      "len": 6
+    },
+    "data": {
+      "dtype": "u8",
+      "file": "encode_units_farnsworth.data.bin",
+      "len": 105
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "encode_units_farnsworth.lengths.bin",
+      "len": 6
+    },
+    "unit_counts": {
+      "dtype": "i32",
+      "file": "encode_units_farnsworth.unit_counts.bin",
+      "len": 6
+    },
+    "units": {
+      "dtype": "u8",
+      "file": "encode_units_farnsworth.units.bin",
+      "len": 2118
+    },
+    "word_gap": {
+      "dtype": "i32",
+      "file": "encode_units_farnsworth.word_gap.bin",
+      "len": 6
+    },
+    "wpm": {
+      "dtype": "f32",
+      "file": "encode_units_farnsworth.wpm.bin",
+      "len": 6
+    }
+  },
+  "case": "encode_units_farnsworth",
+  "format_version": 1,
+  "kernel": "morse",
+  "notes": "6 texts at (wpm, char_wpm) 10/18, 12/25, 5/20, 20/40, 10/13 and 30/30; the gaps from ta = (60 c - 37.2 s) / (s c) seconds, 3 ta / 19 and 7 ta / 19 in units of the character speed, rounded half up to whole units",
+  "params": {
+    "pairs": 6
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 651,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

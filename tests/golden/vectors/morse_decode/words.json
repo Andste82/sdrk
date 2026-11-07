@@ -1,0 +1,48 @@
+{
+  "arrays": {
+    "envelope": {
+      "dtype": "f32",
+      "file": "words.envelope.bin",
+      "len": 120644
+    },
+    "starts": {
+      "dtype": "i32",
+      "file": "words.starts.bin",
+      "len": 3
+    },
+    "word_lengths": {
+      "dtype": "i32",
+      "file": "words.word_lengths.bin",
+      "len": 17
+    },
+    "words": {
+      "dtype": "u8",
+      "file": "words.words.bin",
+      "len": 50
+    },
+    "wpm": {
+      "dtype": "f32",
+      "file": "words.wpm.bin",
+      "len": 3
+    }
+  },
+  "case": "words",
+  "format_version": 1,
+  "kernel": "morse_decode",
+  "notes": "3 transmissions at 6, 12 and 25 wpm at 1000 Hz, hard keying plus Gaussian noise of 0.05 (26 dB below the key down level), each but the last followed by 22 word gaps of silence; the words that were sent",
+  "params": {
+    "fs": 1000,
+    "sigma": 0.05,
+    "transmissions": 3
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 653,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

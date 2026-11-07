@@ -42,16 +42,17 @@ use sdrk_blocks::{
     FmStereoRdsModBlock, FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig,
     FrameEncodeBlock, FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock,
     FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig,
-    ImagPartBlock, InterpolateConfig, MakeComplexBlock, MulBlock, MulRealBlock, Mutability,
-    NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock,
-    OokDemodConfig, OokModBlock, OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock,
-    PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, QuadDemodConfig,
-    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
-    RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
-    ScaleBlock, ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock,
-    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    ImagPartBlock, InterpolateConfig, MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig,
+    MorseEncodeBlock, MorseEncodeConfig, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
+    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock,
+    OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
+    StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock,
+    all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -73,8 +74,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 61);
-    assert_eq!(all_descriptions().len(), 61);
+    assert_eq!(kinds.len(), 63);
+    assert_eq!(all_descriptions().len(), 63);
     for kind in [
         "convert",
         "convert_out",
@@ -137,6 +138,8 @@ fn there_are_sixty_one_unique_kinds() {
         "equalize",
         "rds_encode",
         "fm_stereo_rds_mod",
+        "morse_encode",
+        "morse_decode",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -370,6 +373,8 @@ fn config_defaults_match_the_descriptions() {
         |n| FmStereoRdsModConfig::default().get(n),
         &[],
     );
+    defaults_match("morse_encode", |n| MorseEncodeConfig::default().get(n), &[]);
+    defaults_match("morse_decode", |n| MorseDecodeConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -483,6 +488,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("equalize", EqualizeConfig);
     round_trip!("rds_encode", RdsEncodeConfig);
     round_trip!("fm_stereo_rds_mod", FmStereoRdsModConfig);
+    round_trip!("morse_encode", MorseEncodeConfig);
+    round_trip!("morse_decode", MorseDecodeConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -824,6 +831,14 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "equalize",
         &mut EqualizeBlock::new(&EqualizeConfig::default(), rate(25_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "morse_encode",
+        &mut MorseEncodeBlock::new(&MorseEncodeConfig::default(), rate(8_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "morse_decode",
+        &mut MorseDecodeBlock::new(&MorseDecodeConfig::default(), rate(8_000), &mut s).unwrap(),
     );
     let pd = PskDemodConfig {
         order: 8,

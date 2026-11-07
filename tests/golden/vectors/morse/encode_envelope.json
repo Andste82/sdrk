@@ -1,0 +1,48 @@
+{
+  "arrays": {
+    "data": {
+      "dtype": "u8",
+      "file": "encode_envelope.data.bin",
+      "len": 34
+    },
+    "envelope": {
+      "dtype": "f32",
+      "file": "encode_envelope.envelope.bin",
+      "len": 25976
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "encode_envelope.lengths.bin",
+      "len": 3
+    },
+    "unit_counts": {
+      "dtype": "i32",
+      "file": "encode_envelope.unit_counts.bin",
+      "len": 3
+    },
+    "units": {
+      "dtype": "u8",
+      "file": "encode_envelope.units.bin",
+      "len": 368
+    }
+  },
+  "case": "encode_envelope",
+  "format_version": 1,
+  "kernel": "morse",
+  "notes": "3 packets at 17 wpm and 1000 Hz (70.59 samples a unit), hard keying; each packet ends with its word gap of 7 units; unit k ends at floor((k + 1) spu + 0.5)",
+  "params": {
+    "fs": 1000,
+    "rise_ms": 0.0,
+    "wpm": 17.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 652,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

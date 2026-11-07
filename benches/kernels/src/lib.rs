@@ -50,6 +50,7 @@ mod halfband_family;
 mod math_family;
 mod noise_family;
 mod proto_family;
+mod morse_family;
 mod rds_family;
 mod rds_tx_family;
 mod stereo_family;
@@ -352,7 +353,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 204] = [
+pub const KERNELS: [&str; 206] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -557,6 +558,8 @@ pub const KERNELS: [&str; 204] = [
     "equalize_fallback",
     "rds_shape",
     "stereo_encode_rds",
+    "morse_encode_block",
+    "morse_decode_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -752,6 +755,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "costas_fallback" => Box::new(costas_family::CostasK::new(rng, layout, true)),
         "rds_demod_block" => Box::new(rds_family::RdsDemodBlockK::new(rng, layout)),
         "rds_decode_block" => Box::new(rds_family::RdsDecodeBlockK::new(rng, layout)),
+        "morse_encode_block" => Box::new(morse_family::MorseEncodeBlockK::new(rng, layout)),
+        "morse_decode_block" => Box::new(morse_family::MorseDecodeBlockK::new(rng, layout)),
         "dot_complex" | "dot_complex_fallback" => {
             Box::new(equalize_family::DotComplexK::new(rng, layout, entry))
         }

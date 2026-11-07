@@ -865,8 +865,9 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// vectors, so there is no misaligned variant. `family` is [`Family::GnuRadio`] for the CRCs
 /// (GNU Radio's `gr::digital::crc`, D527) and [`Family::Own`] (information only) for the
 /// framing, which no library has. The RDS blocks of M41 (`rds_demod_block`, one multiplex
-/// sample; `rds_decode_block`, one soft bit) use the same shape: composite blocks that no
-/// library has, information only.
+/// sample; `rds_decode_block`, one soft bit) and the Morse blocks of M47 (`morse_encode_block`,
+/// one output sample; `morse_decode_block`, one input sample) use the same shape: blocks that
+/// no library has, information only.
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -890,7 +891,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 204] = [
+pub static KERNELS: [KernelSpec; 206] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1118,6 +1119,8 @@ pub static KERNELS: [KernelSpec; 204] = [
     spec("equalize_fallback", Family::FallbackVsGnuRadio, false),
     spec("rds_shape", Family::Own, false),
     spec("stereo_encode_rds", Family::Own, false),
+    proto("morse_encode_block", Family::Own),
+    proto("morse_decode_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4595,6 +4598,8 @@ mod tests {
             "frame_decode_block",
             "rds_demod_block",
             "rds_decode_block",
+            "morse_encode_block",
+            "morse_decode_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {

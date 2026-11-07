@@ -464,6 +464,8 @@ pub struct Decoder {
     char_thr: u32,
     word_thr: u32,
     idle_thr: u32,
+    /// The key-up run length at which `gap` has something to do (`u32::MAX`: nothing).
+    event: u32,
     unknown: u32,
     overflow: u32,
     uncertain: u32,
@@ -502,6 +504,7 @@ impl Decoder {
             char_thr: 0,
             word_thr: 0,
             idle_thr: 0,
+            event: u32::MAX,
             unknown: 0,
             overflow: 0,
             uncertain: 0,
@@ -565,20 +568,53 @@ impl Decoder {
 
     /// Takes the key state of one sample; returns a character or a space when this sample
     /// finishes one.
+    // `always`: the fast path of a sample inside a run is a few instructions, and the call and
+    // the return of the `Option<Emit>` cost more (measured, D909).
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
     pub fn push(&mut self, on: bool, index: u64) -> Option<Emit> {
         if on == self.level {
             self.run = self.run.saturating_add(1);
-            return if on { None } else { self.gap() };
+            if on || self.run != self.event {
+                return None;
+            }
+        }
+        self.push_slow(on, index)
+    }
+
+    /// The samples that do something: a change of the key state and a key-up run that reaches
+    /// the end of a character, a word or the transmission.
+    #[inline(never)]
+    fn push_slow(&mut self, on: bool, index: u64) -> Option<Emit> {
+        if on == self.level {
+            return self.gap();
         }
         if self.level {
             self.finish_run();
         }
         self.level = on;
         self.run = 1;
-        if on && self.n == 0 && !self.over {
-            self.start = index;
+        if on {
+            if self.n == 0 && !self.over {
+                self.start = index;
+            }
+        } else {
+            self.event = self.next_event();
         }
         None
+    }
+
+    /// The key-up run length at which the next thing happens: the end of the character, the
+    /// word or the transmission.
+    fn next_event(&self) -> u32 {
+        if self.pending() {
+            self.char_thr
+        } else if self.word_open {
+            self.word_thr
+        } else {
+            self.idle_thr
+        }
+        .max(2)
     }
 
     /// Finishes the character in progress and the word, as if a long gap had come.
@@ -603,6 +639,9 @@ impl Decoder {
         } else {
             None
         };
+        if !self.level {
+            self.event = self.next_event();
+        }
         (first, second)
     }
 
@@ -626,21 +665,30 @@ impl Decoder {
     /// One more sample of key up: the gap thresholds.
     fn gap(&mut self) -> Option<Emit> {
         let run = self.run;
-        if self.pending() {
+        let emit = if self.pending() {
             if run >= self.char_thr {
-                return self.finish_char();
+                self.finish_char()
+            } else {
+                None
             }
         } else if self.word_open && run >= self.word_thr {
             self.word_open = false;
-            return Some(Emit {
+            Some(Emit {
                 byte: b' ',
                 start: self.start,
-            });
-        }
+            })
+        } else {
+            None
+        };
         if run == self.idle_thr {
             self.forget();
+            self.event = u32::MAX;
+        } else {
+            // The next thing happens later in this key-up run (or never).
+            let next = self.next_event();
+            self.event = if next > run { next } else { u32::MAX };
         }
-        None
+        emit
     }
 
     /// Looks up the character in progress.

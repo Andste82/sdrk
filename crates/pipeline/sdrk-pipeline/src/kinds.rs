@@ -3735,7 +3735,7 @@ impl Kind for MorseEncodeKind {
             rate_out: MorseEncodeBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: MorseEncodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // The unit counter, the edge and one store per output sample (D909).
-            cost: 19.0,
+            cost: 20.0,
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,
@@ -3788,7 +3788,7 @@ impl Kind for MorseDecodeKind {
             memory_bytes: MorseDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // The smoother, the two level trackers, the threshold with hysteresis, the glitch
             // filter and the run counter of the decoder per input sample (D909).
-            cost: 148.0,
+            cost: 69.0,
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,

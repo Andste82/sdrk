@@ -256,14 +256,29 @@ pub struct MorseDecodeBlock<S: Storage> {
     decoder: Decoder,
     /// Smoothing coefficient of the envelope.
     smooth: f32,
-    /// Coefficient of the slow level trackers.
-    slow: f32,
     /// Shortest key state that counts, in samples.
     glitch: u32,
     /// The smoothed envelope.
     y: f32,
     /// Whether the first sample has been seen (it starts the smoother and the trackers).
     started: bool,
+    /// The signal level must exceed this for a key down: infinity before the first quiet block
+    /// has been folded in, then the noise floor (at least 1e-12).
+    gate: f32,
+    /// Samples between two updates of the levels, the threshold and the noise statistics (the
+    /// smoothed value changes slowly).
+    stride: u32,
+    /// The coefficients of the peak rise and of the slow trackers for one update.
+    smooth_s: f32,
+    slow_s: f32,
+    /// Updates in a block of the noise statistics.
+    blk_target: u32,
+    /// The smoothed value above which the key goes down and below which it goes up again
+    /// (infinity: no key down).
+    t_on: f32,
+    t_off: f32,
+    /// Samples until the next update (counts down from `stride`).
+    phase: u32,
     /// Signal level (peak hold).
     sig: f32,
     /// Noise level (minimum hold).
@@ -274,8 +289,6 @@ pub struct MorseDecodeBlock<S: Storage> {
     var: f64,
     /// Quiet blocks folded into `mu` and `var` so far (saturating).
     n_blk: u32,
-    /// The noise floor, `mu + 4 sigma` (0 before the first block), refreshed with every block.
-    floor: f32,
     /// Key-up samples since the key went up (the tail of the smoother does not count as noise).
     quiet: u32,
     /// Samples after which the tail of the smoother has died away (four time constants); also
@@ -283,7 +296,8 @@ pub struct MorseDecodeBlock<S: Storage> {
     settle: u32,
     /// Weight of one block in the one-pole average of the statistics.
     beta: f64,
-    /// The block in progress: samples, sum, sum of squares, and whether it has stayed quiet.
+    /// The block in progress: the updates that entered the sums, the sum and the sum of
+    /// squares, and whether it has stayed quiet.
     blk_n: u32,
     blk_sum: f64,
     blk_sq: f64,
@@ -323,6 +337,9 @@ impl<S: Storage> MorseDecodeBlock<S> {
         let fs = hz(rate_in);
         let unit = fs * 1.2 / config.wpm;
         let settle = (4.0 * (1.0 + SMOOTH_UNITS * unit)) as u32;
+        let smooth = (1.0 / (1.0 + SMOOTH_UNITS * unit)) as f32;
+        let slow = (1.0 / (1.0 + TRACK_UNITS * unit)) as f32;
+        let stride = (settle / 32).clamp(1, 4);
         // The small addition keeps a quotient that rounding leaves just below a whole number.
         let unit_min = fs * 1.2 / config.wpm_max;
         let glitch = (libm::floor(GLITCH_FRACTION * unit_min + 1e-6) as u32).max(2);
@@ -330,8 +347,7 @@ impl<S: Storage> MorseDecodeBlock<S> {
             config: *config,
             rate_hz: fs,
             decoder: Decoder::new(unit as f32)?,
-            smooth: (1.0 / (1.0 + SMOOTH_UNITS * unit)) as f32,
-            slow: (1.0 / (1.0 + TRACK_UNITS * unit)) as f32,
+            smooth,
             glitch,
             y: 0.0,
             started: false,
@@ -340,7 +356,14 @@ impl<S: Storage> MorseDecodeBlock<S> {
             mu: 0.0,
             var: 0.0,
             n_blk: 0,
-            floor: 0.0,
+            gate: f32::INFINITY,
+            stride,
+            smooth_s: (1.0 - libm::pow(1.0 - f64::from(smooth), f64::from(stride))) as f32,
+            slow_s: (1.0 - libm::pow(1.0 - f64::from(slow), f64::from(stride))) as f32,
+            blk_target: (settle / stride).max(1),
+            t_on: f32::INFINITY,
+            t_off: f32::INFINITY,
+            phase: stride,
             quiet: u32::MAX / 2,
             settle,
             beta: f64::from(settle) / (f64::from(settle) + NOISE_UNITS * unit),
@@ -399,23 +422,64 @@ impl<S: Storage> MorseDecodeBlock<S> {
         self.decoder.uncertain()
     }
 
-    /// Adds the smoothed value `y` to the block of the noise statistics. A block is folded
-    /// into the mean and the variance only if it and the next one were quiet (the key up, the
-    /// tail of the smoother gone), so that the rising edge in front of an element, which the
-    /// threshold takes some samples to see, does not count as noise.
-    #[inline]
-    fn noise_block(&mut self, y: f32) {
-        if self.raw || self.quiet <= self.settle {
-            self.blk_quiet = false;
+    /// One update of the level trackers, the threshold and the block of the noise statistics
+    /// with the smoothed value `y`, every `stride` samples. A block is folded into the mean and
+    /// the variance only if it and the next one were quiet (the key up, the tail of the
+    /// smoother gone), so that the rising edge in front of an element, which the threshold
+    /// takes some samples to see, does not count as noise.
+    // `always`: part of the per-sample loop of `run`, the whole of which is the block.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn update(&mut self, y: f32) {
+        self.quiet = if self.raw {
+            0
+        } else if self.quiet <= self.settle {
+            self.quiet + self.stride
+        } else {
+            self.quiet
+        };
+        self.blk_quiet = self.blk_quiet && !self.raw && self.quiet > self.settle;
+        let yd = f64::from(y);
+        self.blk_n += 1;
+        self.blk_sum += yd;
+        self.blk_sq += yd * yd;
+        if self.blk_n >= self.blk_target {
+            self.end_block();
         }
-        self.blk_n = self.blk_n.saturating_add(1);
-        let y = f64::from(y);
-        self.blk_sum += y;
-        self.blk_sq += y * y;
-        if self.blk_n < self.settle {
-            return;
+        // Peak hold, decaying towards the noise level; minimum hold, rising while the key is up.
+        // The peak rises as fast as the smoother, so a burst of a few samples hardly moves it.
+        self.sig = if y > self.sig {
+            self.sig + self.smooth_s * (y - self.sig)
+        } else {
+            self.sig - (self.sig - self.noise) * self.slow_s
+        };
+        if y < self.noise {
+            self.noise = y;
+        } else if !self.raw {
+            self.noise += (y - self.noise) * self.slow_s;
         }
-        if self.blk_quiet {
+        let span = self.sig - self.noise;
+        // The first block after the start or a reset only learns the noise: no key down (the
+        // gate is infinite until a quiet block has been folded in).
+        if span <= 0.0 || self.sig <= self.gate {
+            self.t_on = f32::INFINITY;
+            self.t_off = f32::INFINITY;
+        } else {
+            let t = (self.noise + THRESHOLD_POSITION * span).max(self.gate);
+            let h = HYSTERESIS * span;
+            self.t_on = t + h;
+            self.t_off = t - h;
+        }
+    }
+
+    /// Ends the block of the noise statistics.
+    #[cold]
+    #[inline(never)]
+    fn end_block(&mut self) {
+        self.y = flush(self.y);
+        self.sig = flush(self.sig);
+        self.noise = flush(self.noise);
+        if self.blk_quiet && self.blk_n > 0 {
             if self.n_blk == 0 {
                 // The first quiet block is folded at once: the stream starts with noise.
                 self.pend_n = self.blk_n;
@@ -450,123 +514,143 @@ impl<S: Storage> MorseDecodeBlock<S> {
         self.mu += weight * shift;
         self.var =
             (1.0 - weight) * self.var + weight * spread + weight * (1.0 - weight) * shift * shift;
-        self.floor = (self.mu + f64::from(NOISE_SIGMAS) * libm::sqrt(self.var.max(0.0))) as f32;
+        let floor = (self.mu + f64::from(NOISE_SIGMAS) * libm::sqrt(self.var.max(0.0))) as f32;
+        self.gate = floor.max(1.0e-12);
         self.pend_n = 0;
     }
 
-    /// The key state of the smoothed value `y`, with the threshold and the level trackers.
-    #[inline]
-    fn detect(&mut self, x: f32) -> bool {
+    /// Starts the smoother and the level trackers at the first sample, so that the rise from
+    /// zero to the noise level is not taken for a signal.
+    fn start(&mut self, x: f32) {
+        let x = if x.is_finite() { x } else { 0.0 };
+        self.started = true;
+        self.y = x;
+        self.sig = x;
+        self.noise = x;
+    }
+
+    /// The key state of the sample `x`: the smoother, then the fixed threshold or the
+    /// threshold of the last update (every `stride` samples) with its hysteresis.
+    // `always`: part of the per-sample loop of `run`, the whole of which is the block.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn detect<const ADAPTIVE: bool>(&mut self, x: f32) -> bool {
         // A sample that is not finite counts as 0, so that one bad value does not stay in the
         // smoother.
         let x = if x.is_finite() { x } else { 0.0 };
-        if self.started {
-            self.y = flush(self.y + self.smooth * (x - self.y));
-        } else {
-            // The smoother and the level trackers start at the first sample, so that the rise
-            // from zero to the noise level is not taken for a signal.
-            self.started = true;
-            self.y = x;
-            self.sig = x;
-            self.noise = x;
-        }
-        let y = self.y;
-        if self.config.threshold > 0.0 {
+        let y = self.y + self.smooth * (x - self.y);
+        self.y = y;
+        if !ADAPTIVE {
+            self.y = flush(y);
             let t = self.config.threshold as f32;
             let h = HYSTERESIS * t;
             return if self.raw { y >= t - h } else { y > t + h };
         }
-        if self.raw {
-            self.quiet = 0;
-        } else {
-            self.quiet = self.quiet.saturating_add(1);
+        self.phase -= 1;
+        if self.phase == 0 {
+            self.phase = self.stride;
+            self.update(y);
         }
-        self.noise_block(y);
-        // The floor (0 until a quiet block has been folded in, so that a signal that starts at
-        // once is not mistaken for noise) is refreshed with every block.
-        let floor = self.floor;
-        // Peak hold, decaying towards the noise level; minimum hold, rising while the key is up.
-        // The peak rises as fast as the smoother, so a burst of a few samples hardly moves it.
-        if y > self.sig {
-            self.sig = flush(self.sig + self.smooth * (y - self.sig));
-        } else {
-            self.sig = flush(self.sig - (self.sig - self.noise) * self.slow);
-        }
-        if y < self.noise {
-            self.noise = y;
-        } else if !self.raw {
-            self.noise = flush(self.noise + (y - self.noise) * self.slow);
-        }
-        let span = self.sig - self.noise;
-        // The first block after the start or a reset only learns the noise: no key down.
-        if self.n_blk == 0 || span <= 0.0 || self.sig <= floor || self.sig < 1.0e-12 {
-            return false;
-        }
-        let t = (self.noise + THRESHOLD_POSITION * span).max(floor);
-        let h = HYSTERESIS * span;
-        if self.raw { y >= t - h } else { y > t + h }
+        y > if self.raw { self.t_off } else { self.t_on }
     }
 
-    /// Gives one sample of key state to the decoder and collects what it finishes.
-    #[inline]
-    fn feed(&mut self, on: bool, out: &mut Option<Packet>) {
+    /// Gives one sample of key state to the decoder; true when it finished a word, which is
+    /// then in `slot`.
+    // `always`: part of the per-sample loop of `run`, the whole of which is the block.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn feed(&mut self, on: bool, slot: &mut Packet) -> bool {
         let index = self.fed;
         self.fed = self.fed.wrapping_add(1);
-        if let Some(Emit { byte, start }) = self.decoder.push(on, index) {
-            if byte == b' ' {
-                self.finish_word(out);
-            } else {
-                if self.wlen == 0 {
-                    self.wstart = start;
-                }
-                if let Some(slot) = self.word.get_mut(self.wlen) {
-                    *slot = byte;
-                    self.wlen += 1;
-                }
-                if self.wlen == MAX_PACKET_BYTES {
-                    self.finish_word(out);
-                }
-            }
+        let Some(Emit { byte, start }) = self.decoder.push(on, index) else {
+            return false;
+        };
+        if byte == b' ' {
+            return self.finish_word(slot);
         }
+        if self.wlen == 0 {
+            self.wstart = start;
+        }
+        if let Some(cell) = self.word.get_mut(self.wlen) {
+            *cell = byte;
+            self.wlen += 1;
+        }
+        self.wlen == MAX_PACKET_BYTES && self.finish_word(slot)
     }
 
-    /// Turns the word in progress into a packet (none for an empty word).
-    fn finish_word(&mut self, out: &mut Option<Packet>) {
+    /// Turns the word in progress into the packet `slot` (false for an empty word).
+    fn finish_word(&mut self, slot: &mut Packet) -> bool {
         if self.wlen == 0 {
-            return;
+            return false;
         }
         let data = self.word.get(..self.wlen).unwrap_or(&[]);
-        // The word has at most 256 bytes, so `new` cannot fail.
-        *out = Packet::new(self.wstart, PacketFlags::NONE, data).ok();
         self.wlen = 0;
+        // The word has at most 256 bytes, so `new` cannot fail.
+        match Packet::new(self.wstart, PacketFlags::NONE, data) {
+            Ok(p) => {
+                *slot = p;
+                true
+            }
+            Err(_) => false,
+        }
     }
 
-    /// Takes the next input sample; returns a packet when the sample finishes a word.
-    #[inline]
-    fn step(&mut self, x: f32) -> Option<Packet> {
-        let mut out = None;
-        self.raw = self.detect(x);
+    /// Takes the next input sample; true when the sample finishes a word, which is then in
+    /// `slot`.
+    // `always`: part of the per-sample loop of `run`, the whole of which is the block.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn step<const ADAPTIVE: bool>(&mut self, x: f32, slot: &mut Packet) -> bool {
+        self.raw = self.detect::<ADAPTIVE>(x);
+        if self.raw == self.committed && self.pending == 0 {
+            let on = self.committed;
+            return self.feed(on, slot);
+        }
+        let mut ready = false;
         if self.raw == self.committed {
             // A change that did not last is merged into the run it interrupted.
+            let on = self.committed;
             for _ in 0..self.pending {
-                let c = self.committed;
-                self.feed(c, &mut out);
+                ready |= self.feed(on, slot);
             }
             self.pending = 0;
-            let c = self.committed;
-            self.feed(c, &mut out);
+            ready |= self.feed(on, slot);
         } else {
             self.pending = self.pending.saturating_add(1);
             if self.pending >= self.glitch {
                 self.committed = self.raw;
+                let on = self.committed;
                 for _ in 0..self.pending {
-                    let c = self.committed;
-                    self.feed(c, &mut out);
+                    ready |= self.feed(on, slot);
                 }
                 self.pending = 0;
             }
         }
-        out
+        ready
+    }
+
+    /// The per-sample loop; `ADAPTIVE` selects the threshold at compile time.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn run<const ADAPTIVE: bool>(&mut self, input: &[f32], output: &mut [Packet]) -> Progress {
+        let mut slots = output.iter_mut();
+        let Some(mut slot) = slots.next() else {
+            return Progress::default();
+        };
+        let mut consumed = input.len();
+        let mut produced = 0;
+        for (i, &x) in input.iter().enumerate() {
+            if self.step::<ADAPTIVE>(x, slot) {
+                produced += 1;
+                let Some(next) = slots.next() else {
+                    consumed = i + 1;
+                    break;
+                };
+                slot = next;
+            }
+        }
+        self.count = self.count.wrapping_add(consumed as u64);
+        Progress { consumed, produced }
     }
 }
 
@@ -579,25 +663,16 @@ impl<S: Storage> Block for MorseDecodeBlock<S> {
     }
 
     fn process(&mut self, input: &[f32], output: &mut [Packet]) -> Result<Progress> {
-        let mut slots = output.iter_mut();
-        let Some(mut slot) = slots.next() else {
-            return Ok(Progress::default());
-        };
-        let mut consumed = input.len();
-        let mut produced = 0;
-        for (i, &x) in input.iter().enumerate() {
-            if let Some(packet) = self.step(x) {
-                *slot = packet;
-                produced += 1;
-                let Some(next) = slots.next() else {
-                    consumed = i + 1;
-                    break;
-                };
-                slot = next;
-            }
+        if !self.started
+            && let Some(&x) = input.first()
+        {
+            self.start(x);
         }
-        self.count = self.count.wrapping_add(consumed as u64);
-        Ok(Progress { consumed, produced })
+        Ok(if self.config.threshold > 0.0 {
+            self.run::<false>(input, output)
+        } else {
+            self.run::<true>(input, output)
+        })
     }
 
     fn timing(&self) -> BlockTiming {
@@ -619,7 +694,10 @@ impl<S: Storage> Block for MorseDecodeBlock<S> {
         self.mu = 0.0;
         self.var = 0.0;
         self.n_blk = 0;
-        self.floor = 0.0;
+        self.gate = f32::INFINITY;
+        self.t_on = f32::INFINITY;
+        self.t_off = f32::INFINITY;
+        self.phase = self.stride;
         self.quiet = u32::MAX / 2;
         self.blk_n = 0;
         self.blk_sum = 0.0;

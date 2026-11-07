@@ -167,7 +167,7 @@ crate::delegate! {
         ("rds_shape", f32, Fallback),
         ("stereo_encode_rds", C32, Fallback),
         ("costas", C32, Fallback),
-        ("equalize", C32, Fast),
+        ("equalize", C32, Fallback),
         ("ddc", C32, Chained),
         ("ddc", CQ15, Chained),
         ("duc", C32, Chained),
@@ -292,9 +292,9 @@ impl Costas for crate::Sdrk {
 
 // `Equalize` has no sample-type parameter (the signature of the spec, `C32` only), so it is
 // delegated by hand like `Costas`; the row above registers it in the `backend_for` table. The
-// loop is a recursion over the symbols; the SIMD backend accelerates its filter part with its
-// bit-exact `dot_complex` and keeps the scalar weight update, so every backend gives the bits of
-// the fallback.
+// loop is a recursion over the symbols and stays with the fallback (D841): one dispatched SIMD
+// `dot_complex` call per symbol on the 11 taps of the default cost more than the fallback's
+// own filter part, which the compiler vectorizes on every level.
 impl Equalize for crate::Sdrk {
     #[inline]
     fn equalize<W, H>(
@@ -307,7 +307,7 @@ impl Equalize for crate::Sdrk {
         W: AsRef<[C32]> + AsMut<[C32]>,
         H: AsRef<[C32]> + AsMut<[C32]>,
     {
-        <Fast as Equalize>::equalize(&Fast, s, input, output)
+        <Fallback as Equalize>::equalize(&Fallback, s, input, output)
     }
 }
 

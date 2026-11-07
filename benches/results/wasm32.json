@@ -1905,6 +1905,68 @@
           "status": "info",
           "verdict": "info"
         },
+        "dot_complex": {
+          "compared_with": "volk_32fc_x2_dot_prod_32fc",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_x2_dot_prod_32fc",
+              "label": "n = 64",
+              "other_instr_per_sample": 43.8,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 17.8,
+              "ratio": 0.41
+            },
+            {
+              "compared_with": "volk_32fc_x2_dot_prod_32fc",
+              "label": "n = 100",
+              "other_instr_per_sample": 42.61,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 18.05,
+              "ratio": 0.42
+            },
+            {
+              "compared_with": "volk_32fc_x2_dot_prod_32fc",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 40.55,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.2,
+              "ratio": 0.33
+            }
+          ],
+          "other_instr_per_sample": 40.55,
+          "ours_instr_per_sample": 13.2,
+          "ratio": 0.33,
+          "snr_db": {
+            "other": 122.74,
+            "ours": 123.5
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "dot_complex_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 35.3,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.2,
+              "ratio": 0.37
+            }
+          ],
+          "other_instr_per_sample": 35.3,
+          "ours_instr_per_sample": 13.2,
+          "ratio": 0.37,
+          "snr_db": {
+            "other": 119.18,
+            "ours": 123.5
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
         "dot_cq15": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -2113,6 +2175,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "equalize": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1027.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1027.31,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 1027.31,
+          "ours_instr_per_sample": 1027.31,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "equalize_fallback": {
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1900.06,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1027.31,
+              "ratio": 0.54
+            }
+          ],
+          "other_instr_per_sample": 1900.06,
+          "ours_instr_per_sample": 1027.31,
+          "ratio": 0.54,
+          "snr_db": {
+            "other": 127.5,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",

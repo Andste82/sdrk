@@ -107,7 +107,7 @@ mod convert_out;
 mod costas;
 mod decim;
 mod demod;
-mod dot;
+pub(crate) mod dot;
 mod equalize;
 mod fft;
 mod filter;

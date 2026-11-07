@@ -977,7 +977,7 @@ fn m43_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     use sdrk::kernels::equalize::{EqParams, Equalize, EqualizeState};
 
     assert_eq!(backend_for("dot_complex", SampleType::C32), ACCEL);
-    assert_eq!(backend_for("equalize", SampleType::C32), ACCEL);
+    assert_eq!(backend_for("equalize", SampleType::C32), "fallback");
     assert_eq!(backend_for("dot_complex", SampleType::CQ15), "none");
     assert_eq!(backend_for("equalize", SampleType::CQ15), "none");
 

@@ -20,13 +20,14 @@
 //!   before the tree. AVX-512 has no wider form: sixteen samples per vector would need sixteen
 //!   partial sums, and the contract fixes eight.
 //!
-//! `equalize` runs the loop of `sdrk-core` (`equalize_with`) with this `dot_complex` for the
-//! filter part; the weight update stays the scalar code of `sdrk-core`, which the compiler may
-//! vectorize (element-wise, the same bits).
+//! `equalize` is the loop of the fallback (D841): a dispatched `dot_complex` call per symbol on
+//! the short filters of the equalizer (11 taps by default) cost more than the filter part of the
+//! fallback's loop, which keeps the history and the weights split into their parts and padded to
+//! whole blocks, so the compiler vectorizes it on every level.
 
 use fearless_simd::{Simd as SimdToken, f32x4, prelude::*};
 use sdrk_core::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
-use sdrk_core::kernels::equalize::{Equalize, EqualizeState, equalize_with};
+use sdrk_core::kernels::equalize::{Equalize, EqualizeState};
 use sdrk_core::{C32, Result};
 
 use crate::Simd;
@@ -152,7 +153,7 @@ impl Equalize for Simd {
         W: AsRef<[C32]> + AsMut<[C32]>,
         H: AsRef<[C32]> + AsMut<[C32]>,
     {
-        equalize_with(&Simd, s, input, output)
+        <sdrk_core::Fallback as Equalize>::equalize(&sdrk_core::Fallback, s, input, output)
     }
 }
 

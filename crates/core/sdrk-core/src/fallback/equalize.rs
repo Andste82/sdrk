@@ -1,9 +1,11 @@
 //! Fallback implementation of `equalize`.
 //!
 //! Bit-exact with `Reference`: [`equalize_with`] with the fallback `dot_complex` for the filter
-//! part. Per symbol the history moves by one (a copy of `N - 1` samples, at most 62), the dot
-//! product and the update of the `N` weights are independent per element, so the compiler may
-//! vectorize both without changing a bit.
+//! part of the joint path (feedback taps). Without feedback taps it runs the linear path of
+//! `kernels::equalize` (D840): runs of 64 symbols on a split copy of the state, the history in
+//! place, the filter part and the weight update over the taps padded to a multiple of four
+//! (both vectorized by the compiler), the window powers and the steps of the run computed
+//! before the symbol loop.
 
 use crate::Fallback;
 use crate::error::Result;

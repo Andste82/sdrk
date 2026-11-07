@@ -19,11 +19,12 @@
 use sdrk_device::Ratio;
 
 use crate::error::{Error, Result};
+use crate::fallback::dot::dot_complex_tree;
 use crate::fallback::mix::interp_f32_pair;
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::costas::{derotate, loop_gains, octant_point};
-use crate::kernels::dot::DotComplex;
+use crate::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
 use crate::num::flush_denormal;
 use crate::timing::{Delay, Timing};
 use crate::types::C32;
@@ -564,8 +565,9 @@ pub(crate) fn track(phase: &mut u32, freq: &mut f32, kp: f32, ki: f32, z: C32, d
     *phase = phase.wrapping_add(phase_step(f64::from(*freq + kp * pd), TURN));
 }
 
-/// One symbol after the filter output `y` (finite): the tracker rotation, the decision, `mse`,
-/// the error and the factor `g = (mu / (P + eps)) e`. Returns the output `z`, the value to feed
+/// One symbol after the filter output `y` (finite), with `Pf` (`forward`) and the step
+/// `m = mu / (P + eps)` of the mode: the tracker rotation, the decision, `mse`, the error and
+/// the factor `g = m e`. Returns the output `z`, the value to feed
 /// back (`d e^(j theta)` in decision mode, else 0) and `g` (`None` when it is not finite).
 struct Step {
     z: C32,
@@ -574,7 +576,7 @@ struct Step {
 }
 
 #[inline]
-fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32) -> Result<Step> {
+fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32, forward: f32, m: f32) -> Result<Step> {
     // Phase 0 is the identity (the table's sine at 0 is not exactly 0).
     let (c, s) = if *p.phase == 0 {
         (1.0, 0.0)
@@ -588,16 +590,14 @@ fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32) -> Result<Step> {
     if pe.is_finite() {
         *p.mse = flush_denormal(*p.mse + MSE_ALPHA * (pe - *p.mse));
     }
-    let (e, mu, feedback) = match mode {
+    let (e, feedback) = match mode {
         EqMode::Cma => {
             let f = (y.re * y.re + y.im * y.im) - p.constellation.cma_r2();
             let e = C32::new(clip(y.re * f, CMA_CLIP), clip(y.im * f, CMA_CLIP));
-            (e, p.mu_cma, C32::new(0.0, 0.0))
+            (e, C32::new(0.0, 0.0))
         }
-        EqMode::Decision => (rotate(ed, c, s), p.mu_dd, rotate(d, c, s)),
+        EqMode::Decision => (rotate(ed, c, s), rotate(d, c, s)),
     };
-    let (forward, power) = window_power(p.hist, p.taps);
-    let m = mu / (power + NLMS_EPS);
     let g = C32::new(m * e.re, m * e.im);
     track(p.phase, p.freq, p.kp, p.ki, z, d);
     // A forward window of silence adapts nothing and feeds nothing back (D839).
@@ -609,11 +609,12 @@ fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32) -> Result<Step> {
     })
 }
 
-/// The equalizer with the filter part `y = Σ w[i] x[i]` computed by `dot` (any implementation
-/// of [`DotComplex`] `C32`, all of them bit-identical) over the joint vector of forward
-/// history and fed-back decisions: `Fallback` runs it with `Fallback`, the SIMD backend with
-/// its own `dot_complex`. The rest of the loop is the scalar code of this crate. See
-/// [`Equalize::equalize`] for the arithmetic.
+/// The equalizer of [`Equalize::equalize`] (see there for the arithmetic). Without feedback taps
+/// it runs the linear path of this crate (runs of symbols on a split copy of the state, its own
+/// filter part in the order of [`DotComplex`], D840) and `dot` is not used; with feedback taps
+/// the filter part `y = Σ w[i] x[i]` over the joint vector of forward history and fed-back
+/// decisions is computed by `dot` (any implementation of [`DotComplex`] `C32`, all of them
+/// bit-identical). `Fallback`, the SIMD backend and the facade run it with `Fallback` (D841).
 ///
 /// ```
 /// use sdrk_core::{kernels::equalize::{equalize_with, EqParams, EqualizeState}, Fallback, C32};
@@ -640,6 +641,396 @@ where
 {
     check_len(input.len(), output.len())?;
     let mut p = s.parts_mut();
+    if p.hist.len() == p.taps {
+        equalize_linear(&mut p, input, output)
+    } else {
+        equalize_joint(dot, &mut p, input, output)
+    }
+}
+
+/// `v`, or zero when a component is not finite (the value the history stores).
+#[inline]
+fn sanitize(v: C32) -> C32 {
+    if v.re.is_finite() && v.im.is_finite() {
+        v
+    } else {
+        C32::new(0.0, 0.0)
+    }
+}
+
+/// Step 5 for every weight of the joint path: `w[i] = flush_denormal(w[i] - g conj(x[i]))`, and
+/// the start weights (`taps` forward taps) when a new weight is not finite. The finite test is
+/// an `or` of integer bits over all weights (no branch per weight), so the loop stays one
+/// straight pass: an exponent of all ones plus one carries into the sign bit.
+#[inline]
+fn update_weights(w: &mut [C32], x: &[C32], g: C32, taps: usize) {
+    const EXP: u32 = 0x7f80_0000;
+    const CARRY: u32 = 0x0080_0000;
+    let mut bad = 0u32;
+    for (w, &x) in w.iter_mut().zip(x) {
+        let v = update_weight(*w, g, x);
+        bad |=
+            (v.re.to_bits() & EXP).wrapping_add(CARRY) | (v.im.to_bits() & EXP).wrapping_add(CARRY);
+        *w = v;
+    }
+    if bad & 0x8000_0000 != 0 {
+        start_weights(w, taps);
+    }
+}
+
+/// Symbols per run of the linear path ([`equalize_linear`]).
+const RUN: usize = 64;
+/// The most forward taps rounded up to a multiple of [`QUAD`].
+const PADDED_MAX: usize = 64;
+/// The linear path pads the forward taps to a multiple of four lanes: one vector of SSE2,
+/// NEON and SIMD128, half a block of the filter part (whose last half block goes to the partial
+/// sums 0 to 3).
+const QUAD: usize = DOT_COMPLEX_PARTIALS / 2;
+/// A block of [`DOT_COMPLEX_PARTIALS`] values of one component.
+type Lanes = [f32; DOT_COMPLEX_PARTIALS];
+
+/// The history part of the working copy of the linear path, split into its real and imaginary
+/// parts. The two parts live in the frames of two functions ([`equalize_linear`] and
+/// [`linear_state`]), so that no frame holds both (the stack limit of the library, 4096 bytes
+/// per frame as Clippy counts them).
+struct History {
+    /// The history, newest first: symbol `k` of a run at `RUN - 1 - k`, the history before the
+    /// run from `RUN` on.
+    xr: [f32; RUN + PADDED_MAX],
+    xi: [f32; RUN + PADDED_MAX],
+    /// `-xi`, for the imaginary part of the filter part (see [`dot_split`]).
+    xn: [f32; RUN + PADDED_MAX],
+}
+
+/// The weight part of the working copy of the linear path, with the scratch of a run.
+struct Weights {
+    /// The weights, zero after the `N` forward taps.
+    wr: [f32; PADDED_MAX],
+    wi: [f32; PADDED_MAX],
+    /// All ones for the `N` weights, zero for the padding.
+    mask: [u32; PADDED_MAX],
+    /// `|x|²` of the history values.
+    mag: [f32; RUN + PADDED_MAX],
+    /// The window power and the step `mu / (P + eps)` of the symbol at each position of a run.
+    power: [f32; RUN],
+    steps: [f32; RUN],
+}
+
+impl History {
+    /// All zero (the padding stays so).
+    const ZERO: Self = Self {
+        xr: [0.0; RUN + PADDED_MAX],
+        xi: [0.0; RUN + PADDED_MAX],
+        xn: [0.0; RUN + PADDED_MAX],
+    };
+}
+
+impl Weights {
+    /// All zero (the padding stays so).
+    const ZERO: Self = Self {
+        wr: [0.0; PADDED_MAX],
+        wi: [0.0; PADDED_MAX],
+        mask: [0; PADDED_MAX],
+        mag: [0.0; RUN + PADDED_MAX],
+        power: [0.0; RUN],
+        steps: [0.0; RUN],
+    };
+}
+
+/// The working copy of the linear path.
+struct Linear<'a> {
+    h: &'a mut History,
+    w: &'a mut Weights,
+}
+
+/// `dot_complex` of the window and the weights in the order of its contract (element `i` to
+/// partial sum `i mod 8`, the products `x.re w.re - x.im w.im` and `x.re w.im + x.im w.re`,
+/// then the tree), over blocks of split parts (a multiple of [`QUAD`] samples): each block is
+/// one vector step per component on every level with vectors of four or eight lanes. The
+/// imaginary product is
+/// formed as `x.re w.im - (-x.im) w.re` from the negated imaginary parts `xn`: `(-a) b` is
+/// `-(a b)` and `p - (-q)` is `p + q` exactly (IEEE 754 defines the difference as the sum with
+/// the negated operand), so the bits are the same. The point is the form: with a sum of two
+/// products LLVM pairs the products into one vector and adds them horizontally (many
+/// shuffles per block on SSE2, AVX2 and NEON); with a difference both components compile to
+/// plain lane-wise multiplies and subtractions.
+#[inline]
+fn dot_split(xr: &[f32], xi: &[f32], xn: &[f32], wr: &[f32], wi: &[f32]) -> C32 {
+    /// `acc[k] = acc[k] + (a c - b d)` per lane, by whole blocks; a last half block (the length
+    /// is a multiple of [`QUAD`]) goes to the partial sums 0 to 3, as its elements do.
+    #[inline(always)]
+    fn pass(a: &[f32], b: &[f32], c: &[f32], d: &[f32]) -> Lanes {
+        #[inline]
+        fn add(acc: &mut [f32], a: &[f32], b: &[f32], c: &[f32], d: &[f32]) {
+            let lanes = acc.iter_mut().zip(a).zip(b).zip(c.iter().zip(d));
+            for (((s, &a), &b), (&c, &d)) in lanes {
+                *s += a * c - b * d;
+            }
+        }
+        let mut acc: Lanes = [0.0; DOT_COMPLEX_PARTIALS];
+        let (ab, ar) = a.as_chunks::<DOT_COMPLEX_PARTIALS>();
+        let (bb, br) = b.as_chunks::<DOT_COMPLEX_PARTIALS>();
+        let (cb, cr) = c.as_chunks::<DOT_COMPLEX_PARTIALS>();
+        let (db, dr) = d.as_chunks::<DOT_COMPLEX_PARTIALS>();
+        for (((a, b), c), d) in ab.iter().zip(bb).zip(cb).zip(db) {
+            add(&mut acc, a, b, c, d);
+        }
+        if let (Some(a), Some(b), Some(c), Some(d)) = (
+            ar.first_chunk::<QUAD>(),
+            br.first_chunk::<QUAD>(),
+            cr.first_chunk::<QUAD>(),
+            dr.first_chunk::<QUAD>(),
+        ) && let Some(lo) = acc.first_chunk_mut::<QUAD>()
+        {
+            add(lo, a, b, c, d);
+        }
+        acc
+    }
+    let re = pass(xr, xi, wr, wi);
+    let im = pass(xr, xn, wi, wr);
+    C32::new(dot_complex_tree(re), dot_complex_tree(im))
+}
+
+/// Step 5 on the split weights over whole blocks: `w[i] = flush_denormal(w[i] - g conj(x[i]))`
+/// for the `N` weights, over `lanes` (`N` rounded up to a multiple of [`QUAD`]); the padding is
+/// computed too and masked back to `+0`, so only the `N` weights take part in the finite test
+/// (an integer compare per weight and an `or`, no branch). One flat loop, which LLVM
+/// vectorizes.
+/// Returns whether a new weight is not finite.
+#[inline]
+fn update_split(l: &mut Linear<'_>, at: usize, lanes: usize, g: C32) -> Option<bool> {
+    /// The magnitude bits, and those of `f32::MAX`: a value is not finite when its magnitude
+    /// bits are above (a signed compare of non-negative values, one instruction on every level).
+    const ABS: u32 = 0x7fff_ffff;
+    const MAX: i32 = 0x7f7f_ffff;
+    let xr = l.h.xr.get(at..at + lanes)?;
+    let xi = l.h.xi.get(at..at + lanes)?;
+    let wr = l.w.wr.get_mut(..lanes)?;
+    let wi = l.w.wi.get_mut(..lanes)?;
+    let mut bad = 0u32;
+    let each = wr
+        .iter_mut()
+        .zip(wi.iter_mut())
+        .zip(xr)
+        .zip(xi)
+        .zip(&l.w.mask);
+    for ((((wr, wi), &a), &b), &m) in each {
+        let cr = g.re * a + g.im * b;
+        let ci = g.im * a - g.re * b;
+        let vr = flush_denormal(*wr - cr).to_bits() & m;
+        let vi = flush_denormal(*wi - ci).to_bits() & m;
+        bad |= u32::from(((vr & ABS) as i32) > MAX) | u32::from(((vi & ABS) as i32) > MAX);
+        *wr = f32::from_bits(vr);
+        *wi = f32::from_bits(vi);
+    }
+    Some(bad != 0)
+}
+
+/// The equalizer without feedback taps (`M = 0`), the arithmetic of [`Equalize::equalize`] in
+/// runs of [`RUN`] symbols on a working copy of the state ([`Linear`]):
+///
+/// - The history is kept newest first with the symbol `k` of a run at `RUN - 1 - k`, so the
+///   forward window of symbol `k` is the slice from `RUN - 1 - k`: nothing moves per symbol, the
+///   window moves once per run.
+/// - The filter part runs over the window and the weights padded with zero weights to a
+///   multiple of [`QUAD`] samples ([`dot_split`]): the window values there are finite (stored
+///   symbols or zero), so their products are `+0` or `-0`, and adding either to a partial sum
+///   does not change it (a partial sum that starts at `+0` is never `-0` under
+///   round-to-nearest). The sum has the bits of the call over `N` samples.
+/// - The window power depends on the input only (`M = 0`), so it is computed for the whole run
+///   first: `|x|²` once per symbol, then the sums of all windows side by side, each in
+///   ascending order from `+0.0` (its own chain in the order of the contract), which the
+///   compiler vectorizes across the windows; so are the steps `mu / (P + eps)` of the run, the
+///   mode of every symbol known from the symbol counter (the rule of `advance`). The divisions
+///   leave the chain from symbol to symbol.
+/// - The weight update runs over the padding too, which is masked back to zero
+///   ([`update_split`]).
+fn equalize_linear(p: &mut EqualizeParts<'_>, input: &[C32], output: &mut [C32]) -> Result<()> {
+    let mut h = History::ZERO;
+    linear_state(p, &mut h, input, output)
+}
+
+/// The rest of [`equalize_linear`]: the weight part of the working copy, the copy in and out of
+/// the state and the runs.
+fn linear_state(
+    p: &mut EqualizeParts<'_>,
+    h: &mut History,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
+    let mut w = Weights::ZERO;
+    let mut l = Linear { h, w: &mut w };
+    load_linear(p, &mut l);
+    let result = linear_runs(p, &mut l, input, output);
+    // The state is written back also after an (internal) error.
+    store_linear(p, &l);
+    result
+}
+
+/// The state into the working copy.
+fn load_linear(p: &EqualizeParts<'_>, l: &mut Linear<'_>) {
+    let hist =
+        l.h.xr
+            .iter_mut()
+            .zip(l.h.xi.iter_mut())
+            .zip(l.h.xn.iter_mut())
+            .skip(RUN);
+    for (((r, i), m), h) in hist.zip(p.hist.iter()) {
+        (*r, *i, *m) = (h.re, h.im, -h.im);
+    }
+    let weights =
+        l.w.wr
+            .iter_mut()
+            .zip(l.w.wi.iter_mut())
+            .zip(l.w.mask.iter_mut());
+    for (((r, i), m), w) in weights.zip(p.weights.iter()) {
+        (*r, *i, *m) = (w.re, w.im, u32::MAX);
+    }
+}
+
+/// The working copy back into the state.
+fn store_linear(p: &mut EqualizeParts<'_>, l: &Linear<'_>) {
+    for ((w, &r), &i) in p.weights.iter_mut().zip(&l.w.wr).zip(&l.w.wi) {
+        *w = C32::new(r, i);
+    }
+    let hist = l.h.xr.iter().zip(&l.h.xi).skip(RUN);
+    for (h, (&r, &i)) in p.hist.iter_mut().zip(hist) {
+        *h = C32::new(r, i);
+    }
+}
+
+/// The runs of [`equalize_linear`]; on return the history is at `RUN..RUN + N`.
+#[inline]
+fn linear_runs(
+    p: &mut EqualizeParts<'_>,
+    l: &mut Linear<'_>,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
+    let index = || Error::Internal("equalizer index");
+    let n = p.taps;
+    let lanes = n.next_multiple_of(QUAD);
+    let padded = lanes;
+    for (xs, ys) in input.chunks(RUN).zip(output.chunks_mut(RUN)) {
+        let first = RUN - xs.len();
+        prepare_run(p, l, xs, first).ok_or_else(index)?;
+        for (k, (o, &raw)) in ys.iter_mut().zip(xs).enumerate() {
+            let at = RUN - 1 - k;
+            let y = dot_window(l, at, padded).ok_or_else(index)?;
+            let finite = raw.re.is_finite() && raw.im.is_finite();
+            *o = if finite && y.re.is_finite() && y.im.is_finite() {
+                let (&pq, &m) = l.w.power.get(at).zip(l.w.steps.get(at)).ok_or_else(index)?;
+                let mode = *p.mode;
+                let st = step(p, mode, y, pq, m)?;
+                if let Some(g) = st.g
+                    && update_split(l, at, lanes, g).ok_or_else(index)?
+                {
+                    start_split(l, n);
+                }
+                st.z
+            } else {
+                C32::new(0.0, 0.0)
+            };
+            advance(p.mode, p.count, p.cma_symbols);
+        }
+        // The window of the last symbol becomes the history before the next run.
+        l.h.xr.copy_within(first..first + n, RUN);
+        l.h.xi.copy_within(first..first + n, RUN);
+        l.h.xn.copy_within(first..first + n, RUN);
+    }
+    Ok(())
+}
+
+/// The start of a run of [`linear_runs`]: the symbols of the run `xs` into the history (from
+/// `first` on), `|x|²` of every value of its windows, the window powers side by side and the
+/// steps `mu / (P + eps)` of the run.
+#[inline]
+fn prepare_run(p: &EqualizeParts<'_>, l: &mut Linear<'_>, xs: &[C32], first: usize) -> Option<()> {
+    let n = p.taps;
+    let fresh =
+        l.h.xr
+            .get_mut(first..RUN)?
+            .iter_mut()
+            .zip(l.h.xi.get_mut(first..RUN)?.iter_mut())
+            .zip(l.h.xn.get_mut(first..RUN)?.iter_mut())
+            .rev();
+    for (((r, i), m), &x) in fresh.zip(xs) {
+        let v = sanitize(x);
+        (*r, *i, *m) = (v.re, v.im, -v.im);
+    }
+    // |x|² of every value of the windows of the run, then the window powers side by side.
+    let used = RUN + n - 1;
+    let vals =
+        l.h.xr
+            .get(first..used)?
+            .iter()
+            .zip(l.h.xi.get(first..used)?);
+    for (m, (&r, &i)) in l.w.mag.get_mut(first..used)?.iter_mut().zip(vals) {
+        *m = r * r + i * i;
+    }
+    let pw = l.w.power.get_mut(first..)?;
+    pw.fill(0.0);
+    for i in 0..n {
+        let ms = l.w.mag.get(first + i..RUN + i)?;
+        for (q, &m) in pw.iter_mut().zip(ms) {
+            *q += m;
+        }
+    }
+    // The steps `mu / (P + eps)` of the run: the symbols before `cma_left` in CMA mode (the
+    // rule of `advance`), the others in decision mode.
+    let cma_left = match *p.mode {
+        EqMode::Decision => 0,
+        EqMode::Cma if p.cma_symbols == u32::MAX => RUN,
+        EqMode::Cma => p.cma_symbols.saturating_sub(*p.count) as usize,
+    };
+    let sw = l.w.steps.get_mut(first..)?;
+    for (j, (st, &q)) in sw.iter_mut().zip(pw.iter()).enumerate() {
+        // Position `first + j` holds symbol `RUN - 1 - first - j` of the run.
+        let mu = if RUN - 1 - first - j < cma_left {
+            p.mu_cma
+        } else {
+            p.mu_dd
+        };
+        *st = mu / (q + NLMS_EPS);
+    }
+    Some(())
+}
+
+/// [`dot_split`] of the window from `at` and the weights, over `padded` samples.
+#[inline]
+fn dot_window(l: &Linear<'_>, at: usize, padded: usize) -> Option<C32> {
+    let x = at..at + padded;
+    Some(dot_split(
+        l.h.xr.get(x.clone())?,
+        l.h.xi.get(x.clone())?,
+        l.h.xn.get(x)?,
+        l.w.wr.get(..padded)?,
+        l.w.wi.get(..padded)?,
+    ))
+}
+
+/// The start weights on the split weights (the padding stays zero).
+fn start_split(l: &mut Linear<'_>, taps: usize) {
+    let centre = taps / 2;
+    for (i, (r, im)) in
+        l.w.wr
+            .iter_mut()
+            .zip(l.w.wi.iter_mut())
+            .take(taps)
+            .enumerate()
+    {
+        *r = if i == centre { 1.0 } else { 0.0 };
+        *im = 0.0;
+    }
+}
+
+/// The equalizer with feedback taps (`M > 0`): the joint history moves by one per symbol.
+fn equalize_joint<D: DotComplex<C32>>(
+    dot: &D,
+    p: &mut EqualizeParts<'_>,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
     let n = p.taps;
     let len = p.hist.len();
     for (o, &raw) in output.iter_mut().zip(input) {
@@ -648,23 +1039,20 @@ where
         // is not finite).
         p.hist.copy_within(..n.saturating_sub(1), 1);
         if let Some(first) = p.hist.first_mut() {
-            *first = if finite { raw } else { C32::new(0.0, 0.0) };
+            *first = sanitize(raw);
         }
         let y = dot.dot_complex(p.hist, p.weights)?;
         let mode = *p.mode;
         let mut feedback = C32::new(0.0, 0.0);
         *o = if finite && y.re.is_finite() && y.im.is_finite() {
-            let st = step(&mut p, mode, y)?;
+            let (forward, power) = window_power(p.hist, n);
+            let mu = match mode {
+                EqMode::Cma => p.mu_cma,
+                EqMode::Decision => p.mu_dd,
+            };
+            let st = step(p, mode, y, forward, mu / (power + NLMS_EPS))?;
             if let Some(g) = st.g {
-                let mut bad = false;
-                for (w, &x) in p.weights.iter_mut().zip(p.hist.iter()) {
-                    let v = update_weight(*w, g, x);
-                    bad |= !(v.re.is_finite() && v.im.is_finite());
-                    *w = v;
-                }
-                if bad {
-                    start_weights(p.weights, n);
-                }
+                update_weights(p.weights, p.hist, g, n);
             }
             feedback = st.feedback;
             st.z

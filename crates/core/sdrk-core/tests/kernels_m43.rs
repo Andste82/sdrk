@@ -846,4 +846,69 @@ mod against_the_reference {
             }
         }
     }
+
+    /// The linear path of the fallback (no feedback taps; runs of 64 symbols on split and
+    /// padded copies of the state, D840) at every forward length, in chunks that start and end
+    /// inside and across the runs, with the switch from CMA to decisions inside a call and
+    /// special values: bit for bit the reference.
+    #[test]
+    fn equalize_linear_path_equals_reference_at_every_length() {
+        let mut rng = Rng::new(SEED_EQ + 11);
+        let chunks = [1usize, 63, 64, 65, 2, 130, 7, 200];
+        for taps in (3usize..=63).step_by(2) {
+            let c = [
+                EqConstellation::Bpsk,
+                EqConstellation::Qpsk,
+                EqConstellation::Psk8,
+            ][taps % 3];
+            let mut x = channel(
+                &qpsk(&mut rng, 600),
+                &[C32::new(1.0, 0.0), C32::new(0.25, 0.2)],
+            );
+            for v in &mut x {
+                *v += C32::new(rng.next() * 0.05, rng.next() * 0.05);
+            }
+            for (j, s) in SPECIALS.iter().enumerate() {
+                x[300 + 5 * j] = C32::new(*s, -0.2);
+            }
+            // Different step sizes per mode, so the step of every symbol shows its mode.
+            let mut a = EqualizeState::new(
+                vec![C32::default(); taps],
+                vec![C32::default(); taps],
+                EqParams {
+                    constellation: c,
+                    feedback_taps: 0,
+                    mu_cma: 0.05,
+                    mu_dd: 0.02,
+                    cma_symbols: 150,
+                    phase_bw: 0.05,
+                },
+            )
+            .unwrap();
+            let mut b = a.clone();
+            let (mut ya, mut yb) = (vec![C32::default(); x.len()], vec![C32::default(); x.len()]);
+            let mut start = 0;
+            for &len in chunks.iter().cycle() {
+                if start >= x.len() {
+                    break;
+                }
+                let end = (start + len).min(x.len());
+                Fallback
+                    .equalize(&mut a, &x[start..end], &mut ya[start..end])
+                    .unwrap();
+                Reference
+                    .equalize(&mut b, &x[start..end], &mut yb[start..end])
+                    .unwrap();
+                start = end;
+            }
+            assert_eq!(bits(&ya), bits(&yb), "taps {taps}");
+            assert_eq!(bits(a.weights()), bits(b.weights()), "taps {taps}");
+            assert_eq!(bits(a.history()), bits(b.history()), "taps {taps}");
+            assert_eq!((a.mode(), a.mse().to_bits()), (b.mode(), b.mse().to_bits()));
+            assert_eq!(
+                (a.phase(), a.frequency().to_bits()),
+                (b.phase(), b.frequency().to_bits())
+            );
+        }
+    }
 }

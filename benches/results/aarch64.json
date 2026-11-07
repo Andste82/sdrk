@@ -2057,6 +2057,84 @@
           "status": "release",
           "verdict": "pass"
         },
+        "dot_complex": {
+          "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_x2_dot_prod_32fc",
+              "label": "information: volk",
+              "other_instr_per_sample": 2.53,
+              "other_snr_db": 125.18,
+              "ours_instr_per_sample": 3.53,
+              "ratio": 1.4
+            },
+            {
+              "compared_with": "volk_32fc_x2_dot_prod_32fc: neonv8",
+              "label": "goal: cheapest VOLK implementation",
+              "other_instr_per_sample": 2.53,
+              "other_snr_db": 125.18,
+              "ours_instr_per_sample": 3.53,
+              "ratio": 1.4
+            },
+            {
+              "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "n = 64",
+              "other_instr_per_sample": 5.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.63,
+              "ratio": 1.0
+            },
+            {
+              "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "n = 100",
+              "other_instr_per_sample": 5.05,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.67,
+              "ratio": 1.12
+            },
+            {
+              "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 4.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.53,
+              "ratio": 0.88
+            }
+          ],
+          "other_instr_per_sample": 4.03,
+          "ours_instr_per_sample": 3.53,
+          "ratio": 0.88,
+          "snr_db": {
+            "other": 123.23,
+            "ours": 123.5
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
+        "dot_complex_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 11.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 9.03,
+              "ratio": 0.78
+            }
+          ],
+          "other_instr_per_sample": 11.52,
+          "ours_instr_per_sample": 9.03,
+          "ratio": 0.78,
+          "snr_db": {
+            "other": 119.18,
+            "ours": 123.5
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
         "dot_cq15": {
           "compared_with": "sdrk fallback",
           "goal": false,
@@ -2273,6 +2351,52 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "equalize": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 437.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 437.31,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 437.31,
+          "ours_instr_per_sample": 437.31,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "equalize_fallback": {
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 493.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 437.31,
+              "ratio": 0.89
+            }
+          ],
+          "other_instr_per_sample": 493.03,
+          "ours_instr_per_sample": 437.31,
+          "ratio": 0.89,
+          "snr_db": {
+            "other": 127.23,
+            "ours": 999.0
+          },
+          "status": "dev",
+          "verdict": "warn"
         },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",

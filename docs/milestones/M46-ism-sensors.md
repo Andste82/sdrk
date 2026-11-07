@@ -1,18 +1,18 @@
 # M46 — Sensor decoders for the 433 MHz and 868 MHz bands, sensor flows
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M45](M45-ism-band-receiver.md) · Next: [BACKLOG](BACKLOG.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M45.1](M45.1-ism-band-receiver.md) · Next: [BACKLOG](BACKLOG.md)
 
 ## Goal
 
-Turn the pulse trains of M45 into readings: generic slicers (pulse-width, pulse-position, Manchester and NRZ for FSK, with timing tolerance), a set of device decoders for common weather stations and thermometers in the 433 MHz band (on-off keying) and the 868 MHz band (FSK), merging of the repeated copies that sensors send, and readings as JSON Lines (`{"time":…,"model":…,"id":…,"temperature_C":…,…}`); flows `ism433_sensors` and `ism868_sensors` that decode every supported sensor anywhere in the band.
+Turn the pulse trains of M45.1 into readings: generic slicers (pulse-width, pulse-position, Manchester and NRZ for FSK, with timing tolerance), a set of device decoders for common weather stations and thermometers in the 433 MHz band (on-off keying) and the 868 MHz band (FSK), merging of the repeated copies that sensors send, and readings as JSON Lines (`{"time":…,"model":…,"id":…,"temperature_C":…,…}`); flows `ism433_sensors` and `ism868_sensors` that decode every supported sensor anywhere in the band.
 
 ## Why
 
-M45 finds every transmission in the band; users want the temperature, humidity, wind and rain values, not pulse widths. A small, well-tested set of decoders on a clean slicer interface shows the whole chain end to end and makes adding further devices a matter of one decoder each.
+M45.1 finds every transmission in the band; users want the temperature, humidity, wind and rain values, not pulse widths. A small, well-tested set of decoders on a clean slicer interface shows the whole chain end to end and makes adding further devices a matter of one decoder each.
 
 ## Order
 
-M46 depends on M45 (pulse trains, the `ism` generator) and through it on M39.1 and M37. It can run in parallel with M42 to M44.
+M46 depends on M45.1 (pulse trains, the `ism` generator) and through it on M45, M39.1 and M37. It can run in parallel with M42 to M44.
 ## Ground rules (identical in every milestone — read them completely before you start)
 
 These rules apply to every line of code in this repository. They are repeated in every milestone file so that each milestone is self-contained. If a rule and a milestone-specific instruction ever conflict, stop and ask; do not guess.
@@ -154,7 +154,7 @@ SDRk is MIT/Apache-2.0. **No code, table or text of GPL projects (rtl_433 and it
 
 ### 1. Slicers (`sdrk_proto::slicers`)
 
-Input: a pulse train of M45 (`sdrk_proto::pulses`). Each slicer has a configuration in µs with a tolerance (default ±20 %, minimum ±2 samples) and returns rows of bits (a gap longer than `reset_us` starts a new row; rows are how repeats appear):
+Input: a pulse train of M45.1 (`sdrk_proto::pulses`). Each slicer has a configuration in µs with a tolerance (default ±20 %, minimum ±2 samples) and returns rows of bits (a gap longer than `reset_us` starts a new row; rows are how repeats appear):
 
 - `pwm { short_us, long_us, gap_us, reset_us }`: a pulse near `short` is 1 or 0 as configured (`short_is_one`), near `long` the other; a pulse outside both is an error that ends the row.
 - `ppm { short_gap_us, long_gap_us, reset_us }`: the gap after a pulse carries the bit.
@@ -181,7 +181,7 @@ At least **four decoders for the 433 MHz band** and **two for the 868 MHz band**
 
 ### 5. Flows
 
-- `ism433_sensors` (+ YAML): the chain of `ism433_pulses` (M45) followed by `dec` = `sensor_decode` → `readings` (JSON Lines).
+- `ism433_sensors` (+ YAML): the chain of `ism433_pulses` (M45.1) followed by `dec` = `sensor_decode` → `readings` (JSON Lines).
 - `ism868_sensors` (+ YAML): the chain of `ism868_pulses` followed by `sensor_decode` → `readings`.
 - `examples/README.md`: running both with an RTL-SDR (`cu8`) or a HackRF (`cs8`), two receivers for both bands at once, and the JSON output.
 
@@ -189,7 +189,7 @@ At least **four decoders for the 433 MHz band** and **two for the 868 MHz band**
 
 1. Slicers: every slicer on generated trains with ±15 % timing error and random glitches (seed 636): exact bits; ±25 % gives an error row, not wrong bits.
 2. **Golden protocol cases:** for every chosen decoder, a Python encoder in `tests/golden/sdrk_golden` (written from the same public description, independent of the Rust decoder) produces 20 messages with random fields (seed 637 + an offset per device, recorded in the case) as pulse trains and as `cu8` bursts; the Rust decoder returns exactly the encoded readings from the pulse trains.
-3. **The whole chain, every frequency:** for each band a generated scene (M45 `ism::Scene` with the Python-encoded bursts; 433 MHz: seed 640, 868 MHz: seed 641) with 200 transmissions of the chosen devices (each with its usual repeats) at uniform frequencies across the band, including channel boundaries and band edges, levels 12 … 40 dB, timing errors up to ±10 %, overlapping transmissions on different frequencies: every transmission is reported once (repeats merged) with the encoded values; no reading that was not sent.
+3. **The whole chain, every frequency:** for each band a generated scene (M45.1 `ism::Scene` with the Python-encoded bursts; 433 MHz: seed 640, 868 MHz: seed 641) with 200 transmissions of the chosen devices (each with its usual repeats) at uniform frequencies across the band, including channel boundaries and band edges, levels 12 … 40 dB, timing errors up to ±10 %, overlapping transmissions on different frequencies: every transmission is reported once (repeats merged) with the encoded values; no reading that was not sent.
 4. Integrity: a flipped bit in a CRC or checksum device gives no reading; a device without integrity check gives a reading only with two equal repeats.
 5. Out-of-range values and truncated rows give no reading; `emit_unknown` emits unknown trains (seed 642).
 6. Chunk invariance of `sensor_decode` (it is per packet) and of the two flows with 20 plans (seed 643).

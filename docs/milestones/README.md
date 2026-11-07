@@ -61,8 +61,8 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M42 | [M42-rds-tx.md](M42-rds-tx.md) | 10 | RDS transmit: group carousel, `rds_encode` (`Clocked`), `fm_stereo_rds_mod`, flow `fm_stereo_rds_transmitter` |
 | M43 | [M43-equalizer.md](M43-equalizer.md) | 10 | Adaptive equalizer `equalize` (CMA, decision-directed), testkit multipath |
 | M44 | [M44-qam.md](M44-qam.md) | 10 | 16-QAM and 64-QAM RX+TX |
-| M45 | [M45-ism-band-receiver.md](M45-ism-band-receiver.md) | 10 | ISM band receiver: kernel `channelize` (polyphase filter bank), `band_pulse_detect` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
-| M45.1 | [M45.1-channelizer-block.md](M45.1-channelizer-block.md) | 10 | Channelizer as a pipeline block (draft): port type `Lanes<T>` (M channels through one output), kinds `channelize` and `channel_select`, `band_pulse_detect` on lanes, flow `pmr446_monitor` (eight PMR446 channels at once) |
+| M45 | [M45-channelizer.md](M45-channelizer.md) | 10 | Channelizer (draft): kernel `channelize` (polyphase filter bank, prototype with passband and stopband edges), port type `Lanes<T>` (M channels through one output), kinds `channelize` and `channel_select`, flow `pmr446_monitor` (eight PMR446 channels at once) |
+| M45.1 | [M45.1-ism-band-receiver.md](M45.1-ism-band-receiver.md) | 10 | ISM band receiver: `band_pulse_detect` on the lanes of `channelize` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
 | M46 | [M46-ism-sensors.md](M46-ism-sensors.md) | 10 | Sensor decoders: slicers (PWM, PPM, Manchester, NRZ), `sensor_decode` with readings as JSON, at least four 433 MHz and two 868 MHz devices (clean-room, no GPL code), flows `ism433_sensors`, `ism868_sensors` |
 | M47 | [M47-morse.md](M47-morse.md) | 10 | Morse (CW) receive and transmit: `sdrk_proto::morse` (ITU-R M.1677-1 table, encoder, decoder with speed estimate), `morse_encode`, `morse_decode` (adaptive threshold), flows `cw_transmitter` and `cw_receiver` with tone variants |
 | — | [BACKLOG.md](BACKLOG.md) | 7–10, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
@@ -102,10 +102,10 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M42 RDS transmit | M41, M36, M37 | M43, M44 |
 | M43 Equalizer | M40.1 | M41, M42 |
 | M44 QAM | M43 | M41, M42 |
-| M45 ISM band receiver | M39.1 | M42, M43, M44 |
-| M45.1 Channelizer block, lanes | M45 | M42, M43, M44, M46 (if M46 leaves `band_pulse_detect` unchanged) |
-| M46 ISM sensor decoders | M45 | M42, M43, M44 |
-| M47 Morse (CW) | M39.1 | M42, M43, M44, M45, M46 |
+| M45 Channelizer, lane streams | M34 | M35–M44, M47 |
+| M45.1 ISM band receiver | M45, M39.1 | M42, M43, M44 |
+| M46 ISM sensor decoders | M45.1 | M42, M43, M44 |
+| M47 Morse (CW) | M39.1 | M42, M43, M44, M45, M45.1, M46 |
 | M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
@@ -169,11 +169,11 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 590–599 | M43 |
 | 600–619 | M44 |
 | 620–625 | the golden gap cases of D356 (`resample_real` and `power_db` `Q15`, `convert_out` `rs8`/`ru8`; first numbered 469 to 474, which collided with M31 to M33, D357) |
-| 626–635 | M45 |
+| 626–635 | M45.1 (626–628 unused: the kernel cases moved to M45 with new seeds) |
 | 636–649 | M46 |
 | 650–659 | M47 |
-| 660–669 | M45.1 |
-| 670–999 | free, for backlog milestones |
+| 660–679 | M45 |
+| 680–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

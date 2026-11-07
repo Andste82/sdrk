@@ -24,7 +24,8 @@ use sdrk_blocks::{
     FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
     HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MulBlock,
+    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock,
+    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
     MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
@@ -3696,6 +3697,112 @@ impl Kind for HdlcDecodeKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(PacketOutNode::new(HdlcDecodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- morse_encode
+
+pub(crate) struct MorseEncodeKind;
+
+impl Kind for MorseEncodeKind {
+    type Cfg = MorseEncodeConfig;
+
+    const KIND: &'static str = "morse_encode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> MorseEncodeConfig {
+        MorseEncodeConfig::default()
+    }
+    fn set(cfg: &mut MorseEncodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &MorseEncodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch("morse_encode needs packets"));
+        }
+        // `rate` is the `rate_hz` of the packet input: the rate of the key envelope. Fewer than
+        // 8 samples per unit is `OutOfRange` of `wpm`, which the factory reports as
+        // `rate_unsupported`.
+        Ok(Figures {
+            rate_out: MorseEncodeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: MorseEncodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The unit counter, the edge and one store per output sample (D909).
+            cost: 19.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &MorseEncodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketInNode::new(MorseEncodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- morse_decode
+
+pub(crate) struct MorseDecodeKind;
+
+impl Kind for MorseDecodeKind {
+    type Cfg = MorseDecodeConfig;
+
+    const KIND: &'static str = "morse_decode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> MorseDecodeConfig {
+        MorseDecodeConfig::default()
+    }
+    fn set(cfg: &mut MorseDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &MorseDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("morse_decode needs the real f32 envelope"));
+        }
+        // The packet stream gets the nominal rate `rate * max_per_input`.
+        let block = MorseDecodeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: MorseDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The smoother, the two level trackers, the threshold with hysteresis, the glitch
+            // filter and the run counter of the decoder per input sample (D909).
+            cost: 148.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &MorseDecodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(MorseDecodeBlock::new(
             cfg, rate, st,
         )?)))
     }

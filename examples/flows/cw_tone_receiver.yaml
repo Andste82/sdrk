@@ -1,0 +1,61 @@
+# SDRk pipeline: receive Morse code (CW) from an audio tone (YAML twin of
+# cw_tone_receiver.json). YAML is accepted as input; JSON stays the canonical format.
+#
+# The audio of an SSB receiver tuned to a CW station contains the keyed tone, often near 700 Hz.
+# This flow filters the tone with a band-pass, rectifies it (the magnitude of a real sample is
+# its absolute value), smooths it with a low-pass into the envelope of the key and decodes it
+# with morse_decode (speed 5 to 40 words per minute found by the decoder itself, adaptive
+# threshold, one packet per word). Start a transmission with a preamble such as VVV and give the
+# decoder about a unit of silence or noise at the beginning of the stream.
+sdrk: 1
+name: cw-tone-receiver
+description: "Receive Morse code (CW) from a 700 Hz audio tone on 8 kHz audio and output the words as text packets."
+# f32 pipeline (the Morse kinds have no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  audio:
+    type: f32
+    rate_hz: 8000
+    description: "Mono audio with the keyed tone near 700 Hz"
+nodes:
+  # Band-pass at the tone: Q 8 is a bandwidth of about 90 Hz, wide enough for 30 words per
+  # minute. cutoff_hz (the centre) and q can be changed while the flow runs (set_param); set
+  # cutoff_hz to the pitch of the station.
+  tone:
+    kind: biquad
+    params:
+      cutoff_hz: 700
+      q: 8
+      response: bandpass
+  # Rectifier: a real sample as a complex one with a zero imaginary part, then its magnitude.
+  cplx:
+    kind: to_complex
+  abs:
+    kind: mag
+  # Low-pass that removes the 1400 Hz of the rectified tone and leaves the envelope.
+  env:
+    kind: biquad
+    params:
+      cutoff_hz: 150
+      order: 2
+      response: lowpass
+  dec:
+    kind: morse_decode
+    params:
+      wpm: 20
+      wpm_max: 40
+# Band-pass, rectifier, low-pass, decoder.
+edges:
+  - { from: audio, to: tone }
+  - { from: tone, to: cplx }
+  - { from: cplx, to: abs }
+  - { from: abs, to: env }
+  - { from: env, to: dec }
+  - { from: dec, to: words }
+outputs:
+  words:
+    type: packets
+    queue: 64
+    description: "The decoded words as upper case ASCII text, one packet each, with the input index of their first key-down sample"

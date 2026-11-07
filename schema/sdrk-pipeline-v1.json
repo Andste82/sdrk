@@ -2694,6 +2694,116 @@
           },
           {
             "additionalProperties": false,
+            "description": "Decodes Morse code (CW) from the envelope of a keyed carrier or tone to text packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "morse_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "threshold": {
+                    "default": 0.0,
+                    "description": "Fixed level of the smoothed envelope above which the key is down; 0 is the adaptive threshold. Typical: 0 (adaptive); a fixed level for a known signal. Build-time.",
+                    "maximum": 1000000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "wpm": {
+                    "default": 20.0,
+                    "description": "Speed hint in words per minute: the starting estimate of the dot length and the time constant of the smoother. Typical: 20; near the speed of the sender. Build-time.",
+                    "maximum": 60.0,
+                    "minimum": 5.0,
+                    "type": "number"
+                  },
+                  "wpm_max": {
+                    "default": 40.0,
+                    "description": "Fastest speed expected, at least wpm: the shortest run that counts is a third of a unit at this speed, and a unit at this speed needs 8 samples. Typical: 40. Build-time.",
+                    "maximum": 100.0,
+                    "minimum": 5.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Turns text packets into the keying envelope of Morse code (CW).",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "morse_encode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "char_wpm": {
+                    "default": 0.0,
+                    "description": "Speed of the characters in words per minute; 0 is wpm, otherwise at least wpm. Typical: 0 (same as wpm); 18 with wpm 10 for Farnsworth timing. Build-time.",
+                    "maximum": 100.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "rise_ms": {
+                    "default": 5.0,
+                    "description": "Length of the raised-cosine edge in milliseconds, 0 to 50; at most half of a unit, longer values are cut to that. Typical: 5. Build-time.",
+                    "maximum": 50.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "wpm": {
+                    "default": 20.0,
+                    "description": "Speed of the text in words per minute (the word PARIS and its word gap, 50 units, counts as one word). Typical: 20. Build-time.",
+                    "maximum": 60.0,
+                    "minimum": 5.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Multiplies two streams of the same type, sample by sample.",
             "properties": {
               "align": {

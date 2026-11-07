@@ -1,0 +1,62 @@
+{
+  "sdrk": 1,
+  "name": "cw-transmitter",
+  "description": "Send text as Morse code (CW) at 20 words per minute as a carrier 10 kHz above the centre, 240 kS/s signed 8-bit IQ, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "msg": {
+      "type": "packets",
+      "rate_hz": 8000,
+      "description": "Text to send, up to 256 bytes per packet; every packet ends with a word gap"
+    }
+  },
+  "nodes": {
+    "cplx": {
+      "kind": "to_complex"
+    },
+    "keys": {
+      "kind": "morse_encode",
+      "params": {
+        "wpm": 20
+      }
+    },
+    "up": {
+      "kind": "duc",
+      "params": {
+        "cutoff_hz": 500,
+        "frequency_hz": 10000,
+        "interpolation": 30,
+        "max_taps": 2048,
+        "transition_hz": 600
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "msg",
+      "to": "keys"
+    },
+    {
+      "from": "keys",
+      "to": "cplx"
+    },
+    {
+      "from": "cplx",
+      "to": "up"
+    },
+    {
+      "from": "up",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs8",
+      "underrun": "zeros"
+    }
+  }
+}

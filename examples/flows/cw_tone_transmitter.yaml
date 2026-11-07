@@ -1,0 +1,56 @@
+# SDRk pipeline: send text as Morse code (CW) as an audio tone, in pull mode (YAML twin of
+# cw_tone_transmitter.json). The caller asks for samples with Pipeline::pull_samples; the text
+# is supplied as packets on demand. Feed the audio to the microphone input of an SSB transmitter
+# (a keyed 700 Hz tone in the upper sideband is a CW signal 700 Hz above the carrier) or to a
+# sound card, and use it with the cw_tone_receiver flow.
+#
+# The key envelope of morse_encode (1.0 key down, 0.0 key up, raised-cosine edges) multiplies a
+# tone made by an oscillator that runs on the clock of the envelope: the real part of
+# envelope * exp(j 2 pi 700 t) is envelope * cos(2 pi 700 t).
+sdrk: 1
+name: cw-tone-transmitter
+description: "Send text as Morse code (CW) at 20 words per minute as a 700 Hz audio tone on 8 kHz audio, in pull mode."
+# f32 pipeline; chunks of 4096 samples.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # A packet input has no samples of its own: its rate_hz is the sample rate of the audio
+  # (the unit at 20 words per minute is 480 samples). A packet is a text of up to 256 bytes.
+  msg:
+    type: packets
+    rate_hz: 8000
+    description: "Text to send, up to 256 bytes per packet; every packet ends with a word gap"
+nodes:
+  keys:
+    kind: morse_encode
+    params:
+      wpm: 20
+  # The envelope as a complex signal (imaginary part 0), to multiply with the complex tone.
+  cplx:
+    kind: to_complex
+  # The tone: one complex sample per sample of the envelope at 700 Hz. frequency_hz can be
+  # changed while the flow runs (set_param).
+  tone:
+    kind: nco
+    params:
+      frequency_hz: 700
+  mix:
+    kind: mul
+  # The audio: the real part of the keyed tone.
+  re:
+    kind: real_part
+# The envelope feeds both the complex conversion and the oscillator's clock; the two meet in mul.
+edges:
+  - { from: msg, to: keys }
+  - { from: keys, to: cplx }
+  - { from: keys, to: tone }
+  - { from: cplx, to: mix, port: a }
+  - { from: tone, to: mix, port: b }
+  - { from: mix, to: re }
+  - { from: re, to: audio }
+# Real f32 audio at 8 kHz; the tone is off when no text is waiting, so no underrun.
+outputs:
+  audio:
+    type: stream
+    underrun: zeros

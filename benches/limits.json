@@ -4766,5 +4766,65 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "morse_encode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per output sample, the key envelope at 8 kHz)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per output sample, the key envelope at 8 kHz)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per output sample, the key envelope at 8 kHz)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per output sample, the key envelope at 8 kHz)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per output sample, the key envelope at 8 kHz)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per output sample, the key envelope at 8 kHz)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`morse_encode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "morse_decode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, the envelope at 8 kHz)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, the envelope at 8 kHz)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, the envelope at 8 kHz)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, the envelope at 8 kHz)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, the envelope at 8 kHz)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles and instructions per input sample, the envelope at 8 kHz)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`morse_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

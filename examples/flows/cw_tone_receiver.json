@@ -1,0 +1,80 @@
+{
+  "sdrk": 1,
+  "name": "cw-tone-receiver",
+  "description": "Receive Morse code (CW) from a 700 Hz audio tone on 8 kHz audio and output the words as text packets.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "audio": {
+      "type": "f32",
+      "rate_hz": 8000,
+      "description": "Mono audio with the keyed tone near 700 Hz"
+    }
+  },
+  "nodes": {
+    "abs": {
+      "kind": "mag"
+    },
+    "cplx": {
+      "kind": "to_complex"
+    },
+    "dec": {
+      "kind": "morse_decode",
+      "params": {
+        "wpm": 20,
+        "wpm_max": 40
+      }
+    },
+    "env": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 150,
+        "order": 2,
+        "response": "lowpass"
+      }
+    },
+    "tone": {
+      "kind": "biquad",
+      "params": {
+        "cutoff_hz": 700,
+        "q": 8,
+        "response": "bandpass"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "audio",
+      "to": "tone"
+    },
+    {
+      "from": "tone",
+      "to": "cplx"
+    },
+    {
+      "from": "cplx",
+      "to": "abs"
+    },
+    {
+      "from": "abs",
+      "to": "env"
+    },
+    {
+      "from": "env",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "words"
+    }
+  ],
+  "outputs": {
+    "words": {
+      "type": "packets",
+      "queue": 64,
+      "description": "The decoded words as upper case ASCII text, one packet each, with the input index of their first key-down sample"
+    }
+  }
+}

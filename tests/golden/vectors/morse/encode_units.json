@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "data": {
+      "dtype": "u8",
+      "file": "encode_units.data.bin",
+      "len": 1106
+    },
+    "lengths": {
+      "dtype": "i32",
+      "file": "encode_units.lengths.bin",
+      "len": 40
+    },
+    "unit_counts": {
+      "dtype": "i32",
+      "file": "encode_units.unit_counts.bin",
+      "len": 40
+    },
+    "units": {
+      "dtype": "u8",
+      "file": "encode_units.units.bin",
+      "len": 13714
+    }
+  },
+  "case": "encode_units",
+  "format_version": 1,
+  "kernel": "morse",
+  "notes": "40 texts (11 fixed, 29 random of 1 to 60 bytes from letters of both cases, digits, punctuation, spaces, the byte 0x04 (SK) and bytes without a code); units 1 key down, 0 key up; no gap in front of the first character; ITU-R M.1677-1 written out in morse.py",
+  "params": {
+    "char_gap": 3,
+    "texts": 40,
+    "word_gap": 7
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 650,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

@@ -27,6 +27,7 @@ from . import (  # noqa: F401
     io,
     mag,
     mag_sq,
+    morse,
     noise_blank,
     oscillate,
     power_db,

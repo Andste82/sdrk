@@ -39,8 +39,9 @@ use sdrk_blocks::{
     SymbolSyncConfig, Ted,
 };
 use sdrk_blocks::{
-    CostasBlock, CostasConfig, FramePolarity, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    CostasBlock, CostasConfig, FramePolarity, MorseDecodeBlock, MorseDecodeConfig,
+    MorseEncodeBlock, MorseEncodeConfig, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
+    PskVariant, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -601,6 +602,16 @@ fn public_types_are_send() {
     assert_sync::<RdsDecodeBlock<A<'static>>>();
     assert_send::<RdsDecodeConfig>();
     assert_sync::<RdsDecodeConfig>();
+    assert_send::<MorseEncodeBlock<A<'static>>>();
+    assert_send::<MorseEncodeBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<MorseEncodeBlock<A<'static>>>();
+    assert_send::<MorseDecodeBlock<A<'static>>>();
+    assert_send::<MorseDecodeBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<MorseDecodeBlock<A<'static>>>();
+    assert_send::<MorseEncodeConfig>();
+    assert_sync::<MorseEncodeConfig>();
+    assert_send::<MorseDecodeConfig>();
+    assert_sync::<MorseDecodeConfig>();
     assert_sync::<PskVariant>();
     assert_send::<FramePolarity>();
     assert_sync::<FramePolarity>();

@@ -35,6 +35,8 @@ pub mod imag_part;
 pub mod interpolate;
 pub mod mag;
 pub mod make_complex;
+pub mod morse_decode;
+pub mod morse_encode;
 pub mod mul;
 pub mod nco;
 pub mod noise_blank;

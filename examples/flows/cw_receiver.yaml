@@ -1,0 +1,60 @@
+# SDRk pipeline: receive Morse code (CW) from IQ (YAML twin of cw_receiver.json). YAML is
+# accepted as input; JSON stays the canonical format.
+#
+# A CW signal is a carrier that is keyed on and off. This flow tunes to the carrier, takes a
+# narrow channel, takes the magnitude (the envelope of the keyed carrier) and decodes it:
+# morse_decode finds the speed itself (5 to 40 words per minute), sets an adaptive threshold
+# between the noise and the signal level and returns one packet per word. Start a transmission
+# with a preamble such as VVV: the decoder takes a few elements to settle on the speed, and the
+# first characters of a start with E, T or 5 are guesses until then. Set wpm near the speed of
+# the sender to help. The stream must start with about a unit of silence or noise.
+sdrk: 1
+name: cw-receiver
+description: "Receive Morse code (CW) from a 240 kS/s unsigned 8-bit baseband with the carrier 10 kHz above the centre and output the words as text packets."
+# f32 pipeline (the Morse kinds have no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # Unsigned 8-bit IQ at 240 kS/s (an RTL-SDR with --rate 240000), the carrier about 10 kHz
+  # above the tuner centre.
+  rf:
+    format: cu8
+    rate_hz: 240000
+    description: "IQ at 240 kS/s with the carrier near +10 kHz"
+nodes:
+  # Channel filter: shift the carrier to 0 Hz, a pass band of 200 Hz (cutoff 500 Hz minus half
+  # the transition of 600 Hz) and decimation by 30 to 8 kS/s. The noise in the channel sets the
+  # sensitivity: 100 to 250 Hz of pass band is right up to about 30 words per minute. About 1100
+  # taps (max_taps 2048). frequency_hz can be changed while the flow runs (set_param).
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 500
+      decimation: 30
+      frequency_hz: 10000
+      max_taps: 2048
+      transition_hz: 600
+  # The envelope of the keyed carrier.
+  env:
+    kind: mag
+  # Decoder: wpm is the starting speed (20); wpm_max (40) sets the shortest run that counts and
+  # needs at least 8 samples per unit (8 kS/s allow up to 100). The threshold is adaptive.
+  dec:
+    kind: morse_decode
+    params:
+      wpm: 20
+      wpm_max: 40
+# Channel filter, envelope, decoder.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: env }
+  - { from: env, to: dec }
+  - { from: dec, to: words }
+outputs:
+  # The words as ASCII text, one packet each; the index is the input sample index of the first
+  # key-down sample of the word. The reader empties the queue after every push.
+  words:
+    type: packets
+    queue: 64
+    description: "The decoded words as upper case ASCII text, one packet each, with the input index of their first key-down sample"

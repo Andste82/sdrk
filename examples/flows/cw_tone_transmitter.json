@@ -1,0 +1,77 @@
+{
+  "sdrk": 1,
+  "name": "cw-tone-transmitter",
+  "description": "Send text as Morse code (CW) at 20 words per minute as a 700 Hz audio tone on 8 kHz audio, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "msg": {
+      "type": "packets",
+      "rate_hz": 8000,
+      "description": "Text to send, up to 256 bytes per packet; every packet ends with a word gap"
+    }
+  },
+  "nodes": {
+    "cplx": {
+      "kind": "to_complex"
+    },
+    "keys": {
+      "kind": "morse_encode",
+      "params": {
+        "wpm": 20
+      }
+    },
+    "mix": {
+      "kind": "mul"
+    },
+    "re": {
+      "kind": "real_part"
+    },
+    "tone": {
+      "kind": "nco",
+      "params": {
+        "frequency_hz": 700
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "msg",
+      "to": "keys"
+    },
+    {
+      "from": "keys",
+      "to": "cplx"
+    },
+    {
+      "from": "keys",
+      "to": "tone"
+    },
+    {
+      "from": "cplx",
+      "to": "mix",
+      "port": "a"
+    },
+    {
+      "from": "tone",
+      "to": "mix",
+      "port": "b"
+    },
+    {
+      "from": "mix",
+      "to": "re"
+    },
+    {
+      "from": "re",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "underrun": "zeros"
+    }
+  }
+}

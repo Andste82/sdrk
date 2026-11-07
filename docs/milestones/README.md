@@ -63,6 +63,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M44 | [M44-qam.md](M44-qam.md) | 10 | 16-QAM and 64-QAM RX+TX |
 | M45 | [M45-ism-band-receiver.md](M45-ism-band-receiver.md) | 10 | ISM band receiver: kernel `channelize` (polyphase filter bank), `band_pulse_detect` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
 | M46 | [M46-ism-sensors.md](M46-ism-sensors.md) | 10 | Sensor decoders: slicers (PWM, PPM, Manchester, NRZ), `sensor_decode` with readings as JSON, at least four 433 MHz and two 868 MHz devices (clean-room, no GPL code), flows `ism433_sensors`, `ism868_sensors` |
+| M47 | [M47-morse.md](M47-morse.md) | 10 | Morse (CW) receive and transmit: `sdrk_proto::morse` (ITU-R M.1677-1 table, encoder, decoder with speed estimate), `morse_encode`, `morse_decode` (adaptive threshold), flows `cw_transmitter` and `cw_receiver` with tone variants |
 | — | [BACKLOG.md](BACKLOG.md) | 7–10, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -102,6 +103,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M44 QAM | M43 | M41, M42 |
 | M45 ISM band receiver | M39.1 | M42, M43, M44 |
 | M46 ISM sensor decoders | M45 | M42, M43, M44 |
+| M47 Morse (CW) | M39.1 | M42, M43, M44, M45, M46 |
 | M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
@@ -167,10 +169,11 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 620–625 | the golden gap cases of D356 (`resample_real` and `power_db` `Q15`, `convert_out` `rs8`/`ru8`; first numbered 469 to 474, which collided with M31 to M33, D357) |
 | 626–635 | M45 |
 | 636–649 | M46 |
-| 650–999 | free, for backlog milestones |
+| 650–659 | M47 |
+| 660–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory
 
-- `M00-…` to `M46-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2).
+- `M00-…` to `M47-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2).
 - `BACKLOG.md`: work after M18 and M44.

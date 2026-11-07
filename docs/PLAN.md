@@ -201,6 +201,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - Packet ports and the crate `sdrk-proto` (protocol logic without signal processing), symbol timing recovery, slicer, test channel and BER meter (M37, M38)
 - FSK/GFSK with AFC, AFSK/APRS, OOK, ADS-B (M39, M39.1); BPSK/QPSK and variants (M40, M40.1); RDS receive and transmit (M41, M42); adaptive equalizer and QAM (M43, M44)
 - Short-range devices in the ISM bands (M45, M46): the whole 433 MHz band (1.74 MHz) or the 868 MHz sensor band with one receiver each, split by a polyphase channelizer so that every transmitter is found whatever its exact frequency, simultaneous transmissions included; pulse detection after rtl_433's method, generic slicers and clean-room decoders of common weather sensors, readings as JSON Lines
+- Morse (CW) receive and transmit (M47): the ITU-R M.1677-1 table with prosigns, an encoder, a decoder with its own speed estimate and adaptive threshold, flows for IQ and for an audio tone
 - Receive and transmit of a mode in the same milestone, with loop tests TX → channel → RX against the theoretical bit error rate
 
 ### Later (prepared, not scheduled)

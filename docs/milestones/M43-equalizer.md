@@ -222,9 +222,9 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-te
 - [x] Kernel `equalize` with reference, fallback, delegation, contract (D803 to D809); the new reusable kernel `dot_complex` for its filter part (D800 to D802)
 - [x] Block and kind `equalize`; `psk_demod` option `equalizer_taps` (D814 to D817)
 - [x] `channel::Multipath` with presets (D810)
-- [x] Tests (seeds 590–595, and 596/597 for `dot_complex`) (D811 to D813, D818, D819, D824, D832, D834 to D836); every criterion of tests 1 to 6 is met; the count entries of test 5 are registered but not counted yet (see Status)
+- [x] Tests (seeds 590–595, and 596/597 for `dot_complex`) (D811 to D813, D818, D819, D824, D832, D834 to D836); every criterion of tests 1 to 6 is met; the count entries of test 5 are counted (see Status)
 - [x] The adaptation of the solutions of other projects (maintainer decision of 2026-11-06): the order before `costas`, NLMS, the clipped CMA error, the phase tracker, the decision feedback and the GNU Radio reference of `equalize_fallback` (D825 to D839)
-- [x] `docs/kernels.md`, `docs/blocks.md`, `docs/backends.md`, `docs/testing.md`, CHANGELOG, decisions log (D800 to D838); count entries registered (D821 to D823, D838), not yet counted (see Status)
+- [x] `docs/kernels.md`, `docs/blocks.md`, `docs/backends.md`, `docs/testing.md`, CHANGELOG, decisions log (D800 to D838); count entries counted and measured (D821 to D823, D838, D840 to D845; see Status)
 
 ## Status
 
@@ -279,14 +279,34 @@ Comparisons behind the decisions (an f64 model of the loop on the `symbol_sync` 
 | Without the tracker (decision mode as in liquid-dsp's example) | 0 | 5 errors | BER 0.12 | BER 2.9e-3 |
 | With the tracker, `phase_bw` 0.02 | 0 | 0 | 0 | 0 |
 
-Counts: not run yet. The four entries are registered in `xtask/src/count.rs` and `benches/limits.json` with their references (D821 to D823, D838; `equalize_fallback` against GNU Radio's `linear_equalizer`, `dev` until the first count), but no row exists in `benches/results/*.json`, the judged levels of `dot_complex`, `dot_complex_fallback` and `equalize_fallback` are `dev`, and there are no cycles per sample for `dot_complex`, `dot_complex_fallback`, `equalize` and `equalize_fallback` in `docs/performance.md`. The acceptance command `cargo xtask count --platform x86_64` (with `--kernel dot_complex,dot_complex_fallback,equalize,equalize_fallback --merge`, and the x86_64-avx512, aarch64 and wasm32 platforms) and `cargo measure` / `benches/cycle_tables.py` are left to the final gate of the milestone; afterwards the `dev` levels become the measured gate result (or a waiver with an open item) and the cycles per sample go into this section and `docs/performance.md`. The C translation `benches/refs/gr-equalizer.c` was compiled and linked locally against the VOLK 3.3.0 headers, and the wrapper test `gnuradio_linear_equalizer` of `cref-sys` and the accuracy test of the measurement binary passed with it; `build.sh` itself has not run.
+Counts (2026-11-07, after the performance round of D840 to D845): the four entries were counted on all four platforms (`cargo xtask count --platform <p> --kernel dot_complex --kernel dot_complex_fallback --kernel equalize --kernel equalize_fallback --merge`; x86_64 per level `sse2`, `sse4.2`, `avx2`, `avx2-runtime`) and measured with `cargo measure dot_complex` and `cargo measure equalize` on every level with a core model; the rows are in `benches/results/*.json` and `docs/performance.md`. Every judged level is within the release limit and is `release` in `benches/limits.json`; `dot_complex` at `avx2-runtime` (1.06 against the limit 1.02) is waived with open item I43-5. D321 holds at every level.
+
+Instructions per sample, ours / comparison:
+
+| Entry (comparison) | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `dot_complex` (VOLK) | 5.29 / 8.53 info | 5.29 / 6.03 | 2.29 / 3.02 | 2.42 (1.06, I43-5) | 2.29 / 3.02 | 3.53 / 4.03 | 13.20 / 40.55 info |
+| `dot_complex_fallback` (CMSIS-DSP) | 14.41 / 15.02 | 8.66 / 15.02 | 8.41 / 13.02 | - | 6.41 / 13.02 | 9.03 / 11.52 | 13.20 / 35.30 |
+| `equalize` (our fallback, info) | 502.98 / 502.98 | 496.45 / 496.45 | 533.11 / 533.11 | 502.21 | 492.09 / 492.09 | 437.31 / 437.31 | 1027.31 / 1027.31 |
+| `equalize_fallback` (GNU Radio `linear_equalizer`) | 502.98 / 722.54 | 496.45 / 722.54 | 533.11 / 729.03 | - | 492.09 / 729.03 | 437.31 / 493.03 | 1027.31 / 1900.06 |
+
+Simulated cycles per symbol of `equalize` (whole-loop, reference / counter model; SIMD = fallback since D841):
+
+| Level (models) | SIMD before D840 | Fallback before D840 | Now | GNU Radio | Now / GNU Radio |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| sse2 (`skylake` / `znver2`) | 434.72 / 400.79 | 391.41 / 350.08 | 157.42 / 164.21 | 168.47 / 201.30 | 0.93 / 0.82 |
+| sse4.2 (`skylake` / `znver2`) | 398.8 / 351.6 | 344.9 / 304.3 | 146.43 / 157.81 | 168.47 / 201.30 | 0.87 / 0.78 |
+| avx2 (`znver3` / `alderlake`) | 252.1 / 237.9 | 226.8 / 240.2 | 114.56 / 116.18 | 931.44 / 220.19 | 0.12 / 0.53 |
+| avx512 (`znver4` / `sapphirerapids`) | 238.7 / 244.0 | 207.3 / 243.6 | 107.27 / 121.97 | 929.60 / 220.19 | 0.12 / 0.55 |
+| neon (`cortex-a72` / `cortex-a76`) | 549.3 / 456.5 | 466.5 / 392.6 | 262.11 / 191.23 | 229.47 / 236.11 | 1.14 / 0.81 |
+
+`neon` on `cortex-a72` stays above GNU Radio: the phase tracker and the smoothed `mse` cost about 81 cycles per symbol there (D845). `dot_complex` simulates 0.46 / 0.58 cycles per sample at `avx2` (VOLK 0.78 / 0.78), 1.32 / 1.33 at `sse2`, 1.31 / 1.33 at `sse4.2`, 0.45 / 0.58 at `avx512` and 3.67 / 1.77 at `neon` (VOLK 3.55 / 2.03); 0.24 to 0.86 of its fallback.
 
 Verified locally on Linux x86-64: the M43 test files of `sdrk-core` (`kernels_m43`), `sdrk-backend-simd` (`equalize`), `sdrk` (`facade`), `sdrk-blocks` (`equalize_blocks`, `psk_blocks`, `describe`), `sdrk-pipeline` (`equalize_kinds`, `psk_kinds`) and `sdrk-testkit` (`golden_m43`, `suite_m43`, `channel_multipath_m43`, `psk_ber_m43` with all its tests, the M40 and M40.1 BER tests), `cargo clippy` on the touched crates, `cargo xtask check`, `cargo xtask schema --check` and `python tests/golden/generate.py --check` (Python 3.12, the pinned NumPy and SciPy).
 
 Not done or not run:
-- The counts and cycle measurements (above).
 - The whole workspace test suite, the emulator, the wasm tests and the other hosts; CI and the final gate run them.
 
-Open items: none of M43; I43-1 to I43-4 are closed (D837, `docs/open-items.md`).
+Open items: I43-5 (`dot_complex` at `avx2-runtime`, `docs/open-items.md`); I43-1 to I43-4 are closed (D837).
 
 Gate and counts: see below.

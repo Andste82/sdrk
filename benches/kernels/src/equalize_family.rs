@@ -15,8 +15,8 @@
 //! `benches/refs/volk-nofma.c`), as for `mul` under D287, because the contract of ours forbids
 //! the fusion (D821). One call of `n` samples per run, as `dot`.
 //!
-//! `equalize` runs the SIMD `dot_complex` for its filter part and the scalar weight update of
-//! `sdrk-core` (D803). The facade entry is counted against our own fallback as information.
+//! `equalize` delegates to the fallback (D841). The facade entry is counted against our own
+//! fallback as information.
 //! `equalize_fallback` is counted against the loop of GNU Radio's `linear_equalizer` with
 //! `adaptive_algorithm_nlms` (`benches/refs/gr-equalizer.c`, D838): per symbol the same work in
 //! decision mode, an FIR of 11 complex taps (VOLK's generic `volk_32fc_x2_dot_prod_32fc`), the

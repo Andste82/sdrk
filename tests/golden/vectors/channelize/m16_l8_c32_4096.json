@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "m16_l8_c32_4096.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "m16_l8_c32_4096.input.bin",
+      "len": 4096
+    },
+    "taps": {
+      "dtype": "f32",
+      "file": "m16_l8_c32_4096.taps.bin",
+      "len": 128
+    }
+  },
+  "case": "m16_l8_c32_4096",
+  "format_version": 1,
+  "kernel": "channelize",
+  "notes": "y_k[m] = sum_r h[r] x[(m+1) M/2 - 1 - r] exp(-j 2 pi k ((m+1) M/2 - 1 - r) / M), step-major (M channels per step, FFT order), zero history; h = the float32 prototype with edges 0.5 / 1.0, 60 dB; exactly rounded sums",
+  "params": {
+    "attenuation_db": 60.0,
+    "channels": 16,
+    "passband": 0.5,
+    "stopband": 1.0,
+    "taps_per_branch": 8
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 660,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_guard": 139.8,
+    "snr_db_min": 100.0
+  }
+}

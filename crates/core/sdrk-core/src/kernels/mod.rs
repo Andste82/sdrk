@@ -4,6 +4,7 @@ pub mod agc;
 pub mod auto_notch;
 pub mod basic;
 pub mod biquad;
+pub mod channelize;
 pub mod convert;
 pub mod costas;
 pub mod decim;

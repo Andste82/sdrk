@@ -287,3 +287,61 @@ def _register_rrc(tag, rolloff, sps, span, singular):
 
 for _tag, _b, _sps, _span, _sing in (("0p35", 0.35, 4, 10, 0), ("0p5", 0.5, 8, 8, 2), ("1p0", 1.0, 10, 6, 0)):
     _register_rrc(_tag, _b, _sps, _span, _sing)
+
+
+# Channelizer prototype (M45)
+
+
+def _register_channelizer(channels, taps_per_branch, passband, stopband, tag):
+    @case(kernel="design", name=f"channelizer_m{channels}_l{taps_per_branch}_{tag}", seed=0)
+    def _case(rng):
+        taps = sdrk_design.channelizer_prototype(channels, taps_per_branch, passband, stopband, 60.0)
+        return dict(
+            params={
+                "channels": channels,
+                "taps_per_branch": taps_per_branch,
+                "passband": passband,
+                "stopband": stopband,
+                "attenuation_db": 60.0,
+            },
+            arrays={"expected": Array("f64", taps)},
+            tolerance={"class": "max_abs_err", "max_abs_err": 1e-12, "skip": 0},
+            notes=(
+                "scipy.signal.firwin(M L, (passband + stopband) / (2 M), window=('kaiser', kaiser_beta(60)), "
+                "fs=1): the channelizer prototype, edges as fractions of the channel spacing fs / M, DC gain 1"
+            ),
+        )
+
+
+_register_channelizer(16, 8, 0.5, 1.0, "0p5_1p0")
+_register_channelizer(16, 24, 0.4, 0.6, "0p4_0p6")
+
+
+@case(kernel="design", name="channelizer_taps_table", seed=663)
+def channelizer_taps_table(rng):
+    channels = np.array([4 << int(rng.integers(0, 7)) for _ in range(20)], dtype=np.int32)
+    passband = rng.uniform(0.05, 1.2, 20)
+    stopband = np.array([rng.uniform(p + 0.02, 1.5) for p in passband])
+    attenuation = rng.uniform(20.0, 120.0, 20)
+    taps = np.array(
+        [sdrk_design.channelizer_taps(int(m), p, s, a) for m, p, s, a in zip(channels, passband, stopband, attenuation)],
+        dtype=np.int32,
+    )
+    per_branch = np.array([-(-int(n) // int(m)) for n, m in zip(taps, channels)], dtype=np.int32)
+    return dict(
+        params={"pairs": 20},
+        arrays={
+            "channels": Array("i32", channels),
+            "passband": Array("f64", passband),
+            "stopband": Array("f64", stopband),
+            "attenuation_db": Array("f64", attenuation),
+            "expected": Array("i32", taps),
+            "taps_per_branch": Array("i32", per_branch),
+        },
+        tolerance={"class": "bit_exact"},
+        notes=(
+            "scipy.signal.kaiserord(attenuation, 2 (stopband - passband) / M)[0], the tap count as returned "
+            "(not forced odd), and taps_per_branch = ceil(taps / M); M a power of two 4 to 256, passband "
+            "0.05 to 1.2, stopband up to 1.5, attenuation 20 to 120 dB"
+        ),
+    )

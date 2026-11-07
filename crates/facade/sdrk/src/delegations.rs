@@ -6,6 +6,7 @@ use sdrk_core::kernels::agc::{Agc, AgcState};
 use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::basic::Scale;
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
+use sdrk_core::kernels::channelize::{Channelize, ChannelizeState};
 use sdrk_core::kernels::convert::{Convert, ConvertOut, ConvertOutReal, ConvertReal};
 use sdrk_core::kernels::costas::{Costas, CostasState};
 use sdrk_core::kernels::decim::{
@@ -154,6 +155,7 @@ crate::delegate! {
     DotReal<f32>::dot_real(&self, x: &[f32], taps: &[f32]) -> Result<f32> => Fast;
     DotReal<Q15>::dot_real(&self, x: &[Q15], taps: &[Q15]) -> Result<Q15> => Fast;
     DotComplex<C32>::dot_complex(&self, x: &[C32], w: &[C32]) -> Result<C32> => Fast;
+    Channelize<C32>::channelize[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>, Tw: AsRef<[C32]>](&self, s: &mut ChannelizeState<C32, Taps, Hist, Tw>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fallback;
     @extra [
         ("interleave", C32, Fast),
         ("deinterleave", C32, Fast),

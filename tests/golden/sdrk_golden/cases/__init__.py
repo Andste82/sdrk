@@ -6,6 +6,7 @@ from . import (  # noqa: F401
     auto_notch,
     basic_math,
     biquad,
+    channelize,
     blocks,
     convert,
     convert_out,

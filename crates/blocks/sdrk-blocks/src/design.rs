@@ -1028,3 +1028,188 @@ pub fn rrc(rolloff: f64, sps: usize, span: usize, taps: &mut [f64]) -> Result<()
     }
     Ok(())
 }
+
+/// The largest stop-band edge of [`channelizer_prototype`] in channel spacings: the largest edge
+/// that does not alias into the passband at the oversampled output rate `2 fs / M`.
+pub const CHANNELIZER_MAX_STOPBAND: f64 = 1.5;
+/// The smallest stop-band attenuation of [`channelizer_prototype`] in dB.
+pub const CHANNELIZER_MIN_ATTENUATION_DB: f64 = 20.0;
+/// The largest stop-band attenuation of [`channelizer_prototype`] in dB.
+pub const CHANNELIZER_MAX_ATTENUATION_DB: f64 = 120.0;
+
+/// Checks the edges and the attenuation of a channelizer prototype.
+fn check_channelizer_edges(passband: f64, stopband: f64, attenuation_db: f64) -> Result<()> {
+    if !(passband.is_finite() && passband > 0.0) {
+        return Err(Error::InvalidParameter {
+            name: "passband",
+            reason: "the passband edge must be a finite fraction of the channel spacing above 0",
+        });
+    }
+    if !(stopband.is_finite() && stopband > passband && stopband <= CHANNELIZER_MAX_STOPBAND) {
+        return Err(Error::InvalidParameter {
+            name: "stopband",
+            reason: "the stopband edge must lie above the passband edge and at most at 1.5 channel spacings",
+        });
+    }
+    if !(CHANNELIZER_MIN_ATTENUATION_DB..=CHANNELIZER_MAX_ATTENUATION_DB).contains(&attenuation_db)
+    {
+        return Err(Error::OutOfRange {
+            name: "attenuation_db",
+            min: CHANNELIZER_MIN_ATTENUATION_DB,
+            max: CHANNELIZER_MAX_ATTENUATION_DB,
+            got: attenuation_db,
+        });
+    }
+    Ok(())
+}
+
+/// Checks the channel count of a channelizer: a power of two from 4 to 256.
+fn check_channelizer_channels(channels: usize) -> Result<()> {
+    use sdrk_core::kernels::channelize::{MAX_CHANNELS, MIN_CHANNELS};
+    if channels.is_power_of_two() && (MIN_CHANNELS..=MAX_CHANNELS).contains(&channels) {
+        Ok(())
+    } else {
+        Err(Error::InvalidParameter {
+            name: "channels",
+            reason: "the channel count must be a power of two from 4 to 256",
+        })
+    }
+}
+
+/// The Kaiser tap estimate of a channelizer prototype: the number of taps that
+/// `scipy.signal.kaiserord(attenuation_db, width)` returns for the transition from `passband` to
+/// `stopband` channel spacings, `width = 2 (stopband - passband) / M` (the tap count as `SciPy`
+/// returns it, not forced odd): `ceil((A - 7.95) / 2.285 / (pi width) + 1)`.
+///
+/// ```
+/// use sdrk_blocks::design::channelizer_taps;
+/// // 16 channels, 60 dB: the search grid of 0.5 / 1.0 and the sharp PMR446 plan of 0.4 / 0.6.
+/// assert_eq!(channelizer_taps(16, 0.5, 1.0, 60.0)?, 118);
+/// assert_eq!(channelizer_taps(16, 0.4, 0.6, 60.0)?, 292);
+/// assert!(channelizer_taps(16, 0.6, 0.4, 60.0).is_err());
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+///
+/// # Errors
+/// `InvalidParameter` for a channel count that is not a power of two from 4 to 256 or for edges
+/// outside `0 < passband < stopband <= 1.5`; `OutOfRange` for an attenuation outside 20 to
+/// 120 dB.
+pub fn channelizer_taps(
+    channels: usize,
+    passband: f64,
+    stopband: f64,
+    attenuation_db: f64,
+) -> Result<usize> {
+    check_channelizer_channels(channels)?;
+    check_channelizer_edges(passband, stopband, attenuation_db)?;
+    let width = 2.0 * (stopband - passband) / channels as f64;
+    let num = (attenuation_db - 7.95) / 2.285 / (PI * width) + 1.0;
+    // A transition band of almost zero width needs an absurd number of taps.
+    if !(num.is_finite() && num <= TAP_LIMIT as f64) {
+        return Err(Error::InvalidParameter {
+            name: "stopband",
+            reason: "the transition band is too narrow for any channelizer prototype",
+        });
+    }
+    Ok(libm::ceil(num) as usize)
+}
+
+/// The prototype taps per branch `L` that the Kaiser estimate of [`channelizer_taps`] needs:
+/// `ceil(channelizer_taps(..) / M)`.
+///
+/// ```
+/// use sdrk_blocks::design::channelizer_taps_per_branch;
+/// assert_eq!(channelizer_taps_per_branch(16, 0.5, 1.0, 60.0)?, 8);
+/// assert_eq!(channelizer_taps_per_branch(16, 0.4, 0.6, 60.0)?, 19);
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+///
+/// # Errors
+/// As [`channelizer_taps`].
+pub fn channelizer_taps_per_branch(
+    channels: usize,
+    passband: f64,
+    stopband: f64,
+    attenuation_db: f64,
+) -> Result<usize> {
+    Ok(channelizer_taps(channels, passband, stopband, attenuation_db)?.div_ceil(channels))
+}
+
+/// The streaming design of [`channelizer_prototype`] (one tap at a time, no `f64` buffer).
+pub(crate) fn channelizer_lowpass(
+    channels: usize,
+    taps_per_branch: usize,
+    passband: f64,
+    stopband: f64,
+    attenuation_db: f64,
+) -> Result<Lowpass> {
+    use sdrk_core::kernels::channelize::{MAX_TAPS_PER_BRANCH, MIN_TAPS_PER_BRANCH};
+    check_channelizer_channels(channels)?;
+    if !(MIN_TAPS_PER_BRANCH..=MAX_TAPS_PER_BRANCH).contains(&taps_per_branch) {
+        return Err(Error::InvalidParameter {
+            name: "taps_per_branch",
+            reason: "a channelizer needs 4 to 32 taps per branch",
+        });
+    }
+    check_channelizer_edges(passband, stopband, attenuation_db)?;
+    let cutoff = (passband + stopband) / (2.0 * channels as f64);
+    Lowpass::new(
+        cutoff,
+        1.0,
+        DesignWindow::Kaiser {
+            beta: kaiser_beta(attenuation_db),
+        },
+        channels * taps_per_branch,
+    )
+}
+
+/// The prototype low-pass of the channelizer (`sdrk_core::kernels::channelize`): `M L` taps
+/// (`M = channels`, a power of two from 4 to 256, `L = taps_per_branch`, 4 to 32;
+/// `taps.len()` must be `M L`), a Kaiser-windowed low-pass with the passband edge at
+/// `passband fs / M` and the stopband from `stopband fs / M` (both fractions of the channel
+/// spacing `fs / M`, `0 < passband < stopband <= 1.5`; 1.5 is the largest edge that does not
+/// alias into the passband at the output rate `2 fs / M`), the stop-band attenuation
+/// `attenuation_db` (20 to 120, 60 is the usual value), normalized to a DC gain of 1.
+///
+/// Equal to `scipy.signal.firwin(M L, (passband + stopband) / (2 M), window=('kaiser',
+/// kaiser_beta(attenuation_db)), fs=1)` within 1e-12: the cutoff (the -6 dB point) lies in the
+/// middle of the transition band. The tap count is a parameter; [`channelizer_taps`] says how
+/// many the edges need. The search grid of a band (edges 0.5 / 1.0) passes half a spacing on each
+/// side of a channel centre flat, so neighbouring channels overlap by half a spacing; a channel
+/// plan (PMR446: 0.4 / 0.6) rejects its neighbours sharply.
+///
+/// ```
+/// use sdrk_blocks::design::channelizer_prototype;
+/// let mut h = vec![0.0f64; 16 * 8];
+/// channelizer_prototype(16, 8, 0.5, 1.0, 60.0, &mut h)?;
+/// assert!((h.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// assert!(channelizer_prototype(16, 8, 1.0, 0.5, 60.0, &mut h).is_err()); // edges swapped
+/// assert!(channelizer_prototype(16, 8, 0.5, 1.6, 60.0, &mut h).is_err()); // above 1.5
+/// assert!(channelizer_prototype(16, 8, 0.5, 1.0, 60.0, &mut [0.0; 100]).is_err());
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+///
+/// # Errors
+/// `InvalidParameter` for a channel count, a tap count per branch or edges outside the ranges;
+/// `OutOfRange` for the attenuation; `Core(LengthMismatch)` if `taps.len()` is not `M L`.
+pub fn channelizer_prototype(
+    channels: usize,
+    taps_per_branch: usize,
+    passband: f64,
+    stopband: f64,
+    attenuation_db: f64,
+    taps: &mut [f64],
+) -> Result<()> {
+    let lp = channelizer_lowpass(
+        channels,
+        taps_per_branch,
+        passband,
+        stopband,
+        attenuation_db,
+    )?;
+    check_len(lp.len(), taps.len())?;
+    for (i, t) in taps.iter_mut().enumerate() {
+        *t = lp.tap(i);
+    }
+    Ok(())
+}

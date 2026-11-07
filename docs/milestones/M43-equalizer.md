@@ -279,13 +279,13 @@ Comparisons behind the decisions (an f64 model of the loop on the `symbol_sync` 
 | Without the tracker (decision mode as in liquid-dsp's example) | 0 | 5 errors | BER 0.12 | BER 2.9e-3 |
 | With the tracker, `phase_bw` 0.02 | 0 | 0 | 0 | 0 |
 
-Counts (2026-11-07, after the performance round of D840 to D845): the four entries were counted on all four platforms (`cargo xtask count --platform <p> --kernel dot_complex --kernel dot_complex_fallback --kernel equalize --kernel equalize_fallback --merge`; x86_64 per level `sse2`, `sse4.2`, `avx2`, `avx2-runtime`) and measured with `cargo measure dot_complex` and `cargo measure equalize` on every level with a core model; the rows are in `benches/results/*.json` and `docs/performance.md`. Every judged level is within the release limit and is `release` in `benches/limits.json`; `dot_complex` at `avx2-runtime` (1.06 against the limit 1.02) is waived with open item I43-5. D321 holds at every level.
+Counts (2026-11-07, after the performance round of D840 to D845): the four entries were counted on all four platforms (`cargo xtask count --platform <p> --kernel dot_complex --kernel dot_complex_fallback --kernel equalize --kernel equalize_fallback --merge`; x86_64 per level `sse2`, `sse4.2`, `avx2`, `avx2-runtime`) and measured with `cargo measure dot_complex` and `cargo measure equalize` on every level with a core model; the rows are in `benches/results/*.json` and `docs/performance.md`. Every judged level is within the release limit and is `release` in `benches/limits.json`; `dot_complex` at `avx2-runtime` (1.00 against the limit 1.02, after the two-block loop of `dot_complex_avx2`) needs no waiver. D321 holds at every level.
 
 Instructions per sample, ours / comparison:
 
 | Entry (comparison) | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `dot_complex` (VOLK) | 5.29 / 8.53 info | 5.29 / 6.03 | 2.29 / 3.02 | 2.42 (1.06, I43-5) | 2.29 / 3.02 | 3.53 / 4.03 | 13.20 / 40.55 info |
+| `dot_complex` (VOLK) | 5.29 / 8.53 info | 5.29 / 6.03 | 2.35 / 3.02 | 2.36 (1.00) | 2.35 / 3.02 | 3.53 / 4.03 | 13.20 / 40.55 info |
 | `dot_complex_fallback` (CMSIS-DSP) | 14.41 / 15.02 | 8.66 / 15.02 | 8.41 / 13.02 | - | 6.41 / 13.02 | 9.03 / 11.52 | 13.20 / 35.30 |
 | `equalize` (our fallback, info) | 502.98 / 502.98 | 496.45 / 496.45 | 533.11 / 533.11 | 502.21 | 492.09 / 492.09 | 437.31 / 437.31 | 1027.31 / 1027.31 |
 | `equalize_fallback` (GNU Radio `linear_equalizer`) | 502.98 / 722.54 | 496.45 / 722.54 | 533.11 / 729.03 | - | 492.09 / 729.03 | 437.31 / 493.03 | 1027.31 / 1900.06 |
@@ -307,6 +307,6 @@ Verified locally on Linux x86-64: the M43 test files of `sdrk-core` (`kernels_m4
 Not done or not run:
 - The whole workspace test suite, the emulator, the wasm tests and the other hosts; CI and the final gate run them.
 
-Open items: I43-5 (`dot_complex` at `avx2-runtime`, `docs/open-items.md`); I43-1 to I43-4 are closed (D837).
+Open items: none of M43; I43-1 to I43-4 are closed (D837), I43-5 (`dot_complex` at `avx2-runtime`) is closed by the two-block loop of `dot_complex_avx2` (CHANGELOG).
 
 Gate and counts: see below.

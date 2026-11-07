@@ -195,7 +195,18 @@ mod x86 {
             };
             let (xb, xr) = x.as_chunks::<BLOCK>();
             let (wb, wr) = w.as_chunks::<BLOCK>();
-            for (xs, ws) in xb.iter().zip(wb) {
+            // Two blocks per iteration: the accumulation order is that of the contract, and
+            // the loop control is paid once per two blocks (the run-time build of the level
+            // does not unroll this loop by itself).
+            let (mut xp, mut wp) = (xb.chunks_exact(2), wb.chunks_exact(2));
+            for (x2, w2) in xp.by_ref().zip(wp.by_ref()) {
+                // `chunks_exact(2)` yields pairs only.
+                if let ([xa, xb], [wa, wb]) = (x2, w2) {
+                    block(xa, wa);
+                    block(xb, wb);
+                }
+            }
+            for (xs, ws) in xp.remainder().iter().zip(wp.remainder()) {
                 block(xs, ws);
             }
             if !xr.is_empty() {

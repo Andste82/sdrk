@@ -1,0 +1,32 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "channelizer_m16_l24_0p4_0p6.expected.bin",
+      "len": 384
+    }
+  },
+  "case": "channelizer_m16_l24_0p4_0p6",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "scipy.signal.firwin(M L, (passband + stopband) / (2 M), window=('kaiser', kaiser_beta(60)), fs=1): the channelizer prototype, edges as fractions of the channel spacing fs / M, DC gain 1",
+  "params": {
+    "attenuation_db": 60.0,
+    "channels": 16,
+    "passband": 0.4,
+    "stopband": 0.6,
+    "taps_per_branch": 24
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1e-12,
+    "skip": 0
+  }
+}

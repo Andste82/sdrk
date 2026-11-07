@@ -1,0 +1,51 @@
+{
+  "arrays": {
+    "attenuation_db": {
+      "dtype": "f64",
+      "file": "channelizer_taps_table.attenuation_db.bin",
+      "len": 20
+    },
+    "channels": {
+      "dtype": "i32",
+      "file": "channelizer_taps_table.channels.bin",
+      "len": 20
+    },
+    "expected": {
+      "dtype": "i32",
+      "file": "channelizer_taps_table.expected.bin",
+      "len": 20
+    },
+    "passband": {
+      "dtype": "f64",
+      "file": "channelizer_taps_table.passband.bin",
+      "len": 20
+    },
+    "stopband": {
+      "dtype": "f64",
+      "file": "channelizer_taps_table.stopband.bin",
+      "len": 20
+    },
+    "taps_per_branch": {
+      "dtype": "i32",
+      "file": "channelizer_taps_table.taps_per_branch.bin",
+      "len": 20
+    }
+  },
+  "case": "channelizer_taps_table",
+  "format_version": 1,
+  "kernel": "design",
+  "notes": "scipy.signal.kaiserord(attenuation, 2 (stopband - passband) / M)[0], the tap count as returned (not forced odd), and taps_per_branch = ceil(taps / M); M a power of two 4 to 256, passband 0.05 to 1.2, stopband up to 1.5, attenuation 20 to 120 dB",
+  "params": {
+    "pairs": 20
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 663,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

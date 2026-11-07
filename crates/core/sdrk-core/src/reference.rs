@@ -49,6 +49,7 @@ impl Scale<CQ15> for Reference {
 mod agc;
 mod auto_notch;
 mod biquad;
+mod channelize;
 mod convert;
 mod convert_out;
 mod costas;

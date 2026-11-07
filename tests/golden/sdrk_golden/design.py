@@ -172,3 +172,24 @@ def gaussian(bt, sps, span):
     for v in raw:
         total += v
     return np.array([v / total for v in raw], dtype=np.float64)
+
+
+# Channelizer prototype (M45): ``sdrk_blocks::design::channelizer_taps`` and ``channelizer_prototype``.
+
+
+def channelizer_taps(channels, passband, stopband, attenuation_db):
+    """Kaiser tap estimate of the channelizer prototype: ``scipy.signal.kaiserord(attenuation, width)``
+    with the transition ``(stopband - passband) fs / M``, so ``width = 2 (stopband - passband) / M``
+    (the tap count as SciPy returns it, not forced odd)."""
+    n, _ = scipy.signal.kaiserord(attenuation_db, 2.0 * (stopband - passband) / channels)
+    return int(n)
+
+
+def channelizer_prototype(channels, taps_per_branch, passband, stopband, attenuation_db):
+    """Prototype of the channelizer: ``M L`` taps of ``firwin`` with a Kaiser window of
+    ``kaiser_beta(attenuation)``, the cutoff in the middle of the transition band,
+    ``(passband + stopband) / (2 M)`` of the input rate, DC gain 1 (float64)."""
+    assert 0.0 < passband < stopband <= 1.5
+    beta = float(scipy.signal.kaiser_beta(attenuation_db))
+    cutoff = (passband + stopband) / (2.0 * channels)
+    return scipy.signal.firwin(channels * taps_per_branch, cutoff, window=("kaiser", beta), fs=1.0)

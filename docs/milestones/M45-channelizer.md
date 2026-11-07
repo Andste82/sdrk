@@ -282,7 +282,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 
 ## Deliverables checklist
 
-- [ ] Kernel `channelize` with reference, fallback, delegation, SIMD path, contract; `design::channelizer_prototype` with edges
+- [ ] Kernel `channelize` with reference, fallback, delegation, SIMD path, contract; `design::channelizer_prototype` with edges (done except the SIMD path)
 - [ ] `Lanes<T>`, `LanesRef`, `LanesMut`, `PortType::Lanes`; compile tests
 - [ ] Lane streams in the pipeline: `PortKind::Lanes`, node views, node wrapper, runner buffers, checks, report; schema
 - [ ] Block and kind `channelize`
@@ -294,4 +294,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 
 ## Status
 
-Draft (2026-11-07). Not started.
+In progress (2026-11-07).
+
+- **Done (step 1, section 1 and test 2):** the kernel `channelize` (`sdrk_core::kernels::channelize`) with `Reference` (f64 model), `Fallback`, the facade delegation (to the fallback until the SIMD path exists) and the numeric contract in `docs/kernels.md`; the design `sdrk_blocks::design::channelizer_prototype` with the edge parameters and the Kaiser tap estimate of section 4 (`channelizer_taps`, `channelizer_taps_per_branch`); the golden cases of seeds 660, 661 (kernel), the two prototype cases and the `kaiserord` table of seed 663; test 1 for the fallback and the facade (golden cases, the f64 model within 100 dB, chunk invariance with 20 plans of seed 662, the tone sweeps of 0.5 / 1.0 and of 0.4 / 0.6 with L 24: 0.1 dB and 60 dB are met, the second confirmed at 65.3 dB), test 2, the extreme inputs of R9 and the suite cases `channelize_c32` and `extremes_m45`. Decisions D912 to D917.
+- **Open:** the SIMD path of `channelize` and its comparison with the fallback, the count entries and the cycles per sample against the library reference; sections 2 to 7 (`Lanes<T>`, lane streams in the pipeline, the kinds `channelize` and `channel_select`, the flow `pmr446_monitor`, `nfm::ChannelScene`) and tests 3 to 10.

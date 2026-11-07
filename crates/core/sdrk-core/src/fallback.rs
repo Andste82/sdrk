@@ -102,6 +102,7 @@ fn scale_words<const SAT: bool>(input: &[[u8; 4]], output: &mut [[u8; 4]], gain:
 mod agc;
 mod auto_notch;
 mod biquad;
+mod channelize;
 mod convert;
 mod convert_out;
 mod costas;

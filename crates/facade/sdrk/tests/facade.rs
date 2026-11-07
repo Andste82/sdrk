@@ -1054,3 +1054,41 @@ fn m42_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     assert_eq!(a, b);
     Ok(())
 }
+
+#[test]
+fn m45_channelize_agrees_with_the_fallback() -> Result<()> {
+    use sdrk::kernels::channelize::{Channelize, ChannelizeState, history_len};
+
+    assert_eq!(backend_for("channelize", SampleType::C32), "fallback");
+    assert_eq!(backend_for("channelize", SampleType::CQ15), "none");
+
+    let mut seed = 662u64;
+    let mut draw = || lcg(&mut seed) as f32 / 4_294_967_296.0 * 2.0 - 1.0;
+    let input: Vec<C32> = (0..4096).map(|_| C32::new(draw(), draw())).collect();
+    for (m, l) in [(4usize, 4usize), (8, 6), (16, 8), (64, 8), (256, 4)] {
+        let taps: Vec<f32> = (0..m * l).map(|_| draw() / (m * l) as f32).collect();
+        let mut a = ChannelizeState::<C32, _, _, _>::new(
+            taps.clone(),
+            m,
+            vec![C32::default(); history_len(m, l)],
+            vec![C32::default(); m / 2],
+        )?;
+        let mut b = ChannelizeState::<C32, _, _, _>::new(
+            taps,
+            m,
+            vec![C32::default(); history_len(m, l)],
+            vec![C32::default(); m / 2],
+        )?;
+        let steps = input.len() / (m / 2);
+        let (mut ya, mut yb) = (
+            vec![C32::default(); steps * m],
+            vec![C32::default(); steps * m],
+        );
+        let pa = Sdrk.channelize(&mut a, &input, &mut ya)?;
+        let pb = Fallback.channelize(&mut b, &input, &mut yb)?;
+        assert_eq!((pa.consumed, pa.produced), (pb.consumed, pb.produced));
+        assert_eq!(pa.produced, steps * m);
+        assert_close(&flat(&yb), &flat(&ya));
+    }
+    Ok(())
+}

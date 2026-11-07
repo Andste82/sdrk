@@ -397,8 +397,12 @@ impl<S: Storage> Block for MorseEncodeBlock<S> {
     fn process(&mut self, input: &[Packet], output: &mut [f32]) -> Result<Progress> {
         let idle_ok = input.is_empty();
         if idle_ok {
-            // A packet that was not resubmitted is dropped.
+            // A packet that was not resubmitted is dropped, with the character and the tail in
+            // progress: the next packet starts afresh.
             self.pos = 0;
+            self.tail = 0;
+            self.tail_done = false;
+            self.enc.reset();
         }
         let mut consumed = 0;
         let mut produced = 0;

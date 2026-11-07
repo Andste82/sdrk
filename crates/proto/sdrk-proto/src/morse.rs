@@ -384,7 +384,7 @@ impl Encoder {
 /// Most key-down runs the decoder keeps for the estimate of the dot and dash lengths.
 const WINDOW: usize = 16;
 
-/// Key-up run after which the decoder forgets the speed, in word gaps (D-log: 20).
+/// Key-up run after which the decoder forgets the speed, in word gaps (D903: 20).
 const IDLE_WORDS: f32 = 20.0;
 
 /// A character or a space the [`Decoder`] has finished.
@@ -659,15 +659,15 @@ impl Decoder {
         self.n = 0;
         self.over = false;
         if over {
-            self.overflow += 1;
+            self.overflow = self.overflow.saturating_add(1);
             return None;
         }
         if unsure {
-            self.uncertain += 1;
+            self.uncertain = self.uncertain.saturating_add(1);
         }
         self.word_open = true;
         let byte = els.get(..n).and_then(character).unwrap_or_else(|| {
-            self.unknown += 1;
+            self.unknown = self.unknown.saturating_add(1);
             b'?'
         });
         Some(Emit { byte, start })

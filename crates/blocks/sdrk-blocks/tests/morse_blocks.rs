@@ -493,22 +493,31 @@ fn a_fixed_threshold_decodes_a_clean_envelope() {
 
 #[test]
 fn glitches_are_merged() {
-    // 20 wpm at 8 kHz: a unit is 480 samples; the glitch limit is 25 samples (40 wpm max).
+    // 20 wpm at 8 kHz: a unit is 480 samples; the glitch limit is 80 samples (a third of a
+    // unit at 40 wpm). V is dot, gap, dot, gap, dot, gap, dash (units 6 to 8).
     let mut env = encode(&[b"VVV TEST"], &hard(), FS);
     let want = texts_of(&words(&env, &MorseDecodeConfig::default(), FS, None));
-    // A dropout of 8 samples inside the first dash and a spike of 8 in the first gap.
-    let first_on = env.iter().position(|&x| x > 0.5).unwrap();
-    for x in &mut env[first_on + 480 * 11 + 100..first_on + 480 * 11 + 108] {
+    assert_eq!(want, ["VVV", "TEST"]);
+    // A dropout of 70 samples inside the first dash (the smoother falls to 0.32, below the
+    // threshold, for about 40 samples) and a burst of 70 samples in the first gap (it rises
+    // to 0.68, above the threshold, for about 45 samples).
+    for x in &mut env[2880 + 520..2880 + 590] {
         *x = 0.0;
     }
-    for x in &mut env[first_on + 480 + 100..first_on + 480 + 108] {
+    for x in &mut env[600..670] {
         *x = 1.0;
     }
     assert_eq!(
         texts_of(&words(&env, &MorseDecodeConfig::default(), FS, None)),
         want
     );
-    assert_eq!(want, ["VVV", "TEST"]);
+    // With a shortest run of 32 samples (`wpm_max` 100) the same changes are runs of their own:
+    // the output differs, so the merge above is what the test checks.
+    let sharp = MorseDecodeConfig {
+        wpm_max: 100.0,
+        ..MorseDecodeConfig::default()
+    };
+    assert_ne!(texts_of(&words(&env, &sharp, FS, None)), want);
 }
 
 #[test]
@@ -780,4 +789,95 @@ fn edit_distance(a: &[u8], b: &[u8]) -> usize {
         prev = cur;
     }
     prev[b.len()]
+}
+
+#[test]
+fn an_empty_call_drops_the_packet_and_its_state() {
+    // A packet that is cut short by an empty call is dropped with its character and its tail:
+    // the next packet is a fresh one (no gap in front, a whole word gap behind).
+    let cfg = hard();
+    let fresh = {
+        let mut enc = encoder(&cfg, 1000);
+        let mut out = vec![0.0f32; 2000];
+        let p = enc.process(&[packet(b"E")], &mut out).unwrap();
+        out.truncate(p.produced);
+        out
+    };
+    // 20 wpm at 1000 Hz: 60 samples a unit; "E" is 1 unit and 7 of gap = 480 samples.
+    assert_eq!(fresh.len(), 480);
+    let mut enc = encoder(&cfg, 1000);
+    let mut room = vec![0.0f32; 240];
+    let p = enc.process(&[packet(b"E")], &mut room).unwrap();
+    assert_eq!((p.consumed, p.produced), (0, 240));
+    let mut idle = vec![0.0f32; 120];
+    enc.process(&[], &mut idle).unwrap();
+    let mut out = vec![0.0f32; 2000];
+    let p = enc.process(&[packet(b"E")], &mut out).unwrap();
+    assert_eq!(p.consumed, 1);
+    // The idle call ends on a unit boundary (240 + 120 = 360 = 6 units); the packet starts
+    // there: the dot at once, then the whole gap.
+    assert_eq!(p.produced, 480);
+    assert_eq!(&out[..480], &fresh[..]);
+}
+
+#[test]
+fn a_burst_of_interference_blinds_the_decoder_only_briefly() {
+    // 10 samples of 30 times the key down level in the silence in front of the text: the peak
+    // level rises as slowly as the smoother, so the decoder is not blinded for seconds.
+    let env = encode(&[b"VVV TEST"], &hard(), FS);
+    let mut stream = vec![0.0f32; 3000];
+    stream.extend(std::iter::repeat_n(30.0f32, 10));
+    stream.extend(std::iter::repeat_n(0.0f32, 3200));
+    stream.extend_from_slice(&env);
+    let got = texts_of(&run_decoder(
+        &mut decoder(&MorseDecodeConfig::default(), FS),
+        &stream,
+        None,
+        None,
+    ));
+    // The burst itself and the first word of the text may be wrong (the burst is a short key
+    // down that the decoder takes for an element); the decoder is not deaf afterwards.
+    assert_eq!(got.last().map(String::as_str), Some("TEST"), "{got:?}");
+}
+
+#[test]
+fn a_step_to_a_faster_sender_after_an_idle_gap_is_learned() {
+    let first = text_units(b"VVV CQ DE W1AW K");
+    let second = text_units(b"VVV QRZ DE DL1ABC K");
+    let mut units = first.clone();
+    units.extend(std::iter::repeat_n(false, 200));
+    let mid = units.len();
+    units.extend(second);
+    let mut env = expand_with(&units, |k| if k < mid { 480.0 } else { 480.0 / 1.3 });
+    add_noise(&mut env, 0.05, 657);
+    let got = texts_of(&words(&env, &MorseDecodeConfig::default(), FS, None));
+    assert_eq!(
+        got,
+        [
+            "VVV", "CQ", "DE", "W1AW", "K", "VVV", "QRZ", "DE", "DL1ABC", "K"
+        ]
+    );
+}
+
+#[test]
+fn unknown_and_overlong_characters_are_counted_by_the_block() {
+    // Seven dots are no character ("?", counted in `unknown`); nine dots are discarded
+    // (`overflow`); an E afterwards shows that the decoder went on.
+    let mut units = vec![false; 4];
+    for dots in [7, 9] {
+        for k in 0..dots {
+            if k > 0 {
+                units.push(false);
+            }
+            units.push(true);
+        }
+        units.extend([false; 4]);
+    }
+    units.push(true);
+    units.extend(std::iter::repeat_n(false, 12));
+    let env = lead(&expand_with(&units, |_| 480.0));
+    let mut dec = decoder(&MorseDecodeConfig::default(), FS);
+    let got = run_decoder(&mut dec, &env, None, None);
+    assert_eq!(texts_of(&got), ["?E"]);
+    assert_eq!((dec.unknown(), dec.overflow()), (1, 1));
 }

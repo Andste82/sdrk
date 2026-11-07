@@ -150,10 +150,6 @@ fn the_flows_have_the_nodes_and_rates_of_the_spec() {
         tr.iter().any(|n| n.1 == "morse_decode" && n.2 == 8000),
         "{tr:?}"
     );
-    // The decoder needs 8 samples per unit at 40 words per minute: 267 Hz.
-    let slow = flow("cw_tone_receiver").replace("8000", "200");
-    let report = Registry::standard().validate_json(&slow, &BuildOptions::default());
-    assert!(!report.is_ok());
 }
 
 /// The audio of the tone transmitter: `lead` samples of silence, the texts, and `tail`

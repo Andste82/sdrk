@@ -7,6 +7,8 @@ use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::morse::{Decoder, Emit};
 use sdrk_proto::{MAX_PACKET_BYTES, Packet, PacketFlags};
 
+use sdrk_core::num::flush_denormal as flush;
+
 use super::{hz, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -19,16 +21,16 @@ use crate::storage::{Plan, Storage};
 /// Fewest samples per unit at `wpm_max` (`OutOfRange` of `wpm_max` below; D900).
 const MIN_SAMPLES_PER_UNIT: f64 = 8.0;
 
-/// Where the threshold lies between the noise and the signal level (D903).
+/// Where the threshold lies between the noise and the signal level (D904).
 const THRESHOLD_POSITION: f32 = 0.5;
 
-/// Half width of the hysteresis around the threshold, as a part of the span (D903).
+/// Half width of the hysteresis around the threshold, as a part of the span (D904).
 const HYSTERESIS: f32 = 0.05;
 
-/// Time constant of the smoothing in units of the hint speed (D902).
+/// Time constant of the smoothing in units of the hint speed (D904).
 const SMOOTH_UNITS: f64 = 0.125;
 
-/// Time constant of the slow level trackers in units of the hint speed (D903).
+/// Time constant of the slow level trackers in units of the hint speed (D904).
 const TRACK_UNITS: f64 = 20.0;
 
 /// The key is down only above the noise mean plus this many standard deviations of the
@@ -70,7 +72,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         overflow() and uncertain(). Pitfall: a transmission that starts with several equal \
         elements (E, T, 5) is decoded with the speed wpm until the first character with a dot \
         and a dash settles the estimate; start with a preamble such as VVV, or set wpm near \
-        the speed of the sender. Pitfall: the first block (four time constants of the smoother, about half a unit) \
+        the speed of the sender. Pitfall: Farnsworth text (char_wpm above wpm of the sender) with a gap between \
+        characters of 5 dot lengths or more comes out as one packet per character, because the \
+        decoder takes a key-up run of 5 dots for a word gap. Pitfall: the first block (four \
         after the start or a reset only learns the noise level and gives no key down, so the \
         stream must begin with noise or silence of about a unit; a signal on from the first \
         sample is taken for noise until the key has been up for some blocks. Pitfall: the front end sets the noise bandwidth; \
@@ -404,7 +408,7 @@ impl<S: Storage> MorseDecodeBlock<S> {
         if self.raw || self.quiet <= self.settle {
             self.blk_quiet = false;
         }
-        self.blk_n += 1;
+        self.blk_n = self.blk_n.saturating_add(1);
         let y = f64::from(y);
         self.blk_sum += y;
         self.blk_sq += y * y;
@@ -457,7 +461,7 @@ impl<S: Storage> MorseDecodeBlock<S> {
         // smoother.
         let x = if x.is_finite() { x } else { 0.0 };
         if self.started {
-            self.y += self.smooth * (x - self.y);
+            self.y = flush(self.y + self.smooth * (x - self.y));
         } else {
             // The smoother and the level trackers start at the first sample, so that the rise
             // from zero to the noise level is not taken for a signal.
@@ -482,15 +486,16 @@ impl<S: Storage> MorseDecodeBlock<S> {
         // once is not mistaken for noise) is refreshed with every block.
         let floor = self.floor;
         // Peak hold, decaying towards the noise level; minimum hold, rising while the key is up.
+        // The peak rises as fast as the smoother, so a burst of a few samples hardly moves it.
         if y > self.sig {
-            self.sig = y;
+            self.sig = flush(self.sig + self.smooth * (y - self.sig));
         } else {
-            self.sig -= (self.sig - self.noise) * self.slow;
+            self.sig = flush(self.sig - (self.sig - self.noise) * self.slow);
         }
         if y < self.noise {
             self.noise = y;
         } else if !self.raw {
-            self.noise += (y - self.noise) * self.slow;
+            self.noise = flush(self.noise + (y - self.noise) * self.slow);
         }
         let span = self.sig - self.noise;
         // The first block after the start or a reset only learns the noise: no key down.
@@ -551,7 +556,7 @@ impl<S: Storage> MorseDecodeBlock<S> {
             let c = self.committed;
             self.feed(c, &mut out);
         } else {
-            self.pending += 1;
+            self.pending = self.pending.saturating_add(1);
             if self.pending >= self.glitch {
                 self.committed = self.raw;
                 for _ in 0..self.pending {

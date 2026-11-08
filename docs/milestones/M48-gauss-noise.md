@@ -222,7 +222,7 @@ New file `tests/golden/sdrk_golden/cases/gauss_noise.py`. The Python model imple
 
 ### 5. Cost
 
-`cargo xtask count` entries `gauss_noise_c32` and `gauss_noise_f32` (instructions per output sample at every level; the `libm` calls dominate). No reference library entry: GNU Radio and liquid-dsp produce other sequences, so their counts are not a like-for-like comparison. Record the numbers in `docs/performance.md`.
+`cargo xtask count` entries `gauss_noise_c32` and `gauss_noise_f32` (instructions per output sample at every level; the `libm` calls dominate). Reference rows `gauss_noise_f32` and `gauss_noise_c32` against liquid-dsp `randnf` and `crandnf` (transcribed as `benches/refs/liquid-randn.c`, the version of the other liquid rows), marked **reference does less work** (as D914): liquid draws from libc `rand()` and computes Box–Muller with f32 `sqrtf`, `logf`, `cosf`, without random access and without a cross-platform bit-exact result, while ours runs PCG32 and f64 `libm`. The rows make the price of the exact sequence visible; they are information, not a gap to close. GNU Radio is not added (xoroshiro128+ and its own tables, the same kind of difference). Record the numbers in `docs/performance.md`.
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
 
@@ -261,7 +261,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 - [ ] Contract row and section `gauss_noise` in `docs/kernels.md` (with the power convention and the GNU Radio and liquid-dsp conversions)
 - [ ] Golden cases (seeds 680–684) and the Python model
 - [ ] Tests 1–9 (seeds 680–689); suite cases
-- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`; the reference rows against liquid-dsp `randnf`/`crandnf` (`benches/refs/liquid-randn.c`, "reference does less work")
 - [ ] Blocks `NoiseBlock<T>`, `NoiseRealBlock<T>` and kind `noise` (§6): `docs/blocks.md` (entry; the reserved-name row becomes "delivered"), `docs/pipeline.md` (cost), `docs/timing.md`, schema, WASM kind list; count entry `noise_block`
 - [ ] CHANGELOG, decisions log (the reading of R4.4, the state's sample-type rule, the tolerances)
 

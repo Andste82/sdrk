@@ -211,7 +211,7 @@ New file `tests/golden/sdrk_golden/cases/xcorr.py`. Expected values: the f64 dir
 
 ### 5. Cost
 
-`cargo xtask count` entries `xcorr_fft_n512` and `xcorr_fft_n4096` (per output sample, dominated by the two FFTs over `B` outputs). Compare in `docs/performance.md` against the time-domain cost `L` complex MACs per output (the break-even `L` where overlap-save wins is recorded) and, as information, against GNU Radio's `fft_filter_ccc` and liquid-dsp's `fftfilt` instruction counts if a count harness for them exists; otherwise cite their method only (both overlap-add; ours overlap-save — noted).
+`cargo xtask count` entries `xcorr_fft_n512` and `xcorr_fft_n4096` (per output sample, dominated by the two FFTs over `B` outputs). Compare in `docs/performance.md` against the time-domain cost `L` complex MACs per output (the break-even `L` where overlap-save wins is recorded) and against liquid-dsp `fftfilt_cccf` as the **reference** (D32: the same work — streaming complex FFT fast convolution with complex taps in f32; liquid uses overlap-add, ours overlap-save, which does not change the work per output), transcribed as `benches/refs/liquid-fftfilt.c` with the FFT of the existing liquid rows, at the same `L` and the nearest block length. A gap above 10 % is an open item. GNU Radio `fft_filter_ccc` is the same method again and is not added.
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
 
@@ -249,7 +249,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 - [ ] Contract row and section in `docs/kernels.md` (overlap-save, the correlation convention, the normalisation note)
 - [ ] Golden cases (seeds 700–703) and the Python model
 - [ ] Tests 1–7 (seeds 700–707); suite cases
-- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md` (break-even vs. time domain; GNU Radio / liquid-dsp method note)
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md` (break-even vs. time domain); the reference rows against liquid-dsp `fftfilt_cccf` (`benches/refs/liquid-fftfilt.c`)
 - [ ] Block `CorrelateBlock` and kind `correlate` (§6): `docs/blocks.md` (entry and a new reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `correlate_block`
 - [ ] CHANGELOG, decisions log (the no-tap-scaling reason, the tolerance class, the FFT-size rule)
 

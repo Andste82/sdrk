@@ -223,6 +223,8 @@ New file `tests/golden/sdrk_golden/cases/acquire.py`.
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
 
+**Reference (D32).** No library row: GNSS-SDR's PCPS is the same method, but it is built from pieces that already have reference rows (the carrier wipe-off as `rotate` against GNU Radio's rotator, the FFT of M07, the spectral product as `mul`), and a transcription would only repeat them. The rows are information; the speed baseline is the vectorised scalar fallback (and the D321 gate once a SIMD path exists).
+
 ### 6. Block and kind `code_search`
 
 `CodeSearchBlock` (`C32` → packets) around the kernel `code_search`. The block cuts its input into back-to-back dwells of `K` samples from the first sample after construction or `reset`; after `dwells` dwells it writes one packet with the result and starts the next search (`CodeSearchState::reset`). The code is a PRBS (`sdrk_proto::prbs`, chip `b` → `1 − 2b`), every chip repeated `samples_per_chip` times, zero-padded to `K` = the smallest power of two ≥ `period · samples_per_chip` (at most 65536); the block computes `Dconj` once.

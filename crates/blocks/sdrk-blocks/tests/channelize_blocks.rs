@@ -22,7 +22,7 @@ use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::design::{channelizer_prototype, channelizer_taps_per_branch};
 use sdrk_blocks::{
     Block, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, Error,
-    LanesMut, LanesRef,
+    LanesMut, LanesRef, ParamValue,
 };
 use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len};
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
@@ -348,7 +348,8 @@ fn the_channel_is_signed() {
 fn a_channel_outside_the_width_is_out_of_range() {
     for width in [4usize, 16, 256] {
         let half = (width / 2) as i64;
-        for channel in [half, -half - 1] {
+        // The edges and values beyond the widest input; the description sets no bound.
+        for channel in [half, -half - 1, 200, -129, i64::MAX, i64::MIN] {
             let e = ChannelSelectBlock::new(&ChannelSelectConfig { channel }, width).unwrap_err();
             assert_eq!(
                 e,
@@ -367,6 +368,10 @@ fn a_channel_outside_the_width_is_out_of_range() {
             );
         }
     }
+    // The config takes any integer; the width decides at construction.
+    let mut config = ChannelSelectConfig { channel: 0 };
+    config.set("channel", ParamValue::I64(200)).unwrap();
+    assert_eq!(config.channel, 200);
     assert!(matches!(
         ChannelSelectConfig { channel: 0 }.lane(0),
         Err(Error::InvalidParameter { name: "width", .. })

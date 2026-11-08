@@ -544,7 +544,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `channelize` | `passband` | ratio | build | f64, 0.000001 to 1.5, default 0.5 | 0.5 (search grid), 0.4 (channel plan) |
 | `channelize` | `stopband` | ratio | build | f64, 0.000001 to 1.5, default 1 | 1.0 (search grid), 0.6 (channel plan) |
 | `channelize` | `attenuation_db` | dB | build | f64, 20 to 120, default 60 | 60 |
-| `channel_select` | `channel` | - | build | integer, -128 to 127, no default | 0 (the centre channel), -1 the channel below |
+| `channel_select` | `channel` | - | build | integer, any value, no default | 0 (the centre channel), -1 the channel below |
 
 <!-- blocks-table:end -->
 

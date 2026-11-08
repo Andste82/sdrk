@@ -11,9 +11,6 @@ use crate::describe::{
 use crate::error::{Error, Result};
 use crate::ports::{Lanes, LanesRef};
 
-/// The largest width of a lane stream (the most channels of `channelize`).
-const MAX_WIDTH: i64 = sdrk_core::kernels::channelize::MAX_CHANNELS as i64;
-
 /// Description of the `channel_select` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "channel_select",
@@ -40,9 +37,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     params: &[ParamDesc {
         name: "channel",
         unit: Unit::None,
+        // Unbounded: the valid range depends on the width of the input, so every value reaches
+        // `ChannelSelectConfig::lane`, which names the width and its range (spec §5).
         kind: ParamKind::I64 {
-            min: -(MAX_WIDTH / 2),
-            max: MAX_WIDTH / 2 - 1,
+            min: i64::MIN,
+            max: i64::MAX,
             default: None,
         },
         typical: "0 (the centre channel), -1 the channel below",

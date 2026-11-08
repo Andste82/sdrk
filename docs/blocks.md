@@ -603,7 +603,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `morse_encode`, `morse_decode` | Morse code (CW): text to the key envelope, the envelope to words | M47 (delivered) |
 | `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 |
 | `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45 (delivered) |
-| `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 |
+| `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 (delivered) |
 | `correlate` | sliding correlation with a PRBS code or a caller reference (kernel `xcorr_fft`) | M50 |
 | `sync_detect` | sync-word detector: `correlate` with a peak search and a threshold | backlog |
 | `noise` | deterministic Gaussian noise source (kernel `gauss_noise`) | M48 |

@@ -1042,6 +1042,92 @@
           },
           {
             "additionalProperties": false,
+            "description": "Detects short-range transmissions in every lane of a channelizer and emits their pulse trains as packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "band_pulse_detect"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "center_hz": {
+                    "default": 0.0,
+                    "description": "The RF centre of the band; only for the absolute frequency of the JSON form (the packets carry the offset). Unit: Hz. Typical: 433920000. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": -1000000000000.0,
+                    "type": "number"
+                  },
+                  "gap_ratio": {
+                    "default": 10.0,
+                    "description": "A gap longer than this many times the longest pulse of the burst ends it. Typical: 10. Build-time.",
+                    "maximum": 1000.0,
+                    "minimum": 1.0,
+                    "type": "number"
+                  },
+                  "max_gap_ms": {
+                    "default": 10.0,
+                    "description": "A gap longer than this many milliseconds ends a burst. Typical: 10. Build-time.",
+                    "maximum": 10000.0,
+                    "minimum": 0.01,
+                    "type": "number"
+                  },
+                  "max_pulses": {
+                    "default": 1200,
+                    "description": "Most pairs of a train; a longer burst is emitted flagged TRUNCATED. Typical: 1200. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "min_pulse_us": {
+                    "default": 40.0,
+                    "description": "Pulses and gaps shorter than this are glitches (rounded to steps, at least 1). Unit: us. Typical: 40. Build-time.",
+                    "maximum": 100000.0,
+                    "minimum": 0.1,
+                    "type": "number"
+                  },
+                  "min_snr_db": {
+                    "default": 9.0,
+                    "description": "A burst starts when the envelope is this far above the noise level (an amplitude ratio of 10^(min_snr_db / 20)); a change applies to the next burst. Unit: dB. Typical: 9. Runtime.",
+                    "maximum": 60.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "modulation": {
+                    "default": "auto",
+                    "description": "ook: envelope pulses only; fsk: every pulse is an FSK frame; auto: a pulse with frequency runs is an FSK frame, the rest on-off keying. Typical: auto. Build-time.",
+                    "enum": [
+                      "ook",
+                      "fsk",
+                      "auto"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Filters with a Butterworth low-pass or high-pass, a band-pass or a notch (IIR).",
             "properties": {
               "align": {

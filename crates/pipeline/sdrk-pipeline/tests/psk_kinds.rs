@@ -78,7 +78,7 @@ fn the_kinds_are_registered_with_their_kernels() {
         assert_eq!(f.kernels(), kernels, "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    assert_eq!(registry.descriptions().count(), 65);
+    assert_eq!(registry.descriptions().count(), 66);
 }
 
 /// A `psk_demod` node of 8 samples per symbol at 200 kHz with `params` and `backend`.

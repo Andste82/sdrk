@@ -59,6 +59,10 @@ pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::am_mod::{AmModBlock, AmModConfig};
 pub use blocks::auto_notch::{AutoNotchConfig, AutoNotchRealBlock};
+pub use blocks::band_pulse_detect::{
+    BAND_PULSE_CHUNK, BAND_PULSE_LEAD, BAND_PULSE_MAX_LANES, BAND_PULSE_MIN_RATE_HZ,
+    BAND_PULSE_WARMUP, BandPulseDetectBlock, BandPulseDetectConfig, PulseModulation,
+};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
 pub use blocks::channel_select::{ChannelSelectBlock, ChannelSelectConfig};
 pub use blocks::channelize::{ChannelizeBlock, ChannelizeConfig};

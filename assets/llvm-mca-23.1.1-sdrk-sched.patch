@@ -1,0 +1,1608 @@
+SDRk corrections of the llvm-mca 23.1.1 scheduling models (decision D942, 2026-11-08).
+
+Apply in the root of llvm-project-23.1.1.src with `patch -p1`. Only numbers of the
+models that SDRk's cycle simulation uses are changed, from measured or documented values:
+
+- x86 (skylake, znver2, znver3, alderlake, znver4, sapphirerapids): uops.info
+  instructions.xml of 2026-03-29, SHA-256
+  e5e702caaf04c4fc1f75192a9bbe4d8554b3e174f7933a14d124cc33ca677ab3 (sapphirerapids
+  takes the values of EMR, the closest core uops.info measures).
+- cortex-a72 (simulated with the A57 model): Arm Cortex-A72 Software Optimization
+  Guide, ARM UAN 0016A, SHA-256
+  b74576514a8e4ee3be567cc5d9884cc9a70ae59e4411542da2c77375c7c40c4c.
+- cortex-a76 (simulated with the Neoverse N1 model): Arm Neoverse N1 Software
+  Optimization Guide, PJDOC-466751330-9707 issue 4.0, SHA-256
+  275bc255ed5b33874531bc4aa626fd3ad72d9066ac571bd43c3158de970edf7f.
+
+Every changed or added definition carries an `SDRk:` comment with its source. The
+only additions beyond numbers: one store resource in the Znver2 model (as Znver3 and
+Znver4 have) and one FP divider resource in the Alder Lake P and Sapphire Rapids
+models (as the Skylake model has).
+
+--- a/llvm/lib/Target/X86/X86ScheduleZnver2.td
++++ b/llvm/lib/Target/X86/X86ScheduleZnver2.td
+@@ -79,6 +79,16 @@
+ // but are relevant for some instructions
+ def Zn2AGU : ProcResGroup<[Zn2AGU0, Zn2AGU1, Zn2AGU2]> {
+   let BufferSize=28;
++}
++// SDRk: Zen 2 commits one store per cycle; uops.info ZEN2 MOV (M64, R64),
++// MOVUPS (M128, XMM), ADD (M64, R64): TP 1.00. The three AGUs alone allowed three.
++def Zn2Store : ProcResource<1>;
++// SDRk: ALU operations on memory load, compute and store; the model had only the load
++// part (WriteALULd). uops.info ZEN2 ADD (M64, R64): TP 1.00. Latency and uops as before.
++def SdrkZn2WriteALURMW : SchedWriteRes<[Zn2AGU, Zn2ALU, Zn2Store]> {
++  let Latency = 5;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
+ }
+ 
+ // Integer Multiplication issued on ALU1.
+@@ -171,10 +181,10 @@
+ 
+ // WriteRMW is set for instructions with Memory write
+ // operation in codegen
+-def : WriteRes<WriteRMW, [Zn2AGU]>;
+-
+-def : WriteRes<WriteStore,   [Zn2AGU]>;
+-def : WriteRes<WriteStoreNT, [Zn2AGU]>;
++def : WriteRes<WriteRMW, [Zn2AGU, Zn2Store]>; // SDRk: + Zn2Store
++
++def : WriteRes<WriteStore,   [Zn2AGU, Zn2Store]>; // SDRk: + Zn2Store
++def : WriteRes<WriteStoreNT, [Zn2AGU, Zn2Store]>; // SDRk: + Zn2Store
+ def : WriteRes<WriteMove,    [Zn2ALU]>;
+ def : WriteRes<WriteLoad,    [Zn2AGU]> { let Latency = 4; }
+ 
+@@ -260,12 +270,12 @@
+ defm : X86WriteRes<WriteFMaskedLoad,   [Zn2AGU,Zn2FPU01], 8, [1,1], 1>;
+ defm : X86WriteRes<WriteFMaskedLoadY,  [Zn2AGU,Zn2FPU01], 8, [1,1], 2>;
+ 
+-defm : X86WriteRes<WriteFStore,        [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteFStoreX,       [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteFStoreY,       [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteFStoreNT,      [Zn2AGU,Zn2FPU2], 8, [1,1], 1>;
+-defm : X86WriteRes<WriteFStoreNTX,     [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteFStoreNTY,     [Zn2AGU], 1, [1], 1>;
++defm : X86WriteRes<WriteFStore,        [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteFStoreX,       [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteFStoreY,       [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteFStoreNT,      [Zn2AGU,Zn2FPU2,Zn2Store], 8, [1,1,1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteFStoreNTX,     [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteFStoreNTY,     [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
+ defm : X86WriteRes<WriteFMaskedStore32,  [Zn2AGU,Zn2FPU01], 4, [1,1], 1>;
+ defm : X86WriteRes<WriteFMaskedStore32Y, [Zn2AGU,Zn2FPU01], 5, [1,2], 2>;
+ defm : X86WriteRes<WriteFMaskedStore64,  [Zn2AGU,Zn2FPU01], 4, [1,1], 1>;
+@@ -380,11 +390,11 @@
+ defm : X86WriteRes<WriteVecLoadNTY,      [Zn2AGU], 8, [1], 1>;
+ defm : X86WriteRes<WriteVecMaskedLoad,   [Zn2AGU,Zn2FPU01], 8, [1,2], 2>;
+ defm : X86WriteRes<WriteVecMaskedLoadY,  [Zn2AGU,Zn2FPU01], 8, [1,2], 2>;
+-defm : X86WriteRes<WriteVecStore,        [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteVecStoreX,       [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteVecStoreY,       [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteVecStoreNT,      [Zn2AGU], 1, [1], 1>;
+-defm : X86WriteRes<WriteVecStoreNTY,     [Zn2AGU], 1, [1], 1>;
++defm : X86WriteRes<WriteVecStore,        [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteVecStoreX,       [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteVecStoreY,       [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteVecStoreNT,      [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
++defm : X86WriteRes<WriteVecStoreNTY,     [Zn2AGU, Zn2Store], 1, [1, 1], 1>; // SDRk: + Zn2Store
+ defm : X86WriteRes<WriteVecMaskedStore32,  [Zn2AGU,Zn2FPU01], 4, [1,1], 1>;
+ defm : X86WriteRes<WriteVecMaskedStore32Y, [Zn2AGU,Zn2FPU01], 5, [1,2], 2>;
+ defm : X86WriteRes<WriteVecMaskedStore64,  [Zn2AGU,Zn2FPU01], 4, [1,1], 1>;
+@@ -585,20 +595,20 @@
+ 
+ // ADD SUB.
+ // m,r/i.
+-def : InstRW<[WriteALULd], (instregex "(ADD|SUB)(8|16|32|64)m(r|i)",
++def : InstRW<[SdrkZn2WriteALURMW], (instregex "(ADD|SUB)(8|16|32|64)m(r|i)", // SDRk: was WriteALULd
+                           "(ADD|SUB)(8|16|32|64)mi8",
+                           "(ADD|SUB)64mi32")>;
+ 
+ // ADC SBB.
+ // m,r/i.
+-def : InstRW<[WriteALULd],
++def : InstRW<[SdrkZn2WriteALURMW], // SDRk: was WriteALULd
+              (instregex "(ADC|SBB)(8|16|32|64)m(r|i)",
+               "(ADC|SBB)(16|32|64)mi8",
+               "(ADC|SBB)64mi32")>;
+ 
+ // INC DEC NOT NEG.
+ // m.
+-def : InstRW<[WriteALULd],
++def : InstRW<[SdrkZn2WriteALURMW], // SDRk: was WriteALULd
+              (instregex "(INC|DEC|NOT|NEG)(8|16|32|64)m")>;
+ 
+ // MUL IMUL.
+@@ -1399,4 +1409,33 @@
+   ], ZeroIdiomPredicate>,
+ ]>;
+ 
++//===----------------------------------------------------------------------===//
++// SDRk: corrections of single instruction forms from uops.info measurements
++// (uops.info instructions.xml of 2026-03-29, SHA-256 e5e702ca...7ab3), the
++// one-time comparison of 2026-11-08. Each write names its source. Memory forms
++// keep the latency of this model; register forms take the measured latency.
++//===----------------------------------------------------------------------===//
++// SDRk: LEA with a scale other than 1 or with base, index and offset: uops.info ZEN2
++// LEA_B_IS (R64), LEA_B_I_D8 (R64), LEA_B_IS_D8 (R64): TP 0.50 (other forms 0.25). The
++// latency of 2 is the one the Znver3 model uses for the same forms (uops.info gives none).
++def SdrkZn2SlowLEAPredicate : MCSchedPredicate<
++  CheckAny<[
++    IsThreeOperandsLEAFn,
++    CheckAll<[
++      CheckIsImmOperand<2>,
++      CheckNot<CheckImmOperand<2, 1>>
++    ]>
++  ]>
++>;
++def SdrkZn2WriteSlowLEA : SchedWriteRes<[Zn2ALU]> {
++  let Latency = 2;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def SdrkZn2WriteLEA : SchedWriteVariant<[
++    SchedVar<SdrkZn2SlowLEAPredicate, [SdrkZn2WriteSlowLEA]>,
++    SchedVar<NoSchedPred,             [WriteLEA]>
++]>;
++def : InstRW<[SdrkZn2WriteLEA], (instrs LEA32r, LEA64r, LEA64_32r)>;
++
+ } // SchedModel
+--- a/llvm/lib/Target/X86/X86ScheduleZnver3.td
++++ b/llvm/lib/Target/X86/X86ScheduleZnver3.td
+@@ -503,8 +503,9 @@
+ }
+ def : InstRW<[Zn3WriteMOVSlow], (instrs MOV8rm, MOV8rm_NOREX, MOV16rm, MOVSX16rm16, MOVSX16rm32, MOVZX16rm16, MOVSX16rm8, MOVZX16rm8)>;
+ 
+-defm : Zn3WriteResInt<WriteStore, [Zn3AGU012, Zn3Store], Znver3Model.StoreLatency, [1, 2], 1>;
+-defm : Zn3WriteResInt<WriteStoreNT, [Zn3AGU012, Zn3Store], Znver3Model.StoreLatency, [1, 2], 1>;
++// SDRk: two stores per cycle; uops.info ZEN3 MOV (M64, R64): TP 0.50 (was [1, 2], one per cycle).
++defm : Zn3WriteResInt<WriteStore, [Zn3AGU012, Zn3Store], Znver3Model.StoreLatency, [1, 1], 1>;
++defm : Zn3WriteResInt<WriteStoreNT, [Zn3AGU012, Zn3Store], Znver3Model.StoreLatency, [1, 1], 1>;
+ defm : Zn3WriteResInt<WriteMove, [Zn3ALU0123], 1, [4], 1>;
+ 
+ // Treat misc copies as a move.
+@@ -1624,4 +1625,90 @@
+   ], ZeroIdiomPredicate>,
+ ]>;
+ 
++//===----------------------------------------------------------------------===//
++// SDRk: corrections of single instruction forms from uops.info measurements
++// (uops.info instructions.xml of 2026-03-29, SHA-256 e5e702ca...7ab3), the
++// one-time comparison of 2026-11-08. Each write names its source. Memory forms
++// keep the latency of this model; register forms take the measured latency.
++//===----------------------------------------------------------------------===//
++// uops.info VPMOVSXWD (YMM, M128) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVSXWDYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVSXWDYrm], (instrs VPMOVSXWDYrm)>;
++
++// uops.info VPMOVZXWD (YMM, M128) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVZXWDYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVZXWDYrm], (instrs VPMOVZXWDYrm)>;
++
++// uops.info VPMOVZXBW (YMM, M128) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVZXBWYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVZXBWYrm], (instrs VPMOVZXBWYrm)>;
++
++// uops.info VPMOVSXBW (YMM, M128) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVSXBWYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVSXBWYrm], (instrs VPMOVSXBWYrm)>;
++
++// uops.info VPMOVSXBD (YMM, M64) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVSXBDYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVSXBDYrm], (instrs VPMOVSXBDYrm)>;
++
++// uops.info VPMOVZXBD (YMM, M64) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVZXBDYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVZXBDYrm], (instrs VPMOVZXBDYrm)>;
++
++// uops.info VPINSRW (XMM, XMM, M16, I8) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 8, uops 1
++def SdrkZn3Write_VPINSRWrmi : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPINSRWrmi], (instrs VPINSRWrmi)>;
++
++// uops.info VPINSRD (XMM, XMM, M32, I8) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 8, uops 1
++def SdrkZn3Write_VPINSRDrmi : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPINSRDrmi], (instrs VPINSRDrmi)>;
++
++// uops.info VPMOVSXWQ (YMM, M64) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVSXWQYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVSXWQYrm], (instrs VPMOVSXWQYrm)>;
++
++// uops.info VPMOVZXDQ (YMM, M128) on ZEN3: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn3Write_VPMOVZXDQYrm : SchedWriteRes<[Zn3FPFMisc12, Zn3FPLd01, Zn3Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn3Write_VPMOVZXDQYrm], (instrs VPMOVZXDQYrm)>;
++
+ } // SchedModel
+--- a/llvm/lib/Target/X86/X86ScheduleZnver4.td
++++ b/llvm/lib/Target/X86/X86ScheduleZnver4.td
+@@ -516,8 +516,9 @@
+ }
+ def : InstRW<[Zn4WriteMOVSlow], (instrs MOV8rm, MOV8rm_NOREX, MOV16rm, MOVSX16rm16, MOVSX16rm32, MOVZX16rm16, MOVSX16rm8, MOVZX16rm8)>;
+ 
+-defm : Zn4WriteResInt<WriteStore, [Zn4AGU012, Zn4Store], Znver4Model.StoreLatency, [1, 2], 1>;
+-defm : Zn4WriteResInt<WriteStoreNT, [Zn4AGU012, Zn4Store], Znver4Model.StoreLatency, [1, 2], 1>;
++// SDRk: two stores per cycle; uops.info ZEN4 MOV (M64, R64): TP 0.50 (was [1, 2], one per cycle).
++defm : Zn4WriteResInt<WriteStore, [Zn4AGU012, Zn4Store], Znver4Model.StoreLatency, [1, 1], 1>;
++defm : Zn4WriteResInt<WriteStoreNT, [Zn4AGU012, Zn4Store], Znver4Model.StoreLatency, [1, 1], 1>;
+ defm : Zn4WriteResInt<WriteMove, [Zn4ALU0123], 1, [4], 1>;
+ 
+ // Treat misc copies as a move.
+@@ -1002,7 +1003,7 @@
+   let ReleaseAtCycles = [1];
+   let NumMicroOps = 1;
+ }
+-def : InstRW<[Zn4WriteVEXTRACTF128rr_VEXTRACTI128rr], (instrs VEXTRACTF128rri, VEXTRACTI128rri)>;
++
+ 
+ def Zn4WriteVEXTRACTI128mr : SchedWriteRes<[Zn4FPFMisc0, Zn4FPSt, Zn4Store]> {
+   let Latency = !add(Znver4Model.VecLoadLatency, Zn4WriteVEXTRACTF128rr_VEXTRACTI128rr.Latency);
+@@ -1130,9 +1131,9 @@
+   let NumMicroOps = 1;
+ }
+ 
+-def : InstRW<[Zn4WriteXMMVecALU2Slow], (instrs VALIGNDZrri, VALIGNQZrri)>;
++def : InstRW<[Zn4WriteXMMVecALU2Slow], (instrs VALIGNQZrri)>;
+ def : InstRW<[Zn4WriteYMMVecALU2Slow], (instrs VALIGNDZ128rri, VALIGNQZ128rri)>;
+-def : InstRW<[Zn4WriteZMMVecALU2Slow], (instrs VALIGNDZ256rri, VALIGNQZ256rri)>;
++def : InstRW<[Zn4WriteZMMVecALU2Slow], (instrs VALIGNQZ256rri)>;
+ 
+ defm : Zn4WriteResYMMPair<WriteVecALUY, [Zn4FPVAdd0123], 1, [1], 1>; // Vector integer ALU op, no logicals (YMM).
+ 
+@@ -1392,7 +1393,7 @@
+   let ReleaseAtCycles = [1];
+   let NumMicroOps = 1;
+ }
+-def : InstRW<[Zn4WriteVPERM2I128rr_VPERM2F128rr], (instrs VPERM2I128rri, VPERM2F128rri)>;
++
+ 
+ def Zn4WriteVPERM2F128rm : SchedWriteRes<[Zn4AGU012, Zn4Load, Zn4FPVShuf]> {
+   let Latency = !add(Znver4Model.VecLoadLatency, Zn4WriteVPERM2I128rr_VPERM2F128rr.Latency);
+@@ -2054,5 +2055,339 @@
+   ], ZeroIdiomPredicate>,
+ ]>;
+ 
++//===----------------------------------------------------------------------===//
++// SDRk: corrections of single instruction forms from uops.info measurements
++// (uops.info instructions.xml of 2026-03-29, SHA-256 e5e702ca...7ab3), the
++// one-time comparison of 2026-11-08. Each write names its source. Memory forms
++// keep the latency of this model; register forms take the measured latency.
++//===----------------------------------------------------------------------===//
++// uops.info VMOVUPS (ZMM, K, M512) on ZEN4: TP 1.0, ports 1*FP0123, uops 1; model before: RThroughput 0.5, latency 8, uops 1
++def SdrkZn4Write_VMOVUPSZrm : SchedWriteRes<[Zn4FPU0123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [4, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VMOVUPSZrm], (instrs VMOVUPSZrm)>;
++
++// uops.info VMOVDQU64 (ZMM, K, M512) on ZEN4: TP 1.0, ports 1*FP0123, uops 1; model before: RThroughput 0.5, latency 8, uops 1
++def SdrkZn4Write_VMOVDQU64Zrm : SchedWriteRes<[Zn4FPU0123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [4, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VMOVDQU64Zrm], (instrs VMOVDQU64Zrm)>;
++
++// uops.info VMOVAPS (ZMM, K, M512) on ZEN4: TP 1.0, ports 1*FP0123, uops 1; model before: RThroughput 0.5, latency 8, uops 1
++def SdrkZn4Write_VMOVAPSZrm : SchedWriteRes<[Zn4FPU0123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [4, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VMOVAPSZrm], (instrs VMOVAPSZrm)>;
++
++// uops.info VEXTRACTI32X4 (XMM, K, YMM, I8) on ZEN4: TP 0.44, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 1, uops 1
++def SdrkZn4Write_VEXTRACTI32X4Z256rri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTI32X4Z256rri], (instrs VEXTRACTI32X4Z256rri)>;
++
++// uops.info VEXTRACTI128 (XMM, YMM, I8) on ZEN4: TP 0.37, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkZn4Write_VEXTRACTI128rri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTI128rri], (instrs VEXTRACTI128rri)>;
++
++// uops.info VPMOVSXWD (ZMM, K, M256) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXWDZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXWDZrm], (instrs VPMOVSXWDZrm)>;
++
++// uops.info VPMOVZXWD (ZMM, K, M256) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXWDZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXWDZrm], (instrs VPMOVZXWDZrm)>;
++
++// uops.info VINSERTI128 (YMM, YMM, XMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 1, uops 1
++def SdrkZn4Write_VINSERTI128rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VINSERTI128rri], (instrs VINSERTI128rri)>;
++
++// uops.info VINSERTI32X4 (YMM, K, YMM, XMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 1, uops 1
++def SdrkZn4Write_VINSERTI32X4Z256rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VINSERTI32X4Z256rri], (instrs VINSERTI32X4Z256rri)>;
++
++// uops.info VINSERTF128 (YMM, YMM, XMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 2, uops 1
++def SdrkZn4Write_VINSERTF128rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 2;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VINSERTF128rri], (instrs VINSERTF128rri)>;
++
++// uops.info VPMOVZXBW (ZMM, K, M256) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXBWZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXBWZrm], (instrs VPMOVZXBWZrm)>;
++
++// uops.info VPMOVSXBW (YMM, M128) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXBWYrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXBWYrm], (instrs VPMOVSXBWYrm)>;
++
++// uops.info VPMOVZXBW (YMM, M128) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXBWYrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXBWYrm], (instrs VPMOVZXBWYrm)>;
++
++// uops.info VPMOVSXWD (YMM, M128) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXWDYrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXWDYrm], (instrs VPMOVSXWDYrm)>;
++
++// uops.info VPMOVSXBD (ZMM, K, M128) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXBDZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXBDZrm], (instrs VPMOVSXBDZrm)>;
++
++// uops.info VPMOVSXBD (YMM, M64) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXBDYrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXBDYrm], (instrs VPMOVSXBDYrm)>;
++
++// uops.info VPMOVZXBD (ZMM, K, M128) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXBDZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXBDZrm], (instrs VPMOVZXBDZrm)>;
++
++// uops.info VPMOVZXBD (YMM, M64) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXBDYrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXBDYrm], (instrs VPMOVZXBDYrm)>;
++
++// uops.info VPMOVDB (M64, K, YMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVDBZ256mr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVDBZ256mr], (instrs VPMOVDBZ256mr)>;
++
++// uops.info VINSERTF32X4 (YMM, K, YMM, XMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 2, uops 1
++def SdrkZn4Write_VINSERTF32X4Z256rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 2;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VINSERTF32X4Z256rri], (instrs VINSERTF32X4Z256rri)>;
++
++// uops.info VMOVDQA64 (ZMM, K, M512) on ZEN4: TP 1.0, ports 1*FP0123, uops 1; model before: RThroughput 0.5, latency 8, uops 1
++def SdrkZn4Write_VMOVDQA64Zrm : SchedWriteRes<[Zn4FPU0123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [4, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VMOVDQA64Zrm], (instrs VMOVDQA64Zrm)>;
++
++// uops.info VPMOVDW (M256, K, ZMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVDWZmr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVDWZmr], (instrs VPMOVDWZmr)>;
++
++// uops.info VEXTRACTF64X4 (YMM, K, ZMM, I8) on ZEN4: TP 0.52, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 2, uops 1
++def SdrkZn4Write_VEXTRACTF64X4Zrri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 2;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTF64X4Zrri], (instrs VEXTRACTF64X4Zrri)>;
++
++// uops.info VEXTRACTF128 (XMM, YMM, I8) on ZEN4: TP 0.37, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkZn4Write_VEXTRACTF128rri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTF128rri], (instrs VEXTRACTF128rri)>;
++
++// uops.info VEXTRACTF32X8 (YMM, K, ZMM, I8) on ZEN4: TP 0.52, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 2, uops 1
++def SdrkZn4Write_VEXTRACTF32X8Zrri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 2;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTF32X8Zrri], (instrs VEXTRACTF32X8Zrri)>;
++
++// uops.info VEXTRACTI64X4 (YMM, K, ZMM, I8) on ZEN4: TP 0.52, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 1, uops 1
++def SdrkZn4Write_VEXTRACTI64X4Zrri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTI64X4Zrri], (instrs VEXTRACTI64X4Zrri)>;
++
++// uops.info VEXTRACTF32X4 (XMM, K, YMM, I8) on ZEN4: TP 0.44, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 2, uops 1
++def SdrkZn4Write_VEXTRACTF32X4Z256rri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 2;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTF32X4Z256rri], (instrs VEXTRACTF32X4Z256rri)>;
++
++// uops.info VALIGND (YMM, K, YMM, YMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkZn4Write_VALIGNDZ256rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VALIGNDZ256rri], (instrs VALIGNDZ256rri)>;
++
++// uops.info VPERM2F128 (YMM, YMM, YMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 3, uops 1
++def SdrkZn4Write_VPERM2F128rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 3;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPERM2F128rri], (instrs VPERM2F128rri)>;
++
++// uops.info VPERM2I128 (YMM, YMM, YMM, I8) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 3, uops 1
++def SdrkZn4Write_VPERM2I128rri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 3;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPERM2I128rri], (instrs VPERM2I128rri)>;
++
++// uops.info VPINSRW (XMM, XMM, M16, I8) on ZEN4: TP 0.5, ports 1*FP123, uops 1; model before: RThroughput 1.5, latency 8, uops 1
++def SdrkZn4Write_VPINSRWrmi : SchedWriteRes<[Zn4FPFMisc123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPINSRWrmi], (instrs VPINSRWrmi)>;
++
++// uops.info VPINSRW_EVEX (XMM, XMM, M16, I8) on ZEN4: TP 0.5, ports 1*FP123, uops 1; model before: RThroughput 1.5, latency 8, uops 1
++def SdrkZn4Write_VPINSRWZrmi : SchedWriteRes<[Zn4FPFMisc123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPINSRWZrmi], (instrs VPINSRWZrmi)>;
++
++// uops.info VPMOVSXWQ (ZMM, K, M128) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXWQZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXWQZrm], (instrs VPMOVSXWQZrm)>;
++
++// uops.info VEXTRACTI32X4 (XMM, K, ZMM, I8) on ZEN4: TP -, ports 1*FP12, uops 1; model before: RThroughput 1.0, latency 1, uops 1
++def SdrkZn4Write_VEXTRACTI32X4Zrri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTI32X4Zrri], (instrs VEXTRACTI32X4Zrri)>;
++
++// uops.info VPINSRD (XMM, XMM, M32, I8) on ZEN4: TP 0.5, ports 1*FP123, uops 1; model before: RThroughput 1.5, latency 8, uops 1
++def SdrkZn4Write_VPINSRDrmi : SchedWriteRes<[Zn4FPFMisc123, Zn4FPLd01, Zn4Load]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPINSRDrmi], (instrs VPINSRDrmi)>;
++
++// uops.info VEXTRACTI64X2 (XMM, K, YMM, I8) on ZEN4: TP 0.44, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 1, uops 1
++def SdrkZn4Write_VEXTRACTI64X2Z256rri : SchedWriteRes<[Zn4FPU0123]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VEXTRACTI64X2Z256rri], (instrs VEXTRACTI64X2Z256rri)>;
++
++// uops.info VPMOVDW (M128, K, YMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVDWZ256mr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVDWZ256mr], (instrs VPMOVDWZ256mr)>;
++
++// uops.info VPMOVZXWD (YMM, M128) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXWDYrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXWDYrm], (instrs VPMOVZXWDYrm)>;
++
++// uops.info VPMOVSXWD (YMM, K, M128) on ZEN4: TP 0.5, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSXWDZ256rm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSXWDZ256rm], (instrs VPMOVSXWDZ256rm)>;
++
++// uops.info VALIGND (ZMM, K, ZMM, ZMM, I8) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 0.5, latency 2, uops 1
++def SdrkZn4Write_VALIGNDZrri : SchedWriteRes<[Zn4FPFMisc12]> {
++  let Latency = 5;
++  let ReleaseAtCycles = [2];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VALIGNDZrri], (instrs VALIGNDZrri)>;
++
++// uops.info VPMOVZXDQ (ZMM, K, M256) on ZEN4: TP 1.0, ports 1*FP12, uops 1; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVZXDQZrm : SchedWriteRes<[Zn4FPFMisc12, Zn4FPLd01, Zn4Load]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [2, 1, 1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkZn4Write_VPMOVZXDQZrm], (instrs VPMOVZXDQZrm)>;
++
+ } // SchedModel
+ 
+--- a/llvm/lib/Target/X86/X86SchedAlderlakeP.td
++++ b/llvm/lib/Target/X86/X86SchedAlderlakeP.td
+@@ -357,7 +357,9 @@
+   let Latency = 3;
+ }
+ defm : X86WriteRes<WriteLDMXCSR, [ADLPPort00, ADLPPort00_01_05, ADLPPort00_06, ADLPPort02_03_10], 7, [1, 1, 1, 1], 4>;
+-def : WriteRes<WriteLEA, [ADLPPort01]>;
++// SDRk: LEA runs on the five integer ALUs; uops.info ADL-P LEA_B, LEA_B_I, LEA_B_I_D8 (R64):
++// TP 0.17 to 0.20 (was one port, TP 1.00). Scaled forms: see the variant at the end.
++def : WriteRes<WriteLEA, [ADLPPort00_01_05_06_11]>;
+ defm : ADLPWriteResPair<WriteLZCNT, [ADLPPort01], 3, [1]>;
+ def : WriteRes<WriteLoad, [ADLPPort02_03_10]> {
+   let Latency = 5;
+@@ -1799,7 +1801,7 @@
+ def ADLPWriteResGroup188 : SchedWriteRes<[ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
+   let NumMicroOps = 3;
+ }
+-def : InstRW<[ADLPWriteResGroup188], (instrs PUSH64rmm)>;
++
+ 
+ def ADLPWriteResGroup189 : SchedWriteRes<[ADLPPort02_03_07, ADLPPort04]>;
+ def : InstRW<[ADLPWriteResGroup189], (instregex "^PUSHA(16|32)$",
+@@ -2470,4 +2472,223 @@
+ }
+ def : InstRW<[ADLPWriteResGroup288], (instrs XSETBV)>;
+ 
+-}
++//===----------------------------------------------------------------------===//
++// SDRk: corrections of single instruction forms from uops.info measurements
++// (uops.info instructions.xml of 2026-03-29, SHA-256 e5e702ca...7ab3), the
++// one-time comparison of 2026-11-08. Each write names its source. Memory forms
++// keep the latency of this model; register forms take the measured latency.
++//===----------------------------------------------------------------------===//
++// SDRk: a divider beside port 0, as in the Skylake model (SKLDivider): uops.info ADL-P
++// DIVSS 3.0, DIVSD 4.0, SQRTSS 3.0, SQRTSD 4.5 cycles of throughput (the model had 1.0).
++def ADLPFPDivider : ProcResource<1>;
++
++// uops.info VSQRTPS (YMM, YMM) on ADL-P: TP 6.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkADLPWrite_VSQRTPSYr : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 6];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VSQRTPSYr], (instrs VSQRTPSYr)>;
++
++// uops.info VDIVSS (XMM, XMM, XMM) on ADL-P: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 11, uops 1
++def SdrkADLPWrite_VDIVSSrr_Int : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VDIVSSrr_Int], (instrs VDIVSSrr_Int)>;
++
++// uops.info SQRTSS (XMM, XMM) on ADL-P: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkADLPWrite_SQRTSSr_Int : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_SQRTSSr_Int], (instrs SQRTSSr_Int)>;
++
++// uops.info VSQRTSD (XMM, XMM, XMM) on ADL-P: TP 4.5, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 18, uops 1
++def SdrkADLPWrite_VSQRTSDr_Int : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 18;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VSQRTSDr_Int], (instrs VSQRTSDr_Int)>;
++
++// uops.info VDIVSD (XMM, XMM, XMM) on ADL-P: TP 4.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 14, uops 1
++def SdrkADLPWrite_VDIVSDrr_Int : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 14;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VDIVSDrr_Int], (instrs VDIVSDrr_Int)>;
++
++// uops.info VSQRTSS (XMM, XMM, XMM) on ADL-P: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkADLPWrite_VSQRTSSr_Int : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VSQRTSSr_Int], (instrs VSQRTSSr_Int)>;
++
++// uops.info SUB (M64, I32) on ADL-P: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_SUB64mi32 : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_SUB64mi32], (instrs SUB64mi32)>;
++
++// uops.info ADD (M64, R64) on ADL-P: TP 0.97, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_ADD64mr : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_ADD64mr], (instrs ADD64mr)>;
++
++// uops.info VDIVPS (YMM, YMM, YMM) on ADL-P: TP 5.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 11, uops 1
++def SdrkADLPWrite_VDIVPSYrr : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 5];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VDIVPSYrr], (instrs VDIVPSYrr)>;
++
++// uops.info DEC (M64) on ADL-P: TP 0.98, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_DEC64m : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_DEC64m], (instrs DEC64m)>;
++
++// uops.info VPINSRW (XMM, XMM, M16, I8) on ADL-P: TP 0.95, ports 1*p15+1*p23A, uops 2; model before: RThroughput 0.5, latency 8, uops 2
++def SdrkADLPWrite_VPINSRWrmi : SchedWriteRes<[ADLPPort01_05, ADLPPort02_03_10]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkADLPWrite_VPINSRWrmi], (instrs VPINSRWrmi)>;
++
++// uops.info SUB (M64, 0) on ADL-P: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_SUB64mi8 : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_SUB64mi8], (instrs SUB64mi8)>;
++
++// uops.info ADD (M64, 0) on ADL-P: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_ADD64mi8 : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_ADD64mi8], (instrs ADD64mi8)>;
++
++// uops.info AND (M64, R64) on ADL-P: TP 0.97, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_AND64mr : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_AND64mr], (instrs AND64mr)>;
++
++// uops.info VPINSRD (XMM, XMM, M32, I8) on ADL-P: TP 1.0, ports 1*p15+1*p23A, uops 2; model before: RThroughput 0.5, latency 8, uops 2
++def SdrkADLPWrite_VPINSRDrmi : SchedWriteRes<[ADLPPort01_05, ADLPPort02_03_10]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkADLPWrite_VPINSRDrmi], (instrs VPINSRDrmi)>;
++
++// uops.info ADD (M64, I32) on ADL-P: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_ADD64mi32 : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_ADD64mi32], (instrs ADD64mi32)>;
++
++// uops.info VDIVPD (XMM, XMM, XMM) on ADL-P: TP 4.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 14, uops 1
++def SdrkADLPWrite_VDIVPDrr : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 14;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VDIVPDrr], (instrs VDIVPDrr)>;
++
++// uops.info SQRTSD (XMM, XMM) on ADL-P: TP 4.5, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 18, uops 1
++def SdrkADLPWrite_SQRTSDr_Int : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 18;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_SQRTSDr_Int], (instrs SQRTSDr_Int)>;
++
++// uops.info VDIVPS (XMM, XMM, XMM) on ADL-P: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 11, uops 1
++def SdrkADLPWrite_VDIVPSrr : SchedWriteRes<[ADLPPort00, ADLPFPDivider]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkADLPWrite_VDIVPSrr], (instrs VDIVPSrr)>;
++
++// uops.info INC (M64) on ADL-P: TP 0.98, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_INC64m : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_INC64m], (instrs INC64m)>;
++
++// uops.info VDIVSS (XMM, XMM, M32) on ADL-P: TP 3.0, ports 1*p0+1*p23A, uops 2; model before: RThroughput 1.0, latency 18, uops 2
++def SdrkADLPWrite_VDIVSSrm_Int : SchedWriteRes<[ADLPPort00, ADLPPort02_03_10, ADLPFPDivider]> {
++  let Latency = 18;
++  let ReleaseAtCycles = [1, 1, 3];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkADLPWrite_VDIVSSrm_Int], (instrs VDIVSSrm_Int)>;
++
++// uops.info NEG (M64) on ADL-P: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_NEG64m : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_NEG64m], (instrs NEG64m)>;
++
++// uops.info SUB (M64, R64) on ADL-P: TP 0.97, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkADLPWrite_SUB64mr : SchedWriteRes<[ADLPPort00_01_05_06_11, ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkADLPWrite_SUB64mr], (instrs SUB64mr)>;
++
++// uops.info PUSH (M16) on ADL-P: TP 0.96, ports 1*p23A+1*p49+1*p78, uops 3; model before: RThroughput 0.5, latency 1, uops 3
++def SdrkADLPWrite_PUSH64rmm : SchedWriteRes<[ADLPPort02_03_10, ADLPPort04_09, ADLPPort07_08]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [1, 2, 1];
++  let NumMicroOps = 3;
++}
++def : InstRW<[SdrkADLPWrite_PUSH64rmm], (instrs PUSH64rmm)>;
++// SDRk: LEA with a scale other than 1: uops.info ADL-P LEA_B_IS (R64), LEA_B_IS_D8 (R64): TP 0.33
++// on ports 0, 1 and 5.
++def SdrkADLPScaledLEAPredicate : MCSchedPredicate<
++  CheckAll<[
++    CheckIsImmOperand<2>,
++    CheckNot<CheckImmOperand<2, 1>>
++  ]>
++>;
++def SdrkADLPWriteScaledLEA : SchedWriteRes<[ADLPPort00_01_05]> {
++  let Latency = 1;
++  let NumMicroOps = 1;
++}
++def SdrkADLPWriteLEA : SchedWriteVariant<[
++    SchedVar<SdrkADLPScaledLEAPredicate, [SdrkADLPWriteScaledLEA]>,
++    SchedVar<NoSchedPred,             [WriteLEA]>
++]>;
++def : InstRW<[SdrkADLPWriteLEA], (instrs LEA32r, LEA64r, LEA64_32r)>;
++
++}
+--- a/llvm/lib/Target/X86/X86SchedSapphireRapids.td
++++ b/llvm/lib/Target/X86/X86SchedSapphireRapids.td
+@@ -360,7 +360,9 @@
+   let Latency = 3;
+ }
+ defm : X86WriteRes<WriteLDMXCSR, [SPRPort00, SPRPort00_01_05, SPRPort00_06, SPRPort02_03_10], 7, [1, 1, 1, 1], 4>;
+-def : WriteRes<WriteLEA, [SPRPort01]>;
++// SDRk: LEA runs on the five integer ALUs; uops.info EMR LEA_B, LEA_B_I, LEA_B_I_D8 (R64):
++// TP 0.17 to 0.20 (was one port, TP 1.00). Scaled forms: see the variant at the end.
++def : WriteRes<WriteLEA, [SPRPort00_01_05_06_11]>;
+ defm : SPRWriteResPair<WriteLZCNT, [SPRPort01], 3, [1]>;
+ def : WriteRes<WriteLoad, [SPRPort02_03_10]> {
+   let Latency = 5;
+@@ -2130,7 +2132,7 @@
+ def SPRWriteResGroup193 : SchedWriteRes<[SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
+   let NumMicroOps = 3;
+ }
+-def : InstRW<[SPRWriteResGroup193], (instrs PUSH64rmm)>;
++
+ 
+ def SPRWriteResGroup194 : SchedWriteRes<[SPRPort00_06, SPRPort01, SPRPort04_09, SPRPort07_08]> {
+   let Latency = 4;
+@@ -3661,7 +3663,7 @@
+   let Latency = 17;
+   let NumMicroOps = 3;
+ }
+-def : InstRW<[SPRWriteResGroup379], (instrs VDIVPSZrr)>;
++
+ 
+ def SPRWriteResGroup380 : SchedWriteRes<[SPRPort00, SPRPort02_03_10]> {
+   let Latency = 21;
+@@ -4013,7 +4015,7 @@
+   let Latency = 12;
+   let NumMicroOps = 5;
+ }
+-def : InstRW<[SPRWriteResGroup419], (instrs VMOVDQU8Zmrk)>;
++
+ 
+ def SPRWriteResGroup420 : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
+   let Latency = 477;
+@@ -5040,7 +5042,7 @@
+   let Latency = 19;
+   let NumMicroOps = 3;
+ }
+-def : InstRW<[SPRWriteResGroup553], (instrs VSQRTPSZr)>;
++
+ 
+ def SPRWriteResGroup554 : SchedWriteRes<[SPRPort00_01_05, SPRPort00_01_05_06_11, SPRPort00_06, SPRPort01, SPRPort01_05_11]> {
+   let ReleaseAtCycles = [1, 2, 3, 3, 1];
+@@ -5204,4 +5206,511 @@
+ }
+ def : InstRW<[SPRWriteResGroup576], (instrs XTEST)>;
+ 
+-}
++//===----------------------------------------------------------------------===//
++// SDRk: corrections of single instruction forms from uops.info measurements
++// (uops.info instructions.xml of 2026-03-29, SHA-256 e5e702ca...7ab3), the
++// one-time comparison of 2026-11-08. Each write names its source. Memory forms
++// keep the latency of this model; register forms take the measured latency.
++//===----------------------------------------------------------------------===//
++// SDRk: a divider beside port 0, as in the Skylake model (SKLDivider): uops.info EMR
++// DIVSS 3.0, DIVSD 4.0, SQRTSS 3.0, SQRTSD 4.5 cycles of throughput (the model had 1.0).
++def SPRFPDivider : ProcResource<1>;
++
++// uops.info VMOVUPS (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVUPSZmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVUPSZmr], (instrs VMOVUPSZmr)>;
++
++// uops.info VMOVDQU64 (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVDQU64Zmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVDQU64Zmr], (instrs VMOVDQU64Zmr)>;
++
++// uops.info VMOVAPS (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVAPSZmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVAPSZmr], (instrs VMOVAPSZmr)>;
++
++// uops.info VMULPS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VMULPSZrr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VMULPSZrr], (instrs VMULPSZrr)>;
++
++// uops.info VSQRTPS (ZMM, K, ZMM) on EMR: TP 12.0, ports 2*p0+1*p05, uops 3; model before: RThroughput 2.0, latency 19, uops 3
++def SdrkSPRWrite_VSQRTPSZr : SchedWriteRes<[SPRPort00, SPRPort00_05, SPRFPDivider]> {
++  let Latency = 19;
++  let ReleaseAtCycles = [2, 1, 12];
++  let NumMicroOps = 3;
++}
++def : InstRW<[SdrkSPRWrite_VSQRTPSZr], (instrs VSQRTPSZr)>;
++
++// uops.info VMULPS (ZMM, K, ZMM, M32_1to16) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VMULPSZrm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMULPSZrm], (instrs VMULPSZrm)>;
++
++// uops.info VDIVSS (XMM, K, XMM, XMM) on EMR: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 11, uops 1
++def SdrkSPRWrite_VDIVSSZrr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VDIVSSZrr_Int], (instrs VDIVSSZrr_Int)>;
++
++// uops.info SQRTSS (XMM, XMM) on EMR: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkSPRWrite_SQRTSSr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_SQRTSSr_Int], (instrs SQRTSSr_Int)>;
++
++// uops.info VSQRTSD (XMM, XMM, XMM) on EMR: TP 4.5, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 18, uops 1
++def SdrkSPRWrite_VSQRTSDr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 18;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VSQRTSDr_Int], (instrs VSQRTSDr_Int)>;
++
++// uops.info VDIVSD (XMM, XMM, XMM) on EMR: TP 4.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 14, uops 1
++def SdrkSPRWrite_VDIVSDrr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 14;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VDIVSDrr_Int], (instrs VDIVSDrr_Int)>;
++
++// uops.info VSQRTSS (XMM, XMM, XMM) on EMR: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkSPRWrite_VSQRTSSr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VSQRTSSr_Int], (instrs VSQRTSSr_Int)>;
++
++// uops.info VDIVSS (XMM, XMM, XMM) on EMR: TP 3.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 11, uops 1
++def SdrkSPRWrite_VDIVSSrr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 3];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VDIVSSrr_Int], (instrs VDIVSSrr_Int)>;
++
++// uops.info VFMADD213PS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMADD213PSZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD213PSZr], (instrs VFMADD213PSZr)>;
++
++// uops.info VMULPD (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VMULPDZrr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VMULPDZrr], (instrs VMULPDZrr)>;
++
++// uops.info VFMADD213PD (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMADD213PDZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD213PDZr], (instrs VFMADD213PDZr)>;
++
++// uops.info VMULPD (ZMM, K, ZMM, M512) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VMULPDZrm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMULPDZrm], (instrs VMULPDZrm)>;
++
++// uops.info VFMADD231PD (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMADD231PDZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD231PDZr], (instrs VFMADD231PDZr)>;
++
++// uops.info VMOVUPD (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVUPDZmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVUPDZmr], (instrs VMOVUPDZmr)>;
++
++// uops.info VFMADD231PD (ZMM, K, ZMM, M512) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VFMADD231PDZm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD231PDZm], (instrs VFMADD231PDZm)>;
++
++// uops.info VFMADD132PD (ZMM, K, ZMM, M512) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VFMADD132PDZm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD132PDZm], (instrs VFMADD132PDZm)>;
++
++// uops.info VEXTRACTF64X4 (M256, K, ZMM, I8) on EMR: TP 0.95, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VEXTRACTF64X4Zmri : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VEXTRACTF64X4Zmri], (instrs VEXTRACTF64X4Zmri)>;
++
++// uops.info VFMADD231PS (ZMM, K, ZMM, M32_1to16) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VFMADD231PSZm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD231PSZm], (instrs VFMADD231PSZm)>;
++
++// uops.info VFMADD132PS (ZMM, K, ZMM, M32_1to16) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VFMADD132PSZm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD132PSZm], (instrs VFMADD132PSZm)>;
++
++// uops.info ADD (M64, R64) on EMR: TP 0.96, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_ADD64mr : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_ADD64mr], (instrs ADD64mr)>;
++
++// uops.info SUB (M64, I32) on EMR: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_SUB64mi32 : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_SUB64mi32], (instrs SUB64mi32)>;
++
++// uops.info INC (M64) on EMR: TP 0.97, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_INC64m : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_INC64m], (instrs INC64m)>;
++
++// uops.info VFMSUB231PS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMSUB231PSZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMSUB231PSZr], (instrs VFMSUB231PSZr)>;
++
++// uops.info VFMADD231PS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMADD231PSZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD231PSZr], (instrs VFMADD231PSZr)>;
++
++// uops.info VFMSUB213PS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMSUB213PSZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMSUB213PSZr], (instrs VFMSUB213PSZr)>;
++
++// uops.info DEC (M64) on EMR: TP 0.97, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_DEC64m : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_DEC64m], (instrs DEC64m)>;
++
++// uops.info VPMADDWD (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 5, uops 1
++def SdrkSPRWrite_VPMADDWDZrr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 5;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VPMADDWDZrr], (instrs VPMADDWDZrr)>;
++
++// uops.info VMOVDQA64 (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVDQA64Zmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVDQA64Zmr], (instrs VMOVDQA64Zmr)>;
++
++// uops.info VPINSRW (XMM, XMM, M16, I8) on EMR: TP 1.0, ports 1*p15+1*p23A, uops 2; model before: RThroughput 0.5, latency 8, uops 2
++def SdrkSPRWrite_VPINSRWrmi : SchedWriteRes<[SPRPort01_05, SPRPort02_03_10]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VPINSRWrmi], (instrs VPINSRWrmi)>;
++
++// uops.info ADD (M64, 0) on EMR: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_ADD64mi8 : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_ADD64mi8], (instrs ADD64mi8)>;
++
++// uops.info SUB (M64, 0) on EMR: TP 0.95, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_SUB64mi8 : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_SUB64mi8], (instrs SUB64mi8)>;
++
++// uops.info VPINSRW_EVEX (XMM, XMM, M16, I8) on EMR: TP 1.0, ports 1*p15+1*p23A, uops 2; model before: RThroughput 0.5, latency 8, uops 2
++def SdrkSPRWrite_VPINSRWZrmi : SchedWriteRes<[SPRPort01_05, SPRPort02_03_10]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VPINSRWZrmi], (instrs VPINSRWZrmi)>;
++
++// uops.info AND (M64, R64) on EMR: TP 0.96, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_AND64mr : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_AND64mr], (instrs AND64mr)>;
++
++// uops.info VPMULDQ (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 5, uops 1
++def SdrkSPRWrite_VPMULDQZrr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 5;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VPMULDQZrr], (instrs VPMULDQZrr)>;
++
++// uops.info VPINSRD (XMM, XMM, M32, I8) on EMR: TP 1.0, ports 1*p15+1*p23A, uops 2; model before: RThroughput 0.5, latency 8, uops 2
++def SdrkSPRWrite_VPINSRDrmi : SchedWriteRes<[SPRPort01_05, SPRPort02_03_10]> {
++  let Latency = 8;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VPINSRDrmi], (instrs VPINSRDrmi)>;
++
++// uops.info VEXTRACTI64X4 (M256, K, ZMM, I8) on EMR: TP 0.95, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VEXTRACTI64X4Zmri : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VEXTRACTI64X4Zmri], (instrs VEXTRACTI64X4Zmri)>;
++
++// uops.info VMOVDQU8 (M512, K, ZMM) on EMR: TP 2.0, ports 1*p0156B+2*p49+2*p78, uops 5; model before: RThroughput 1.0, latency 12, uops 5
++def SdrkSPRWrite_VMOVDQU8Zmrk : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 4, 2];
++  let NumMicroOps = 5;
++}
++def : InstRW<[SdrkSPRWrite_VMOVDQU8Zmrk], (instrs VMOVDQU8Zmrk)>;
++
++// uops.info VPMADDWD (ZMM, K, ZMM, M512) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 13, uops 2
++def SdrkSPRWrite_VPMADDWDZrm : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 13;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VPMADDWDZrm], (instrs VPMADDWDZrm)>;
++
++// uops.info VFMADD132PS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMADD132PSZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD132PSZr], (instrs VFMADD132PSZr)>;
++
++// uops.info VSQRTPS (YMM, YMM) on EMR: TP 6.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkSPRWrite_VSQRTPSYr : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 6];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VSQRTPSYr], (instrs VSQRTPSYr)>;
++
++// uops.info VSQRTPS (YMM, K, YMM) on EMR: TP 6.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 12, uops 1
++def SdrkSPRWrite_VSQRTPSZ256rkz : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 6];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VSQRTPSZ256rkz], (instrs VSQRTPSZ256rkz)>;
++
++// uops.info VDIVPD (XMM, XMM, XMM) on EMR: TP 4.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 14, uops 1
++def SdrkSPRWrite_VDIVPDrr : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 14;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VDIVPDrr], (instrs VDIVPDrr)>;
++
++// uops.info SQRTSD (XMM, XMM) on EMR: TP 4.5, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 18, uops 1
++def SdrkSPRWrite_SQRTSDr_Int : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 18;
++  let ReleaseAtCycles = [1, 4];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_SQRTSDr_Int], (instrs SQRTSDr_Int)>;
++
++// uops.info VDIVSS (XMM, XMM, M32) on EMR: TP 3.0, ports 1*p0+1*p23A, uops 2; model before: RThroughput 1.0, latency 18, uops 2
++def SdrkSPRWrite_VDIVSSrm_Int : SchedWriteRes<[SPRPort00, SPRPort02_03_10, SPRFPDivider]> {
++  let Latency = 18;
++  let ReleaseAtCycles = [1, 1, 3];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VDIVSSrm_Int], (instrs VDIVSSrm_Int)>;
++
++// uops.info VDIVPS (ZMM, K, ZMM, ZMM) on EMR: TP 10.0, ports 2*p0+1*p05, uops 3; model before: RThroughput 2.0, latency 17, uops 3
++def SdrkSPRWrite_VDIVPSZrr : SchedWriteRes<[SPRPort00, SPRPort00_05, SPRFPDivider]> {
++  let Latency = 17;
++  let ReleaseAtCycles = [2, 1, 10];
++  let NumMicroOps = 3;
++}
++def : InstRW<[SdrkSPRWrite_VDIVPSZrr], (instrs VDIVPSZrr)>;
++
++// uops.info PUSH (M16) on EMR: TP 0.95, ports 1*p23A+1*p49+1*p78, uops 3; model before: RThroughput 0.5, latency 1, uops 3
++def SdrkSPRWrite_PUSH64rmm : SchedWriteRes<[SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 1;
++  let ReleaseAtCycles = [1, 2, 1];
++  let NumMicroOps = 3;
++}
++def : InstRW<[SdrkSPRWrite_PUSH64rmm], (instrs PUSH64rmm)>;
++
++// uops.info VMOVDQA32 (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVDQA32Zmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVDQA32Zmr], (instrs VMOVDQA32Zmr)>;
++
++// uops.info VDIVPS (YMM, K, YMM, YMM) on EMR: TP 5.0, ports 1*p0, uops 1; model before: RThroughput 1.0, latency 11, uops 1
++def SdrkSPRWrite_VDIVPSZ256rr : SchedWriteRes<[SPRPort00, SPRFPDivider]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 5];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VDIVPSZ256rr], (instrs VDIVPSZ256rr)>;
++
++// uops.info VFNMADD231PS (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFNMADD231PSZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFNMADD231PSZr], (instrs VFNMADD231PSZr)>;
++
++// uops.info VFMADD213PS (ZMM, K, ZMM, M32_1to16) on EMR: TP 0.5, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VFMADD213PSZmb : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD213PSZmb], (instrs VFMADD213PSZmb)>;
++
++// uops.info VDIVSD (XMM, XMM, M64) on EMR: TP 4.0, ports 1*p0+1*p23A, uops 2; model before: RThroughput 1.0, latency 20, uops 2
++def SdrkSPRWrite_VDIVSDrm_Int : SchedWriteRes<[SPRPort00, SPRPort02_03_10, SPRFPDivider]> {
++  let Latency = 20;
++  let ReleaseAtCycles = [1, 1, 4];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VDIVSDrm_Int], (instrs VDIVSDrm_Int)>;
++
++// uops.info VFMADD213PD (ZMM, K, ZMM, M512) on EMR: TP 0.52, ports 1*p05+1*p23A, uops 2; model before: RThroughput 1.0, latency 12, uops 2
++def SdrkSPRWrite_VFMADD213PDZmb : SchedWriteRes<[SPRPort00_05, SPRPort02_03_10]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VFMADD213PDZmb], (instrs VFMADD213PDZmb)>;
++
++// uops.info VFMSUB231PD (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFMSUB231PDZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFMSUB231PDZr], (instrs VFMSUB231PDZr)>;
++
++// uops.info VMOVAPD (M512, K, ZMM) on EMR: TP 1.0, ports 1*p49+1*p78, uops 2; model before: RThroughput 0.5, latency 12, uops 2
++def SdrkSPRWrite_VMOVAPDZmr : SchedWriteRes<[SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [2, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkSPRWrite_VMOVAPDZmr], (instrs VMOVAPDZmr)>;
++
++// uops.info SUB (M64, R64) on EMR: TP 0.96, ports 1*p0156B+1*p23A+1*p49+1*p78, uops 4; model before: RThroughput 0.5, latency 12, uops 4
++def SdrkSPRWrite_SUB64mr : SchedWriteRes<[SPRPort00_01_05_06_11, SPRPort02_03_10, SPRPort04_09, SPRPort07_08]> {
++  let Latency = 12;
++  let ReleaseAtCycles = [1, 1, 2, 1];
++  let NumMicroOps = 4;
++}
++def : InstRW<[SdrkSPRWrite_SUB64mr], (instrs SUB64mr)>;
++
++// uops.info VFNMADD213PD (ZMM, K, ZMM, ZMM) on EMR: TP 0.5, ports 1*p05, uops 1; model before: RThroughput 1.0, latency 4, uops 1
++def SdrkSPRWrite_VFNMADD213PDZr : SchedWriteRes<[SPRPort00_05]> {
++  let Latency = 4;
++  let ReleaseAtCycles = [1];
++  let NumMicroOps = 1;
++}
++def : InstRW<[SdrkSPRWrite_VFNMADD213PDZr], (instrs VFNMADD213PDZr)>;
++// SDRk: LEA with a scale other than 1: uops.info EMR LEA_B_IS (R64), LEA_B_IS_D8 (R64): TP 0.33
++// on ports 0, 1 and 5.
++def SdrkSPRScaledLEAPredicate : MCSchedPredicate<
++  CheckAll<[
++    CheckIsImmOperand<2>,
++    CheckNot<CheckImmOperand<2, 1>>
++  ]>
++>;
++def SdrkSPRWriteScaledLEA : SchedWriteRes<[SPRPort00_01_05]> {
++  let Latency = 1;
++  let NumMicroOps = 1;
++}
++def SdrkSPRWriteLEA : SchedWriteVariant<[
++    SchedVar<SdrkSPRScaledLEAPredicate, [SdrkSPRWriteScaledLEA]>,
++    SchedVar<NoSchedPred,             [WriteLEA]>
++]>;
++def : InstRW<[SdrkSPRWriteLEA], (instrs LEA32r, LEA64r, LEA64_32r)>;
++
++}
+--- a/llvm/lib/Target/AArch64/AArch64SchedA57WriteRes.td
++++ b/llvm/lib/Target/AArch64/AArch64SchedA57WriteRes.td
+@@ -29,7 +29,8 @@
+ def A57Write_5cyc_1L  : SchedWriteRes<[A57UnitL]> { let Latency = 5;  }
+ def A57Write_5cyc_1M  : SchedWriteRes<[A57UnitM]> { let Latency = 5;  }
+ def A57Write_5cyc_1V  : SchedWriteRes<[A57UnitV]> { let Latency = 5;  }
+-def A57Write_5cyc_1V_FP_Forward  : SchedWriteRes<[A57UnitV]> { let Latency = 5; }
++// SDRk: FP multiply, scalar and D-form: latency 4 on cortex-a72 (Cortex-A72 Software Optimization Guide (ARM UAN 0016A), 3.10, 3.17); was 5.
++def A57Write_5cyc_1V_FP_Forward  : SchedWriteRes<[A57UnitV]> { let Latency = 4; }
+ def A57Write_5cyc_1W  : SchedWriteRes<[A57UnitW]> { let Latency = 5;  }
+ def A57Write_5cyc_1W_Mul_Forward  : SchedWriteRes<[A57UnitW]> { let Latency = 5;  }
+ def A57Write_10cyc_1V : SchedWriteRes<[A57UnitV]> { let Latency = 10; }
+@@ -113,8 +114,9 @@
+   let Latency     = 5;
+   let NumMicroOps = 2;
+ }
++// SDRk: ASIMD FP multiply, Q-form: latency 4 on cortex-a72 (Cortex-A72 Software Optimization Guide (ARM UAN 0016A), 3.17); was 5.
+ def A57Write_5cyc_2V_FP_Forward     : SchedWriteRes<[A57UnitV, A57UnitV]> {
+-  let Latency     = 5;
++  let Latency     = 4;
+   let NumMicroOps = 2;
+ }
+ def A57Write_5cyc_2X     : SchedWriteRes<[A57UnitX, A57UnitX]> {
+--- a/llvm/lib/Target/AArch64/AArch64SchedA57.td
++++ b/llvm/lib/Target/AArch64/AArch64SchedA57.td
+@@ -59,6 +59,26 @@
+ // Define customized scheduler read/write types specific to the Cortex-A57.
+ 
+ include "AArch64SchedA57WriteRes.td"
++
++//===----------------------------------------------------------------------===//
++// SDRk: cortex-a72 runs on this model; numbers from the Cortex-A72 Software Optimization Guide (ARM UAN 0016A)
++// where they differ (one-time comparison of 2026-11-08). Data-dependent latencies and
++// throughputs take the slowest value of the guide.
++//===----------------------------------------------------------------------===//
++// FP add/sub (scalar, D- and Q-form): latency 4 (3.10, 3.17); was 5.
++def SdrkA72Write_4cyc_1V : SchedWriteRes<[A57UnitV]> { let Latency = 4; }
++def SdrkA72Write_4cyc_2V : SchedWriteRes<[A57UnitV, A57UnitV]> {
++  let Latency     = 4;
++  let NumMicroOps = 2;
++}
++// ASIMD multiply long and multiply-accumulate long: latency 4, accumulate latency 1 (3.16); was 5.
++def SdrkA72Write_4cyc_1W_Mul_Forward : SchedWriteRes<[A57UnitW]> { let Latency = 4; }
++def SdrkA72ReadIVMA3 : SchedReadAdvance<3, [SdrkA72Write_4cyc_1W_Mul_Forward]>;
++// FP divide and square root (3.10): S-form FDIV 6-11 cycles, 2/9 to 1/2 per cycle; D-form FDIV
++// 6-18, 1/16 to 1/4; S-form FSQRT 6-17, 2/15 to 1/2. Were 17/17, 32/32 and 17/17.
++def SdrkA72Write_FDIVS : SchedWriteRes<[A57UnitW]> { let Latency = 11; let ReleaseAtCycles = [5]; }
++def SdrkA72Write_FDIVD : SchedWriteRes<[A57UnitW]> { let Latency = 18; let ReleaseAtCycles = [16]; }
++def SdrkA72Write_FSQRTS : SchedWriteRes<[A57UnitW]> { let Latency = 17; let ReleaseAtCycles = [8]; }
+ 
+ //===----------------------------------------------------------------------===//
+ // Map the target-defined scheduler read/write resources and latency for
+@@ -95,7 +115,8 @@
+ def : SchedAlias<WriteFCvt,  A57Write_5cyc_1V>;
+ def : SchedAlias<WriteFCopy, A57Write_5cyc_1L>;
+ def : SchedAlias<WriteFImm,  A57Write_3cyc_1V>;
+-def : WriteRes<WriteFMul, [A57UnitV]> { let Latency = 5;}
++// SDRk: FP multiply (scalar FMUL, FNMUL): latency 4 on cortex-a72 (Cortex-A72 Software Optimization Guide (ARM UAN 0016A), 3.10); was 5.
++def : WriteRes<WriteFMul, [A57UnitV]> { let Latency = 4;}
+ def : SchedAlias<WriteFDiv,  A57Write_17cyc_1W>;
+ def : SchedAlias<WriteVd,    A57Write_3cyc_1V>;
+ def : SchedAlias<WriteVq,    A57Write_3cyc_1V>;
+@@ -405,11 +426,11 @@
+ 
+ // ASIMD multiply accumulate long
+ // ASIMD multiply accumulate saturating long
+-def : InstRW<[A57Write_5cyc_1W_Mul_Forward, A57ReadIVMA4], (instregex "^(S|U)ML[AS]L")>;
++def : InstRW<[SdrkA72Write_4cyc_1W_Mul_Forward, SdrkA72ReadIVMA3], (instregex "^(S|U)ML[AS]L")>; // SDRk: was 5 cycles, advance 4
+ def : InstRW<[A57Write_5cyc_1W_Mul_Forward, A57ReadIVMA3], (instregex "^SQDML[AS]L")>;
+ 
+ // ASIMD multiply long
+-def : InstRW<[A57Write_5cyc_1W_Mul_Forward], (instregex "^(S|U)MULL")>;
++def : InstRW<[SdrkA72Write_4cyc_1W_Mul_Forward], (instregex "^(S|U)MULL")>; // SDRk: was 5 cycles
+ def : InstRW<[A57Write_5cyc_1W], (instregex "^SQDMULL")>;
+ def : InstRW<[A57Write_5cyc_1W], (instregex "^PMULL(v8i8|v16i8)")>;
+ def : InstRW<[A57Write_3cyc_1W], (instregex "^PMULL(v1i64|v2i64)")>;
+@@ -446,12 +467,12 @@
+ //   Q form - v4i32, v2i64
+ 
+ // ASIMD FP arith, normal, D-form
+-def : InstRW<[A57Write_5cyc_1V], (instregex "^(FABD|FADD|FSUB)(v2f32|32|64|v2i32p)")>;
++def : InstRW<[SdrkA72Write_4cyc_1V], (instregex "^(FABD|FADD|FSUB)(v2f32|32|64|v2i32p)")>; // SDRk: was A57Write_5cyc_1V
+ // ASIMD FP arith, normal, Q-form
+-def : InstRW<[A57Write_5cyc_2V], (instregex "^(FABD|FADD|FSUB)(v4f32|v2f64|v2i64p)")>;
++def : InstRW<[SdrkA72Write_4cyc_2V], (instregex "^(FABD|FADD|FSUB)(v4f32|v2f64|v2i64p)")>; // SDRk: was A57Write_5cyc_2V
+ 
+ // ASIMD FP arith, pairwise, D-form
+-def : InstRW<[A57Write_5cyc_1V], (instregex "^FADDP(v2f32|32|64|v2i32)")>;
++def : InstRW<[SdrkA72Write_4cyc_1V], (instregex "^FADDP(v2f32|32|64|v2i32)")>; // SDRk: was A57Write_5cyc_1V
+ // ASIMD FP arith, pairwise, Q-form
+ def : InstRW<[A57Write_9cyc_3V], (instregex "^FADDP(v4f32|v2f64|v2i64)")>;
+ 
+@@ -500,13 +521,15 @@
+ 
+ // ASIMD FP multiply accumulate, D-form, FZ
+ // ASIMD FP multiply accumulate, Q-form, FZ
+-def A57WriteFPVMAD : SchedWriteRes<[A57UnitV]> { let Latency = 9;  }
+-def A57WriteFPVMAQ : SchedWriteRes<[A57UnitV, A57UnitV]> { let Latency = 10;  }
++// SDRk: ASIMD FP multiply-accumulate, D- and Q-form: latency 7, accumulate latency 3 (Cortex-A72 Software Optimization Guide (ARM UAN 0016A), 3.17);
++// was 9 and 10 with advances 5 and 6.
++def A57WriteFPVMAD : SchedWriteRes<[A57UnitV]> { let Latency = 7;  }
++def A57WriteFPVMAQ : SchedWriteRes<[A57UnitV, A57UnitV]> { let Latency = 7;  }
+ 
+ // Cortex A57 Software Optimization Guide Sec 3.15
+ // Advances from FP mul and mul-accum to mul-accum
+-def A57ReadFPVMA5  : SchedReadAdvance<5, [A57WriteFPVMAD, A57WriteFPVMAQ, A57Write_5cyc_1V_FP_Forward, A57Write_5cyc_2V_FP_Forward]>;
+-def A57ReadFPVMA6  : SchedReadAdvance<6, [A57WriteFPVMAD, A57WriteFPVMAQ, A57Write_5cyc_1V_FP_Forward, A57Write_5cyc_2V_FP_Forward]>;
++def A57ReadFPVMA5  : SchedReadAdvance<4, [A57WriteFPVMAD, A57WriteFPVMAQ, A57Write_5cyc_1V_FP_Forward, A57Write_5cyc_2V_FP_Forward]>;
++def A57ReadFPVMA6  : SchedReadAdvance<4, [A57WriteFPVMAD, A57WriteFPVMAQ, A57Write_5cyc_1V_FP_Forward, A57Write_5cyc_2V_FP_Forward]>;
+ 
+ def : InstRW<[A57WriteFPVMAD, A57ReadFPVMA5], (instregex "^FML[AS](v2f32|v1i32|v2i32|v1i64)")>;
+ def : InstRW<[A57WriteFPVMAQ, A57ReadFPVMA6], (instregex "^FML[AS](v4f32|v2f64|v4i32|v2i64)")>;
+@@ -570,26 +593,27 @@
+ // Remainder
+ // -----------------------------------------------------------------------------
+ 
+-def : InstRW<[A57Write_5cyc_1V], (instregex "^F(ADD|SUB)[DS]rr")>;
++def : InstRW<[SdrkA72Write_4cyc_1V], (instregex "^F(ADD|SUB)[DS]rr")>; // SDRk: was A57Write_5cyc_1V
+ 
+ // Cortex A57 Software Optimization Guide Sec 3.10
+-def A57WriteFPMA  : SchedWriteRes<[A57UnitV]> { let Latency = 9;  }
+-def A57ReadFPMA5  : SchedReadAdvance<5, [A57WriteFPMA, WriteFMul]>;
++// SDRk: FP multiply-accumulate (scalar): latency 7, accumulate latency 3 (Cortex-A72 Software Optimization Guide (ARM UAN 0016A), 3.10); was 9, advance 5.
++def A57WriteFPMA  : SchedWriteRes<[A57UnitV]> { let Latency = 7;  }
++def A57ReadFPMA5  : SchedReadAdvance<4, [A57WriteFPMA, WriteFMul]>;
+ def A57ReadFPM    : SchedReadAdvance<0>;
+ def : InstRW<[A57WriteFPMA, A57ReadFPM, A57ReadFPM, A57ReadFPMA5], (instregex "^FN?M(ADD|SUB)[DS]rrr")>;
+ 
+ def : InstRW<[A57Write_10cyc_1L_1V], (instregex "^[FSU]CVT[AMNPZ][SU](_Int)?[SU]?[XW]?[DS]?[rds]i?")>;
+ def : InstRW<[A57Write_10cyc_1L_1V], (instregex "^[SU]CVTF")>;
+ 
+-def : InstRW<[A57Write_32cyc_1W], (instrs FDIVDrr)>;
+-def : InstRW<[A57Write_17cyc_1W], (instrs FDIVSrr)>;
++def : InstRW<[SdrkA72Write_FDIVD], (instrs FDIVDrr)>; // SDRk: was A57Write_32cyc_1W
++def : InstRW<[SdrkA72Write_FDIVS], (instrs FDIVSrr)>; // SDRk: was A57Write_17cyc_1W
+ 
+ def : InstRW<[A57Write_5cyc_1V], (instregex "^F(MAX|MIN).+rr")>;
+ 
+ def : InstRW<[A57Write_5cyc_1V], (instregex "^FRINT.+r")>;
+ 
+ def : InstRW<[A57Write_32cyc_1W], (instrs FSQRTDr)>;
+-def : InstRW<[A57Write_17cyc_1W], (instrs FSQRTSr)>;
++def : InstRW<[SdrkA72Write_FSQRTS], (instrs FSQRTSr)>; // SDRk: was A57Write_17cyc_1W
+ 
+ def : InstRW<[A57Write_5cyc_1L, WriteLDHi], (instrs LDNPDi)>;
+ def : InstRW<[A57Write_6cyc_2L, WriteLDHi], (instrs LDNPQi)>;
+--- a/llvm/lib/Target/AArch64/AArch64SchedNeoverseN1.td
++++ b/llvm/lib/Target/AArch64/AArch64SchedNeoverseN1.td
+@@ -468,7 +468,11 @@
+ 
+ // FP divide, S-form
+ // FP square root, S-form
+-def : InstRW<[N1Write_10c7_1V0], (instrs FDIVSrr, FSQRTSr)>;
++// SDRk: FP divide and square root, S-form: 7 to 10 cycles, 4/9 to 4/7 per cycle (Neoverse N1 Software Optimization Guide (PJDOC-466751330-9707, issue 4.0), 3.10);
++// the model had a throughput of one per 7 cycles.
++def SdrkN1Write_10c2_1V0 : SchedWriteRes<[N1UnitV0]> { let Latency = 10;
++                                                     let ReleaseAtCycles = [2]; }
++def : InstRW<[SdrkN1Write_10c2_1V0], (instrs FDIVSrr, FSQRTSr)>; // SDRk: was N1Write_10c7_1V0
+ 
+ // FP divide, D-form
+ def : InstRW<[N1Write_15c7_1V0], (instrs FDIVDrr)>;

@@ -138,8 +138,13 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
 #   decision), built from the release source with the X86 and AArch64 targets
 #   only; the Ubuntu llvm package has another version and must not be used for
 #   the published ratios. The checksum is the one of the release attestation.
+#   SDRk's corrections of the scheduling models (assets/llvm-mca-23.1.1-sdrk-sched.patch,
+#   D942: numbers from uops.info and the Arm optimization guides) are applied after a
+#   first build: the unpatched tool stays next to the patched one for comparisons
+#   (SDRK_LLVM_MCA_UPSTREAM); the patched one is the default (SDRK_LLVM_MCA).
 ARG LLVM_MCA_VERSION=23.1.1
 ARG LLVM_MCA_SHA256=ebe9be46fe8756d58c5b198ffad0fa2a766257add81a4dc52179bfacc7888ee6
+COPY assets/llvm-mca-23.1.1-sdrk-sched.patch /tmp/llvm-mca-sdrk-sched.patch
 RUN curl -sfL -o /tmp/llvm.tar.xz \
        https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_MCA_VERSION/llvm-project-$LLVM_MCA_VERSION.src.tar.xz \
     && echo "$LLVM_MCA_SHA256  /tmp/llvm.tar.xz" | sha256sum -c - \
@@ -154,9 +159,13 @@ RUN curl -sfL -o /tmp/llvm.tar.xz \
        -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF \
        -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_USE_LINKER=lld \
     && ninja -C /tmp/llvm-build llvm-mca \
+    && install -D /tmp/llvm-build/bin/llvm-mca /opt/llvm-mca-$LLVM_MCA_VERSION-upstream/bin/llvm-mca \
+    && patch -p1 --forward --batch -d /tmp/llvm-project-$LLVM_MCA_VERSION.src < /tmp/llvm-mca-sdrk-sched.patch \
+    && ninja -C /tmp/llvm-build llvm-mca \
     && install -D /tmp/llvm-build/bin/llvm-mca /opt/llvm-mca-$LLVM_MCA_VERSION/bin/llvm-mca \
-    && rm -rf /tmp/llvm.tar.xz /tmp/llvm-project-$LLVM_MCA_VERSION.src /tmp/llvm-build
+    && rm -rf /tmp/llvm.tar.xz /tmp/llvm-project-$LLVM_MCA_VERSION.src /tmp/llvm-build /tmp/llvm-mca-sdrk-sched.patch
 ENV SDRK_LLVM_MCA=/opt/llvm-mca-23.1.1/bin/llvm-mca
+ENV SDRK_LLVM_MCA_UPSTREAM=/opt/llvm-mca-23.1.1-upstream/bin/llvm-mca
 
 # - Second opinions where a decision depends on a single result (D33): OSACA
 #   (AGPL-3.0; Zen, Intel, Neoverse N1/V2, Cortex-A72) from PyPI, and uiCA

@@ -130,14 +130,18 @@ pub use blocks::symbol_sync::{SymbolSyncBlock, SymbolSyncConfig};
 pub use blocks::to_complex::ToComplexBlock;
 pub use chain::{CHAIN_DESCRIPTION, Chain};
 pub use describe::{
-    BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit, all_descriptions,
+    BlockDescription, LaneElem, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
+    all_descriptions,
 };
 pub use design::{BiquadResponse, DesignSpec, DesignWindow};
 pub use drift::{DriftConfig, DriftController};
 pub use error::{Error, Result};
 pub use fork::{FORK_DESCRIPTION, Fork};
 pub use param_map::ParamMap;
-pub use ports::{ChainEnd, ChainItem, Clocked, Frame, FrameOut, Packets, Ports, StreamElem, Two};
+pub use ports::{
+    ChainEnd, ChainItem, Clocked, Frame, FrameOut, Lanes, LanesMut, LanesRef, Packets, Ports,
+    StreamElem, Two,
+};
 pub use sample::{BlockReal, BlockSample, TunedElem};
 pub use sdrk_core::kernels::equalize::{EqConstellation, EqMode};
 pub use sdrk_core::kernels::symbol_sync::Ted;

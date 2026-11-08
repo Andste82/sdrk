@@ -3,7 +3,7 @@
 use sdrk::{C32, CQ15, Progress, Q15};
 use sdrk_blocks::{
     Block, BlockDescription, BlockTiming, Clocked, Error as BlockError, Frame, FrameMeta, FrameOut,
-    Packet, Packets, ParamValue, StreamElem, Two,
+    Lanes, LanesMut, LanesRef, Packet, Packets, ParamValue, Ports, StreamElem, Two,
 };
 
 /// One typed, borrowed stream: the data of one input port of a node.
@@ -58,6 +58,13 @@ pub enum NodeInput<'a> {
         /// The packets of port `b` (any number, also none).
         packets: &'a [Packet],
     },
+    /// A lane stream of `C32`: whole time steps of `width` values, step-major.
+    Lanes {
+        /// The values, `width` per step.
+        data: &'a [C32],
+        /// Number of lanes.
+        width: usize,
+    },
 }
 
 /// Typed, borrowed output views used by the type-erased runner.
@@ -77,6 +84,13 @@ pub enum NodeOutput<'a> {
     Frame(&'a mut [f32]),
     /// Room for packets (the output of a decoder).
     Packets(&'a mut [Packet]),
+    /// Room for whole time steps of a `C32` lane stream (`width` values per step).
+    Lanes {
+        /// The room, a multiple of `width` values.
+        data: &'a mut [C32],
+        /// Number of lanes.
+        width: usize,
+    },
 }
 
 /// How a stream element is taken out of a [`NodeInput`] or [`NodeOutput`]. Implemented for
@@ -90,8 +104,41 @@ pub trait NodeSlice: StreamElem {
     fn output(o: NodeOutput<'_>) -> Option<&mut [Self]>;
 }
 
+/// How the port views of a block are taken out of a [`NodeInput`] or [`NodeOutput`]: the slices
+/// of a stream element (every [`NodeSlice`]) or the views of a lane stream (`Lanes<C32>`).
+/// The trait of the ports of [`LanesNode`].
+pub trait NodePort: Ports {
+    /// The read-only view of this port type, if the input has the matching variant.
+    fn input(i: NodeInput<'_>) -> Option<Self::Ref<'_>>;
+    /// The writable view of this port type, if the output has the matching variant.
+    fn output(o: NodeOutput<'_>) -> Option<Self::Mut<'_>>;
+}
+
+impl NodePort for Lanes<C32> {
+    fn input(i: NodeInput<'_>) -> Option<LanesRef<'_, C32>> {
+        match i {
+            NodeInput::Lanes { data, width } => LanesRef::new(data, width).ok(),
+            _ => None,
+        }
+    }
+    fn output(o: NodeOutput<'_>) -> Option<LanesMut<'_, C32>> {
+        match o {
+            NodeOutput::Lanes { data, width } => LanesMut::new(data, width).ok(),
+            _ => None,
+        }
+    }
+}
+
 macro_rules! elem {
     ($t:ty, $v:ident) => {
+        impl NodePort for $t {
+            fn input(i: NodeInput<'_>) -> Option<&[Self]> {
+                <Self as NodeSlice>::input(i)
+            }
+            fn output(o: NodeOutput<'_>) -> Option<&mut [Self]> {
+                <Self as NodeSlice>::output(o)
+            }
+        }
         impl NodeSlice for $t {
             fn input(i: NodeInput<'_>) -> Option<&[Self]> {
                 match i {
@@ -582,6 +629,87 @@ where
 
     fn consumed_packets(&self) -> usize {
         self.block.consumed_packets()
+    }
+
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        self.block.reading(index)
+    }
+
+    forward_node!();
+}
+
+/// A [`Node`] around a [`Block`] with a lane port ([`Lanes<C32>`](Lanes)) on either side: a
+/// channelizer (`In = C32`, `Out = Lanes<C32>`) or a block that reads lanes (`In = Lanes<C32>`).
+/// The runner passes lane streams as [`NodeInput::Lanes`] and [`NodeOutput::Lanes`];
+/// `Progress` counts time steps on a lane port.
+///
+/// ```
+/// use sdrk::{C32, Delay, Progress, Ratio, RatioKind};
+/// use sdrk_blocks::{all_descriptions, Block, BlockDescription, BlockTiming, Lanes, LanesRef, ParamValue};
+/// use sdrk_pipeline::{LanesNode, Node, NodeInput, NodeOutput};
+///
+/// /// Sums the lanes of every step.
+/// struct LaneSum;
+/// impl Block for LaneSum {
+///     type In = Lanes<C32>;
+///     type Out = C32;
+///     fn description(&self) -> &'static BlockDescription { all_descriptions()[0] }
+///     fn process(&mut self, input: LanesRef<'_, C32>, output: &mut [C32]) -> sdrk_blocks::Result<Progress> {
+///         let n = input.steps().min(output.len());
+///         for (i, o) in output[..n].iter_mut().enumerate() {
+///             *o = input.step(i).unwrap().iter().sum();
+///         }
+///         Ok(Progress { consumed: n, produced: n })
+///     }
+///     fn timing(&self) -> BlockTiming {
+///         BlockTiming { ratio: Ratio::ONE, kind: RatioKind::Constant, delay: Delay::ZERO }
+///     }
+///     fn reset(&mut self) {}
+///     fn set_param(&mut self, _: &str, _: ParamValue) -> sdrk_blocks::Result<()> {
+///         Err(sdrk_blocks::Error::UnknownParameter)
+///     }
+///     fn param(&self, _: &str) -> sdrk_blocks::Result<ParamValue> {
+///         Err(sdrk_blocks::Error::UnknownParameter)
+///     }
+///     fn min_input(&self) -> usize { 1 }
+/// }
+///
+/// let mut node = LanesNode::new(LaneSum);
+/// let lanes = [C32::new(1.0, 0.0); 8]; // two steps of four lanes
+/// let mut out = [C32::default(); 2];
+/// let mut meta = None;
+/// let p = node.process(NodeInput::Lanes { data: &lanes, width: 4 }, NodeOutput::C32(&mut out), &mut meta)?;
+/// assert_eq!((p.consumed, p.produced), (2, 2));
+/// assert_eq!(out[1], C32::new(4.0, 0.0));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct LanesNode<B: Block> {
+    block: B,
+}
+
+impl<B: Block> LanesNode<B> {
+    /// Wraps a block with a lane port.
+    pub fn new(block: B) -> Self {
+        Self { block }
+    }
+}
+
+impl<B, I, O> Node for LanesNode<B>
+where
+    B: Block<In = I, Out = O>,
+    I: NodePort,
+    O: NodePort,
+{
+    fn process(
+        &mut self,
+        input: NodeInput<'_>,
+        output: NodeOutput<'_>,
+        _meta: &mut Option<FrameMeta>,
+    ) -> Result<Progress, BlockError> {
+        let input = <I as NodePort>::input(input).ok_or_else(mismatch)?;
+        let output = <O as NodePort>::output(output).ok_or_else(mismatch)?;
+        self.block.process(input, output)
     }
 
     fn reading(&self, index: usize) -> Option<(&'static str, f64)> {

@@ -46,6 +46,8 @@ pub mod drift;
 mod error;
 mod groups;
 mod kinds;
+#[cfg(test)]
+mod lanes_test;
 mod latency;
 mod model;
 mod node;
@@ -74,8 +76,8 @@ pub use model::{
     OutputType, PipelineSpec, PortName, Precision, RateHz, Settings, UnderrunPolicy, is_valid_name,
 };
 pub use node::{
-    ClockedNode, FrameNode, Node, NodeElem, NodeInput, NodeOutput, NodeSlice, PacketInNode,
-    PacketOutNode, PairNode, StreamNode,
+    ClockedNode, FrameNode, LanesNode, Node, NodeElem, NodeInput, NodeOutput, NodePort, NodeSlice,
+    PacketInNode, PacketOutNode, PairNode, StreamNode,
 };
 pub use pull::{PullError, PullSource};
 pub use registry::{BlockFactory, BuildOptions, Checked, Limits, PortInfo, PortKind, Registry};

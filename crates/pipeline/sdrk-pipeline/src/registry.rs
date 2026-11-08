@@ -4,7 +4,7 @@ use std::any::Any;
 use std::collections::BTreeMap;
 
 use sdrk::{Delay, Rate};
-use sdrk_blocks::{BlockDescription, PortType, all_descriptions};
+use sdrk_blocks::{BlockDescription, LaneElem, PortType, all_descriptions};
 use serde_json::{Map, Value};
 
 use crate::analysis;
@@ -27,12 +27,15 @@ use crate::runner::Pipeline;
 use crate::storage::VecStorage;
 use crate::validate::{Diagnostic, Report};
 
-/// What a node produces: a stream of one sample type or frames of `f32` values.
+/// What a node produces (and what arrives at a node): a stream of one sample type, frames of
+/// `f32` values or a lane stream (M streams side by side).
 ///
 /// ```
 /// use sdrk_blocks::PortType;
 /// use sdrk_pipeline::PortKind;
 /// assert_ne!(PortKind::Stream(PortType::C32), PortKind::Frames { len: 1024 });
+/// let lanes = PortKind::Lanes { elem: PortType::C32, width: 16 };
+/// assert_ne!(lanes, PortKind::Stream(PortType::C32));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortKind {
@@ -43,6 +46,38 @@ pub enum PortKind {
         /// Number of values in a frame.
         len: usize,
     },
+    /// A lane stream: time steps of `width` values of `elem` (`C32` in this version). Rates,
+    /// delays, buffer sizes and counts of a lane stream are in time steps.
+    Lanes {
+        /// The element type of every lane.
+        elem: PortType,
+        /// Number of lanes (values per time step).
+        width: usize,
+    },
+}
+
+/// True if a port that accepts `types` takes `input`. A lane port matches a lane stream of
+/// the same element whatever the names of their width parameters (no port requires a width
+/// in this version).
+pub(crate) fn port_accepts(types: &[PortType], input: PortType) -> bool {
+    types.iter().any(|t| match (*t, input) {
+        (PortType::Lanes { elem: a, .. }, PortType::Lanes { elem: b, .. }) => a == b,
+        (a, b) => a == b,
+    })
+}
+
+/// The port type that stands for `kind` at the input of a node: the sample type of a stream,
+/// [`PortType::Lanes`] (with no width parameter) for a lane stream; `None` for frames and for
+/// lanes of an element that has no lane type.
+pub(crate) fn input_port_type(kind: PortKind) -> Option<PortType> {
+    match kind {
+        PortKind::Stream(t) => Some(t),
+        PortKind::Lanes { elem, .. } => LaneElem::of(elem).map(|elem| PortType::Lanes {
+            elem,
+            width_param: "",
+        }),
+        PortKind::Frames { .. } => None,
+    }
 }
 
 /// An input port of a block kind: its name in the flow (`a` or `b`) and the port types it
@@ -76,12 +111,13 @@ pub struct PortInfo {
 /// ```
 /// use sdrk::Rate;
 /// use sdrk_blocks::PortType;
-/// use sdrk_pipeline::{Precision, Registry};
+/// use sdrk_pipeline::{PortKind, Precision, Registry};
 /// let registry = Registry::standard();
 /// let factory = registry.factory("ddc").unwrap();
 /// let params = serde_json::json!({ "decimation": 10 });
+/// let input = PortKind::Stream(PortType::C32);
 /// let checked = factory
-///     .check(params.as_object().unwrap(), PortType::C32, Rate::hz(2_400_000)?, Precision::F32)
+///     .check(params.as_object().unwrap(), input, Rate::hz(2_400_000)?, Precision::F32)
 ///     .unwrap();
 /// assert_eq!(checked.rate_out, Rate::hz(240_000)?);
 /// assert!(checked.cost > 0.0);
@@ -125,13 +161,14 @@ pub trait BlockFactory: Send + Sync {
     /// The description of the block kind.
     fn description(&self) -> &'static BlockDescription;
     /// Parses the params (already JSON-checked) into a config and validates it for this input
-    /// rate and precision. `input` is the port type arriving at this node (it lets `resample`
-    /// choose the complex or the real block). The paths of the diagnostics are relative to the
-    /// node, e.g. `params.frequency_hz`; an empty path means the node itself.
+    /// rate and precision. `input` is what arrives at port `a` of this node: a stream (its
+    /// sample type lets `resample` choose the complex or the real block) or a lane stream (its
+    /// width is the width of the reading block). The paths of the diagnostics are relative to
+    /// the node, e.g. `params.frequency_hz`; an empty path means the node itself.
     fn check(
         &self,
         params: &Map<String, Value>,
-        input: PortType,
+        input: PortKind,
         rate_in: Rate,
         precision: Precision,
     ) -> Result<Checked, Vec<Diagnostic>>;

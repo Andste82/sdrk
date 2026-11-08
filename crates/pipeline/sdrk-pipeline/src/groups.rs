@@ -165,7 +165,8 @@ impl Splitter<'_> {
         };
         let sample_type = match source.checked.output {
             PortKind::Stream(ty) => input_type(ty),
-            PortKind::Frames { .. } => None,
+            // Lanes cannot cross groups: no pipeline input takes a lane stream.
+            PortKind::Frames { .. } | PortKind::Lanes { .. } => None,
         };
         let path = format!("edges.{}", edge.from);
         let Some(sample_type) = sample_type else {
@@ -173,7 +174,7 @@ impl Splitter<'_> {
                 path,
                 DiagCode::InvalidValue,
                 format!(
-                    "the edge `{} -> {}` crosses groups but carries frames, raw bytes or packets",
+                    "the edge `{} -> {}` crosses groups but carries frames, raw bytes, packets or lanes",
                     edge.from, edge.to
                 ),
             );

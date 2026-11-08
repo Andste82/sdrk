@@ -172,6 +172,10 @@ pub struct NodeReport {
     /// Group delay of the node in its input samples.
     #[serde(serialize_with = "serialize_delay")]
     pub delay_samples_in: Delay,
+    /// The width of the lane stream the node produces (`"lanes"` in the JSON, left out for a
+    /// node that produces a stream or frames); `rate_out` is then the step rate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lanes: Option<usize>,
     /// Whether the pipeline inserted the node (conversion or alignment).
     pub auto: bool,
     /// The clock domain of the node: the name of the pipeline input its data derives from.

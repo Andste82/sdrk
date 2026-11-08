@@ -672,8 +672,8 @@
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 104.7,
-          "ours_instr_per_sample": 104.7,
+          "other_instr_per_sample": 104.25,
+          "ours_instr_per_sample": 104.25,
           "ratio": 1.0,
           "snr_db": {
             "other": 139.19,
@@ -698,8 +698,8 @@
         "channel_select_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 2.29,
-          "ours_instr_per_sample": 2.29,
+          "other_instr_per_sample": 1.68,
+          "ours_instr_per_sample": 1.68,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

@@ -525,7 +525,7 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 0.96 | 0.58 | 0.65 | 0.49 | 0.78 | 0.37 |
 | `equalize` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 0.70 | 0.69 | 0.73 | 0.67 | 0.89 | 0.54 |
-| `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 0.28 | 0.28 | 0.15 | 0.17 | 0.17 | 0.29 |
+| `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 0.28 | 0.28 | 0.15 | 0.17 | 0.12 | 0.29 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 0.45 | 0.44 | 0.35 | 0.36 | 0.51 | 0.46 |
 | `channelize_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `channel_select_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
@@ -738,11 +738,11 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 14.41 / 15.02 | 8.66 / 15.02 | 8.41 / 13.02 | - | 6.41 / 13.02 | 9.03 / 11.52 | 13.20 / 35.30 |
 | `equalize` C32 (our fallback) | 502.98 / 502.98 | 496.45 / 496.45 | 533.11 / 533.11 | 502.21 | 492.09 / 492.09 | 437.31 / 437.31 | 1027.31 / 1027.31 |
 | `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 502.98 / 722.54 | 496.45 / 722.54 | 533.11 / 729.03 | - | 492.09 / 729.03 | 437.31 / 493.03 | 1027.31 / 1900.06 |
-| `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 93.20 / 337.96 | 94.69 / 339.96 | 50.42 / 326.64 | 50.03 | 56.63 / 334.08 | 62.54 / 361.58 | 270.93 / 949.71 |
+| `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 93.20 / 337.96 | 94.69 / 339.96 | 50.42 / 326.64 | 50.03 | 56.63 / 334.08 | 43.43 / 361.58 | 270.93 / 949.71 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 192.43 / 431.21 | 189.18 / 429.58 | 145.84 / 412.39 | - | 143.76 / 398.71 | 151.01 / 297.08 | 436.07 / 949.71 |
-| `channelize_block` (our code, per input sample) | 94.70 / 94.70 | 94.67 / 94.67 | 51.04 / 51.04 | 50.65 | 57.12 / 57.12 | 63.04 / 63.04 | 270.93 / 270.93 |
+| `channelize_block` (our code, per input sample) | 94.70 / 94.70 | 94.67 / 94.67 | 51.04 / 51.04 | 50.65 | 57.12 / 57.12 | 43.68 / 43.68 | 270.93 / 270.93 |
 | `channel_select_block` (our code, per output sample) | 3.52 / 3.52 | 4.02 / 4.02 | 3.53 / 3.53 | 3.52 | 2.29 / 2.29 | 3.51 / 3.51 | 13.30 / 13.30 |
-| `channel_bank_channelize` (our code, per input sample) | 194.26 / 194.26 | 194.75 / 194.75 | 84.59 / 84.59 | 84.10 | 104.70 / 104.70 | 130.41 / 130.41 | 537.13 / 537.13 |
+| `channel_bank_channelize` (our code, per input sample) | 194.26 / 194.26 | 194.75 / 194.75 | 84.59 / 84.59 | 84.10 | 104.70 / 104.70 | 83.13 / 83.13 | 537.13 / 537.13 |
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
@@ -964,7 +964,7 @@ The M40 entries `costas` and `costas_fallback` were counted on all four platform
 
 The M47 entries `morse_encode_block` and `morse_decode_block` (our blocks, per output and per input sample of an 8 kHz envelope; no library has them, so information against our own code, D910) were counted on all four platforms (`cargo xtask count --platform <p> --kernel morse_encode_block --kernel morse_decode_block --merge`, 2026-11-07) and measured with `cargo measure` on every level with a core model. Cycles per sample, whole-loop, reference / counter model: the encoder 6.60 / 7.58 (`sse2`, `sse4.2`), 4.44 / 4.50 (`avx2`), 4.20 / 4.64 (`avx512`) and 8.56 / 9.45 (`neon`, `cortex-a72` / `cortex-a76`); the decoder 16.81 / 20.53 (`sse2`), 16.62 / 20.31 (`sse4.2`), 13.06 / 16.08 (`avx2`), 13.19 / 17.03 (`avx512`) and 22.26 / 28.43 (`neon`). The decoder had 147.92 instructions per sample at `avx2` before the speed round of D909 and has 69.08 now; the cycles above are those of the final code. Both blocks are scalar code with a dependency from one sample to the next (the smoother, the level trackers, the run counter), so the levels differ only by code generation.
 
-The M45 entries `channelize` and `channelize_fallback` (16 channels, 8 taps per branch, per input sample) were counted on all four platforms (`cargo xtask count --platform <p> --kernel channelize --kernel channelize_fallback --merge`, 2026-11-07, recounted 2026-11-08 after D922) and measured with `cargo measure channelize --no-golden` on every level with a core model, against liquid-dsp's `firpfbch2_crcf` (D919); both are `release` on every level. Cycles per sample, whole-loop, reference / counter model, ours against liquid: the SIMD path 25.93 / 27.72 against 171.64 / 176.30 (`sse2`), 21.95 / 28.21 against 171.63 / 176.29 (`sse4.2`), 12.08 / 12.75 against 120.69 / 99.98 (`avx2`), 12.68 / 16.01 against 104.12 / 84.10 (`avx512`) and 42.56 / 32.70 against 302.17 / 240.53 (`neon`); the fallback 53.40 / 58.43, 53.83 / 58.12, 34.92 / 32.41, 38.10 / 32.11 and 98.73 / 81.02 against 166.47 / 180.90, 166.73 / 180.51, 149.61 / 131.39, 107.09 / 118.99 and 222.34 / 165.45 (liquid portable). The SIMD path simulates 0.33 to 0.50 of the cycles of its fallback on every level and both models (D321 holds), at `simd128` it counts 270.93 instructions per sample against 436.07 of the fallback. liquid runs a window object and a dot-product object per branch (`windowcf_push`, `dotprod_crcf_execute` through a call each) and scales every output; ours sums the columns of one history in registers. Before the round of D918 and D920 the SIMD path simulated 24.22 / 22.35 at `avx2` and the fallback 38.11 / 34.13; D922 (the fallback's rows as whole chunks of `M`) took the fallback from 101.68 / 86.10 to 98.73 / 81.02 at `neon` and from 34.70 to 38.10 on the `avx512` reference model (ARM preferred).
+The M45 entries `channelize` and `channelize_fallback` (16 channels, 8 taps per branch, per input sample) were counted on all four platforms (`cargo xtask count --platform <p> --kernel channelize --kernel channelize_fallback --merge`, 2026-11-07, recounted 2026-11-08 after D922 and after D939) and measured with `cargo measure channelize --no-golden` on every level with a core model, against liquid-dsp's `firpfbch2_crcf` (D919); both are `release` on every level. Cycles per sample, whole-loop, reference / counter model, ours against liquid: the SIMD path 25.93 / 27.72 against 171.64 / 176.30 (`sse2`), 21.95 / 28.21 against 171.63 / 176.29 (`sse4.2`), 12.08 / 12.75 against 120.69 / 99.98 (`avx2`), 12.68 / 16.01 against 104.12 / 84.10 (`avx512`) and 30.93 / 22.59 against 302.17 / 240.53 (`neon`; 42.56 / 32.70 before the two-hop branch sums of D939, open item I45-1); the fallback 53.40 / 58.43, 53.83 / 58.12, 34.97 / 32.37, 38.10 / 32.11 and 98.73 / 81.02 against 166.47 / 180.90, 166.73 / 180.51, 149.61 / 131.39, 107.09 / 118.99 and 222.34 / 165.45 (liquid portable). The SIMD path simulates 0.28 to 0.50 of the cycles of its fallback on every level and both models (D321 holds), at `simd128` it counts 270.93 instructions per sample against 436.07 of the fallback. liquid runs a window object and a dot-product object per branch (`windowcf_push`, `dotprod_crcf_execute` through a call each) and scales every output; ours sums the columns of one history in registers. Before the round of D918 and D920 the SIMD path simulated 24.22 / 22.35 at `avx2` and the fallback 38.11 / 34.13; D922 (the fallback's rows as whole chunks of `M`) took the fallback from 101.68 / 86.10 to 98.73 / 81.02 at `neon` and from 34.70 to 38.10 on the `avx512` reference model (ARM preferred).
 
 The M43 entries `dot_complex`, `dot_complex_fallback`, `equalize` and `equalize_fallback` were counted on all four platforms (`cargo xtask count --platform <p> --kernel dot_complex --kernel dot_complex_fallback --kernel equalize --kernel equalize_fallback --merge`, 2026-11-07) and measured with `cargo measure dot_complex` and `cargo measure equalize` on every level with a core model, after the performance round of D840 to D845. All judged entries are within the release limit and are `release`. `dot_complex` simulates 0.24 to 0.86 of the cycles of its fallback and 0.58 (`znver3`) to 1.03 (`cortex-a72`) of VOLK's protokernel without FMA. `equalize` runs the fallback on every backend (D841), so the facade entry equals the fallback (1.00, D321 holds). `equalize_fallback` counts 0.54 to 0.89 of the instructions of GNU Radio's `linear_equalizer` and simulates 0.12 to 0.93 of its cycles on x86 and 0.81 on `cortex-a76`; on `cortex-a72` it simulates 1.14 (262.11 against 229.47), the cost of the phase tracker and the smoothed `mse` that GNU Radio's loop does not have (D845: about 81 cycles per symbol on `cortex-a72`). Before D840 the fallback simulated 1.18 to 2.32 of GNU Radio's cycles where it was not below and the SIMD entry was slower than the fallback at every level. `dot_complex` at `avx2` and `avx512` counts 2.35 (after the two-block loop of `dot_complex_avx2`, 2.29 before; the cycles are unchanged), and at `avx2-runtime` 2.36 against 2.35 of the fixed `avx2` build (1.00, limit 1.02): the run-time build no longer needs a waiver (open item I43-5, closed).
 
@@ -1586,7 +1586,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channel_select_block` | 1.24 | 1.24 | 1.00 | 2.28 | 2.28 | 1.00 | sdrk fallback |
 | `channelize` | 12.08 | 120.69 | 0.10 | 12.75 | 99.98 | 0.13 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 12.21 | 12.21 | 1.00 | 12.87 | 12.87 | 1.00 | sdrk fallback |
-| `channelize_fallback` | 34.92 | 149.61 | 0.23 | 32.41 | 131.39 | 0.25 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
+| `channelize_fallback` | 34.97 | 149.61 | 0.23 | 32.37 | 131.39 | 0.25 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 81.08 | 81.08 | 1.00 | 104.05 | 104.05 | 1.00 | sdrk fallback |
 | `costas_fallback` | 81.08 | 54.40 | 1.49 | 104.05 | 32.27 | 3.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1805,7 +1805,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `channel_bank_ddc` | 516.23 | 516.13 | 1.00 | 96.78 | 96.79 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.55 | 0.55 | 1.00 | 3.67 | 3.67 | 1.00 | sdrk fallback |
 | `channelize` | 12.68 | 104.12 | 0.12 | 16.01 | 84.10 | 0.19 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
-| `channelize_block` | 12.69 | 12.69 | 1.00 | 16.12 | 16.12 | 1.00 | sdrk fallback |
+| `channelize_block` | 12.69 | 12.69 | 1.00 | 16.13 | 16.13 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 38.10 | 107.09 | 0.36 | 32.11 | 118.99 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 84.05 | 84.05 | 1.00 | 102.05 | 102.05 | 1.00 | sdrk fallback |
 | `costas_fallback` | 84.05 | 68.92 | 1.22 | 102.05 | 66.57 | 1.53 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -2021,11 +2021,11 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 1.28 | 2.27 | 1.52 | 1.03 | 1.48 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 296.16 | 296.16 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
-| `channel_bank_channelize` | 92.68 | 92.68 | 1.00 | 70.61 | 70.61 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 60.82 | 60.82 | 1.00 | 43.46 | 43.46 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 308.18 | 308.18 | 1.00 | 263.36 | 263.36 | 1.00 | sdrk fallback |
 | `channel_select_block` | 2.04 | 2.04 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
-| `channelize` | 42.56 | 302.17 | 0.14 | 32.70 | 240.53 | 0.14 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
-| `channelize_block` | 42.70 | 42.70 | 1.00 | 32.82 | 32.82 | 1.00 | sdrk fallback |
+| `channelize` | 30.93 | 302.17 | 0.10 | 22.59 | 240.53 | 0.09 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 30.99 | 30.99 | 1.00 | 22.71 | 22.71 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 98.73 | 222.34 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 131.06 | 131.06 | 1.00 | 77.05 | 77.05 | 1.00 | sdrk fallback |
 | `costas_fallback` | 131.06 | 87.89 | 1.49 | 77.05 | 75.07 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -2210,27 +2210,27 @@ Simulated cycles per sample, reference model (whole-loop):
 
 | Entry | `sse2` (`skylake`) | `sse4.2` (`skylake`) | `avx2` (`znver3`) | `avx512` (`znver4`) | `neon` (`cortex-a72`) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `channelize_block` | 26.79 | 26.51 | 12.21 | 12.69 | 42.70 |
+| `channelize_block` | 26.79 | 26.51 | 12.21 | 12.69 | 30.99 |
 | `channel_select_block` | 0.79 | 1.03 | 1.24 | 0.55 | 2.04 |
-| `channel_bank_channelize` | 46.24 | 46.19 | 21.44 | 791.29 | 92.68 |
+| `channel_bank_channelize` | 46.24 | 46.19 | 21.44 | 791.29 | 60.82 |
 | `channel_bank_ddc` | 227.45 | 227.20 | 72.75 | 516.23 | 308.18 |
 
 Simulated cycles per sample, counter-model (whole-loop):
 
 | Entry | `sse2` (`znver2`) | `sse4.2` (`znver2`) | `avx2` (`alderlake`) | `avx512` (`sapphirerapids`) | `neon` (`cortex-a76`) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `channelize_block` | 27.83 | 27.84 | 12.87 | 16.12 | 32.82 |
+| `channelize_block` | 27.83 | 27.84 | 12.87 | 16.13 | 22.71 |
 | `channel_select_block` | 0.91 | 1.03 | 2.28 | 3.67 | 2.03 |
-| `channel_bank_channelize` | 52.66 | 52.78 | 27.30 | 99.43 | 70.61 |
+| `channel_bank_channelize` | 52.66 | 52.78 | 27.30 | 99.43 | 43.46 |
 | `channel_bank_ddc` | 212.36 | 212.46 | 65.45 | 96.78 | 263.36 |
 
 Instructions per sample (`simd128`: wasmtime fuel, no core model, so no cycles):
 
 | Entry | `sse2` | `sse4.2` | `avx2` | `avx2-runtime` | `avx512` | `neon` | `simd128` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `channelize_block` | 94.70 | 94.67 | 51.04 | 50.65 | 57.12 | 63.04 | 270.93 |
+| `channelize_block` | 94.70 | 94.67 | 51.04 | 50.65 | 57.12 | 43.68 | 270.93 |
 | `channel_select_block` | 3.52 | 4.02 | 3.53 | 3.52 | 2.29 | 3.51 | 13.30 |
-| `channel_bank_channelize` | 194.26 | 194.75 | 84.59 | 84.10 | 104.70 | 130.41 | 537.13 |
+| `channel_bank_channelize` | 194.26 | 194.75 | 84.59 | 84.10 | 104.70 | 83.13 | 537.13 |
 | `channel_bank_ddc` | 721.18 | 721.77 | 234.33 | 241.94 | 178.06 | 436.60 | 1657.26 |
 
 Report cost of the two banks as pipeline graphs (`sdrk-pipeline/tests/pmr446.rs`, `the_cost_of_one_channelizer_against_eight_ddc`), per input sample:
@@ -2241,7 +2241,7 @@ Report cost of the two banks as pipeline graphs (`sdrk-pipeline/tests/pmr446.rs`
 | eight `ddc` (decimation 8, cutoff 6.25 kHz, transition 2.5 kHz) | 1204 |
 
 Remarks:
-- **Test 9: the channelizer bank against the `ddc` bank.** Leaving out `avx512` (next remark), the channelizer bank needs 0.20 to 0.42 of the cycles of the `ddc` bank. On the reference model it is 46.24 against 227.45 at `sse2` (0.20), 21.44 against 72.75 at `avx2` (0.29) and 92.68 against 308.18 at `neon` (0.30). On the counter-model it is 52.66 against 212.36 (0.25), 27.30 against 65.45 (0.42) and 70.61 against 263.36 (0.27). In instructions it is 0.27 (`sse2`), 0.36 (`avx2`), 0.30 (`neon`) and 0.32 (`simd128`). The report cost is a model of the arithmetic, not of the code. It puts the channelizer bank at 0.03 of the `ddc` bank: 24 + 10 for the channelizer plus 1/8 per `channel_select`, against 150.5 per `ddc`.
+- **Test 9: the channelizer bank against the `ddc` bank.** Leaving out `avx512` (next remark), the channelizer bank needs 0.17 to 0.42 of the cycles of the `ddc` bank. On the reference model it is 46.24 against 227.45 at `sse2` (0.20), 21.44 against 72.75 at `avx2` (0.29) and 60.82 against 308.18 at `neon` (0.20; 92.68 before the two-hop branch sums of D939). On the counter-model it is 52.66 against 212.36 (0.25), 27.30 against 65.45 (0.42) and 43.46 against 263.36 (0.17; 70.61 before D939). In instructions it is 0.27 (`sse2`), 0.36 (`avx2`), 0.19 (`neon`) and 0.32 (`simd128`). The report cost is a model of the arithmetic, not of the code. It puts the channelizer bank at 0.03 of the `ddc` bank: 24 + 10 for the channelizer plus 1/8 per `channel_select`, against 150.5 per `ddc`.
 - **Artifact at `avx512`.** The `avx512` values of both banks are an artifact of the simulation, like the `rep stosb` note of the cycle tables. Both blocks shift their history with `copy_within`. Under SDE's `-spr` CPU, glibc does these copies with `rep movsb`, and SDE counts every byte as one execution of the instruction. `znver4` rates each execution at 100 cycles and `sapphirerapids` at 8.
   - `channel_bank_channelize` copies 502336 bytes in 65536 samples. That is 770 of its 791 cycles on `znver4` and about 61 of its 99 on `sapphirerapids`, so without the copies it is about 21 and 38.
   - `channel_bank_ddc` copies 294400 bytes. That is about 454 of its 516 cycles and about 36 of its 97, so without the copies it is about 62 and 61.

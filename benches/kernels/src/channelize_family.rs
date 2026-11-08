@@ -40,7 +40,7 @@ use std::hint::black_box;
 
 use cref_sys::{Firpfbch2Build, LiquidFirpfbch2};
 use sdrk::Rate;
-use sdrk::kernels::channelize::{Channelize, ChannelizeState, history_len, taps_len};
+use sdrk::kernels::channelize::{Channelize, ChannelizeState, history_len};
 use sdrk::kernels::decim::FirDecimState;
 use sdrk::kernels::fused::Ddc;
 use sdrk::kernels::mix::Nco;
@@ -72,24 +72,9 @@ fn prototype() -> Vec<f32> {
     h.iter().map(|&v| v as f32).collect()
 }
 
-/// The tap storage of the state (`2 N` values) with the prototype `h` in its first half.
-fn tap_storage(h: &[f32]) -> Vec<f32> {
-    let mut t = vec![0.0f32; 2 * h.len()];
-    t[..h.len()].copy_from_slice(h);
-    t
-}
-
-/// The prototype in time order from the taps a state stores (time-reversed, every tap twice).
-fn prototype_of(stored: &[f32]) -> Vec<f32> {
-    let mut h: Vec<f32> = stored.iter().step_by(2).copied().collect();
-    h.reverse();
-    h
-}
-
 fn state(h: &[f32]) -> State {
-    debug_assert_eq!(2 * h.len(), taps_len(CHANNELS, TAPS_PER_BRANCH));
     ChannelizeState::new(
-        tap_storage(h),
+        h.to_vec(),
         CHANNELS,
         vec![C32::default(); history_len(CHANNELS, TAPS_PER_BRANCH)],
         vec![C32::default(); CHANNELS / 2],
@@ -326,9 +311,9 @@ impl Kernel for ChannelizeBlockK {
         self.block.reset();
         let mut got = vec![C32::default(); self.out.len()];
         let steps = channelize_block_call(&mut self.block, &self.input, &mut got);
-        // The block holds the taps time-reversed and twice each; the state takes the prototype
-        // in time order.
-        let taps = prototype_of(self.block.taps());
+        // The block holds the taps time-reversed; the state takes them in time order.
+        let mut taps = self.block.taps().to_vec();
+        taps.reverse();
         let mut want = vec![C32::default(); self.out.len()];
         let _ = Reference.channelize(&mut state(&taps), &self.input, &mut want);
         if steps * CHANNELS != want.len() {
@@ -512,10 +497,11 @@ impl Kernel for ChannelBankK {
         }
         self.chan.reset();
         let produced = channel_bank_call(self);
-        let taps = prototype_of(self.chan.taps());
+        let mut taps = self.chan.taps().to_vec();
+        taps.reverse();
         let steps = self.lanes.len() / CHANNELS;
         let mut state = ChannelizeState::new(
-            tap_storage(&taps),
+            taps,
             CHANNELS,
             vec![C32::default(); history_len(CHANNELS, 24)],
             vec![C32::default(); CHANNELS / 2],

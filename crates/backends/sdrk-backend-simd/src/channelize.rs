@@ -10,24 +10,28 @@
 //! fallback within the 100 dB of the contract, not bit for bit.
 //!
 //! **Branch sums.** Column `c` of the window is multiplied by the real tap `g[p M + c]` of every
-//! row `p` and summed over the rows: a real tap times an interleaved complex sample. The state
-//! stores every tap twice (`g0 g0 g1 g1 ...`, I45-1), so a vector of taps is loaded as it is and
-//! matches the vector of interleaved samples; a row of taps has `2 M` floats like a row of the
-//! window.
+//! row `p` and summed over the rows: a real tap times an interleaved complex sample, so a vector
+//! of `k` interleaved samples needs the vector of their `k` taps with every tap duplicated
+//! (`g0 g0 g1 g1 ...`). One shuffle per vector of products makes that vector:
 //!
-//! - Generic code (SSE2, SSE4.2, NEON, SIMD128 and the scalar level): blocks of eight columns
-//!   (four and two for 8 and 4 channels), four 128-bit accumulators of two samples.
-//! - AVX2 and AVX-512 (`x86` below): blocks of sixteen columns, four 256-bit accumulators of four
-//!   samples.
-//! - NEON from 16 channels on: two consecutive hops at once ([`sums_pair_generic`]), so that one
-//!   load of taps and most loads of the window serve both hops; the single-hop code of a level
-//!   was bound by its loads. The pair form simulated slower at SSE2 on its reference model
-//!   (`skylake`) and is not used on `x86`.
+//! - Generic code (SSE2, SSE4.2, NEON, SIMD128 and the scalar level): four taps in one 128-bit
+//!   vector, `zip_low` / `zip_high` of it with itself for the two vectors of two samples each.
+//! - AVX2 and AVX-512 (`x86` below): four taps loaded into both 128-bit halves of a 256-bit
+//!   vector (`vinsertf128`) and duplicated in each half with `vpermilps` (`0 0 1 1` in the low
+//!   half, `2 2 3 3` in the high half) for one vector of four samples.
 //!
-//! The partial sums of a block stay in registers over all rows, as in the fallback; each block
-//! of eight columns is stored at its place after the parity shift (column `c` to
-//! `(c + s) mod M`), which never splits it because `M / 2` is a multiple of eight from 16
-//! channels on.
+//! The columns are summed in blocks (sixteen columns at AVX2 and AVX-512, eight in the generic
+//! code, four and two for 8 and 4 channels) whose partial sums stay in registers over all rows,
+//! as in the fallback; each block of eight columns is stored at its place after the parity shift
+//! (column `c` to `(c + s) mod M`), which never splits it because `M / 2` is a multiple of eight
+//! from 16 channels on.
+//!
+//! **Two hops at once (NEON, from 16 channels on; I45-1).** The single-hop branch sums of the
+//! generic code are bound by their loads and shuffles at NEON; there the driver hands over two
+//! consecutive hops at once ([`sums_pair_generic`]), so that every load of taps and its `zip`
+//! serve both hops and most window vectors serve two products. The values are those of two
+//! single hops. The pair form is not used on `x86_64` and `wasm32` (the change was measured for
+//! NEON only, the single-hop code of those levels is kept).
 
 use fearless_simd::{Simd as SimdToken, f32x4, prelude::*};
 use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, channel_fft, channelize_with};
@@ -46,24 +50,24 @@ fn bad_len() -> sdrk_core::Error {
     internal("channelize branch sums")
 }
 
-/// The sums of the `W2 / 2` columns from `c` over all rows: `body(acc, taps, window)` adds the
-/// products of one row (its `W2` stored taps and `W2` window floats) to the accumulators.
+/// The sums of the `W` columns from `c` over all rows: `body(acc, taps, window)` adds the
+/// products of one row (its `W` taps and `2 W` window floats) to the accumulators.
 #[inline(always)]
-fn column_sums<A, const W2: usize>(
+fn column_sums<A, const W: usize, const W2: usize>(
     taps: &[f32],
     window: &[f32],
     m: usize,
     c: usize,
     mut acc: A,
-    mut body: impl FnMut(&mut A, &[f32; W2], &[f32; W2]),
+    mut body: impl FnMut(&mut A, &[f32; W], &[f32; W2]),
 ) -> Result<A> {
-    if 2 * c + W2 > 2 * m {
+    if c + W > m || W2 != 2 * W {
         return Err(bad_len());
     }
-    // Whole rows of `2 M` floats in both: the bounds of the columns are checked once above (the
-    // compiler hoists the checks below out of the loop).
-    for (t, w) in taps.chunks_exact(2 * m).zip(window.chunks_exact(2 * m)) {
-        let t = t.get(2 * c..2 * c + W2).and_then(|t| t.first_chunk::<W2>());
+    // Whole rows: the bounds of the columns are checked once above (the compiler hoists the
+    // checks below out of the loop).
+    for (t, w) in taps.chunks_exact(m).zip(window.chunks_exact(2 * m)) {
+        let t = t.get(c..c + W).and_then(|t| t.first_chunk::<W>());
         let w = w.get(2 * c..2 * c + W2).and_then(|w| w.first_chunk::<W2>());
         let (t, w) = t.zip(w).ok_or_else(bad_len)?;
         body(&mut acc, t, w);
@@ -98,9 +102,18 @@ fn sums_generic<S: SimdToken>(
     let mut buf = [0.0f32; 16];
     if m >= 16 {
         for c in (0..m).step_by(8) {
-            let acc = column_sums::<_, 16>(taps, window, m, c, [zero; 4], |acc, t, w| {
-                for ((a, g), x) in acc.iter_mut().zip(t.chunks_exact(4)).zip(w.chunks_exact(4)) {
-                    *a = f32x4::from_slice(simd, x).mul_add(f32x4::from_slice(simd, g), *a);
+            let acc = column_sums::<_, 8, 16>(taps, window, m, c, [zero; 4], |acc, t, w| {
+                let (ta, tb) = t.split_at(4);
+                let ta = f32x4::from_slice(simd, ta);
+                let tb = f32x4::from_slice(simd, tb);
+                let g = [
+                    ta.zip_low(ta),
+                    ta.zip_high(ta),
+                    tb.zip_low(tb),
+                    tb.zip_high(tb),
+                ];
+                for ((a, g), x) in acc.iter_mut().zip(g).zip(w.chunks_exact(4)) {
+                    *a = f32x4::from_slice(simd, x).mul_add(g, *a);
                 }
             })?;
             for (d, a) in buf.chunks_exact_mut(4).zip(acc) {
@@ -110,9 +123,11 @@ fn sums_generic<S: SimdToken>(
         }
     } else if m == 8 {
         for c in [0, 4] {
-            let acc = column_sums::<_, 8>(taps, window, m, c, [zero; 2], |acc, t, w| {
-                for ((a, g), x) in acc.iter_mut().zip(t.chunks_exact(4)).zip(w.chunks_exact(4)) {
-                    *a = f32x4::from_slice(simd, x).mul_add(f32x4::from_slice(simd, g), *a);
+            let acc = column_sums::<_, 4, 8>(taps, window, m, c, [zero; 2], |acc, t, w| {
+                let t = f32x4::from_slice(simd, t);
+                let g = [t.zip_low(t), t.zip_high(t)];
+                for ((a, g), x) in acc.iter_mut().zip(g).zip(w.chunks_exact(4)) {
+                    *a = f32x4::from_slice(simd, x).mul_add(g, *a);
                 }
             })?;
             for (d, a) in buf.chunks_exact_mut(4).zip(acc) {
@@ -122,8 +137,8 @@ fn sums_generic<S: SimdToken>(
         }
     } else {
         for c in [0, 2] {
-            let acc = column_sums::<_, 4>(taps, window, m, c, zero, |acc, t, w| {
-                let g = f32x4::from_slice(simd, t);
+            let acc = column_sums::<_, 2, 4>(taps, window, m, c, zero, |acc, &[t0, t1], w| {
+                let g = f32x4::from_slice(simd, &[t0, t0, t1, t1]);
                 *acc = f32x4::from_slice(simd, w).mul_add(g, *acc);
             })?;
             acc.store_slice(buf.get_mut(..4).ok_or_else(bad_len)?);
@@ -133,12 +148,27 @@ fn sums_generic<S: SimdToken>(
     Ok(())
 }
 
-/// Loads `V` vectors of `4 V` stored taps (two samples each).
+/// Loads `V` vectors of two samples each from `4 V` window floats.
 #[inline(always)]
-fn load<S: SimdToken, const V: usize>(simd: S, t: &[f32]) -> [f32x4<S>; V] {
+fn load<S: SimdToken, const V: usize>(simd: S, x: &[f32]) -> [f32x4<S>; V] {
+    let mut v = [f32x4::splat(simd, 0.0); V];
+    for (v, x) in v.iter_mut().zip(x.chunks_exact(4)) {
+        *v = f32x4::from_slice(simd, x);
+    }
+    v
+}
+
+/// The taps of `V` vectors of two samples each from `2 V` taps: four taps per load, every tap
+/// duplicated by `zip_low` / `zip_high` (`g0 g0 g1 g1`, `g2 g2 g3 g3`).
+#[inline(always)]
+fn taps_dup<S: SimdToken, const V: usize>(simd: S, t: &[f32]) -> [f32x4<S>; V] {
     let mut g = [f32x4::splat(simd, 0.0); V];
-    for (g, t) in g.iter_mut().zip(t.chunks_exact(4)) {
-        *g = f32x4::from_slice(simd, t);
+    for (g, t) in g.chunks_exact_mut(2).zip(t.chunks_exact(4)) {
+        let t = f32x4::from_slice(simd, t);
+        if let [lo, hi] = g {
+            *lo = t.zip_low(t);
+            *hi = t.zip_high(t);
+        }
     }
     g
 }
@@ -163,8 +193,8 @@ fn store_acc<S: SimdToken, const V: usize>(
 /// the window holds the newest `M L + D` samples, hop A the first `M L`, hop B the last `M L`
 /// (`D = M / 2` later). Read as half rows of `D` samples, column `c < D` of row `p` of hop A is
 /// half row `2 p`, column `c + D` is half row `2 p + 1`, and hop B is shifted by one half row; so
-/// per row and block of `2 V` columns `c .. c + 2 V` (with `c + D ..` beside it) one tap load
-/// serves both hops and every window vector but one serves two products:
+/// per row and block of `2 V` columns `c .. c + 2 V` (with `c + D ..` beside it) one load of
+/// taps serves both hops and every window vector but one serves two products:
 ///
 /// - `A[c]     += g[p M + c]     x[2 p]`
 /// - `B[c]     += g[p M + c]     x[2 p + 1]`
@@ -187,8 +217,8 @@ fn sums_pair_generic<S: SimdToken, const V: usize>(
     let w = 2 * V;
     if m < 16
         || !m.is_power_of_two()
-        || (m / 2) % w != 0
-        || window.len() != taps.len() + m
+        || !(m / 2).is_multiple_of(w)
+        || window.len() != 2 * taps.len() + m
         || out_a.len() != 2 * m
         || out_b.len() != 2 * m
     {
@@ -206,19 +236,19 @@ fn sums_pair_generic<S: SimdToken, const V: usize>(
         let mut b_lo = [zero; V];
         let mut b_hi = [zero; V];
         let mut xa = load::<S, V>(simd, head.get(2 * c..2 * c + 2 * w).ok_or_else(bad_len)?);
-        for (t, x) in taps.chunks_exact(2 * m).zip(body.chunks_exact(2 * m)) {
-            let t_lo = t.get(2 * c..2 * c + 2 * w).ok_or_else(bad_len)?;
-            let t_hi = t.get(m + 2 * c..m + 2 * c + 2 * w).ok_or_else(bad_len)?;
+        for (t, x) in taps.chunks_exact(m).zip(body.chunks_exact(2 * m)) {
+            let t_lo = t.get(c..c + w).ok_or_else(bad_len)?;
+            let t_hi = t.get(d + c..d + c + w).ok_or_else(bad_len)?;
             let x_mid = x.get(2 * c..2 * c + 2 * w).ok_or_else(bad_len)?;
             let x_next = x.get(m + 2 * c..m + 2 * c + 2 * w).ok_or_else(bad_len)?;
-            let g = load::<S, V>(simd, t_lo);
+            let g = taps_dup::<S, V>(simd, t_lo);
             for ((a, g), x) in a_lo.iter_mut().zip(g).zip(xa) {
                 *a = x.mul_add(g, *a);
             }
             for ((b, g), x) in b_lo.iter_mut().zip(g).zip(x_mid.chunks_exact(4)) {
                 *b = f32x4::from_slice(simd, x).mul_add(g, *b);
             }
-            let g = load::<S, V>(simd, t_hi);
+            let g = taps_dup::<S, V>(simd, t_hi);
             for ((a, g), x) in a_hi.iter_mut().zip(g).zip(x_mid.chunks_exact(4)) {
                 *a = f32x4::from_slice(simd, x).mul_add(g, *a);
             }
@@ -252,11 +282,7 @@ fn branch_sums<S: SimdToken>(
     group: &mut [C32],
 ) -> Result<()> {
     let m = group.len();
-    if m < 4
-        || !m.is_power_of_two()
-        || taps.len() != 2 * window.len()
-        || window.len() & (m - 1) != 0
-    {
+    if m < 4 || !m.is_power_of_two() || taps.len() != window.len() || taps.len() & (m - 1) != 0 {
         return Err(bad_len());
     }
     let window: &[f32] = bytemuck::cast_slice(window);
@@ -274,7 +300,7 @@ fn branch_sums<S: SimdToken>(
 /// Vectors per column block of the pair form: `2 PAIR_VECTORS` columns.
 const PAIR_VECTORS: usize = 4;
 
-/// Whether the level sums two hops at once ([`sums_pair_generic`]).
+/// Whether the level sums two hops at once ([`sums_pair_generic`]): NEON only.
 #[inline(always)]
 fn pair_level<S: SimdToken>(simd: S) -> bool {
     #[cfg(target_arch = "aarch64")]
@@ -282,7 +308,7 @@ fn pair_level<S: SimdToken>(simd: S) -> bool {
         return true;
     }
     let _ = simd;
-    true // TEMP
+    false
 }
 
 /// The transform of one output group: the backend FFT from 16 channels on, the radix-2
@@ -328,25 +354,23 @@ where
          plan: &FftPlan<C32, Tw>,
          group: &mut [C32],
          second: Option<&mut [C32]>| {
-            let m = group.len();
             if let Some(second) = second {
-                let s = if swap { m / 2 } else { 0 };
+                let s = if swap { group.len() / 2 } else { 0 };
                 sums_pair_generic::<S, PAIR_VECTORS>(
                     simd,
                     taps,
                     bytemuck::cast_slice(window),
-                    m,
+                    group.len(),
                     s,
                     bytemuck::cast_slice_mut(group),
                     bytemuck::cast_slice_mut(second),
                 )?;
                 forward(simd, plan, group)?;
-                forward(simd, plan, second)?;
+                forward(simd, plan, second)
             } else {
                 branch_sums(simd, taps, window, swap, group)?;
-                forward(simd, plan, group)?;
+                forward(simd, plan, group)
             }
-            Ok(())
         },
     )
 }
@@ -370,13 +394,15 @@ impl Channelize<C32> for Simd {
 #[cfg(target_arch = "x86_64")]
 mod x86 {
     //! The AVX2 branch sums (also run at AVX-512): blocks of sixteen columns with four 256-bit
-    //! accumulators of four samples over all rows (one 256-bit load of eight stored taps per
-    //! accumulator); each half of a block (eight columns) is stored at its place after the
-    //! parity shift.
+    //! accumulators of four samples over all rows; each half of a block (eight columns) is
+    //! stored at its place after the parity shift.
 
-    use core::arch::x86_64::{__m256, _mm256_fmadd_ps, _mm256_setzero_ps};
-    use fearless_simd::f32x8;
+    use core::arch::x86_64::{
+        __m128, __m256, __m256i, _mm256_castps128_ps256, _mm256_fmadd_ps, _mm256_insertf128_ps,
+        _mm256_permutevar_ps, _mm256_setr_epi32, _mm256_setzero_ps,
+    };
     use fearless_simd::prelude::*;
+    use fearless_simd::{f32x4, f32x8};
     use sdrk_core::Result;
 
     use super::{column_sums, store};
@@ -391,15 +417,19 @@ mod x86 {
             s: usize,
             out: &mut [f32],
         ) -> Result<()> {
+            // In-lane `vpermilps` indices on four taps in both halves: `0 0 1 1` in the low half,
+            // `2 2 3 3` in the high half.
+            let dup: __m256i = _mm256_setr_epi32(0, 0, 1, 1, 2, 2, 3, 3);
             let zero = _mm256_setzero_ps();
             let mut buf = [0.0f32; 32];
             for c in (0..m).step_by(16) {
-                let acc = column_sums::<_, 32>(taps, window, m, c, [zero; 4], |acc, g, w| {
-                    for ((a, g), w) in acc.iter_mut().zip(g.chunks_exact(8)).zip(w.chunks_exact(8))
+                let acc = column_sums::<_, 16, 32>(taps, window, m, c, [zero; 4], |acc, g, w| {
+                    for ((a, g), w) in acc.iter_mut().zip(g.chunks_exact(4)).zip(w.chunks_exact(8))
                     {
-                        let g: __m256 = f32x8::from_slice(t, g).into();
+                        let g4: __m128 = f32x4::from_slice(t, g).into();
+                        let g = _mm256_insertf128_ps::<1>(_mm256_castps128_ps256(g4), g4);
                         let w: __m256 = f32x8::from_slice(t, w).into();
-                        *a = _mm256_fmadd_ps(w, g, *a);
+                        *a = _mm256_fmadd_ps(w, _mm256_permutevar_ps(g, dup), *a);
                     }
                 })?;
                 for (d, a) in buf.chunks_exact_mut(8).zip(acc) {

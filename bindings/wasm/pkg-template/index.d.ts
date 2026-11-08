@@ -115,6 +115,8 @@ export interface NodeReport {
   rate_out: number | string;
   /** Group delay in input samples, "num/den". */
   delay_samples_in: string;
+  /** Width of the lane stream the node produces (a channelizer); absent otherwise. */
+  lanes?: number;
   /** True for nodes that the pipeline inserted (conversions and delays that align two paths). */
   auto: boolean;
   /** The pipeline input that the data of the node derives from. */

@@ -139,6 +139,7 @@ pub(crate) fn name_of(t: PortType) -> &'static str {
         PortType::Q15 => "q15",
         PortType::Raw => "raw",
         PortType::Packets => "packets",
+        PortType::Lanes { .. } => "lanes",
         _ => "frames",
     }
 }
@@ -189,6 +190,10 @@ fn pair_mut<T>(v: &mut [T], first: usize, second: usize) -> Result<(&mut T, &mut
 // ------------------------------------------------------------------ buffers
 
 /// A typed linear buffer.
+///
+/// A lane buffer holds whole time steps of `width` values; every position, length and range
+/// of it is in steps (the value `i` of step `s` is `data[s * width + i]`), so the stream logic
+/// of the runner is the same for lanes.
 pub(crate) enum Buffer {
     Raw(Vec<u8>),
     C32(Vec<C32>),
@@ -196,10 +201,11 @@ pub(crate) enum Buffer {
     F32(Vec<f32>),
     Q15(Vec<Q15>),
     Packets(Vec<Packet>),
+    Lanes { data: Vec<C32>, width: usize },
 }
 
 macro_rules! each {
-    ($b:expr, $v:ident => $e:expr) => {
+    ($b:expr, $v:ident => $e:expr, $data:ident, $width:ident => $lanes:expr) => {
         match $b {
             Buffer::Raw($v) => $e,
             Buffer::C32($v) => $e,
@@ -207,8 +213,17 @@ macro_rules! each {
             Buffer::F32($v) => $e,
             Buffer::Q15($v) => $e,
             Buffer::Packets($v) => $e,
+            Buffer::Lanes {
+                data: $data,
+                width: $width,
+            } => $lanes,
         }
     };
+}
+
+/// The values of the steps `r` of a lane buffer of `width` lanes.
+fn lane_values(r: Range<usize>, width: usize) -> Option<Range<usize>> {
+    Some(r.start.checked_mul(width)?..r.end.checked_mul(width)?)
 }
 
 /// `dst[dst_at..dst_at + n] = src[from..from + n]`.
@@ -238,14 +253,29 @@ impl Buffer {
             _ => {
                 return Err(sdrk_blocks::Error::InvalidParameter {
                     name: "buffer",
-                    reason: "frames have no stream buffer",
+                    reason: "frames and lanes have no stream buffer",
                 });
             }
         })
     }
 
+    /// A lane buffer of `steps` time steps of `width` `C32` values.
+    pub(crate) fn lanes(width: usize, steps: usize) -> Result<Self, sdrk_blocks::Error> {
+        let values = steps
+            .checked_mul(width)
+            .ok_or(sdrk_blocks::Error::Storage {
+                needed: usize::MAX,
+                available: 0,
+            })?;
+        Ok(Self::Lanes {
+            data: crate::storage::alloc_vec(values)?,
+            width,
+        })
+    }
+
+    /// Number of elements (time steps of a lane buffer).
     pub(crate) fn len(&self) -> usize {
-        each!(self, v => v.len())
+        each!(self, v => v.len(), data, width => data.len() / (*width).max(1))
     }
 
     pub(crate) fn view(&self, r: Range<usize>) -> Option<NodeInput<'_>> {
@@ -256,6 +286,10 @@ impl Buffer {
             Self::F32(v) => NodeInput::F32(v.get(r)?),
             Self::Q15(v) => NodeInput::Q15(v.get(r)?),
             Self::Packets(v) => NodeInput::Packets(v.get(r)?),
+            Self::Lanes { data, width } => NodeInput::Lanes {
+                data: data.get(lane_values(r, *width)?)?,
+                width: *width,
+            },
         })
     }
 
@@ -275,8 +309,8 @@ impl Buffer {
             Self::CQ15(v) => NodeElem::CQ15(v.get(r)?),
             Self::F32(v) => NodeElem::F32(v.get(r)?),
             Self::Q15(v) => NodeElem::Q15(v.get(r)?),
-            // Packets are never one stream of a lockstep pair.
-            Self::Packets(_) => return None,
+            // Packets and lanes are never one stream of a lockstep pair.
+            Self::Packets(_) | Self::Lanes { .. } => return None,
         })
     }
 
@@ -288,15 +322,24 @@ impl Buffer {
             Self::F32(v) => NodeOutput::F32(v.get_mut(r)?),
             Self::Q15(v) => NodeOutput::Q15(v.get_mut(r)?),
             Self::Packets(v) => NodeOutput::Packets(v.get_mut(r)?),
+            Self::Lanes { data, width } => NodeOutput::Lanes {
+                data: data.get_mut(lane_values(r, *width)?)?,
+                width: *width,
+            },
         })
     }
 
     /// Moves `r` to the front at `dst`.
     pub(crate) fn move_within(&mut self, r: Range<usize>, dst: usize) {
-        each!(self, v => {
+        fn within<T: Copy>(v: &mut [T], r: Range<usize>, dst: usize) {
             let n = r.end.saturating_sub(r.start);
             if r.end <= v.len() && r.start <= r.end && dst.saturating_add(n) <= v.len() {
                 v.copy_within(r, dst);
+            }
+        }
+        each!(self, v => within(v, r, dst), data, width => {
+            if let (Some(values), Some(at)) = (lane_values(r, *width), dst.checked_mul(*width)) {
+                within(data, values, at);
             }
         });
     }
@@ -310,6 +353,12 @@ impl Buffer {
             (Self::F32(d), Self::F32(s)) => copy_slice(d, at, s, from, n),
             (Self::Q15(d), Self::Q15(s)) => copy_slice(d, at, s, from, n),
             (Self::Packets(d), Self::Packets(s)) => copy_slice(d, at, s, from, n),
+            (Self::Lanes { data: d, width: w }, Self::Lanes { data: s, width: ws }) if w == ws => {
+                match (at.checked_mul(*w), from.checked_mul(*w), n.checked_mul(*w)) {
+                    (Some(at), Some(from), Some(n)) => copy_slice(d, at, s, from, n),
+                    _ => false,
+                }
+            }
             _ => false,
         }
     }
@@ -346,8 +395,8 @@ impl Buffer {
             Self::CQ15(v) => bytes_of(v, from, n),
             Self::F32(v) => bytes_of(v, from, n),
             Self::Q15(v) => bytes_of(v, from, n),
-            // Packets are not plain bytes; see `copy_packets_to`.
-            Self::Packets(_) => None,
+            // Packets are not plain bytes (see `copy_packets_to`); no output reads lanes.
+            Self::Packets(_) | Self::Lanes { .. } => None,
         };
         let dst: &mut [u8] = bytemuck::cast_slice_mut(out);
         match (bytes, dst.get_mut(..n.saturating_mul(size))) {

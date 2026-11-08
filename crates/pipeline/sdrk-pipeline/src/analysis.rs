@@ -23,7 +23,10 @@ use crate::model::{
     OutputSpec, OutputType, PipelineSpec, PortName, Precision, is_valid_name,
 };
 use crate::params::check_params;
-use crate::registry::{BlockFactory, BuildOptions, Checked, PortInfo, PortKind, Registry};
+use crate::registry::{
+    BlockFactory, BuildOptions, Checked, PortInfo, PortKind, Registry, input_port_type,
+    port_accepts,
+};
 use crate::structure::join;
 use crate::validate::{DiagCode, Diagnostic, GroupEdge, NodeReport, OutputReport, Report};
 
@@ -66,9 +69,15 @@ pub(crate) struct PlanNode {
 }
 
 /// A linear buffer shared by the readers of one source.
+///
+/// A lane stream (`lanes` is `Some(width)`, `ty` is `PortType::Lanes` without a width
+/// parameter) counts its rate, capacity and `min_input` in time steps; its buffer holds
+/// `width` values per step.
 #[derive(Debug, Clone)]
 pub(crate) struct PlanStream {
     pub ty: PortType,
+    /// Number of lanes of a lane stream; `None` for every other stream.
+    pub lanes: Option<usize>,
     pub rate: Rate,
     pub origin: usize,
     /// Elements per sample: bytes per sample for raw streams, 1 otherwise (`num`, `den`).
@@ -127,6 +136,22 @@ fn ceil_mul_div(a: u128, b: u128, c: u128) -> Option<u128> {
 }
 
 impl PlanStream {
+    /// What the stream carries, as the readers' factories see it.
+    pub(crate) fn kind(&self) -> PortKind {
+        match (self.lanes, self.ty) {
+            (Some(width), PortType::Lanes { elem, .. }) => PortKind::Lanes {
+                elem: elem.port_type(),
+                width,
+            },
+            _ => PortKind::Stream(self.ty),
+        }
+    }
+
+    /// Bytes of one element (one time step of a lane stream).
+    pub(crate) fn elem_bytes(&self) -> usize {
+        elem_size(self.ty).saturating_mul(self.lanes.unwrap_or(1))
+    }
+
     /// Elements of this stream produced by `samples` samples at the pipeline input
     /// (rounded up).
     pub(crate) fn elements_for(&self, samples: usize, origin_rate: Rate) -> usize {
@@ -168,6 +193,8 @@ pub(crate) fn elem_size(t: PortType) -> usize {
         PortType::CQ15 | PortType::F32 => 4,
         PortType::Q15 => 2,
         PortType::Packets => core::mem::size_of::<sdrk_blocks::Packet>(),
+        // One lane value; a time step holds `width` of them (`PlanStream::elem_bytes`).
+        PortType::Lanes { elem, .. } => elem_size(elem.port_type()),
         _ => 1,
     }
 }
@@ -213,15 +240,24 @@ fn input_port(t: InputType) -> PortType {
     }
 }
 
-fn port_name(t: PortType) -> &'static str {
+fn port_name(t: PortType) -> String {
     match t {
-        PortType::C32 => "c32",
-        PortType::CQ15 => "cq15",
-        PortType::F32 => "f32",
-        PortType::Q15 => "q15",
-        PortType::Raw => "raw bytes",
-        PortType::Packets => "packets",
-        _ => "frames",
+        PortType::C32 => "c32".into(),
+        PortType::CQ15 => "cq15".into(),
+        PortType::F32 => "f32".into(),
+        PortType::Q15 => "q15".into(),
+        PortType::Raw => "raw bytes".into(),
+        PortType::Packets => "packets".into(),
+        PortType::Lanes { elem, .. } => format!("lanes of {}", elem.name()),
+        _ => "frames".into(),
+    }
+}
+
+/// What a stream carries, for messages: `c32`, or `lanes of c32, width 16`.
+fn stream_text(s: &PlanStream) -> String {
+    match s.lanes {
+        Some(width) => format!("{}, width {width}", port_name(s.ty)),
+        None => port_name(s.ty),
     }
 }
 
@@ -1095,6 +1131,7 @@ impl<'a> Stage2<'a> {
     fn new_stream(&mut self, ty: PortType, rate: Rate, origin: usize, elems: (u64, u64)) -> usize {
         self.streams.push(PlanStream {
             ty,
+            lanes: None,
             rate,
             origin,
             elems,
@@ -1121,12 +1158,12 @@ impl<'a> Stage2<'a> {
         remap: &dyn Fn(&str) -> String,
     ) -> Option<usize> {
         let factory: &dyn BlockFactory = self.registry.factory(kind)?;
-        let (ty, rate_in, origin) = {
+        let (input, rate_in, origin) = {
             let s = self.streams.get(src)?;
-            (s.ty, s.rate, s.origin)
+            (s.kind(), s.rate, s.origin)
         };
         let precision = self.spec.settings.precision;
-        match factory.check(params, ty, rate_in, precision) {
+        match factory.check(params, input, rate_in, precision) {
             Ok(checked) => {
                 let min_input = checked.min_input;
                 if let Some(s) = self.streams.get_mut(src) {
@@ -1192,6 +1229,18 @@ impl<'a> Stage2<'a> {
                 Some(Produced::Stream(s))
             }
             PortKind::Frames { len } => Some(Produced::Frames { len, node: idx }),
+            PortKind::Lanes { width, .. } => {
+                // A lane stream has the clock domain of its source, like a stream; its rate is
+                // the step rate.
+                let ty = input_port_type(output)?;
+                let s = self.new_stream(ty, rate_out, origin, (1, 1));
+                if let Some(stream) = self.streams.get_mut(s) {
+                    stream.delay_s = delay_s;
+                    stream.lanes = Some(width);
+                }
+                self.nodes.get_mut(idx)?.dst = PlanDst::Stream(s);
+                Some(Produced::Stream(s))
+            }
         }
     }
 
@@ -1359,18 +1408,23 @@ impl<'a> Stage2<'a> {
                 None
             }
             Produced::Stream(s) => {
-                let ty = self.streams.get(s).map_or(PortType::Raw, |x| x.ty);
-                if accepted.contains(&ty) {
+                let stream = self.streams.get(s)?;
+                if port_accepts(accepted, stream.ty) {
                     Some(s)
                 } else {
+                    let delivers = stream_text(stream);
+                    let hint = if stream.lanes.is_some() {
+                        "; take one lane with `channel_select`"
+                    } else {
+                        ""
+                    };
                     self.report.error(
                         format!("edges[{k}].to"),
                         DiagCode::TypeMismatch,
                         format!(
-                            "`{node}` ({kind}) takes {}, but `{}` delivers {}",
+                            "`{node}` ({kind}) takes {}, but `{}` delivers {delivers}{hint}",
                             describe_types(accepted),
                             edge.from,
-                            port_name(ty)
                         ),
                     );
                     None
@@ -1692,6 +1746,21 @@ impl<'a> Stage2<'a> {
                     .is_some_and(|x| x.ty == PortType::Packets),
                 _ => false,
             };
+            // No output type takes a lane stream in this version.
+            if let Produced::Stream(s) = produced
+                && let Some(stream) = self.streams.get(s).filter(|x| x.lanes.is_some())
+            {
+                let text = stream_text(stream);
+                self.report.error(
+                    join(&path, "type"),
+                    DiagCode::TypeMismatch,
+                    format!(
+                        "`{}` produces {text}, which no output takes; take one lane with `channel_select`",
+                        edge.from
+                    ),
+                );
+                continue;
+            }
             let wanted = match (produced, packets) {
                 (Produced::Frames { .. }, _) => "frames",
                 (_, true) => "packets",
@@ -1812,7 +1881,7 @@ impl<'a> Stage2<'a> {
         for s in &self.streams {
             if let Some(&r) = input_rates.get(s.origin) {
                 let cap = s.capacity(max_chunk, r, s.min_input);
-                memory = memory.saturating_add(cap.saturating_mul(elem_size(s.ty)));
+                memory = memory.saturating_add(cap.saturating_mul(s.elem_bytes()));
             }
         }
         for o in &self.outputs {
@@ -1922,6 +1991,10 @@ impl<'a> Stage2<'a> {
                 rate_in: n.rate_in,
                 rate_out: n.checked.rate_out,
                 delay_samples_in: n.checked.delay,
+                lanes: match n.checked.output {
+                    PortKind::Lanes { width, .. } => Some(width),
+                    _ => None,
+                },
                 auto: n.auto,
                 clock_domain: self
                     .streams

@@ -81,6 +81,75 @@ pub enum PortType {
     /// Packets ([`Packet`](sdrk_proto::Packet): bytes with a sample index and flags), named
     /// `"packets"` in schemas and documentation.
     Packets,
+    /// A lane stream ([`Lanes`](crate::Lanes)): time steps of M values of `elem` side by side,
+    /// written `lanes<c32>` in the documentation. On an output, `width_param` names the
+    /// parameter that sets M (`"channels"` for `channelize`); a reading port declares `""`
+    /// and takes the width of its input.
+    ///
+    /// ```
+    /// use sdrk_blocks::{LaneElem, PortType};
+    /// let out = PortType::Lanes { elem: LaneElem::C32, width_param: "channels" };
+    /// assert!(out.is_lanes());
+    /// assert!(!PortType::C32.is_lanes());
+    /// ```
+    Lanes {
+        /// The element type of every lane.
+        elem: LaneElem,
+        /// Name of the parameter that holds the width; `""` on a port that takes the width
+        /// of its input.
+        width_param: &'static str,
+    },
+}
+
+impl PortType {
+    /// True for [`PortType::Lanes`].
+    pub const fn is_lanes(&self) -> bool {
+        matches!(self, Self::Lanes { .. })
+    }
+}
+
+/// The element type of a lane stream ([`PortType::Lanes`]). `C32` only in this version.
+///
+/// ```
+/// use sdrk_blocks::{LaneElem, PortType};
+/// assert_eq!(LaneElem::C32.port_type(), PortType::C32);
+/// assert_eq!(LaneElem::C32.name(), "c32");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LaneElem {
+    /// Complex `f32`.
+    C32,
+}
+
+impl LaneElem {
+    /// The stream port type of one lane.
+    pub const fn port_type(self) -> PortType {
+        match self {
+            Self::C32 => PortType::C32,
+        }
+    }
+
+    /// The lane element of a stream port type, if lanes of it exist (`C32` only).
+    ///
+    /// ```
+    /// use sdrk_blocks::{LaneElem, PortType};
+    /// assert_eq!(LaneElem::of(PortType::C32), Some(LaneElem::C32));
+    /// assert_eq!(LaneElem::of(PortType::F32), None);
+    /// ```
+    pub const fn of(t: PortType) -> Option<Self> {
+        match t {
+            PortType::C32 => Some(Self::C32),
+            _ => None,
+        }
+    }
+
+    /// Lowercase name, as in the documentation (`"c32"`).
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::C32 => "c32",
+        }
+    }
 }
 
 /// A parameter of a block.

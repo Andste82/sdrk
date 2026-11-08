@@ -45,7 +45,7 @@ use crate::node::{
     ClockedNode, FrameNode, Node, PacketInNode, PacketOutNode, PairNode, StreamNode,
 };
 use crate::params::{check_params, to_param};
-use crate::registry::{BlockFactory, Checked, PortKind};
+use crate::registry::{BlockFactory, Checked, PortKind, input_port_type, port_accepts};
 use crate::storage::VecStorage;
 use crate::validate::{DiagCode, Diagnostic};
 
@@ -81,6 +81,12 @@ pub(crate) trait Kind: Send + Sync + 'static {
     fn default_cfg() -> Self::Cfg;
     /// Sets one parameter (kind and absolute range are checked).
     fn set(cfg: &mut Self::Cfg, name: &str, value: ParamValue) -> BlockResult<()>;
+    /// Takes the width of the lane stream at port `a` before [`Kind::plan`] (only called for
+    /// a kind whose port `a` accepts lanes). The default ignores it.
+    fn input_width(cfg: &mut Self::Cfg, width: usize) -> BlockResult<()> {
+        let _ = (cfg, width);
+        Ok(())
+    }
     /// Validates the configuration for the input and computes the figures.
     fn plan(
         cfg: &Self::Cfg,
@@ -190,22 +196,31 @@ impl<K: Kind> BlockFactory for Factory<K> {
     fn check(
         &self,
         params: &Map<String, Value>,
-        input: PortType,
+        input_kind: PortKind,
         rate_in: Rate,
         precision: Precision,
     ) -> Result<Checked, Vec<Diagnostic>> {
-        let cfg = parse_params::<K>(self.desc, params)?;
-        let accepted = self
-            .desc
-            .inputs
-            .first()
-            .is_some_and(|p| p.types.contains(&input));
-        if !accepted {
+        let mut cfg = parse_params::<K>(self.desc, params)?;
+        let input = input_port_type(input_kind);
+        let accepted = input.filter(|&t| {
+            self.desc
+                .inputs
+                .first()
+                .is_some_and(|p| port_accepts(p.types, t))
+        });
+        let Some(input) = accepted else {
             return Err(vec![diag(
                 String::new(),
                 DiagCode::TypeMismatch,
-                format!("`{}` does not accept {input:?} input", self.desc.kind),
+                format!("`{}` does not accept {input_kind:?} input", self.desc.kind),
             )]);
+        };
+        if let PortKind::Lanes { width, .. } = input_kind {
+            K::input_width(&mut cfg, width).map_err(|e| {
+                let mut d = plan_error(&e);
+                K::adjust(&e, &mut d);
+                vec![d]
+            })?;
         }
         let f = K::plan(&cfg, input, rate_in, precision).map_err(|e| {
             let mut d = plan_error(&e);

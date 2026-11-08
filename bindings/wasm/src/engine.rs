@@ -547,6 +547,8 @@ fn output_buffers<'a>(
                 chunk: 0,
                 buf: Buf::F32(vec![0.0; len]),
             },
+            // No output carries lanes (the validation rejects a lane source).
+            PortKind::Lanes { .. } => return Err(internal("output type")),
         };
         outputs.insert(name.clone(), slot);
     }

@@ -150,8 +150,12 @@ fn build_streams(
     for s in streams {
         let origin_rate = inputs.get(s.origin).map_or(s.rate, |i| i.rate);
         let cap = s.capacity(max_chunk, origin_rate, s.min_input);
-        let buf = Buffer::new(s.ty, cap).map_err(|e| limit(e.to_string()))?;
-        *memory = memory.saturating_add(cap.saturating_mul(elem_size(s.ty)));
+        let buf = match s.lanes {
+            Some(width) => Buffer::lanes(width, cap),
+            None => Buffer::new(s.ty, cap),
+        }
+        .map_err(|e| limit(e.to_string()))?;
+        *memory = memory.saturating_add(cap.saturating_mul(s.elem_bytes()));
         rt.push(Stream {
             buf,
             end: 0,

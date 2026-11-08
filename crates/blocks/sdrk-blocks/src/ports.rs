@@ -1,8 +1,8 @@
 //! Port types: what a [`Block`](crate::Block) reads and writes in one `process` call.
 //!
 //! A port type is a stream of one sample type ([`StreamElem`]), a pair of streams that advance
-//! together ([`Two`]), frames of `f32` values ([`Frame`]), packets ([`Packets`]) or a clock
-//! stream with packets ([`Clocked`]). The types exist only at compile time; a stream block
+//! together ([`Two`]), frames of `f32` values ([`Frame`]), packets ([`Packets`]), a clock
+//! stream with packets ([`Clocked`]) or M streams side by side ([`Lanes`]). The types exist only at compile time; a stream block
 //! keeps the signature it had before ports were introduced.
 
 use core::mem::{align_of, size_of};
@@ -484,6 +484,213 @@ impl Ports for Packets {
     }
     fn mut_reborrow<'a>(view: &'a mut Self::Mut<'_>) -> Self::Mut<'a> {
         &mut **view
+    }
+}
+
+/// M streams of `T` side by side (a lane stream): time step after time step, each step M
+/// values (lane 0 … M−1). The output of a channelizer: one port carries all its channels.
+///
+/// The width M is a run-time value (it comes from the configuration of the producing block),
+/// not a type parameter; the views carry it. `Progress` of a block with a lane port counts
+/// time steps on that port, and [`Ports::ref_len`], [`Ports::mut_len`], [`Ports::ref_skip`]
+/// and [`Ports::mut_skip`] count and skip whole steps.
+///
+/// ```
+/// use sdrk::C32;
+/// use sdrk_blocks::{Lanes, LanesRef, Ports};
+/// assert_eq!(<Lanes<C32> as Ports>::COUNT, 1);
+/// let data = [C32::new(1.0, 0.0); 12];
+/// let view = LanesRef::new(&data, 4)?;
+/// assert_eq!(<Lanes<C32> as Ports>::ref_len(&view), 3);
+/// let rest = <Lanes<C32> as Ports>::ref_skip(view, 2);
+/// assert_eq!((rest.steps(), rest.data().len()), (1, 4));
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+///
+/// A lane stream is not a stream element: a block or a chain that needs a stream rejects it.
+///
+/// ```compile_fail,E0277
+/// use sdrk::C32;
+/// use sdrk_blocks::{Lanes, StreamElem};
+/// fn needs_stream<T: StreamElem>() {}
+/// needs_stream::<Lanes<C32>>();
+/// ```
+///
+/// ```compile_fail,E0277
+/// use sdrk::C32;
+/// use sdrk_blocks::{ChainItem, Lanes};
+/// fn passable<T: ChainItem>() {}
+/// passable::<Lanes<C32>>();
+/// ```
+pub struct Lanes<T: StreamElem>(core::marker::PhantomData<T>);
+
+/// Checks the shape of a lane view: `width >= 1` and `len` a multiple of `width`.
+fn lane_shape(len: usize, width: usize) -> Result<()> {
+    if width == 0 {
+        return Err(crate::Error::InvalidParameter {
+            name: "width",
+            reason: "a lane stream has at least one lane",
+        });
+    }
+    if !len.is_multiple_of(width) {
+        return Err(crate::Error::Core(sdrk_core::Error::LengthMismatch {
+            expected: len.div_ceil(width).saturating_mul(width),
+            got: len,
+        }));
+    }
+    Ok(())
+}
+
+/// The values `i·width .. (i+1)·width`, if they exist.
+fn lane_range(i: usize, width: usize) -> Option<core::ops::Range<usize>> {
+    let start = i.checked_mul(width)?;
+    Some(start..start.checked_add(width)?)
+}
+
+/// The read-only view of a [`Lanes`] port: whole time steps of `width` values each, step-major.
+///
+/// ```
+/// use sdrk::C32;
+/// use sdrk_blocks::LanesRef;
+/// let data: Vec<C32> = (0..8).map(|i| C32::new(i as f32, 0.0)).collect();
+/// let view = LanesRef::new(&data, 4)?;
+/// assert_eq!((view.width(), view.steps()), (4, 2));
+/// assert_eq!(view.step(1).unwrap()[0], C32::new(4.0, 0.0));
+/// assert!(view.step(2).is_none());
+/// // A length that is not a multiple of the width, or width 0, is rejected.
+/// assert!(LanesRef::new(&data[..7], 4).is_err());
+/// assert!(LanesRef::new(&data, 0).is_err());
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct LanesRef<'a, T> {
+    data: &'a [T],
+    width: usize,
+}
+
+impl<'a, T> LanesRef<'a, T> {
+    /// A view of `data` as steps of `width` lanes.
+    ///
+    /// # Errors
+    /// `InvalidParameter` (`width`) for width 0, `LengthMismatch` if `data.len()` is not a
+    /// multiple of `width`.
+    pub fn new(data: &'a [T], width: usize) -> Result<Self> {
+        lane_shape(data.len(), width)?;
+        Ok(Self { data, width })
+    }
+
+    /// Number of lanes (values per step).
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Number of whole time steps (`data().len() / width()`).
+    pub fn steps(&self) -> usize {
+        self.data.len() / self.width.max(1)
+    }
+
+    /// All values, step-major: step 0 lane 0 … M−1, then step 1, …
+    pub fn data(&self) -> &'a [T] {
+        self.data
+    }
+
+    /// The `width` values of step `i` (lane 0 first); `None` past the last step.
+    pub fn step(&self, i: usize) -> Option<&'a [T]> {
+        self.data.get(lane_range(i, self.width)?)
+    }
+}
+
+/// The writable view of a [`Lanes`] port: room for whole time steps of `width` values each.
+///
+/// ```
+/// use sdrk::C32;
+/// use sdrk_blocks::LanesMut;
+/// let mut data = [C32::default(); 8];
+/// let mut view = LanesMut::new(&mut data, 4)?;
+/// assert_eq!(view.steps(), 2);
+/// view.step_mut(1).unwrap()[3] = C32::new(1.0, 0.0);
+/// view.data_mut()[0] = C32::new(2.0, 0.0);
+/// assert_eq!(view.step(1).unwrap()[3], C32::new(1.0, 0.0));
+/// assert_eq!(data[0], C32::new(2.0, 0.0));
+/// assert_eq!(data[7], C32::new(1.0, 0.0));
+/// # Ok::<(), sdrk_blocks::Error>(())
+/// ```
+#[derive(Debug)]
+pub struct LanesMut<'a, T> {
+    data: &'a mut [T],
+    width: usize,
+}
+
+impl<'a, T> LanesMut<'a, T> {
+    /// A writable view of `data` as steps of `width` lanes.
+    ///
+    /// # Errors
+    /// `InvalidParameter` (`width`) for width 0, `LengthMismatch` if `data.len()` is not a
+    /// multiple of `width`.
+    pub fn new(data: &'a mut [T], width: usize) -> Result<Self> {
+        lane_shape(data.len(), width)?;
+        Ok(Self { data, width })
+    }
+
+    /// Number of lanes (values per step).
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Number of whole time steps that fit.
+    pub fn steps(&self) -> usize {
+        self.data.len() / self.width.max(1)
+    }
+
+    /// All values, step-major.
+    pub fn data(&self) -> &[T] {
+        self.data
+    }
+
+    /// All values, step-major, writable.
+    pub fn data_mut(&mut self) -> &mut [T] {
+        self.data
+    }
+
+    /// The `width` values of step `i`; `None` past the last step.
+    pub fn step(&self, i: usize) -> Option<&[T]> {
+        self.data.get(lane_range(i, self.width)?)
+    }
+
+    /// The `width` values of step `i`, writable; `None` past the last step.
+    pub fn step_mut(&mut self, i: usize) -> Option<&mut [T]> {
+        self.data.get_mut(lane_range(i, self.width)?)
+    }
+}
+
+impl<T: StreamElem> Ports for Lanes<T> {
+    type Ref<'a> = LanesRef<'a, T>;
+    type Mut<'a> = LanesMut<'a, T>;
+    const COUNT: usize = 1;
+
+    fn ref_len(view: &Self::Ref<'_>) -> usize {
+        view.steps()
+    }
+    fn mut_len(view: &Self::Mut<'_>) -> usize {
+        view.steps()
+    }
+    fn ref_skip(view: Self::Ref<'_>, n: usize) -> Self::Ref<'_> {
+        LanesRef {
+            data: skip_ref(view.data, n.saturating_mul(view.width)),
+            width: view.width,
+        }
+    }
+    fn mut_skip(view: Self::Mut<'_>, n: usize) -> Self::Mut<'_> {
+        LanesMut {
+            data: skip_mut(view.data, n.saturating_mul(view.width)),
+            width: view.width,
+        }
+    }
+    fn mut_reborrow<'a>(view: &'a mut Self::Mut<'_>) -> Self::Mut<'a> {
+        LanesMut {
+            data: &mut *view.data,
+            width: view.width,
+        }
     }
 }
 

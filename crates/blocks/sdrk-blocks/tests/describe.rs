@@ -1797,6 +1797,7 @@ fn port_types(ports: &[sdrk_blocks::PortDesc]) -> String {
                 PortType::Raw => "raw".to_string(),
                 PortType::Frame { len_param } => format!("frame({len_param})"),
                 PortType::Packets => "packets".to_string(),
+                PortType::Lanes { elem, .. } => format!("lanes<{}>", elem.name()),
                 _ => "?".to_string(),
             })
             .collect();

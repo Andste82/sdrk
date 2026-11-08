@@ -3,16 +3,19 @@
 //! `sdrk_testkit::ism` at 2 MHz (D968).
 //!
 //! - Spec test 3 (seed 629): 300 PWM transmissions of 40 bits one at a time in the 433 MHz band
-//!   (2 MHz around 433.92 MHz, 16 channels), 20 on channel boundaries and 20 at the band edges,
+//!   (2 MHz around 433.92 MHz, 16 channels), 20 on the 14 channel boundaries inside the band and
+//!   20 at the band edges,
 //!   levels 10 to 40 dB above the noise in a channel spacing: every one emitted once with the
 //!   frequency within 10 kHz; every width within one step from `WIDTH_SNR` on, a guard on the
 //!   share of the widths within one step from 12 dB (open item I45.1-1).
 //! - Spec test 4 (seed 630): 100 scenes of 2 or 3 overlapping OOK and FSK transmissions at least
-//!   250 kHz apart: guards on the shares emitted with their own train (I45.1-3).
+//!   250 kHz apart: every OOK transmission emitted with its own train (the spec), guards on the
+//!   FSK shares and the widths (I45.1-3).
 //! - Spec test 6 (seed 632): the detection levels through the channelizer and through a `ddc`
 //!   with the same detector on a lane view of width 1 agree within 1 dB.
 //! - Spec test 7 (seed 633): noise, a carrier and wideband bursts give at most one train per
-//!   burst and nothing else (4 s; the 60 s of the spec in an ignored test).
+//!   burst and nothing else (4 s; the 60 s of the spec in an ignored test that the CI job `soak`
+//!   runs, D974).
 //! - Chunk invariance of the block with 20 plans of input chunks and output room (seed 635, the
 //!   block part of test 8), on a scene with overlapping OOK and FSK transmissions.
 //! - Two transmissions two channel spacings apart that overlap in time are both emitted; an FSK
@@ -218,7 +221,7 @@ const MIN_SNR: f64 = 12.0;
 const WIDTH_SNR: f64 = 28.0;
 
 /// Regression guard of the widths between `MIN_SNR` and `WIDTH_SNR`: the share of single
-/// widths within one step (measured 0.965, I45.1-1).
+/// widths within one step (measured 0.966, I45.1-1).
 const MIN_WIDTH_SHARE: f64 = 0.95;
 
 /// Transmissions of spec test 3 and the scenes they are split into (a scene holds at most 64).
@@ -259,9 +262,10 @@ fn test3_transmissions() -> Vec<Test3Tx> {
     (0..TEST3_COUNT)
         .map(|i| {
             let freq = match i {
-                // 20 on channel boundaries (between the channels -8 .. 7, all 15 boundaries
-                // and 5 again), 20 at the band edges (10 at 433.05 MHz, 10 at 434.79 MHz).
-                0..20 => (((i % 15) as f64) - 7.5) * spacing,
+                // 20 on channel boundaries inside the band (the 14 boundaries from -812.5 to
+                // +812.5 kHz between the channels -7 .. 7, and the first 6 again), 20 at the
+                // band edges (10 at 433.05 MHz, 10 at 434.79 MHz).
+                0..20 => (((i % 14) as f64) - 6.5) * spacing,
                 20..30 => 433.05e6 - CENTER,
                 30..40 => 434.79e6 - CENTER,
                 _ => (rng.next_f64() * (434.79e6 - 433.05e6) + 433.05e6) - CENTER,
@@ -371,7 +375,8 @@ fn width_error(got: &[Pair], want: &[(f64, f64)], us_per_step: f64) -> f64 {
 }
 
 /// Spec test 3 (seed 629): 300 PWM transmissions of 40 bits one at a time over the 433 MHz band
-/// (2 MHz around 433.92 MHz, 16 channels), 20 on channel boundaries and 20 at the band edges,
+/// (2 MHz around 433.92 MHz, 16 channels), 20 on the 14 channel boundaries inside the band
+/// (-812.5 to +812.5 kHz) and 20 at the band edges,
 /// levels 10 to 40 dB above the noise in a channel spacing. Every one at 12 dB or more is
 /// emitted once with the right number of pairs and the frequency within 10 kHz, below 12 dB at
 /// most one train each; every pulse and gap within 1 step of the generator's widths from
@@ -559,12 +564,14 @@ const TEST4_PERIOD_S: f64 = 0.040;
 const TEST4_SNR: (f64, f64) = (30.0, 40.0);
 /// The tolerance of the widths (OOK) and transitions (FSK) of test 4 in steps.
 const TEST4_TOL: f64 = 1.0;
-/// Regression guards of test 4 (I45.1-3): the shares of the OOK and of the FSK transmissions
-/// emitted once with their own train, and of those with every width (OOK) or transition (FSK)
-/// within 1 and 3 steps; the trains of no transmission.
-const TEST4_MIN_OOK: [f64; 3] = [0.98, 0.97, 0.97];
+/// The shares of the OOK and of the FSK transmissions of test 4 emitted once with their own
+/// train, and of those with every width (OOK) or transition (FSK) within 1 and 3 steps: the
+/// spec for the OOK trains (measured 128 of 128), regression guards on the measured shares
+/// elsewhere (I45.1-3: OOK widths 0.992 and 0.992; FSK 0.962, 0.568 and 0.674); the trains of no
+/// transmission (measured 2, I45.1-3).
+const TEST4_MIN_OOK: [f64; 3] = [1.0, 0.97, 0.97];
 const TEST4_MIN_FSK: [f64; 3] = [0.93, 0.53, 0.64];
-const TEST4_MAX_STRAYS: usize = 6;
+const TEST4_MAX_STRAYS: usize = 2;
 
 /// One transmission of test 4.
 struct Test4Tx {
@@ -819,9 +826,10 @@ fn simultaneous_transmissions_are_each_emitted() {
         );
     }
     println!("test 4: {strays} trains of no transmission");
-    // The spec asks for every transmission with its own train; the detector does not reach it
-    // for every FSK transmission and one PPM transmission (open item I45.1-3): regression
-    // guards on the measured shares.
+    // The spec asks for every transmission with its own train: asserted for the OOK trains,
+    // which all have it; the detector does not reach it for every FSK transmission (open item
+    // I45.1-3), and the widths are not part of the spec's criterion (one Manchester transmission
+    // has a width 4.5 steps off): regression guards on the measured shares.
     for (m, min) in [TEST4_MIN_OOK, TEST4_MIN_FSK].iter().enumerate() {
         for (got, want) in shares[m].iter().zip(min) {
             assert!(got >= want, "{m}: {:?} against {min:?}", shares[m]);
@@ -1071,8 +1079,8 @@ const TEST7_MAX_PER_BURST: usize = 3;
 
 /// Spec test 7 (seed 633) over the 60 s of the spec (15 bursts): nothing outside the bursts and
 /// nothing from the carrier, as the spec asks, and at most `TEST7_MAX_PER_BURST` trains per
-/// burst; minutes in a debug build:
-/// `cargo test --profile emulated -p sdrk-blocks --test band_pulse_detect -- --ignored`.
+/// burst; minutes in a debug build, so it is ignored by default and runs in the CI job `soak`
+/// (D974): `cargo test --profile emulated -p sdrk-blocks --test band_pulse_detect -- --ignored`.
 #[test]
 #[ignore = "60 s of 2 MS/s; run with --profile emulated -- --ignored"]
 fn sixty_seconds_of_noise_give_no_false_alarms() {
@@ -1206,6 +1214,50 @@ fn overlapping_transmissions_two_spacings_apart_are_both_emitted() {
             1.0,
         )
         .unwrap();
+    }
+}
+
+/// The lane of channel -8 is centred on the edge of the input band (plus and minus 1 MHz): a
+/// transmission at +960 kHz or -960 kHz, nearer to that lane than to channel 7 or -7, is
+/// emitted once from the lane of channel -8 with its offset on its own side of the band (D964).
+#[test]
+fn a_transmission_at_the_edge_of_the_input_band_keeps_its_side() {
+    let bits = [
+        true, false, true, true, false, false, true, false, true, true, false, true,
+    ];
+    for freq in [960e3, -960e3] {
+        let placed = [Placed {
+            start_s: 0.008,
+            transmission: Transmission {
+                coding: Coding::Pwm {
+                    short_us: 200.0,
+                    long_us: 400.0,
+                    gap_us: 200.0,
+                },
+                bits: &bits,
+                repeats: 1,
+                repeat_gap_us: 0.0,
+                freq_offset_hz: freq,
+                level_db: noise_in_channel() + 30.0,
+                timing_error: 0.0,
+            },
+        }];
+        let scene = Scene {
+            fs: FS,
+            center_hz: CENTER,
+            clock_error_ppm: 0.0,
+            noise_db: NOISE_DB,
+            transmissions: &placed,
+            interferers: &[],
+            seed: 8,
+        };
+        let lanes = lanes_of(&scene, 0.030, CHANNELS);
+        let trains = detect_all(&BandPulseDetectConfig::default(), &lanes, 250e3, CHANNELS);
+        assert_eq!(trains.len(), 1, "{freq}: {trains:?}");
+        let tr = &trains[0];
+        assert_eq!(tr.header.channel, -8, "{freq}: {tr:?}");
+        let df = f64::from(tr.header.freq_offset_hz) - freq;
+        assert!(df.abs() < 10e3, "{freq}: {tr:?}");
     }
 }
 
@@ -1434,6 +1486,110 @@ fn min_snr_db_decides_the_start_and_reset_starts_over() {
     // The noise level: about the mean magnitude of the noise (1.25e-3).
     let noise = det.noise_levels()[0];
     assert!((noise / 1.25e-3 - 1.0).abs() < 0.2, "{noise}");
+}
+
+/// One lane at 250 kHz: weak noise for `BAND_PULSE_WARMUP + 1000` steps, then `frames` bursts of
+/// a carrier (0.05 of the step rate, amplitude `amplitude`) of `on` steps every `period` steps,
+/// then 4000 steps of noise.
+fn carrier_lane(frames: usize, on: usize, period: usize, amplitude: f32) -> Vec<C32> {
+    let mut rng = Pcg32::new(7, 7);
+    let start = BAND_PULSE_WARMUP as usize + 1000;
+    (0..start + frames * period + 4000)
+        .map(|n| {
+            let k = n.wrapping_sub(start);
+            let on = n >= start && k < frames * period && k % period < on;
+            let a = if on { amplitude } else { 0.0 };
+            let ph = 2.0 * std::f64::consts::PI * 0.05 * n as f64;
+            C32::new(
+                a * ph.cos() as f32 + 1e-3 * rng.normal() as f32,
+                a * ph.sin() as f32 + 1e-3 * rng.normal() as f32,
+            )
+        })
+        .collect()
+}
+
+/// D971: with `min_pulse_us` of one step (4 us at 250 kHz) FSK frames of 2 steps every 8 steps
+/// finish two frames inside 16 steps; the lead-in is then `4 min_steps - 1` steps, so its replay
+/// finishes at most one frame and no frame is overwritten before its decision: every frame
+/// comes out.
+#[test]
+fn short_frames_in_the_lead_in_are_all_emitted() {
+    const FRAMES: usize = 12;
+    let x = carrier_lane(FRAMES, 2, 8, 0.02);
+    let cfg = BandPulseDetectConfig {
+        modulation: PulseModulation::Fsk,
+        min_pulse_us: 4.0,
+        ..BandPulseDetectConfig::default()
+    };
+    for chunk in [1usize, 7, 500] {
+        let mut det = detector(&cfg, 250e3, 1);
+        let trains = assemble(&run(
+            &mut det,
+            &x,
+            1,
+            &mut std::iter::repeat(chunk),
+            &mut std::iter::repeat(4),
+        ));
+        assert_eq!(trains.len(), FRAMES, "chunk {chunk}: {trains:?}");
+        let start = BAND_PULSE_WARMUP + 1000;
+        for (k, t) in trains.iter().enumerate() {
+            assert_eq!(t.header.modulation, Modulation::Fsk);
+            assert!(
+                t.index.abs_diff(start + 8 * k as u64) <= 2,
+                "frame {k} at {}",
+                t.index
+            );
+        }
+    }
+}
+
+/// A runtime change of `min_snr_db` applies to the next burst: an FSK frame in progress keeps
+/// the trigger factor it started with (its presence threshold, its end), the next burst sees
+/// the new one.
+#[test]
+fn a_runtime_min_snr_db_applies_to_the_next_burst() {
+    // Two carriers of 2000 steps, 0.01 against noise of 1.25e-3 (about 18 dB), 6000 steps
+    // apart; the change to 30 dB comes 1000 steps into the first.
+    let x = carrier_lane(2, 2000, 8000, 0.01);
+    let cfg = BandPulseDetectConfig {
+        modulation: PulseModulation::Fsk,
+        ..BandPulseDetectConfig::default()
+    };
+    let mut det = detector(&cfg, 250e3, 1);
+    let all = assemble(&run(
+        &mut det,
+        &x,
+        1,
+        &mut std::iter::repeat(500),
+        &mut std::iter::repeat(4),
+    ));
+    assert_eq!(all.len(), 2, "{all:?}");
+    let cut = BAND_PULSE_WARMUP as usize + 1000 + 1000;
+    let mut det = detector(&cfg, 250e3, 1);
+    let mut packets = run(
+        &mut det,
+        &x[..cut],
+        1,
+        &mut std::iter::repeat(500),
+        &mut std::iter::repeat(4),
+    );
+    det.set_param("min_snr_db", ParamValue::F64(30.0)).unwrap();
+    packets.extend(run(
+        &mut det,
+        &x[cut..],
+        1,
+        &mut std::iter::repeat(500),
+        &mut std::iter::repeat(4),
+    ));
+    let changed = assemble(&packets);
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert_eq!(changed[0].index, all[0].index);
+    assert_eq!(changed[0].pairs, all[0].pairs);
+    assert!(
+        changed[0].pairs[0].pulse.abs_diff(2000) <= 2,
+        "{:?}",
+        changed[0].pairs
+    );
 }
 
 #[test]

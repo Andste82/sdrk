@@ -4,6 +4,7 @@ from . import (  # noqa: F401
     agc,
     am_mod,
     auto_notch,
+    band_pulse_detect,
     basic_math,
     biquad,
     channelize,

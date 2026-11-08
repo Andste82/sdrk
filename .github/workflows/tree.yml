@@ -1215,7 +1215,8 @@ jobs:
         run: cargo +nightly fuzz run pipeline_json -- -max_total_time=300
 
   soak:
-    # The ten-minute variant of the long-run system test (ten minutes of signal, release build).
+    # The ten-minute variant of the long-run system test (ten minutes of signal, release build)
+    # and the 60 s of the false-alarm test of M45.1.
     name: soak
     needs: build_x64_linux
     if: ${{ inputs.scope == 'full' }}
@@ -1228,3 +1229,9 @@ jobs:
           cache-key: soak
       - name: Ten minutes of signal without drift
         run: cargo test --release -p sdrk-system-tests --test long_run_no_drift -- --ignored
+      - name: Sixty seconds of the 433 MHz band without false alarms
+        # Spec test 7 of M45.1 over its 60 s (2 MS/s through the channelizer and the pulse
+        # detector), too long for the default test run (D974).
+        run: >-
+          cargo test --profile emulated -p sdrk-blocks --test band_pulse_detect --
+          --ignored sixty_seconds_of_noise_give_no_false_alarms

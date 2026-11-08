@@ -1,0 +1,64 @@
+{
+  "arrays": {
+    "freqs": {
+      "dtype": "f64",
+      "file": "ook_lane.freqs.bin",
+      "len": 6
+    },
+    "gaps": {
+      "dtype": "f64",
+      "file": "ook_lane.gaps.bin",
+      "len": 91
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "ook_lane.input.bin",
+      "len": 41500
+    },
+    "levels_db": {
+      "dtype": "f64",
+      "file": "ook_lane.levels_db.bin",
+      "len": 6
+    },
+    "pair_counts": {
+      "dtype": "i32",
+      "file": "ook_lane.pair_counts.bin",
+      "len": 6
+    },
+    "pulses": {
+      "dtype": "f64",
+      "file": "ook_lane.pulses.bin",
+      "len": 91
+    },
+    "starts": {
+      "dtype": "f64",
+      "file": "ook_lane.starts.bin",
+      "len": 6
+    }
+  },
+  "case": "ook_lane",
+  "format_version": 1,
+  "kernel": "band_pulse_detect",
+  "notes": "one lane at 250 kHz (a lane view of width 1): 6 OOK trains of 16 bits (PWM 200/400/200 and 100/300/150 us, PPM 200/400/800 and 120/240/480 us, Manchester 250 and 400 us halves), one every 26 ms from 10 ms on, offsets uniform within +-40 kHz, 30 to 36 dB above the noise of the lane; 2 us linear edges centred on the nominal edges; the exact widths in steps and every width within 1 step",
+  "params": {
+    "fs": 250000.0,
+    "lanes": 1,
+    "max_freq_err_hz": 10000.0,
+    "max_start_err_steps": 2.0,
+    "noise_rms": 0.001,
+    "step_rate": 250000.0,
+    "transmissions": 6
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 629,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1.0,
+    "skip": 0
+  }
+}

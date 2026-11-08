@@ -52,6 +52,12 @@ pub struct Counts {
     /// often in the subtracted run (the harness code of the restore-only run of an FFT). The
     /// count subtracts them, so the total of the profile does too ([`profile`]).
     pub deducted: i64,
+    /// Executions of the jump of a PLT stub that callgrind (`--skip-plt=yes`, its default)
+    /// adds to the call site as a second cost line of the call instruction after the
+    /// inclusive cost ([`parse_callgrind`]). They belong to the counted total, not to the
+    /// call: on the call they would double the count of its block and so the iterations of
+    /// a loop around it.
+    pub plt: u64,
 }
 
 /// The share of the executed instructions that the simulated units must cover.
@@ -181,13 +187,17 @@ pub fn llvm_mca() -> PathBuf {
 /// Parses a callgrind output file written with `--dump-instr=yes --collect-jumps=yes
 /// --compress-pos=no --compress-strings=no` into execution counts per instruction and per
 /// taken jump. The cost line after a `calls=` line is the inclusive cost of the call and is
-/// skipped; the position line after a `jump=` (unconditional: `jump=<taken> <target>`) or
+/// skipped; a cost line of the call instruction right after it is the jump of the PLT stub
+/// the call went through, which callgrind adds to the call site, and goes to [`Counts::plt`];
+/// the position line after a `jump=` (unconditional: `jump=<taken> <target>`) or
 /// `jcnd=` line (conditional: `jcnd=<taken>/<executed> <target>`) is the address of the jump.
 #[must_use]
 pub fn parse_callgrind(text: &str) -> Counts {
     let mut counts = Counts::default();
     let mut object = String::new();
     let mut call_cost = false;
+    // The address of the call whose inclusive cost was the last cost line.
+    let mut after_call: Option<u64> = None;
     let mut jump: Option<(u64, u64)> = None;
     let hex = |s: &str| {
         s.strip_prefix("0x")
@@ -213,6 +223,7 @@ pub fn parse_callgrind(text: &str) -> Counts {
             let mut parts = line.split_whitespace();
             let address = parts.next().and_then(hex);
             if let Some((taken, target)) = jump.take() {
+                after_call = None;
                 if let Some(address) = address
                     && taken > 0
                 {
@@ -224,9 +235,14 @@ pub fn parse_callgrind(text: &str) -> Counts {
                 continue;
             }
             if std::mem::take(&mut call_cost) {
+                after_call = address;
                 continue;
             }
             let ir = parts.nth(1).and_then(|n| n.parse::<u64>().ok());
+            if address.is_some() && std::mem::take(&mut after_call) == address {
+                counts.plt += ir.unwrap_or(0);
+                continue;
+            }
             if let (Some(address), Some(ir)) = (address, ir) {
                 *counts
                     .instructions
@@ -248,6 +264,7 @@ pub fn difference(full: &Counts, empty: &Counts) -> Counts {
         jumps: minus(&full.jumps, &empty.jumps),
         deducted: full.deducted - empty.deducted
             + shortfall(&full.instructions, &empty.instructions),
+        plt: full.plt.saturating_sub(empty.plt),
     }
 }
 
@@ -1230,7 +1247,8 @@ pub fn profile(counts: &Counts, mode: CycleMode) -> anyhow::Result<Profile> {
     });
     // The executions a subtraction left negative belong to the counted total (with the mean
     // cycles per instruction of the simulated units, [`simulate`]).
-    let total = (total - counts.deducted as f64).max(0.0);
+    // The PLT jumps callgrind adds to the call sites ([`Counts::plt`]) belong to it too.
+    let total = (total - counts.deducted as f64 + counts.plt as f64).max(0.0);
     Ok(Profile {
         mode,
         units,
@@ -1525,6 +1543,43 @@ fn=h
         assert_eq!(d.deducted, 4);
         assert_eq!(difference(&d, &d).deducted, 0);
         assert_eq!(d.jumps.get(&("/bin/a".to_string(), 0x18, 0x10)), Some(&2));
+    }
+
+    /// A call through a PLT stub as callgrind writes it (the `sincosf@plt` call of
+    /// `costas_fallback`'s GNU Radio loop at `avx2`): the self cost of the call, the inclusive
+    /// cost, and a second line of the call with the jump of the stub.
+    #[test]
+    fn callgrind_plt_jumps_are_not_counted_on_the_call() {
+        let text = "\
+positions: instr line
+events: Ir
+ob=/bin/a
+fn=f
+0x10 0 7
+0x14 0 7
+cob=/lib/m.so
+cfn=sincosf
+calls=7 0xa7030 44
+0x14 0 300
+0x14 0 7
+0x19 0 7
+jcnd=6/7 0x10 0
+0x19 0
+";
+        let c = parse_callgrind(text);
+        let i = &c.instructions;
+        assert_eq!(i.get(&("/bin/a".to_string(), 0x14)), Some(&7));
+        assert_eq!(i.get(&("/bin/a".to_string(), 0x19)), Some(&7));
+        assert_eq!(c.plt, 7);
+        assert_eq!(c.jumps.get(&("/bin/a".to_string(), 0x19, 0x10)), Some(&6));
+        let empty = Counts {
+            plt: 2,
+            ..Counts::default()
+        };
+        assert_eq!(difference(&c, &empty).plt, 5);
+        // Without a PLT line the next cost line is counted as usual.
+        let c = parse_callgrind(CALLGRIND);
+        assert_eq!(c.plt, 0);
     }
 
     #[test]

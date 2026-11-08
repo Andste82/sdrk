@@ -345,6 +345,7 @@ pub fn expand(blocks: &BlockCounts) -> anyhow::Result<Counts> {
         instructions: BTreeMap::new(),
         jumps: blocks.jumps.clone(),
         deducted: blocks.deducted,
+        plt: 0,
     };
     let mut mismatched = Vec::new();
     for (object, list) in per_object {

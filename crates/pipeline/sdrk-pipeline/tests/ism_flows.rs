@@ -29,7 +29,7 @@ mod common;
 
 use num_complex::{Complex32, Complex64};
 use sdrk_device::formats;
-use sdrk_pipeline::{BuildOptions, InputData, Pipeline, Registry};
+use sdrk_pipeline::{BuildOptions, InputData, Pipeline, PipelineSpec, Registry};
 use sdrk_proto::pulses::{self, Assembler, Header, Modulation, Pair};
 use sdrk_proto::{Packet, PacketFlags};
 use sdrk_testkit::Pcg32;
@@ -434,6 +434,12 @@ fn test8(name: &str, center: f64, spread: f64, carrier: f64, rate: f64) {
     let det = report.nodes.iter().find(|n| n.name == "det").unwrap();
     assert_eq!(det.kind, "band_pulse_detect");
     assert_eq!(det.rate_in, sdrk::Rate::hz(rate as u64).unwrap());
+    // The RF centre of the JSON form comes from the flow, the build parameter `center_hz` of
+    // `det` (D976).
+    let center_hz = PipelineSpec::from_json(&text).unwrap().nodes["det"].params["center_hz"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(center_hz as f64, center);
 
     // The scene as a file, as a recording would come.
     let (bytes, want) = test8_scene_cu8(center, spread, carrier);
@@ -480,7 +486,7 @@ fn test8(name: &str, center: f64, spread: f64, carrier: f64, rate: f64) {
             assert_eq!(f64::from(t.header.rate_hz), rate);
             // The JSON form with the absolute frequency.
             let mut s = String::new();
-            pulses::write_json(&mut s, &t.header, t.pairs.iter().copied(), center as i64).unwrap();
+            pulses::write_json(&mut s, &t.header, t.pairs.iter().copied(), center_hz).unwrap();
             let v: serde_json::Value = serde_json::from_str(&s).unwrap();
             let f = v["freq_hz"].as_f64().unwrap();
             assert!((f - center - freq).abs() < 10e3, "{s}");

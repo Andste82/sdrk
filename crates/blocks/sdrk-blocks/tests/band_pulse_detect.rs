@@ -11,6 +11,9 @@
 //! - Spec test 4 (seed 630): 100 scenes of 2 or 3 overlapping OOK and FSK transmissions at least
 //!   250 kHz apart: every OOK transmission emitted with its own train (the spec), guards on the
 //!   FSK shares and the widths (I45.1-3).
+//! - Spec §3 through the 8 lanes of `ism868_pulses` (seed 630, stream 3): 60 groups of 2 or 3
+//!   overlapping OOK transmissions pairwise two spacings apart are each emitted with their own
+//!   train (the wideband rule needs at least 10 lanes, D975).
 //! - Spec test 6 (seed 632): the detection levels through the channelizer and through a `ddc`
 //!   with the same detector on a lane view of width 1 agree within 1 dB.
 //! - Spec test 7 (seed 633): noise, a carrier and wideband bursts give at most one train per
@@ -839,6 +842,173 @@ fn simultaneous_transmissions_are_each_emitted() {
         strays <= TEST4_MAX_STRAYS,
         "{strays} trains of no transmission"
     );
+}
+
+/// The 868 MHz flow `ism868_pulses`: 8 channels over the 2 MHz input (250 kHz apart, 500 kHz
+/// steps).
+const CHANNELS_868: usize = 8;
+/// Groups of the test of overlapping transmissions through 8 lanes, and groups per scene.
+const OVERLAP_868_GROUPS: usize = 60;
+const OVERLAP_868_PER_SCENE: usize = 20;
+
+/// One transmission of `overlapping_transmissions_through_8_lanes_are_each_emitted`.
+struct Overlap868Tx {
+    group: usize,
+    start_s: f64,
+    coding: Coding,
+    bits: Vec<bool>,
+    freq: f64,
+    snr: f64,
+}
+
+/// Groups of 2 or 3 OOK transmissions pairwise two spacings (500 kHz) apart, anywhere in the
+/// band (seed 630, the seed of spec test 4, stream 3).
+fn overlap_868_transmissions() -> Vec<Overlap868Tx> {
+    let mut rng = Pcg32::new(SEED_SIMULTANEOUS, 3);
+    let mut txs = Vec::new();
+    for g in 0..OVERLAP_868_GROUPS {
+        let n = 2 + rng.below(2) as usize;
+        let span = 500e3 * (n - 1) as f64;
+        let low = -875e3 + (1750e3 - span) * rng.next_f64();
+        for k in 0..n {
+            let coding = match rng.below(3) {
+                0 => Coding::Pwm {
+                    short_us: 200.0,
+                    long_us: 400.0,
+                    gap_us: 200.0,
+                },
+                1 => Coding::Ppm {
+                    pulse_us: 150.0,
+                    short_gap_us: 250.0,
+                    long_gap_us: 600.0,
+                },
+                _ => Coding::Manchester { half_bit_us: 250.0 },
+            };
+            let nbits = 24 + rng.below(17) as usize;
+            txs.push(Overlap868Tx {
+                group: g,
+                start_s: if k == 0 {
+                    0.0
+                } else {
+                    0.0005 + 0.0035 * rng.next_f64()
+                },
+                coding,
+                bits: random_bits(&mut rng, nbits),
+                freq: low + 500e3 * k as f64,
+                snr: TEST4_SNR.0 + (TEST4_SNR.1 - TEST4_SNR.0) * rng.next_f64(),
+            });
+        }
+    }
+    txs
+}
+
+/// Runs the groups `first .. first + OVERLAP_868_PER_SCENE` as one scene through 8 lanes;
+/// returns per transmission `Ok` or what went wrong, and the trains of no transmission.
+fn overlap_868_scene(txs: &[Overlap868Tx], first: usize) -> (Vec<Result<(), String>>, usize) {
+    let mine: Vec<&Overlap868Tx> = txs
+        .iter()
+        .filter(|t| t.group >= first && t.group < first + OVERLAP_868_PER_SCENE)
+        .collect();
+    let lead = 0.010;
+    let noise = 10.0f64.mul_add((1.0 / CHANNELS_868 as f64).log10(), NOISE_DB);
+    let placed: Vec<Placed<'_>> = mine
+        .iter()
+        .map(|t| Placed {
+            start_s: lead + TEST4_PERIOD_S * (t.group - first) as f64 + t.start_s,
+            transmission: Transmission {
+                coding: t.coding,
+                bits: &t.bits,
+                repeats: 1,
+                repeat_gap_us: 0.0,
+                freq_offset_hz: t.freq,
+                level_db: noise + t.snr,
+                timing_error: 0.0,
+            },
+        })
+        .collect();
+    let scene = Scene {
+        fs: FS,
+        center_hz: 868.5e6,
+        clock_error_ppm: 0.0,
+        noise_db: NOISE_DB,
+        transmissions: &placed,
+        interferers: &[],
+        seed: SEED_SIMULTANEOUS + 1000 + first as u64,
+    };
+    let seconds = lead + TEST4_PERIOD_S * OVERLAP_868_PER_SCENE as f64;
+    let cfg = BandPulseDetectConfig::default();
+    let trains = stream_detect(&scene, seconds, CHANNELS_868, &cfg);
+    let rate = 500e3;
+    let mut results: Vec<Result<(), String>> = vec![Err("missed".to_string()); mine.len()];
+    let mut hits = vec![0usize; mine.len()];
+    let mut strays = 0;
+    for tr in &trains {
+        let t_s = tr.index as f64 / rate;
+        let f = f64::from(tr.header.freq_offset_hz);
+        let Some(i) = placed.iter().position(|p| {
+            (t_s - p.start_s).abs() < 0.002 && (f - p.transmission.freq_offset_hz).abs() < 125e3
+        }) else {
+            strays += 1;
+            continue;
+        };
+        hits[i] += 1;
+        let t = &placed[i].transmission;
+        let want = expected_pairs(t, &scene);
+        results[i] = if tr.header.modulation != Modulation::Ook {
+            Err(format!("{:?}", tr.header.modulation))
+        } else if (f - t.freq_offset_hz).abs() >= 10e3 {
+            Err(format!("frequency {f} Hz"))
+        } else if tr.pairs.len() != want.len() {
+            Err(format!("{} pairs, want {}", tr.pairs.len(), want.len()))
+        } else {
+            Ok(())
+        };
+    }
+    for (r, h) in results.iter_mut().zip(&hits) {
+        if *h > 1 {
+            *r = Err(format!("{h} trains"));
+        }
+    }
+    (results, strays)
+}
+
+/// Spec §3 through the 8 lanes of `ism868_pulses` (250 kHz apart): 60 groups of 2 or 3 OOK
+/// transmissions (PWM, PPM, Manchester; 30 to 40 dB above the noise in a channel spacing) that
+/// overlap in time on frequencies pairwise two spacings apart, anywhere in the band, are each
+/// emitted once with their own train (the modulation, the number of pairs, the frequency within
+/// 10 kHz); the wideband rule (D965, D975) does not merge them (measured before D975: 46 of the
+/// 150 transmissions lost).
+#[test]
+fn overlapping_transmissions_through_8_lanes_are_each_emitted() {
+    let txs = overlap_868_transmissions();
+    let (results, strays): (Vec<_>, Vec<_>) = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..OVERLAP_868_GROUPS)
+            .step_by(OVERLAP_868_PER_SCENE)
+            .map(|first| {
+                let txs = &txs;
+                s.spawn(move || overlap_868_scene(txs, first))
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).unzip()
+    });
+    let results: Vec<Result<(), String>> = results.into_iter().flatten().collect();
+    assert_eq!(results.len(), txs.len());
+    let mut failed = 0;
+    for (t, r) in txs.iter().zip(&results) {
+        if let Err(e) = r {
+            failed += 1;
+            println!(
+                "group {} {:?} at {:.0} Hz ({:.1} dB): {e}",
+                t.group, t.coding, t.freq, t.snr
+            );
+        }
+    }
+    let strays: usize = strays.iter().sum();
+    println!(
+        "8 lanes: {} transmissions, {failed} without their own train, {strays} trains of no transmission",
+        txs.len()
+    );
+    assert_eq!(failed, 0);
 }
 
 // ------------------------------------------------------------------ spec test 6

@@ -33,8 +33,9 @@ nodes:
       channels: 16
       taps_per_branch: 8
   # The pulse detector in every channel (OOK and FSK, modulation auto, a burst starts 9 dB above
-  # the noise; min_snr_db can be changed while the flow runs). center_hz only sets the absolute
-  # frequency of the packets (freq_hz of the JSON form of sdrk_proto::pulses).
+  # the noise; min_snr_db can be changed while the flow runs). The packets carry the offset
+  # from the centre; center_hz is the RF centre that a tool reads from the flow for the absolute
+  # frequency (freq_hz of the JSON form of sdrk_proto::pulses).
   det:
     kind: band_pulse_detect
     params:

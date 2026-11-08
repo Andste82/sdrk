@@ -2,6 +2,8 @@
 
 > Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M43](M43-equalizer.md) · Next: [BACKLOG](BACKLOG.md)
 
+> **Amended on 2026-11-08** (before implementation) to match the delivered M40–M43 and the maintainer's decisions: the order of `qam_demod` follows D825, the carrier loop of QAM uses GNU Radio's decision-directed phase detector, `costas` gets the parameter `constellation`, `frame_decode` the parameter `rotations` with an exact bit map for square QAM, and acceptance and deliverables include the count entries and the cycles per sample. The choices against GNU Radio's own QAM receiver are stated where they differ.
+
 ## Goal
 
 Quadrature amplitude modulation in both directions: blocks `qam_mod` and `qam_demod` for 16-QAM and 64-QAM with Gray mapping, the constellations `qam16`/`qam64` in `slice` (soft bits) and `equalize` (decisions, CMA radius), a decision-directed carrier loop for QAM, and loop tests through noise and multipath.
@@ -141,7 +143,7 @@ Additional rules:
 
 ## Scope
 
-**In:** the constellations `qam16` and `qam64` (mapping table in `sdrk-core::kernels::constellation` shared by modulator, slicer, equalizer and carrier loop); `costas` mode `dd_qam` (decision-directed with the QAM decision); blocks and kinds `qam_mod`, `qam_demod`; `slice` and `equalize` constellations `qam16`, `qam64`; flows `qam16_transmitter` and `qam16_receiver` with YAML twins; tests; `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, `CHANGELOG.md`.
+**In:** the constellations `qam16` and `qam64` (mapping table in `sdrk-core::kernels::constellation` shared by modulator, slicer, equalizer and carrier loop); `costas` parameter `constellation` with the QAM constellations (decision-directed with the QAM decision, replacing `order`); blocks and kinds `qam_mod`, `qam_demod`; `frame_decode` parameters `rotations` (replacing `polarity`) and `bits_per_symbol`; count entries and cycles per sample of the new paths and blocks; `slice` and `equalize` constellations `qam16`, `qam64`; flows `qam16_transmitter` and `qam16_receiver` with YAML twins; tests; `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/performance.md`, `examples/README.md`, `CHANGELOG.md`.
 
 **Out:** 256-QAM and above (backlog), APSK (backlog), FEC (backlog), Q15 (backlog: the dynamic range of 64-QAM needs care in Q15).
 
@@ -149,20 +151,22 @@ Additional rules:
 
 ### 1. Constellations
 
-Square QAM with `M = 16` or `64`, `k = log2 M` bits per symbol, `m = √M` levels per axis. The first `k/2` bits select the in-phase level, the last `k/2` bits the quadrature level, each by the Gray code of the level index: level index `i` (0 … m−1) has the Gray code `i XOR (i >> 1)`, the level value is `2i − (m − 1)`. Bit order: most significant bit first. The points are scaled by `1/√E` with `E = 2·(M − 1)/3` (unit average power). Constants for `equalize`: `R2 = E|s|⁴ / E|s|²` (16-QAM: 1.32, 64-QAM: 1.381; compute exactly in the code and test against these values to 3 digits). Decision: per axis, round `(y·√E + (m−1)) / 2` to the nearest integer and clamp to `0 … m−1`.
+Square QAM with `M = 16` or `64`, `k = log2 M` bits per symbol, `m = √M` levels per axis. The first `k/2` bits select the in-phase level, the last `k/2` bits the quadrature level, each by the Gray code of the level index: level index `i` (0 … m−1) has the Gray code `i XOR (i >> 1)`, the level value is `2i − (m − 1)`. Bit order: most significant bit first. The points are scaled by `1/√E` with `E = 2·(M − 1)/3` (unit average power). Constants for `equalize`: `R2 = E|s|⁴ / E|s|²` (16-QAM: 1.32, 64-QAM: 1.381; compute exactly in the code and test against these values to 3 digits). Decision: per axis, round `(y·√E + (m−1)) / 2` to the nearest integer and clamp to `0 … m−1` (a grid slicer, as GNU Radio's `constellation_rect`).
+
+Rotation by 90°: `j·y` maps the in-phase level index `i` to the quadrature axis and the quadrature level index `q` to `m − 1 − q` on the in-phase axis; with the reflected Gray code of this section, `m − 1 − i` has the Gray code of `i` with only its most significant bit inverted. So a rotation by +90° maps the bit groups `(I bits, Q bits)` of a symbol to `(Q bits with the first bit inverted, I bits)`; two and three rotations follow by repetition. For QPSK (one bit per axis) this is the known map of the four QPSK rotations. The unit test checks the map against the points for every symbol and rotation.
 
 ### 2. Soft bits (`slice` `qam16`, `qam64`)
 
-Per axis with the max-log rule, simplified to the standard piecewise-linear form for Gray square QAM: for 16-QAM per axis with `v = y·√E` (levels −3, −1, 1, 3): `s_0 = ±scale·v` and `s_1 = ±scale·(2 − |v|)`, where each sign is chosen so that **a soft bit > 0 means 1** for the mapping of §1 (with the Gray code of §1 the most significant bit is 1 on the positive side, so `s_0 = +scale·v`; the second bit is 1 for the inner levels −1 and +1, so `s_1 = +scale·(2 − |v|)`). For 64-QAM the three bits per axis use `v`, `4 − |v|` and `2 − ||v| − 4|`, with the signs chosen by the same rule. The unit test derives the expected signs from the mapping of §1 for every point, so the formulas and the mapping cannot disagree.
+Per axis with the max-log rule, simplified to the standard piecewise-linear form for Gray square QAM (GNU Radio's `calc_soft_dec` computes the exact log-sum over all points instead; the piecewise-linear form is the usual cheaper approximation and is kept): for 16-QAM per axis with `v = y·√E` (levels −3, −1, 1, 3): `s_0 = ±scale·v` and `s_1 = ±scale·(2 − |v|)`, where each sign is chosen so that **a soft bit > 0 means 1** for the mapping of §1 (with the Gray code of §1 the most significant bit is 1 on the positive side, so `s_0 = +scale·v`; the second bit is 1 for the inner levels −1 and +1, so `s_1 = +scale·(2 − |v|)`). For 64-QAM the three bits per axis use `v`, `4 − |v|` and `2 − ||v| − 4|`, with the signs chosen by the same rule. The unit test derives the expected signs from the mapping of §1 for every point, so the formulas and the mapping cannot disagree.
 
 ### 3. Carrier recovery for QAM
 
-`costas` gets the mode `dd_qam` (with the constellation): `d` = the decision of §1, `e = im(y·conj(d)) / |d|²` (the normalization keeps the loop gain equal for inner and outer points), the loop filter and NCO of M40. Lock detector as in M40.1 with `d`.
+`costas` gets the parameter `constellation` (Choice `bpsk`/`qpsk`/`8psk`/`qam16`/`qam64`, build, default `bpsk`) in place of `order` (a hard break before 1.0: every caller and test is changed, no alias; `bpsk`, `qpsk` and `8psk` keep the phase detectors of M40/M40.1 unchanged). For `qam16` and `qam64` the loop is decision-directed: `d` = the decision of §1 on the derotated sample `y`, the phase error `e = arg(y·conj(d))` (the sign convention of the M40 loop), the exact phase as GNU Radio's `constellation_receiver_cb` computes it (`decision_maker_pe`), without a normalization by `|d|²`; the loop filter and NCO of M40. The `atan2` may use the kernel's existing fast arctangent if its contract allows it (log the choice). Lock detector as in M40.1 with `d`. The golden case of test 2 is the float32 model of this definition.
 
 ### 4. `qam_mod` and `qam_demod`
 
 - `qam_mod`: In soft bits (±1), Out C32: mapping of §1, pulse shaping as `psk_mod` (RRC, `√sps` scaling). Parameters `order` (I64, build, 16; 16 or 64), `samples_per_symbol`, `rolloff`, `span`. Ratio `sps / k`.
-- `qam_demod`: In C32 (after `agc`), Out soft bits: RRC matched filter → `symbol_sync` (Gardner) → `costas` (`dd_qam`) → `equalize` (constellation `qam16`/`qam64`, `taps` from `equalizer_taps`, default 11; CMA first) → `slice`. Parameters `order`, `symbol_rate_hz`, `rolloff`, `span`, `equalizer_taps`, `sync_bw`, `carrier_bw` (default 0.005). The 90° ambiguity is resolved by `frame_decode` `polarity` extended to `rotations` (Choice `normal`/`both`/`four`): `four` tests the sync word for the four rotations of the I/Q bit pairs; add this to `frame_decode`.
+- `qam_demod`: In C32 (after `agc`), Out soft bits: RRC matched filter → `symbol_sync` (Gardner) → `equalize` (constellation `qam16`/`qam64`, `taps` from `equalizer_taps`, default 11; CMA first, then decision-directed with the kernel's phase tracker of D829) → `costas` (constellation `qam16`/`qam64`) → `slice`. This is the order of `psk_demod` (D825, after GNU Radio's PSK tutorial and liquid-dsp's blind equalizer example), not the order of the first draft (carrier loop before the equalizer). Parameters `order`, `symbol_rate_hz`, `rolloff`, `span`, `equalizer_taps`, `sync_bw`, `carrier_bw` (default 0.005). The 90° ambiguity is resolved at the sync word: `frame_decode`'s parameter `polarity` becomes `rotations` (Choice `normal`/`both`/`four`, build, default `normal`; a hard break: `qpsk_receiver.json`/`.yaml` and every test that sets `polarity` are changed, no alias), and `frame_decode` gets `bits_per_symbol` (I64, build, 1 … 6, default 2; even for `four`). `normal` and `both` behave as `polarity` did. `four` tests the sync word in the four rotations of §1 applied to every group of `bits_per_symbol` soft bits (swap of the I and Q halves and inversion of the first bit of a half, a soft bit inverted by its sign), decodes the frame under the matching inverse rotation and reports the rotation in the packet flags (bits of the flags word to be chosen and logged). GNU Radio resolves the ambiguity differently, by differential coding of the whole symbol modulo M with a quadrant layout and no Gray code (`qam.py`, `diff_encoder_bb`); that roughly doubles the bit errors and would miss the coherent Gray bound of tests 3 and 4, so the coherent Gray mapping with the sync-word rotation stays.
 
 ### 5. Flows
 
@@ -170,7 +174,7 @@ Per axis with the max-log rule, simplified to the standard piecewise-linear form
 
 ## Tests
 
-1. Constellation tables: mapping of every point, unit average power, `R2` values, decision rule at boundaries; soft-bit signs for every point (test derives them from the mapping).
+1. Constellation tables: mapping of every point, unit average power, `R2` values, decision rule at boundaries; soft-bit signs for every point (test derives them from the mapping); the rotation map of §1 for every symbol and rotation (16- and 64-QAM, and QPSK); `frame_decode` `four` finds the sync word and decodes the payload under each of the four rotations for `bits_per_symbol` 2, 4 and 6; `costas` `constellation` `bpsk`/`qpsk`/`8psk` give bit-identical output to the former `order` 2/4/8.
 2. Golden: `costas/dd_qam16_c32_8192` (seed 600), `equalize/dd_qam16_c32_16384` (seed 601), float32 model.
 3. **16-QAM BER (AWGN):** within 1 dB of the Gray-coded approximation `P_b ≈ (4/k)·(1 − 1/√M)·Q(√(3k/(M−1)·Eb/N0))` at Eb/N0 12 and 14 dB over 10^6 bits (seed 602).
 4. **64-QAM BER:** same formula, within 1.5 dB at Eb/N0 18 and 20 dB (seed 603).
@@ -181,13 +185,14 @@ Per axis with the max-log rule, simplified to the standard piecewise-linear form
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask emu --target qemu-cortex-m4` (quick profile).
+R1.2 commands; `python tests/golden/generate.py --check`; the new tests of this milestone (`sdrk-testkit`, `sdrk-blocks`, `sdrk-pipeline`; the whole suite and the emulators run in CI); `cargo xtask schema --check`; `cargo xtask count` entries for the QAM paths of `costas` and `equalize` and the blocks `qam_mod`, `qam_demod` on every platform the existing PSK entries are counted on, with their simulated cycles per sample (`cargo measure`, reference and counter model on every level with a core model; instructions only where no cycles exist) recorded in `docs/performance.md`, against a like-for-like reference where one exists (for example a C translation of GNU Radio's `constellation_receiver_cb` for the carrier loop, as `benches/refs/gr-costas.c` is for `costas`, or liquid-dsp's `modemcf` for the mapping and soft bits; the choice and reason are logged).
 
 ## Deliverables checklist
 
 - [ ] Shared constellation tables `qam16`, `qam64`
-- [ ] `slice`, `equalize` and `costas` (`dd_qam`) extensions
-- [ ] Blocks and kinds `qam_mod`, `qam_demod`; `rotations` option of `frame_decode`
+- [ ] `slice`, `equalize` and `costas` (`constellation`, QAM decision-directed) extensions
+- [ ] Blocks and kinds `qam_mod`, `qam_demod`; `rotations` and `bits_per_symbol` of `frame_decode` (and the renamed callers)
+- [ ] Count entries and cycles per sample of the QAM paths and blocks, with the reference
 - [ ] Flows `qam16_transmitter`, `qam16_receiver` with YAML twins
 - [ ] Tests (seeds 600–607)
-- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `examples/README.md`, CHANGELOG, decisions log
+- [ ] `docs/kernels.md`, `docs/blocks.md`, `docs/pipeline.md`, `docs/performance.md`, `examples/README.md`, CHANGELOG, decisions log

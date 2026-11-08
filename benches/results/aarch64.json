@@ -701,6 +701,45 @@
           "status": "release",
           "verdict": "pass"
         },
+        "channel_bank_channelize": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 130.41,
+          "ours_instr_per_sample": 130.41,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 139.18,
+            "ours": 139.18
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "channel_bank_ddc": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 436.6,
+          "ours_instr_per_sample": 436.6,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 139.44,
+            "ours": 139.44
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "channel_select_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 3.51,
+          "ours_instr_per_sample": 3.51,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "channelize": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
           "goal": true,
@@ -731,6 +770,19 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "channelize_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 63.04,
+          "ours_instr_per_sample": 63.04,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 141.34,
+            "ours": 141.34
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "channelize_fallback": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",

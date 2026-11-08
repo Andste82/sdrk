@@ -201,9 +201,16 @@ impl Block for ChannelSelectBlock {
             }));
         }
         let n = input.steps().min(output.len());
-        let lane = input.data().iter().skip(self.lane).step_by(self.width);
-        for (o, v) in output.iter_mut().take(n).zip(lane) {
-            *o = *v;
+        // One step after the other; the lane is checked once against the width (it always
+        // holds, `new` checks it), so the loop is one load and one store per step (D935).
+        let lane = self.lane;
+        if lane < self.width {
+            let steps = input.data().chunks_exact(self.width);
+            for (o, step) in output.iter_mut().take(n).zip(steps) {
+                if let Some(v) = step.get(lane) {
+                    *o = *v;
+                }
+            }
         }
         Ok(Progress {
             consumed: n,

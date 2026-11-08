@@ -1,6 +1,6 @@
 # M55 — Kernel `pilot_equalize`: OFDM pilot-based channel equalization
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M07](M07-fft.md) · Next: [M56](M56-fwht.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M07](M07-fft.md), [M45](M45-channelizer.md) (lane ports; through it M19 and M38) · Next: [M56](M56-fwht.md)
 
 > **Status: planned** (written 2026-11-08). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone, and the last of the DSSS/OFDM kernels together with `fwht` (M56).
 
@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `pilot_equalize` (`C32`) in `sdrk_core::kernels::ofdm_eq` with `PilotEqualizeState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `pilot_equalize` (`C32`) in `sdrk_core::kernels::ofdm_eq` with `PilotEqualizeState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `PilotEqualizeBlock` and the pipeline kind `pilot_equalize` (§7) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the lane plumbing and the kinds `pilot_equalize`, `ofdm_demod` (M45 lanes + a later milestone; names reserved); the FFT and guard removal (`to_lanes`, `fft` on lanes — later milestone); decision-feedback updating from data decisions (the `simpledfe` data path; backlog, because it needs the constellation and couples to the slicer); superimposed-pilot estimation (backlog); `CQ15` (backlog, OFDM dynamic range). Carried in: the LS pilot estimate, frequency interpolation, time smoothing, one-tap equalization, common-phase correction — the pieces a basic OFDM receiver needs.
+**Out:** the composite `ofdm_demod` and the lane kinds `fft`, `to_lanes`, `subcarrier_demap` (later milestone; names reserved); the FFT and guard removal (`to_lanes`, `fft` on lanes — later milestone); decision-feedback updating from data decisions (the `simpledfe` data path; backlog, because it needs the constellation and couples to the slicer); superimposed-pilot estimation (backlog); `CQ15` (backlog, OFDM dynamic range). Carried in: the LS pilot estimate, frequency interpolation, time smoothing, one-tap equalization, common-phase correction — the pieces a basic OFDM receiver needs.
 
 ## Specification
 
@@ -214,6 +214,20 @@ New file `tests/golden/sdrk_golden/cases/ofdm_eq.py`, the float32 model.
 
 `cargo xtask count` entry `pilot_equalize_256` (per subcarrier; a complex division plus the interpolation and smoothing). Record in `docs/performance.md`.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §7 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 7. Block and kind `pilot_equalize`
+
+`PilotEqualizeBlock` (`Lanes<C32>` of width `N` → `Lanes<C32>` of width `data`, one lane step per OFDM symbol) around the kernel `pilot_equalize`. The layout comes from scalar parameters: carrier `k` is a null when `dc_null` and `k = 0`, or when it lies among the `guard` carriers centred on `N/2` (the band edge in natural order); the pilots are the non-null carriers with `k mod pilot_spacing = pilot_offset`, all with the value `1 + 0j`; the data carriers are the others, in index order. `PilotEqualizeBlock::with_layout` takes any index lists and pilot values of the caller (Rust API only).
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `pilot_equalize` | `PilotEqualizeBlock` | lanes<c32> (`N`) → lanes<c32> (`data`) | `fft_size` (I64, build, required; a power of two 16 … 65536, equal to the input width), `pilot_spacing` (I64, build, required; 2 … `N`), `pilot_offset` (I64, build, 0; 0 … `pilot_spacing − 1`), `guard` (I64, build, 0; 0 … `N − 2`), `dc_null` (Bool, build, true), `alpha` (linear, **runtime**, 0.5; 0 ≤ α < 1), `cpe` (Bool, build, false) | `pilot_equalize`; a layout with no pilot or no data carrier is `invalid_value` at `params.pilot_spacing`; the output width is `data` |
+
+- Reading `degenerate` (the kernel's count). `PilotEqualizeConfig`. Storage: `Hs` (`N`) and the index lists; exact. Timing ratio 1 (steps), delay 0. A change of `alpha` takes effect with the next symbol (`set_alpha`).
+- Pipeline kind `pilot_equalize` (a `LanesNode`; the width of the input through `Kind::input_width`, a width other than `fft_size` is `type_mismatch`), cost 12 per input value (a complex division per data carrier, the interpolation and the smoothing; checked against the count, logged), a row in `docs/pipeline.md` and `docs/timing.md`.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 750 … 759.
@@ -223,19 +237,20 @@ Seeds 750 … 759.
 3. Block-size invariance / state continuity: processing a stream of symbols one at a time vs. the same symbols is identical (the kernel is per-symbol; the "chunking" here is symbol granularity) — 20 orderings not applicable; instead a continuity test that `Hs` after `n` symbols is independent of any grouping (seed 753).
 4. Extremes: all-zero symbol (outputs 0, degenerate count = data len); full scale; NaN/∞ in one subcarrier (that output 0 or NaN per the zero-division rule — documented); the largest `N` (65536) with a sparse pilot set; `cpe` on with pilots summing to 0 residual (φ = 0).
 5. Suite cases `pilot_equalize_c32` and `extremes_m55`.
+6. **Block and kind** (`sdrk-blocks/tests/pilot_equalize_blocks.rs`, `sdrk-pipeline/tests/pilot_equalize_kinds.rs`; seeds 754, 755): the block equals the kernel bit for bit over a sequence of symbols, in 20 cuts of the lane steps into calls; the layout from the parameters for `N` = 64 and 256; the description rules of M09, exact storage, struct at most 512 bytes, validation errors at their parameter; a pipeline flow `channelize` (as a lane source of width `N`) → `pilot_equalize` → `channel_select` equals the blocks wired by hand; `cargo xtask schema --check` and the WASM kind list include `pilot_equalize`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entry of §6).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entry of §6 and `pilot_equalize_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `pilot_equalize` (`C32`): `PilotEqualizeState`, trait, Fallback, Reference, facade delegation, `backend_for` (fallback)
 - [ ] Contract row and section in `docs/kernels.md` (LS estimate, interpolation, smoothing, CPE; the GNU Radio cross-check)
 - [ ] Golden cases (seeds 750–752) and the float32 Python model with the f64 guard
-- [ ] Tests 1–5 (seeds 750–753); suite cases
-- [ ] `cargo xtask count` entry, `docs/performance.md`
-- [ ] Reserved kind names `pilot_equalize`, `ofdm_demod`, `ofdm_mod` in `docs/blocks.md`
+- [ ] Tests 1–6 (seeds 750–755); suite cases
+- [ ] Count and cycle entry (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `PilotEqualizeBlock` and kind `pilot_equalize` (§7): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `pilot_equalize_block`
 - [ ] CHANGELOG, decisions log (the α convention, edge-hold interpolation, CPE, the zero-division rule)
 
 ## Status

@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `code_track` (`C32`) in `sdrk_core::kernels::code_track` with `CodeTrackState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, lock, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `code_track` (`C32`) in `sdrk_core::kernels::code_track` with `CodeTrackState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, lock, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `CodeTrackBlock` and the pipeline kind `code_track` (§7) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the carrier loop (that stays in `costas`, M40, placed after `code_track` as for PSK); acquisition (`code_search`, M53); the block and kind `code_track`/`dsss_demod` (later milestone; names reserved); `CQ15` (backlog); a second (data-aided) discriminator (backlog). Carrier-aiding of the code NCO (feeding the carrier Doppler into the code rate) is in as an optional input, because without it a long integration slips.
+**Out:** the carrier loop (that stays in `costas`, M40, placed after `code_track` as for PSK); acquisition (`code_search`, M53); the composite `dsss_demod` and the carrier-aiding input of the block (later milestone; name reserved); `CQ15` (backlog); a second (data-aided) discriminator (backlog). Carrier-aiding of the code NCO (feeding the carrier Doppler into the code rate) is in as an optional input, because without it a long integration slips.
 
 ## Specification
 
@@ -212,6 +212,20 @@ New file `tests/golden/sdrk_golden/cases/code_track.py`, the float32 model of th
 
 `cargo xtask count` entry `code_track_sf127` (per input chip; three correlators + the interpolator + the loop update per period). Record in `docs/performance.md`; note the loop is a recursion (not vectorised), like `symbol_sync` and `costas`.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §7 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 7. Block and kind `code_track`
+
+`CodeTrackBlock` (`C32` → `C32`, one prompt symbol per code period) around the kernel `code_track` with a short PRBS code (`sdrk_proto::prbs`, chip `b` → `1 − 2b`; `sf` is the code period). Carrier aiding is off (`f_rf = 0`): it needs a second input and comes with `dsss_demod`.
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `code_track` | `CodeTrackBlock` | C32 → C32 | `code`, `code_seed` (as `spread`), `samples_per_chip` (linear, build, 1; 1 … 1024), `early_late_chips` (chips, build, 0.5; 0.1 … 1.0), `loop_bw` (linear, build, 0.005; 0.0001 … 0.1, relative to the code rate), `damping` (linear, build, 0.7071; 0.1 … 4), `max_rate` (chips per period, build, 0.05; 0 … 0.5), `initial_code_phase` (chips, build, 0; 0 … period) | `code_track`; `initial_code_phase` is `set_initial(phase, 0)` at construction and `reset` (the value a `code_search` packet gives, divided by `samples_per_chip`) |
+
+- Getters `locked()`, `code_phase()`, `rate()` (as `costas`). `CodeTrackConfig`. Storage: the code and the interpolator window; exact. Timing `RatioKind::Variable`, nominal ratio `1/(sf · samples_per_chip)`, delay and `min_input` from the kernel state (as `symbol_sync`).
+- Pipeline kind `code_track` (`c32` only), cost `12 + 3 · 24 / samples_per_chip` per input sample (three correlators and the cubic interpolation of `symbol_sync`; the implementer checks it against the count and logs it), a row in `docs/pipeline.md` and `docs/timing.md`. Chain position: `code_track` → `costas` → `slice`.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 740 … 749.
@@ -223,19 +237,20 @@ Seeds 740 … 749.
 5. Block-size invariance: 20 chunk plans at the chip level (seed 745).
 6. Extremes: silence (no lock, no panic); full scale; NaN/∞ in one chip (`e = 0` that period, recovers); `samples_per_chip = 1` with `δ` = 0.1; the largest `sf`.
 7. Suite cases `code_track_c32` and `extremes_m54`.
+8. **Block and kind** (`sdrk-blocks/tests/code_track_blocks.rs`, `sdrk-pipeline/tests/code_track_kinds.rs`; seeds 746, 747): the block equals the kernel bit for bit on whole buffers and in 20 chunk plans; `spread` (block) → channel → `code_track` (block) locks from `initial_code_phase` 0.3 chips off; the description rules of M09, exact storage, struct at most 512 bytes, validation errors at their parameter; a pipeline flow `code_track` → `costas` equals the blocks; `cargo xtask schema --check` and the WASM kind list include `code_track`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entry of §6).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entry of §6 and `code_track_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `code_track` (`C32`): `CodeTrackState`, `CodeTrackGains`, trait, Fallback, Reference, facade delegation, `backend_for` (fallback)
 - [ ] Contract row and section in `docs/kernels.md` (E−L discriminator, the loop, the interpolator reuse, the `despread` identity, the GNSS-SDR citation)
 - [ ] Golden cases (seeds 740–742) and the float32 Python model with the f64 guard
-- [ ] Tests 1–6 (seeds 740–745); suite cases
-- [ ] `cargo xtask count` entry, `docs/performance.md`
-- [ ] Reserved kind names `code_track`, `code_acquire` in `docs/blocks.md`
+- [ ] Tests 1–8 (seeds 740–747); suite cases
+- [ ] Count and cycle entry (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `CodeTrackBlock` and kind `code_track` (§7): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `code_track_block`
 - [ ] CHANGELOG, decisions log (the discriminator gain constant, the `δ` default, carrier aiding, the zero-bandwidth switch)
 
 ## Status

@@ -116,14 +116,14 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M46 ISM sensor decoders | M45.1 | M42, M43, M44 |
 | M47 Morse (CW) | M39.1 | M42, M43, M44, M45, M45.1, M46 |
 | M48 `gauss_noise` | M38 | everything after M38 (the DSSS/OFDM kernels are independent of one another unless listed) |
-| M49 `scramble` | M30 | everything after M30 |
-| M50 `xcorr_fft` | M07, M43 | everything after M43 |
-| M51 `spread` | M30 | everything after M30 |
+| M49 `scramble` | M38 | everything after M38 |
+| M50 `xcorr_fft` | M07, M43, M49 | everything after M43 and M49 |
+| M51 `spread` | M38, M49 | everything after M49 |
 | M52 `despread` | M43, M51 | everything after M51 |
 | M53 `code_search` | M07, M50 | everything after M50 |
 | M54 `code_track` | M38, M52 | everything after M52 |
-| M55 `pilot_equalize` | M07 | everything after M07 |
-| M56 `fwht` | M02 | anything |
+| M55 `pilot_equalize` | M07, M45 | everything after M45 |
+| M56 `fwht` | M29 | everything after M29 |
 | M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
@@ -205,5 +205,5 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 
 ## Files in this directory
 
-- `M00-…` to `M56-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2). M48 to M56 are the DSSS/OFDM kernel series (one kernel per milestone, for spread-spectrum and multicarrier work; the blocks, kinds and flows that use them follow in later milestones).
+- `M00-…` to `M56-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2). M48 to M56 are the DSSS/OFDM kernel series (one kernel per milestone with its primitive block and pipeline kind, for spread-spectrum and multicarrier work; the composite blocks and the flows follow in later milestones).
 - `BACKLOG.md`: work after M18 and M44.

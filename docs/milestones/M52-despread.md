@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `despread` (`C32`, `CQ15`) in `sdrk_core::kernels::spread` (the module of M51) with `DespreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `despread` (`C32`, `CQ15`) in `sdrk_core::kernels::spread` (the module of M51) with `DespreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `DespreadBlock<T>` and the pipeline kind `despread` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the code-phase search (`code_search`, M53) and the tracking loop (`code_track`, M54); the block/kind `despread` (later milestone; name reserved); a SIMD path (allowed later; the `±1` case is add/subtract, which maps to a `dot`-style vector sum in the fixed order).
+**Out:** the code-phase search (`code_search`, M53) and the tracking loop (`code_track`, M54); the composite `dsss_demod` (later milestone; name reserved); a SIMD path (allowed later; the `±1` case is add/subtract, which maps to a `dot`-style vector sum in the fixed order).
 
 ## Specification
 
@@ -205,6 +205,20 @@ New cases in `tests/golden/sdrk_golden/cases/despread.py` (the shared code helpe
 
 `cargo xtask count` entries `despread_c32`, `despread_cq15` (per input chip; one complex MAC into the partial sums). Record in `docs/performance.md`.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 6. Block and kind `despread`
+
+`DespreadBlock<T>` (`C32`/`CQ15` → same, one output symbol per `sf` input chips) around the kernel `despread`, with the code of `spread` (§6 of M51: the same parameters, the same PRBS mapping, `DespreadBlock::with_code` for a caller code). Chip 0 of the code meets the first input sample after construction or `reset`; the block does not search (that is `code_search`, M53, and `code_track`, M54).
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `despread` | `DespreadBlock<T>` | C32/CQ15 → same | `sf`, `code`, `code_seed`, `long` as `spread` | `despread`; a call consumes whole groups of `sf` chips limited by the output room, the rest stays in the kernel history |
+
+- `DespreadConfig`. Storage: the code and the chip history (`sf − 1`); exact. Timing ratio `1/sf`. **Delay:** §1 states 0; under [timing.md](../timing.md) (output `m` stands at input `m · sf`; `decimate` with `N` taps reports `(N − 1)/2`) the integration window lies after `m · sf`. The implementer decides the declared delay of kernel and block together with that of `spread` so that `spread` → `despread` reports the delay the samples show, and logs it.
+- Pipeline kind `despread` (`c32` or `cq15`), cost 4 per input chip (one complex MAC), a row in `docs/pipeline.md` and `docs/timing.md`.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 720 … 729.
@@ -214,19 +228,20 @@ Seeds 720 … 729.
 3. Block-size invariance: 20 chunk plans at the chip level (seed 723), both types.
 4. Extremes: fewer than `sf` chips (no output); `sf = 2`, `sf = 65536`; full-scale `CQ15`; NaN/∞ `C32` in one chip (that symbol NaN, the next recovers).
 5. Suite cases `despread_c32`, `despread_cq15`, `extremes_m52`.
+6. **Block and kind** (`sdrk-blocks/tests/despread_blocks.rs`, `sdrk-pipeline/tests/despread_kinds.rs`; seeds 724, 725): the block equals the kernel bit for bit on whole buffers and in 20 chunk plans, both types; `spread` → `despread` blocks return `sf` times the symbols for every PRBS choice; the description rules of M09, exact storage, struct at most 512 bytes, validation errors as `spread`; a pipeline flow `spread` → `despread` equals the blocks and its reported delay matches the samples; `cargo xtask schema --check` and the WASM kind list include `despread`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entries of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `despread_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `despread` (`C32`, `CQ15`): `DespreadState`, trait, Fallback (reusing `dot_complex`), Reference, facade delegation, `backend_for`
 - [ ] Contract rows and section in `docs/kernels.md` (the `dot_complex` order; the `spread` round-trip and the `code_track` zero-bandwidth invariant)
 - [ ] Golden cases (seeds 720–722) and the Python model
-- [ ] Tests 1–5 (seeds 720–723); suite cases
-- [ ] `cargo xtask count` entries, `docs/performance.md`
-- [ ] Reserved kind name `despread` in `docs/blocks.md`
+- [ ] Tests 1–6 (seeds 720–725); suite cases
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `DespreadBlock<T>` and kind `despread` (§6): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `despread_block`; the delay decision
 - [ ] CHANGELOG, decisions log (reuse of `dot_complex`, the history length)
 
 ## Status

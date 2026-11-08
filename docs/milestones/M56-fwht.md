@@ -1,6 +1,6 @@
 # M56 — Kernel `fwht`: fast Walsh–Hadamard transform
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M02](M02-core-foundations.md) · Next: [BACKLOG](BACKLOG.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M29](M29-primitive-blocks.md) (the block; through it M19, whose general rules apply) · Next: [BACKLOG](BACKLOG.md)
 
 > **Status: planned** (written 2026-11-08). Last kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
 
@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `fwht` (`C32`, `CQ15`) in `sdrk_core::kernels::fwht` with `Fwht<T>`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `fwht` (`C32`, `CQ15`) in `sdrk_core::kernels::fwht` with `Fwht<T>`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `FwhtBlock<T>` and the pipeline kind `fwht` (§5) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the blocks and kinds `freq_spread`/`freq_despread` (M45 lanes + a later milestone; names reserved); sequency or dyadic ordering (natural ordering only; a permutation to sequency order is a flow-level reorder if ever needed, backlog); non-power-of-two lengths (the transform is defined only for powers of two).
+**Out:** the MC-CDMA blocks `freq_spread`/`freq_despread` with their `1/√N` scaling on lanes (later milestone; names reserved; the primitive block `fwht` of §5 is the plain transform on a stream); sequency or dyadic ordering (natural ordering only; a permutation to sequency order is a flow-level reorder if ever needed, backlog); non-power-of-two lengths (the transform is defined only for powers of two).
 
 ## Specification
 
@@ -211,6 +211,20 @@ New file `tests/golden/sdrk_golden/cases/fwht.py`, the matrix model (`scipy.lina
 
 `cargo xtask count` entries `fwht_c32_1024` and `fwht_cq15_256` (per element; `log2(N)` add/subtract pairs). Record in `docs/performance.md`; note there are no multiplies (except the single `1/N` on the inverse), so it is far cheaper than an FFT of the same length.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §5 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 5. Block and kind `fwht`
+
+`FwhtBlock<T>` (`C32`/`CQ15` → same) around the kernel `fwht`: the stream is cut into frames of `size` samples counted from the first sample after construction or `reset`, and every frame is transformed in place (a copy to the output, then the kernel on the output slice).
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `fwht` | `FwhtBlock<T>` | C32/CQ15 → same | `size` (I64, build, required; a power of two 2 … 65536), `inverse` (Bool, build, false) | `fwht`; a call takes whole frames limited by input and output room, `min_input` `size` |
+
+- `FwhtConfig`; no storage. Timing ratio 1, delay 0 (a frame transform, not a filter; output frame `k` is the transform of input frame `k`; logged). A lane variant for the OFDM chain comes with `freq_spread`.
+- Pipeline kind `fwht` (`c32` or `cq15`), cost `log2(size)` per input sample (one add or subtract per stage; the inverse adds the `1/N`), a row in `docs/pipeline.md` and `docs/timing.md`. Rule 6 of the names: `fwht` is an established abbreviation; the summary writes it out once.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 760 … 769.
@@ -219,19 +233,20 @@ Seeds 760 … 769.
 2. Unit tests (`sdrk-core/tests/kernels_m56.rs`): non-power-of-two and out-of-range lengths are `InvalidParameter`; `N = 2` is one butterfly `[a+b, a−b]`; `X[0]` is the sum of the input; the transform equals the Sylvester matrix product (`Fallback` against `Reference`) for `N` = 2…1024; orthogonality (forward of a unit vector `e_k` is the `k`-th Walsh function, ±1); the round trip (`C32` within SNR, `CQ15` within the `/N` rounding); the SymPy example vector; `CQ15` saturation on a full-scale forward.
 3. Suite cases `fwht_c32`, `fwht_cq15`, `extremes_m56` (silence, full scale, NaN/∞ for `C32`, every power-of-two length to 1024, both directions).
 4. (No streaming state, so no chunk-invariance test; the transform is whole-vector.)
+5. **Block and kind** (`sdrk-blocks/tests/fwht_blocks.rs`, `sdrk-pipeline/tests/fwht_kinds.rs`; seeds 765, 766): the block equals the kernel frame by frame bit for bit on whole buffers and in 20 chunk plans that cut frames, both types and both directions; forward then inverse blocks return the input (`C32` within SNR, `CQ15` within the `/N` rounding); the description rules of M09, no storage, struct at most 512 bytes, validation errors at `params.size`; a pipeline flow equals the block; `cargo xtask schema --check` and the WASM kind list include `fwht`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entries of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `fwht_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `fwht` (`C32`, `CQ15`): trait, Fallback, Reference (matrix), facade delegation, `backend_for`
 - [ ] Contract rows and section in `docs/kernels.md` (Sylvester ordering, normalisation, the SciPy/SymPy cross-check)
 - [ ] Golden cases (seeds 760–764) and the Python model
-- [ ] Tests 1–3 (seeds 760–764); suite cases
-- [ ] `cargo xtask count` entries, `docs/performance.md`
-- [ ] Reserved kind names `freq_spread`, `freq_despread` in `docs/blocks.md`
+- [ ] Tests 1–3 and 5 (seeds 760–766); suite cases
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `FwhtBlock<T>` and kind `fwht` (§5): `docs/blocks.md` (entry and a new reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `fwht_block`
 - [ ] CHANGELOG, decisions log (the ordering choice, the normalisation convention, the `CQ15` round-trip loss)
 
 ## Status

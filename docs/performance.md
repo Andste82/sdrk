@@ -746,7 +746,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_select_block` (our code, per output sample) | 3.02 / 3.02 | 3.02 / 3.02 | 2.30 / 2.30 | 3.02 | 1.68 / 1.68 | 2.27 / 2.27 | 10.54 / 10.54 |
 | `channel_bank_channelize` (our code, per input sample) | 193.80 / 193.80 | 193.79 / 193.79 | 83.51 / 83.51 | 83.64 | 104.25 / 104.25 | 81.92 / 81.92 | 534.31 / 534.31 |
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
-| `band_pulse_detect_block` (our code, per lane value) | 121.36 / 121.36 | 120.05 / 120.05 | 112.86 / 112.86 | 119.99 | 112.26 / 112.26 | 110.02 / 110.02 | 266.49 / 266.49 |
+| `band_pulse_detect_block` (our code, per lane value) | 121.60 / 121.60 | 120.29 / 120.29 | 113.14 / 113.14 | 120.22 | 112.52 / 112.52 | 109.90 / 109.90 | 267.85 / 267.85 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -1146,7 +1146,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 2.62 | 4.17 | 0.63 | 3.12 | 4.64 | 0.67 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 56.90 | 56.90 | 1.00 | 56.38 | 56.38 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 57.16 | 57.16 | 1.00 | 56.49 | 56.49 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 46.06 | 46.06 | 1.00 | 52.54 | 52.54 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 227.45 | 227.45 | 1.00 | 212.36 | 212.36 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
@@ -1366,7 +1366,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 1.23 | 3.17 | 0.39 | 1.15 | 3.60 | 0.32 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 57.28 | 57.28 | 1.00 | 56.56 | 56.56 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 57.54 | 57.54 | 1.00 | 56.66 | 56.66 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 45.77 | 45.77 | 1.00 | 52.53 | 52.53 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 227.20 | 227.20 | 1.00 | 212.46 | 212.46 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
@@ -1587,7 +1587,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `am_mod_cq15_fallback` | 0.43 | 2.91 | 0.15 | 0.56 | 2.30 | 0.24 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `am_mod_fallback` | 0.65 | 0.53 | 1.22 | 0.47 | 0.54 | 0.87 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 164.98 | 164.98 | 1.00 | 164.85 | 164.85 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 46.83 | 46.83 | 1.00 | 42.65 | 42.65 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 46.96 | 46.96 | 1.00 | 42.86 | 42.86 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 21.00 | 21.00 | 1.00 | 25.61 | 25.61 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 72.75 | 72.75 | 1.00 | 65.45 | 65.45 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.76 | 0.76 | 1.00 | 0.52 | 0.52 | 1.00 | sdrk fallback |
@@ -1808,7 +1808,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 0.32 | 2.82 | 0.11 | 0.48 | 2.37 | 0.20 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `am_mod_fallback` | 0.38 | 0.53 | 0.73 | 0.30 | 0.54 | 0.56 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 161.09 | 161.09 | 1.00 | 163.36 | 163.36 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 52.29 | 52.29 | 1.00 | 47.86 | 47.86 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 52.43 | 52.43 | 1.00 | 48.06 | 48.06 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 792.49 | 792.49 | 1.00 | 97.78 | 97.78 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 516.23 | 516.13 | 1.00 | 96.78 | 96.79 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.28 | 0.28 | 1.00 | 1.83 | 1.83 | 1.00 | sdrk fallback |
@@ -2029,7 +2029,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 1.28 | 2.27 | 1.52 | 1.03 | 1.48 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 263.70 | 263.70 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 88.06 | 88.06 | 1.00 | 70.36 | 70.36 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 88.55 | 88.55 | 1.00 | 70.36 | 70.36 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 60.07 | 60.07 | 1.00 | 42.71 | 42.71 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 308.18 | 308.18 | 1.00 | 263.36 | 263.36 | 1.00 | sdrk fallback |
 | `channel_select_block` | 1.27 | 1.27 | 1.00 | 1.27 | 1.27 | 1.00 | sdrk fallback |
@@ -2289,18 +2289,19 @@ Simulated cycles per lane value, whole-loop:
 
 | Model | `sse2` | `sse4.2` | `avx2` | `avx512` | `neon` |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| reference model | 56.90 (`skylake`) | 57.28 (`skylake`) | 46.83 (`znver3`) | 52.29 (`znver4`) | 88.06 (`cortex-a72`) |
-| counter-model | 56.38 (`znver2`) | 56.56 (`znver2`) | 42.65 (`alderlake`) | 47.86 (`sapphirerapids`) | 70.36 (`cortex-a76`) |
+| reference model | 57.16 (`skylake`) | 57.54 (`skylake`) | 46.96 (`znver3`) | 52.43 (`znver4`) | 88.55 (`cortex-a72`) |
+| counter-model | 56.49 (`znver2`) | 56.66 (`znver2`) | 42.86 (`alderlake`) | 48.06 (`sapphirerapids`) | 70.36 (`cortex-a76`) |
 
 Instructions per lane value (`simd128`: wasmtime fuel, no core model, so no cycles):
 
 | `sse2` | `sse4.2` | `avx2` | `avx2-runtime` | `avx512` | `neon` | `simd128` |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 121.36 | 120.05 | 112.86 | 119.99 | 112.26 | 110.02 | 266.49 |
+| 121.60 | 120.29 | 113.14 | 120.22 | 112.52 | 109.90 | 267.85 |
 
 Remarks:
 - **Where the instructions go.** Profiled with callgrind at `avx2` (200 calls, before the two changes of D963): of the instructions of the calls, about 73 % are the detectors of the busy lanes (the run machines of the envelope and of the presence, the frequency slicer with one `atan2` per sample of a frame and the merge decisions; about 300 instructions per busy lane value), about 26 % the loop over the lanes of each step (the envelope low-pass, the noise level, the trigger and the choice of the lanes to run) and about 1 % `mag`. The efficiency of 0.50 to 0.75 and the bottleneck class `latency` on every model come from the chain of one sample of a lane to the next in the detectors.
 - **The report cost** of the kind is 12 per lane value (spec §3); the instructions are about 9 times that, almost all of it in the busy lanes, so a quieter band costs less: with no busy lane a step is the vector loop over the lanes and `mag` only.
+- **Recount after the review (D978).** The trigger factor copied per lane (D972) and the shorter lead-in at low step rates (D971) were counted again on all four platforms and simulated again on 2026-11-08 (the tables above): simulated cycles per lane value before -> after (reference / counter model) 56.90 / 56.38 -> 57.16 / 56.49 (`sse2`), 57.28 / 56.56 -> 57.54 / 56.66 (`sse4.2`), 46.83 / 42.65 -> 46.96 / 42.86 (`avx2`), 52.29 / 47.86 -> 52.43 / 48.06 (`avx512`), 88.06 / 70.36 -> 88.55 / 70.36 (`neon`); `simd128` (no core model) 266.49 -> 267.85 instructions per lane value.
 - **D970.** The merge decision (`decide`, run once per burst) is kept out of line (`#[inline(never)]`): inlined into the step loop it took registers from the per-sample detectors; simulated cycles per lane value before -> after (reference / counter model, with the merging rules of D964 to D966 in both): no figure before, the instructions were 160.00 -> 121.36 (`sse2`), 149.75 -> 112.86 (`avx2`); against the entry of D963 (before D964 to D966) the cycles fell from 63.49 / 62.76 to 56.90 / 56.38 (`sse2`), 53.91 / 48.75 to 46.83 / 42.65 (`avx2`), 59.64 / 54.07 to 52.29 / 47.86 (`avx512`) and 105.23 / 86.11 to 88.06 / 70.36 (`neon`).
 - **D963.** The frequency of every sample of a frame uses a polynomial `atan2` (within 2e-5 rad of `libm::atan2f`), and each step runs only the lanes of a bitmask of busy lanes (plus the lanes that trigger); simulated cycles per lane value after these two changes (reference / counter model): 63.49 / 62.76 at `sse2`, 64.19 / 63.18 at `sse4.2`, 53.91 / 48.75 at `avx2`, 59.64 / 54.07 at `avx512`, 105.23 / 86.11 at `neon` (`simd128` 301.18 instructions, no core model); no cycles were simulated before the changes, so the step is known in instructions only: 145.15 -> 138.17 per lane value at `avx2`.
 

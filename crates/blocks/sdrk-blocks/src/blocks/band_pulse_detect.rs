@@ -102,6 +102,12 @@ const EDGE_WINDOW: f64 = 4.0;
 /// of the first transition).
 const FSK_CAND: usize = 8;
 
+/// The fewest lanes with bursts at the same time that make a wideband event (D965, D975): more
+/// than 3 overlapping narrowband transmissions (spec test 4) of 3 lanes each can lift, so that
+/// transmissions two spacings apart stay apart (spec §3); with fewer lanes than this there are
+/// no wideband events.
+const WIDE_MIN_LANES: usize = 10;
+
 /// The names of the `modulation` choice, in index order.
 const MODULATIONS: &[&str] = &["ook", "fsk", "auto"];
 
@@ -149,7 +155,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         are less than a channel spacing apart (modulo the input rate) are one transmission, \
         and only the one with the higher level is emitted; an FSK frame that spans at least \
         half of an OOK train of the same transmission is kept instead of the train. A burst \
-        that shares a step with bursts in more than half of the lanes (a wideband event) is \
+        that shares a step with bursts in more than half of the lanes and in at least 10 lanes \
+        (a wideband event; none with fewer than 10 lanes) is \
         emitted only when no other lane of the event has emitted it or has it at a higher \
         level, and later bursts inside the span of the emitted event are dropped. The frequency is c times the spacing (half the step rate) \
         plus the mean phase rotation of the pulses (FSK: the middle of the two levels). \
@@ -256,8 +263,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             },
             typical: "433920000",
             mutability: Mutability::Build,
-            description: "The RF centre of the band; only for the absolute frequency of the \
-                JSON form (the packets carry the offset).",
+            description: "The RF centre of the band, metadata of the flow: it does not \
+                change the packets, which carry the offset from it; a tool reads it from the \
+                flow for the absolute frequency of the JSON form (pulses::write_json).",
         },
     ],
     required: &[],
@@ -317,7 +325,8 @@ pub struct BandPulseDetectConfig {
     pub gap_ratio: f64,
     /// Most pairs of a train.
     pub max_pulses: usize,
-    /// RF centre of the band in Hz (for the JSON form only).
+    /// RF centre of the band in Hz: metadata of the flow, it does not change the packets (a tool
+    /// reads it from the flow and passes it to `pulses::write_json`, D976).
     pub center_hz: f64,
 }
 
@@ -1685,13 +1694,14 @@ impl<S: Storage> BandPulseDetectBlock<S> {
     /// The wideband rule (D965) for the burst `mine` of lane `k` (level `level`): `Some(true)`
     /// when it is part of a wideband event that another lane emits, `Some(false)` when it is
     /// the lane that emits a new event, `None` when it is no wideband burst. A burst is part
-    /// of a wideband event when more than half of the lanes (at least 4) have bursts that share
-    /// a step with it, whatever their frequency; it is dropped when one of them was emitted or
+    /// of a wideband event when more than half of the lanes, and at least `WIDE_MIN_LANES`
+    /// (D975), have bursts that share a step with it (itself included), whatever their
+    /// frequency; it is dropped when one of them was emitted or
     /// is in progress at a higher level (equal levels: the lower lane), or when it lies in the
     /// span of the last emitted event by more than half.
     fn wideband(&self, k: usize, mine: (u64, u64), level: f32) -> Result<Option<bool>> {
         let w = self.width;
-        if w < 4 {
+        if w < WIDE_MIN_LANES {
             return Ok(None);
         }
         let in_event = Self::overlap(mine, self.wide) && Self::touch(mine, self.wide);
@@ -1712,7 +1722,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             }
             busy += usize::from(hit);
         }
-        Ok(if 2 * busy > w {
+        Ok(if 2 * busy > w && busy >= WIDE_MIN_LANES {
             Some(blocked || in_event)
         } else if in_event {
             Some(true)

@@ -1067,7 +1067,7 @@
                 "properties": {
                   "center_hz": {
                     "default": 0.0,
-                    "description": "The RF centre of the band; only for the absolute frequency of the JSON form (the packets carry the offset). Unit: Hz. Typical: 433920000. Build-time.",
+                    "description": "The RF centre of the band, metadata of the flow: it does not change the packets, which carry the offset from it; a tool reads it from the flow for the absolute frequency of the JSON form (pulses::write_json). Unit: Hz. Typical: 433920000. Build-time.",
                     "maximum": 1000000000000.0,
                     "minimum": -1000000000000.0,
                     "type": "number"

@@ -140,7 +140,7 @@ impl LiquidFirpfbch2 {
     pub fn execute(&mut self, x: &mut [[f32; 2]], y: &mut [[f32; 2]]) {
         let hop = self.channels / 2;
         assert!(
-            x.len() % hop == 0 && y.len() == 2 * x.len(),
+            x.len().is_multiple_of(hop) && y.len() == 2 * x.len(),
             "liquid firpfbch2: lengths"
         );
         let n = c_uint::try_from(x.len() / hop).expect("block too long");

@@ -450,23 +450,26 @@ fn column_block<const B: usize>(
     off: usize,
     dst: &mut [C32],
 ) -> Result<()> {
-    // Row `p` of the block starts at `p M + off`; `M` is a power of two, so the row count is a
-    // shift (an iterator over the rows would divide by `M` in every hop).
-    let rows = taps.len() >> m.trailing_zeros();
-    let row = |p: usize| {
-        let at = p * m + off;
-        taps.get(at..at + B)
-            .and_then(|t| t.first_chunk::<B>())
-            .zip(window.get(at..at + B).and_then(|w| w.first_chunk::<B>()))
-            .ok_or_else(internal)
-    };
+    // Whole rows of `M` values: `M` is a power of two, and written as a shift the compiler
+    // counts the rows with a shift instead of a division; the columns `off .. off + B` of a row
+    // are checked against the row length, which does not change, so the check leaves the loop.
+    let m = 1usize << m.trailing_zeros();
+    let mut rows = taps
+        .chunks_exact(m)
+        .zip(window.chunks_exact(m))
+        .map(|(t, w)| {
+            t.get(off..off + B)
+                .and_then(|t| t.first_chunk::<B>())
+                .zip(w.get(off..off + B).and_then(|w| w.first_chunk::<B>()))
+                .ok_or_else(internal)
+        });
     let mut acc = [C32::new(0.0, 0.0); B];
-    let (t0, w0) = row(0)?;
+    let (t0, w0) = rows.next().ok_or_else(internal)??;
     for ((a, &g), x) in acc.iter_mut().zip(t0).zip(w0) {
         *a = C32::new(g * x.re, g * x.im);
     }
-    for p in 1..rows {
-        let (t, w) = row(p)?;
+    for r in rows {
+        let (t, w) = r?;
         for ((a, &g), x) in acc.iter_mut().zip(t).zip(w) {
             *a = C32::new(a.re + g * x.re, a.im + g * x.im);
         }

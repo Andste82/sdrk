@@ -676,10 +676,10 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 475.08,
+              "other_instr_per_sample": 436.07,
               "other_snr_db": 140.71,
               "ours_instr_per_sample": 270.93,
-              "ratio": 0.57
+              "ratio": 0.62
             },
             {
               "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
@@ -709,13 +709,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 949.71,
               "other_snr_db": null,
-              "ours_instr_per_sample": 475.08,
-              "ratio": 0.5
+              "ours_instr_per_sample": 436.07,
+              "ratio": 0.46
             }
           ],
           "other_instr_per_sample": 949.71,
-          "ours_instr_per_sample": 475.08,
-          "ratio": 0.5,
+          "ours_instr_per_sample": 436.07,
+          "ratio": 0.46,
           "snr_db": {
             "other": 140.86,
             "ours": 140.71

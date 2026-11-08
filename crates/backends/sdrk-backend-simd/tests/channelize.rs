@@ -38,10 +38,8 @@ fn random_taps(rng: &mut Rng, m: usize, l: usize) -> Vec<f32> {
 }
 
 fn state(taps: &[f32], m: usize) -> State {
-    let mut stored = vec![0.0f32; 2 * taps.len()];
-    stored[..taps.len()].copy_from_slice(taps);
     ChannelizeState::new(
-        stored,
+        taps.to_vec(),
         m,
         vec![C32::default(); history_len(m, taps.len() / m)],
         vec![C32::default(); m / 2],
@@ -146,10 +144,8 @@ fn the_history_length_does_not_change_the_bits() {
         let want = run_whole(&Simd, &mut state(&taps, m), &input);
         let n = m * l;
         for hist in [n, n + m / 2 - 1, n + m / 2, n + m / 2 + 1, 3 * n + 5] {
-            let mut stored = vec![0.0f32; 2 * n];
-            stored[..n].copy_from_slice(&taps);
             let mut st = ChannelizeState::new(
-                stored,
+                taps.clone(),
                 m,
                 vec![C32::default(); hist],
                 vec![C32::default(); m / 2],

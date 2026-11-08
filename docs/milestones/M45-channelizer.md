@@ -294,7 +294,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 
 ## Status
 
-Delivered (2026-11-08, branch `m45-channelizer`; decisions D912 to D937). Every section (1 to 7) and every test (1 to 10, seeds 660 to 671 and 672 for the SIMD tests) is implemented; no part of the specification is left out.
+Delivered (2026-11-08, branch `m45-channelizer`; decisions D912 to D939). Every section (1 to 7) and every test (1 to 10, seeds 660 to 671 and 672 for the SIMD tests) is implemented; no part of the specification is left out.
 
 Cycles per sample (simulated by llvm-mca, whole-loop mode, reference / counter model; 16 channels, 8 taps per branch, per input sample):
 
@@ -302,11 +302,11 @@ Cycles per sample (simulated by llvm-mca, whole-loop mode, reference / counter m
 | --- | --- | --- | --- | --- |
 | `sse2` | 25.93 / 27.72 | 53.40 / 58.43 | 171.64 / 176.30 | 166.47 / 180.90 |
 | `sse4.2` | 21.95 / 28.21 | 53.83 / 58.12 | 171.63 / 176.29 | 166.73 / 180.51 |
-| `avx2` | 12.08 / 12.75 | 34.92 / 32.41 | 120.69 / 99.98 | 149.61 / 131.39 |
+| `avx2` | 12.08 / 12.75 | 34.97 / 32.37 | 120.69 / 99.98 | 149.61 / 131.39 |
 | `avx512` | 12.68 / 16.01 | 38.10 / 32.11 | 104.12 / 84.10 | 107.09 / 118.99 |
-| `neon` | 42.56 / 32.70 | 98.73 / 81.02 | 302.17 / 240.53 | 222.34 / 165.45 |
+| `neon` | 30.93 / 22.59 | 98.73 / 81.02 | 302.17 / 240.53 | 222.34 / 165.45 |
 
-`simd128` (no core model, instructions per sample): SIMD 270.93, fallback 436.07, liquid-dsp 949.71. The blocks, cycles per sample at `avx2`: `channelize_block` 12.21 / 12.87 per input sample, `channel_select_block` 1.24 / 2.28 per output sample; test 9 (one `channelize` with eight `channel_select` against eight `ddc`, per input sample): 21.44 / 27.30 against 72.75 / 65.45 at `avx2`, 46.24 / 52.66 against 227.45 / 212.36 at `sse2`, 92.68 / 70.61 against 308.18 / 263.36 at `neon`. The other levels are in [performance.md](../performance.md#channelizer-blocks-and-channel-banks-m45).
+`simd128` (no core model, instructions per sample): SIMD 270.93, fallback 436.07, liquid-dsp 949.71. The blocks, cycles per sample at `avx2`: `channelize_block` 12.21 / 12.87 per input sample, `channel_select_block` 1.24 / 2.28 per output sample; test 9 (one `channelize` with eight `channel_select` against eight `ddc`, per input sample): 21.44 / 27.30 against 72.75 / 65.45 at `avx2`, 46.24 / 52.66 against 227.45 / 212.36 at `sse2`, 60.82 / 43.46 against 308.18 / 263.36 at `neon`. The `neon` SIMD path sums two hops at once (D939, open item I45-1, closed by D938): 42.56 / 32.70 before, the test 9 bank 92.68 / 70.61 before. The other levels are in [performance.md](../performance.md#channelizer-blocks-and-channel-banks-m45).
 
 Deviations and judgement calls of the specification, all in the decisions log: the output definition and the consumption rule of the kernel (D913, D914), the tap estimate as returned by `kaiserord` (D915), the golden expected values as the exactly rounded definition (D917), `BlockFactory::check` with the arriving `PortKind` (D923), no new diagnostic code (`rate_unsupported` for both range errors, D927), `channel_select` without a SIMD gather kernel (D929, D935), the test thresholds of tests 7 and 8 (D933, D934), `ChannelizeState::plan()` as an `Option` (D936), no bound on `channel_select.channel` (D937).
 
@@ -318,7 +318,9 @@ Deviations and judgement calls of the specification, all in the decisions log: t
 
 Verified locally on Linux x86-64 (2026-11-08): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo xtask check`, `cargo xtask bare-metal`, `cargo xtask schema --check`, `python tests/golden/generate.py --check` (903 files), and the M45 test files: `sdrk-core` `kernels_m45`; `sdrk-backend-simd` `channelize`; `sdrk` `facade` (m45); `sdrk-blocks` `lanes`, `channelize_blocks`, `describe`; `sdrk-pipeline` `lanes_test` (lib), `channelize_kinds`, `pmr446`, `schema`; `sdrk-testkit` `golden_m45`, `suite_m45`, `harness`, `golden_m09`.
 
+I45-1 (D939, 2026-11-08): the same checks and M45 test files again after the two-hop branch sums of `neon`, plus `sdrk-backend-simd` `channelize` on `aarch64` under `qemu-aarch64` (the two-hop path), the counts of `channelize`, `channelize_fallback`, `channelize_block` and `channel_bank_channelize` on all four platforms and their cycles on every level with a core model (unchanged except `neon`).
+
 Not done or not run:
 - The whole workspace test suite, the emulators, the wasm tests, the SIMD tests at AVX-512 and on aarch64 and wasm32, and the other hosts; CI runs them.
 
-Open items: I45-1 (the `neon` SIMD branch sums are bound by loads; going further needs a different tap layout in the state of `sdrk-core`); I45-2 (the step-slice loop of `channel_select_block`, D935, is slower on the `avx2` and `avx512` counter models).
+Open items: I45-2 (the step-slice loop of `channel_select_block`, D935, is slower on the `avx2` and `avx512` counter models).

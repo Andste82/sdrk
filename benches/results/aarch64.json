@@ -704,8 +704,8 @@
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 130.41,
-          "ours_instr_per_sample": 130.41,
+          "other_instr_per_sample": 83.13,
+          "ours_instr_per_sample": 83.13,
           "ratio": 1.0,
           "snr_db": {
             "other": 139.18,
@@ -749,21 +749,21 @@
               "label": "information: fallback",
               "other_instr_per_sample": 151.01,
               "other_snr_db": 140.71,
-              "ours_instr_per_sample": 62.54,
-              "ratio": 0.41
+              "ours_instr_per_sample": 43.43,
+              "ratio": 0.29
             },
             {
               "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 361.58,
               "other_snr_db": null,
-              "ours_instr_per_sample": 62.54,
-              "ratio": 0.17
+              "ours_instr_per_sample": 43.43,
+              "ratio": 0.12
             }
           ],
           "other_instr_per_sample": 361.58,
-          "ours_instr_per_sample": 62.54,
-          "ratio": 0.17,
+          "ours_instr_per_sample": 43.43,
+          "ratio": 0.12,
           "snr_db": {
             "other": 141.3,
             "ours": 141.4
@@ -774,8 +774,8 @@
         "channelize_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 63.04,
-          "ours_instr_per_sample": 63.04,
+          "other_instr_per_sample": 43.68,
+          "ours_instr_per_sample": 43.68,
           "ratio": 1.0,
           "snr_db": {
             "other": 141.34,

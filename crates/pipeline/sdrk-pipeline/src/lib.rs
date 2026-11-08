@@ -28,7 +28,9 @@
 //! assert_eq!(pipeline.read_stream("out", &mut out)?, 2);
 //! # Ok::<(), sdrk_pipeline::Error>(())
 //! ```
-#![forbid(unsafe_code)]
+// The unit-test build has one `unsafe` item: the counting global allocator of
+// `lane_packets_test` (D955); every other build forbids `unsafe`.
+#![cfg_attr(not(test), forbid(unsafe_code))]
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -46,6 +48,8 @@ pub mod drift;
 mod error;
 mod groups;
 mod kinds;
+#[cfg(test)]
+mod lane_packets_test;
 #[cfg(test)]
 mod lanes_test;
 mod latency;

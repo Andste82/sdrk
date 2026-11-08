@@ -65,6 +65,15 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M45.1 | [M45.1-ism-band-receiver.md](M45.1-ism-band-receiver.md) | 10 | ISM band receiver: `band_pulse_detect` on the lanes of `channelize` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
 | M46 | [M46-ism-sensors.md](M46-ism-sensors.md) | 10 | Sensor decoders: slicers (PWM, PPM, Manchester, NRZ), `sensor_decode` with readings as JSON, at least four 433 MHz and two 868 MHz devices (clean-room, no GPL code), flows `ism433_sensors`, `ism868_sensors` |
 | M47 | [M47-morse.md](M47-morse.md) | 10 | Morse (CW) receive and transmit: `sdrk_proto::morse` (ITU-R M.1677-1 table, encoder, decoder with speed estimate), `morse_encode`, `morse_decode` (adaptive threshold), flows `cw_transmitter` and `cw_receiver` with tone variants |
+| M48 | [M48-gauss-noise.md](M48-gauss-noise.md) | 10 | Kernel `gauss_noise` (`C32`/`CQ15`/`f32`/`Q15`): deterministic Gaussian noise from a seed with random access, the PCG32 + Box–Muller of the testkit; first of the DSSS/OFDM kernel series (one kernel per milestone) |
+| M49 | [M49-scramble.md](M49-scramble.md) | 10 | Kernel `scramble` (`C32`/`CQ15`): keyed phase scrambling / descrambling by unit phasors from a caller-supplied index sequence (a `rotate` step); `b=1` sign, `b=2` the DVB-S2 `{1,j,−1,−j}` pattern |
+| M50 | [M50-xcorr-fft.md](M50-xcorr-fft.md) | 10 | Kernel `xcorr_fft` (`C32`): overlap-save fast convolution / long matched filter for sync-word and spreading-code correlation (the backlog's "FFT fast convolution" item) |
+| M51 | [M51-spread.md](M51-spread.md) | 10 | Kernel `spread` (`C32`/`CQ15`): direct-sequence spreading, short and long codes, chip phase tracked across calls |
+| M52 | [M52-despread.md](M52-despread.md) | 10 | Kernel `despread` (`C32`/`CQ15`): integrate-and-dump correlation (the `dot_complex` order), the matched receiver for `spread` |
+| M53 | [M53-code-search.md](M53-code-search.md) | 10 | Kernel `code_search` (`C32`): parallel code-phase + Doppler acquisition (PCPS) with a CFAR statistic, after GNSS-SDR |
+| M54 | [M54-code-track.md](M54-code-track.md) | 10 | Kernel `code_track` (`C32`): delay-locked loop (early/prompt/late, normalised E−L discriminator, the `symbol_sync` interpolator), prompt equals `despread` at zero bandwidth |
+| M55 | [M55-pilot-equalize.md](M55-pilot-equalize.md) | 10 | Kernel `pilot_equalize` (`C32`): OFDM pilot-based LS channel estimate, frequency interpolation, time smoothing, one-tap equalization, common-phase correction |
+| M56 | [M56-fwht.md](M56-fwht.md) | 10 | Kernel `fwht` (`C32`/`CQ15`): fast Walsh–Hadamard transform (Sylvester ordering), the spreading transform of MC-CDMA; last of the DSSS/OFDM kernel series |
 | — | [BACKLOG.md](BACKLOG.md) | 7–10, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -106,6 +115,15 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M45.1 ISM band receiver | M45, M39.1 | M42, M43, M44 |
 | M46 ISM sensor decoders | M45.1 | M42, M43, M44 |
 | M47 Morse (CW) | M39.1 | M42, M43, M44, M45, M45.1, M46 |
+| M48 `gauss_noise` | M38 | everything after M38 (the DSSS/OFDM kernels are independent of one another unless listed) |
+| M49 `scramble` | M30 | everything after M30 |
+| M50 `xcorr_fft` | M07, M43 | everything after M43 |
+| M51 `spread` | M30 | everything after M30 |
+| M52 `despread` | M43, M51 | everything after M51 |
+| M53 `code_search` | M07, M50 | everything after M50 |
+| M54 `code_track` | M38, M52 | everything after M52 |
+| M55 `pilot_equalize` | M07 | everything after M07 |
+| M56 `fwht` | M02 | anything |
 | M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
@@ -173,10 +191,19 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 636–649 | M46 |
 | 650–659 | M47 |
 | 660–679 | M45 |
-| 680–999 | free, for backlog milestones |
+| 680–689 | M48 (`gauss_noise`) |
+| 690–699 | M49 (`scramble`) |
+| 700–709 | M50 (`xcorr_fft`) |
+| 710–719 | M51 (`spread`) |
+| 720–729 | M52 (`despread`) |
+| 730–739 | M53 (`code_search`) |
+| 740–749 | M54 (`code_track`) |
+| 750–759 | M55 (`pilot_equalize`) |
+| 760–769 | M56 (`fwht`) |
+| 770–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory
 
-- `M00-…` to `M47-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2).
+- `M00-…` to `M56-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2). M48 to M56 are the DSSS/OFDM kernel series (one kernel per milestone, for spread-spectrum and multicarrier work; the blocks, kinds and flows that use them follow in later milestones).
 - `BACKLOG.md`: work after M18 and M44.

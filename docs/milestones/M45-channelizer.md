@@ -321,4 +321,4 @@ Verified locally on Linux x86-64 (2026-11-08): `cargo fmt --all -- --check`, `ca
 Not done or not run:
 - The whole workspace test suite, the emulators, the wasm tests, the SIMD tests at AVX-512 and on aarch64 and wasm32, and the other hosts; CI runs them.
 
-Open items: I45-1 (the `neon` SIMD branch sums are bound by loads; going further needs a different tap layout in the state of `sdrk-core`).
+Open items: I45-1 (the `neon` SIMD branch sums are bound by loads; going further needs a different tap layout in the state of `sdrk-core`); I45-2 (the step-slice loop of `channel_select_block`, D935, is slower on the `avx2` and `avx512` counter models).

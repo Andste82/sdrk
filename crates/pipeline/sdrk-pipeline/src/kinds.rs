@@ -14,8 +14,9 @@ use sdrk_blocks::{
     AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
     AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
     AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
-    BlockSample, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock,
-    CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
+    BlockSample, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig,
+    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, CostasBlock,
+    CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
     DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
     DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
     EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
@@ -42,7 +43,7 @@ use serde_json::{Map, Value};
 
 use crate::model::Precision;
 use crate::node::{
-    ClockedNode, FrameNode, Node, PacketInNode, PacketOutNode, PairNode, StreamNode,
+    ClockedNode, FrameNode, LanesNode, Node, PacketInNode, PacketOutNode, PairNode, StreamNode,
 };
 use crate::params::{check_params, to_param};
 use crate::registry::{BlockFactory, Checked, PortKind, input_port_type, port_accepts};
@@ -4091,6 +4092,165 @@ impl Kind for FmStereoRdsModKind {
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(PairNode::new(FmStereoRdsModBlock::new(
             cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ channelize
+
+pub(crate) struct ChannelizeKind;
+
+impl Kind for ChannelizeKind {
+    type Cfg = ChannelizeConfig;
+
+    const KIND: &'static str = "channelize";
+    fn kernels() -> &'static [&'static str] {
+        &["channelize"]
+    }
+    fn default_cfg() -> ChannelizeConfig {
+        ChannelizeConfig::default()
+    }
+    fn set(cfg: &mut ChannelizeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &ChannelizeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("channelize needs c32 samples"));
+        }
+        let (m, l) = (cfg.channels, cfg.taps_per_branch);
+        Ok(Figures {
+            rate_out: ChannelizeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: ChannelizeBlock::<VecStorage>::storage_bytes(cfg)?,
+            // §4 of M45: L for the branch filters plus log2(M) 5/2 for the M-point FFT per
+            // M/2 input samples, per input sample (D926).
+            cost: l as f64 + f64::from(m.trailing_zeros()) * 2.5,
+            taps: m * l,
+            delay: delay_half(m * l),
+            min_input: m / 2,
+            output: PortKind::Lanes {
+                elem: PortType::C32,
+                width: m,
+            },
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        // The prototype is shorter than the Kaiser estimate: name the required taps per
+        // branch (the `min` of the error).
+        if let sdrk_blocks::Error::OutOfRange {
+            name: "taps_per_branch",
+            min,
+            max,
+            got,
+        } = *e
+        {
+            d.message = if min > max {
+                format!(
+                    "the passband, stopband and attenuation_db need taps_per_branch {min} \
+                     (the Kaiser estimate), more than the largest {max}: widen the transition \
+                     band or lower the attenuation (taps_per_branch is {got})"
+                )
+            } else {
+                format!(
+                    "the passband, stopband and attenuation_db need taps_per_branch {min} or \
+                     more (the Kaiser estimate), got {got}"
+                )
+            };
+        }
+    }
+    fn build(
+        cfg: &ChannelizeConfig,
+        _input: PortType,
+        _rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(LanesNode::new(ChannelizeBlock::new(cfg, st)?)))
+    }
+}
+
+// -------------------------------------------------------------- channel_select
+
+/// The configuration of `channel_select` with the width of its input.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ChannelSelectCfg {
+    config: ChannelSelectConfig,
+    width: usize,
+}
+
+pub(crate) struct ChannelSelectKind;
+
+impl Kind for ChannelSelectKind {
+    type Cfg = ChannelSelectCfg;
+
+    const KIND: &'static str = "channel_select";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> ChannelSelectCfg {
+        ChannelSelectCfg {
+            config: ChannelSelectConfig::default(),
+            width: 0,
+        }
+    }
+    fn set(cfg: &mut ChannelSelectCfg, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.config.set(name, value)
+    }
+    fn input_width(cfg: &mut ChannelSelectCfg, width: usize) -> BlockResult<()> {
+        cfg.width = width;
+        Ok(())
+    }
+    fn plan(
+        cfg: &ChannelSelectCfg,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if !input.is_lanes() {
+            return Err(mismatch("channel_select needs a lane stream"));
+        }
+        cfg.config.lane(cfg.width)?;
+        Ok(Figures {
+            rate_out: rate,
+            memory_bytes: 0,
+            // A strided copy: one value per step.
+            cost: 1.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        // A channel outside the range of the width of the input (a rate problem of the flow,
+        // D927): name the width and the range.
+        if let sdrk_blocks::Error::OutOfRange {
+            name: "channel",
+            min,
+            max,
+            got,
+        } = *e
+        {
+            let width = max - min + 1.0;
+            d.message = format!(
+                "channel {got} is outside {min} to {max}, the range of an input of {width} lanes"
+            );
+        }
+    }
+    fn build(
+        cfg: &ChannelSelectCfg,
+        _input: PortType,
+        _rate: Rate,
+        _p: Precision,
+        _st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(LanesNode::new(ChannelSelectBlock::new(
+            &cfg.config,
+            cfg.width,
         )?)))
     }
 }

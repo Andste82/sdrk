@@ -1111,6 +1111,119 @@
           },
           {
             "additionalProperties": false,
+            "description": "Copies one channel of a lane stream into an ordinary complex stream.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "channel_select"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "channel": {
+                    "description": "Signed channel number, -M/2 to M/2 - 1 for an input of M lanes (lane channel mod M). Required. Typical: 0 (the centre channel), -1 the channel below. Build-time.",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "channel"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Polyphase channelizer: splits a complex band into channels lanes of a lane stream at twice the channel spacing.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "channelize"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "attenuation_db": {
+                    "default": 60.0,
+                    "description": "Stopband attenuation of the prototype in dB. Unit: dB. Typical: 60. Build-time.",
+                    "maximum": 120.0,
+                    "minimum": 20.0,
+                    "type": "number"
+                  },
+                  "channels": {
+                    "default": 16,
+                    "description": "Number of channels M, a power of two from 4 to 256; the channel spacing is fs / M. Typical: 16. Build-time.",
+                    "maximum": 256,
+                    "minimum": 4,
+                    "type": "integer"
+                  },
+                  "passband": {
+                    "default": 0.5,
+                    "description": "Passband edge as a fraction of the channel spacing, below stopband. Unit: ratio. Typical: 0.5 (search grid), 0.4 (channel plan). Build-time.",
+                    "maximum": 1.5,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "stopband": {
+                    "default": 1.0,
+                    "description": "Stopband edge as a fraction of the channel spacing, above passband and at most 1.5 (the largest edge that does not alias into the passband at the output rate 2 fs / M). Unit: ratio. Typical: 1.0 (search grid), 0.6 (channel plan). Build-time.",
+                    "maximum": 1.5,
+                    "minimum": 1e-6,
+                    "type": "number"
+                  },
+                  "taps_per_branch": {
+                    "default": 8,
+                    "description": "Prototype taps per branch; the prototype has channels taps_per_branch taps and must be at least as long as the Kaiser estimate of the edges. Typical: 8 for 0.5 / 1.0, 24 for 0.4 / 0.6. Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Converts raw device bytes in a sample format to complex or real samples.",
             "properties": {
               "align": {

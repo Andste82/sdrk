@@ -60,6 +60,8 @@ pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};
 pub use blocks::am_mod::{AmModBlock, AmModConfig};
 pub use blocks::auto_notch::{AutoNotchConfig, AutoNotchRealBlock};
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
+pub use blocks::channel_select::{ChannelSelectBlock, ChannelSelectConfig};
+pub use blocks::channelize::{ChannelizeBlock, ChannelizeConfig};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
 pub use blocks::costas::{CostasBlock, CostasConfig};

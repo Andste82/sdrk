@@ -2,7 +2,7 @@
 
 > Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M34](M34-multi-input.md) · Next: [M45.1](M45.1-ism-band-receiver.md)
 
-> **Status: draft.** Written on 2026-11-07 from a design discussion with the maintainer (the kernel `channelize` and its prototype design moved here from the ISM band receiver, which became M45.1); not yet reviewed. The thresholds marked *(to be confirmed)* are first estimates and are fixed by the implementation through the decisions log.
+> **Status: delivered** (2026-11-08, see [Status](#status)). Written on 2026-11-07 from a design discussion with the maintainer (the kernel `channelize` and its prototype design moved here from the ISM band receiver, which became M45.1). The thresholds marked *(to be confirmed)* are confirmed: test 1 keeps its 60 dB (measured 65.3 dB, see Status), tests 7 and 8 are fixed by D933 and D934.
 
 ## Goal
 

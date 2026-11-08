@@ -396,7 +396,10 @@ fn config_round_trip(
     for p in d.params {
         let sample = match p.kind {
             ParamKind::F64 { min, max, .. } => ParamValue::F64(min + (max - min) / 3.0),
-            ParamKind::I64 { min, max, .. } => ParamValue::I64(min + (max - min) / 3),
+            // In i128: an unbounded parameter spans the whole i64 range.
+            ParamKind::I64 { min, max, .. } => ParamValue::I64(
+                i64::try_from(i128::from(min) + (i128::from(max) - i128::from(min)) / 3).unwrap(),
+            ),
             ParamKind::Bool { default } => ParamValue::Bool(!default),
             ParamKind::Choice { options, .. } => ParamValue::Choice(options.len() as u16 - 1),
             ParamKind::Format => ParamValue::Format(sdrk_device::formats::CS16),
@@ -422,7 +425,8 @@ fn config_round_trip(
                     Err(Error::OutOfRange { .. })
                 ));
             }
-            ParamKind::I64 { max, .. } => {
+            // An unbounded parameter (`max` is `i64::MAX`) has no value above its range.
+            ParamKind::I64 { max, .. } if max < i64::MAX => {
                 assert!(matches!(
                     set(p.name, ParamValue::I64(max + 1)),
                     Err(Error::OutOfRange { .. })
@@ -1828,6 +1832,14 @@ fn kind_text(k: &ParamKind) -> String {
     match k {
         ParamKind::F64 { min, max, default } => format!(
             "f64, {min} to {max}, {}",
+            default.map_or("no default".to_string(), |d| format!("default {d}"))
+        ),
+        ParamKind::I64 {
+            min: i64::MIN,
+            max: i64::MAX,
+            default,
+        } => format!(
+            "integer, any value, {}",
             default.map_or("no default".to_string(), |d| format!("default {d}"))
         ),
         ParamKind::I64 { min, max, default } => format!(

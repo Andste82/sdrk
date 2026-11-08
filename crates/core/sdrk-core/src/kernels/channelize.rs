@@ -253,9 +253,16 @@ where
         self.hist.as_ref()
     }
 
-    /// The FFT plan of size `M`.
-    pub fn plan(&self) -> &FftPlan<T, Tw> {
-        &self.plan
+    /// The FFT plan of size `M` for 16 channels and more; `None` for 4 and 8 channels, whose
+    /// transform is the radix-2 path of [`channel_fft`] and lies outside the sizes the FFT kernel
+    /// accepts (16 to 65536 points), so the plan never reaches [`Fft::fft`].
+    pub fn plan(&self) -> Option<&FftPlan<T, Tw>> {
+        (self.channels >= FFT_MIN).then_some(&self.plan)
+    }
+
+    /// The `M / 2` twiddles `e^(-j 2 pi k / M)` of the channel transform (for every `M`).
+    pub fn twiddles(&self) -> &[T] {
+        self.plan.twiddles()
     }
 
     /// Input samples of the current hop received so far (`0 .. M / 2`).

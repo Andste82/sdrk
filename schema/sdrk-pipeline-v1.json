@@ -1136,8 +1136,8 @@
                 "properties": {
                   "channel": {
                     "description": "Signed channel number, -M/2 to M/2 - 1 for an input of M lanes (lane channel mod M). Required. Typical: 0 (the centre channel), -1 the channel below. Build-time.",
-                    "maximum": 127,
-                    "minimum": -128,
+                    "maximum": 9223372036854775807,
+                    "minimum": -9223372036854775808,
                     "type": "integer"
                   }
                 },

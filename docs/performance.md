@@ -2247,7 +2247,17 @@ Remarks:
   - `channel_bank_ddc` copies 294400 bytes. That is about 454 of its 516 cycles and about 36 of its 97, so without the copies it is about 62 and 61.
   - `channelize_block` (12.69 on `znver4`, its history of 8 taps per branch) is not affected.
 - **The readers.** One `channel_select` costs 0.55 to 3.67 cycles per step, and a step comes every 8 input samples. The eight readers of the bank add about 0.5 to 3.7 cycles per input sample together.
-- **D935.** Before D935, `channel_select_block` counted 11.01 instructions per output sample at `sse2` and `avx2`, and `channel_bank_channelize` 201.67 and 91.89.
+- **D935.** The step slices of `channel_select` against the former `skip` / `step_by` loop, simulated cycles per output sample of `channel_select_block`, whole-loop (the before values simulated on 2026-11-08 with the old loop put back for the measurement):
+
+  | Level | Before, reference model | After, reference model | Before, counter-model | After, counter-model |
+  | --- | ---: | ---: | ---: | ---: |
+  | `sse2` | 2.28 | 0.79 | 2.80 | 0.91 |
+  | `sse4.2` | 2.28 | 1.03 | 2.80 | 1.03 |
+  | `avx2` | 1.89 | 1.24 | 1.61 | 2.28 |
+  | `avx512` | 1.89 | 0.55 | 1.61 | 3.67 |
+  | `neon` | 5.02 | 2.04 | 4.04 | 2.03 |
+
+  Faster in 8 of the 10 cells; the counter models of `avx2` (`alderlake`) and `avx512` (`sapphirerapids`) are slower. `simd128` has no core model: 13.30 instructions per output sample after (no count before). The cycles of `channel_bank_channelize` before D935 were never simulated; only its instructions were counted (201.67 at `sse2` and 91.89 at `avx2`, now 194.26 and 84.59).
 
 ## Pipeline benchmark
 

@@ -439,7 +439,18 @@ fn bad_channel_counts_and_edges_are_invalid_values() {
 
 #[test]
 fn a_channel_outside_the_width_names_the_width_and_the_range() {
-    for (channel, ok) in [(-8i64, true), (7, true), (8, false), (-9, false)] {
+    // 200 and -129 lie outside -128 .. 127 (the range of the widest input) and still get the
+    // message of the width.
+    for (channel, ok) in [
+        (-8i64, true),
+        (7, true),
+        (8, false),
+        (-9, false),
+        (200, false),
+        (-129, false),
+        (i64::MAX, false),
+        (i64::MIN, false),
+    ] {
         let errors = errors_of(&flow(&[channel]));
         if ok {
             assert_eq!(errors, Vec::new(), "{channel}");

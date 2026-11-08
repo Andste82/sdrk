@@ -17,6 +17,7 @@
 )]
 
 use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len};
+use sdrk_core::kernels::fft::FftPlan;
 use sdrk_core::{C32, Delay, Error, Fallback, Progress, Ratio, Timing};
 use sdrk_device::{ErrorKind, SdrkError};
 
@@ -164,7 +165,10 @@ fn construction_rules() {
                 (st.channels(), st.taps_per_branch(), st.hop()),
                 (m, l, m / 2)
             );
-            assert_eq!(st.plan().len(), m);
+            // Only 16 channels and more hand out a plan the FFT kernel accepts (16 to 65536
+            // points); 4 and 8 channels keep their twiddles to the radix-2 path.
+            assert_eq!(st.plan().map(FftPlan::len), (m >= 16).then_some(m));
+            assert_eq!(st.twiddles().len(), m / 2);
             assert_eq!((st.phase(), st.odd_step()), (0, false));
         }
     }
@@ -215,7 +219,8 @@ fn the_taps_are_stored_time_reversed_and_the_twiddles_filled() {
         let st = state(&taps, m);
         let want: Vec<f32> = taps.iter().rev().copied().collect();
         assert_eq!(st.taps(), &want[..]);
-        let tw = st.plan().twiddles();
+        assert!(st.plan().is_none());
+        let tw = st.twiddles();
         assert_eq!(tw.len(), m / 2);
         for (k, w) in tw.iter().enumerate() {
             let theta = 2.0 * core::f64::consts::PI * k as f64 / m as f64;
@@ -547,4 +552,26 @@ fn public_types_are_send_and_sync() {
     assert_send_sync::<ChannelizeState<C32, [f32; 64], [C32; 128], [C32; 8]>>();
     assert_send_sync::<ChannelizeState<C32, &'static mut [f32], &'static mut [C32], &'static [C32]>>(
     );
+}
+
+/// The 4- and 8-point twiddles of a small bank never form a plan the FFT kernel would run: the
+/// state hands out no plan below 16 channels, and the kernel's own constructor rejects the size.
+#[test]
+fn a_small_bank_hands_out_no_fft_plan() {
+    use sdrk_core::kernels::fft::{Direction, Fft, Scaling};
+    let taps = vec![0.5f32; 64];
+    for m in [4usize, 8] {
+        let st = state(&taps[..m * 8], m);
+        assert!(st.plan().is_none());
+        assert_eq!(st.twiddles().len(), m / 2);
+        let e = FftPlan::<C32, _>::new(m, vec![C32::default(); m / 2]).unwrap_err();
+        assert!(matches!(e, Error::InvalidParameter(_)), "{e:?}");
+    }
+    let st = state(&taps[..16 * 4], 16);
+    let plan = st.plan().expect("16 channels use the FFT kernel");
+    let mut data = vec![C32::new(1.0, 0.0); 16];
+    Fallback
+        .fft(plan, &mut data, Direction::Forward, Scaling::Default)
+        .unwrap();
+    assert!((data[0].re - 16.0).abs() < 1e-5 && data[1].re.abs() < 1e-5);
 }

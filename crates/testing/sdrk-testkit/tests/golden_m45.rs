@@ -69,8 +69,11 @@ fn usize_param(case: &GoldenCase, name: &str) -> usize {
 
 fn state(taps: &[f32], m: usize) -> State {
     let l = taps.len() / m;
+    // The prototype in the first half of the tap storage of `2 M L` values.
+    let mut stored = vec![0.0f32; 2 * taps.len()];
+    stored[..taps.len()].copy_from_slice(taps);
     ChannelizeState::new(
-        taps.to_vec(),
+        stored,
         m,
         vec![C32::default(); history_len(m, l)],
         vec![C32::default(); m / 2],

@@ -1,8 +1,9 @@
 //! Reference implementation of `channelize`: the f64 model of the filter bank.
 //!
 //! Per hop, with the window `w` of the newest `M L` samples (oldest first), the time-reversed
-//! taps `g` and the absolute index `n_i` of `w[i]` (`n_i mod M = (i + s) mod M`, `s = M / 2` for
-//! an even output index and 0 for an odd one), channel `k` is
+//! taps `g` (stored twice each, `g[i]` at `2 i`) and the absolute index `n_i` of `w[i]`
+//! (`n_i mod M = (i + s) mod M`, `s = M / 2` for an even output index and 0 for an odd one),
+//! channel `k` is
 //! `sum_q u[q] e^(-j 2 pi k q / M)` with `u[q] = sum_{i: n_i mod M = q} g[i] w[i]`, all in f64
 //! (the twiddle of `k q` reduced modulo `M` in integers first, `libm::cos` and `libm::sin`),
 //! rounded once to `C32`. The same input buffering as the fallback (`channelize_with`), so the
@@ -37,7 +38,7 @@ impl Channelize<C32> for Reference {
         Hist: AsRef<[C32]> + AsMut<[C32]>,
         Tw: AsRef<[C32]>,
     {
-        channelize_with(s, input, output, |taps, window, swap, _plan, group| {
+        channelize_with(s, input, output, false, |taps, window, swap, _plan, group, _| {
             let m = group.len();
             let shift = if swap { m / 2 } else { 0 };
             for (k, out) in group.iter_mut().enumerate() {
@@ -46,8 +47,10 @@ impl Channelize<C32> for Reference {
                     // The column `c` with `(c + shift) mod m == q`.
                     let c = (q + m - shift) % m;
                     let mut u = Complex64::new(0.0, 0.0);
-                    for (t, w) in taps.chunks_exact(m).zip(window.chunks_exact(m)) {
-                        let g = f64::from(*t.get(c).ok_or(Error::Internal("reference tap"))?);
+                    // The stored taps hold every tap twice: a row of `M` samples has `2 M`.
+                    for (t, w) in taps.chunks_exact(2 * m).zip(window.chunks_exact(m)) {
+                        let g =
+                            f64::from(*t.get(2 * c).ok_or(Error::Internal("reference tap"))?);
                         u += w
                             .get(c)
                             .ok_or(Error::Internal("reference window"))?

@@ -18,7 +18,9 @@
 //!
 //! **Computation.** Per hop, the window `w` of the newest `N` samples is multiplied by the
 //! time-reversed prototype `g[i] = h[N - 1 - i]`, and the `L` rows of `M` products are summed per
-//! column: `z[c] = sum_p g[p M + c] w[p M + c]` (the `M` branch filters). Column `c` holds the
+//! column: `z[c] = sum_p g[p M + c] w[p M + c]` (the `M` branch filters). The state stores every
+//! tap twice (`g0 g0 g1 g1 ...`, `2 N` values), so a vector of taps matches a vector of
+//! interleaved complex samples without a shuffle. Column `c` holds the
 //! samples with `n mod M = (c + s) mod M`, where `s = D` for an even hop index and `s = 0` for an
 //! odd one, so `u[(c + s) mod M] = z[c]` (the circular shift by the parity of the output index)
 //! and `y[m] = FFT_M(u)` (forward, unnormalised).
@@ -64,8 +66,9 @@ fn check_channels(channels: usize) -> Result<()> {
     }
 }
 
-/// State of the channelizer: the time-reversed prototype (`M L` taps), the history of the input,
-/// the position within the current hop, the parity of the hop index and the FFT plan of size `M`.
+/// State of the channelizer: the time-reversed prototype with every tap stored twice (`2 M L`
+/// values, see [`taps`](Self::taps)), the history of the input, the position within the current
+/// hop, the parity of the hop index and the FFT plan of size `M`.
 ///
 /// The history holds the newest `N - D` samples of the last complete hop plus the samples of
 /// the current hop; it is written in place and moved to its start only when it is full, so a
@@ -75,9 +78,11 @@ fn check_channels(channels: usize) -> Result<()> {
 /// ```
 /// use sdrk_core::kernels::channelize::{Channelize, ChannelizeState};
 /// use sdrk_core::{C32, Fallback};
-/// // 4 channels with 4 taps per branch: a prototype of 16 taps (here a plain average).
-/// let mut state =
-///     ChannelizeState::<C32, _, _, _>::new([1.0f32 / 16.0; 16], 4, [C32::default(); 32], [C32::default(); 2])?;
+/// // 4 channels with 4 taps per branch: a prototype of 16 taps (here a plain average) in the
+/// // first half of a tap storage of 32 values.
+/// let mut taps = [0.0f32; 32];
+/// taps[..16].fill(1.0 / 16.0);
+/// let mut state = ChannelizeState::<C32, _, _, _>::new(taps, 4, [C32::default(); 32], [C32::default(); 2])?;
 /// // A tone exactly on channel 1 (fs / 4).
 /// let input: Vec<C32> = (0..64)
 ///     .map(|n| {
@@ -123,24 +128,27 @@ where
     Hist: AsRef<[T]> + AsMut<[T]>,
     Tw: AsRef<[T]> + AsMut<[T]>,
 {
-    /// Creates a state for `channels` channels `M` (a power of two, 4 to 256) from the prototype
-    /// `taps` `h` (`M L` taps with `L` from 4 to 32, in time order; the state reverses them in
-    /// place, see [`taps`](Self::taps)), a `history` of at least `M L` samples (2 `M L`
-    /// recommended, [`history_len`]) and the FFT `twiddles` (`M / 2` values, filled with
-    /// `e^(-j 2 pi k / M)` as by [`FftPlan::new`]). The history is zeroed.
+    /// Creates a state for `channels` channels `M` (a power of two, 4 to 256) from the tap
+    /// storage `taps` of `2 M L` values ([`taps_len`], `L` from 4 to 32) whose first `M L` hold
+    /// the prototype `h` in time order (the rest is overwritten: the state reverses the
+    /// prototype and stores every tap twice in place, see [`taps`](Self::taps)), a `history` of
+    /// at least `M L` samples (2 `M L` recommended, [`history_len`]) and the FFT `twiddles`
+    /// (`M / 2` values, filled with `e^(-j 2 pi k / M)` as by [`FftPlan::new`]). The history is
+    /// zeroed.
     ///
     /// # Errors
-    /// `InvalidParameter` for a channel count or a tap count outside the ranges;
-    /// `LengthMismatch` for a history shorter than `M L` or a twiddle table other than `M / 2`.
+    /// `InvalidParameter` for a channel count or a tap count outside the ranges (a tap storage
+    /// that is not `2 M L` long for an `L` from 4 to 32); `LengthMismatch` for a history shorter
+    /// than `M L` or a twiddle table other than `M / 2`.
     ///
     /// ```
-    /// use sdrk_core::kernels::channelize::ChannelizeState;
+    /// use sdrk_core::kernels::channelize::{ChannelizeState, taps_len};
     /// use sdrk_core::C32;
-    /// let ok = ChannelizeState::<C32, _, _, _>::new(vec![0.0f32; 128], 16, vec![C32::default(); 256], vec![C32::default(); 8]);
+    /// let ok = ChannelizeState::<C32, _, _, _>::new(vec![0.0f32; taps_len(16, 8)], 16, vec![C32::default(); 256], vec![C32::default(); 8]);
     /// assert!(ok.is_ok());
     /// // 12 channels are not a power of two; 16 channels with 3 taps per branch are too few.
-    /// assert!(ChannelizeState::<C32, _, _, _>::new(vec![0.0f32; 48], 12, vec![C32::default(); 96], vec![C32::default(); 6]).is_err());
-    /// assert!(ChannelizeState::<C32, _, _, _>::new(vec![0.0f32; 48], 16, vec![C32::default(); 96], vec![C32::default(); 8]).is_err());
+    /// assert!(ChannelizeState::<C32, _, _, _>::new(vec![0.0f32; 96], 12, vec![C32::default(); 96], vec![C32::default(); 6]).is_err());
+    /// assert!(ChannelizeState::<C32, _, _, _>::new(vec![0.0f32; 96], 16, vec![C32::default(); 96], vec![C32::default(); 8]).is_err());
     /// ```
     pub fn new(
         mut taps: Taps,
@@ -149,9 +157,10 @@ where
         mut twiddles: Tw,
     ) -> Result<Self> {
         check_channels(channels)?;
-        let n = taps.as_ref().len();
+        let stored = taps.as_ref().len();
+        let n = stored / 2;
         let taps_per_branch = n / channels;
-        if !n.is_multiple_of(channels)
+        if !stored.is_multiple_of(2 * channels)
             || !(MIN_TAPS_PER_BRANCH..=MAX_TAPS_PER_BRANCH).contains(&taps_per_branch)
         {
             return Err(Error::InvalidParameter(
@@ -185,7 +194,14 @@ where
                 _sample: PhantomData,
             }
         };
-        taps.as_mut().reverse();
+        // The prototype in the first half, reversed, then every tap twice from the end (the
+        // pair of tap `i` lands at `2 i` and `2 i + 1`, never before an unread tap).
+        let t = taps.as_mut();
+        t.get_mut(..n).ok_or_else(internal)?.reverse();
+        for i in (0..n).rev() {
+            let g = *t.get(i).ok_or_else(internal)?;
+            t.get_mut(2 * i..2 * i + 2).ok_or_else(internal)?.fill(g);
+        }
         history.as_mut().fill(T::ZERO);
         Ok(Self {
             taps,
@@ -199,6 +215,18 @@ where
             _t: PhantomData,
         })
     }
+}
+
+/// The length of the tap storage of a [`ChannelizeState`] for `channels` channels with
+/// `taps_per_branch` taps per branch: `2 M L` (the prototype of `M L` taps, every tap stored
+/// twice).
+///
+/// ```
+/// use sdrk_core::kernels::channelize::taps_len;
+/// assert_eq!(taps_len(16, 8), 256);
+/// ```
+pub const fn taps_len(channels: usize, taps_per_branch: usize) -> usize {
+    channels.saturating_mul(taps_per_branch).saturating_mul(2)
 }
 
 /// The recommended history length of a [`ChannelizeState`] for `channels` channels with
@@ -243,7 +271,9 @@ where
         self.channels / 2
     }
 
-    /// The prototype, **time-reversed**: `taps()[i] = h[M L - 1 - i]`.
+    /// The prototype, **time-reversed** and every tap twice (`2 M L` values):
+    /// `taps()[2 i] = taps()[2 i + 1] = h[M L - 1 - i]`, so that tap `i` meets the real and the
+    /// imaginary part of window sample `i`.
     pub fn taps(&self) -> &[T::Real] {
         self.taps.as_ref()
     }
@@ -283,7 +313,7 @@ where
     /// ```
     /// use sdrk_core::kernels::channelize::ChannelizeState;
     /// use sdrk_core::C32;
-    /// let state = ChannelizeState::<C32, _, _, _>::new([0.0f32; 64], 16, [C32::default(); 128], [C32::default(); 8])?;
+    /// let state = ChannelizeState::<C32, _, _, _>::new([0.0f32; 128], 16, [C32::default(); 128], [C32::default(); 8])?;
     /// assert_eq!(state.max_input_for_output(0), 7);
     /// assert_eq!(state.max_input_for_output(2), 23);
     /// # Ok::<(), sdrk_core::Error>(())
@@ -344,10 +374,19 @@ pub trait Channelize<T: ComplexSample> {
 }
 
 /// The driver of every channelizer implementation: consumes the input into the history hop by
-/// hop and calls `hop(taps, window, swap, plan, group)` for every complete hop, with the
-/// time-reversed taps, the window of the newest `M L` samples (oldest first), whether the
+/// hop and calls `hop(taps, window, swap, plan, group, None)` for every complete hop, with the
+/// stored taps (time-reversed, every tap twice, `2 M L` values), the window of the newest `M L` samples (oldest first), whether the
 /// column sums are swapped by half (`swap`: an even output index, `s = D`), the plan and the
 /// output group of `M` values.
+///
+/// With `pairs` set, two hops that are both complete in `input`, with room for both output
+/// steps and a history of at least `M L + D` samples, are handed over in one call
+/// `hop(taps, window, swap, plan, first, Some(second))`: the window is then the newest
+/// `M L + D` samples (the window of the first hop is its first `M L`, that of the second its
+/// last `M L`), `swap` belongs to the first step and the second step has the other parity. An
+/// implementation that sums both hops at once reads every tap and most window samples once for
+/// two hops. Without `pairs` the second group is always `None`. The values do not depend on
+/// `pairs`.
 ///
 /// # Errors
 /// `LengthMismatch` for an output that is not a multiple of `M`, and the errors of `hop`.
@@ -360,6 +399,7 @@ pub fn channelize_with<T, Taps, Hist, Tw, H>(
     s: &mut ChannelizeState<T, Taps, Hist, Tw>,
     input: &[T],
     output: &mut [T],
+    pairs: bool,
     mut hop: H,
 ) -> Result<Progress>
 where
@@ -367,7 +407,7 @@ where
     Taps: AsRef<[T::Real]>,
     Hist: AsRef<[T]> + AsMut<[T]>,
     Tw: AsRef<[T]>,
-    H: FnMut(&[T::Real], &[T], bool, &FftPlan<T, Tw>, &mut [T]) -> Result<()>,
+    H: FnMut(&[T::Real], &[T], bool, &FftPlan<T, Tw>, &mut [T], Option<&mut [T]>) -> Result<()>,
 {
     let m = s.channels;
     let d = m / 2;
@@ -391,12 +431,15 @@ where
     let taps = taps.as_ref();
     let hist = hist.as_mut();
     let cap = hist.len();
+    let pairs = pairs && cap >= n + d;
     let mut groups = output.chunks_exact_mut(m);
     let mut rest = input;
     let mut consumed = 0;
     let mut produced = 0;
     while !rest.is_empty() {
-        if *phase == 0 && *pos + d > cap {
+        let two = pairs && *phase == 0 && rest.len() >= 2 * d && groups.len() >= 2;
+        let room = if two { 2 * d } else { d };
+        if *phase == 0 && *pos + room > cap {
             // Move the newest `N - D` samples to the start of the history.
             let keep = n - d;
             let from = pos.checked_sub(keep).ok_or_else(internal)?;
@@ -405,8 +448,8 @@ where
                 .copy_within(from.., 0);
             *pos = keep;
         }
-        let need = d - *phase;
-        let blocked = rest.len() >= need && groups.len() == 0;
+        let need = if two { 2 * d } else { d - *phase };
+        let blocked = !two && rest.len() >= need && groups.len() == 0;
         let take = if blocked {
             need - 1
         } else {
@@ -424,17 +467,29 @@ where
             *h = *x;
         }
         *pos += take;
-        *phase += take;
         consumed += take;
         rest = later;
+        if !two {
+            *phase += take;
+        }
         if blocked {
             break;
+        }
+        if two {
+            let first = groups.next().ok_or_else(internal)?;
+            let second = groups.next().ok_or_else(internal)?;
+            let start = pos.checked_sub(n + d).ok_or_else(internal)?;
+            let window = hist.get(start..*pos).ok_or_else(internal)?;
+            // Two steps: the parity of the next step is unchanged.
+            hop(taps, window, !*odd, plan, first, Some(second))?;
+            produced += 2 * m;
+            continue;
         }
         if *phase == d {
             let group = groups.next().ok_or_else(internal)?;
             let start = pos.checked_sub(n).ok_or_else(internal)?;
             let window = hist.get(start..*pos).ok_or_else(internal)?;
-            hop(taps, window, !*odd, plan, group)?;
+            hop(taps, window, !*odd, plan, group, None)?;
             *odd = !*odd;
             *phase = 0;
             produced += m;
@@ -444,14 +499,15 @@ where
 }
 
 /// Sums of `B` columns starting at `off` over all rows, in f32 without FMA (ascending rows), into
-/// `dst` (`B` values).
+/// `dst` (`B` values); `taps` are the stored pairs (one pair `[g, g]` per window sample), and
+/// the first of each pair is used for both parts of its sample.
 #[allow(
     clippy::inline_always,
     reason = "the column block is the loop body of the branch sums; it must not become a call"
 )]
 #[inline(always)]
 fn column_block<const B: usize>(
-    taps: &[f32],
+    taps: &[[f32; 2]],
     window: &[C32],
     m: usize,
     off: usize,
@@ -472,12 +528,12 @@ fn column_block<const B: usize>(
         });
     let mut acc = [C32::new(0.0, 0.0); B];
     let (t0, w0) = rows.next().ok_or_else(internal)??;
-    for ((a, &g), x) in acc.iter_mut().zip(t0).zip(w0) {
+    for ((a, &[g, _]), x) in acc.iter_mut().zip(t0).zip(w0) {
         *a = C32::new(g * x.re, g * x.im);
     }
     for r in rows {
         let (t, w) = r?;
-        for ((a, &g), x) in acc.iter_mut().zip(t).zip(w) {
+        for ((a, &[g, _]), x) in acc.iter_mut().zip(t).zip(w) {
             *a = C32::new(a.re + g * x.re, a.im + g * x.im);
         }
     }
@@ -492,7 +548,7 @@ fn column_block<const B: usize>(
 )]
 #[inline(always)]
 fn column_range<const B: usize>(
-    taps: &[f32],
+    taps: &[[f32; 2]],
     window: &[C32],
     m: usize,
     off: usize,
@@ -504,8 +560,9 @@ fn column_range<const B: usize>(
     Ok(())
 }
 
-/// The branch sums of one hop: `z[c] = sum_p g[p M + c] w[p M + c]` for the time-reversed taps
-/// `taps` and the `window` (both `M L` long, `M = group.len()`), each column summed over the rows
+/// The branch sums of one hop: `z[c] = sum_p g[p M + c] w[p M + c]` for the stored taps `taps`
+/// (time-reversed, every tap twice, `2 M L` values) and the `window` (`M L` samples,
+/// `M = group.len()`), each column summed over the rows
 /// in ascending order in f32 without FMA (the first product, then one addition per row), written
 /// to `group[(c + s) mod M]` with `s = M / 2` when `swap` is set and `s = 0` otherwise.
 ///
@@ -522,8 +579,10 @@ fn column_range<const B: usize>(
 pub fn branch_sums(taps: &[f32], window: &[C32], swap: bool, group: &mut [C32]) -> Result<()> {
     let m = group.len();
     let d = m / 2;
+    let (taps, rest) = taps.as_chunks::<2>();
     if m < MIN_CHANNELS
         || !m.is_power_of_two()
+        || !rest.is_empty()
         || taps.len() != window.len()
         || taps.len() & (m - 1) != 0
     {

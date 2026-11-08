@@ -3,7 +3,7 @@
 
 use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::C32;
-use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len};
+use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len, taps_len};
 use sdrk_core::timing::Timing;
 
 use super::{check_count, unknown};
@@ -298,8 +298,9 @@ impl<S: Storage> ChannelizeBlock<S> {
             config.stopband,
             config.attenuation_db,
         )?;
-        let mut taps = storage.alloc::<f32>(m * l)?;
-        for (i, t) in taps.as_mut().iter_mut().enumerate() {
+        // The prototype in the first half of the tap storage; the state stores every tap twice.
+        let mut taps = storage.alloc::<f32>(taps_len(m, l))?;
+        for (i, t) in taps.as_mut().iter_mut().take(m * l).enumerate() {
             *t = lp.tap(i) as f32;
         }
         let hist = storage.alloc::<C32>(history_len(m, l))?;
@@ -311,12 +312,13 @@ impl<S: Storage> ChannelizeBlock<S> {
     }
 
     /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
-    /// address: `M L` taps (`f32`), a history of `2 M L` and `M / 2` twiddles (`C32`).
+    /// address: `2 M L` taps (`f32`, the prototype with every tap stored twice), a history of
+    /// `2 M L` and `M / 2` twiddles (`C32`).
     ///
     /// ```
     /// use sdrk_blocks::{ArenaStorage, ChannelizeBlock, ChannelizeConfig};
     /// let bytes = ChannelizeBlock::<ArenaStorage<'_>>::storage_bytes(&ChannelizeConfig::default())?;
-    /// assert_eq!(bytes, 128 * 4 + 256 * 8 + 8 * 8);
+    /// assert_eq!(bytes, 256 * 4 + 256 * 8 + 8 * 8);
     /// # Ok::<(), sdrk_blocks::Error>(())
     /// ```
     ///
@@ -326,7 +328,7 @@ impl<S: Storage> ChannelizeBlock<S> {
         config.validate()?;
         let (m, l) = (config.channels, config.taps_per_branch);
         let mut plan = Plan::default();
-        plan.add::<f32>(m * l)?;
+        plan.add::<f32>(taps_len(m, l))?;
         plan.add::<C32>(history_len(m, l))?;
         plan.add::<C32>(m / 2)?;
         Ok(plan.bytes())
@@ -346,7 +348,8 @@ impl<S: Storage> ChannelizeBlock<S> {
         self.config.channels
     }
 
-    /// The prototype taps, time-reversed (as the kernel stores them).
+    /// The prototype taps as the kernel stores them: time-reversed, every tap twice
+    /// (`2 M L` values).
     pub fn taps(&self) -> &[f32] {
         self.state.taps()
     }

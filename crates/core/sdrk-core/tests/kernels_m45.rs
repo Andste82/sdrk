@@ -16,7 +16,7 @@
     clippy::many_single_char_names
 )]
 
-use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len};
+use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len, taps_len};
 use sdrk_core::kernels::fft::FftPlan;
 use sdrk_core::{C32, Delay, Error, Fallback, Progress, Ratio, Timing};
 use sdrk_device::{ErrorKind, SdrkError};
@@ -63,10 +63,17 @@ fn random_taps(rng: &mut Rng, m: usize, l: usize) -> Vec<f32> {
         .collect()
 }
 
+/// The tap storage of a state (`2 M L` values) with the prototype `taps` in its first half.
+fn storage(taps: &[f32]) -> Vec<f32> {
+    let mut t = vec![0.0f32; 2 * taps.len()];
+    t[..taps.len()].copy_from_slice(taps);
+    t
+}
+
 fn state(taps: &[f32], m: usize) -> State {
     let l = taps.len() / m;
     ChannelizeState::new(
-        taps.to_vec(),
+        storage(taps),
         m,
         vec![C32::default(); history_len(m, l)],
         vec![C32::default(); m / 2],
@@ -150,9 +157,10 @@ const CONFIGS: [(usize, usize); 8] = [
 
 #[test]
 fn construction_rules() {
+    // `taps` counts the prototype; the storage holds every tap twice.
     let ok = |taps: usize, m: usize, hist: usize, tw: usize| {
         ChannelizeState::<C32, _, _, _>::new(
-            vec![0.0f32; taps],
+            vec![0.0f32; 2 * taps],
             m,
             vec![C32::default(); hist],
             vec![C32::default(); tw],
@@ -186,6 +194,13 @@ fn construction_rules() {
     invalid(ok(16 * 33, 16, 16 * 33, 8));
     invalid(ok(16 * 8 + 1, 16, 16 * 9, 8));
     invalid(ok(0, 16, 128, 8));
+    // A tap storage of odd length (one value short of 2 M L) is no layout of the state.
+    invalid(ChannelizeState::<C32, _, _, _>::new(
+        vec![0.0f32; taps_len(16, 8) - 1],
+        16,
+        vec![C32::default(); 128],
+        vec![C32::default(); 8],
+    ));
     // History shorter than M L, twiddles other than M / 2.
     assert_eq!(
         ok(128, 16, 127, 8).unwrap_err(),
@@ -210,14 +225,16 @@ fn construction_rules() {
     );
     assert_eq!(history_len(16, 8), 256);
     assert_eq!(history_len(usize::MAX, 2), usize::MAX);
+    assert_eq!(taps_len(16, 8), 256);
+    assert_eq!(taps_len(usize::MAX, 2), usize::MAX);
 }
 
 #[test]
-fn the_taps_are_stored_time_reversed_and_the_twiddles_filled() {
+fn the_taps_are_stored_time_reversed_twice_each_and_the_twiddles_filled() {
     let taps: Vec<f32> = (0..32).map(|i| i as f32).collect();
     for m in [4usize, 8] {
         let st = state(&taps, m);
-        let want: Vec<f32> = taps.iter().rev().copied().collect();
+        let want: Vec<f32> = taps.iter().rev().flat_map(|&t| [t, t]).collect();
         assert_eq!(st.taps(), &want[..]);
         assert!(st.plan().is_none());
         let tw = st.twiddles();
@@ -438,7 +455,7 @@ fn the_output_does_not_depend_on_the_history_length() {
         let want = run_whole(&Fallback, &mut state(&taps, m), &input);
         for hist in [m * l, m * l + 1, m * l + m / 2, 3 * m * l + 5] {
             let mut st = ChannelizeState::new(
-                taps.clone(),
+                storage(&taps),
                 m,
                 vec![C32::default(); hist],
                 vec![C32::default(); m / 2],
@@ -549,7 +566,7 @@ fn non_finite_input_spoils_only_the_steps_that_read_it() {
 fn public_types_are_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<State>();
-    assert_send_sync::<ChannelizeState<C32, [f32; 64], [C32; 128], [C32; 8]>>();
+    assert_send_sync::<ChannelizeState<C32, [f32; 128], [C32; 128], [C32; 8]>>();
     assert_send_sync::<ChannelizeState<C32, &'static mut [f32], &'static mut [C32], &'static [C32]>>(
     );
 }

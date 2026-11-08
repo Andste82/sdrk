@@ -36,9 +36,14 @@ const fn table_msb16(poly: u16) -> [u16; 256] {
     t
 }
 
-/// The LSB-first (reflected) table of a 16-bit polynomial given in reflected form.
-const fn table_lsb16(poly_reflected: u16) -> [u16; 256] {
-    let mut t = [0u16; 256];
+/// The LSB-first (reflected) table of a 16-bit polynomial given in reflected form, with the
+/// 16-bit entries in `u32`: the lookup is then a word load with the index scaled by 4, which
+/// takes 4 cycles on the Cortex-A72 where a halfword load scaled by 2 takes 5 (ARM UAN 0016A,
+/// load instructions), and the loop of [`crc16_x25`] is one dependency chain through that load
+/// (D946). The table is 1 KiB instead of 512 bytes; on the other targets the two loads cost the
+/// same.
+const fn table_lsb16(poly_reflected: u16) -> [u32; 256] {
+    let mut t = [0u32; 256];
     let mut i = 0usize;
     while i < 256 {
         let mut c = i as u16;
@@ -53,7 +58,7 @@ const fn table_lsb16(poly_reflected: u16) -> [u16; 256] {
         }
         #[allow(clippy::indexing_slicing)]
         {
-            t[i] = c;
+            t[i] = c as u32;
         }
         i += 1;
     }
@@ -109,7 +114,7 @@ const fn table_msb24(poly: u32) -> [u32; 256] {
 }
 
 static CCITT_MSB: [u16; 256] = table_msb16(0x1021);
-static CCITT_LSB: [u16; 256] = table_lsb16(0x8408);
+static CCITT_LSB: [u32; 256] = table_lsb16(0x8408);
 static CRC32_LSB: [u32; 256] = table_lsb32(0xEDB8_8320);
 static ADSB_MSB: [u32; 256] = table_msb24(0x00FF_F409);
 
@@ -143,7 +148,7 @@ pub fn crc16_x25(d: &[u8]) -> u16 {
     // The register is kept in a `u32` (its upper half stays zero: the shift brings in zeros and
     // the entries have 16 bits), so the loop has no 16-bit operations in its dependency chain.
     let crc = d.iter().fold(0xFFFF_u32, |crc, &b| {
-        (crc >> 8) ^ u32::from(entry(&CCITT_LSB, crc as u8 ^ b))
+        (crc >> 8) ^ entry(&CCITT_LSB, crc as u8 ^ b)
     });
     !(crc as u16)
 }

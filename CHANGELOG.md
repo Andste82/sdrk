@@ -140,6 +140,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Fixed
 
+- Tooling: `cargo measure` at `avx2` counted the jump of a PLT stub, which callgrind adds to the call site, on the call instruction; a loop that calls a library function through the PLT seemed to run twice as often, and the function was not simulated (D948). Every `avx2` cycle row was measured again: `costas_fallback` against GNU Radio 1.49 / 3.20 to 1.06 / 1.57, the two `power_db` fallbacks against CMSIS-DSP, and the M45 channelizer rows with the corrected `llvm-mca` of D942. The gap of `costas_fallback` is fair and is open item I133-1 (D949); `stereo_pll_fallback` against liquid-dsp's `nco_crcf` is accepted as a trade of speed for accuracy, closing I24-1 (D947).
 - M40: `Pipeline::pull` with an idle packet source no longer fails with "the packet encoder of a pull made no progress" when a block on the path needs more than the encoder's share of one step before it produces (a QPSK `psk_mod` takes two bits per symbol): the idle encoder is called again, up to 64 times per step (D620).
 
 ## [0.1.0] - 2026-11-02

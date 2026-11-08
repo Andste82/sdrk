@@ -1262,6 +1262,7 @@ dependencies = [
  "sdrk-blocks",
  "sdrk-core",
  "sdrk-device",
+ "sdrk-io",
  "sdrk-proto",
  "sdrk-testkit",
  "serde",

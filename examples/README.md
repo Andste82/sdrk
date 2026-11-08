@@ -145,3 +145,29 @@ cargo run -p fm-receiver -- --input pmr.cu8 --format cu8 --rate 2400000 \
 ```
 
 The sum is not normalized: with the squelches, usually one channel is open at a time; for several open channels put a `scale` between `mix7` and `out` (the YAML comment shows where). The YAML twin also explains how to add channels 9 to 16 (another eight chains on the lanes 0 to 7). `crates/pipeline/sdrk-pipeline/tests/pmr446.rs` runs the flow on NFM channel scenes of the testkit (`sdrk_testkit::nfm::ChannelScene`).
+
+`ism433_pulses` and `ism868_pulses` (M45.1) receive every short-range device of an ISM band at once, without knowing its frequency: weather stations, thermometers, door contacts and remote controls, whose crystals or SAW resonators are tens of kHz off. `ism433_pulses` takes an RTL-SDR recording (`cu8` at 2 MS/s) centred at 433.92 MHz, which holds the whole band 433.05 to 434.79 MHz; `chan` (`channelize`, 16 channels of 125 kHz) splits it into overlapping channels, and `det` (`band_pulse_detect`) runs a pulse detector after the method of `rtl_433` in every channel (OOK and two-level FSK), merges what neighbouring channels see of the same transmission and writes one pulse train per transmission to the packets output `pulses`. `ism868_pulses` does the same at 868.5 MHz with 8 channels of 250 kHz for the wider FSK sensors (868.3 MHz and its neighbours; devices at 868.95 MHz need the centre moved up, see its YAML twin). Each packet is a train of `sdrk_proto::pulses` (modulation, signed channel, frequency offset from the centre, level, noise, the pulse and gap widths in steps of the channel rate, 250 or 500 kHz); a train of more than 30 pulses comes as several packets flagged `CONTINUED`, which `pulses::Assembler` joins, and `pulses::write_json` writes the JSON form with the absolute frequency. The device protocols (M46) decode the trains; `--set det.min_snr_db=...` (runtime) moves the trigger level.
+
+```sh
+rtl_sdr -f 433920000 -s 2000000 ism.cu8
+```
+
+```rust
+use sdrk_pipeline::{InputData, Packet};
+use sdrk_proto::pulses::{self, Assembler, Pair};
+
+// `pipeline` was built from `examples/flows/ism433_pulses.json`; `bytes` are cu8 samples.
+let mut trains = Assembler::new(vec![Pair::default(); 1200]);
+pipeline.push("rf", InputData::Raw(&bytes))?;
+let mut packets = [Packet::default(); 256];
+let n = pipeline.read_packets("pulses", &mut packets)?;
+for p in &packets[..n] {
+    if let Some(t) = trains.push(p)? {
+        let mut line = String::new();
+        pulses::write_json(&mut line, &t.header, t.pairs.iter().copied(), 433_920_000)?;
+        println!("{line}"); // {"mod":"ook","freq_hz":433947312,"rssi_db":-21.4,...,"pulses":[[50,100],...]}
+    }
+}
+```
+
+The packets can also be stored as JSON Lines with `sdrk_io::packets::write_jsonl` (hex payload) and read back with `read_jsonl`. `crates/pipeline/sdrk-pipeline/tests/ism_flows.rs` runs both flows on `cu8` scenes of `sdrk_testkit::ism`.

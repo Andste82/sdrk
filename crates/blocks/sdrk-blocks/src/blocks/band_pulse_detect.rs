@@ -141,10 +141,15 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         sdrk_proto::pulses (widths in steps of the input, a train of more than 30 pairs is \
         split over packets flagged CONTINUED; the last gap is 0); the packet index is the \
         step of the first pulse since construction or reset. A transmission seen in the \
-        neighbouring channels c and c + 1 (signed channel numbers, no wrap) is emitted once: \
+        neighbouring channels c and c + 1 (signed channel numbers; from 4 lanes on the lane \
+        -M/2, centred on the edge of the input band, also borders M/2 - 1) is emitted once: \
         two bursts that overlap by more than half of the shorter one and whose frequencies \
-        are less than a channel spacing apart are one transmission, and only the one with the \
-        higher level is emitted. The frequency is c times the spacing (half the step rate) \
+        are less than a channel spacing apart (modulo the input rate) are one transmission, \
+        and only the one with the higher level is emitted; an FSK frame that spans at least \
+        half of an OOK train of the same transmission is kept instead of the train. A burst \
+        that shares a step with bursts in more than half of the lanes (a wideband event) is \
+        emitted only when no other lane of the event has emitted it or has it at a higher \
+        level, and later bursts inside the span of the emitted event are dropped. The frequency is c times the spacing (half the step rate) \
         plus the mean phase rotation of the pulses (FSK: the middle of the two levels). \
         Pitfall: the input must begin with about 4 ms of band noise (1024 steps), and a \
         carrier present from the start is learned as noise.",
@@ -580,7 +585,8 @@ struct Lane {
     fsk_cand: u32,
     fsk_cnt: u32,
     fsk_full: u32,
-    _pad: u32,
+    /// Whether the last decided burst was an FSK frame.
+    sum_fsk: u32,
     /// Frequencies of the candidate samples of the first transition.
     cand_f: [f32; FSK_CAND],
     /// The envelope of the lead-in and its samples (`lead_x[0]` the sample before).
@@ -1398,6 +1404,8 @@ pub struct BandPulseDetectBlock<S: Storage> {
     fsk: S::Buf<u32>,
     /// Whether an output record waits for its packets.
     pending: bool,
+    /// The span of the last emitted wideband event (start, end; steps), D965.
+    wide: (u64, u64),
 }
 
 impl<S: Storage> core::fmt::Debug for BandPulseDetectBlock<S> {
@@ -1472,6 +1480,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             ook,
             fsk,
             pending: false,
+            wide: (0, 0),
         })
     }
 
@@ -1554,15 +1563,137 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             + f64::from(rad) * self.p.rate_hz / core::f64::consts::TAU
     }
 
-    /// Whether two bursts are one transmission.
-    fn same(&self, a: (u64, u64, f64), b: (u64, u64, f64)) -> bool {
+    /// The two neighbours of lane `k` (signed channels `c - 1` and `c + 1`). The lane of
+    /// channel `-M/2` is centred on the edge of the input band (plus and minus half the input
+    /// rate) and also borders channel `M/2 - 1`, so from 4 lanes on the two wrap (D964).
+    fn neighbours(&self, k: usize) -> [Option<usize>; 2] {
+        let c = self.channel(k);
+        let w = self.width as i64;
+        let wrap = |n: i64| {
+            if w < 4 {
+                n
+            } else if n < -(w / 2) {
+                n + w
+            } else if n > w - w / 2 - 1 {
+                n - w
+            } else {
+                n
+            }
+        };
+        [self.lane_of(wrap(c - 1)), self.lane_of(wrap(c + 1))]
+    }
+
+    /// Whether two bursts overlap by more than half of the shorter one.
+    fn overlap(a: (u64, u64), b: (u64, u64)) -> bool {
         let over = i128::from(a.1.min(b.1)) - i128::from(a.0.max(b.0));
         let shorter = i128::from((a.1.saturating_sub(a.0)).min(b.1.saturating_sub(b.0)));
-        2 * over > shorter && (a.2 - b.2).abs() < self.spacing()
+        2 * over > shorter
+    }
+
+    /// Whether two bursts are one transmission: they overlap by more than half of the shorter
+    /// one and their frequencies are less than a spacing apart (modulo the input rate, which
+    /// is `M` spacings: the band wraps at its edge, D964).
+    fn same(&self, a: (u64, u64, f64), b: (u64, u64, f64)) -> bool {
+        let band = self.width as f64 * self.spacing();
+        let mut d = (a.2 - b.2) % band;
+        if d > 0.5 * band {
+            d -= band;
+        } else if d < -0.5 * band {
+            d += band;
+        }
+        Self::overlap((a.0, a.1), (b.0, b.1)) && d.abs() < self.spacing()
+    }
+
+    /// The spans so far of the burst in progress of lane `n` (the OOK train and the FSK frame),
+    /// without their frequencies (see `in_progress`).
+    fn spans(&self, n: &Lane) -> [Option<(u64, u64)>; 2] {
+        let mut out = [None, None];
+        if n.mode != BURST {
+            return out;
+        }
+        if n.started == 1 {
+            let end = if n.level == 1 {
+                self.pos + 1
+            } else {
+                step_of(n.t_run)
+            };
+            out[0] = Some((n.start, end.max(n.start)));
+        }
+        if n.p_level == 1 && n.p_confirmed == 1 {
+            out[1] = Some((step_of(n.p_t_run), self.pos + 1));
+        }
+        out
+    }
+
+    /// The burst in progress of lane `j` (its span so far, the frequency of lane `j` from
+    /// `rot`): the OOK train (index 0) and the FSK frame (index 1), with their level.
+    fn in_progress(&self, j: usize, n: &Lane) -> [Option<(u64, u64, f64, f32)>; 2] {
+        let [ook, frame] = self.spans(n);
+        [
+            ook.map(|(a, b)| {
+                let rot = libm::atan2f(n.acc[1] + n.pac[1], n.acc[0] + n.pac[0]);
+                (a, b, self.offset_hz(j, rot), n.high)
+            }),
+            frame.map(|(a, b)| {
+                // At the middle of its two levels once it has them.
+                let rot = if n.fsk_phase == 1 {
+                    n.f_hi.midpoint(n.f_lo)
+                } else {
+                    libm::atan2f(n.pac[1], n.pac[0])
+                };
+                (a, b, self.offset_hz(j, rot), n.high)
+            }),
+        ]
+    }
+
+    /// Whether the spans `a` and `b` share at least one step.
+    fn touch(a: (u64, u64), b: (u64, u64)) -> bool {
+        a.0.max(b.0) < a.1.min(b.1)
+    }
+
+    /// The wideband rule (D965) for the burst `mine` of lane `k` (level `level`): `Some(true)`
+    /// when it is part of a wideband event that another lane emits, `Some(false)` when it is
+    /// the lane that emits a new event, `None` when it is no wideband burst. A burst is part
+    /// of a wideband event when more than half of the lanes (at least 4) have bursts that share
+    /// a step with it, whatever their frequency; it is dropped when one of them was emitted or
+    /// is in progress at a higher level (equal levels: the lower lane), or when it lies in the
+    /// span of the last emitted event by more than half.
+    fn wideband(&self, k: usize, mine: (u64, u64), level: f32) -> Result<Option<bool>> {
+        let w = self.width;
+        if w < 4 {
+            return Ok(None);
+        }
+        let in_event = Self::overlap(mine, self.wide) && Self::touch(mine, self.wide);
+        let lanes = self.lanes.as_ref();
+        let (mut busy, mut blocked) = (1usize, false);
+        for j in (0..w).filter(|j| *j != k) {
+            let n = lanes.get(j).ok_or_else(internal)?;
+            let mut hit = false;
+            if n.sum_valid == 1 && Self::touch(mine, (n.sum_start, n.sum_end)) {
+                hit = true;
+                blocked |= n.sum_emitted == 1;
+            }
+            for b in self.spans(n).into_iter().flatten() {
+                if Self::touch(mine, b) {
+                    hit = true;
+                    blocked |= n.high > level || (n.high == level && j < k);
+                }
+            }
+            busy += usize::from(hit);
+        }
+        Ok(if 2 * busy > w {
+            Some(blocked || in_event)
+        } else if in_event {
+            Some(true)
+        } else {
+            None
+        })
     }
 
     /// Decides the record `r` of lane `k`: emitted unless a neighbour already emitted the
-    /// same transmission or has it at a higher level.
+    /// same transmission or has it at a higher level, or another lane emits the wideband event
+    /// it belongs to.
+    #[inline(never)]
     fn decide(&mut self, k: usize, r: usize) -> Result<()> {
         let lanes = self.lanes.as_ref();
         let o = *lanes
@@ -1570,53 +1701,48 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             .and_then(|me| me.out.get(r))
             .ok_or_else(internal)?;
         let mine = (o.index, o.end, self.offset_hz(k, o.freq));
-        let c = self.channel(k);
-        let mut emit = true;
-        for j in [self.lane_of(c - 1), self.lane_of(c + 1)]
-            .into_iter()
-            .flatten()
-        {
+        let fsk = o.fsk == 1;
+        let wide = self.wideband(k, (mine.0, mine.1), o.level)?;
+        let mut emit = wide != Some(true);
+        for j in self.neighbours(k).into_iter().flatten() {
             let n = lanes.get(j).ok_or_else(internal)?;
+            // An FSK frame that spans the transmission describes it completely, an OOK train
+            // in a neighbour only one of its tones: such a frame is not dropped for a train,
+            // and a train is dropped for it (D966). A frame that spans less than half of the
+            // train (a frequency jump inside a pulse) counts by its level as before.
+            let span = |a: u64, b: u64| b.saturating_sub(a);
+            let covers = |frame: u64, train: u64| 2 * frame >= train;
+            let me = span(mine.0, mine.1);
             if n.sum_valid == 1 && n.sum_emitted == 1 {
                 let theirs = (n.sum_start, n.sum_end, f64::from(n.sum_freq));
-                if self.same(mine, theirs) {
+                let other = span(theirs.0, theirs.1);
+                let kept = fsk && n.sum_fsk == 0 && covers(me, other);
+                if !kept && self.same(mine, theirs) {
                     emit = false;
                 }
             }
-            if n.mode == BURST && n.started == 1 {
-                // The end of its last pulse so far: now during a pulse, else where the current
-                // gap started (its last pulse may not be committed yet).
-                let end = if n.level == 1 {
-                    self.pos + 1
-                } else {
-                    step_of(n.t_run)
+            for (r, b) in self.in_progress(j, n).into_iter().enumerate() {
+                let Some(b) = b else { continue };
+                let frame = r == 1;
+                let other = span(b.0, b.1);
+                let louder = b.3 > o.level || (b.3 == o.level && j < k);
+                let wins = match (fsk, frame) {
+                    (true, false) if covers(me, other) => false,
+                    (false, true) if covers(other, me) => true,
+                    _ => louder,
                 };
-                let rot = libm::atan2f(n.acc[1] + n.pac[1], n.acc[0] + n.pac[0]);
-                let theirs = (n.start, end.max(n.start), self.offset_hz(j, rot));
-                let louder = n.high > o.level || (n.high == o.level && j < k);
-                if louder && self.same(mine, theirs) {
-                    emit = false;
-                }
-            }
-            if n.mode == BURST && n.p_level == 1 && n.p_confirmed == 1 {
-                // A frame in progress: from the start of its presence until now, at the middle
-                // of its two levels once it has them.
-                let rot = if n.fsk_phase == 1 {
-                    n.f_hi.midpoint(n.f_lo)
-                } else {
-                    libm::atan2f(n.pac[1], n.pac[0])
-                };
-                let start = step_of(n.p_t_run);
-                let theirs = (start, self.pos + 1, self.offset_hz(j, rot));
-                let louder = n.high > o.level || (n.high == o.level && j < k);
-                if louder && self.same(mine, theirs) {
+                if wins && self.same(mine, (b.0, b.1, b.2)) {
                     emit = false;
                 }
             }
         }
+        if emit && wide == Some(false) {
+            self.wide = (mine.0, mine.1);
+        }
         let lane = self.lanes.as_mut().get_mut(k).ok_or_else(internal)?;
         lane.sum_valid = 1;
         lane.sum_emitted = u32::from(emit);
+        lane.sum_fsk = o.fsk;
         lane.sum_start = mine.0;
         lane.sum_end = mine.1;
         lane.sum_level = o.level;
@@ -1995,6 +2121,7 @@ where
         self.pos = 0;
         self.active = 0;
         self.pending = false;
+        self.wide = (0, 0);
         self.lp.as_mut().fill(0.0);
         self.noise.as_mut().fill(0.0);
         self.gain.as_mut().fill(NOISE_RATIO);

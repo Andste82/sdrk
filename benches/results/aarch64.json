@@ -424,8 +424,8 @@
         "band_pulse_detect_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 137.38,
-          "ours_instr_per_sample": 137.38,
+          "other_instr_per_sample": 110.02,
+          "ours_instr_per_sample": 110.02,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

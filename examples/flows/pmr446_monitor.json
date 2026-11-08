@@ -1,0 +1,393 @@
+{
+  "sdrk": 1,
+  "name": "pmr446-monitor",
+  "description": "Monitor PMR446 channels 1 to 8 at once: one polyphase channelizer, a squelch and an NFM demodulator per channel, the audio summed to 48 kHz.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2400000,
+      "description": "RTL-SDR IQ centred at 446.10625 MHz"
+    }
+  },
+  "nodes": {
+    "chan": {
+      "kind": "channelize",
+      "params": {
+        "channels": 16,
+        "passband": 0.4,
+        "stopband": 0.6,
+        "taps_per_branch": 24
+      }
+    },
+    "dec": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 100000,
+        "decimation": 12,
+        "max_taps": 2048,
+        "transition_hz": 12500
+      }
+    },
+    "demod1": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod2": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod3": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod4": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod5": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod6": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod7": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "demod8": {
+      "kind": "fm_demod",
+      "params": {
+        "audio_cutoff_hz": 3000,
+        "deemphasis_us": 530,
+        "deviation_hz": 2500
+      }
+    },
+    "gate1": {
+      "kind": "squelch"
+    },
+    "gate2": {
+      "kind": "squelch"
+    },
+    "gate3": {
+      "kind": "squelch"
+    },
+    "gate4": {
+      "kind": "squelch"
+    },
+    "gate5": {
+      "kind": "squelch"
+    },
+    "gate6": {
+      "kind": "squelch"
+    },
+    "gate7": {
+      "kind": "squelch"
+    },
+    "gate8": {
+      "kind": "squelch"
+    },
+    "mix1": {
+      "kind": "add"
+    },
+    "mix2": {
+      "kind": "add"
+    },
+    "mix3": {
+      "kind": "add"
+    },
+    "mix4": {
+      "kind": "add"
+    },
+    "mix5": {
+      "kind": "add"
+    },
+    "mix6": {
+      "kind": "add"
+    },
+    "mix7": {
+      "kind": "add"
+    },
+    "out": {
+      "kind": "resample",
+      "params": {
+        "cutoff_hz": 4000,
+        "max_taps": 4096,
+        "rate_out_hz": 48000,
+        "transition_hz": 2000
+      }
+    },
+    "sel1": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -8
+      }
+    },
+    "sel2": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -7
+      }
+    },
+    "sel3": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -6
+      }
+    },
+    "sel4": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -5
+      }
+    },
+    "sel5": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -4
+      }
+    },
+    "sel6": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -3
+      }
+    },
+    "sel7": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -2
+      }
+    },
+    "sel8": {
+      "kind": "channel_select",
+      "params": {
+        "channel": -1
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "chan"
+    },
+    {
+      "from": "chan",
+      "to": "sel1"
+    },
+    {
+      "from": "chan",
+      "to": "sel2"
+    },
+    {
+      "from": "chan",
+      "to": "sel3"
+    },
+    {
+      "from": "chan",
+      "to": "sel4"
+    },
+    {
+      "from": "chan",
+      "to": "sel5"
+    },
+    {
+      "from": "chan",
+      "to": "sel6"
+    },
+    {
+      "from": "chan",
+      "to": "sel7"
+    },
+    {
+      "from": "chan",
+      "to": "sel8"
+    },
+    {
+      "from": "sel1",
+      "to": "gate1"
+    },
+    {
+      "from": "sel2",
+      "to": "gate2"
+    },
+    {
+      "from": "sel3",
+      "to": "gate3"
+    },
+    {
+      "from": "sel4",
+      "to": "gate4"
+    },
+    {
+      "from": "sel5",
+      "to": "gate5"
+    },
+    {
+      "from": "sel6",
+      "to": "gate6"
+    },
+    {
+      "from": "sel7",
+      "to": "gate7"
+    },
+    {
+      "from": "sel8",
+      "to": "gate8"
+    },
+    {
+      "from": "gate1",
+      "to": "demod1"
+    },
+    {
+      "from": "gate2",
+      "to": "demod2"
+    },
+    {
+      "from": "gate3",
+      "to": "demod3"
+    },
+    {
+      "from": "gate4",
+      "to": "demod4"
+    },
+    {
+      "from": "gate5",
+      "to": "demod5"
+    },
+    {
+      "from": "gate6",
+      "to": "demod6"
+    },
+    {
+      "from": "gate7",
+      "to": "demod7"
+    },
+    {
+      "from": "gate8",
+      "to": "demod8"
+    },
+    {
+      "from": "demod1",
+      "to": "mix1",
+      "port": "a"
+    },
+    {
+      "from": "demod2",
+      "to": "mix1",
+      "port": "b"
+    },
+    {
+      "from": "demod3",
+      "to": "mix2",
+      "port": "a"
+    },
+    {
+      "from": "demod4",
+      "to": "mix2",
+      "port": "b"
+    },
+    {
+      "from": "demod5",
+      "to": "mix3",
+      "port": "a"
+    },
+    {
+      "from": "demod6",
+      "to": "mix3",
+      "port": "b"
+    },
+    {
+      "from": "demod7",
+      "to": "mix4",
+      "port": "a"
+    },
+    {
+      "from": "demod8",
+      "to": "mix4",
+      "port": "b"
+    },
+    {
+      "from": "mix1",
+      "to": "mix5",
+      "port": "a"
+    },
+    {
+      "from": "mix2",
+      "to": "mix5",
+      "port": "b"
+    },
+    {
+      "from": "mix3",
+      "to": "mix6",
+      "port": "a"
+    },
+    {
+      "from": "mix4",
+      "to": "mix6",
+      "port": "b"
+    },
+    {
+      "from": "mix5",
+      "to": "mix7",
+      "port": "a"
+    },
+    {
+      "from": "mix6",
+      "to": "mix7",
+      "port": "b"
+    },
+    {
+      "from": "mix7",
+      "to": "out"
+    },
+    {
+      "from": "out",
+      "to": "audio"
+    }
+  ],
+  "outputs": {
+    "audio": {
+      "type": "stream",
+      "capacity": 16384,
+      "drop": "error"
+    }
+  }
+}

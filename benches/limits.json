@@ -732,14 +732,16 @@
       "status": "release"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.5 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback (D943, as at `avx2` and `neon`)"
     },
     "avx2": {
       "status": "info",
       "waiver": "VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.6 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.6 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback (D943, as at `avx2` and `neon`)"
     },
     "neon": {
       "status": "info",

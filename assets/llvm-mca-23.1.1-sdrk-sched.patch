@@ -296,7 +296,7 @@ models (as the Skylake model has).
  
  def Zn4WriteVPERM2F128rm : SchedWriteRes<[Zn4AGU012, Zn4Load, Zn4FPVShuf]> {
    let Latency = !add(Znver4Model.VecLoadLatency, Zn4WriteVPERM2I128rr_VPERM2F128rr.Latency);
-@@ -2054,5 +2055,339 @@
+@@ -2054,5 +2055,371 @@
    ], ZeroIdiomPredicate>,
  ]>;
  
@@ -450,6 +450,22 @@ models (as the Skylake model has).
 +}
 +def : InstRW<[SdrkZn4Write_VPMOVZXBDYrm], (instrs VPMOVZXBDYrm)>;
 +
++// uops.info VPMOVSDW (M256, K, ZMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSDWZmr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSDWZmr], (instrs VPMOVSDWZmr)>;
++
++// uops.info VPMOVSDB (M128, K, ZMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSDBZmr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSDBZmr], (instrs VPMOVSDBZmr)>;
++
 +// uops.info VPMOVDB (M64, K, YMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
 +def SdrkZn4Write_VPMOVDBZ256mr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
 +  let Latency = 11;
@@ -578,6 +594,14 @@ models (as the Skylake model has).
 +}
 +def : InstRW<[SdrkZn4Write_VEXTRACTI32X4Zrri], (instrs VEXTRACTI32X4Zrri)>;
 +
++// uops.info VPMOVSQW (M32, K, XMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSQWZ128mr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSQWZ128mr], (instrs VPMOVSQWZ128mr)>;
++
 +// uops.info VPINSRD (XMM, XMM, M32, I8) on ZEN4: TP 0.5, ports 1*FP123, uops 1; model before: RThroughput 1.5, latency 8, uops 1
 +def SdrkZn4Write_VPINSRDrmi : SchedWriteRes<[Zn4FPFMisc123, Zn4FPLd01, Zn4Load]> {
 +  let Latency = 8;
@@ -585,6 +609,14 @@ models (as the Skylake model has).
 +  let NumMicroOps = 1;
 +}
 +def : InstRW<[SdrkZn4Write_VPINSRDrmi], (instrs VPINSRDrmi)>;
++
++// uops.info VPMOVSQW (M128, K, ZMM) on ZEN4: TP 1.0, ports 1*FP12+1*FP45, uops 2; model before: RThroughput 1.5, latency 11, uops 1
++def SdrkZn4Write_VPMOVSQWZmr : SchedWriteRes<[Zn4FPFMisc12, Zn4FPSt, Zn4Store]> {
++  let Latency = 11;
++  let ReleaseAtCycles = [1, 1, 1];
++  let NumMicroOps = 2;
++}
++def : InstRW<[SdrkZn4Write_VPMOVSQWZmr], (instrs VPMOVSQWZmr)>;
 +
 +// uops.info VEXTRACTI64X2 (XMM, K, YMM, I8) on ZEN4: TP 0.44, ports 1*FP0123, uops 1; model before: RThroughput 1.0, latency 1, uops 1
 +def SdrkZn4Write_VEXTRACTI64X2Z256rri : SchedWriteRes<[Zn4FPU0123]> {

@@ -984,21 +984,21 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 
 | Entry | ours skylake (cycles/sample) | comparison skylake (cycles/sample) | ratio skylake (ours/comparison) | ours znver2 (cycles/sample) | comparison znver2 (cycles/sample) | ratio znver2 (ours/comparison) | comparison |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `convert_cq15_cs8` | 0.26 | 0.33 | 0.80 | 0.26 | 0.42 | 0.61 | volk_8i_convert_16i |
+| `convert_cq15_cs8` | 0.26 | 0.33 | 0.80 | 0.26 | 0.42 | 0.63 | volk_8i_convert_16i |
 | `convert_cq15_cs8_fallback` | 0.30 | 0.32 | 0.93 | 0.36 | 0.42 | 0.86 | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `convert_cq15_cu8` | 0.26 | 0.33 | 0.80 | 0.32 | 0.42 | 0.75 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
 | `convert_cq15_cu8_fallback` | 0.33 | 0.32 | 1.03 | 0.42 | 0.42 | 1.01 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `convert_cs16` | 0.53 | 1.17 | 0.45 | 0.60 | 1.43 | 0.42 | volk_16i_s32f_convert_32f |
 | `convert_cs16_fallback` | 0.78 | 0.78 | 1.00 | 0.97 | 0.96 | 1.00 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `convert_cs8` | 0.76 | 1.02 | 0.75 | 0.63 | 1.02 | 0.62 | volk_8i_s32f_convert_32f |
+| `convert_cs8` | 0.77 | 1.02 | 0.76 | 0.63 | 1.02 | 0.62 | volk_8i_s32f_convert_32f |
 | `convert_cs8_fallback` | 1.03 | 1.02 | 1.02 | 1.09 | 1.02 | 1.08 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `convert_cu8` | 0.76 | 1.02 | 0.75 | 0.63 | 1.02 | 0.62 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cu8` | 0.77 | 1.02 | 0.76 | 0.63 | 1.02 | 0.62 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
 | `convert_cu8_fallback` | 1.03 | 1.02 | 1.02 | 1.10 | 1.02 | 1.08 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `convert_out_cs16` | 1.10 | 1.03 | 1.06 | 1.04 | 1.03 | 1.01 | volk_32f_s32f_convert_16i |
+| `convert_out_cs16` | 1.10 | 1.03 | 1.06 | 1.03 | 1.03 | 1.00 | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 2.05 | 2.97 | 0.69 | 2.04 | 3.47 | 0.59 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `convert_out_cs8` | 1.02 | 1.02 | 1.00 | 1.03 | 0.96 | 1.08 | volk_32f_s32f_convert_8i |
 | `convert_out_cs8_fallback` | 2.32 | 3.08 | 0.75 | 2.48 | 3.67 | 0.68 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `convert_out_cu8` | 1.59 | 1.27 | 1.25 | 1.56 | 1.27 | 1.23 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_cu8` | 1.59 | 1.27 | 1.25 | 1.55 | 1.27 | 1.23 | volk_32f_s32f_x2_convert_8u |
 | `convert_out_cu8_fallback` | 5.43 | 3.08 | 1.76 | 5.74 | 3.67 | 1.56 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `convert_out_real_rs16` | 0.56 | 0.52 | 1.07 | 0.53 | 0.52 | 1.02 | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 1.03 | 1.49 | 0.69 | 1.02 | 1.74 | 0.59 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
@@ -1008,34 +1008,34 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `convert_out_real_ru8_fallback` | 2.72 | 1.54 | 1.76 | 2.88 | 1.84 | 1.57 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `convert_real_rs16` | 0.28 | 0.59 | 0.47 | 0.31 | 0.72 | 0.44 | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.40 | 0.39 | 1.03 | 0.49 | 0.48 | 1.01 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `rotate` | 2.08 | 11.05 | 0.19 | 1.99 | 12.14 | 0.16 | volk_32fc_s32fc_x2_rotator2_32fc |
-| `rotate_cq15` | 3.80 | 12.10 | 0.31 | 3.87 | 12.37 | 0.31 | sdrk fallback |
-| `rotate_cq15_fallback` | 12.10 | 36.49 | 0.33 | 12.37 | 34.91 | 0.35 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `rotate_fallback` | 8.64 | 15.46 | 0.56 | 8.88 | 16.79 | 0.53 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
-| `fir` | 33.48 | 77.65 | 0.43 | 29.84 | 77.94 | 0.38 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 142.31 | 142.31 | 1.00 | 187.71 | 187.71 | 1.00 | sdrk fallback |
-| `fir_cq15_fallback` | 142.31 | 177.35 | 0.80 | 187.71 | 220.90 | 0.85 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_decimate` | 6.88 | 12.46 | 0.55 | 6.02 | 13.37 | 0.45 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
+| `rotate` | 2.08 | 11.05 | 0.19 | 1.99 | 12.13 | 0.16 | volk_32fc_s32fc_x2_rotator2_32fc |
+| `rotate_cq15` | 3.80 | 12.10 | 0.31 | 3.85 | 12.37 | 0.31 | sdrk fallback |
+| `rotate_cq15_fallback` | 12.10 | 36.49 | 0.33 | 12.37 | 34.93 | 0.35 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `rotate_fallback` | 8.64 | 15.45 | 0.56 | 8.88 | 16.79 | 0.53 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
+| `fir` | 33.48 | 77.65 | 0.43 | 29.84 | 78.96 | 0.38 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
+| `fir_cq15` | 142.31 | 142.31 | 1.00 | 188.30 | 188.30 | 1.00 | sdrk fallback |
+| `fir_cq15_fallback` | 142.31 | 177.35 | 0.80 | 188.30 | 220.90 | 0.85 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_decimate` | 6.88 | 12.46 | 0.55 | 6.05 | 13.37 | 0.45 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 30.41 | 30.41 | 1.00 | 45.20 | 45.20 | 1.00 | sdrk fallback |
 | `fir_decimate_cq15_fallback` | 30.41 | 24.93 | 1.22 | 45.20 | 25.79 | 1.75 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_decimate_fallback` | 15.09 | 38.80 | 0.39 | 15.81 | 23.74 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_fallback` | 42.70 | 132.97 | 0.32 | 51.69 | 110.95 | 0.47 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_interpolate` | 36.23 | 86.10 | 0.42 | 33.65 | 87.19 | 0.39 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 137.50 | 137.50 | 1.00 | 207.98 | 207.98 | 1.00 | sdrk fallback |
-| `fir_interpolate_cq15_fallback` | 137.50 | 137.61 | 1.00 | 207.98 | 164.30 | 1.27 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_interpolate_fallback` | 69.81 | 141.75 | 0.49 | 71.56 | 114.81 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_interpolate_real` | 19.42 | 79.39 | 0.24 | 18.09 | 77.13 | 0.23 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
-| `fir_interpolate_real_fallback` | 42.43 | 70.88 | 0.60 | 44.53 | 57.41 | 0.78 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_decimate_fallback` | 15.09 | 38.80 | 0.39 | 15.82 | 23.74 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_fallback` | 42.70 | 132.97 | 0.32 | 51.73 | 111.96 | 0.46 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_interpolate` | 36.23 | 86.10 | 0.42 | 34.15 | 88.20 | 0.39 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `fir_interpolate_cq15` | 137.50 | 137.50 | 1.00 | 207.96 | 207.96 | 1.00 | sdrk fallback |
+| `fir_interpolate_cq15_fallback` | 137.50 | 137.61 | 1.00 | 207.96 | 164.43 | 1.26 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_interpolate_fallback` | 69.81 | 141.75 | 0.49 | 71.88 | 114.81 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_interpolate_real` | 19.42 | 79.39 | 0.24 | 18.14 | 77.13 | 0.24 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
+| `fir_interpolate_real_fallback` | 42.43 | 70.88 | 0.60 | 44.68 | 57.41 | 0.78 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fir_interpolate_real_q15` | 74.97 | 74.97 | 1.00 | 112.89 | 112.89 | 1.00 | sdrk fallback |
-| `fir_interpolate_real_q15_fallback` | 74.97 | 68.81 | 1.09 | 112.89 | 82.15 | 1.37 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `resample` | 38.71 | 87.37 | 0.44 | 35.17 | 88.05 | 0.40 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 168.56 | 168.56 | 1.00 | 240.62 | 240.62 | 1.00 | sdrk fallback |
-| `resample_cq15_fallback` | 168.56 | 136.68 | 1.23 | 240.62 | 163.47 | 1.47 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `resample_fallback` | 84.56 | 141.22 | 0.60 | 86.78 | 113.81 | 0.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `resample_real` | 22.43 | 80.59 | 0.28 | 21.98 | 77.71 | 0.28 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
-| `resample_real_fallback` | 84.62 | 70.61 | 1.20 | 86.75 | 56.90 | 1.52 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_interpolate_real_q15_fallback` | 74.97 | 68.81 | 1.09 | 112.89 | 82.21 | 1.37 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `resample` | 38.71 | 87.37 | 0.44 | 35.17 | 89.05 | 0.39 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 168.56 | 168.56 | 1.00 | 240.71 | 240.71 | 1.00 | sdrk fallback |
+| `resample_cq15_fallback` | 168.56 | 136.68 | 1.23 | 240.71 | 163.55 | 1.47 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `resample_fallback` | 84.56 | 141.22 | 0.60 | 86.87 | 113.81 | 0.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `resample_real` | 22.43 | 80.59 | 0.28 | 22.04 | 77.71 | 0.28 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
+| `resample_real_fallback` | 84.62 | 70.61 | 1.20 | 86.80 | 56.90 | 1.53 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `resample_real_q15` | 103.68 | 103.68 | 1.00 | 144.23 | 144.23 | 1.00 | sdrk fallback |
-| `resample_real_q15_fallback` | 103.68 | 68.34 | 1.52 | 144.23 | 81.74 | 1.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `resample_real_q15_fallback` | 103.68 | 68.34 | 1.52 | 144.23 | 81.78 | 1.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mag` | 0.76 | 0.79 | 0.96 | 1.77 | 1.79 | 0.99 | volk_32fc_magnitude_32f |
 | `mag_fallback` | 0.79 | 0.85 | 0.93 | 1.79 | 1.86 | 0.96 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mag_q15` | 2.27 | 11.17 | 0.20 | 3.44 | 12.29 | 0.28 | volk_16ic_magnitude_16i |
@@ -1044,16 +1044,16 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `mag_sq_fallback` | 0.52 | 0.65 | 0.80 | 0.67 | 0.84 | 0.80 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mag_sq_q15` | 0.33 | 0.82 | 0.40 | 0.33 | 0.90 | 0.37 | sdrk fallback |
 | `mag_sq_q15_fallback` | 0.82 | 5.39 | 0.15 | 0.90 | 4.02 | 0.22 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `quad_demod` | 9.38 | 110.71 | 0.08 | 11.36 | 97.70 | 0.12 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod` | 9.38 | 110.71 | 0.08 | 11.36 | 98.69 | 0.12 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
 | `quad_demod_cq15` | 20.33 | 94.87 | 0.21 | 21.68 | 97.68 | 0.22 | sdrk fallback |
-| `quad_demod_cq15_fallback` | 94.87 | 133.11 | 0.71 | 97.68 | 119.04 | 0.82 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
-| `quad_demod_fallback` | 53.33 | 68.55 | 0.78 | 51.61 | 63.51 | 0.81 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
+| `quad_demod_cq15_fallback` | 94.87 | 133.11 | 0.71 | 97.68 | 119.98 | 0.81 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
+| `quad_demod_fallback` | 53.33 | 68.55 | 0.78 | 51.61 | 63.79 | 0.81 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
 | `fm_mod` | 7.97 | 47.68 | 0.17 | 8.37 | 60.01 | 0.14 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `fm_mod_cq15` | 8.56 | 10.75 | 0.80 | 8.56 | 11.73 | 0.73 | sdrk fallback |
-| `fm_mod_cq15_fallback` | 10.75 | 25.62 | 0.42 | 11.73 | 23.96 | 0.49 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fm_mod_cq15` | 8.56 | 10.74 | 0.80 | 8.56 | 11.73 | 0.73 | sdrk fallback |
+| `fm_mod_cq15_fallback` | 10.74 | 25.62 | 0.42 | 11.73 | 23.96 | 0.49 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fm_mod_fallback` | 8.94 | 47.68 | 0.19 | 10.89 | 60.01 | 0.18 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `squelch` | 12.14 | 27.74 | 0.44 | 9.14 | 26.36 | 0.35 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
-| `squelch_cq15` | 7.60 | 7.60 | 1.00 | 8.10 | 8.10 | 1.00 | sdrk fallback |
+| `squelch` | 12.14 | 27.74 | 0.44 | 9.14 | 26.37 | 0.35 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
+| `squelch_cq15` | 7.60 | 7.60 | 1.00 | 8.11 | 8.11 | 1.00 | sdrk fallback |
 | `window` | 0.54 | 0.65 | 0.83 | 0.68 | 0.78 | 0.87 | volk_32fc_32f_multiply_32fc |
 | `window_cq15` | 0.88 | 2.11 | 0.42 | 0.95 | 2.65 | 0.36 | sdrk fallback |
 | `window_cq15_fallback` | 2.11 | 2.62 | 0.81 | 2.65 | 2.78 | 0.95 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
@@ -1067,12 +1067,12 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `agc_fallback` | 18.78 | 42.10 | 0.45 | 17.66 | 38.11 | 0.46 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
 | `dc_block` | 5.71 | 10.05 | 0.57 | 4.79 | 7.07 | 0.68 | sdrk fallback |
 | `dc_block_cq15` | 8.06 | 8.06 | 1.00 | 10.05 | 10.05 | 1.00 | sdrk fallback |
-| `dc_block_fallback` | 10.05 | 56.29 | 0.18 | 7.07 | 51.18 | 0.14 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
+| `dc_block_fallback` | 10.05 | 56.29 | 0.18 | 7.07 | 51.26 | 0.14 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real` | 4.61 | 10.03 | 0.46 | 3.69 | 7.04 | 0.52 | sdrk fallback |
 | `dc_block_real_fallback` | 10.03 | 46.19 | 0.22 | 7.04 | 43.86 | 0.16 | liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real_q15` | 6.06 | 6.06 | 1.00 | 7.55 | 7.55 | 1.00 | sdrk fallback |
 | `deemphasis` | 4.15 | 15.09 | 0.28 | 3.59 | 12.09 | 0.30 | sdrk fallback |
-| `deemphasis_fallback` | 15.09 | 13.15 | 1.15 | 12.09 | 17.10 | 0.71 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
+| `deemphasis_fallback` | 15.09 | 13.15 | 1.15 | 12.09 | 17.11 | 0.71 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
 | `deemphasis_q15` | 7.03 | 7.03 | 1.00 | 8.53 | 8.53 | 1.00 | sdrk fallback |
 | `biquad` | 12.69 | 28.36 | 0.45 | 9.42 | 27.58 | 0.34 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
 | `biquad_cq15` | 24.94 | 24.94 | 1.00 | 31.17 | 31.17 | 1.00 | sdrk fallback |
@@ -1085,19 +1085,19 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `dot` | 0.60 | 0.61 | 0.98 | 0.69 | 0.65 | 1.05 | volk_32fc_32f_dot_prod_32fc |
 | `dot_complex` | 1.32 | 2.67 | 0.49 | 1.33 | 2.19 | 0.61 | volk_32fc_x2_dot_prod_32fc |
 | `dot_complex_fallback` | 5.02 | 8.28 | 0.61 | 3.77 | 6.28 | 0.60 | CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `dot_cq15` | 1.00 | 2.20 | 0.46 | 0.81 | 2.53 | 0.32 | sdrk fallback |
+| `dot_cq15` | 1.00 | 2.20 | 0.46 | 0.82 | 2.53 | 0.32 | sdrk fallback |
 | `dot_cq15_fallback` | 2.20 | 1.78 | 1.23 | 2.53 | 2.03 | 1.24 | CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `dot_fallback` | 4.03 | 8.07 | 0.50 | 3.03 | 6.06 | 0.50 | CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `dot_real` | 0.27 | 0.28 | 0.97 | 0.29 | 0.27 | 1.06 | volk_32f_x2_dot_prod_32f |
 | `dot_real_fallback` | 4.04 | 4.04 | 1.00 | 3.03 | 3.03 | 1.00 | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `dot_real_q15` | 0.34 | 0.98 | 0.35 | 0.35 | 0.98 | 0.36 | sdrk fallback |
+| `dot_real_q15` | 0.34 | 0.98 | 0.35 | 0.36 | 0.98 | 0.36 | sdrk fallback |
 | `dot_real_q15_fallback` | 0.98 | 0.89 | 1.10 | 0.98 | 1.02 | 0.96 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `scale` | 0.51 | 0.64 | 0.80 | 0.43 | 0.79 | 0.54 | volk_32f_s32f_multiply_32f |
+| `scale` | 0.51 | 0.64 | 0.80 | 0.51 | 0.79 | 0.64 | volk_32f_s32f_multiply_32f |
 | `scale_cq15` | 2.03 | 2.03 | 1.00 | 2.11 | 2.11 | 1.00 | sdrk fallback |
 | `scale_cq15_fallback` | 2.03 | 3.78 | 0.54 | 2.11 | 3.65 | 0.58 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `scale_fallback` | 0.63 | 0.63 | 1.00 | 0.79 | 0.79 | 1.00 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `add` | 0.51 | 0.70 | 0.72 | 0.56 | 0.79 | 0.70 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.25 | 0.35 | 0.72 | 0.28 | 0.40 | 0.71 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15` | 0.25 | 0.35 | 0.72 | 0.28 | 0.40 | 0.70 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.35 | 3.66 | 0.10 | 0.46 | 3.78 | 0.12 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `add_fallback` | 0.70 | 0.70 | 1.00 | 0.91 | 0.91 | 1.00 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `add_real` | 0.26 | 0.36 | 0.71 | 0.28 | 0.40 | 0.70 | volk_32f_x2_add_32f |
@@ -1112,11 +1112,11 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `mul_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `mul_real_q15` | 0.97 | 0.97 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
 | `mul_real_q15_fallback` | 0.97 | 1.21 | 0.81 | 1.02 | 1.39 | 0.73 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `interleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.26 | 0.26 | 0.99 | 0.24 | 0.31 | 0.78 | sdrk fallback |
+| `interleave` | 0.51 | 0.52 | 0.98 | 0.51 | 0.64 | 0.79 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.26 | 0.26 | 0.99 | 0.26 | 0.31 | 0.84 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.26 | 0.26 | 1.00 | 0.31 | 0.33 | 0.95 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `interleave_fallback` | 0.51 | 0.52 | 0.98 | 0.61 | 0.64 | 0.94 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
-| `deinterleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave` | 0.51 | 0.52 | 0.98 | 0.51 | 0.65 | 0.79 | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.34 | 1.52 | 0.23 | 0.40 | 0.89 | 0.45 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 1.02 | 1.27 | 0.80 | 0.64 | 0.73 | 0.88 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `deinterleave_fallback` | 0.51 | 0.58 | 0.88 | 0.54 | 0.71 | 0.77 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
@@ -1124,24 +1124,24 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `oscillate_cq15` | 3.78 | 5.34 | 0.71 | 3.79 | 6.82 | 0.55 | sdrk fallback |
 | `oscillate_cq15_fallback` | 5.34 | 21.81 | 0.24 | 6.82 | 19.33 | 0.35 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `oscillate_fallback` | 4.90 | 56.29 | 0.09 | 6.35 | 51.64 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_1024` | 7.20 | 6.91 | 1.04 | 6.39 | 6.78 | 0.94 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
-| `fft_1024_fallback` | 31.46 | 26.16 | 1.20 | 30.55 | 28.76 | 1.06 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_4096` | 8.15 | 10.41 | 0.78 | 7.34 | 8.86 | 0.83 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
-| `fft_4096_fallback` | 37.63 | 30.53 | 1.23 | 36.72 | 32.74 | 1.12 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_64` | 4.46 | 5.86 | 0.76 | 3.91 | 5.51 | 0.71 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
-| `fft_64_fallback` | 20.08 | 15.15 | 1.33 | 19.53 | 17.64 | 1.11 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_cq15_1024` | 8.77 | 52.83 | 0.17 | 9.73 | 62.25 | 0.16 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default` | 7.36 | 52.83 | 0.14 | 7.73 | 62.25 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default_fallback` | 50.23 | 44.75 | 1.12 | 54.76 | 56.09 | 0.98 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_cq15_1024_fallback` | 83.13 | 44.75 | 1.86 | 91.70 | 56.09 | 1.63 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_cq15_1024_full_scale` | 7.68 | 52.83 | 0.15 | 8.06 | 62.25 | 0.13 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `rfft_1024` | 4.71 | 5.63 | 0.84 | 4.39 | 4.62 | 0.95 | FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place) |
-| `rfft_1024_fallback` | 16.76 | 14.25 | 1.18 | 16.72 | 14.97 | 1.12 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fft_1024` | 7.20 | 6.91 | 1.04 | 6.37 | 6.78 | 0.94 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
+| `fft_1024_fallback` | 31.46 | 26.16 | 1.20 | 30.31 | 28.91 | 1.05 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fft_4096` | 8.15 | 10.41 | 0.78 | 7.32 | 8.77 | 0.83 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
+| `fft_4096_fallback` | 37.63 | 30.53 | 1.23 | 36.49 | 32.90 | 1.11 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fft_64` | 4.46 | 5.86 | 0.76 | 3.95 | 5.51 | 0.72 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
+| `fft_64_fallback` | 20.08 | 15.15 | 1.33 | 19.29 | 17.76 | 1.09 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fft_cq15_1024` | 8.84 | 52.83 | 0.17 | 9.71 | 63.00 | 0.15 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default` | 7.37 | 52.83 | 0.14 | 7.76 | 63.00 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default_fallback` | 50.23 | 44.75 | 1.12 | 54.68 | 56.34 | 0.97 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fft_cq15_1024_fallback` | 83.13 | 44.75 | 1.86 | 91.71 | 56.34 | 1.63 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fft_cq15_1024_full_scale` | 7.68 | 52.83 | 0.15 | 8.00 | 63.00 | 0.13 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `rfft_1024` | 4.71 | 5.63 | 0.84 | 4.42 | 4.58 | 0.96 | FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place) |
+| `rfft_1024_fallback` | 16.76 | 14.25 | 1.18 | 16.76 | 15.04 | 1.11 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `am_mod` | 1.09 | 1.09 | 1.00 | 1.16 | 1.16 | 1.00 | sdrk fallback |
 | `am_mod_cq15` | 2.62 | 2.62 | 1.00 | 3.12 | 3.12 | 1.00 | sdrk fallback |
 | `am_mod_cq15_fallback` | 2.62 | 4.17 | 0.63 | 3.12 | 4.64 | 0.67 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
-| `auto_notch` | 233.12 | 233.12 | 1.00 | 207.22 | 207.22 | 1.00 | sdrk fallback |
+| `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 46.06 | 46.06 | 1.00 | 52.54 | 52.54 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 227.45 | 227.45 | 1.00 | 212.36 | 212.36 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
@@ -1149,52 +1149,52 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_block` | 26.79 | 26.79 | 1.00 | 27.83 | 27.83 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.43 | 180.90 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 115.06 | 115.06 | 1.00 | 99.06 | 99.06 | 1.00 | sdrk fallback |
-| `costas_fallback` | 115.06 | 86.69 | 1.33 | 99.06 | 80.45 | 1.23 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 115.06 | 86.69 | 1.33 | 99.06 | 80.46 | 1.23 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 157.42 | 157.42 | 1.00 | 164.21 | 164.21 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 157.42 | 168.47 | 0.93 | 164.21 | 201.30 | 0.82 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 5.81 | 5.81 | 1.00 | 7.68 | 7.68 | 1.00 | sdrk fallback |
-| `frame_decode_block` | 5.65 | 5.65 | 1.00 | 7.68 | 7.68 | 1.00 | sdrk fallback |
-| `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.78 | 1.78 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 7.01 | 59.03 | 0.12 | 7.55 | 50.41 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2) |
-| `halfband_decimate_cq15` | 16.69 | 39.56 | 0.42 | 16.21 | 46.08 | 0.35 | sdrk fallback |
-| `halfband_decimate_cq15_fallback` | 39.56 | 41.57 | 0.95 | 46.08 | 50.10 | 0.92 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `halfband_decimate_fallback` | 15.16 | 82.14 | 0.18 | 17.48 | 69.50 | 0.25 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
-| `halfband_decimate_real` | 3.68 | 68.61 | 0.05 | 3.92 | 55.00 | 0.07 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
-| `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.00 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
-| `halfband_decimate_real_q15` | 7.02 | 22.39 | 0.31 | 6.65 | 27.24 | 0.24 | sdrk fallback |
+| `equalize` | 157.42 | 157.42 | 1.00 | 164.22 | 164.22 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 157.42 | 168.47 | 0.93 | 164.22 | 201.30 | 0.82 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `frame_decode` | 6.18 | 6.18 | 1.00 | 8.41 | 8.41 | 1.00 | sdrk fallback |
+| `frame_decode_block` | 6.01 | 6.01 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
+| `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
+| `halfband_decimate` | 7.01 | 59.03 | 0.12 | 7.93 | 50.49 | 0.16 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2) |
+| `halfband_decimate_cq15` | 16.69 | 39.56 | 0.42 | 16.24 | 46.15 | 0.35 | sdrk fallback |
+| `halfband_decimate_cq15_fallback` | 39.56 | 41.57 | 0.95 | 46.15 | 50.09 | 0.92 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `halfband_decimate_fallback` | 15.16 | 82.14 | 0.18 | 17.48 | 69.57 | 0.25 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `halfband_decimate_real` | 3.68 | 68.61 | 0.05 | 4.01 | 55.10 | 0.07 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.10 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `halfband_decimate_real_q15` | 7.02 | 22.39 | 0.31 | 6.70 | 27.24 | 0.25 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.39 | 20.77 | 1.08 | 27.24 | 25.03 | 1.09 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `halfband_ref_fir_decimate` | 13.14 | 29.62 | 0.44 | 12.40 | 29.79 | 0.42 | sdrk fallback |
+| `halfband_ref_fir_decimate` | 13.14 | 29.62 | 0.44 | 12.41 | 29.82 | 0.42 | sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 60.59 | 60.59 | 1.00 | 86.10 | 86.10 | 1.00 | sdrk fallback |
-| `halfband_ref_shifted` | 9.73 | 17.92 | 0.54 | 11.08 | 21.03 | 0.53 | sdrk fallback |
-| `halfband_ref_shifted_cq15` | 19.61 | 42.48 | 0.46 | 20.38 | 50.24 | 0.41 | sdrk fallback |
-| `morse_decode_block` | 16.81 | 16.81 | 1.00 | 20.53 | 20.53 | 1.00 | sdrk fallback |
+| `halfband_ref_shifted` | 9.73 | 17.92 | 0.54 | 11.45 | 21.03 | 0.54 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 19.61 | 42.48 | 0.46 | 20.41 | 50.32 | 0.41 | sdrk fallback |
+| `morse_decode_block` | 16.81 | 16.81 | 1.00 | 20.51 | 20.51 | 1.00 | sdrk fallback |
 | `morse_encode_block` | 6.60 | 6.60 | 1.00 | 7.58 | 7.58 | 1.00 | sdrk fallback |
-| `noise_blank` | 15.92 | 15.92 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
-| `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
-| `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.48 | 11.48 | 1.00 | sdrk fallback |
+| `noise_blank` | 15.92 | 15.92 | 1.00 | 11.94 | 11.94 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.59 | 10.59 | 1.00 | sdrk fallback |
+| `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
-| `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.80 | 11.80 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 44.52 | 44.52 | 1.00 | 38.82 | 38.82 | 1.00 | sdrk fallback |
+| `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 44.51 | 44.52 | 1.00 | 39.74 | 39.75 | 1.00 | sdrk fallback |
 | `rds_shape` | 83.94 | 83.94 | 1.00 | 75.83 | 75.83 | 1.00 | sdrk fallback |
-| `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.51 | 57.15 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
-| `real_to_complex_airspy` | 5.31 | 11.28 | 0.47 | 5.51 | 9.31 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
+| `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.53 | 57.25 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `real_to_complex_airspy` | 5.31 | 11.28 | 0.47 | 5.53 | 9.37 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_cq15` | 8.98 | 15.69 | 0.57 | 8.96 | 17.83 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
-| `real_to_complex_cq15_fallback` | 29.09 | 15.69 | 1.85 | 34.86 | 17.83 | 1.95 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
-| `real_to_complex_fallback` | 17.76 | 70.40 | 0.25 | 20.55 | 57.15 | 0.36 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `real_to_complex_cq15_fallback` | 29.09 | 15.69 | 1.85 | 34.91 | 17.83 | 1.96 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
+| `real_to_complex_fallback` | 17.76 | 70.40 | 0.25 | 20.65 | 57.25 | 0.36 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 18.68 | 18.68 | 1.00 | 17.96 | 17.96 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.49 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.51 | 1.02 | 0.50 | 0.53 | 1.14 | 0.47 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 1.02 | 5.50 | 0.19 | 1.14 | 5.68 | 0.20 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `stereo_matrix_fallback` | 1.55 | 1.07 | 1.45 | 1.67 | 1.38 | 1.21 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `stereo_pll_fallback` | 88.89 | 71.63 | 1.24 | 77.84 | 62.55 | 1.24 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse2) |
-| `stereo_pll_q15_fallback` | 38.04 | 55.57 | 0.68 | 38.05 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `symbol_sync` | 49.33 | 49.33 | 1.00 | 39.08 | 39.08 | 1.00 | sdrk fallback |
+| `stereo_pll_fallback` | 88.89 | 71.63 | 1.24 | 77.84 | 63.55 | 1.22 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse2) |
+| `stereo_pll_q15_fallback` | 38.04 | 55.57 | 0.68 | 38.06 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `symbol_sync` | 49.33 | 49.33 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
 | `symbol_sync_real` | 23.16 | 23.16 | 1.00 | 18.66 | 18.66 | 1.00 | sdrk fallback |
 
 #### Simulated cycles at `sse4.2` (`x86_64`)
@@ -1203,21 +1203,21 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 
 | Entry | ours skylake (cycles/sample) | comparison skylake (cycles/sample) | ratio skylake (ours/comparison) | ours znver2 (cycles/sample) | comparison znver2 (cycles/sample) | ratio znver2 (ours/comparison) | comparison |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `convert_cq15_cs8` | 0.26 | 0.39 | 0.68 | 0.26 | 0.39 | 0.66 | volk_8i_convert_16i |
+| `convert_cq15_cs8` | 0.26 | 0.39 | 0.68 | 0.26 | 0.39 | 0.68 | volk_8i_convert_16i |
 | `convert_cq15_cs8_fallback` | 0.30 | 0.39 | 0.79 | 0.30 | 0.36 | 0.84 | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `convert_cq15_cu8` | 0.26 | 0.39 | 0.67 | 0.32 | 0.39 | 0.81 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
 | `convert_cq15_cu8_fallback` | 0.36 | 0.39 | 0.92 | 0.36 | 0.36 | 1.01 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `convert_cs16` | 0.52 | 0.78 | 0.67 | 0.53 | 0.96 | 0.55 | volk_16i_s32f_convert_32f |
+| `convert_cs16` | 0.53 | 0.78 | 0.68 | 0.54 | 0.96 | 0.56 | volk_16i_s32f_convert_32f |
 | `convert_cs16_fallback` | 0.70 | 0.78 | 0.91 | 0.72 | 0.84 | 0.86 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `convert_cs8` | 0.53 | 0.89 | 0.59 | 0.53 | 0.77 | 0.70 | volk_8i_s32f_convert_32f |
+| `convert_cs8` | 0.53 | 0.89 | 0.59 | 0.54 | 0.77 | 0.70 | volk_8i_s32f_convert_32f |
 | `convert_cs8_fallback` | 0.70 | 1.14 | 0.62 | 0.72 | 0.83 | 0.87 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `convert_cu8` | 0.76 | 0.89 | 0.85 | 0.63 | 0.77 | 0.82 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
 | `convert_cu8_fallback` | 0.79 | 1.14 | 0.69 | 0.85 | 0.83 | 1.02 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `convert_out_cs16` | 1.10 | 1.03 | 1.06 | 1.04 | 1.03 | 1.01 | volk_32f_s32f_convert_16i |
+| `convert_out_cs16` | 1.10 | 1.03 | 1.06 | 1.03 | 1.03 | 1.00 | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 1.95 | 1.03 | 1.90 | 2.03 | 1.25 | 1.63 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `convert_out_cs8` | 1.02 | 1.02 | 1.01 | 1.03 | 0.96 | 1.08 | volk_32f_s32f_convert_8i |
+| `convert_out_cs8` | 1.02 | 1.02 | 1.00 | 1.03 | 0.96 | 1.08 | volk_32f_s32f_convert_8i |
 | `convert_out_cs8_fallback` | 1.91 | 1.18 | 1.61 | 1.88 | 1.39 | 1.35 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `convert_out_cu8` | 1.57 | 1.33 | 1.18 | 1.53 | 1.39 | 1.10 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_cu8` | 1.57 | 1.33 | 1.18 | 1.52 | 1.39 | 1.09 | volk_32f_s32f_x2_convert_8u |
 | `convert_out_cu8_fallback` | 4.70 | 1.18 | 3.98 | 4.41 | 1.39 | 3.17 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `convert_out_real_rs16` | 0.56 | 0.52 | 1.07 | 0.53 | 0.52 | 1.02 | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 0.98 | 0.52 | 1.91 | 1.02 | 0.63 | 1.64 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
@@ -1230,31 +1230,31 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `rotate` | 2.08 | 9.16 | 0.23 | 1.98 | 11.13 | 0.18 | volk_32fc_s32fc_x2_rotator2_32fc |
 | `rotate_cq15` | 2.78 | 9.55 | 0.29 | 2.54 | 10.37 | 0.24 | sdrk fallback |
 | `rotate_cq15_fallback` | 9.55 | 34.89 | 0.27 | 10.37 | 33.66 | 0.31 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `rotate_fallback` | 7.15 | 15.46 | 0.46 | 8.62 | 16.79 | 0.51 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
-| `fir` | 33.43 | 86.68 | 0.39 | 29.72 | 87.46 | 0.34 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 47.80 | 142.31 | 0.34 | 49.03 | 187.71 | 0.26 | sdrk fallback |
-| `fir_cq15_fallback` | 142.31 | 177.24 | 0.80 | 187.71 | 220.40 | 0.85 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_decimate` | 6.90 | 14.45 | 0.48 | 6.03 | 14.17 | 0.43 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
-| `fir_decimate_cq15` | 8.90 | 30.41 | 0.29 | 9.34 | 45.20 | 0.21 | sdrk fallback |
+| `rotate_fallback` | 7.15 | 15.45 | 0.46 | 8.62 | 16.79 | 0.51 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
+| `fir` | 33.48 | 86.68 | 0.39 | 29.84 | 88.48 | 0.34 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
+| `fir_cq15` | 47.80 | 142.31 | 0.34 | 49.16 | 188.30 | 0.26 | sdrk fallback |
+| `fir_cq15_fallback` | 142.31 | 177.24 | 0.80 | 188.30 | 220.40 | 0.85 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_decimate` | 6.87 | 14.45 | 0.48 | 6.05 | 14.17 | 0.43 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
+| `fir_decimate_cq15` | 8.90 | 30.41 | 0.29 | 9.37 | 45.20 | 0.21 | sdrk fallback |
 | `fir_decimate_cq15_fallback` | 30.41 | 27.95 | 1.09 | 45.20 | 22.79 | 1.98 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_decimate_fallback` | 15.09 | 38.81 | 0.39 | 15.81 | 23.69 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_fallback` | 42.70 | 132.97 | 0.32 | 51.69 | 110.95 | 0.47 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_interpolate` | 36.28 | 95.13 | 0.38 | 33.64 | 96.70 | 0.35 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 51.51 | 137.49 | 0.37 | 53.45 | 207.97 | 0.26 | sdrk fallback |
-| `fir_interpolate_cq15_fallback` | 137.49 | 137.61 | 1.00 | 207.97 | 164.30 | 1.27 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_interpolate_fallback` | 69.81 | 141.75 | 0.49 | 71.56 | 114.81 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_interpolate_real` | 19.43 | 72.80 | 0.27 | 18.11 | 62.85 | 0.29 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
-| `fir_interpolate_real_fallback` | 42.43 | 70.88 | 0.60 | 44.53 | 57.41 | 0.78 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_decimate_fallback` | 15.09 | 38.81 | 0.39 | 15.82 | 23.69 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_fallback` | 42.70 | 132.97 | 0.32 | 51.73 | 111.96 | 0.46 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_interpolate` | 36.27 | 95.13 | 0.38 | 34.15 | 97.71 | 0.35 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `fir_interpolate_cq15` | 51.51 | 137.49 | 0.37 | 53.70 | 207.96 | 0.26 | sdrk fallback |
+| `fir_interpolate_cq15_fallback` | 137.49 | 137.61 | 1.00 | 207.96 | 164.43 | 1.26 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_interpolate_fallback` | 69.81 | 141.75 | 0.49 | 71.88 | 114.81 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_interpolate_real` | 19.44 | 72.80 | 0.27 | 18.18 | 62.85 | 0.29 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
+| `fir_interpolate_real_fallback` | 42.43 | 70.88 | 0.60 | 44.68 | 57.41 | 0.78 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate_real_q15` | 26.86 | 74.97 | 0.36 | 32.49 | 112.89 | 0.29 | sdrk fallback |
-| `fir_interpolate_real_q15_fallback` | 74.97 | 68.81 | 1.09 | 112.89 | 82.15 | 1.37 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `resample` | 38.71 | 96.79 | 0.40 | 35.44 | 97.79 | 0.36 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 50.01 | 168.56 | 0.30 | 51.67 | 240.62 | 0.21 | sdrk fallback |
-| `resample_cq15_fallback` | 168.56 | 136.68 | 1.23 | 240.62 | 163.47 | 1.47 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `resample_fallback` | 84.56 | 141.22 | 0.60 | 86.78 | 113.81 | 0.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `resample_real` | 22.44 | 73.99 | 0.30 | 21.74 | 63.40 | 0.34 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
-| `resample_real_fallback` | 84.65 | 70.61 | 1.20 | 75.06 | 56.90 | 1.32 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_interpolate_real_q15_fallback` | 74.97 | 68.81 | 1.09 | 112.89 | 82.21 | 1.37 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `resample` | 38.79 | 96.79 | 0.40 | 35.04 | 98.80 | 0.35 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 50.01 | 168.56 | 0.30 | 51.87 | 240.71 | 0.22 | sdrk fallback |
+| `resample_cq15_fallback` | 168.56 | 136.68 | 1.23 | 240.71 | 163.55 | 1.47 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `resample_fallback` | 84.56 | 141.22 | 0.60 | 86.87 | 113.81 | 0.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `resample_real` | 22.42 | 73.99 | 0.30 | 21.79 | 63.40 | 0.34 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
+| `resample_real_fallback` | 84.65 | 70.61 | 1.20 | 75.11 | 56.90 | 1.32 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `resample_real_q15` | 26.11 | 103.68 | 0.25 | 31.59 | 144.23 | 0.22 | sdrk fallback |
-| `resample_real_q15_fallback` | 103.68 | 68.34 | 1.52 | 144.23 | 81.74 | 1.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `resample_real_q15_fallback` | 103.68 | 68.34 | 1.52 | 144.23 | 81.78 | 1.76 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mag` | 0.76 | 0.79 | 0.96 | 1.77 | 1.80 | 0.98 | volk_32fc_magnitude_32f |
 | `mag_fallback` | 0.79 | 0.85 | 0.93 | 1.79 | 1.86 | 0.96 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mag_q15` | 2.27 | 6.47 | 0.35 | 3.44 | 6.78 | 0.51 | volk_16ic_magnitude_16i |
@@ -1263,16 +1263,16 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `mag_sq_fallback` | 0.52 | 0.65 | 0.80 | 0.67 | 0.84 | 0.80 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mag_sq_q15` | 0.33 | 0.41 | 0.80 | 0.33 | 0.48 | 0.69 | sdrk fallback |
 | `mag_sq_q15_fallback` | 0.41 | 3.71 | 0.11 | 0.48 | 2.77 | 0.17 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `quad_demod` | 8.50 | 107.41 | 0.08 | 10.10 | 92.94 | 0.11 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod` | 8.50 | 107.41 | 0.08 | 10.10 | 93.93 | 0.11 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
 | `quad_demod_cq15` | 12.77 | 94.87 | 0.13 | 12.48 | 97.68 | 0.13 | sdrk fallback |
-| `quad_demod_cq15_fallback` | 94.87 | 130.34 | 0.73 | 97.68 | 118.42 | 0.82 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
-| `quad_demod_fallback` | 51.20 | 68.55 | 0.75 | 49.82 | 63.51 | 0.78 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
+| `quad_demod_cq15_fallback` | 94.87 | 130.34 | 0.73 | 97.68 | 119.37 | 0.82 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
+| `quad_demod_fallback` | 51.20 | 68.55 | 0.75 | 49.82 | 63.79 | 0.78 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
 | `fm_mod` | 6.98 | 47.68 | 0.15 | 6.61 | 60.01 | 0.11 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
 | `fm_mod_cq15` | 6.57 | 12.31 | 0.53 | 4.95 | 11.93 | 0.41 | sdrk fallback |
 | `fm_mod_cq15_fallback` | 12.31 | 25.62 | 0.48 | 11.93 | 23.96 | 0.50 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fm_mod_fallback` | 8.94 | 47.68 | 0.19 | 10.89 | 60.01 | 0.18 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `squelch` | 12.13 | 27.74 | 0.44 | 9.13 | 26.36 | 0.35 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
-| `squelch_cq15` | 7.60 | 7.60 | 1.00 | 8.10 | 8.10 | 1.00 | sdrk fallback |
+| `squelch` | 12.13 | 27.74 | 0.44 | 9.13 | 26.37 | 0.35 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
+| `squelch_cq15` | 7.60 | 7.60 | 1.00 | 8.11 | 8.11 | 1.00 | sdrk fallback |
 | `window` | 0.54 | 0.65 | 0.83 | 0.68 | 0.78 | 0.87 | volk_32fc_32f_multiply_32fc |
 | `window_cq15` | 0.48 | 1.46 | 0.33 | 0.53 | 1.49 | 0.36 | sdrk fallback |
 | `window_cq15_fallback` | 1.46 | 1.53 | 0.95 | 1.49 | 1.53 | 0.97 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
@@ -1280,24 +1280,24 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `power_db` | 6.83 | 4.62 | 1.48 | 7.79 | 4.98 | 1.56 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
 | `power_db_fallback` | 8.96 | 55.94 | 0.16 | 10.71 | 49.41 | 0.22 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `power_db_q15` | 5.30 | 9.62 | 0.55 | 5.08 | 11.84 | 0.43 | sdrk fallback |
-| `power_db_q15_fallback` | 9.62 | 56.34 | 0.17 | 11.84 | 49.83 | 0.24 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `power_db_q15_fallback` | 9.62 | 56.34 | 0.17 | 11.84 | 49.84 | 0.24 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `agc` | 13.76 | 42.10 | 0.33 | 11.54 | 38.11 | 0.30 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
 | `agc_cq15` | 85.25 | 85.25 | 1.00 | 82.80 | 82.80 | 1.00 | sdrk fallback |
 | `agc_fallback` | 18.78 | 42.10 | 0.45 | 17.66 | 38.11 | 0.46 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
 | `dc_block` | 5.04 | 10.03 | 0.50 | 4.28 | 7.04 | 0.61 | sdrk fallback |
 | `dc_block_cq15` | 8.06 | 8.06 | 1.00 | 10.05 | 10.05 | 1.00 | sdrk fallback |
-| `dc_block_fallback` | 10.03 | 56.29 | 0.18 | 7.04 | 51.18 | 0.14 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
+| `dc_block_fallback` | 10.03 | 56.29 | 0.18 | 7.04 | 51.26 | 0.14 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real` | 4.09 | 10.03 | 0.41 | 3.65 | 7.04 | 0.52 | sdrk fallback |
 | `dc_block_real_fallback` | 10.03 | 46.19 | 0.22 | 7.04 | 43.86 | 0.16 | liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real_q15` | 6.06 | 6.06 | 1.00 | 7.55 | 7.55 | 1.00 | sdrk fallback |
 | `deemphasis` | 3.77 | 15.09 | 0.25 | 3.64 | 11.09 | 0.33 | sdrk fallback |
-| `deemphasis_fallback` | 15.09 | 13.15 | 1.15 | 11.09 | 17.10 | 0.65 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
+| `deemphasis_fallback` | 15.09 | 13.15 | 1.15 | 11.09 | 17.11 | 0.65 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
 | `deemphasis_q15` | 7.03 | 7.03 | 1.00 | 8.53 | 8.53 | 1.00 | sdrk fallback |
-| `biquad` | 12.68 | 27.87 | 0.46 | 9.42 | 27.34 | 0.34 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse42, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
+| `biquad` | 12.68 | 27.87 | 0.46 | 9.42 | 28.09 | 0.34 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse42, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
 | `biquad_cq15` | 16.13 | 24.43 | 0.66 | 15.63 | 31.16 | 0.50 | sdrk fallback |
 | `biquad_cq15_fallback` | 24.43 | 60.21 | 0.41 | 31.16 | 52.19 | 0.60 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `biquad_fallback` | 25.00 | 32.54 | 0.77 | 18.60 | 24.54 | 0.76 | CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `biquad_real` | 12.12 | 13.94 | 0.87 | 9.05 | 13.67 | 0.66 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse42, -ffp-contract=off) |
+| `biquad_real` | 12.12 | 13.94 | 0.87 | 9.05 | 14.05 | 0.64 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (sse42, -ffp-contract=off) |
 | `biquad_real_fallback` | 14.52 | 24.04 | 0.60 | 11.31 | 18.03 | 0.63 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `biquad_real_q15` | 12.08 | 14.13 | 0.85 | 11.32 | 15.13 | 0.75 | sdrk fallback |
 | `biquad_real_q15_fallback` | 14.13 | 30.11 | 0.47 | 15.13 | 26.10 | 0.58 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
@@ -1311,7 +1311,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `dot_real_fallback` | 4.04 | 4.04 | 1.00 | 3.03 | 3.03 | 1.00 | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `dot_real_q15` | 0.35 | 1.03 | 0.34 | 0.35 | 0.72 | 0.49 | sdrk fallback |
 | `dot_real_q15_fallback` | 1.03 | 1.02 | 1.01 | 0.72 | 0.75 | 0.95 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `scale` | 0.51 | 0.64 | 0.80 | 0.43 | 0.79 | 0.54 | volk_32f_s32f_multiply_32f |
+| `scale` | 0.51 | 0.64 | 0.80 | 0.51 | 0.79 | 0.64 | volk_32f_s32f_multiply_32f |
 | `scale_cq15` | 0.26 | 1.10 | 0.24 | 0.26 | 1.02 | 0.26 | sdrk fallback |
 | `scale_cq15_fallback` | 1.10 | 1.78 | 0.62 | 1.02 | 1.65 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `scale_fallback` | 0.52 | 0.63 | 0.82 | 0.58 | 0.79 | 0.74 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
@@ -1331,36 +1331,36 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `mul_real_fallback` | 0.29 | 0.36 | 0.82 | 0.36 | 0.46 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `mul_real_q15` | 0.20 | 0.67 | 0.30 | 0.24 | 0.55 | 0.43 | sdrk fallback |
 | `mul_real_q15_fallback` | 0.67 | 0.64 | 1.04 | 0.55 | 0.71 | 0.78 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `interleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.26 | 0.26 | 0.99 | 0.24 | 0.31 | 0.78 | sdrk fallback |
+| `interleave` | 0.51 | 0.52 | 0.98 | 0.51 | 0.64 | 0.79 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.26 | 0.26 | 0.99 | 0.26 | 0.31 | 0.84 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.26 | 0.26 | 1.00 | 0.31 | 0.33 | 0.95 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `interleave_fallback` | 0.51 | 0.52 | 0.98 | 0.61 | 0.64 | 0.94 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
-| `deinterleave` | 0.51 | 0.52 | 0.98 | 0.47 | 0.64 | 0.73 | volk_32fc_deinterleave_32f_x2 |
-| `deinterleave_cq15` | 0.51 | 0.52 | 0.99 | 0.30 | 0.48 | 0.63 | volk_16ic_deinterleave_16i_x2 |
+| `deinterleave` | 0.51 | 0.52 | 0.98 | 0.51 | 0.65 | 0.79 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave_cq15` | 0.51 | 0.52 | 0.99 | 0.30 | 0.49 | 0.63 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.52 | 0.51 | 1.00 | 0.48 | 0.55 | 0.89 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `deinterleave_fallback` | 0.51 | 0.58 | 0.88 | 0.54 | 0.71 | 0.77 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `oscillate` | 2.29 | 4.90 | 0.47 | 2.57 | 6.35 | 0.40 | sdrk fallback |
 | `oscillate_cq15` | 2.61 | 8.08 | 0.32 | 3.04 | 7.08 | 0.43 | sdrk fallback |
 | `oscillate_cq15_fallback` | 8.08 | 21.81 | 0.37 | 7.08 | 19.33 | 0.37 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `oscillate_fallback` | 4.90 | 51.98 | 0.09 | 6.35 | 50.82 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_1024` | 7.20 | 9.32 | 0.77 | 6.39 | 9.28 | 0.69 | rustfft (FftPlanner, forward, in place) |
-| `fft_1024_fallback` | 31.40 | 25.79 | 1.22 | 30.67 | 28.44 | 1.08 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_4096` | 8.15 | 10.68 | 0.76 | 7.34 | 10.64 | 0.69 | rustfft (FftPlanner, forward, in place) |
-| `fft_4096_fallback` | 37.57 | 30.53 | 1.23 | 36.84 | 32.74 | 1.13 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_64` | 4.46 | 8.57 | 0.52 | 3.91 | 7.93 | 0.49 | rustfft (FftPlanner, forward, in place) |
-| `fft_64_fallback` | 20.02 | 15.17 | 1.32 | 19.66 | 17.65 | 1.11 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_cq15_1024` | 6.32 | 52.83 | 0.12 | 7.31 | 62.25 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default` | 5.28 | 52.83 | 0.10 | 5.92 | 62.25 | 0.10 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default_fallback` | 45.87 | 44.80 | 1.02 | 46.88 | 56.09 | 0.84 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_cq15_1024_fallback` | 76.35 | 44.80 | 1.70 | 77.17 | 56.09 | 1.38 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_cq15_1024_full_scale` | 5.76 | 52.83 | 0.11 | 6.26 | 62.25 | 0.10 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `rfft_1024` | 4.71 | 5.63 | 0.84 | 4.39 | 4.62 | 0.95 | FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place) |
-| `rfft_1024_fallback` | 16.64 | 13.39 | 1.24 | 16.44 | 14.51 | 1.13 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fft_1024` | 7.20 | 9.32 | 0.77 | 6.37 | 9.55 | 0.67 | rustfft (FftPlanner, forward, in place) |
+| `fft_1024_fallback` | 31.40 | 25.79 | 1.22 | 30.63 | 28.60 | 1.07 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fft_4096` | 8.15 | 10.68 | 0.76 | 7.32 | 10.77 | 0.68 | rustfft (FftPlanner, forward, in place) |
+| `fft_4096_fallback` | 37.57 | 30.53 | 1.23 | 36.80 | 32.90 | 1.12 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fft_64` | 4.46 | 8.57 | 0.52 | 3.95 | 8.08 | 0.49 | rustfft (FftPlanner, forward, in place) |
+| `fft_64_fallback` | 20.02 | 15.17 | 1.32 | 19.61 | 17.78 | 1.10 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fft_cq15_1024` | 6.27 | 52.83 | 0.12 | 7.29 | 63.00 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default` | 5.39 | 52.83 | 0.10 | 6.16 | 63.00 | 0.10 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default_fallback` | 45.87 | 44.80 | 1.02 | 46.95 | 56.34 | 0.83 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fft_cq15_1024_fallback` | 76.35 | 44.80 | 1.70 | 77.17 | 56.34 | 1.37 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fft_cq15_1024_full_scale` | 5.83 | 52.83 | 0.11 | 6.27 | 63.00 | 0.10 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `rfft_1024` | 4.71 | 5.63 | 0.84 | 4.42 | 4.58 | 0.96 | FFTW (fftwf_plan_dft_r2c_1d, FFTW_ESTIMATE, forward, out of place) |
+| `rfft_1024_fallback` | 16.64 | 13.39 | 1.24 | 16.45 | 14.58 | 1.13 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `am_mod` | 1.09 | 1.09 | 1.00 | 1.16 | 1.16 | 1.00 | sdrk fallback |
-| `am_mod_cq15` | 0.31 | 1.23 | 0.25 | 0.36 | 1.15 | 0.32 | sdrk fallback |
-| `am_mod_cq15_fallback` | 1.23 | 3.17 | 0.39 | 1.15 | 3.57 | 0.32 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `am_mod_cq15` | 0.31 | 1.23 | 0.25 | 0.37 | 1.15 | 0.32 | sdrk fallback |
+| `am_mod_cq15_fallback` | 1.23 | 3.17 | 0.39 | 1.15 | 3.60 | 0.32 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
-| `auto_notch` | 233.12 | 233.12 | 1.00 | 207.22 | 207.22 | 1.00 | sdrk fallback |
+| `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 45.77 | 45.77 | 1.00 | 52.53 | 52.53 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 227.20 | 227.20 | 1.00 | 212.46 | 212.46 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
@@ -1368,51 +1368,51 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_block` | 26.51 | 26.51 | 1.00 | 27.84 | 27.84 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.83 | 166.73 | 0.32 | 58.12 | 180.51 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 115.06 | 115.06 | 1.00 | 98.55 | 98.55 | 1.00 | sdrk fallback |
-| `costas_fallback` | 115.06 | 86.69 | 1.33 | 98.55 | 80.45 | 1.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 115.06 | 86.69 | 1.33 | 98.55 | 80.46 | 1.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 146.43 | 146.43 | 1.00 | 157.81 | 157.81 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 146.43 | 168.47 | 0.87 | 157.81 | 201.30 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 5.81 | 5.81 | 1.00 | 7.68 | 7.68 | 1.00 | sdrk fallback |
-| `frame_decode_block` | 5.71 | 5.71 | 1.00 | 7.77 | 7.77 | 1.00 | sdrk fallback |
-| `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.78 | 1.78 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 6.77 | 59.03 | 0.11 | 7.67 | 50.41 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2) |
-| `halfband_decimate_cq15` | 13.12 | 23.94 | 0.55 | 12.99 | 21.81 | 0.60 | sdrk fallback |
+| `equalize` | 146.43 | 146.43 | 1.00 | 157.82 | 157.82 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 146.43 | 168.47 | 0.87 | 157.82 | 201.30 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `frame_decode` | 6.25 | 6.25 | 1.00 | 8.50 | 8.50 | 1.00 | sdrk fallback |
+| `frame_decode_block` | 6.06 | 6.06 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
+| `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
+| `halfband_decimate` | 6.77 | 59.03 | 0.11 | 7.75 | 50.48 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2) |
+| `halfband_decimate_cq15` | 13.12 | 23.94 | 0.55 | 13.02 | 21.81 | 0.60 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 23.94 | 38.80 | 0.62 | 21.81 | 47.25 | 0.46 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `halfband_decimate_fallback` | 15.73 | 82.14 | 0.19 | 17.79 | 69.50 | 0.26 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
-| `halfband_decimate_real` | 3.68 | 53.52 | 0.07 | 3.92 | 48.18 | 0.08 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
-| `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.00 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
-| `halfband_decimate_real_q15` | 6.20 | 16.50 | 0.38 | 5.32 | 16.82 | 0.32 | sdrk fallback |
+| `halfband_decimate_fallback` | 15.73 | 82.14 | 0.19 | 17.79 | 69.57 | 0.26 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
+| `halfband_decimate_real` | 3.68 | 53.52 | 0.07 | 4.01 | 48.28 | 0.08 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
+| `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.10 | 0.25 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
+| `halfband_decimate_real_q15` | 6.20 | 16.50 | 0.38 | 5.37 | 16.82 | 0.32 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 16.50 | 19.39 | 0.85 | 16.82 | 23.61 | 0.71 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `halfband_ref_fir_decimate` | 13.07 | 29.62 | 0.44 | 12.40 | 29.79 | 0.42 | sdrk fallback |
-| `halfband_ref_fir_decimate_cq15` | 19.30 | 60.59 | 0.32 | 19.62 | 86.10 | 0.23 | sdrk fallback |
-| `halfband_ref_shifted` | 9.48 | 18.49 | 0.51 | 11.20 | 21.34 | 0.52 | sdrk fallback |
-| `halfband_ref_shifted_cq15` | 16.03 | 26.84 | 0.60 | 17.15 | 25.98 | 0.66 | sdrk fallback |
-| `morse_decode_block` | 16.62 | 16.62 | 1.00 | 20.31 | 20.31 | 1.00 | sdrk fallback |
+| `halfband_ref_fir_decimate` | 13.07 | 29.62 | 0.44 | 12.41 | 29.82 | 0.42 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 19.30 | 60.59 | 0.32 | 19.67 | 86.10 | 0.23 | sdrk fallback |
+| `halfband_ref_shifted` | 9.50 | 18.49 | 0.51 | 11.27 | 21.34 | 0.53 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 16.03 | 26.84 | 0.60 | 17.17 | 25.98 | 0.66 | sdrk fallback |
+| `morse_decode_block` | 16.62 | 16.62 | 1.00 | 20.30 | 20.30 | 1.00 | sdrk fallback |
 | `morse_encode_block` | 6.60 | 6.60 | 1.00 | 7.58 | 7.58 | 1.00 | sdrk fallback |
-| `noise_blank` | 15.92 | 15.92 | 1.00 | 11.82 | 11.82 | 1.00 | sdrk fallback |
-| `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.54 | 10.54 | 1.00 | sdrk fallback |
-| `preemph_limit` | 16.13 | 16.13 | 1.00 | 11.29 | 11.29 | 1.00 | sdrk fallback |
+| `noise_blank` | 15.92 | 15.92 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 9.59 | 9.59 | 1.00 | 10.59 | 10.59 | 1.00 | sdrk fallback |
+| `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.42 | 11.42 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 44.50 | 44.51 | 1.00 | 38.75 | 38.75 | 1.00 | sdrk fallback |
+| `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 44.51 | 44.50 | 1.00 | 39.67 | 39.68 | 1.00 | sdrk fallback |
 | `rds_shape` | 78.95 | 78.95 | 1.00 | 71.83 | 71.83 | 1.00 | sdrk fallback |
-| `real_to_complex` | 5.34 | 55.36 | 0.10 | 5.42 | 50.15 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
-| `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.87 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
-| `real_to_complex_cq15_fallback` | 22.69 | 10.87 | 2.09 | 23.47 | 13.87 | 1.69 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
-| `real_to_complex_fallback` | 17.36 | 70.45 | 0.25 | 19.88 | 56.98 | 0.35 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
+| `real_to_complex` | 5.34 | 55.36 | 0.10 | 5.44 | 50.25 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
+| `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.90 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
+| `real_to_complex_cq15_fallback` | 22.69 | 10.87 | 2.09 | 23.68 | 13.90 | 1.70 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
+| `real_to_complex_fallback` | 17.36 | 70.45 | 0.25 | 19.91 | 57.08 | 0.35 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
 | `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 14.16 | 14.16 | 1.00 | 15.14 | 15.14 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.48 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.51 | 1.52 | 0.34 | 0.53 | 0.83 | 0.64 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 1.52 | 3.43 | 0.44 | 0.83 | 2.20 | 0.38 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `stereo_matrix_fallback` | 1.52 | 1.07 | 1.42 | 1.46 | 1.38 | 1.06 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `stereo_pll_fallback` | 88.29 | 71.63 | 1.23 | 77.34 | 62.55 | 1.24 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse4.2) |
-| `stereo_pll_q15_fallback` | 38.04 | 55.57 | 0.68 | 38.05 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `symbol_sync` | 49.82 | 49.82 | 1.00 | 37.86 | 37.86 | 1.00 | sdrk fallback |
+| `stereo_pll_fallback` | 88.29 | 71.63 | 1.23 | 77.34 | 63.55 | 1.22 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse4.2) |
+| `stereo_pll_q15_fallback` | 38.04 | 55.57 | 0.68 | 38.06 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `symbol_sync` | 49.82 | 49.82 | 1.00 | 38.10 | 38.10 | 1.00 | sdrk fallback |
 | `symbol_sync_real` | 23.29 | 23.29 | 1.00 | 18.29 | 18.29 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
@@ -1423,16 +1423,16 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 
 | Entry | ours znver3 (cycles/sample) | comparison znver3 (cycles/sample) | ratio znver3 (ours/comparison) | ours alderlake (cycles/sample) | comparison alderlake (cycles/sample) | ratio alderlake (ours/comparison) | comparison |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `convert_cq15_cs8` | 0.28 | 0.29 | 0.99 | 0.14 | 0.18 | 0.76 | volk_8i_convert_16i |
-| `convert_cq15_cs8_fallback` | 0.28 | 0.26 | 1.09 | 0.14 | 0.20 | 0.69 | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `convert_cq15_cu8` | 0.26 | 0.29 | 0.92 | 0.14 | 0.18 | 0.80 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
-| `convert_cq15_cu8_fallback` | 0.26 | 0.26 | 1.01 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `convert_cs16` | 0.41 | 0.43 | 0.96 | 0.27 | 0.38 | 0.71 | volk_16i_s32f_convert_32f |
-| `convert_cs16_fallback` | 0.42 | 0.39 | 1.06 | 0.29 | 0.40 | 0.72 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `convert_cs8` | 0.41 | 0.48 | 0.86 | 0.26 | 0.32 | 0.84 | volk_8i_s32f_convert_32f |
-| `convert_cs8_fallback` | 0.42 | 0.58 | 0.72 | 0.29 | 0.58 | 0.50 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `convert_cu8` | 0.44 | 0.48 | 0.91 | 0.27 | 0.32 | 0.84 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
-| `convert_cu8_fallback` | 0.51 | 0.58 | 0.88 | 0.37 | 0.58 | 0.64 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `convert_cq15_cs8` | 0.14 | 0.14 | 0.97 | 0.14 | 0.18 | 0.76 | volk_8i_convert_16i |
+| `convert_cq15_cs8_fallback` | 0.14 | 0.26 | 0.53 | 0.14 | 0.20 | 0.69 | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `convert_cq15_cu8` | 0.14 | 0.14 | 0.97 | 0.14 | 0.18 | 0.80 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cq15_cu8_fallback` | 0.14 | 0.26 | 0.53 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `convert_cs16` | 0.26 | 0.32 | 0.81 | 0.27 | 0.38 | 0.71 | volk_16i_s32f_convert_32f |
+| `convert_cs16_fallback` | 0.27 | 0.39 | 0.68 | 0.29 | 0.40 | 0.72 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `convert_cs8` | 0.26 | 0.48 | 0.55 | 0.27 | 0.32 | 0.84 | volk_8i_s32f_convert_32f |
+| `convert_cs8_fallback` | 0.27 | 0.58 | 0.46 | 0.29 | 0.58 | 0.50 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `convert_cu8` | 0.27 | 0.48 | 0.55 | 0.27 | 0.32 | 0.84 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cu8_fallback` | 0.28 | 0.58 | 0.49 | 0.37 | 0.58 | 0.64 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `convert_out_cs16` | 0.45 | 0.46 | 0.99 | 0.55 | 0.53 | 1.04 | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 0.77 | 0.46 | 1.65 | 0.73 | 0.58 | 1.25 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `convert_out_cs8` | 0.43 | 0.50 | 0.87 | 0.56 | 0.52 | 1.07 | volk_32f_s32f_convert_8i |
@@ -1445,64 +1445,64 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `convert_out_real_rs8_fallback` | 0.54 | 0.26 | 2.06 | 0.52 | 0.32 | 1.64 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `convert_out_real_ru8` | 0.28 | 0.28 | 1.00 | 0.34 | 0.30 | 1.13 | volk_32f_s32f_x2_convert_8u |
 | `convert_out_real_ru8_fallback` | 0.84 | 0.26 | 3.22 | 0.92 | 0.32 | 2.91 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `convert_real_rs16` | 0.21 | 0.22 | 0.98 | 0.14 | 0.19 | 0.73 | volk_16i_s32f_convert_32f |
-| `convert_real_rs16_fallback` | 0.21 | 0.20 | 1.06 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `rotate` | 0.66 | 3.20 | 0.21 | 0.57 | 3.04 | 0.19 | volk_32fc_s32fc_x2_rotator2_32fc |
-| `rotate_cq15` | 1.12 | 6.96 | 0.16 | 1.20 | 4.78 | 0.25 | sdrk fallback |
-| `rotate_cq15_fallback` | 6.96 | 29.23 | 0.24 | 4.78 | 26.70 | 0.18 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `rotate_fallback` | 2.65 | 10.64 | 0.25 | 4.41 | 11.16 | 0.40 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
-| `fir` | 9.63 | 58.05 | 0.17 | 9.43 | 74.35 | 0.13 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 66.88 | 66.88 | 1.00 | 61.16 | 61.16 | 1.00 | sdrk fallback |
-| `fir_cq15_fallback` | 66.88 | 145.39 | 0.46 | 61.16 | 154.81 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_decimate` | 2.40 | 9.29 | 0.26 | 2.10 | 12.80 | 0.16 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
-| `fir_decimate_cq15` | 20.13 | 20.13 | 1.00 | 17.45 | 17.45 | 1.00 | sdrk fallback |
-| `fir_decimate_cq15_fallback` | 20.13 | 42.02 | 0.48 | 17.45 | 17.53 | 1.00 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_decimate_fallback` | 11.63 | 71.28 | 0.16 | 11.55 | 32.93 | 0.35 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `convert_real_rs16` | 0.14 | 0.17 | 0.84 | 0.14 | 0.19 | 0.73 | volk_16i_s32f_convert_32f |
+| `convert_real_rs16_fallback` | 0.14 | 0.20 | 0.69 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `rotate` | 0.66 | 3.19 | 0.21 | 0.57 | 3.05 | 0.19 | volk_32fc_s32fc_x2_rotator2_32fc |
+| `rotate_cq15` | 1.12 | 4.49 | 0.25 | 1.20 | 5.49 | 0.22 | sdrk fallback |
+| `rotate_cq15_fallback` | 4.49 | 29.18 | 0.15 | 5.49 | 25.57 | 0.21 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `rotate_fallback` | 2.65 | 10.64 | 0.25 | 4.41 | 11.16 | 0.39 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
+| `fir` | 9.63 | 58.05 | 0.17 | 8.85 | 72.63 | 0.12 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
+| `fir_cq15` | 40.62 | 40.62 | 1.00 | 61.15 | 61.15 | 1.00 | sdrk fallback |
+| `fir_cq15_fallback` | 40.62 | 144.83 | 0.28 | 61.15 | 154.65 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_decimate` | 2.41 | 9.29 | 0.26 | 2.09 | 12.60 | 0.17 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
+| `fir_decimate_cq15` | 21.62 | 21.62 | 1.00 | 22.06 | 22.06 | 1.00 | sdrk fallback |
+| `fir_decimate_cq15_fallback` | 21.62 | 42.02 | 0.51 | 22.06 | 17.52 | 1.26 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_decimate_fallback` | 11.63 | 71.28 | 0.16 | 11.54 | 32.88 | 0.35 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir_fallback` | 31.56 | 51.44 | 0.61 | 30.50 | 80.42 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_interpolate` | 12.35 | 66.84 | 0.18 | 11.91 | 78.40 | 0.15 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 79.42 | 79.42 | 1.00 | 73.46 | 73.46 | 1.00 | sdrk fallback |
-| `fir_interpolate_cq15_fallback` | 79.42 | 137.86 | 0.58 | 73.46 | 152.94 | 0.48 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_interpolate_fallback` | 41.06 | 102.01 | 0.40 | 38.06 | 101.03 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_interpolate_real` | 7.35 | 83.60 | 0.09 | 7.06 | 95.25 | 0.07 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
-| `fir_interpolate_real_fallback` | 25.86 | 51.01 | 0.51 | 24.05 | 50.51 | 0.48 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_interpolate_real_q15` | 42.31 | 42.31 | 1.00 | 31.01 | 31.01 | 1.00 | sdrk fallback |
-| `fir_interpolate_real_q15_fallback` | 42.31 | 68.93 | 0.61 | 31.01 | 76.47 | 0.41 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `resample` | 14.89 | 68.15 | 0.22 | 14.00 | 79.63 | 0.18 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 109.92 | 109.92 | 1.00 | 91.00 | 91.00 | 1.00 | sdrk fallback |
-| `resample_cq15_fallback` | 109.92 | 136.79 | 0.80 | 91.00 | 152.19 | 0.60 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `resample_fallback` | 64.91 | 101.06 | 0.64 | 61.70 | 100.27 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `resample_real` | 9.89 | 84.38 | 0.12 | 9.07 | 96.50 | 0.09 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
-| `resample_real_fallback` | 61.17 | 50.53 | 1.21 | 74.48 | 50.13 | 1.49 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `resample_real_q15` | 75.87 | 112.81 | 0.67 | 68.68 | 91.36 | 0.75 | sdrk fallback |
-| `resample_real_q15_fallback` | 112.81 | 68.40 | 1.65 | 91.36 | 76.10 | 1.20 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `mag` | 0.76 | 0.91 | 0.84 | 0.38 | 0.53 | 0.72 | volk_32fc_magnitude_32f |
-| `mag_fallback` | 0.90 | 1.15 | 0.78 | 0.38 | 0.59 | 0.64 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `mag_q15` | 0.97 | 1.06 | 0.92 | 0.81 | 0.91 | 0.89 | volk_16ic_magnitude_16i |
-| `mag_q15_fallback` | 1.93 | 79.45 | 0.02 | 1.28 | 83.53 | 0.02 | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `mag_sq` | 0.22 | 0.33 | 0.68 | 0.26 | 0.52 | 0.50 | volk_32fc_magnitude_squared_32f |
+| `fir_interpolate` | 12.38 | 66.84 | 0.19 | 11.36 | 76.70 | 0.15 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `fir_interpolate_cq15` | 52.45 | 52.45 | 1.00 | 71.49 | 71.49 | 1.00 | sdrk fallback |
+| `fir_interpolate_cq15_fallback` | 52.45 | 136.94 | 0.38 | 71.49 | 136.97 | 0.52 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_interpolate_fallback` | 41.06 | 101.68 | 0.40 | 38.06 | 101.03 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_interpolate_real` | 7.36 | 83.60 | 0.09 | 6.78 | 93.79 | 0.07 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
+| `fir_interpolate_real_fallback` | 25.86 | 50.84 | 0.51 | 24.05 | 50.51 | 0.48 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_interpolate_real_q15` | 42.12 | 42.12 | 1.00 | 38.06 | 38.06 | 1.00 | sdrk fallback |
+| `fir_interpolate_real_q15_fallback` | 42.12 | 68.47 | 0.62 | 38.06 | 68.49 | 0.56 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `resample` | 14.85 | 68.15 | 0.22 | 14.01 | 77.87 | 0.18 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 117.54 | 117.54 | 1.00 | 113.21 | 113.21 | 1.00 | sdrk fallback |
+| `resample_cq15_fallback` | 117.54 | 136.18 | 0.86 | 113.21 | 136.22 | 0.83 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `resample_fallback` | 64.91 | 100.83 | 0.64 | 61.67 | 100.27 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `resample_real` | 9.82 | 84.38 | 0.12 | 9.13 | 94.98 | 0.10 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
+| `resample_real_fallback` | 61.16 | 50.42 | 1.21 | 69.86 | 50.13 | 1.39 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `resample_real_q15` | 62.01 | 112.75 | 0.55 | 68.67 | 99.55 | 0.69 | sdrk fallback |
+| `resample_real_q15_fallback` | 112.75 | 68.09 | 1.66 | 99.55 | 68.11 | 1.46 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `mag` | 0.76 | 0.91 | 0.84 | 0.76 | 0.78 | 0.97 | volk_32fc_magnitude_32f |
+| `mag_fallback` | 0.90 | 1.15 | 0.78 | 0.78 | 0.83 | 0.94 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `mag_q15` | 0.97 | 1.06 | 0.92 | 0.98 | 0.92 | 1.07 | volk_16ic_magnitude_16i |
+| `mag_q15_fallback` | 1.93 | 79.45 | 0.02 | 1.30 | 83.02 | 0.02 | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `mag_sq` | 0.22 | 0.33 | 0.67 | 0.26 | 0.52 | 0.50 | volk_32fc_magnitude_squared_32f |
 | `mag_sq_fallback` | 0.29 | 0.52 | 0.55 | 0.32 | 0.53 | 0.61 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `mag_sq_q15` | 0.14 | 0.20 | 0.70 | 0.18 | 0.23 | 0.80 | sdrk fallback |
+| `mag_sq_q15` | 0.14 | 0.20 | 0.69 | 0.18 | 0.23 | 0.80 | sdrk fallback |
 | `mag_sq_q15_fallback` | 0.20 | 2.17 | 0.09 | 0.23 | 1.84 | 0.12 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `quad_demod` | 2.60 | 3.61 | 0.72 | 2.12 | 3.70 | 0.57 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
-| `quad_demod_cq15` | 4.40 | 71.20 | 0.06 | 4.01 | 66.50 | 0.06 | sdrk fallback |
-| `quad_demod_cq15_fallback` | 71.20 | 85.94 | 0.83 | 66.50 | 64.56 | 1.03 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
-| `quad_demod_fallback` | 39.05 | 865.81 | 0.05 | 32.76 | 131.57 | 0.25 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
-| `fm_mod` | 2.06 | 105.76 | 0.02 | 2.13 | 25.53 | 0.08 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `fm_mod_cq15` | 1.93 | 8.71 | 0.22 | 2.16 | 6.06 | 0.36 | sdrk fallback |
-| `fm_mod_cq15_fallback` | 8.71 | 21.41 | 0.41 | 6.06 | 20.60 | 0.29 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fm_mod_fallback` | 5.34 | 105.76 | 0.05 | 6.42 | 25.53 | 0.25 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `squelch` | 9.13 | 20.51 | 0.45 | 10.13 | 15.33 | 0.66 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
+| `quad_demod_cq15` | 4.40 | 71.20 | 0.06 | 4.01 | 66.54 | 0.06 | sdrk fallback |
+| `quad_demod_cq15_fallback` | 71.20 | 84.76 | 0.84 | 66.54 | 64.37 | 1.03 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
+| `quad_demod_fallback` | 39.05 | 865.81 | 0.05 | 32.80 | 130.25 | 0.25 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
+| `fm_mod` | 2.06 | 105.76 | 0.02 | 2.13 | 25.57 | 0.08 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `fm_mod_cq15` | 1.93 | 7.53 | 0.26 | 2.16 | 7.91 | 0.27 | sdrk fallback |
+| `fm_mod_cq15_fallback` | 7.53 | 21.41 | 0.35 | 7.91 | 19.58 | 0.40 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fm_mod_fallback` | 5.34 | 105.76 | 0.05 | 6.42 | 25.57 | 0.25 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `squelch` | 9.13 | 20.51 | 0.45 | 10.13 | 15.26 | 0.66 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
 | `squelch_cq15` | 5.56 | 5.56 | 1.00 | 6.95 | 6.95 | 1.00 | sdrk fallback |
 | `window` | 0.33 | 0.38 | 0.87 | 0.26 | 0.53 | 0.49 | volk_32fc_32f_multiply_32fc |
 | `window_cq15` | 0.22 | 0.56 | 0.39 | 0.21 | 0.56 | 0.37 | sdrk fallback |
 | `window_cq15_fallback` | 0.56 | 0.75 | 0.75 | 0.56 | 0.82 | 0.68 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `window_fallback` | 0.39 | 0.41 | 0.97 | 0.36 | 0.38 | 0.94 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `power_db` | 1.85 | 1.18 | 1.57 | 1.88 | 1.52 | 1.24 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
-| `power_db_fallback` | 2.76 | 38.52 | 0.07 | 2.08 | 42.52 | 0.05 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `power_db_q15` | 1.92 | 3.05 | 0.63 | 1.89 | 2.46 | 0.77 | sdrk fallback |
-| `power_db_q15_fallback` | 3.05 | 39.25 | 0.08 | 2.46 | 43.33 | 0.06 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `agc` | 13.18 | 36.12 | 0.36 | 14.47 | 39.15 | 0.37 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
-| `agc_cq15` | 78.32 | 78.32 | 1.00 | 86.42 | 86.42 | 1.00 | sdrk fallback |
+| `power_db_fallback` | 2.76 | 38.52 | 0.07 | 2.08 | 42.51 | 0.05 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `power_db_q15` | 1.89 | 3.07 | 0.61 | 1.89 | 2.46 | 0.77 | sdrk fallback |
+| `power_db_q15_fallback` | 3.07 | 39.25 | 0.08 | 2.46 | 43.32 | 0.06 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `agc` | 13.18 | 36.12 | 0.36 | 14.78 | 39.15 | 0.38 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
+| `agc_cq15` | 78.32 | 78.32 | 1.00 | 85.53 | 85.53 | 1.00 | sdrk fallback |
 | `agc_fallback` | 17.93 | 36.12 | 0.50 | 18.42 | 39.15 | 0.47 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
 | `dc_block` | 2.95 | 7.03 | 0.42 | 2.76 | 9.04 | 0.31 | sdrk fallback |
 | `dc_block_cq15` | 6.30 | 6.30 | 1.00 | 6.13 | 6.13 | 1.00 | sdrk fallback |
@@ -1511,18 +1511,18 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `dc_block_real_fallback` | 7.03 | 36.03 | 0.20 | 9.04 | 34.31 | 0.26 | liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real_q15` | 5.62 | 5.62 | 1.00 | 5.56 | 5.56 | 1.00 | sdrk fallback |
 | `deemphasis` | 2.09 | 9.55 | 0.22 | 1.84 | 11.58 | 0.16 | sdrk fallback |
-| `deemphasis_fallback` | 9.55 | 10.81 | 0.88 | 11.58 | 23.15 | 0.50 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
+| `deemphasis_fallback` | 9.55 | 10.80 | 0.88 | 11.58 | 23.14 | 0.50 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
 | `deemphasis_q15` | 5.53 | 5.53 | 1.00 | 5.54 | 5.54 | 1.00 | sdrk fallback |
-| `biquad` | 9.37 | 20.59 | 0.46 | 10.57 | 19.12 | 0.55 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
+| `biquad` | 9.37 | 20.59 | 0.46 | 10.57 | 19.11 | 0.55 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
 | `biquad_cq15` | 9.16 | 21.19 | 0.43 | 10.57 | 21.26 | 0.50 | sdrk fallback |
 | `biquad_cq15_fallback` | 21.19 | 54.13 | 0.39 | 21.26 | 56.47 | 0.38 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `biquad_fallback` | 18.46 | 24.04 | 0.77 | 20.84 | 26.04 | 0.80 | CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `biquad_real` | 9.12 | 10.30 | 0.89 | 10.06 | 9.56 | 1.05 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off) |
 | `biquad_real_fallback` | 10.13 | 18.04 | 0.56 | 11.77 | 20.05 | 0.59 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `biquad_real_q15` | 8.18 | 11.11 | 0.74 | 10.20 | 12.14 | 0.84 | sdrk fallback |
+| `biquad_real_q15` | 8.18 | 11.11 | 0.74 | 10.21 | 12.14 | 0.84 | sdrk fallback |
 | `biquad_real_q15_fallback` | 11.11 | 27.07 | 0.41 | 12.14 | 28.24 | 0.43 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `dot` | 0.26 | 0.27 | 0.97 | 0.26 | 0.52 | 0.50 | volk_32fc_32f_dot_prod_32fc |
-| `dot_complex` | 0.46 | 0.78 | 0.58 | 0.58 | 0.78 | 0.74 | VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `dot_complex` | 0.46 | 0.78 | 0.59 | 0.58 | 0.78 | 0.74 | VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `dot_complex_fallback` | 1.94 | 6.03 | 0.32 | 1.68 | 6.03 | 0.28 | CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `dot_cq15` | 0.30 | 1.04 | 0.29 | 0.39 | 0.77 | 0.51 | sdrk fallback |
 | `dot_cq15_fallback` | 1.04 | 1.07 | 0.97 | 0.77 | 1.03 | 0.75 | CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
@@ -1530,7 +1530,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `dot_real` | 0.14 | 0.52 | 0.26 | 0.10 | 0.77 | 0.13 | volk_32f_x2_dot_prod_32f |
 | `dot_real_fallback` | 3.03 | 3.04 | 1.00 | 3.03 | 3.04 | 1.00 | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `dot_real_q15` | 0.13 | 0.32 | 0.40 | 0.16 | 0.38 | 0.42 | sdrk fallback |
-| `dot_real_q15_fallback` | 0.32 | 0.54 | 0.60 | 0.38 | 0.52 | 0.74 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `dot_real_q15_fallback` | 0.32 | 0.54 | 0.59 | 0.38 | 0.52 | 0.74 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `scale` | 0.26 | 0.27 | 0.94 | 0.19 | 0.29 | 0.68 | volk_32f_s32f_multiply_32f |
 | `scale_cq15` | 0.13 | 0.28 | 0.47 | 0.10 | 0.42 | 0.24 | sdrk fallback |
 | `scale_cq15_fallback` | 0.28 | 0.65 | 0.44 | 0.42 | 0.78 | 0.54 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
@@ -1541,7 +1541,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `add_fallback` | 0.38 | 0.40 | 0.97 | 0.27 | 0.35 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `add_real` | 0.19 | 0.20 | 0.95 | 0.13 | 0.18 | 0.73 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `add_real_q15` | 0.10 | 0.10 | 0.93 | 0.07 | 0.09 | 0.74 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 0.10 | 0.10 | 0.93 | 0.07 | 0.09 | 0.73 | volk_16i_x2_add_saturated_16i |
 | `add_real_q15_fallback` | 0.10 | 0.52 | 0.19 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul` | 0.45 | 0.49 | 0.93 | 0.51 | 0.54 | 0.94 | volk_32fc_x2_multiply_32fc |
 | `mul_cq15` | 0.51 | 0.83 | 0.61 | 0.63 | 1.37 | 0.46 | sdrk fallback |
@@ -1549,8 +1549,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `mul_fallback` | 0.51 | 0.53 | 0.97 | 0.51 | 0.79 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul_real` | 0.19 | 0.20 | 0.95 | 0.13 | 0.18 | 0.73 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `mul_real_q15` | 0.10 | 0.51 | 0.19 | 0.09 | 0.39 | 0.22 | sdrk fallback |
-| `mul_real_q15_fallback` | 0.51 | 0.30 | 1.71 | 0.39 | 0.31 | 1.25 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `mul_real_q15` | 0.10 | 0.28 | 0.35 | 0.09 | 0.39 | 0.22 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.28 | 0.30 | 0.92 | 0.39 | 0.31 | 1.25 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `interleave` | 0.26 | 0.27 | 0.97 | 0.51 | 0.52 | 0.97 | volk_32f_x2_interleave_32fc |
 | `interleave_cq15` | 0.13 | 0.13 | 1.01 | 0.13 | 0.13 | 1.00 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.13 | 0.14 | 0.97 | 0.13 | 0.14 | 0.96 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
@@ -1560,27 +1560,27 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `deinterleave_cq15_fallback` | 0.23 | 0.20 | 1.14 | 0.23 | 0.26 | 0.86 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `deinterleave_fallback` | 0.26 | 1.02 | 0.26 | 0.26 | 0.52 | 0.50 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `oscillate` | 1.40 | 2.27 | 0.62 | 1.45 | 4.03 | 0.36 | sdrk fallback |
-| `oscillate_cq15` | 1.90 | 5.84 | 0.33 | 1.49 | 3.34 | 0.45 | sdrk fallback |
-| `oscillate_cq15_fallback` | 5.84 | 16.77 | 0.35 | 3.34 | 17.80 | 0.19 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `oscillate_cq15` | 1.90 | 4.51 | 0.42 | 1.49 | 4.80 | 0.31 | sdrk fallback |
+| `oscillate_cq15_fallback` | 4.51 | 16.77 | 0.27 | 4.80 | 16.78 | 0.29 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `oscillate_fallback` | 2.27 | 31.51 | 0.07 | 4.03 | 80.72 | 0.05 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fft_1024` | 2.35 | 2.70 | 0.87 | 2.26 | 3.38 | 0.67 | rustfft (FftPlanner, forward, in place) |
-| `fft_1024_fallback` | 18.45 | 20.91 | 0.88 | 18.88 | 26.89 | 0.70 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fft_4096` | 2.60 | 3.37 | 0.77 | 2.52 | 3.83 | 0.66 | rustfft (FftPlanner, forward, in place) |
-| `fft_4096_fallback` | 21.91 | 23.92 | 0.92 | 22.36 | 32.19 | 0.69 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fft_64` | 1.67 | 2.04 | 0.82 | 1.82 | 1.89 | 0.96 | rustfft (FftPlanner, forward, in place) |
-| `fft_64_fallback` | 12.47 | 13.27 | 0.94 | 12.88 | 16.94 | 0.76 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fft_cq15_1024` | 2.44 | 50.51 | 0.05 | 2.83 | 50.50 | 0.06 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default` | 2.26 | 50.51 | 0.04 | 2.34 | 50.50 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default_fallback` | 28.69 | 38.91 | 0.74 | 31.21 | 39.38 | 0.79 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fft_cq15_1024_fallback` | 46.25 | 38.91 | 1.19 | 51.81 | 39.38 | 1.32 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fft_cq15_1024_full_scale` | 2.41 | 50.51 | 0.05 | 2.48 | 50.50 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `rfft_1024` | 2.12 | 2.71 | 0.78 | 2.09 | 2.85 | 0.73 | realfft on rustfft (RealFftPlanner, forward, out of place) |
-| `rfft_1024_fallback` | 9.73 | 10.06 | 0.97 | 9.95 | 13.52 | 0.74 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fft_1024` | 2.33 | 2.70 | 0.86 | 2.26 | 3.38 | 0.67 | rustfft (FftPlanner, forward, in place) |
+| `fft_1024_fallback` | 18.43 | 20.03 | 0.92 | 18.87 | 19.56 | 0.96 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fft_4096` | 2.60 | 3.37 | 0.77 | 2.51 | 3.83 | 0.66 | rustfft (FftPlanner, forward, in place) |
+| `fft_4096_fallback` | 21.89 | 23.30 | 0.94 | 22.36 | 22.33 | 1.00 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fft_64` | 1.65 | 2.04 | 0.81 | 1.82 | 1.89 | 0.96 | rustfft (FftPlanner, forward, in place) |
+| `fft_64_fallback` | 12.39 | 12.51 | 0.99 | 12.85 | 12.47 | 1.03 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fft_cq15_1024` | 2.47 | 46.26 | 0.05 | 2.79 | 48.58 | 0.06 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default` | 2.31 | 46.26 | 0.05 | 2.34 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default_fallback` | 28.16 | 37.69 | 0.75 | 30.91 | 38.63 | 0.80 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fft_cq15_1024_fallback` | 46.25 | 37.69 | 1.23 | 51.39 | 38.63 | 1.33 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fft_cq15_1024_full_scale` | 2.44 | 46.26 | 0.05 | 2.45 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `rfft_1024` | 2.10 | 2.71 | 0.78 | 2.08 | 2.82 | 0.74 | realfft on rustfft (RealFftPlanner, forward, out of place) |
+| `rfft_1024_fallback` | 9.71 | 9.77 | 0.99 | 9.95 | 9.84 | 1.01 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `am_mod` | 0.65 | 0.65 | 1.00 | 0.47 | 0.47 | 1.00 | sdrk fallback |
-| `am_mod_cq15` | 0.20 | 0.45 | 0.45 | 0.21 | 0.56 | 0.37 | sdrk fallback |
-| `am_mod_cq15_fallback` | 0.45 | 2.97 | 0.15 | 0.56 | 2.30 | 0.24 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `am_mod_cq15` | 0.20 | 0.43 | 0.47 | 0.21 | 0.56 | 0.37 | sdrk fallback |
+| `am_mod_cq15_fallback` | 0.43 | 2.91 | 0.15 | 0.56 | 2.30 | 0.24 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `am_mod_fallback` | 0.65 | 0.53 | 1.22 | 0.47 | 0.54 | 0.87 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
-| `auto_notch` | 164.98 | 164.98 | 1.00 | 169.39 | 169.39 | 1.00 | sdrk fallback |
+| `auto_notch` | 164.98 | 164.98 | 1.00 | 164.85 | 164.85 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 21.00 | 21.00 | 1.00 | 25.61 | 25.61 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 72.75 | 72.75 | 1.00 | 65.45 | 65.45 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.76 | 0.76 | 1.00 | 0.52 | 0.52 | 1.00 | sdrk fallback |
@@ -1588,52 +1588,52 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize_block` | 12.21 | 12.21 | 1.00 | 12.87 | 12.87 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 34.97 | 149.61 | 0.23 | 32.37 | 131.39 | 0.25 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 81.08 | 81.08 | 1.00 | 104.05 | 104.05 | 1.00 | sdrk fallback |
-| `costas_fallback` | 81.08 | 54.40 | 1.49 | 104.05 | 32.27 | 3.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 81.08 | 54.40 | 1.49 | 104.05 | 32.47 | 3.20 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.05 | 10.39 | 0.78 | 9.05 | 9.40 | 0.96 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 114.56 | 114.56 | 1.00 | 116.18 | 116.18 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 114.56 | 931.44 | 0.12 | 116.18 | 220.19 | 0.53 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 5.46 | 5.46 | 1.00 | 5.68 | 5.68 | 1.00 | sdrk fallback |
-| `frame_decode_block` | 5.21 | 5.21 | 1.00 | 5.19 | 5.19 | 1.00 | sdrk fallback |
-| `frame_encode_block` | 1.63 | 1.63 | 1.00 | 1.71 | 1.71 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 3.40 | 87.58 | 0.04 | 2.97 | 34.43 | 0.09 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
-| `halfband_decimate_cq15` | 7.25 | 13.07 | 0.55 | 7.13 | 13.27 | 0.54 | sdrk fallback |
-| `halfband_decimate_cq15_fallback` | 13.07 | 31.18 | 0.42 | 13.27 | 33.35 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `halfband_decimate_fallback` | 61.28 | 68.76 | 0.89 | 13.95 | 62.30 | 0.22 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
-| `halfband_decimate_real` | 2.04 | 65.39 | 0.03 | 1.38 | 32.32 | 0.04 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
-| `halfband_decimate_real_fallback` | 9.13 | 80.22 | 0.11 | 8.76 | 50.71 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
-| `halfband_decimate_real_q15` | 4.03 | 11.33 | 0.36 | 3.84 | 10.14 | 0.38 | sdrk fallback |
-| `halfband_decimate_real_q15_fallback` | 11.33 | 15.59 | 0.73 | 10.14 | 16.67 | 0.61 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `halfband_ref_fir_decimate` | 5.53 | 21.86 | 0.25 | 5.48 | 21.38 | 0.26 | sdrk fallback |
-| `halfband_ref_fir_decimate_cq15` | 38.17 | 38.17 | 1.00 | 30.85 | 30.85 | 1.00 | sdrk fallback |
-| `halfband_ref_shifted` | 5.77 | 63.72 | 0.09 | 5.42 | 16.42 | 0.33 | sdrk fallback |
-| `halfband_ref_shifted_cq15` | 10.03 | 15.87 | 0.63 | 10.21 | 16.35 | 0.62 | sdrk fallback |
-| `morse_decode_block` | 13.06 | 13.06 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
-| `morse_encode_block` | 4.44 | 4.44 | 1.00 | 4.50 | 4.50 | 1.00 | sdrk fallback |
+| `equalize` | 114.56 | 114.56 | 1.00 | 115.63 | 115.63 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 114.56 | 930.66 | 0.12 | 115.63 | 220.13 | 0.53 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `frame_decode` | 5.56 | 5.56 | 1.00 | 6.17 | 6.17 | 1.00 | sdrk fallback |
+| `frame_decode_block` | 6.89 | 6.89 | 1.00 | 5.78 | 5.78 | 1.00 | sdrk fallback |
+| `frame_encode_block` | 1.64 | 1.64 | 1.00 | 1.72 | 1.72 | 1.00 | sdrk fallback |
+| `halfband_decimate` | 3.40 | 87.24 | 0.04 | 2.97 | 34.43 | 0.09 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_cq15` | 6.55 | 12.86 | 0.51 | 7.12 | 13.27 | 0.54 | sdrk fallback |
+| `halfband_decimate_cq15_fallback` | 12.86 | 30.91 | 0.42 | 13.27 | 33.32 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `halfband_decimate_fallback` | 61.26 | 68.43 | 0.90 | 13.84 | 62.30 | 0.22 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_real` | 2.04 | 65.21 | 0.03 | 1.38 | 32.32 | 0.04 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_real_fallback` | 9.11 | 80.05 | 0.11 | 8.76 | 50.71 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_real_q15` | 2.95 | 11.33 | 0.26 | 3.83 | 10.11 | 0.38 | sdrk fallback |
+| `halfband_decimate_real_q15_fallback` | 11.33 | 15.45 | 0.73 | 10.11 | 16.66 | 0.61 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `halfband_ref_fir_decimate` | 5.53 | 21.86 | 0.25 | 5.48 | 21.37 | 0.26 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 41.00 | 41.00 | 1.00 | 39.65 | 39.65 | 1.00 | sdrk fallback |
+| `halfband_ref_shifted` | 5.76 | 63.70 | 0.09 | 5.43 | 16.31 | 0.33 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 9.33 | 15.65 | 0.60 | 10.20 | 16.35 | 0.62 | sdrk fallback |
+| `morse_decode_block` | 12.78 | 12.78 | 1.00 | 16.09 | 16.09 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 4.44 | 4.44 | 1.00 | 4.49 | 4.49 | 1.00 | sdrk fallback |
 | `noise_blank` | 11.58 | 11.58 | 1.00 | 11.37 | 11.37 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 8.48 | 8.48 | 1.00 | 9.30 | 9.30 | 1.00 | sdrk fallback |
-| `preemph_limit` | 15.40 | 15.40 | 1.00 | 13.20 | 13.20 | 1.00 | sdrk fallback |
+| `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
-| `rds_decode_block` | 7.39 | 7.39 | 1.00 | 7.97 | 7.97 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 16.82 | 16.82 | 1.00 | 15.22 | 15.22 | 1.00 | sdrk fallback |
+| `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 16.68 | 16.68 | 1.00 | 15.21 | 15.21 | 1.00 | sdrk fallback |
 | `rds_shape` | 50.41 | 50.41 | 1.00 | 78.60 | 78.60 | 1.00 | sdrk fallback |
-| `real_to_complex` | 2.50 | 92.12 | 0.03 | 2.29 | 35.30 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
-| `real_to_complex_cq15` | 4.74 | 7.27 | 0.65 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
-| `real_to_complex_cq15_fallback` | 14.91 | 7.27 | 2.05 | 14.62 | 8.83 | 1.66 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
-| `real_to_complex_fallback` | 12.67 | 106.99 | 0.12 | 13.29 | 53.74 | 0.25 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
-| `stereo_encode` | 4.47 | 4.47 | 1.00 | 6.04 | 6.04 | 1.00 | sdrk fallback |
-| `stereo_encode_rds` | 7.17 | 7.17 | 1.00 | 8.67 | 8.67 | 1.00 | sdrk fallback |
+| `real_to_complex` | 2.50 | 91.94 | 0.03 | 2.29 | 35.30 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `real_to_complex_cq15` | 3.60 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
+| `real_to_complex_cq15_fallback` | 14.91 | 7.27 | 2.05 | 14.50 | 8.83 | 1.64 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
+| `real_to_complex_fallback` | 12.67 | 106.82 | 0.12 | 12.75 | 53.74 | 0.24 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
+| `stereo_encode` | 4.47 | 4.47 | 1.00 | 5.92 | 5.92 | 1.00 | sdrk fallback |
+| `stereo_encode_rds` | 7.17 | 7.17 | 1.00 | 8.91 | 8.91 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.32 | 1.26 | 0.26 | 0.45 | 1.45 | 0.31 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.15 | 0.39 | 0.39 | 0.20 | 0.54 | 0.37 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 0.39 | 1.55 | 0.25 | 0.54 | 1.55 | 0.35 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `stereo_matrix_fallback` | 0.63 | 0.60 | 1.05 | 0.86 | 0.53 | 1.61 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `stereo_pll_fallback` | 63.32 | 57.06 | 1.11 | 80.41 | 78.06 | 1.03 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx2) |
-| `stereo_pll_q15_fallback` | 37.04 | 51.46 | 0.72 | 37.39 | 37.63 | 0.99 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `stereo_matrix_fallback` | 0.63 | 0.60 | 1.06 | 0.86 | 0.53 | 1.61 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `stereo_pll_fallback` | 63.32 | 57.06 | 1.11 | 79.41 | 78.06 | 1.02 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx2) |
+| `stereo_pll_q15_fallback` | 37.04 | 51.46 | 0.72 | 38.06 | 34.89 | 1.09 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `symbol_sync` | 31.52 | 31.52 | 1.00 | 43.74 | 43.74 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 15.79 | 15.79 | 1.00 | 21.81 | 21.81 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 15.66 | 15.66 | 1.00 | 21.81 | 21.81 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 
@@ -1643,164 +1643,164 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 
 | Entry | ours znver4 (cycles/sample) | comparison znver4 (cycles/sample) | ratio znver4 (ours/comparison) | ours sapphirerapids (cycles/sample) | comparison sapphirerapids (cycles/sample) | ratio sapphirerapids (ours/comparison) | comparison |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `convert_cq15_cs8` | 0.10 | 0.29 | 0.36 | 0.07 | 0.18 | 0.41 | volk_8i_convert_16i |
-| `convert_cq15_cs8_fallback` | 0.28 | 0.17 | 1.70 | 0.14 | 0.20 | 0.69 | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_cq15_cu8` | 0.13 | 0.29 | 0.44 | 0.11 | 0.18 | 0.61 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
-| `convert_cq15_cu8_fallback` | 0.26 | 0.17 | 1.58 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_cs16` | 0.26 | 0.27 | 0.96 | 0.26 | 0.27 | 0.95 | volk_16i_s32f_convert_32f |
-| `convert_cs16_fallback` | 0.42 | 0.29 | 1.45 | 0.29 | 0.40 | 0.72 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_cs8` | 0.26 | 0.27 | 0.96 | 0.26 | 0.28 | 0.94 | volk_8i_s32f_convert_32f |
-| `convert_cs8_fallback` | 0.42 | 0.31 | 1.34 | 0.29 | 0.58 | 0.50 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_cu8` | 0.26 | 0.27 | 0.96 | 0.26 | 0.27 | 0.95 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
-| `convert_cu8_fallback` | 0.51 | 0.31 | 1.64 | 0.37 | 0.58 | 0.64 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_out_cs16` | 0.45 | 0.46 | 0.97 | 0.39 | 0.52 | 0.75 | volk_32f_s32f_convert_16i |
+| `convert_cq15_cs8` | 0.09 | 0.14 | 0.66 | 0.07 | 0.18 | 0.41 | volk_8i_convert_16i |
+| `convert_cq15_cs8_fallback` | 0.14 | 0.13 | 1.02 | 0.14 | 0.20 | 0.69 | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_cq15_cu8` | 0.10 | 0.14 | 0.71 | 0.11 | 0.18 | 0.61 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cq15_cu8_fallback` | 0.14 | 0.13 | 1.02 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_cs16` | 0.24 | 0.25 | 1.00 | 0.21 | 0.22 | 0.94 | volk_16i_s32f_convert_32f |
+| `convert_cs16_fallback` | 0.27 | 0.28 | 0.93 | 0.29 | 0.40 | 0.72 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_cs8` | 0.25 | 0.25 | 1.00 | 0.21 | 0.22 | 0.94 | volk_8i_s32f_convert_32f |
+| `convert_cs8_fallback` | 0.27 | 0.34 | 0.79 | 0.29 | 0.58 | 0.50 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_cu8` | 0.25 | 0.25 | 1.00 | 0.21 | 0.22 | 0.94 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cu8_fallback` | 0.28 | 0.34 | 0.83 | 0.37 | 0.58 | 0.64 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_out_cs16` | 0.39 | 0.42 | 0.94 | 0.39 | 0.40 | 0.97 | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 0.64 | 0.41 | 1.58 | 0.61 | 0.59 | 1.03 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_out_cs8` | 0.45 | 0.47 | 0.96 | 0.39 | 0.52 | 0.76 | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 0.88 | 0.38 | 2.30 | 0.84 | 0.61 | 1.38 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_out_cu8` | 0.52 | 0.51 | 1.01 | 0.52 | 0.59 | 0.88 | volk_32f_s32f_x2_convert_8u |
-| `convert_out_cu8_fallback` | 1.31 | 0.38 | 3.44 | 1.33 | 0.61 | 2.16 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_out_real_rs16` | 0.23 | 0.24 | 0.99 | 0.20 | 0.26 | 0.77 | volk_32f_s32f_convert_16i |
+| `convert_out_cs8` | 0.39 | 0.43 | 0.91 | 0.39 | 0.39 | 1.00 | volk_32f_s32f_convert_8i |
+| `convert_out_cs8_fallback` | 0.73 | 0.38 | 1.92 | 0.84 | 0.61 | 1.38 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_out_cu8` | 0.62 | 0.51 | 1.20 | 0.52 | 0.59 | 0.88 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_cu8_fallback` | 1.22 | 0.38 | 3.20 | 1.33 | 0.61 | 2.16 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_out_real_rs16` | 0.20 | 0.21 | 0.95 | 0.20 | 0.20 | 1.00 | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 0.33 | 0.21 | 1.58 | 0.31 | 0.30 | 1.05 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_out_real_rs8` | 0.24 | 0.24 | 0.99 | 0.21 | 0.26 | 0.79 | volk_32f_s32f_convert_8i |
-| `convert_out_real_rs8_fallback` | 0.44 | 0.19 | 2.29 | 0.43 | 0.31 | 1.39 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_out_real_ru8` | 0.27 | 0.26 | 1.02 | 0.27 | 0.30 | 0.91 | volk_32f_s32f_x2_convert_8u |
-| `convert_out_real_ru8_fallback` | 0.66 | 0.19 | 3.40 | 0.67 | 0.31 | 2.17 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `convert_real_rs16` | 0.14 | 0.14 | 0.99 | 0.14 | 0.14 | 0.97 | volk_16i_s32f_convert_32f |
-| `convert_real_rs16_fallback` | 0.21 | 0.15 | 1.45 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `rotate` | 0.67 | 3.90 | 0.17 | 0.56 | 3.24 | 0.17 | volk_32fc_s32fc_x2_rotator2_32fc |
-| `rotate_cq15` | 0.75 | 7.59 | 0.10 | 3.22 | 4.23 | 0.76 | sdrk fallback |
-| `rotate_cq15_fallback` | 7.59 | 27.55 | 0.28 | 4.23 | 26.94 | 0.16 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `rotate_fallback` | 0.95 | 10.63 | 0.09 | 9.30 | 11.17 | 0.83 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
-| `fir` | 8.60 | 62.87 | 0.14 | 8.25 | 75.78 | 0.11 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 47.46 | 47.46 | 1.00 | 42.93 | 42.93 | 1.00 | sdrk fallback |
-| `fir_cq15_fallback` | 47.46 | 145.35 | 0.33 | 42.93 | 154.82 | 0.28 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_decimate` | 1.95 | 8.82 | 0.22 | 1.74 | 10.78 | 0.16 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
-| `fir_decimate_cq15` | 12.53 | 21.10 | 0.59 | 11.17 | 14.71 | 0.76 | sdrk fallback |
-| `fir_decimate_cq15_fallback` | 21.10 | 37.23 | 0.57 | 14.71 | 20.44 | 0.72 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_decimate_fallback` | 11.13 | 77.33 | 0.14 | 10.64 | 38.89 | 0.27 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_fallback` | 31.12 | 51.42 | 0.61 | 30.50 | 80.41 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_interpolate` | 10.94 | 71.22 | 0.15 | 10.61 | 79.82 | 0.13 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 61.25 | 61.25 | 1.00 | 57.18 | 57.18 | 1.00 | sdrk fallback |
-| `fir_interpolate_cq15_fallback` | 61.25 | 137.76 | 0.44 | 57.18 | 152.94 | 0.37 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_interpolate_fallback` | 39.38 | 101.50 | 0.39 | 38.07 | 100.78 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_interpolate_real` | 6.57 | 82.27 | 0.08 | 6.44 | 95.46 | 0.07 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
-| `fir_interpolate_real_fallback` | 25.50 | 50.75 | 0.50 | 24.05 | 50.39 | 0.48 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_interpolate_real_q15` | 22.45 | 22.45 | 1.00 | 29.27 | 29.27 | 1.00 | sdrk fallback |
-| `fir_interpolate_real_q15_fallback` | 22.45 | 68.88 | 0.33 | 29.27 | 76.47 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `resample` | 12.69 | 71.71 | 0.18 | 10.99 | 80.58 | 0.14 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 73.75 | 106.31 | 0.69 | 69.75 | 71.12 | 0.98 | sdrk fallback |
-| `resample_cq15_fallback` | 106.31 | 136.69 | 0.78 | 71.12 | 152.19 | 0.47 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `resample_fallback` | 60.87 | 100.64 | 0.60 | 57.05 | 100.10 | 0.57 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `resample_real` | 9.64 | 82.98 | 0.12 | 9.15 | 96.34 | 0.10 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
-| `resample_real_fallback` | 40.74 | 50.32 | 0.81 | 243.32 | 50.05 | 4.86 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `resample_real_q15` | 35.10 | 106.53 | 0.33 | 36.74 | 81.38 | 0.45 | sdrk fallback |
-| `resample_real_q15_fallback` | 106.53 | 68.35 | 1.56 | 81.38 | 76.10 | 1.07 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mag` | 0.64 | 1.28 | 0.50 | 0.29 | 0.54 | 0.54 | volk_32fc_magnitude_32f |
-| `mag_fallback` | 0.64 | 0.66 | 0.97 | 0.31 | 0.41 | 0.75 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mag_q15` | 0.73 | 0.94 | 0.78 | 0.77 | 0.91 | 0.85 | volk_16ic_magnitude_16i |
-| `mag_q15_fallback` | 0.94 | 78.55 | 0.01 | 1.00 | 83.53 | 0.01 | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mag_sq` | 0.20 | 0.33 | 0.59 | 0.16 | 0.52 | 0.31 | volk_32fc_magnitude_squared_32f |
-| `mag_sq_fallback` | 0.30 | 0.31 | 0.97 | 0.26 | 0.27 | 0.94 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mag_sq_q15` | 0.20 | 0.22 | 0.89 | 0.14 | 0.19 | 0.71 | sdrk fallback |
-| `mag_sq_q15_fallback` | 0.22 | 0.98 | 0.22 | 0.19 | 1.87 | 0.10 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `quad_demod` | 1.61 | 2.00 | 0.81 | 1.42 | 2.11 | 0.67 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
-| `quad_demod_cq15` | 2.20 | 77.19 | 0.03 | 2.87 | 75.60 | 0.04 | sdrk fallback |
-| `quad_demod_cq15_fallback` | 77.19 | 83.69 | 0.92 | 75.60 | 65.14 | 1.16 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
-| `quad_demod_fallback` | 41.29 | 868.77 | 0.05 | 42.59 | 131.57 | 0.32 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
-| `fm_mod` | 1.35 | 56.04 | 0.02 | 2.11 | 25.53 | 0.08 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `fm_mod_cq15` | 1.28 | 10.15 | 0.13 | 1.47 | 6.08 | 0.24 | sdrk fallback |
-| `fm_mod_cq15_fallback` | 10.15 | 21.56 | 0.47 | 6.08 | 20.60 | 0.30 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fm_mod_fallback` | 2.56 | 56.04 | 0.05 | 5.74 | 25.53 | 0.22 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `squelch` | 9.13 | 18.42 | 0.50 | 10.14 | 15.33 | 0.66 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
+| `convert_out_real_rs8` | 0.21 | 0.22 | 0.93 | 0.21 | 0.20 | 1.04 | volk_32f_s32f_convert_8i |
+| `convert_out_real_rs8_fallback` | 0.37 | 0.19 | 1.92 | 0.43 | 0.31 | 1.39 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_out_real_ru8` | 0.32 | 0.26 | 1.21 | 0.27 | 0.30 | 0.91 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_real_ru8_fallback` | 0.61 | 0.19 | 3.17 | 0.67 | 0.31 | 2.17 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `convert_real_rs16` | 0.13 | 0.13 | 1.01 | 0.11 | 0.11 | 0.96 | volk_16i_s32f_convert_32f |
+| `convert_real_rs16_fallback` | 0.14 | 0.15 | 0.94 | 0.15 | 0.20 | 0.74 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `rotate` | 0.71 | 3.89 | 0.18 | 0.44 | 3.36 | 0.13 | volk_32fc_s32fc_x2_rotator2_32fc |
+| `rotate_cq15` | 0.79 | 4.59 | 0.17 | 3.22 | 5.64 | 0.57 | sdrk fallback |
+| `rotate_cq15_fallback` | 4.59 | 27.49 | 0.17 | 5.64 | 25.81 | 0.22 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `rotate_fallback` | 1.05 | 10.63 | 0.10 | 9.30 | 11.17 | 0.83 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
+| `fir` | 8.65 | 63.03 | 0.14 | 4.82 | 97.97 | 0.05 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
+| `fir_cq15` | 40.60 | 40.60 | 1.00 | 45.49 | 45.49 | 1.00 | sdrk fallback |
+| `fir_cq15_fallback` | 40.60 | 144.59 | 0.28 | 45.49 | 154.66 | 0.29 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_decimate` | 2.05 | 8.83 | 0.23 | 1.61 | 15.25 | 0.11 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
+| `fir_decimate_cq15` | 11.57 | 16.80 | 0.69 | 11.17 | 18.22 | 0.61 | sdrk fallback |
+| `fir_decimate_cq15_fallback` | 16.80 | 37.21 | 0.45 | 18.22 | 20.44 | 0.89 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_decimate_fallback` | 11.13 | 71.32 | 0.16 | 10.28 | 38.89 | 0.26 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_fallback` | 31.12 | 51.41 | 0.61 | 30.50 | 80.41 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_interpolate` | 11.12 | 71.37 | 0.16 | 7.49 | 102.01 | 0.07 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `fir_interpolate_cq15` | 54.36 | 54.36 | 1.00 | 63.17 | 63.17 | 1.00 | sdrk fallback |
+| `fir_interpolate_cq15_fallback` | 54.36 | 136.84 | 0.40 | 63.17 | 136.97 | 0.46 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_interpolate_fallback` | 39.38 | 101.17 | 0.39 | 38.06 | 100.78 | 0.38 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_interpolate_real` | 6.69 | 81.93 | 0.08 | 4.79 | 118.66 | 0.04 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
+| `fir_interpolate_real_fallback` | 25.50 | 50.59 | 0.50 | 24.05 | 50.39 | 0.48 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_interpolate_real_q15` | 22.72 | 22.72 | 1.00 | 29.26 | 29.26 | 1.00 | sdrk fallback |
+| `fir_interpolate_real_q15_fallback` | 22.72 | 68.42 | 0.33 | 29.26 | 68.49 | 0.43 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `resample` | 13.69 | 71.87 | 0.19 | 12.54 | 102.76 | 0.12 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 67.78 | 84.07 | 0.81 | 69.75 | 89.12 | 0.78 | sdrk fallback |
+| `resample_cq15_fallback` | 84.07 | 136.08 | 0.62 | 89.12 | 136.22 | 0.65 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `resample_fallback` | 60.87 | 100.42 | 0.61 | 55.22 | 100.10 | 0.55 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `resample_real` | 9.17 | 82.64 | 0.11 | 8.89 | 119.58 | 0.07 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
+| `resample_real_fallback` | 40.74 | 50.21 | 0.81 | 243.32 | 50.05 | 4.86 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `resample_real_q15` | 32.80 | 101.47 | 0.32 | 36.74 | 85.53 | 0.43 | sdrk fallback |
+| `resample_real_q15_fallback` | 101.47 | 68.04 | 1.49 | 85.53 | 68.11 | 1.26 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mag` | 0.64 | 1.28 | 0.50 | 0.76 | 1.54 | 0.49 | volk_32fc_magnitude_32f |
+| `mag_fallback` | 0.64 | 0.66 | 0.97 | 0.76 | 0.78 | 0.97 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mag_q15` | 0.72 | 0.84 | 0.85 | 0.93 | 0.92 | 1.01 | volk_16ic_magnitude_16i |
+| `mag_q15_fallback` | 0.96 | 78.55 | 0.01 | 1.11 | 83.02 | 0.01 | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mag_sq` | 0.29 | 0.33 | 0.88 | 0.16 | 0.52 | 0.31 | volk_32fc_magnitude_squared_32f |
+| `mag_sq_fallback` | 0.37 | 0.31 | 1.21 | 0.26 | 0.27 | 0.94 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mag_sq_q15` | 0.18 | 0.19 | 0.92 | 0.14 | 0.19 | 0.71 | sdrk fallback |
+| `mag_sq_q15_fallback` | 0.19 | 0.90 | 0.22 | 0.19 | 1.87 | 0.10 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `quad_demod` | 1.64 | 2.11 | 0.77 | 1.28 | 2.11 | 0.61 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod_cq15` | 2.29 | 77.19 | 0.03 | 2.68 | 76.98 | 0.03 | sdrk fallback |
+| `quad_demod_cq15_fallback` | 77.19 | 81.69 | 0.94 | 76.98 | 65.14 | 1.18 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
+| `quad_demod_fallback` | 41.29 | 868.77 | 0.05 | 43.08 | 130.25 | 0.33 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
+| `fm_mod` | 1.37 | 56.04 | 0.02 | 2.11 | 25.57 | 0.08 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `fm_mod_cq15` | 1.31 | 7.60 | 0.17 | 1.48 | 7.84 | 0.19 | sdrk fallback |
+| `fm_mod_cq15_fallback` | 7.60 | 21.56 | 0.35 | 7.84 | 19.58 | 0.40 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fm_mod_fallback` | 2.56 | 56.04 | 0.05 | 5.74 | 25.57 | 0.22 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `squelch` | 9.13 | 18.42 | 0.50 | 10.14 | 15.26 | 0.66 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
 | `squelch_cq15` | 5.56 | 5.56 | 1.00 | 6.95 | 6.95 | 1.00 | sdrk fallback |
-| `window` | 0.20 | 0.38 | 0.52 | 0.15 | 0.53 | 0.28 | volk_32fc_32f_multiply_32fc |
-| `window_cq15` | 0.11 | 0.53 | 0.20 | 0.22 | 0.55 | 0.39 | sdrk fallback |
-| `window_cq15_fallback` | 0.53 | 0.65 | 0.82 | 0.55 | 0.98 | 0.56 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `window` | 0.20 | 0.34 | 0.60 | 0.15 | 0.53 | 0.28 | volk_32fc_32f_multiply_32fc |
+| `window_cq15` | 0.13 | 0.48 | 0.28 | 0.22 | 0.55 | 0.39 | sdrk fallback |
+| `window_cq15_fallback` | 0.48 | 0.65 | 0.74 | 0.55 | 0.98 | 0.56 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `window_fallback` | 0.28 | 0.41 | 0.69 | 0.16 | 0.38 | 0.42 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `power_db` | 1.50 | 1.01 | 1.47 | 1.56 | 0.97 | 1.61 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
-| `power_db_fallback` | 2.42 | 40.37 | 0.06 | 2.05 | 46.32 | 0.04 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `power_db_q15` | 1.51 | 2.98 | 0.51 | 1.61 | 2.32 | 0.69 | sdrk fallback |
-| `power_db_q15_fallback` | 2.98 | 40.52 | 0.07 | 2.32 | 46.53 | 0.05 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `agc` | 13.07 | 36.12 | 0.36 | 14.31 | 39.15 | 0.37 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
-| `agc_cq15` | 82.44 | 82.44 | 1.00 | 88.58 | 88.58 | 1.00 | sdrk fallback |
+| `power_db` | 1.56 | 1.01 | 1.54 | 1.41 | 0.97 | 1.46 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
+| `power_db_fallback` | 2.42 | 40.37 | 0.06 | 2.05 | 46.31 | 0.04 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `power_db_q15` | 1.48 | 2.98 | 0.50 | 1.46 | 2.32 | 0.63 | sdrk fallback |
+| `power_db_q15_fallback` | 2.98 | 40.52 | 0.07 | 2.32 | 46.52 | 0.05 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `agc` | 13.08 | 36.12 | 0.36 | 15.28 | 39.15 | 0.39 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
+| `agc_cq15` | 82.44 | 82.44 | 1.00 | 87.71 | 87.71 | 1.00 | sdrk fallback |
 | `agc_fallback` | 18.34 | 36.12 | 0.51 | 18.42 | 39.15 | 0.47 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
-| `dc_block` | 2.65 | 9.03 | 0.29 | 3.34 | 11.04 | 0.30 | sdrk fallback |
-| `dc_block_cq15` | 8.27 | 8.27 | 1.00 | 7.79 | 7.79 | 1.00 | sdrk fallback |
+| `dc_block` | 2.65 | 9.03 | 0.29 | 3.19 | 11.04 | 0.29 | sdrk fallback |
+| `dc_block_cq15` | 8.27 | 8.27 | 1.00 | 8.03 | 8.03 | 1.00 | sdrk fallback |
 | `dc_block_fallback` | 9.03 | 43.11 | 0.21 | 11.04 | 39.57 | 0.28 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
-| `dc_block_real` | 2.19 | 7.03 | 0.31 | 2.60 | 8.04 | 0.32 | sdrk fallback |
+| `dc_block_real` | 2.26 | 7.03 | 0.32 | 2.41 | 8.04 | 0.30 | sdrk fallback |
 | `dc_block_real_fallback` | 7.03 | 33.06 | 0.21 | 8.04 | 34.31 | 0.23 | liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real_q15` | 5.36 | 5.36 | 1.00 | 5.46 | 5.46 | 1.00 | sdrk fallback |
-| `deemphasis` | 2.19 | 10.21 | 0.21 | 2.27 | 11.11 | 0.20 | sdrk fallback |
-| `deemphasis_fallback` | 10.21 | 10.81 | 0.94 | 11.11 | 23.15 | 0.48 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
+| `deemphasis` | 2.24 | 10.21 | 0.22 | 2.15 | 11.11 | 0.19 | sdrk fallback |
+| `deemphasis_fallback` | 10.21 | 10.80 | 0.95 | 11.11 | 23.14 | 0.48 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
 | `deemphasis_q15` | 5.76 | 5.76 | 1.00 | 5.53 | 5.53 | 1.00 | sdrk fallback |
 | `biquad` | 9.44 | 24.92 | 0.38 | 10.57 | 28.90 | 0.37 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx512, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
-| `biquad_cq15` | 9.05 | 21.05 | 0.43 | 10.85 | 20.25 | 0.54 | sdrk fallback |
+| `biquad_cq15` | 9.12 | 21.05 | 0.43 | 10.85 | 20.25 | 0.54 | sdrk fallback |
 | `biquad_cq15_fallback` | 21.05 | 66.14 | 0.32 | 20.25 | 76.17 | 0.27 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `biquad_fallback` | 18.46 | 24.04 | 0.77 | 20.71 | 26.04 | 0.80 | CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `biquad_real` | 9.31 | 12.46 | 0.75 | 10.32 | 14.45 | 0.71 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx512, -ffp-contract=off) |
 | `biquad_real_fallback` | 9.69 | 18.04 | 0.54 | 11.46 | 20.05 | 0.57 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `biquad_real_q15` | 8.98 | 12.08 | 0.74 | 10.62 | 13.08 | 0.81 | sdrk fallback |
+| `biquad_real_q15` | 9.04 | 12.08 | 0.75 | 10.62 | 13.08 | 0.81 | sdrk fallback |
 | `biquad_real_q15_fallback` | 12.08 | 33.07 | 0.37 | 13.08 | 38.08 | 0.34 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `dot` | 0.18 | 0.27 | 0.68 | 0.17 | 0.40 | 0.43 | volk_32fc_32f_dot_prod_32fc |
+| `dot` | 0.20 | 0.27 | 0.75 | 0.21 | 0.77 | 0.27 | volk_32fc_32f_dot_prod_32fc |
 | `dot_complex` | 0.45 | 0.78 | 0.58 | 0.58 | 0.78 | 0.74 | VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `dot_complex_fallback` | 1.52 | 6.03 | 0.25 | 1.69 | 6.03 | 0.28 | CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `dot_cq15` | 0.38 | 0.58 | 0.66 | 0.35 | 0.79 | 0.45 | sdrk fallback |
-| `dot_cq15_fallback` | 0.58 | 0.65 | 0.88 | 0.79 | 1.28 | 0.61 | CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `dot_cq15_fallback` | 0.58 | 0.65 | 0.89 | 0.79 | 1.28 | 0.61 | CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `dot_fallback` | 3.03 | 6.07 | 0.50 | 3.03 | 6.07 | 0.50 | CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `dot_real` | 0.09 | 0.27 | 0.34 | 0.09 | 0.39 | 0.24 | volk_32f_x2_dot_prod_32f |
+| `dot_real` | 0.11 | 0.27 | 0.40 | 0.11 | 0.77 | 0.15 | volk_32f_x2_dot_prod_32f |
 | `dot_real_fallback` | 3.03 | 3.04 | 1.00 | 3.03 | 3.04 | 1.00 | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `dot_real_q15` | 0.13 | 0.32 | 0.40 | 0.15 | 0.38 | 0.39 | sdrk fallback |
-| `dot_real_q15_fallback` | 0.32 | 0.33 | 0.98 | 0.38 | 0.64 | 0.59 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `dot_real_q15_fallback` | 0.32 | 0.32 | 0.99 | 0.38 | 0.64 | 0.59 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `scale` | 0.13 | 0.27 | 0.48 | 0.13 | 0.29 | 0.45 | volk_32f_s32f_multiply_32f |
-| `scale_cq15` | 0.07 | 0.50 | 0.14 | 0.07 | 0.39 | 0.17 | sdrk fallback |
-| `scale_cq15_fallback` | 0.50 | 0.59 | 0.85 | 0.39 | 1.04 | 0.38 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `scale_fallback` | 0.13 | 0.27 | 0.49 | 0.14 | 0.29 | 0.48 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `scale_cq15` | 0.07 | 0.36 | 0.19 | 0.07 | 0.39 | 0.17 | sdrk fallback |
+| `scale_cq15_fallback` | 0.36 | 0.59 | 0.61 | 0.39 | 1.04 | 0.38 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `scale_fallback` | 0.13 | 0.27 | 0.49 | 0.14 | 0.29 | 0.47 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `add` | 0.19 | 0.40 | 0.48 | 0.13 | 0.35 | 0.37 | volk_32fc_x2_add_32fc |
-| `add_cq15` | 0.10 | 0.20 | 0.48 | 0.07 | 0.18 | 0.38 | volk_16i_x2_add_saturated_16i on the 2 n values |
-| `add_cq15_fallback` | 0.10 | 0.54 | 0.18 | 0.09 | 1.03 | 0.09 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `add_fallback` | 0.20 | 0.40 | 0.50 | 0.18 | 0.35 | 0.50 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `add_real` | 0.10 | 0.11 | 0.93 | 0.07 | 0.09 | 0.72 | volk_32f_x2_add_32f |
+| `add_cq15` | 0.11 | 0.20 | 0.54 | 0.07 | 0.18 | 0.38 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_cq15_fallback` | 0.11 | 0.52 | 0.21 | 0.09 | 1.03 | 0.09 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `add_fallback` | 0.20 | 0.40 | 0.51 | 0.18 | 0.35 | 0.50 | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `add_real` | 0.10 | 0.11 | 0.91 | 0.07 | 0.09 | 0.73 | volk_32f_x2_add_32f |
 | `add_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `add_real_q15` | 0.05 | 0.10 | 0.48 | 0.04 | 0.09 | 0.39 | volk_16i_x2_add_saturated_16i |
-| `add_real_q15_fallback` | 0.10 | 0.27 | 0.36 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul` | 0.45 | 0.49 | 0.93 | 0.39 | 0.54 | 0.71 | volk_32fc_x2_multiply_32fc |
-| `mul_cq15` | 0.70 | 0.78 | 0.90 | 0.59 | 1.08 | 0.55 | sdrk fallback |
-| `mul_cq15_fallback` | 0.78 | 1.06 | 0.74 | 1.08 | 1.66 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_fallback` | 0.75 | 0.53 | 1.42 | 0.78 | 0.79 | 0.98 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_real` | 0.10 | 0.11 | 0.92 | 0.07 | 0.09 | 0.72 | volk_32f_x2_multiply_32f |
+| `add_real_q15` | 0.06 | 0.10 | 0.53 | 0.04 | 0.09 | 0.39 | volk_16i_x2_add_saturated_16i |
+| `add_real_q15_fallback` | 0.10 | 0.26 | 0.37 | 0.07 | 0.52 | 0.13 | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul` | 0.58 | 0.49 | 1.18 | 0.39 | 0.54 | 0.71 | volk_32fc_x2_multiply_32fc |
+| `mul_cq15` | 0.70 | 0.81 | 0.86 | 0.59 | 1.08 | 0.55 | sdrk fallback |
+| `mul_cq15_fallback` | 0.81 | 1.06 | 0.77 | 1.08 | 1.66 | 0.65 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul_fallback` | 0.77 | 0.53 | 1.47 | 0.78 | 0.79 | 0.98 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul_real` | 0.10 | 0.12 | 0.83 | 0.07 | 0.09 | 0.71 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.76 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_real_q15` | 0.05 | 0.34 | 0.15 | 0.05 | 0.26 | 0.21 | sdrk fallback |
-| `mul_real_q15_fallback` | 0.34 | 0.27 | 1.26 | 0.26 | 0.39 | 0.65 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `interleave` | 0.14 | 0.27 | 0.50 | 0.13 | 0.52 | 0.25 | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.07 | 0.13 | 0.54 | 0.13 | 0.13 | 1.00 | sdrk fallback |
+| `mul_real_q15` | 0.07 | 0.24 | 0.29 | 0.05 | 0.26 | 0.21 | sdrk fallback |
+| `mul_real_q15_fallback` | 0.24 | 0.27 | 0.89 | 0.26 | 0.39 | 0.65 | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `interleave` | 0.20 | 0.27 | 0.74 | 0.13 | 0.52 | 0.25 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.10 | 0.13 | 0.78 | 0.13 | 0.13 | 1.00 | sdrk fallback |
 | `interleave_cq15_fallback` | 0.13 | 0.14 | 0.97 | 0.13 | 0.26 | 0.51 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `interleave_fallback` | 0.26 | 0.27 | 0.97 | 0.14 | 0.27 | 0.50 | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
-| `deinterleave` | 0.13 | 0.27 | 0.50 | 0.13 | 0.27 | 0.49 | volk_32fc_deinterleave_32f_x2 |
-| `deinterleave_cq15` | 0.07 | 0.33 | 0.22 | 0.13 | 0.26 | 0.50 | volk_16ic_deinterleave_16i_x2 |
-| `deinterleave_cq15_fallback` | 0.20 | 0.20 | 1.00 | 0.26 | 0.27 | 0.97 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
+| `deinterleave` | 0.20 | 0.27 | 0.73 | 0.13 | 0.27 | 0.49 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave_cq15` | 0.10 | 0.33 | 0.32 | 0.13 | 0.26 | 0.50 | volk_16ic_deinterleave_16i_x2 |
+| `deinterleave_cq15_fallback` | 0.13 | 0.20 | 0.68 | 0.26 | 0.27 | 0.97 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `deinterleave_fallback` | 0.26 | 0.39 | 0.67 | 0.26 | 0.27 | 0.96 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
-| `oscillate` | 0.41 | 0.76 | 0.54 | 2.08 | 3.79 | 0.55 | sdrk fallback |
-| `oscillate_cq15` | 0.37 | 7.56 | 0.05 | 2.03 | 3.70 | 0.55 | sdrk fallback |
-| `oscillate_cq15_fallback` | 7.56 | 15.95 | 0.47 | 3.70 | 17.80 | 0.21 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `oscillate` | 0.43 | 0.76 | 0.57 | 2.08 | 3.79 | 0.55 | sdrk fallback |
+| `oscillate_cq15` | 0.38 | 4.22 | 0.09 | 2.03 | 5.40 | 0.38 | sdrk fallback |
+| `oscillate_cq15_fallback` | 4.22 | 15.95 | 0.26 | 5.40 | 16.78 | 0.32 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `oscillate_fallback` | 0.76 | 78.52 | 0.01 | 3.79 | 90.69 | 0.04 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_1024` | 2.03 | 2.73 | 0.74 | 1.95 | 3.27 | 0.60 | rustfft (FftPlanner, forward, in place) |
-| `fft_1024_fallback` | 17.02 | 18.65 | 0.91 | 16.75 | 26.92 | 0.62 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_4096` | 2.16 | 3.13 | 0.69 | 2.12 | 3.71 | 0.57 | rustfft (FftPlanner, forward, in place) |
-| `fft_4096_fallback` | 20.56 | 21.14 | 0.97 | 20.23 | 32.67 | 0.62 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_64` | 1.65 | 1.82 | 0.90 | 1.63 | 1.82 | 0.89 | rustfft (FftPlanner, forward, in place) |
-| `fft_64_fallback` | 10.95 | 12.31 | 0.89 | 10.73 | 17.12 | 0.63 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_cq15_1024` | 2.12 | 48.10 | 0.04 | 2.93 | 50.50 | 0.06 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default` | 1.84 | 48.10 | 0.04 | 2.39 | 50.50 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default_fallback` | 28.62 | 38.80 | 0.74 | 32.22 | 40.50 | 0.80 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_cq15_1024_fallback` | 42.80 | 38.80 | 1.10 | 49.46 | 40.50 | 1.22 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_cq15_1024_full_scale` | 1.90 | 48.10 | 0.04 | 2.50 | 50.50 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `rfft_1024` | 1.70 | 2.55 | 0.67 | 1.66 | 2.86 | 0.58 | realfft on rustfft (RealFftPlanner, forward, out of place) |
-| `rfft_1024_fallback` | 8.94 | 8.90 | 1.00 | 8.85 | 13.58 | 0.65 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fft_1024` | 2.44 | 2.62 | 0.93 | 1.80 | 3.27 | 0.55 | rustfft (FftPlanner, forward, in place) |
+| `fft_1024_fallback` | 17.03 | 17.82 | 0.96 | 16.75 | 18.53 | 0.90 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fft_4096` | 2.70 | 3.03 | 0.89 | 1.93 | 3.71 | 0.52 | rustfft (FftPlanner, forward, in place) |
+| `fft_4096_fallback` | 20.57 | 20.57 | 1.00 | 20.23 | 21.21 | 0.95 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fft_64` | 1.58 | 1.82 | 0.87 | 1.63 | 1.82 | 0.89 | rustfft (FftPlanner, forward, in place) |
+| `fft_64_fallback` | 10.91 | 11.76 | 0.93 | 10.73 | 11.39 | 0.94 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fft_cq15_1024` | 2.32 | 45.37 | 0.05 | 2.65 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default` | 2.08 | 45.37 | 0.05 | 2.34 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default_fallback` | 28.66 | 37.40 | 0.77 | 31.56 | 39.49 | 0.80 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fft_cq15_1024_fallback` | 42.83 | 37.40 | 1.15 | 50.08 | 39.49 | 1.27 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fft_cq15_1024_full_scale` | 2.14 | 45.37 | 0.05 | 2.40 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `rfft_1024` | 1.93 | 2.57 | 0.75 | 1.61 | 2.83 | 0.57 | realfft on rustfft (RealFftPlanner, forward, out of place) |
+| `rfft_1024_fallback` | 9.02 | 8.63 | 1.05 | 8.87 | 9.37 | 0.95 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `am_mod` | 0.38 | 0.38 | 1.00 | 0.30 | 0.30 | 1.00 | sdrk fallback |
 | `am_mod_cq15` | 0.14 | 0.32 | 0.43 | 0.20 | 0.48 | 0.43 | sdrk fallback |
-| `am_mod_cq15_fallback` | 0.32 | 2.85 | 0.11 | 0.48 | 2.37 | 0.20 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `am_mod_cq15_fallback` | 0.32 | 2.82 | 0.11 | 0.48 | 2.37 | 0.20 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `am_mod_fallback` | 0.38 | 0.53 | 0.73 | 0.30 | 0.54 | 0.56 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
-| `auto_notch` | 161.09 | 161.09 | 1.00 | 168.96 | 168.96 | 1.00 | sdrk fallback |
+| `auto_notch` | 161.09 | 161.09 | 1.00 | 163.36 | 163.36 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 792.49 | 792.49 | 1.00 | 97.78 | 97.78 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 516.23 | 516.13 | 1.00 | 96.78 | 96.79 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.28 | 0.28 | 1.00 | 1.83 | 1.83 | 1.00 | sdrk fallback |
@@ -1808,52 +1808,52 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `channelize_block` | 12.69 | 12.69 | 1.00 | 16.13 | 16.13 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 38.10 | 107.09 | 0.36 | 32.11 | 118.99 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 84.05 | 84.05 | 1.00 | 102.05 | 102.05 | 1.00 | sdrk fallback |
-| `costas_fallback` | 84.05 | 68.92 | 1.22 | 102.05 | 66.57 | 1.53 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 84.05 | 68.92 | 1.22 | 102.05 | 66.44 | 1.54 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.05 | 10.38 | 0.78 | 9.04 | 9.40 | 0.96 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 107.27 | 107.27 | 1.00 | 121.97 | 121.97 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 107.27 | 929.60 | 0.12 | 121.97 | 220.19 | 0.55 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 5.47 | 5.47 | 1.00 | 5.67 | 5.67 | 1.00 | sdrk fallback |
-| `frame_decode_block` | 5.20 | 5.20 | 1.00 | 5.18 | 5.18 | 1.00 | sdrk fallback |
-| `frame_encode_block` | 1.57 | 1.57 | 1.00 | 1.68 | 1.68 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 1.97 | 108.34 | 0.02 | 3.44 | 34.03 | 0.10 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
-| `halfband_decimate_cq15` | 7.12 | 11.98 | 0.59 | 8.56 | 13.27 | 0.65 | sdrk fallback |
-| `halfband_decimate_cq15_fallback` | 11.98 | 30.73 | 0.39 | 13.27 | 33.31 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `halfband_decimate_fallback` | 60.75 | 118.58 | 0.51 | 13.03 | 65.16 | 0.20 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
-| `halfband_decimate_real` | 1.34 | 27.72 | 0.05 | 1.08 | 20.32 | 0.05 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
-| `halfband_decimate_real_fallback` | 8.93 | 78.88 | 0.11 | 8.71 | 52.10 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
-| `halfband_decimate_real_q15` | 3.85 | 11.81 | 0.33 | 4.51 | 12.41 | 0.36 | sdrk fallback |
-| `halfband_decimate_real_q15_fallback` | 11.81 | 15.39 | 0.77 | 12.41 | 16.68 | 0.74 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `halfband_ref_fir_decimate` | 9.12 | 20.89 | 0.44 | 7.77 | 19.65 | 0.40 | sdrk fallback |
-| `halfband_ref_fir_decimate_cq15` | 31.77 | 35.48 | 0.90 | 27.90 | 22.29 | 1.25 | sdrk fallback |
-| `halfband_ref_shifted` | 4.34 | 63.18 | 0.07 | 5.89 | 15.50 | 0.38 | sdrk fallback |
-| `halfband_ref_shifted_cq15` | 9.90 | 14.77 | 0.67 | 11.64 | 16.35 | 0.71 | sdrk fallback |
-| `morse_decode_block` | 13.19 | 13.19 | 1.00 | 17.03 | 17.03 | 1.00 | sdrk fallback |
+| `equalize` | 107.26 | 107.26 | 1.00 | 113.93 | 113.93 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 107.26 | 929.60 | 0.12 | 113.93 | 220.19 | 0.52 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `frame_decode` | 5.68 | 5.68 | 1.00 | 6.17 | 6.17 | 1.00 | sdrk fallback |
+| `frame_decode_block` | 6.88 | 6.88 | 1.00 | 5.78 | 5.78 | 1.00 | sdrk fallback |
+| `frame_encode_block` | 1.60 | 1.60 | 1.00 | 1.72 | 1.72 | 1.00 | sdrk fallback |
+| `halfband_decimate` | 2.59 | 107.90 | 0.02 | 3.45 | 34.07 | 0.10 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
+| `halfband_decimate_cq15` | 7.14 | 11.94 | 0.60 | 8.54 | 13.27 | 0.64 | sdrk fallback |
+| `halfband_decimate_cq15_fallback` | 11.94 | 30.34 | 0.39 | 13.27 | 33.28 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `halfband_decimate_fallback` | 60.73 | 118.25 | 0.51 | 12.98 | 65.16 | 0.20 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
+| `halfband_decimate_real` | 1.64 | 27.50 | 0.06 | 1.08 | 20.10 | 0.05 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
+| `halfband_decimate_real_fallback` | 8.91 | 78.71 | 0.11 | 8.78 | 52.09 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
+| `halfband_decimate_real_q15` | 3.82 | 11.68 | 0.33 | 4.51 | 12.40 | 0.36 | sdrk fallback |
+| `halfband_decimate_real_q15_fallback` | 11.68 | 15.19 | 0.77 | 12.40 | 16.66 | 0.74 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `halfband_ref_fir_decimate` | 7.56 | 20.89 | 0.36 | 7.77 | 18.96 | 0.41 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 30.90 | 27.20 | 1.14 | 28.35 | 28.95 | 0.98 | sdrk fallback |
+| `halfband_ref_shifted` | 4.96 | 63.16 | 0.08 | 5.90 | 15.45 | 0.38 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 9.92 | 14.74 | 0.67 | 11.62 | 16.34 | 0.71 | sdrk fallback |
+| `morse_decode_block` | 12.75 | 12.75 | 1.00 | 17.03 | 17.03 | 1.00 | sdrk fallback |
 | `morse_encode_block` | 4.20 | 4.20 | 1.00 | 4.64 | 4.64 | 1.00 | sdrk fallback |
-| `noise_blank` | 11.45 | 11.45 | 1.00 | 11.30 | 11.30 | 1.00 | sdrk fallback |
-| `noise_blank_cq15` | 8.41 | 8.41 | 1.00 | 9.24 | 9.24 | 1.00 | sdrk fallback |
-| `preemph_limit` | 19.20 | 19.20 | 1.00 | 12.19 | 12.19 | 1.00 | sdrk fallback |
+| `noise_blank` | 11.45 | 11.45 | 1.00 | 11.33 | 11.33 | 1.00 | sdrk fallback |
+| `noise_blank_cq15` | 8.41 | 8.41 | 1.00 | 9.25 | 9.25 | 1.00 | sdrk fallback |
+| `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
-| `rds_decode_block` | 7.31 | 7.31 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 477.42 | 476.94 | 1.00 | 53.46 | 53.43 | 1.00 | sdrk fallback |
-| `rds_shape` | 41.35 | 41.35 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
-| `real_to_complex` | 1.68 | 54.21 | 0.03 | 1.56 | 23.24 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
-| `real_to_complex_cq15` | 4.32 | 220.51 | 0.02 | 5.03 | 25.95 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
-| `real_to_complex_cq15_fallback` | 14.48 | 219.77 | 0.07 | 15.70 | 25.89 | 0.61 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
-| `real_to_complex_fallback` | 12.02 | 105.40 | 0.11 | 12.35 | 55.02 | 0.22 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
+| `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 481.99 | 481.54 | 1.00 | 51.33 | 51.32 | 1.00 | sdrk fallback |
+| `rds_shape` | 42.06 | 42.06 | 1.00 | 39.42 | 39.42 | 1.00 | sdrk fallback |
+| `real_to_complex` | 1.99 | 53.98 | 0.04 | 1.57 | 23.02 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
+| `real_to_complex_cq15` | 4.28 | 220.09 | 0.02 | 5.03 | 25.92 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
+| `real_to_complex_cq15_fallback` | 14.45 | 220.92 | 0.07 | 15.62 | 25.98 | 0.60 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
+| `real_to_complex_fallback` | 12.02 | 105.23 | 0.11 | 12.12 | 55.01 | 0.22 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
 | `stereo_encode` | 1.15 | 1.15 | 1.00 | 5.53 | 5.53 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 1.59 | 1.59 | 1.00 | 5.54 | 5.54 | 1.00 | sdrk fallback |
-| `stereo_matrix` | 0.32 | 0.84 | 0.38 | 0.32 | 1.07 | 0.30 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
-| `stereo_matrix_cq15` | 0.13 | 0.39 | 0.34 | 0.13 | 0.58 | 0.23 | sdrk fallback |
-| `stereo_matrix_cq15_fallback` | 0.39 | 0.82 | 0.47 | 0.58 | 1.55 | 0.37 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `stereo_matrix_fallback` | 0.45 | 0.60 | 0.75 | 0.54 | 0.53 | 1.02 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `stereo_matrix` | 0.35 | 0.85 | 0.42 | 0.32 | 1.07 | 0.30 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
+| `stereo_matrix_cq15` | 0.20 | 0.39 | 0.51 | 0.13 | 0.58 | 0.23 | sdrk fallback |
+| `stereo_matrix_cq15_fallback` | 0.39 | 0.79 | 0.49 | 0.58 | 1.55 | 0.37 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `stereo_matrix_fallback` | 0.48 | 0.60 | 0.80 | 0.54 | 0.53 | 1.02 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `stereo_pll_fallback` | 61.34 | 56.30 | 1.09 | 74.40 | 78.06 | 0.95 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx512) |
-| `stereo_pll_q15_fallback` | 37.04 | 45.61 | 0.81 | 37.39 | 37.63 | 0.99 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `symbol_sync` | 28.82 | 28.82 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 14.40 | 14.40 | 1.00 | 19.80 | 19.80 | 1.00 | sdrk fallback |
+| `stereo_pll_q15_fallback` | 37.04 | 45.61 | 0.81 | 38.05 | 34.89 | 1.09 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `symbol_sync` | 28.82 | 28.82 | 1.00 | 39.81 | 39.81 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 14.40 | 14.40 | 1.00 | 19.92 | 19.92 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 
@@ -1868,113 +1868,113 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `convert_cq15_cu8` | 0.61 | 1.52 | 0.40 | 0.61 | 1.02 | 0.60 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
 | `convert_cq15_cu8_fallback` | 0.66 | 0.64 | 1.03 | 0.66 | 0.64 | 1.02 | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `convert_cs16` | 1.35 | 2.29 | 0.59 | 1.08 | 2.03 | 0.53 | volk_16i_s32f_convert_32f |
-| `convert_cs16_fallback` | 1.55 | 2.56 | 0.60 | 1.29 | 2.54 | 0.51 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `convert_cs8` | 1.62 | 1.96 | 0.83 | 1.05 | 1.83 | 0.57 | volk_8i_s32f_convert_32f |
+| `convert_cs16_fallback` | 1.55 | 2.56 | 0.61 | 1.29 | 2.54 | 0.51 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `convert_cs8` | 1.63 | 1.96 | 0.83 | 1.06 | 1.83 | 0.58 | volk_8i_s32f_convert_32f |
 | `convert_cs8_fallback` | 1.92 | 1.90 | 1.01 | 1.29 | 1.65 | 0.78 | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `convert_cu8` | 1.18 | 1.96 | 0.60 | 0.94 | 1.83 | 0.51 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cu8` | 1.19 | 1.96 | 0.61 | 0.95 | 1.83 | 0.52 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
 | `convert_cu8_fallback` | 1.55 | 1.90 | 0.81 | 1.29 | 1.65 | 0.78 | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `convert_out_cs16` | 1.69 | 2.78 | 0.61 | 1.44 | 1.90 | 0.76 | volk_32f_s32f_convert_16i |
-| `convert_out_cs16_fallback` | 4.09 | 1.79 | 2.29 | 2.56 | 1.78 | 1.44 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `convert_out_cs16_fallback` | 4.08 | 1.79 | 2.28 | 2.56 | 1.78 | 1.44 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `convert_out_cs8` | 1.63 | 2.65 | 0.62 | 1.35 | 1.71 | 0.79 | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 5.81 | 1.78 | 3.27 | 3.09 | 1.39 | 2.22 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `convert_out_cu8` | 2.91 | 2.68 | 1.09 | 2.09 | 2.15 | 0.97 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_cs8_fallback` | 5.80 | 1.78 | 3.27 | 3.09 | 1.39 | 2.22 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `convert_out_cu8` | 2.91 | 2.66 | 1.09 | 2.09 | 2.15 | 0.97 | volk_32f_s32f_x2_convert_8u |
 | `convert_out_cu8_fallback` | 7.14 | 1.78 | 4.02 | 4.35 | 1.39 | 3.13 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `convert_out_real_rs16` | 0.86 | 1.40 | 0.62 | 0.74 | 0.96 | 0.77 | volk_32f_s32f_convert_16i |
-| `convert_out_real_rs16_fallback` | 2.06 | 0.90 | 2.29 | 1.30 | 0.89 | 1.45 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `convert_out_real_rs16_fallback` | 2.05 | 0.90 | 2.29 | 1.30 | 0.89 | 1.45 | CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `convert_out_real_rs8` | 0.83 | 1.33 | 0.62 | 0.69 | 0.86 | 0.80 | volk_32f_s32f_convert_8i |
 | `convert_out_real_rs8_fallback` | 2.91 | 0.89 | 3.26 | 1.55 | 0.70 | 2.21 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `convert_out_real_ru8` | 1.47 | 1.35 | 1.09 | 1.06 | 1.08 | 0.98 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_real_ru8` | 1.47 | 1.34 | 1.10 | 1.06 | 1.08 | 0.98 | volk_32f_s32f_x2_convert_8u |
 | `convert_out_real_ru8_fallback` | 3.58 | 0.89 | 4.01 | 2.18 | 0.70 | 3.11 | CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `convert_real_rs16` | 0.69 | 1.15 | 0.60 | 0.56 | 1.02 | 0.55 | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.79 | 1.28 | 0.62 | 0.66 | 1.27 | 0.52 | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `rotate` | 2.77 | 5.42 | 0.51 | 1.96 | 3.71 | 0.53 | volk_32fc_s32fc_x2_rotator2_32fc |
-| `rotate_cq15` | 4.50 | 14.12 | 0.32 | 3.66 | 15.09 | 0.24 | sdrk fallback |
+| `rotate` | 2.74 | 4.63 | 0.59 | 1.96 | 3.71 | 0.53 | volk_32fc_s32fc_x2_rotator2_32fc |
+| `rotate_cq15` | 4.54 | 14.12 | 0.32 | 3.66 | 15.09 | 0.24 | sdrk fallback |
 | `rotate_cq15_fallback` | 14.12 | 79.06 | 0.18 | 15.09 | 72.65 | 0.21 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `rotate_fallback` | 11.19 | 11.11 | 1.01 | 13.08 | 14.09 | 0.93 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
-| `fir` | 39.11 | 130.59 | 0.30 | 24.26 | 99.19 | 0.24 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 106.18 | 107.80 | 0.98 | 92.51 | 98.30 | 0.94 | sdrk fallback |
-| `fir_cq15_fallback` | 107.80 | 180.05 | 0.60 | 98.30 | 181.88 | 0.54 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_decimate` | 9.89 | 20.80 | 0.48 | 9.00 | 16.88 | 0.53 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
-| `fir_decimate_cq15` | 26.42 | 29.57 | 0.89 | 23.98 | 27.63 | 0.87 | sdrk fallback |
-| `fir_decimate_cq15_fallback` | 29.57 | 16.42 | 1.80 | 27.63 | 16.90 | 1.63 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_decimate_fallback` | 33.29 | 34.14 | 0.98 | 25.69 | 41.23 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_fallback` | 125.36 | 132.45 | 0.95 | 84.01 | 133.90 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_interpolate` | 43.14 | 142.31 | 0.30 | 28.52 | 113.64 | 0.25 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 75.82 | 127.87 | 0.59 | 76.00 | 145.98 | 0.52 | sdrk fallback |
+| `rotate_fallback` | 11.17 | 11.10 | 1.01 | 13.08 | 14.09 | 0.93 | GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags) |
+| `fir` | 37.96 | 126.85 | 0.30 | 24.33 | 99.19 | 0.25 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
+| `fir_cq15` | 106.10 | 107.72 | 0.98 | 92.51 | 98.30 | 0.94 | sdrk fallback |
+| `fir_cq15_fallback` | 107.72 | 180.05 | 0.60 | 98.30 | 181.88 | 0.54 | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_decimate` | 9.89 | 20.50 | 0.48 | 9.08 | 16.88 | 0.54 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
+| `fir_decimate_cq15` | 26.40 | 29.57 | 0.89 | 23.88 | 27.63 | 0.86 | sdrk fallback |
+| `fir_decimate_cq15_fallback` | 29.57 | 16.40 | 1.80 | 27.63 | 16.90 | 1.63 | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_decimate_fallback` | 32.75 | 34.10 | 0.96 | 25.70 | 41.23 | 0.62 | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_fallback` | 124.44 | 132.43 | 0.94 | 84.01 | 133.90 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_interpolate` | 42.06 | 138.57 | 0.30 | 28.58 | 113.64 | 0.25 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `fir_interpolate_cq15` | 75.80 | 127.87 | 0.59 | 76.00 | 145.98 | 0.52 | sdrk fallback |
 | `fir_interpolate_cq15_fallback` | 127.87 | 141.59 | 0.90 | 145.98 | 141.30 | 1.03 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_interpolate_fallback` | 145.06 | 167.32 | 0.87 | 102.07 | 152.44 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_interpolate_real` | 23.62 | 110.97 | 0.21 | 21.62 | 85.10 | 0.25 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
-| `fir_interpolate_real_fallback` | 82.86 | 83.66 | 0.99 | 62.36 | 76.22 | 0.82 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_interpolate_fallback` | 143.96 | 135.30 | 1.06 | 102.07 | 152.44 | 0.67 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_interpolate_real` | 23.09 | 107.89 | 0.21 | 23.33 | 85.10 | 0.27 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
+| `fir_interpolate_real_fallback` | 82.78 | 67.65 | 1.22 | 62.36 | 76.22 | 0.82 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fir_interpolate_real_q15` | 73.09 | 73.09 | 1.00 | 73.96 | 73.96 | 1.00 | sdrk fallback |
 | `fir_interpolate_real_q15_fallback` | 73.09 | 70.80 | 1.03 | 73.96 | 70.65 | 1.05 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `resample` | 55.26 | 144.03 | 0.38 | 51.08 | 114.43 | 0.45 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 143.66 | 193.79 | 0.74 | 121.64 | 184.92 | 0.66 | sdrk fallback |
+| `resample` | 55.28 | 140.12 | 0.39 | 50.99 | 114.43 | 0.45 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 144.07 | 193.79 | 0.74 | 122.69 | 184.92 | 0.66 | sdrk fallback |
 | `resample_cq15_fallback` | 193.79 | 140.28 | 1.38 | 184.92 | 139.74 | 1.32 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `resample_fallback` | 176.99 | 166.68 | 1.06 | 142.04 | 151.50 | 0.94 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `resample_real` | 32.36 | 112.55 | 0.29 | 29.38 | 85.87 | 0.34 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
-| `resample_real_fallback` | 142.72 | 83.34 | 1.71 | 121.24 | 75.75 | 1.60 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `resample_real_q15` | 97.72 | 113.70 | 0.86 | 78.50 | 107.71 | 0.73 | sdrk fallback |
+| `resample_fallback` | 175.90 | 134.66 | 1.31 | 142.04 | 151.50 | 0.94 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `resample_real` | 32.35 | 109.41 | 0.30 | 29.36 | 85.87 | 0.34 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
+| `resample_real_fallback` | 139.69 | 67.33 | 2.07 | 121.24 | 75.75 | 1.60 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `resample_real_q15` | 97.68 | 113.70 | 0.86 | 78.50 | 107.71 | 0.73 | sdrk fallback |
 | `resample_real_q15_fallback` | 113.70 | 70.14 | 1.62 | 107.71 | 69.87 | 1.54 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mag` | 8.58 | 8.60 | 1.00 | 1.77 | 1.79 | 0.99 | volk_32fc_magnitude_32f |
+| `mag` | 8.58 | 8.59 | 1.00 | 1.77 | 1.79 | 0.99 | volk_32fc_magnitude_32f |
 | `mag_fallback` | 8.56 | 8.82 | 0.97 | 1.77 | 2.04 | 0.87 | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mag_q15` | 9.95 | 9.11 | 1.09 | 3.79 | 3.68 | 1.03 | volk_16ic_magnitude_16i |
-| `mag_q15_fallback` | 9.94 | 35.41 | 0.28 | 4.07 | 32.99 | 0.12 | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mag_sq` | 1.28 | 1.79 | 0.72 | 0.91 | 1.53 | 0.60 | volk_32fc_magnitude_squared_32f |
-| `mag_sq_fallback` | 1.52 | 2.29 | 0.67 | 1.14 | 1.53 | 0.75 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mag_sq_q15` | 0.71 | 1.00 | 0.71 | 0.64 | 0.91 | 0.71 | sdrk fallback |
-| `mag_sq_q15_fallback` | 1.00 | 1.40 | 0.71 | 0.91 | 1.15 | 0.79 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `quad_demod` | 15.92 | 16.49 | 0.97 | 6.91 | 10.40 | 0.66 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
-| `quad_demod_cq15` | 20.15 | 140.14 | 0.14 | 10.61 | 115.54 | 0.09 | sdrk fallback |
-| `quad_demod_cq15_fallback` | 140.14 | 138.91 | 1.01 | 115.54 | 136.18 | 0.85 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
-| `quad_demod_fallback` | 72.81 | 82.40 | 0.88 | 74.45 | 55.28 | 1.35 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
-| `fm_mod` | 10.67 | 59.12 | 0.18 | 5.26 | 57.43 | 0.09 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `fm_mod_cq15` | 8.38 | 18.86 | 0.44 | 4.59 | 15.77 | 0.29 | sdrk fallback |
+| `mag_q15` | 9.91 | 9.10 | 1.09 | 3.79 | 3.68 | 1.03 | volk_16ic_magnitude_16i |
+| `mag_q15_fallback` | 9.88 | 35.41 | 0.28 | 4.07 | 32.99 | 0.12 | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `mag_sq` | 1.28 | 1.78 | 0.72 | 0.91 | 1.53 | 0.60 | volk_32fc_magnitude_squared_32f |
+| `mag_sq_fallback` | 1.52 | 2.28 | 0.67 | 1.14 | 1.53 | 0.75 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `mag_sq_q15` | 0.71 | 1.01 | 0.70 | 0.64 | 0.91 | 0.71 | sdrk fallback |
+| `mag_sq_q15_fallback` | 1.01 | 1.40 | 0.72 | 0.91 | 1.15 | 0.79 | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `quad_demod` | 14.55 | 15.15 | 0.96 | 6.91 | 10.40 | 0.66 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod_cq15` | 19.37 | 120.12 | 0.16 | 10.61 | 115.54 | 0.09 | sdrk fallback |
+| `quad_demod_cq15_fallback` | 120.12 | 138.91 | 0.86 | 115.54 | 136.18 | 0.85 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
+| `quad_demod_fallback` | 71.50 | 72.39 | 0.99 | 74.45 | 55.28 | 1.35 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
+| `fm_mod` | 10.17 | 54.90 | 0.19 | 5.26 | 57.43 | 0.09 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `fm_mod_cq15` | 8.34 | 18.86 | 0.44 | 4.59 | 15.77 | 0.29 | sdrk fallback |
 | `fm_mod_cq15_fallback` | 18.86 | 54.29 | 0.35 | 15.77 | 47.65 | 0.33 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fm_mod_fallback` | 18.67 | 59.12 | 0.32 | 16.45 | 57.43 | 0.29 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
-| `squelch` | 15.16 | 37.72 | 0.40 | 8.21 | 37.23 | 0.22 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
+| `fm_mod_fallback` | 18.66 | 54.90 | 0.34 | 16.45 | 57.43 | 0.29 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `squelch` | 12.15 | 37.71 | 0.32 | 8.21 | 37.23 | 0.22 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
 | `squelch_cq15` | 11.08 | 11.08 | 1.00 | 9.12 | 9.12 | 1.00 | sdrk fallback |
 | `window` | 1.96 | 2.15 | 0.91 | 1.45 | 1.65 | 0.88 | volk_32fc_32f_multiply_32fc |
-| `window_cq15` | 1.05 | 1.66 | 0.63 | 0.83 | 1.40 | 0.59 | sdrk fallback |
-| `window_cq15_fallback` | 1.66 | 2.04 | 0.81 | 1.40 | 1.78 | 0.78 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `window_cq15` | 1.05 | 1.65 | 0.64 | 0.83 | 1.40 | 0.59 | sdrk fallback |
+| `window_cq15_fallback` | 1.65 | 2.04 | 0.81 | 1.40 | 1.78 | 0.78 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `window_fallback` | 2.03 | 2.53 | 0.80 | 1.53 | 2.02 | 0.75 | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `power_db` | 14.36 | 8.24 | 1.74 | 6.61 | 5.45 | 1.21 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
-| `power_db_fallback` | 19.63 | 65.97 | 0.30 | 8.81 | 39.50 | 0.22 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `power_db_q15` | 13.77 | 14.96 | 0.92 | 6.46 | 6.66 | 0.97 | sdrk fallback |
-| `power_db_q15_fallback` | 14.96 | 67.26 | 0.22 | 6.66 | 40.77 | 0.16 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `agc` | 39.90 | 46.14 | 0.86 | 21.76 | 28.09 | 0.77 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
-| `agc_cq15` | 146.49 | 146.49 | 1.00 | 88.18 | 88.18 | 1.00 | sdrk fallback |
-| `agc_fallback` | 39.90 | 46.14 | 0.86 | 21.76 | 28.09 | 0.77 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
-| `dc_block` | 10.20 | 16.04 | 0.64 | 4.79 | 8.04 | 0.60 | sdrk fallback |
+| `power_db` | 14.40 | 7.23 | 1.99 | 6.61 | 5.45 | 1.21 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
+| `power_db_fallback` | 18.37 | 58.97 | 0.31 | 8.81 | 39.50 | 0.22 | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `power_db_q15` | 13.74 | 14.39 | 0.96 | 6.46 | 6.66 | 0.97 | sdrk fallback |
+| `power_db_q15_fallback` | 14.39 | 60.25 | 0.24 | 6.66 | 40.77 | 0.16 | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `agc` | 25.67 | 40.13 | 0.64 | 18.01 | 28.09 | 0.64 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
+| `agc_cq15` | 130.48 | 130.48 | 1.00 | 88.18 | 88.18 | 1.00 | sdrk fallback |
+| `agc_fallback` | 25.67 | 40.13 | 0.64 | 18.01 | 28.09 | 0.64 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
+| `dc_block` | 10.07 | 15.04 | 0.67 | 4.79 | 8.04 | 0.60 | sdrk fallback |
 | `dc_block_cq15` | 11.04 | 11.04 | 1.00 | 12.54 | 12.54 | 1.00 | sdrk fallback |
-| `dc_block_fallback` | 16.04 | 54.65 | 0.29 | 8.04 | 55.67 | 0.14 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
-| `dc_block_real` | 6.74 | 13.07 | 0.52 | 3.34 | 8.05 | 0.41 | sdrk fallback |
-| `dc_block_real_fallback` | 13.07 | 53.73 | 0.24 | 8.05 | 58.60 | 0.14 | liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3) |
+| `dc_block_fallback` | 15.04 | 54.62 | 0.28 | 8.04 | 55.67 | 0.14 | liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3) |
+| `dc_block_real` | 6.74 | 11.07 | 0.61 | 3.34 | 8.05 | 0.41 | sdrk fallback |
+| `dc_block_real_fallback` | 11.07 | 52.71 | 0.21 | 8.05 | 58.60 | 0.14 | liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3) |
 | `dc_block_real_q15` | 11.04 | 11.04 | 1.00 | 10.06 | 10.06 | 1.00 | sdrk fallback |
-| `deemphasis` | 6.03 | 18.08 | 0.33 | 3.09 | 10.06 | 0.31 | sdrk fallback |
-| `deemphasis_fallback` | 18.08 | 18.12 | 1.00 | 10.06 | 21.07 | 0.48 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
+| `deemphasis` | 5.99 | 15.07 | 0.40 | 3.09 | 10.06 | 0.31 | sdrk fallback |
+| `deemphasis_fallback` | 15.07 | 18.10 | 0.83 | 10.06 | 21.07 | 0.48 | GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags) |
 | `deemphasis_q15` | 12.05 | 12.05 | 1.00 | 11.05 | 11.05 | 1.00 | sdrk fallback |
-| `biquad` | 19.67 | 28.67 | 0.69 | 7.68 | 24.13 | 0.32 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (neon64, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
-| `biquad_cq15` | 17.26 | 24.13 | 0.72 | 15.44 | 38.12 | 0.40 | sdrk fallback |
+| `biquad` | 17.66 | 26.24 | 0.67 | 7.68 | 24.13 | 0.32 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (neon64, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
+| `biquad_cq15` | 16.38 | 24.13 | 0.68 | 15.44 | 38.12 | 0.40 | sdrk fallback |
 | `biquad_cq15_fallback` | 24.13 | 200.18 | 0.12 | 38.12 | 124.16 | 0.31 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `biquad_fallback` | 31.53 | 40.05 | 0.79 | 14.83 | 18.91 | 0.78 | CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `biquad_real` | 15.14 | 14.34 | 1.06 | 7.42 | 12.07 | 0.61 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (neon64, -ffp-contract=off) |
-| `biquad_real_fallback` | 16.16 | 30.05 | 0.54 | 10.11 | 14.03 | 0.72 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `biquad_real_q15` | 15.17 | 15.11 | 1.00 | 12.90 | 28.09 | 0.46 | sdrk fallback |
+| `biquad_fallback` | 25.50 | 32.04 | 0.80 | 14.83 | 18.91 | 0.78 | CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `biquad_real` | 12.19 | 13.12 | 0.93 | 7.42 | 12.07 | 0.61 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (neon64, -ffp-contract=off) |
+| `biquad_real_fallback` | 13.16 | 24.04 | 0.55 | 10.11 | 14.03 | 0.72 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `biquad_real_q15` | 14.22 | 15.11 | 0.94 | 12.90 | 28.09 | 0.46 | sdrk fallback |
 | `biquad_real_q15_fallback` | 15.11 | 100.10 | 0.15 | 28.09 | 62.08 | 0.45 | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `dot` | 1.34 | 1.29 | 1.03 | 0.96 | 1.04 | 0.92 | volk_32fc_32f_dot_prod_32fc |
-| `dot_complex` | 3.67 | 3.55 | 1.03 | 1.77 | 2.03 | 0.87 | VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
-| `dot_complex_fallback` | 4.27 | 10.03 | 0.43 | 4.52 | 5.27 | 0.86 | CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `dot` | 1.34 | 1.29 | 1.04 | 0.96 | 1.04 | 0.92 | volk_32fc_32f_dot_prod_32fc |
+| `dot_complex` | 3.66 | 3.54 | 1.03 | 1.77 | 2.03 | 0.87 | VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `dot_complex_fallback` | 4.27 | 8.03 | 0.53 | 4.52 | 5.27 | 0.86 | CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `dot_cq15` | 0.90 | 0.90 | 1.00 | 0.90 | 0.90 | 1.00 | sdrk fallback |
 | `dot_cq15_fallback` | 0.90 | 1.54 | 0.58 | 0.90 | 1.29 | 0.70 | CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `dot_fallback` | 5.04 | 10.09 | 0.50 | 2.27 | 4.05 | 0.56 | CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `dot_fallback` | 4.15 | 8.08 | 0.51 | 2.27 | 4.05 | 0.56 | CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `dot_real` | 0.52 | 0.66 | 0.79 | 0.42 | 0.53 | 0.80 | volk_32f_x2_dot_prod_32f |
-| `dot_real_fallback` | 5.05 | 5.05 | 1.00 | 2.02 | 2.03 | 1.00 | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `dot_real_fallback` | 4.04 | 4.05 | 1.00 | 2.02 | 2.03 | 1.00 | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `dot_real_q15` | 0.39 | 0.52 | 0.76 | 0.40 | 0.52 | 0.77 | sdrk fallback |
 | `dot_real_q15_fallback` | 0.52 | 0.77 | 0.67 | 0.52 | 0.65 | 0.80 | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `scale` | 1.39 | 1.78 | 0.78 | 1.14 | 1.53 | 0.74 | volk_32f_s32f_multiply_32f |
 | `scale_cq15` | 0.70 | 1.52 | 0.46 | 0.58 | 1.39 | 0.41 | sdrk fallback |
 | `scale_cq15_fallback` | 1.52 | 1.80 | 0.84 | 1.39 | 1.55 | 0.90 | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `scale_fallback` | 1.52 | 2.04 | 0.75 | 1.27 | 2.03 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `scale_fallback` | 1.52 | 2.03 | 0.75 | 1.27 | 2.03 | 0.62 | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `add` | 1.64 | 2.03 | 0.81 | 1.39 | 1.77 | 0.78 | volk_32fc_x2_add_32fc |
 | `add_cq15` | 0.70 | 0.90 | 0.78 | 0.70 | 0.90 | 0.78 | volk_16i_x2_add_saturated_16i on the 2 n values |
 | `add_cq15_fallback` | 0.76 | 1.79 | 0.42 | 0.76 | 1.53 | 0.50 | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
@@ -1986,7 +1986,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `mul` | 2.27 | 2.78 | 0.82 | 1.83 | 2.27 | 0.81 | volk_32fc_x2_multiply_32fc |
 | `mul_cq15` | 1.46 | 1.78 | 0.82 | 1.37 | 1.65 | 0.83 | sdrk fallback |
 | `mul_cq15_fallback` | 1.78 | 3.31 | 0.54 | 1.65 | 2.29 | 0.72 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `mul_fallback` | 3.30 | 3.54 | 0.93 | 2.03 | 3.03 | 0.67 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `mul_fallback` | 3.29 | 3.53 | 0.93 | 2.03 | 3.03 | 0.67 | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `mul_real` | 0.82 | 1.02 | 0.80 | 0.70 | 0.90 | 0.78 | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 1.14 | 1.28 | 0.89 | 1.01 | 1.03 | 0.99 | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `mul_real_q15` | 0.41 | 0.89 | 0.46 | 0.41 | 0.82 | 0.50 | sdrk fallback |
@@ -1999,81 +1999,81 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `deinterleave_cq15` | 0.53 | 0.65 | 0.82 | 0.57 | 0.71 | 0.79 | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.58 | 0.65 | 0.89 | 0.64 | 0.90 | 0.71 | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `deinterleave_fallback` | 1.15 | 1.28 | 0.90 | 1.27 | 1.78 | 0.71 | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
-| `oscillate` | 5.55 | 8.11 | 0.68 | 3.28 | 10.06 | 0.33 | sdrk fallback |
+| `oscillate` | 5.55 | 8.10 | 0.68 | 3.28 | 10.06 | 0.33 | sdrk fallback |
 | `oscillate_cq15` | 3.82 | 7.74 | 0.49 | 3.29 | 9.05 | 0.36 | sdrk fallback |
 | `oscillate_cq15_fallback` | 7.74 | 51.51 | 0.15 | 9.05 | 45.00 | 0.20 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `oscillate_fallback` | 8.11 | 56.79 | 0.14 | 10.06 | 46.15 | 0.22 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fft_1024` | 12.84 | 17.23 | 0.75 | 8.55 | 13.55 | 0.63 | rustfft (FftPlanner, forward, in place) |
+| `oscillate_fallback` | 8.10 | 52.62 | 0.15 | 10.06 | 46.15 | 0.22 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fft_1024` | 12.84 | 17.22 | 0.75 | 8.55 | 13.55 | 0.63 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 33.24 | 38.54 | 0.86 | 34.77 | 39.16 | 0.89 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_4096` | 15.06 | 20.37 | 0.74 | 10.02 | 16.16 | 0.62 | rustfft (FftPlanner, forward, in place) |
-| `fft_4096_fallback` | 37.38 | 39.41 | 0.95 | 39.15 | 43.25 | 0.91 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fft_4096_fallback` | 37.38 | 39.40 | 0.95 | 39.15 | 43.25 | 0.91 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_64` | 8.85 | 13.02 | 0.68 | 7.05 | 10.68 | 0.66 | rustfft (FftPlanner, forward, in place) |
 | `fft_64_fallback` | 21.69 | 22.44 | 0.97 | 20.29 | 24.31 | 0.83 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_cq15_1024` | 11.77 | 67.26 | 0.17 | 10.10 | 77.63 | 0.13 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default` | 10.18 | 67.26 | 0.15 | 8.48 | 77.63 | 0.11 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `fft_cq15_1024_default_fallback` | 50.88 | 64.42 | 0.79 | 51.01 | 52.33 | 0.97 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fft_cq15_1024_default_fallback` | 50.87 | 64.42 | 0.79 | 51.01 | 52.33 | 0.97 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_cq15_1024_fallback` | 120.91 | 64.42 | 1.88 | 100.37 | 52.33 | 1.92 | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_cq15_1024_full_scale` | 10.93 | 67.26 | 0.16 | 9.01 | 77.63 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
-| `rfft_1024` | 8.82 | 10.89 | 0.81 | 5.72 | 10.04 | 0.57 | realfft on rustfft (RealFftPlanner, forward, out of place) |
-| `rfft_1024_fallback` | 18.29 | 18.65 | 0.98 | 17.01 | 18.61 | 0.91 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `rfft_1024` | 8.81 | 10.88 | 0.81 | 5.72 | 10.04 | 0.57 | realfft on rustfft (RealFftPlanner, forward, out of place) |
+| `rfft_1024_fallback` | 18.28 | 18.65 | 0.98 | 17.01 | 18.61 | 0.91 | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod` | 2.91 | 2.91 | 1.00 | 1.52 | 1.52 | 1.00 | sdrk fallback |
 | `am_mod_cq15` | 0.90 | 1.72 | 0.52 | 0.77 | 1.33 | 0.58 | sdrk fallback |
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 1.28 | 2.27 | 1.52 | 1.03 | 1.48 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
-| `auto_notch` | 296.16 | 296.16 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
+| `auto_notch` | 263.70 | 263.70 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 60.07 | 60.07 | 1.00 | 42.71 | 42.71 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 308.18 | 308.18 | 1.00 | 263.36 | 263.36 | 1.00 | sdrk fallback |
 | `channel_select_block` | 1.27 | 1.27 | 1.00 | 1.27 | 1.27 | 1.00 | sdrk fallback |
 | `channelize` | 30.93 | 302.17 | 0.10 | 22.59 | 240.53 | 0.09 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 30.99 | 30.99 | 1.00 | 22.71 | 22.71 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 98.73 | 222.34 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
-| `costas` | 131.06 | 131.06 | 1.00 | 77.05 | 77.05 | 1.00 | sdrk fallback |
-| `costas_fallback` | 131.06 | 87.89 | 1.49 | 77.05 | 75.07 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas` | 117.06 | 117.06 | 1.00 | 77.05 | 77.05 | 1.00 | sdrk fallback |
+| `costas_fallback` | 117.06 | 82.40 | 1.42 | 77.05 | 75.07 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 9.12 | 8.17 | 1.12 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.11 | 8.17 | 0.99 | 7.10 | 7.16 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 262.11 | 262.11 | 1.00 | 191.23 | 191.23 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 262.11 | 229.47 | 1.14 | 191.23 | 236.11 | 0.81 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 8.28 | 8.28 | 1.00 | 9.46 | 9.46 | 1.00 | sdrk fallback |
-| `frame_decode_block` | 8.27 | 8.27 | 1.00 | 9.37 | 9.37 | 1.00 | sdrk fallback |
-| `frame_encode_block` | 2.09 | 2.09 | 1.00 | 1.93 | 1.93 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 13.17 | 90.82 | 0.15 | 12.58 | 83.63 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
-| `halfband_decimate_cq15` | 16.35 | 29.05 | 0.56 | 15.22 | 25.78 | 0.59 | sdrk fallback |
-| `halfband_decimate_cq15_fallback` | 29.05 | 39.92 | 0.73 | 25.78 | 40.69 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `halfband_decimate_fallback` | 35.62 | 93.59 | 0.38 | 26.81 | 74.24 | 0.36 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, neon) |
-| `halfband_decimate_real` | 7.75 | 88.66 | 0.09 | 6.79 | 75.02 | 0.09 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
-| `halfband_decimate_real_fallback` | 25.68 | 90.62 | 0.28 | 21.30 | 58.40 | 0.36 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
-| `halfband_decimate_real_q15` | 7.67 | 22.83 | 0.34 | 6.49 | 21.15 | 0.31 | sdrk fallback |
-| `halfband_decimate_real_q15_fallback` | 22.83 | 19.75 | 1.16 | 21.15 | 20.11 | 1.05 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `halfband_ref_fir_decimate` | 19.74 | 64.24 | 0.31 | 17.93 | 50.98 | 0.35 | sdrk fallback |
-| `halfband_ref_fir_decimate_cq15` | 78.43 | 60.69 | 1.29 | 75.20 | 56.59 | 1.33 | sdrk fallback |
-| `halfband_ref_shifted` | 18.84 | 41.30 | 0.46 | 19.08 | 33.38 | 0.57 | sdrk fallback |
-| `halfband_ref_shifted_cq15` | 23.39 | 36.11 | 0.65 | 21.74 | 32.32 | 0.67 | sdrk fallback |
-| `morse_decode_block` | 22.26 | 22.26 | 1.00 | 28.43 | 28.43 | 1.00 | sdrk fallback |
-| `morse_encode_block` | 8.56 | 8.56 | 1.00 | 9.45 | 9.45 | 1.00 | sdrk fallback |
-| `noise_blank` | 17.64 | 17.64 | 1.00 | 8.80 | 8.80 | 1.00 | sdrk fallback |
+| `equalize` | 247.72 | 247.72 | 1.00 | 191.23 | 191.23 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 247.72 | 228.84 | 1.08 | 191.23 | 236.11 | 0.81 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `frame_decode` | 8.83 | 8.83 | 1.00 | 10.38 | 10.38 | 1.00 | sdrk fallback |
+| `frame_decode_block` | 8.83 | 8.83 | 1.00 | 9.55 | 9.55 | 1.00 | sdrk fallback |
+| `frame_encode_block` | 2.10 | 2.10 | 1.00 | 1.96 | 1.96 | 1.00 | sdrk fallback |
+| `halfband_decimate` | 13.17 | 84.75 | 0.16 | 12.58 | 83.63 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
+| `halfband_decimate_cq15` | 16.35 | 29.04 | 0.56 | 15.22 | 25.78 | 0.59 | sdrk fallback |
+| `halfband_decimate_cq15_fallback` | 29.04 | 39.92 | 0.73 | 25.78 | 40.69 | 0.63 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `halfband_decimate_fallback` | 35.63 | 93.29 | 0.38 | 26.81 | 74.24 | 0.36 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, neon) |
+| `halfband_decimate_real` | 7.75 | 84.61 | 0.09 | 6.79 | 75.02 | 0.09 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
+| `halfband_decimate_real_fallback` | 25.66 | 78.52 | 0.33 | 21.30 | 58.40 | 0.36 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
+| `halfband_decimate_real_q15` | 7.67 | 22.82 | 0.34 | 6.49 | 21.15 | 0.31 | sdrk fallback |
+| `halfband_decimate_real_q15_fallback` | 22.82 | 19.75 | 1.16 | 21.15 | 20.11 | 1.05 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `halfband_ref_fir_decimate` | 19.74 | 63.98 | 0.31 | 17.93 | 50.98 | 0.35 | sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 78.40 | 60.69 | 1.29 | 75.20 | 56.59 | 1.33 | sdrk fallback |
+| `halfband_ref_shifted` | 18.84 | 41.31 | 0.46 | 19.08 | 33.38 | 0.57 | sdrk fallback |
+| `halfband_ref_shifted_cq15` | 23.39 | 36.10 | 0.65 | 21.74 | 32.32 | 0.67 | sdrk fallback |
+| `morse_decode_block` | 22.03 | 22.03 | 1.00 | 28.42 | 28.42 | 1.00 | sdrk fallback |
+| `morse_encode_block` | 8.35 | 8.35 | 1.00 | 9.45 | 9.45 | 1.00 | sdrk fallback |
+| `noise_blank` | 14.61 | 14.61 | 1.00 | 8.80 | 8.80 | 1.00 | sdrk fallback |
 | `noise_blank_cq15` | 9.51 | 9.51 | 1.00 | 10.53 | 10.53 | 1.00 | sdrk fallback |
-| `preemph_limit` | 20.93 | 20.93 | 1.00 | 16.43 | 16.43 | 1.00 | sdrk fallback |
+| `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
-| `preemph_limit_stereo` | 29.76 | 29.76 | 1.00 | 26.44 | 26.44 | 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 55.78 | 55.78 | 1.00 | 49.36 | 49.36 | 1.00 | sdrk fallback |
-| `rds_shape` | 61.55 | 61.55 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
-| `real_to_complex` | 10.15 | 90.81 | 0.11 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
+| `rds_demod_block` | 55.36 | 55.36 | 1.00 | 49.36 | 49.36 | 1.00 | sdrk fallback |
+| `rds_shape` | 53.93 | 53.93 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
+| `real_to_complex` | 10.15 | 86.75 | 0.12 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15` | 10.69 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
-| `real_to_complex_cq15_fallback` | 33.37 | 17.90 | 1.86 | 31.07 | 17.14 | 1.81 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
-| `real_to_complex_fallback` | 31.18 | 92.79 | 0.34 | 30.71 | 60.25 | 0.51 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
-| `stereo_encode` | 15.15 | 15.15 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
-| `stereo_encode_rds` | 21.15 | 21.15 | 1.00 | 22.07 | 22.07 | 1.00 | sdrk fallback |
+| `real_to_complex_cq15_fallback` | 33.36 | 17.90 | 1.86 | 31.07 | 17.14 | 1.81 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
+| `real_to_complex_fallback` | 31.17 | 80.68 | 0.39 | 30.71 | 60.25 | 0.51 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
+| `stereo_encode` | 15.13 | 15.13 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
+| `stereo_encode_rds` | 21.13 | 21.13 | 1.00 | 22.07 | 22.07 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.90 | 5.74 | 0.33 | 1.39 | 5.23 | 0.27 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
 | `stereo_matrix_cq15` | 0.77 | 0.77 | 1.00 | 0.76 | 0.76 | 1.00 | sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 0.77 | 2.70 | 0.28 | 0.76 | 2.31 | 0.33 | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `stereo_matrix_fallback` | 1.90 | 3.83 | 0.50 | 1.39 | 3.07 | 0.45 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `stereo_pll_fallback` | 95.51 | 122.43 | 0.78 | 56.44 | 57.23 | 0.99 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, neon) |
+| `stereo_pll_fallback` | 84.51 | 86.93 | 0.97 | 56.44 | 57.23 | 0.99 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, neon) |
 | `stereo_pll_q15_fallback` | 41.07 | 100.31 | 0.41 | 39.08 | 88.00 | 0.44 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `symbol_sync` | 51.52 | 51.52 | 1.00 | 28.58 | 28.58 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 22.67 | 22.67 | 1.00 | 12.03 | 12.03 | 1.00 | sdrk fallback |
+| `symbol_sync` | 47.13 | 47.13 | 1.00 | 28.58 | 28.58 | 1.00 | sdrk fallback |
+| `symbol_sync_real` | 20.41 | 20.41 | 1.00 | 12.03 | 12.03 | 1.00 | sdrk fallback |
 
 - Not measured at this level: `real_to_complex_airspy`.
 

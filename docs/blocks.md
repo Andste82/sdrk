@@ -594,18 +594,21 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 |
 | `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45 (delivered) |
 | `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 |
-| `sync_detect` | sample-level sync-word correlator (kernel `xcorr_fft`) | M50 (kernel); block backlog |
-| `noise` | deterministic Gaussian noise source (kernel `gauss_noise`) | M48 (kernel); block later |
-| `scramble` | keyed phase scrambling / descrambling (kernel `scramble`) | M49 (kernel); block later |
-| `spread`, `despread` | direct-sequence spreading and integrate-and-dump (kernels `spread`, `despread`) | M51, M52 (kernels); blocks later |
-| `code_acquire`, `code_track` | DSSS acquisition and the delay-locked loop (kernels `code_search`, `code_track`) | M53, M54 (kernels); blocks later |
+| `correlate` | sliding correlation with a PRBS code or a caller reference (kernel `xcorr_fft`) | M50 |
+| `sync_detect` | sync-word detector: `correlate` with a peak search and a threshold | backlog |
+| `noise` | deterministic Gaussian noise source (kernel `gauss_noise`) | M48 |
+| `scramble` | phase scrambling / descrambling with a PRBS key (kernel `scramble`) | M49 |
+| `spread`, `despread` | direct-sequence spreading and integrate-and-dump (kernels `spread`, `despread`) | M51, M52 |
+| `code_search`, `code_track` | DSSS code-phase and Doppler search (one result packet per search), the delay-locked loop (kernels `code_search`, `code_track`) | M53, M54 |
+| `code_acquire` | DSSS acquisition: `code_search` with a threshold from a false-alarm probability and the hand-off to `code_track` | later |
 | `dsss_mod`, `dsss_demod` | DSSS modulator and demodulator (composite blocks) | later |
-| `pilot_equalize` | OFDM pilot-based channel equalizer (kernel `pilot_equalize`) | M55 (kernel); block later |
+| `pilot_equalize` | OFDM pilot-based channel equalizer on a lane stream (kernel `pilot_equalize`) | M55 |
 | `fft`, `ifft` | FFT / IFFT on a lane step (OFDM, kernel `fft`) | later (lanes) |
 | `to_lanes`, `from_lanes` | serial ↔ parallel with a guard interval (OFDM) | later (lanes) |
 | `subcarrier_map`, `subcarrier_demap` | subcarrier assignment of data, pilots and nulls (OFDM) | later (lanes) |
 | `ofdm_mod`, `ofdm_demod` | OFDM modulator and demodulator (composite blocks) | later |
-| `freq_spread`, `freq_despread` | MC-CDMA frequency spreading (kernel `fwht`) | M56 (kernel); blocks later |
+| `fwht` | fast Walsh–Hadamard transform of frames of a stream (kernel `fwht`) | M56 |
+| `freq_spread`, `freq_despread` | MC-CDMA frequency spreading on lanes (kernel `fwht`, with the `1/√N` scaling) | later |
 
 ## The blocks
 

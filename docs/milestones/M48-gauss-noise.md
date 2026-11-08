@@ -2,7 +2,7 @@
 
 > Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M38](M38-symbol-sync.md) · Next: [M49](M49-scramble.md)
 
-> **Status: planned** (written 2026-11-08). First of the kernel milestones M48 to M56 for spread-spectrum and multicarrier work (DSSS and OFDM). Each of them delivers one kernel only; the blocks, kinds and flows that use the kernels come in later milestones.
+> **Status: planned** (written 2026-11-08). First of the kernel milestones M48 to M56 for spread-spectrum and multicarrier work (DSSS and OFDM). Each of them delivers one kernel with its primitive block and pipeline kind (as M29 did for the kernels before it); the composite blocks and the flows come in later milestones.
 
 ## Goal
 
@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `gauss_noise` (`C32`, `CQ15`, `f32`, `Q15`) in a new module `sdrk_core::kernels::noise` with `GaussNoiseState`, Fallback, Reference, facade delegation, contract row and section in `docs/kernels.md`; golden cases; unit, statistics, invariance and extreme tests; suite cases; `cargo xtask count` entries; `CHANGELOG.md`, `docs/decisions-log.md`.
+**In:** kernel `gauss_noise` (`C32`, `CQ15`, `f32`, `Q15`) in a new module `sdrk_core::kernels::noise` with `GaussNoiseState`, Fallback, Reference, facade delegation, contract row and section in `docs/kernels.md`; golden cases; unit, statistics, invariance and extreme tests; suite cases; `cargo xtask count` entries; `CHANGELOG.md`, `docs/decisions-log.md`; the block `NoiseBlock<T>`, `NoiseRealBlock<T>` and the pipeline kind `noise` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** a block or kind `noise` (later milestone; the name is reserved by this milestone); coloured noise, phase noise, impulsive noise; a SIMD path (allowed later if it gives the bits of the fallback; not required here); changing `sdrk_testkit::rng::Pcg32` or `channel::Awgn` (they stay as they are and serve as the cross-check).
+**Out:** flows that add noise to a signal (an `add` of the signal and a `noise` node on the same clock is enough; examples later); coloured noise, phase noise, impulsive noise; a SIMD path (allowed later if it gives the bits of the fallback; not required here); changing `sdrk_testkit::rng::Pcg32` or `channel::Awgn` (they stay as they are and serve as the cross-check).
 
 ## Specification
 
@@ -224,6 +224,20 @@ New file `tests/golden/sdrk_golden/cases/gauss_noise.py`. The Python model imple
 
 `cargo xtask count` entries `gauss_noise_c32` and `gauss_noise_f32` (instructions per output sample at every level; the `libm` calls dominate). No reference library entry: GNU Radio and liquid-dsp produce other sequences, so their counts are not a like-for-like comparison. Record the numbers in `docs/performance.md`.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 6. Block and kind `noise`
+
+`NoiseBlock<T>` (`C32`/`CQ15` → same) and `NoiseRealBlock<T>` (`f32`/`Q15` → same) around the kernel `gauss_noise`. The input is the clock, as for `nco` (its values are never read, so a flow needs no source node): one noise sample per input sample, from `GaussNoiseState::new(seed, stream, sigma)`, sample `n` of the output stream = sample `n` of the kernel since construction or `reset`.
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `noise` | `NoiseBlock<T>`, `NoiseRealBlock<T>` | C32/CQ15/f32/Q15 → same | `sigma` (linear, **runtime**, 0.1; 0 … 16, per real component), `seed` (I64, build, 0; 0 … 2^53 − 1), `stream` (I64, build, 1; 0 … 2^53 − 1) | `gauss_noise`; a change of `sigma` takes effect with the next call and keeps the position (`set_sigma`); `reset` is `GaussNoiseState::reset` |
+
+- `NoiseConfig` is the config of both. No storage. Timing ratio 1, delay 0. The rustdoc states the power convention of §2 (`N0 = 2 sigma²` per complex sample) and the conversions to GNU Radio and liquid-dsp.
+- Pipeline kind `noise` (any of the four stream types; the output type is the input type), cost 20 per real component (the `log`, `sqrt` and `cos` in f64 of one Box–Muller value; 40 for complex inputs), a row in `docs/pipeline.md` and `docs/timing.md`. Additive channel noise in a flow is `add` of the signal and `noise` on the same clock.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 680 … 689.
@@ -235,19 +249,20 @@ Seeds 680 … 689.
 5. Block-size invariance (testkit helper of M03): 20 chunk plans (seed 687), every type.
 6. Extremes: `sigma` 0, 16 (saturates nearly every Q15 value, f32 stays finite), the largest index `u64::MAX / 8` for `seek`.
 7. Suite cases `gauss_noise_c32`, `gauss_noise_q15` and `extremes_m48` (`Fallback` against `Reference`, the facade against `Fallback`, chunk plans).
+8. **Block and kind** (`sdrk-blocks/tests/noise_blocks.rs`, `sdrk-pipeline/tests/noise_kinds.rs`; seeds 688, 689): the blocks equal the kernel bit for bit on whole buffers and in 20 chunk plans, every type; a runtime change of `sigma` between two calls equals `set_sigma` at the same sample index; the description rules of M09, exact storage (none), struct at most 512 bytes; validation errors at their parameter (`sigma` negative, NaN, above 16; `seed` and `stream` outside their range); a pipeline flow `nco` clock → `noise` equals the block; `cargo xtask schema --check` and the WASM kind list include `noise`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the two entries of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the two entries of §5 and `noise_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Module `kernels::noise`: `GaussNoiseState`, trait `GaussNoise`, Fallback, Reference, facade delegation, `backend_for`
 - [ ] Contract row and section `gauss_noise` in `docs/kernels.md` (with the power convention and the GNU Radio and liquid-dsp conversions)
 - [ ] Golden cases (seeds 680–684) and the Python model
-- [ ] Tests 1–7 (seeds 680–687); suite cases
-- [ ] `cargo xtask count` entries, `docs/performance.md`
-- [ ] Reserved kind name `noise` in the table of `docs/blocks.md`
+- [ ] Tests 1–9 (seeds 680–689); suite cases
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Blocks `NoiseBlock<T>`, `NoiseRealBlock<T>` and kind `noise` (§6): `docs/blocks.md` (entry; the reserved-name row becomes "delivered"), `docs/pipeline.md` (cost), `docs/timing.md`, schema, WASM kind list; count entry `noise_block`
 - [ ] CHANGELOG, decisions log (the reading of R4.4, the state's sample-type rule, the tolerances)
 
 ## Status

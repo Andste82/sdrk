@@ -1,6 +1,6 @@
 # M51 — Kernel `spread`: direct-sequence spreading
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M30](M30-two-port-blocks.md) · Next: [M52](M52-despread.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M38](M38-symbol-sync.md), [M49](M49-scramble.md) (the PRBS codes of the block) · Next: [M52](M52-despread.md)
 
 > **Status: planned** (written 2026-11-08). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
 
@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `spread` (`C32`, `CQ15`) in `sdrk_core::kernels::spread` (a new module shared with `despread`, M52) with `SpreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `spread` (`C32`, `CQ15`) in `sdrk_core::kernels::spread` (a new module shared with `despread`, M52) with `SpreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, invariance, extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `SpreadBlock<T>` and the pipeline kind `spread` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the blocks and kinds `spread`, `dsss_mod` (later milestone; the names stay reserved); the code generators (m-sequence, Gold, Kasami, keyed) in `sdrk-proto`; separate I and Q codes beyond "the code is complex" (a complex code slice already covers I/Q spreading; QPSK with two real codes is `make_complex` of two `spread` calls, documented, no kernel); a SIMD path (allowed later for the `±1` case, which is add/subtract).
+**Out:** the composite `dsss_mod` (later milestone; the name stays reserved); code generators beyond the PRBS of `sdrk_proto::prbs` (Gold, Kasami, keyed; backlog); separate I and Q codes beyond "the code is complex" (a complex code slice already covers I/Q spreading; QPSK with two real codes is `make_complex` of two `spread` calls, documented, no kernel); a SIMD path (allowed later for the `±1` case, which is add/subtract).
 
 ## Specification
 
@@ -209,6 +209,20 @@ New file `tests/golden/sdrk_golden/cases/spread.py` (shared with `despread.py` o
 
 `cargo xtask count` entries `spread_c32` and `spread_cq15` (per output chip; equal to a `mul` step, less for the `±1` fast path). Record in `docs/performance.md`.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 6. Block and kind `spread`
+
+`SpreadBlock<T>` (`C32`/`CQ15` → same, `sf` output chips per input symbol) around the kernel `spread`. The code is a PRBS of `sdrk_proto::prbs` (chip `b` → `(1 − 2b, 0)`), generated once into the storage; `SpreadBlock::with_code` takes any code of the caller (Rust API only).
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `spread` | `SpreadBlock<T>` | C32/CQ15 → same | `sf` (I64, build, required; 2 … 65536), `code` (Choice, build, `prbs7`; `prbs5` … `prbs15`), `code_seed` (I64, build, 1), `long` (Bool, build, false) | `spread`; a short code (`long` false) needs `sf` equal to the code period (31, 127, 511, 1023, 2047 or 32767), else `invalid_value` at `params.sf` naming the period; a long code runs on across symbols and calls |
+
+- `SpreadConfig`. Storage: the code, `period` values of `T` (32767 for `prbs15`: 256 KiB as `C32`; a microcontroller uses the shorter codes); exact. Timing ratio `sf/1`, delay as the kernel states it (0); a call takes `min(input, output / sf)` symbols.
+- Pipeline kind `spread` (`c32` or `cq15`), cost `4 sf` per input symbol (one complex product per chip, as `mul`), a row in `docs/pipeline.md` and `docs/timing.md`. Chain position: symbols at the symbol rate → `spread` → pulse shaping (`interpolate` or `fir`).
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 710 … 719.
@@ -219,19 +233,20 @@ Seeds 710 … 719.
 4. Block-size invariance: 20 chunk plans at the symbol level (seed 714), both types, short and long code.
 5. Extremes: empty input; `sf = 2` and `sf = 65536`; a full-scale `CQ15` symbol and code (saturation as `mul`); NaN/∞ `C32`.
 6. Suite cases `spread_c32`, `spread_cq15`, `extremes_m51`.
+7. **Block and kind** (`sdrk-blocks/tests/spread_blocks.rs`, `sdrk-pipeline/tests/spread_kinds.rs`; seeds 715, 716): the block equals the kernel with the PRBS code bit for bit on whole buffers and in 20 chunk plans, both types, short and long code; the description rules of M09, exact storage, struct at most 512 bytes, validation errors at their parameter (`sf` out of range, a short code with `sf` not the period); a pipeline flow equals the block; `cargo xtask schema --check` and the WASM kind list include `spread`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entries of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `spread_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `spread` (`C32`, `CQ15`): `SpreadState`, trait, Fallback, Reference, facade delegation, `backend_for`
 - [ ] Contract rows and section in `docs/kernels.md` (short/long indexing; equals `mul` by the code)
 - [ ] Golden cases (seeds 710–713) and the Python model (shared code helper with M52)
-- [ ] Tests 1–6 (seeds 710–714); suite cases
-- [ ] `cargo xtask count` entries, `docs/performance.md`
-- [ ] Reserved kind names `spread`, `dsss_mod`, `dsss_demod` in `docs/blocks.md`
+- [ ] Tests 1–7 (seeds 710–716); suite cases
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `SpreadBlock<T>` and kind `spread` (§6): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `spread_block`
 - [ ] CHANGELOG, decisions log (short vs long indexing, the `±1` fast path)
 
 ## Status

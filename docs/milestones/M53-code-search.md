@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `code_search` (`C32`) in `sdrk_core::kernels::acquire` with `CodeSearchState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, statistic and extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `code_search` (`C32`) in `sdrk_core::kernels::acquire` with `CodeSearchState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; golden cases; unit, statistic and extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `CodeSearchBlock` and the pipeline kind `code_search` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the block and kind `code_acquire`, the hand-off to `code_track`, the squelch/threshold policy as a flow (later milestone; the name `code_acquire` is reserved); a bit-synchronisation search over data-bit boundaries (backlog); fine Doppler (`make_two_steps`; backlog); `CQ15` (backlog). Non-coherent integration across dwells is in (it is cheap and essential below 0 dB); coherent integration longer than one code period is a flow-level choice (longer `K`), not a kernel feature.
+**Out:** the block and kind `code_acquire` with the threshold policy (from a false-alarm probability) and the hand-off to `code_track` (later milestone; the name `code_acquire` is reserved; the primitive block `code_search` of §6 reports every search and decides nothing); a bit-synchronisation search over data-bit boundaries (backlog); fine Doppler (`make_two_steps`; backlog); `CQ15` (backlog). Non-coherent integration across dwells is in (it is cheap and essential below 0 dB); coherent integration longer than one code period is a flow-level choice (longer `K`), not a kernel feature.
 
 ## Specification
 
@@ -221,6 +221,21 @@ New file `tests/golden/sdrk_golden/cases/acquire.py`.
 
 `cargo xtask count` entry `code_search_1024_21bins` (per dwell; `D` wipe-offs + `D` forward FFTs + `D` IFFTs + the grid update, over `K` samples — report per input sample = cost/(K)). Record in `docs/performance.md`; note that acquisition runs once per lock, not per sample, so throughput is secondary.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 6. Block and kind `code_search`
+
+`CodeSearchBlock` (`C32` → packets) around the kernel `code_search`. The block cuts its input into back-to-back dwells of `K` samples from the first sample after construction or `reset`; after `dwells` dwells it writes one packet with the result and starts the next search (`CodeSearchState::reset`). The code is a PRBS (`sdrk_proto::prbs`, chip `b` → `1 − 2b`), every chip repeated `samples_per_chip` times, zero-padded to `K` = the smallest power of two ≥ `period · samples_per_chip` (at most 65536); the block computes `Dconj` once.
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `code_search` | `CodeSearchBlock` | C32 → packets | `code`, `code_seed` (as `spread`), `samples_per_chip` (I64, build, 1; 1 … 16), `doppler_max_hz` (Hz, build, required; > 0, below `rate / 2`), `doppler_step_hz` (Hz, build, required; > 0, at most `doppler_max_hz`), `doppler_center_hz` (Hz, build, 0), `dwells` (I64, build, 1; 1 … 1024) | `code_search`; `D = ceil(2 doppler_max_hz / doppler_step_hz)` bins (§1); more than 2^22 grid cells `D · K` is `invalid_value` at `params.doppler_step_hz` |
+
+- **Packet:** 36 bytes little-endian — `code_phase` (u32, samples), `doppler_bin` (u32), `doppler_hz` (f64), `peak`, `glrt`, `peak_to_floor`, `input_power` (f32 each), `dwells` (u32); `index` = the input index of the first sample of the search; flags 0. `CodeSearchReport::from_packet` reads it back.
+- `CodeSearchConfig`. Storage: the grid (`D · K` f32), `Dconj` and two scratch buffers (`K` C32 each), the twiddles; exact. Timing `Packets { max_per_input: 1/(K · dwells) }`, delay 0.
+- Pipeline kind `code_search` (`c32` only, a `PacketOutNode`), cost `D · (5 log2(K) + 8)` per input sample (per bin the wipe-off, two `K`-point FFTs, the spectral product and the grid update; the implementer checks it against the count and logs it), a row in `docs/pipeline.md` and `docs/timing.md`.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 730 … 739.
@@ -230,19 +245,20 @@ Seeds 730 … 739.
 3. Statistic behaviour (`sdrk-testkit/tests/code_search_m53.rs`, seed 733): over 200 noise-only dwells (no signal) the GLRT stays below a value whose implied false-alarm rate matches the theory within a factor of 2; with a signal at −10 dB chip SNR and enough dwells the GLRT exceeds it — a small ROC sanity check (full ROC tooling is a later testkit milestone).
 4. Extremes: `D = 1` (a single Doppler bin); the largest `K` (65536) with `D = 3`; an all-zero dwell (grid 0, `P_in` 0, the statistics defined as 0 with a guard against division by zero — documented); NaN/∞ in one input sample (that dwell's grid NaN; `reset` recovers).
 5. Suite cases `code_search_c32` and `extremes_m53`.
+6. **Block and kind** (`sdrk-blocks/tests/code_search_blocks.rs`, `sdrk-pipeline/tests/code_search_kinds.rs`; seeds 734, 735): the block gives the kernel results (the packet fields bit for bit) on whole buffers and in 20 chunk plans; a PRBS10 code at a known code phase and Doppler is found in one packet per search with `index` at the search start; the description rules of M09, exact storage, struct at most 512 bytes, validation errors at their parameter; a pipeline flow with a packets output equals the block; `cargo xtask schema --check` and the WASM kind list include `code_search`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entry of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entry of §5 and `code_search_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `code_search` (`C32`): `CodeSearchState`, `CodeSearchResult`, trait, Fallback, Reference, facade delegation, `backend_for`
 - [ ] Contract row and section in `docs/kernels.md` (PCPS steps, both statistics, the Doppler grid, the GNSS-SDR cross-check)
 - [ ] Golden cases (seeds 730–732) and the Python model
-- [ ] Tests 1–5 (seeds 730–733); suite cases
-- [ ] `cargo xtask count` entry, `docs/performance.md`
-- [ ] Reserved kind name `code_acquire` in `docs/blocks.md`
+- [ ] Tests 1–6 (seeds 730–735); suite cases
+- [ ] Count and cycle entry (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `CodeSearchBlock`, `CodeSearchReport` and kind `code_search` (§6): `docs/blocks.md` (entry and reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `code_search_block`
 - [ ] CHANGELOG, decisions log (the conjugation, the two statistics, the zero-division guard, the GNSS-SDR citation)
 
 ## Status

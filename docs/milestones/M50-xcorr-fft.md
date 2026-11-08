@@ -1,6 +1,6 @@
 # M50 — Kernel `xcorr_fft`: fast convolution / long correlator
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M07](M07-fft.md), [M43](M43-equalizer.md) · Next: [M51](M51-spread.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M07](M07-fft.md), [M43](M43-equalizer.md), [M49](M49-scramble.md) (the PRBS codes of the block) · Next: [M51](M51-spread.md)
 
 > **Status: planned** (written 2026-11-08). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone. This is the "FFT-based fast convolution (overlap-save) as a block" item of the backlog, built now as a kernel because the sync-word correlator (`sync_detect`) and the code-phase search (`code_search`, M53) both need it.
 
@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `xcorr_fft` (`C32`) in `sdrk_core::kernels::xcorr` with `XcorrFftState`, Fallback (the overlap-save loop over the backend `fft`), Reference (the direct convolution), facade delegation, contract row and section in `docs/kernels.md`; golden cases; unit, invariance and extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log.
+**In:** kernel `xcorr_fft` (`C32`) in `sdrk_core::kernels::xcorr` with `XcorrFftState`, Fallback (the overlap-save loop over the backend `fft`), Reference (the direct convolution), facade delegation, contract row and section in `docs/kernels.md`; golden cases; unit, invariance and extreme tests; suite cases; `cargo xtask count`; CHANGELOG, decisions log; the block `CorrelateBlock` and the pipeline kind `correlate` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the block and kind `sync_detect` and its peak search / threshold (later milestone; the name `sync_detect` stays reserved); `CQ15` (backlog, the FFT dynamic range needs care); a frequency-offset search (that is `code_search`, M53, which calls this kernel per Doppler bin); automatic FFT-size selection by the block (the kernel takes the plan; the block of the later milestone chooses it).
+**Out:** the block and kind `sync_detect` and its peak search / threshold (later milestone; the name `sync_detect` stays reserved); `CQ15` (backlog, the FFT dynamic range needs care); a frequency-offset search (that is `code_search`, M53, which calls this kernel per Doppler bin).
 
 ## Specification
 
@@ -213,6 +213,20 @@ New file `tests/golden/sdrk_golden/cases/xcorr.py`. Expected values: the f64 dir
 
 `cargo xtask count` entries `xcorr_fft_n512` and `xcorr_fft_n4096` (per output sample, dominated by the two FFTs over `B` outputs). Compare in `docs/performance.md` against the time-domain cost `L` complex MACs per output (the break-even `L` where overlap-save wins is recorded) and, as information, against GNU Radio's `fft_filter_ccc` and liquid-dsp's `fftfilt` instruction counts if a count harness for them exists; otherwise cite their method only (both overlap-add; ours overlap-save — noted).
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 6. Block and kind `correlate`
+
+`CorrelateBlock` (`C32` → `C32`) around the kernel `xcorr_fft`: the sliding correlation of the input with a reference `r` of length `L`, `y[n] = sum_k conj(r[k]) · x[n − L + 1 + k]`. The block builds the taps `h[k] = conj(r[L − 1 − k])` once (§1) and chooses the FFT size. The reference is a PRBS code (`sdrk_proto::prbs`, chip `b` → `1 − 2b`, imaginary part 0) with every chip repeated `samples_per_chip` times; `CorrelateBlock::with_reference` takes any `C32` reference from the caller (Rust API only, the pipeline has no list parameters).
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `correlate` | `CorrelateBlock` | C32 → C32 | `code` (Choice, build, `prbs7`; `prbs5` … `prbs15`), `code_seed` (I64, build, 1; as `key_seed` of `scramble`), `samples_per_chip` (I64, build, 1; 1 … 16), `fft_size` (I64, build, 0 = automatic; else a power of two, 16 … 65536, at least `2 L`) | `xcorr_fft`; automatic size: the smallest power of two ≥ `4 L`, at least 16; `L` above 32768 or a manual size below `2 L` is `invalid_value` at `params.fft_size` with the required size in the message |
+
+- `CorrelateConfig`. Storage: `H` (`N`), the history (`L − 1`), the scratch (`N`) and the twiddles of the plan; exact. Timing ratio 1, delay `L − 1` (from the kernel state), `min_input` `B = N − L + 1`; the output is tolerance class (the chunk tests compare within the stored SNR, as `channelize`).
+- Pipeline kind `correlate` (`c32` only), cost `(5 N log2(N) + 4 N) / B` per input sample (two `N`-point FFTs and the spectral product per `B` outputs; the implementer checks the formula against the count and logs it), a row in `docs/pipeline.md` and `docs/timing.md`. `sync_detect` (backlog) is this block plus a peak search and a threshold.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 700 … 709.
@@ -223,19 +237,20 @@ Seeds 700 … 709.
 4. Block-size invariance: 20 chunk plans (seed 705), the output within the stored SNR across chunkings (not `==`, because `fft` is tolerance).
 5. Extremes: all-zero input (zero output), a full-scale impulse, NaN/∞ in one input sample (the block of that transform becomes NaN, the next clean block recovers — documented), the largest `N` (65536) with `L = 32768`.
 6. Suite cases `xcorr_fft_c32` and `extremes_m50`.
+7. **Block and kind** (`sdrk-blocks/tests/correlate_blocks.rs`, `sdrk-pipeline/tests/correlate_kinds.rs`; seeds 706, 707): the block equals the kernel with the conj-reversed PRBS taps on whole buffers and within the stored SNR in 20 chunk plans; a PRBS7 code with 2 samples per chip placed at a known offset in noise peaks at that offset plus `L − 1`; the automatic FFT size for `L` = 31, 127, 1023, 32767; the description rules of M09, exact storage, struct at most 512 bytes, validation errors at their parameter; a pipeline flow equals the block; `cargo xtask schema --check` and the WASM kind list include `correlate`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entries of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `correlate_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `xcorr_fft` (`C32`): `XcorrFftState`, trait, Fallback (overlap-save), Reference (direct), facade delegation, `backend_for`
 - [ ] Contract row and section in `docs/kernels.md` (overlap-save, the correlation convention, the normalisation note)
 - [ ] Golden cases (seeds 700–703) and the Python model
-- [ ] Tests 1–6 (seeds 700–705); suite cases
-- [ ] `cargo xtask count` entries, `docs/performance.md` (break-even vs. time domain; GNU Radio / liquid-dsp method note)
-- [ ] Reserved kind name `sync_detect` kept in `docs/blocks.md`
+- [ ] Tests 1–7 (seeds 700–707); suite cases
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md` (break-even vs. time domain; GNU Radio / liquid-dsp method note)
+- [ ] Block `CorrelateBlock` and kind `correlate` (§6): `docs/blocks.md` (entry and a new reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `correlate_block`
 - [ ] CHANGELOG, decisions log (the no-tap-scaling reason, the tolerance class, the FFT-size rule)
 
 ## Status

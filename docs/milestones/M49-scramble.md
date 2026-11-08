@@ -1,6 +1,6 @@
 # M49 — Kernel `scramble`: keyed phase scrambling
 
-> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M30](M30-two-port-blocks.md) · Next: [M50](M50-xcorr-fft.md)
+> Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M38](M38-symbol-sync.md) (`sdrk_proto::prbs`; through it M30) · Next: [M50](M50-xcorr-fft.md)
 
 > **Status: planned** (written 2026-11-08). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
 
@@ -146,9 +146,9 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `scramble` (`C32`, `CQ15`) in `sdrk_core::kernels::scramble` with the trait `Scramble<T>`, Fallback, Reference, facade delegation, contract row and section in `docs/kernels.md`; golden cases; unit, invariance and extreme tests; suite cases; `cargo xtask count` entries; CHANGELOG, decisions log.
+**In:** kernel `scramble` (`C32`, `CQ15`) in `sdrk_core::kernels::scramble` with the trait `Scramble<T>`, Fallback, Reference, facade delegation, contract row and section in `docs/kernels.md`; golden cases; unit, invariance and extreme tests; suite cases; `cargo xtask count` entries; CHANGELOG, decisions log; the block `ScrambleBlock<T>` and the pipeline kind `scramble` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
-**Out:** the block and kind `scramble`, the keystream generator and the index sequences (`sdrk-proto`, later milestone; the name `scramble` is reserved here); a SIMD path (allowed later if it gives the bits of the fallback); real (`f32`/`Q15`) scrambling (there is nothing to rotate on a real stream; `b = 1` sign scrambling of a real stream is `mul` by `±1` and needs no kernel).
+**Out:** a keyed keystream (ChaCha20 with random access) and key synchronisation between transmitter and receiver (`sdrk-proto`, backlog; the block of §6 uses the public PRBS of `sdrk_proto::prbs`); a SIMD path (allowed later if it gives the bits of the fallback); real (`f32`/`Q15`) scrambling (there is nothing to rotate on a real stream; `b = 1` sign scrambling of a real stream is `mul` by `±1` and needs no kernel).
 
 ## Specification
 
@@ -205,6 +205,20 @@ New file `tests/golden/sdrk_golden/cases/scramble.py`, reusing the cosine-table 
 
 `cargo xtask count` entries `scramble_c32` and `scramble_cq15` (per sample; equal to a `rotate` step plus the index mask). Record next to `rotate` in `docs/performance.md`.
 
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+### 6. Block and kind `scramble`
+
+`ScrambleBlock<T>` (`C32`/`CQ15` → same) around the kernel `scramble`. The phase indices come from `sdrk_proto::prbs`: sample `n` takes the next `bits` PRBS bits, the first one as the most significant bit of `p[n]`. The PRBS position runs on across calls; `reset` restarts it from `key_seed`. A scrambler and a descrambler (`inverse`) with the same `key` and `key_seed` agree when both start at the same sample; key synchronisation is backlog.
+
+| Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
+| --- | --- | --- | --- | --- |
+| `scramble` | `ScrambleBlock<T>` | C32/CQ15 → same | `bits` (I64, build, 1; 1 … 8), `inverse` (Bool, build, false), `key` (Choice, build, `prbs15`; `prbs5`, `prbs7`, `prbs9`, `prbs10`, `prbs11`, `prbs15`), `key_seed` (I64, build, 1; 1 … 32767, the low `n` bits are used, zero after masking is `invalid_value`) | `scramble`; a call takes at most `SCRAMBLE_CHUNK` (256) samples (the phase bytes of the call live in the struct); no real variant (§Out) |
+
+- **`sdrk_proto::prbs` gains four polynomials** (`Poly` is `#[non_exhaustive]`; two-tap Fibonacci form of M38 §4): `Prbs5` `x^5 + x^3 + 1` (31), `Prbs7` `x^7 + x^6 + 1` (127), `Prbs10` `x^10 + x^7 + 1` (1023), `Prbs11` `x^11 + x^9 + 1` (2047). `sdrk-proto/tests/prbs_m49.rs` checks that every one has the full period `2^n − 1` (every non-zero state once) and the first 16 bits from seed 1 against the Python model in `tests/golden/sdrk_golden/prbs.py`. The spreading and search blocks of M50 to M54 take their codes from the same choices.
+- `ScrambleConfig`; no storage. Timing ratio 1, delay 0. Pipeline kind `scramble` (`c32` or `cq15`), cost 7 per sample (a `rotate` step and the index), a row in `docs/pipeline.md` and `docs/timing.md`. The rustdoc states that a public PRBS key gives spectral whitening and separation, not secrecy.
+- Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
+
 ## Tests
 
 Seeds 690 … 699.
@@ -214,19 +228,20 @@ Seeds 690 … 699.
 3. Block-size invariance: 20 chunk plans (seed 695), both types, a fixed phase sequence sliced with the input.
 4. Extremes: empty input; every index value 0…255 at `bits` 8; `CQ15` full-scale input (saturation as in `rotate`); NaN and ∞ in `C32`.
 5. Suite cases `scramble_c32`, `scramble_cq15` and `extremes_m49`.
+6. **Block and kind** (`sdrk-blocks/tests/scramble_blocks.rs`, `sdrk-pipeline/tests/scramble_kinds.rs`; seeds 696, 697): the block equals the kernel with the PRBS indices bit for bit on whole buffers and in 20 chunk plans, both types; scramble then descramble with the same key returns the input within the `rotate` round-trip error of §3; the description rules of M09, struct at most 512 bytes, validation errors at their parameter (`bits` 0 and 9, `key_seed` 0 and a seed that masks to 0); a pipeline flow `scramble` → `scramble` (`inverse`) equals the blocks; `cargo xtask schema --check` and the WASM kind list include `scramble`.
 
 ## Acceptance
 
-R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo xtask count --platform x86_64` (the entries of §5).
+R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-proto`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `scramble_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
 - [ ] Kernel `scramble` (`C32`, `CQ15`): trait, Fallback, Reference, facade delegation, `backend_for`
 - [ ] Contract rows and section in `docs/kernels.md` (as a `rotate` step; the round-trip and the DVB-S2 note)
 - [ ] Golden cases (seeds 690–694) and the Python model
-- [ ] Tests 1–5 (seeds 690–695); suite cases
-- [ ] `cargo xtask count` entries, `docs/performance.md`
-- [ ] Reserved kind name `scramble` in `docs/blocks.md`
+- [ ] Tests 1–6 (seeds 690–697); suite cases
+- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`
+- [ ] Block `ScrambleBlock<T>` and kind `scramble` (§6); the polynomials `Prbs5`, `Prbs7`, `Prbs10`, `Prbs11` in `sdrk_proto::prbs` with their tests; `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `scramble_block`
 - [ ] CHANGELOG, decisions log (reuse of the `rotate` helpers, the index-mask rule)
 
 ## Status

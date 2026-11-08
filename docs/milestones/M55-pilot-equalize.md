@@ -159,7 +159,7 @@ General rules of M19 apply. The kernel processes one OFDM symbol per call step b
 One OFDM symbol is `N` subcarriers (`N` a power of two 16…65536), given as the FFT output in natural order (subcarrier 0 = DC). The subcarrier roles are fixed at construction by index lists:
 - `pilots: &[u32]` — the pilot subcarrier indices for this symbol, with their known complex values `pilot_values: &[C32]` (same length). (Keyed/hopping pilots: the block passes a different `pilots`/`pilot_values` per symbol; the kernel takes them as inputs.)
 - `data: &[u32]` — the data subcarrier indices to equalize and output.
-- subcarriers in neither list (DC, guard/null carriers) are passed through unchanged or zeroed per a flag.
+- subcarriers in neither list (DC, guard/null carriers) are not output: the output holds the equalized data carriers only, in the order of `data` (a flag to pass the nulls would have no effect on that output, so there is none).
 
 ### 2. Per symbol
 
@@ -172,9 +172,9 @@ One OFDM symbol is `N` subcarriers (`N` a power of two 16…65536), given as the
 ### 3. State and trait
 
 ```rust
-pub struct PilotEqualizeState<..> { /* N, alpha: f32, cpe: bool, pass_nulls: bool, hs: Store (N complex), first: bool */ }
+pub struct PilotEqualizeState<..> { /* N, alpha: f32, cpe: bool, hs: Store (N complex), first: bool */ }
 impl PilotEqualizeState<..> {
-    pub fn new(fft_len: usize, alpha: f32, cpe: bool, pass_nulls: bool, hs_store: Store) -> Result<Self>;
+    pub fn new(fft_len: usize, alpha: f32, cpe: bool, hs_store: Store) -> Result<Self>;
     pub fn alpha(&self) -> f32;  pub fn set_alpha(&mut self, a: f32) -> Result<()>;
     pub fn seed_taps(&mut self, taps: &[C32]) -> Result<()>;  // initial_taps
     pub fn reset(&mut self);   // first = true, hs cleared
@@ -215,6 +215,8 @@ New file `tests/golden/sdrk_golden/cases/ofdm_eq.py`, the float32 model.
 `cargo xtask count` entry `pilot_equalize_256` (per subcarrier; a complex division plus the interpolation and smoothing). Record in `docs/performance.md`.
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §7 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
+
+**Reference (D32).** No library row: GNU Radio's `ofdm_equalizer_simpledfe` does other work (decision feedback on the data carriers, no interpolation between pilots, no CPE) and `ofdm_equalizer_static` holds the nearest pilot, so neither is a fair reference. The rows are information; the speed baseline is the vectorised scalar fallback (and the D321 gate once a SIMD path exists).
 
 ### 7. Block and kind `pilot_equalize`
 

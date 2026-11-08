@@ -213,6 +213,8 @@ New file `tests/golden/sdrk_golden/cases/fwht.py`, the matrix model (`scipy.lina
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §5 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
 
+**Reference (D32).** No library row: neither liquid-dsp nor GNU Radio nor VOLK has a Walsh–Hadamard transform; the cost is compared with the `fft` of the same length as information. The rows are information; the speed baseline is the vectorised scalar fallback (and the D321 gate once a SIMD path exists).
+
 ### 5. Block and kind `fwht`
 
 `FwhtBlock<T>` (`C32`/`CQ15` → same) around the kernel `fwht`: the stream is cut into frames of `size` samples counted from the first sample after construction or `reset`, and every frame is transformed in place (a copy to the output, then the kernel on the output slice).

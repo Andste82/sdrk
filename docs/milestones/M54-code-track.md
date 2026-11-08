@@ -164,7 +164,7 @@ The receiver is aligned when the prompt replica sits on the incoming chips. Thre
 ### 2. Discriminator and loop
 
 - **Code discriminator** (non-coherent early-minus-late envelope, normalised; the GNSS-SDR BPSK form): `e = 0.5 · (|E| − |L|) / (|E| + |L|)` in f32, with `|·|` the magnitude from the `mag` kernel's rule; `e = 0` when `|E| + |L|` is 0 or non-finite (silence, NaN). The factor `0.5` is the GNSS-SDR normalisation `(y_intercept − slope·ε)/slope` for a 1-chip correlation triangle with spacing `δ`; the exact gain constant is `code_disc_gain` (default derived from `δ` as `0.5/δ`·… — the implementer fixes the constant so the discriminator slope is 1 per chip of error at `δ` = 0.5 and unit amplitude, and logs the value; a unit test measures the slope).
-- **Loop filter:** the second-order filter of `symbol_sync`/`costas` in the same form, parameters `loop_bw` (0.0001…0.1 of the code rate; default 0.005) and `damping` (default 1/√2). Constants in f64: `theta = loop_bw/(damping + 1/(4 damping))`, `d = (1 + 2 damping·theta) + theta²`, `kp = ((4 damping·theta)/d)/code_disc_gain`, `ki = ((4 theta²)/d)/code_disc_gain`, rounded to f32; an integrator limit `max_rate` chips per period (default 0.05, i.e. ±5 % clock error). The NCO update per code period: `rate = clamp(flush_denormal(rate + ki·e), −max_rate, max_rate)`, `step = clamp(kp·e, −|…|, …)` (the clamp of `symbol_sync` keeping positions monotone), the chip position advances by `sf + rate + step` chips; the fractional position is kept as an integer index and an f64 `mu` exactly as `symbol_sync` does, so the result is chunk-invariant.
+- **Loop filter:** the second-order filter of `symbol_sync`/`costas` in the same form, parameters `loop_bw` (0 or 0.0001…0.1 of the code rate; default 0.005; 0 is the open loop: `theta = 0`, so `kp = ki = 0` exactly) and `damping` (default 1/√2). Constants in f64: `theta = loop_bw/(damping + 1/(4 damping))`, `d = (1 + 2 damping·theta) + theta²`, `kp = ((4 damping·theta)/d)/code_disc_gain`, `ki = ((4 theta²)/d)/code_disc_gain`, rounded to f32; an integrator limit `max_rate` chips per period (default 0.05, i.e. ±5 % clock error). The NCO update per code period: `rate = clamp(flush_denormal(rate + ki·e), −max_rate, max_rate)`, `step = clamp(kp·e, −|…|, …)` (the clamp of `symbol_sync` keeping positions monotone), the chip position advances by `sf + rate + step` chips; the fractional position is kept as an integer index and an f64 `mu` exactly as `symbol_sync` does, so the result is chunk-invariant.
 - **Carrier aiding (optional):** a per-period input `carrier_doppler_hz` (or 0) scales the nominal advance by `(1 + f_carrier/f_rf)`; with 0 it is off. This keeps the code and carrier Doppler consistent over long integrations (standard in GNSS tracking). Logged as the one addition beyond the GNSS-SDR BPSK DLL.
 - **Output:** one prompt symbol `P` per code period (the despread symbol, handed to `costas` and the slicer downstream). `lock_level()` is a smoothed `|P|²/((|E|²+|L|²)/2)`-style metric (documented), `locked()` its threshold; `code_phase()`, `rate()`, `mu()` read the loop.
 
@@ -185,9 +185,9 @@ pub trait CodeTrack {
 }
 ```
 
-- Parameter ranges validated in `new` (as `symbol_sync`/`costas`): `sf` 2…65536, `samples_per_chip` 1…1024, `early_late_chips` 0.1…1.0, `loop_bw` 0.0001…0.1, `damping` 0.1…4, `max_rate` 0…0.5, `f_rf` > 0 or 0 to disable aiding; non-finite or out-of-range → `InvalidParameter`.
+- Parameter ranges validated in `new` (as `symbol_sync`/`costas`): `sf` 2…65536, `samples_per_chip` 1…1024, `early_late_chips` 0.1…1.0, `loop_bw` 0 or 0.0001…0.1, `damping` 0.1…4, `max_rate` 0…0.5, `f_rf` > 0 or 0 to disable aiding; non-finite or out-of-range → `InvalidParameter`.
 - `carrier_doppler_hz` is either empty (aiding off) or one value per produced symbol; a length that is neither 0 nor matching the symbols produced is `LengthMismatch`.
-- **Zero-bandwidth identity:** `loop_bw`’s effect is `kp = ki = 0` only at the limit; the invariant tested is: with `set_initial(phase, 0)`, `loop_bw` at its minimum, `samples_per_chip = 1`, integer alignment and `δ` such that early/late are unused, the prompt output equals `despread` (M52) of the same chips bit for bit. (A dedicated internal switch for exact zero bandwidth may be added for the test; logged.)
+- **Zero-bandwidth identity:** `loop_bw = 0` opens the loop (`kp = ki = 0`, the chip position advances by exactly `sf` per period); with `set_initial(phase, 0)`, `samples_per_chip = 1` and an integer `phase` (`mu = 0`, the cubic interpolator returns the sample itself), the prompt output equals `despread` (M52) of the same chips bit for bit, for any `δ` (early and late are computed but do not act). No internal switch.
 - Timing: `RatioKind::Variable`, nominal ratio `1/(sf·samples_per_chip)`, group delay as `symbol_sync` (the interpolator window). Consumes whole code periods; keeps the remainder in the interpolator history; chunk-invariant.
 
 ### 4. Contract
@@ -204,7 +204,7 @@ New file `tests/golden/sdrk_golden/cases/code_track.py`, the float32 model of th
 | --- | --- | --- | --- | --- |
 | `code_track/lock_sf127_40ppm` | 740 | 127 | 2 | a 127-chip code, 40 ppm clock drift, Eb/N0 10 dB; the loop follows the drift, prompt symbols recovered |
 | `code_track/acq_handoff_sf1023` | 741 | 1023 | 1 | `set_initial` from an acquisition offset of 0.3 chip; the loop pulls in within N periods |
-| `code_track/zero_bw_equals_despread` | 742 | 31 | 1 | min bandwidth, integer alignment; the prompt output equals `despread` (stored from `despread/…` for cross-check) |
+| `code_track/zero_bw_equals_despread` | 742 | 31 | 1 | `loop_bw` 0, integer alignment; the prompt output equals `despread` (stored from `despread/…` for cross-check) |
 
 - Stored: the code, the input, the loop parameters, the carrier-aiding array (empty or values); expected prompt symbols, the lock flag per period, the final loop state (rate bits, integrator bits, `i`, `mu`), the loop constants as IEEE bits. `snr_db_guard` from the f64 loop.
 
@@ -214,13 +214,15 @@ New file `tests/golden/sdrk_golden/cases/code_track.py`, the float32 model of th
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §7 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies once a SIMD path exists.
 
+**Reference (D32).** No library row: GNSS-SDR's DLL correlators are `volk_32fc_x2_dot_prod_32fc`, which the `dot_complex` rows already compare, and its loop is a few scalar operations per code period. The rows are information; the speed baseline is the vectorised scalar fallback (and the D321 gate once a SIMD path exists).
+
 ### 7. Block and kind `code_track`
 
 `CodeTrackBlock` (`C32` → `C32`, one prompt symbol per code period) around the kernel `code_track` with a short PRBS code (`sdrk_proto::prbs`, chip `b` → `1 − 2b`; `sf` is the code period). Carrier aiding is off (`f_rf = 0`): it needs a second input and comes with `dsss_demod`.
 
 | Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
 | --- | --- | --- | --- | --- |
-| `code_track` | `CodeTrackBlock` | C32 → C32 | `code`, `code_seed` (as `spread`), `samples_per_chip` (linear, build, 1; 1 … 1024), `early_late_chips` (chips, build, 0.5; 0.1 … 1.0), `loop_bw` (linear, build, 0.005; 0.0001 … 0.1, relative to the code rate), `damping` (linear, build, 0.7071; 0.1 … 4), `max_rate` (chips per period, build, 0.05; 0 … 0.5), `initial_code_phase` (chips, build, 0; 0 … period) | `code_track`; `initial_code_phase` is `set_initial(phase, 0)` at construction and `reset` (the value a `code_search` packet gives, divided by `samples_per_chip`) |
+| `code_track` | `CodeTrackBlock` | C32 → C32 | `code`, `code_seed` (as `spread`), `samples_per_chip` (linear, build, 1; 1 … 1024), `early_late_chips` (chips, build, 0.5; 0.1 … 1.0), `loop_bw` (linear, build, 0.005; 0 (open loop) or 0.0001 … 0.1, relative to the code rate), `damping` (linear, build, 0.7071; 0.1 … 4), `max_rate` (chips per period, build, 0.05; 0 … 0.5), `initial_code_phase` (chips, build, 0; 0 … period) | `code_track`; `initial_code_phase` is `set_initial(phase, 0)` at construction and `reset` (the value a `code_search` packet gives, divided by `samples_per_chip`) |
 
 - Getters `locked()`, `code_phase()`, `rate()` (as `costas`). `CodeTrackConfig`. Storage: the code and the interpolator window; exact. Timing `RatioKind::Variable`, nominal ratio `1/(sf · samples_per_chip)`, delay and `min_input` from the kernel state (as `symbol_sync`).
 - Pipeline kind `code_track` (`c32` only), cost `12 + 3 · 24 / samples_per_chip` per input sample (three correlators and the cubic interpolation of `symbol_sync`; the implementer checks it against the count and logs it), a row in `docs/pipeline.md` and `docs/timing.md`. Chain position: `code_track` → `costas` → `slice`.
@@ -251,7 +253,7 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 - [ ] Tests 1–8 (seeds 740–747); suite cases
 - [ ] Count and cycle entry (`cargo xtask count`, `cargo measure`), `docs/performance.md`
 - [ ] Block `CodeTrackBlock` and kind `code_track` (§7): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `code_track_block`
-- [ ] CHANGELOG, decisions log (the discriminator gain constant, the `δ` default, carrier aiding, the zero-bandwidth switch)
+- [ ] CHANGELOG, decisions log (the discriminator gain constant, the `δ` default, carrier aiding, `loop_bw` 0 as the open loop)
 
 ## Status
 

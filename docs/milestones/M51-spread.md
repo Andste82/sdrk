@@ -178,7 +178,7 @@ pub trait Spread<T> {
   - **long code** (`long = true`): `c = (chip_index0 + m·sf + j) mod code_len`, with `chip_index0` the state's `chip_index` at the start of the call. Here `code_len` may be any length ≥ 1 (typically `≫ sf`, e.g. a 2¹⁵−1 m-sequence); the chip index carries across calls, so the same symbol spread in two chunks gives the same chips.
 - The product is the `mul` kernel's product (`C32`: four f32 products then the combinations, no FMA; `CQ15`: `i64`, one round and saturate per component), so `spread` with a `±1` real-valued complex code (`im = 0`) equals `mul` by that code bit for bit. For a real `±1` code the common case is `code[c] = (±1, 0)`, giving `output = ±input`.
 - **Progress / lengths.** `output.len()` must equal `input.len()·sf` (`LengthMismatch` otherwise, nothing written — `sf` is fixed, so the output size is determined by the input; the kernel does not emit partial symbols). `code.len()` must equal `code_len` (`LengthMismatch`). After the call, `chip_index += input.len()·sf`.
-- Timing: ratio `sf/1` (constant), group delay 0, `min_input` 1 symbol.
+- Timing: ratio `sf/1` (constant), delay 0, `min_input` 1 symbol. The delay is declared at the first chip of a symbol, not at the centre of its `sf` chips (the `interpolate` rule of timing.md would give `(sf − 1)/(2 sf)`), so that `spread` → `despread`, which maps symbol `m` to output `m`, reports the delay 0 the samples show (`despread` would need the negative centre delay `−(sf − 1)/2`, which `Delay` cannot express). Logged.
 - `seek` lets a keyed long code resume at an absolute chip position (same access model as `gauss_noise::seek`, so the chips align to the sample timeline after a gap).
 
 ### 2. Fallback and Reference

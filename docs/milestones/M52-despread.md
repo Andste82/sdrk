@@ -173,7 +173,7 @@ pub trait Despread<T> {
 - **Output.** For each complete group of `sf` input chips, `output[m] = sum_{j=0}^{sf-1} input[m·sf + j] · conj(code[c])` with the code position `c` indexed exactly as `spread` (short: `c = j`; long: `c = (chip_index0 + m·sf + j) mod code_len`). The conjugation makes it a correlation (it undoes the phasor of a complex code; for a real `±1` code the conjugate is the code itself).
 - **Summation order (bit-exact).** The sum over the `sf` products uses the `dot_complex` order of M43: eight partial sums per component, product `i` added to partial sum `i mod 8`, then the fixed tree `s[k] = acc[k] + acc[k+4]`, `t[k] = s[k] + s[k+2]`, result `t[0] + t[1]`. The product is `x · conj(code) = (xr·cr + xi·ci, xi·cr − xr·ci)` in f32 (each product rounded before the sum/difference). This is `dot_complex(input_window, conj(code_window))`, so `despread` reuses `dot_complex` directly for `C32`. For `CQ15` the products accumulate in `i64` (Q30) and are rounded and saturated once per component at the dump (the `dot` `CQ15` rule).
 - **Consumption.** A call consumes whole groups of `sf` chips and keeps the remainder (fewer than `sf` chips) in a small history of up to `sf − 1` chips, so a symbol split across two calls still dumps once, in the call that completes it (chunk invariance). `Progress` counts chips consumed and symbols produced; `min_input` `sf`. `chip_index += (symbols produced)·sf`.
-- Timing: ratio `1/sf` (constant), group delay 0 symbols. Storage: the chip history (`sf − 1` complex) and the small state.
+- Timing: ratio `1/sf` (constant), delay 0: declared at the first chip of the integration window, as `spread` declares its delay at the first chip (M51 §1). The centre convention of timing.md would give `−(sf − 1)/2` here (the window lies after the output position `m · sf`), which `Delay` (unsigned) cannot express; with 0 on both sides `spread` → `despread` reports exactly the delay its samples show. Logged. Storage: the chip history (`sf − 1` complex) and the small state.
 
 ### 2. Relation to `code_track` and `spread`
 
@@ -215,7 +215,7 @@ New cases in `tests/golden/sdrk_golden/cases/despread.py` (the shared code helpe
 | --- | --- | --- | --- | --- |
 | `despread` | `DespreadBlock<T>` | C32/CQ15 → same | `sf`, `code`, `code_seed`, `long` as `spread` | `despread`; a call consumes whole groups of `sf` chips limited by the output room, the rest stays in the kernel history |
 
-- `DespreadConfig`. Storage: the code and the chip history (`sf − 1`); exact. Timing ratio `1/sf`. **Delay:** §1 states 0; under [timing.md](../timing.md) (output `m` stands at input `m · sf`; `decimate` with `N` taps reports `(N − 1)/2`) the integration window lies after `m · sf`. The implementer decides the declared delay of kernel and block together with that of `spread` so that `spread` → `despread` reports the delay the samples show, and logs it.
+- `DespreadConfig`. Storage: the code and the chip history (`sf − 1`); exact. Timing ratio `1/sf`. **Delay** 0 (§1: the first chip of the window, as `spread`).
 - Pipeline kind `despread` (`c32` or `cq15`), cost 4 per input chip (one complex MAC), a row in `docs/pipeline.md` and `docs/timing.md`.
 - Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
 

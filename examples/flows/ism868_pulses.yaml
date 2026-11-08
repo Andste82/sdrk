@@ -1,0 +1,50 @@
+# SDRk pipeline: the pulse trains of every short-range device in the 868 MHz SRD band at once
+# (YAML twin of ism868_pulses.json). YAML is accepted as input; JSON stays the canonical format.
+#
+# One RTL-SDR at 2 MS/s centred at 868.5 MHz sees 867.5 ... 869.5 MHz: the band 868.0 ... 868.6
+# MHz and the sensor channels up to 869.0 MHz, among them 868.3 MHz (most weather stations,
+# thermometers and door contacts) and its neighbours 868.35 and 868.42 MHz. Devices at 868.95 MHz
+# (some smart-home systems) lie on the edge of the input band: move the centre up (for example to
+# 868.95 MHz, with center_hz to match) to receive them. The FSK sensors of this band are wider
+# than those at 433 MHz, so the channelizer has 8 channels of 250 kHz (each at 500 kS/s).
+sdrk: 1
+name: ism868-pulses
+description: "Detect every short-range transmission between 867.5 and 869.5 MHz at once (the 868 MHz SRD band and the sensor channels up to 869 MHz): an 8-channel polyphase channelizer and a pulse detector in every channel, the pulse trains as packets."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # RTL-SDR: unsigned 8-bit IQ at 2 MS/s centred at 868.5 MHz (the automatic rf__convert turns
+  # it into c32).
+  rf:
+    format: cu8
+    rate_hz: 2000000
+    description: "RTL-SDR IQ at 2 MS/s centred at 868.5 MHz"
+nodes:
+  # 8 channels 250 kHz apart, each at 500 kS/s, the search grid (flat to half the spacing, 60 dB
+  # down from one spacing). Channel c (-4 ... 3) is at 868.5 MHz + c * 250 kHz; 868.3 MHz is
+  # 50 kHz above the centre of channel -1.
+  chan:
+    kind: channelize
+    params:
+      channels: 8
+      taps_per_branch: 8
+  # The pulse detector in every channel, OOK and two-level FSK (modulation auto); center_hz sets
+  # the absolute frequency of the packets.
+  det:
+    kind: band_pulse_detect
+    params:
+      center_hz: 868500000
+      modulation: auto
+edges:
+  - { from: rf, to: chan }
+  - { from: chan, to: det }
+  - { from: det, to: pulses }
+outputs:
+  # One train per transmission (sdrk_proto::pulses), the widths and the index in steps of
+  # 500 kHz; trains of more than 30 pulses come as several packets with the flag CONTINUED.
+  pulses:
+    type: packets
+    queue: 4096
+    description: "Pulse trains (sdrk_proto::pulses), indexed in steps of 500 kHz"

@@ -1,0 +1,53 @@
+{
+  "sdrk": 1,
+  "name": "ism868-pulses",
+  "description": "Detect every short-range transmission between 867.5 and 869.5 MHz at once (the 868 MHz SRD band and the sensor channels up to 869 MHz): an 8-channel polyphase channelizer and a pulse detector in every channel, the pulse trains as packets.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2000000,
+      "description": "RTL-SDR IQ at 2 MS/s centred at 868.5 MHz"
+    }
+  },
+  "nodes": {
+    "chan": {
+      "kind": "channelize",
+      "params": {
+        "channels": 8,
+        "taps_per_branch": 8
+      }
+    },
+    "det": {
+      "kind": "band_pulse_detect",
+      "params": {
+        "center_hz": 868500000,
+        "modulation": "auto"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "chan"
+    },
+    {
+      "from": "chan",
+      "to": "det"
+    },
+    {
+      "from": "det",
+      "to": "pulses"
+    }
+  ],
+  "outputs": {
+    "pulses": {
+      "type": "packets",
+      "queue": 4096,
+      "description": "Pulse trains (sdrk_proto::pulses), indexed in steps of 500 kHz"
+    }
+  }
+}

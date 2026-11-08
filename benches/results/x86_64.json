@@ -672,8 +672,8 @@
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 84.59,
-          "ours_instr_per_sample": 84.59,
+          "other_instr_per_sample": 83.51,
+          "ours_instr_per_sample": 83.51,
           "ratio": 1.0,
           "snr_db": {
             "other": 139.19,
@@ -698,8 +698,8 @@
         "channel_select_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 3.53,
-          "ours_instr_per_sample": 3.53,
+          "other_instr_per_sample": 2.3,
+          "ours_instr_per_sample": 2.3,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -5393,10 +5393,10 @@
         },
         "channel_bank_channelize": {
           "compared_with": "ours at avx2",
-          "goal": true,
-          "other_instr_per_sample": 84.59,
-          "ours_instr_per_sample": 84.1,
-          "ratio": 0.99,
+          "goal": false,
+          "other_instr_per_sample": 83.51,
+          "ours_instr_per_sample": 83.64,
+          "ratio": 1.0,
           "snr_db": {
             "other": 139.19,
             "ours": 139.19
@@ -5419,10 +5419,10 @@
         },
         "channel_select_block": {
           "compared_with": "ours at avx2",
-          "goal": true,
-          "other_instr_per_sample": 3.53,
-          "ours_instr_per_sample": 3.52,
-          "ratio": 1.0,
+          "goal": false,
+          "other_instr_per_sample": 2.3,
+          "ours_instr_per_sample": 3.02,
+          "ratio": 1.31,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -7466,8 +7466,8 @@
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 194.26,
-          "ours_instr_per_sample": 194.26,
+          "other_instr_per_sample": 193.8,
+          "ours_instr_per_sample": 193.8,
           "ratio": 1.0,
           "snr_db": {
             "other": 138.81,
@@ -7492,8 +7492,8 @@
         "channel_select_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 3.52,
-          "ours_instr_per_sample": 3.52,
+          "other_instr_per_sample": 3.02,
+          "ours_instr_per_sample": 3.02,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -12752,8 +12752,8 @@
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 194.75,
-          "ours_instr_per_sample": 194.75,
+          "other_instr_per_sample": 193.79,
+          "ours_instr_per_sample": 193.79,
           "ratio": 1.0,
           "snr_db": {
             "other": 138.81,
@@ -12778,8 +12778,8 @@
         "channel_select_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 4.02,
-          "ours_instr_per_sample": 4.02,
+          "other_instr_per_sample": 3.02,
+          "ours_instr_per_sample": 3.02,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

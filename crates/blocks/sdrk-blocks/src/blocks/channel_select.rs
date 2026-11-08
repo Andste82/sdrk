@@ -200,14 +200,16 @@ impl Block for ChannelSelectBlock {
             }));
         }
         let n = input.steps().min(output.len());
-        // One step after the other; the lane is checked once against the width (it always
-        // holds, `new` checks it), so the loop is one load and one store per step (D935).
+        // One step after the other (D935); the lane is checked once against the width (it
+        // always holds, `new` checks it), and each step copies the lane as a one-element slice,
+        // a 64-bit copy that the compiler keeps whole instead of splitting it into two strided
+        // `f32` streams (D940, D941).
         let lane = self.lane;
         if lane < self.width {
             let steps = input.data().chunks_exact(self.width);
             for (o, step) in output.iter_mut().take(n).zip(steps) {
-                if let Some(v) = step.get(lane) {
-                    *o = *v;
+                if let Some(v) = step.get(lane..=lane) {
+                    core::slice::from_mut(o).copy_from_slice(v);
                 }
             }
         }

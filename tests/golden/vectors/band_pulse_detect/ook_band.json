@@ -1,0 +1,65 @@
+{
+  "arrays": {
+    "freqs": {
+      "dtype": "f64",
+      "file": "ook_band.freqs.bin",
+      "len": 4
+    },
+    "gaps": {
+      "dtype": "f64",
+      "file": "ook_band.gaps.bin",
+      "len": 40
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "ook_band.input.bin",
+      "len": 58400
+    },
+    "levels_db": {
+      "dtype": "f64",
+      "file": "ook_band.levels_db.bin",
+      "len": 4
+    },
+    "pair_counts": {
+      "dtype": "i32",
+      "file": "ook_band.pair_counts.bin",
+      "len": 4
+    },
+    "pulses": {
+      "dtype": "f64",
+      "file": "ook_band.pulses.bin",
+      "len": 40
+    },
+    "starts": {
+      "dtype": "f64",
+      "file": "ook_band.starts.bin",
+      "len": 4
+    }
+  },
+  "case": "ook_band",
+  "format_version": 1,
+  "kernel": "band_pulse_detect",
+  "notes": "2 MHz around the band centre (the 433 MHz flow: 16 channels of 125 kHz, the channelize defaults, 250 kHz steps), band noise of -30 dBFS: 4 PWM trains of 10 bits (100/200/100 us) one every 5.8 ms from 6 ms on, at +62.5 kHz and -437.5 kHz (channel boundaries) and -870 / +870 kHz (the band edges), 30 to 36 dB above the noise in a channel spacing; the exact widths in steps and every width within 1 step; the start within 12 steps (the delay of the channelizer is 8 steps)",
+  "params": {
+    "fs": 2000000.0,
+    "lanes": 16,
+    "max_freq_err_hz": 10000.0,
+    "max_start_err_steps": 12.0,
+    "noise_rms": 0.0316,
+    "step_rate": 250000.0,
+    "taps_per_branch": 8,
+    "transmissions": 4
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 630,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 1.0,
+    "skip": 0
+  }
+}

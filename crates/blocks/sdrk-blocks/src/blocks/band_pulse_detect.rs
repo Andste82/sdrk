@@ -34,7 +34,9 @@ pub const BAND_PULSE_MIN_RATE_HZ: f64 = 100_000.0;
 pub const BAND_PULSE_CHUNK: usize = 64;
 
 /// Steps of the lead-in of a burst: after a lane triggers, the envelope of this many steps
-/// sets the signal level before the first pulse is measured (D957).
+/// sets the signal level before the first pulse is measured (D957). With `min_pulse_us`
+/// shorter than 5 steps the lead-in is `4 min_steps - 1` steps, so that its replay finishes at
+/// most one FSK frame and one OOK train (D971).
 pub const BAND_PULSE_LEAD: usize = 16;
 
 /// Steps after construction or reset in which every lane only learns its noise level (a
@@ -450,8 +452,11 @@ struct Params {
     fsk_split: f32,
     /// Step rate in Hz.
     rate_hz: f64,
-    /// The trigger factor `10^(min_snr_db / 20)` (runtime).
+    /// The trigger factor `10^(min_snr_db / 20)` (runtime; a lane copies it when it
+    /// triggers).
     factor: f32,
+    /// Steps of the lead-in: `BAND_PULSE_LEAD`, at most `4 min_steps - 1` (D971).
+    lead_len: u32,
 }
 
 impl Params {
@@ -477,8 +482,17 @@ impl Params {
             fsk_split: (tau * f64::from(FSK_SPLIT_CYCLES)) as f32,
             rate_hz: fs,
             factor: config.snr_factor(),
+            lead_len: lead_len(min_steps),
         })
     }
+}
+
+/// The steps of the lead-in for the shortest run `min_steps` (D971): a finished FSK frame
+/// needs a presence and an absence of `min_steps` each, so two of them (or two OOK trains cut by
+/// them) need `4 min_steps` steps and a lead-in of `4 min_steps - 1` steps finishes at most one
+/// of each kind in its replay; its decision follows the replay.
+fn lead_len(min_steps: u32) -> u32 {
+    (BAND_PULSE_LEAD as u32).min(min_steps.saturating_mul(4).saturating_sub(1))
 }
 
 /// A burst that has ended and waits for its decision or its packets.
@@ -541,6 +555,10 @@ struct Lane {
     /// The signal level and the envelope of the sample before.
     high: f32,
     e_prev: f32,
+    /// The trigger factor of the presence machine, copied when the lane triggered (a runtime
+    /// change of `min_snr_db` applies to the next burst, D972).
+    p_factor: f32,
+    _pad: u32,
     /// Envelope run: level (0 off, 1 on), length in samples, confirmed (at least
     /// `min_steps`), length of the previous run.
     level: u32,
@@ -694,8 +712,9 @@ fn fsk_width(a: f64, b: f64) -> u32 {
 
 impl Lane {
     /// Starts the lead-in at step `idx` with the sample `x` (`xp` the one before).
-    fn begin_lead(&mut self, idx: u64, e: f32, x: C32, xp: C32) {
+    fn begin_lead(&mut self, idx: u64, factor: f32, e: f32, x: C32, xp: C32) {
         self.mode = LEAD;
+        self.p_factor = factor;
         self.lead_at = idx;
         self.lead_n = 1;
         self.lead_x = [C32::default(); BAND_PULSE_LEAD + 1];
@@ -772,17 +791,19 @@ impl Lane {
             *v = x;
         }
         self.lead_n += 1;
-        if (self.lead_n as usize) < BAND_PULSE_LEAD {
+        if self.lead_n < p.lead_len {
             return Next::Stay;
         }
+        let len = p.lead_len as usize;
         // The signal level: the largest envelope of the lead-in.
         self.high = self
             .lead_e
             .iter()
+            .take(len)
             .fold(0.0f32, |m, &v| if v > m { v } else { m });
         let first = self.lead_e.first().copied().unwrap_or(0.0);
         self.begin_burst(self.lead_at as f64, first);
-        for i in 0..BAND_PULSE_LEAD {
+        for i in 0..len {
             let (Some(&e), Some(&xp), Some(&x)) = (
                 self.lead_e.get(i),
                 self.lead_x.get(i),
@@ -1143,7 +1164,7 @@ impl Lane {
         d: [f32; 2],
         idx: u64,
     ) -> Option<Next> {
-        let trig = noise * p.factor;
+        let trig = noise * self.p_factor;
         let thr = if self.p_level == 1 {
             trig * (1.0 - HYSTERESIS)
         } else {
@@ -1557,10 +1578,20 @@ impl<S: Storage> BandPulseDetectBlock<S> {
     }
 
     /// The offset of a burst of lane `k` from the band centre in Hz, from its rotation
-    /// `rad` per step.
+    /// `rad` per step. The lane of channel `-M/2` (from 2 lanes on) is centred on the edge of
+    /// the input band, minus and plus half the input rate: a negative rotation there lies
+    /// below `-fs/2`, which is the upper end of the band, so its offset is taken there (`M`
+    /// spacings up, D964).
     fn offset_hz(&self, k: usize, rad: f32) -> f64 {
-        self.channel(k) as f64 * self.spacing()
-            + f64::from(rad) * self.p.rate_hz / core::f64::consts::TAU
+        let c = self.channel(k);
+        let w = self.width as i64;
+        let rot = f64::from(rad) * self.p.rate_hz / core::f64::consts::TAU;
+        let f = c as f64 * self.spacing() + rot;
+        if w >= 2 && c == -(w / 2) && rot < 0.0 {
+            f + w as f64 * self.spacing()
+        } else {
+            f
+        }
     }
 
     /// The two neighbours of lane `k` (signed channels `c - 1` and `c + 1`). The lane of
@@ -1783,6 +1814,14 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         let cap2 = 2 * self.config.max_pulses;
         let rate = self.p.rate_hz;
         let noise = self.noise.as_ref().get(k).copied().unwrap_or(NOISE_FLOOR);
+        let rot = self
+            .lanes
+            .as_ref()
+            .get(k)
+            .and_then(|l| l.out.get(r))
+            .map(|o| o.freq)
+            .ok_or_else(internal)?;
+        let freq = self.offset_hz(k, rot);
         let lane = self.lanes.as_mut().get_mut(k).ok_or_else(internal)?;
         let rec = lane.out.get_mut(r).ok_or_else(internal)?;
         if rec.state != OUT_EMIT {
@@ -1794,8 +1833,6 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             self.fsk.as_ref()
         };
         let pairs = buf.get(k * cap2..(k + 1) * cap2).ok_or_else(internal)?;
-        let freq =
-            channel as f64 * 0.5 * rate + f64::from(rec.freq) * rate / core::f64::consts::TAU;
         let header = Header {
             modulation: if rec.fsk == 1 {
                 Modulation::Fsk
@@ -1920,7 +1957,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         let lane = self.lanes.as_mut().get_mut(k).ok_or_else(internal)?;
         let next = match mode {
             IDLE => {
-                lane.begin_lead(idx, e, x, xp);
+                lane.begin_lead(idx, p.factor, e, x, xp);
                 self.active += 1;
                 if let Some(b) = self.busy.as_mut().get_mut(k / 64) {
                     *b |= 1 << (k % 64);

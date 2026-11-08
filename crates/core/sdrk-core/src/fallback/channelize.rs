@@ -22,7 +22,7 @@ impl Channelize<C32> for Fallback {
         Hist: AsRef<[C32]> + AsMut<[C32]>,
         Tw: AsRef<[C32]>,
     {
-        channelize_with(s, input, output, |taps, window, swap, plan, group| {
+        channelize_with(s, input, output, false, |taps, window, swap, plan, group, _| {
             branch_sums(taps, window, swap, group)?;
             channel_fft(&Fallback, plan, group)
         })

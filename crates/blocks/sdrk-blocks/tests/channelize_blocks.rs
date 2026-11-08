@@ -24,7 +24,7 @@ use sdrk_blocks::{
     Block, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, Error,
     LanesMut, LanesRef, ParamValue,
 };
-use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len};
+use sdrk_core::kernels::channelize::{Channelize, ChannelizeState, history_len, taps_len};
 use sdrk_testkit::{ChunkPlan, Pcg32, VecStorage};
 
 const SEED_CHANNELIZE: u64 = 664;
@@ -42,7 +42,11 @@ fn kernel_output(cfg: &ChannelizeConfig, x: &[C32]) -> Vec<C32> {
     let (m, l) = (cfg.channels, cfg.taps_per_branch);
     let mut h = vec![0.0f64; m * l];
     channelizer_prototype(m, l, cfg.passband, cfg.stopband, cfg.attenuation_db, &mut h).unwrap();
-    let taps: Vec<f32> = h.iter().map(|&v| v as f32).collect();
+    // The prototype in the first half of the tap storage of `2 M L` values.
+    let mut taps = vec![0.0f32; taps_len(m, l)];
+    for (t, &v) in taps.iter_mut().zip(&h) {
+        *t = v as f32;
+    }
     let mut s = ChannelizeState::<C32, _, _, _>::new(
         taps,
         m,
@@ -118,8 +122,9 @@ fn the_block_equals_the_kernel_value_for_value() {
             &mut std::iter::repeat(64),
         );
         assert!(got == want, "{cfg:?}");
-        // The block keeps the prototype in the order of the kernel state (time-reversed).
-        assert_eq!(block.taps().len(), cfg.channels * cfg.taps_per_branch);
+        // The block keeps the prototype in the layout of the kernel state (time-reversed, every
+        // tap twice).
+        assert_eq!(block.taps().len(), 2 * cfg.channels * cfg.taps_per_branch);
     }
 }
 

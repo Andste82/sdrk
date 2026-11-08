@@ -2,7 +2,9 @@
 //! f64 model of `Reference`: within the 100 dB of the contract for every channel count from 4 to
 //! 256 and the taps per branch 4, 8, 24 and 32; the hop boundaries in 20 chunk plans (seed 662)
 //! with limited output space, where the output must be bit-identical with the whole run of the
-//! same backend; buffers at every start offset within a vector; `reset`; the extreme inputs
+//! same backend; history lengths around `M L + M / 2` (the shortest that lets the NEON path sum
+//! two hops at once, I45-1), bit for bit; buffers at every start offset within a vector; `reset`;
+//! the extreme inputs
 //! (silence, full scale, NaN and infinities spoil only the steps that read them); and the error
 //! for an output that is not a whole number of steps. Signals and taps use seed 672.
 #![allow(
@@ -36,8 +38,10 @@ fn random_taps(rng: &mut Rng, m: usize, l: usize) -> Vec<f32> {
 }
 
 fn state(taps: &[f32], m: usize) -> State {
+    let mut stored = vec![0.0f32; 2 * taps.len()];
+    stored[..taps.len()].copy_from_slice(taps);
     ChannelizeState::new(
-        taps.to_vec(),
+        stored,
         m,
         vec![C32::default(); history_len(m, taps.len() / m)],
         vec![C32::default(); m / 2],
@@ -129,6 +133,33 @@ fn the_hop_boundaries_do_not_depend_on_the_chunking() {
             let n = chunked.len().min(whole.len());
             assert!(n + 2 * m >= whole.len(), "m {m} plan {k}: too few steps");
             assert_eq!(bits(&chunked[..n]), bits(&whole[..n]), "m {m} plan {k}");
+        }
+    }
+}
+
+#[test]
+fn the_history_length_does_not_change_the_bits() {
+    let mut rng = Rng::new(SEED + 6);
+    for (m, l) in [(16usize, 4usize), (16, 8), (64, 5)] {
+        let taps = random_taps(&mut rng, m, l);
+        let input = c32_noise(&mut rng, 30 * m + 3, 0.7);
+        let want = run_whole(&Simd, &mut state(&taps, m), &input);
+        let n = m * l;
+        for hist in [n, n + m / 2 - 1, n + m / 2, n + m / 2 + 1, 3 * n + 5] {
+            let mut stored = vec![0.0f32; 2 * n];
+            stored[..n].copy_from_slice(&taps);
+            let mut st = ChannelizeState::new(
+                stored,
+                m,
+                vec![C32::default(); hist],
+                vec![C32::default(); m / 2],
+            )
+            .unwrap();
+            assert_eq!(
+                bits(&run_whole(&Simd, &mut st, &input)),
+                bits(&want),
+                "m {m} l {l} history {hist}"
+            );
         }
     }
 }

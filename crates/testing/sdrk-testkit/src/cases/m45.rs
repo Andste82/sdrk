@@ -74,10 +74,13 @@ fn normals(rng: &mut Pcg32, x: &mut [C32]) {
     }
 }
 
-/// A state over storage carved from `c`: the taps copied from `taps`, a history of `2 M L`.
+/// A state over storage carved from `c`: a tap storage of `2 M L` with the prototype `taps` in
+/// its first half, a history of `2 M L`.
 fn state<'a>(c: &mut Carver<'a>, taps: &[f32], m: usize) -> Result<St<'a>, Failure> {
-    let t = c.take::<f32>(taps.len())?;
-    t.copy_from_slice(taps);
+    let t = c.take::<f32>(2 * taps.len())?;
+    t.get_mut(..taps.len())
+        .ok_or_else(|| Failure::new("m45", "tap storage"))?
+        .copy_from_slice(taps);
     let h = c.take::<C32>(2 * taps.len())?;
     let w = c.take::<C32>(m / 2)?;
     Ok(ChannelizeState::new(t, m, h, w)?)
@@ -297,20 +300,22 @@ pub(super) fn extremes_m45(arena: &mut Arena<'_>) -> Result<(), Failure> {
         ensure(r.is_err(), || Failure::new(CASE, msg))
     };
     for (taps, m, hist, tw, msg) in [
-        (48usize, 12usize, 96usize, 6usize, "12 channels accepted"),
-        (16, 2, 32, 1, "2 channels accepted"),
-        (2048, 512, 4096, 256, "512 channels accepted"),
-        (48, 16, 96, 8, "3 taps per branch accepted"),
-        (16 * 33, 16, 16 * 33, 8, "33 taps per branch accepted"),
+        // The tap storage holds every tap twice: `2 M L` values.
+        (96usize, 12usize, 96usize, 6usize, "12 channels accepted"),
+        (32, 2, 32, 1, "2 channels accepted"),
+        (4096, 512, 4096, 256, "512 channels accepted"),
+        (96, 16, 96, 8, "3 taps per branch accepted"),
+        (2 * 16 * 33, 16, 16 * 33, 8, "33 taps per branch accepted"),
         (
-            129,
+            258,
             16,
             258,
             8,
             "a tap count that is not a multiple of M accepted",
         ),
-        (128, 16, 127, 8, "a short history accepted"),
-        (128, 16, 256, 7, "a short twiddle table accepted"),
+        (255, 16, 256, 8, "a tap storage of odd length accepted"),
+        (256, 16, 127, 8, "a short history accepted"),
+        (256, 16, 256, 7, "a short twiddle table accepted"),
     ] {
         let t = c.take::<f32>(taps)?;
         let h = c.take::<C32>(hist)?;

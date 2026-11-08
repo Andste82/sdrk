@@ -1059,7 +1059,7 @@ fn m42_kernels_give_the_bits_of_the_fallback() -> Result<()> {
 fn m45_channelize_agrees_with_the_fallback() -> Result<()> {
     use sdrk::kernels::channelize::{Channelize, ChannelizeState, history_len};
 
-    assert_eq!(backend_for("channelize", SampleType::C32), "fallback");
+    assert_eq!(backend_for("channelize", SampleType::C32), ACCEL);
     assert_eq!(backend_for("channelize", SampleType::CQ15), "none");
 
     let mut seed = 662u64;

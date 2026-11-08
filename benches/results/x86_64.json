@@ -669,6 +669,60 @@
           "status": "release",
           "verdict": "pass"
         },
+        "channelize": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 153.61,
+              "other_snr_db": 140.71,
+              "ours_instr_per_sample": 50.42,
+              "ratio": 0.33
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 326.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 50.42,
+              "ratio": 0.15
+            }
+          ],
+          "other_instr_per_sample": 326.64,
+          "ours_instr_per_sample": 50.42,
+          "ratio": 0.15,
+          "snr_db": {
+            "other": 141.61,
+            "ours": 141.39
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "channelize_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 412.39,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 153.61,
+              "ratio": 0.37
+            }
+          ],
+          "other_instr_per_sample": 412.39,
+          "ours_instr_per_sample": 153.61,
+          "ratio": 0.37,
+          "snr_db": {
+            "other": 140.86,
+            "ours": 140.71
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "convert_cq15_cs8": {
           "compared_with": "volk_8i_convert_16i",
           "goal": true,
@@ -5285,6 +5339,19 @@
           "status": "release",
           "verdict": "pass"
         },
+        "channelize": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 50.42,
+          "ours_instr_per_sample": 50.03,
+          "ratio": 0.99,
+          "snr_db": {
+            "other": 141.39,
+            "ours": 141.39
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "convert_cq15_cs8": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -7288,6 +7355,60 @@
           "snr_db": {
             "other": 56.63,
             "ours": 71.45
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "channelize": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 197.19,
+              "other_snr_db": 140.71,
+              "ours_instr_per_sample": 93.2,
+              "ratio": 0.47
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 337.96,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 93.2,
+              "ratio": 0.28
+            }
+          ],
+          "other_instr_per_sample": 337.96,
+          "ours_instr_per_sample": 93.2,
+          "ratio": 0.28,
+          "snr_db": {
+            "other": 141.2,
+            "ours": 140.85
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "channelize_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 431.21,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 197.19,
+              "ratio": 0.46
+            }
+          ],
+          "other_instr_per_sample": 431.21,
+          "ours_instr_per_sample": 197.19,
+          "ratio": 0.46,
+          "snr_db": {
+            "other": 140.86,
+            "ours": 140.71
           },
           "status": "release",
           "verdict": "pass"
@@ -12468,6 +12589,60 @@
           "snr_db": {
             "other": 56.63,
             "ours": 71.45
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "channelize": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 194.44,
+              "other_snr_db": 140.71,
+              "ours_instr_per_sample": 94.69,
+              "ratio": 0.49
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 339.96,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 94.69,
+              "ratio": 0.28
+            }
+          ],
+          "other_instr_per_sample": 339.96,
+          "ours_instr_per_sample": 94.69,
+          "ratio": 0.28,
+          "snr_db": {
+            "other": 141.2,
+            "ours": 140.85
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "channelize_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 429.58,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 194.44,
+              "ratio": 0.45
+            }
+          ],
+          "other_instr_per_sample": 429.58,
+          "ours_instr_per_sample": 194.44,
+          "ratio": 0.45,
+          "snr_db": {
+            "other": 140.86,
+            "ours": 140.71
           },
           "status": "release",
           "verdict": "pass"

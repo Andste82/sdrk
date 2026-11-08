@@ -43,14 +43,15 @@ use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, 
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod am_family;
+mod channelize_family;
 mod costas_family;
 mod equalize_family;
 mod fir_family;
 mod halfband_family;
 mod math_family;
+mod morse_family;
 mod noise_family;
 mod proto_family;
-mod morse_family;
 mod rds_family;
 mod rds_tx_family;
 mod stereo_family;
@@ -102,9 +103,10 @@ pub enum Impl {
     Kfr,
     /// CMSIS-DSP's biquad cascades in generic C, compiled for the level of the build.
     Cmsis,
-    /// liquid-dsp: the DC blocker (`iirfilt_rrrf`/`iirfilt_crcf` `create_dc_blocker`, portable C)
-    /// and the halfband decimators (`resamp2`, `firhilbf`; the SIMD dot product of the level for
-    /// the SIMD entries, the portable one for the fallback entries).
+    /// liquid-dsp: the DC blocker (`iirfilt_rrrf`/`iirfilt_crcf` `create_dc_blocker`, portable C),
+    /// the halfband decimators (`resamp2`, `firhilbf`; the SIMD dot product of the level for
+    /// the SIMD entries, the portable one for the fallback entries) and the channelizer
+    /// `firpfbch2_crcf` (with FFTW for the SIMD entry, with liquid's own FFT for the fallback).
     Liquid,
     /// libairspy 1.0.10's real-to-complex converters (`iqconverter_float`, `iqconverter_int16`).
     Airspy,
@@ -353,7 +355,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 206] = [
+pub const KERNELS: [&str; 208] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -560,6 +562,8 @@ pub const KERNELS: [&str; 206] = [
     "stereo_encode_rds",
     "morse_encode_block",
     "morse_decode_block",
+    "channelize",
+    "channelize_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -762,6 +766,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "equalize" => Box::new(equalize_family::EqualizeK::new(rng, layout, false)),
         "equalize_fallback" => Box::new(equalize_family::EqualizeK::new(rng, layout, true)),
+        "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
+        "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),
@@ -6433,6 +6439,8 @@ mod biquad_tests {
             "dot_complex_fallback",
             "equalize",
             "equalize_fallback",
+            "channelize",
+            "channelize_fallback",
         ] {
             let mut kernel = prepare(
                 name,

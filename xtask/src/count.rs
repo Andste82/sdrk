@@ -739,6 +739,10 @@ pub enum Family {
     /// `halfband_decimate_real`): liquid-dsp's `resamp2` with its SIMD dot product of the level
     /// (the portable loop at `simd128`, where liquid has no SIMD loop).
     HalfbandLiquid,
+    /// The channelizer `channelize` (M45): liquid-dsp's `firpfbch2_crcf` analyzer with the SIMD
+    /// dot product of the level and FFTW (liquid's own FFT on wasm32, which has no FFTW build),
+    /// our fallback as information.
+    ChannelizeLiquid,
     /// `real_to_complex` of `C32`: liquid-dsp's `firhilbf` with its SIMD dot product; at `sse2`
     /// libairspy's `iqconverter_float` (SSE2) is the second gate, the entry
     /// [`Family::HilbertAirspy`].
@@ -891,7 +895,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 206] = [
+pub static KERNELS: [KernelSpec; 208] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1121,6 +1125,8 @@ pub static KERNELS: [KernelSpec; 206] = [
     spec("stereo_encode_rds", Family::Own, false),
     proto("morse_encode_block", Family::Own),
     proto("morse_decode_block", Family::Own),
+    spec("channelize", Family::ChannelizeLiquid, false),
+    spec("channelize_fallback", Family::FallbackVsLiquid, false),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -1547,6 +1553,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::FallbackVsLiquid | Family::HalfbandLiquid | Family::HilbertLiquid => {
             (Reference::Liquid, Vec::new())
         }
+        Family::ChannelizeLiquid => (Reference::Liquid, vec![Reference::Fallback]),
         Family::HilbertAirspyQ15 => (Reference::Libairspy, vec![Reference::Fallback]),
         Family::FallbackHilbert => (Reference::Liquid, vec![Reference::Libairspy]),
         Family::HilbertAirspy | Family::FallbackVsAirspy => (Reference::Libairspy, Vec::new()),
@@ -4794,6 +4801,47 @@ mod tests {
             );
         }
         assert!(VOLK_FUNCTIONS.contains(&"volk_32fc_x2_dot_prod_32fc"));
+    }
+
+    #[test]
+    fn the_channelizer_is_judged_against_liquid_on_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let simd = kernel("channelize");
+        let fallback = kernel("channelize_fallback");
+        assert_eq!(simd.family.measured(), "ours");
+        assert_eq!(fallback.family.measured(), "fallback");
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), simd),
+                (Reference::Liquid, vec![Reference::Fallback]),
+                "channelize at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), fallback),
+                (Reference::Liquid, Vec::new()),
+                "channelize_fallback at {level}"
+            );
+        }
+        assert_eq!(
+            comparisons(plan("avx2-runtime"), simd).0,
+            Reference::OwnLevel("avx2")
+        );
+        assert!(!fallback.family.measured_at(plan("avx2-runtime")));
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        for name in ["channelize", "channelize_fallback"] {
+            for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
+                let limit = limits.get(name, p.level);
+                assert!(
+                    limit.is_some(),
+                    "{name} at {}: no entry in limits.json",
+                    p.level
+                );
+                if let Some(limit) = limit.filter(|l| l.status == Status::Info) {
+                    assert!(limit.waiver.is_some(), "{name} at {}", p.level);
+                }
+            }
+        }
     }
 
     #[test]

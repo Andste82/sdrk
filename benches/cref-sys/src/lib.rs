@@ -31,6 +31,9 @@
 //! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
 //!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
 //!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
+//! - [`LiquidFirpfbch2`]: liquid-dsp's analysis channelizer `firpfbch2_crcf` with its SIMD dot
+//!   products and FFTW, or with its portable dot products and its own FFT (MIT), the reference of
+//!   `channelize`.
 //! - [`volk_nofma`]: VOLK 3.3.0's complex product and complex dot product without fused
 //!   multiply-add, the protokernels compiled with `-ffp-contract=off` for the levels `avx2`,
 //!   `avx512` and `neon` (LGPL-3.0-or-later).
@@ -42,6 +45,7 @@
 //! complex layout of `repr(C)` pairs.
 
 mod biquad;
+mod channelizer;
 pub mod cmsis_dsp;
 pub mod gnuradio;
 mod halfband;
@@ -52,6 +56,7 @@ pub mod volk_generic;
 pub mod volk_nofma;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
+pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use gnuradio::{
     CostasLoopState, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
     GrQuadratureDemodCf, GrRotator,

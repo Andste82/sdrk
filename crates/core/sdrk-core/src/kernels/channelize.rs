@@ -406,9 +406,16 @@ where
             need.min(rest.len())
         };
         let (now, later) = rest.split_at(take);
-        hist.get_mut(*pos..*pos + take)
+        // An element loop, not `copy_from_slice`: a hop is short (`M / 2` samples), and the
+        // call of `memcpy` that the slice copy becomes costs more than the copy itself.
+        for (h, x) in hist
+            .get_mut(*pos..*pos + take)
             .ok_or_else(internal)?
-            .copy_from_slice(now);
+            .iter_mut()
+            .zip(now)
+        {
+            *h = *x;
+        }
         *pos += take;
         *phase += take;
         consumed += take;
@@ -443,27 +450,23 @@ fn column_block<const B: usize>(
     off: usize,
     dst: &mut [C32],
 ) -> Result<()> {
-    // Row `p` of the block starts at `p M + off`; every row chunk from `off` on holds at least
-    // `B` values because `off + B <= M`.
-    let mut rows = taps
-        .get(off..)
-        .ok_or_else(internal)?
-        .chunks(m)
-        .zip(window.get(off..).ok_or_else(internal)?.chunks(m));
+    // Row `p` of the block starts at `p M + off`; `M` is a power of two, so the row count is a
+    // shift (an iterator over the rows would divide by `M` in every hop).
+    let rows = taps.len() >> m.trailing_zeros();
+    let row = |p: usize| {
+        let at = p * m + off;
+        taps.get(at..at + B)
+            .and_then(|t| t.first_chunk::<B>())
+            .zip(window.get(at..at + B).and_then(|w| w.first_chunk::<B>()))
+            .ok_or_else(internal)
+    };
     let mut acc = [C32::new(0.0, 0.0); B];
-    let (t0, w0) = rows.next().ok_or_else(internal)?;
-    let (t0, w0) = t0
-        .first_chunk::<B>()
-        .zip(w0.first_chunk::<B>())
-        .ok_or_else(internal)?;
+    let (t0, w0) = row(0)?;
     for ((a, &g), x) in acc.iter_mut().zip(t0).zip(w0) {
         *a = C32::new(g * x.re, g * x.im);
     }
-    for (t, w) in rows {
-        let (t, w) = t
-            .first_chunk::<B>()
-            .zip(w.first_chunk::<B>())
-            .ok_or_else(internal)?;
+    for p in 1..rows {
+        let (t, w) = row(p)?;
         for ((a, &g), x) in acc.iter_mut().zip(t).zip(w) {
             *a = C32::new(a.re + g * x.re, a.im + g * x.im);
         }
@@ -509,7 +512,11 @@ fn column_range<const B: usize>(
 pub fn branch_sums(taps: &[f32], window: &[C32], swap: bool, group: &mut [C32]) -> Result<()> {
     let m = group.len();
     let d = m / 2;
-    if m < MIN_CHANNELS || taps.len() != window.len() || !taps.len().is_multiple_of(m) {
+    if m < MIN_CHANNELS
+        || !m.is_power_of_two()
+        || taps.len() != window.len()
+        || taps.len() & (m - 1) != 0
+    {
         return Err(internal());
     }
     let (lo, hi) = group.split_at_mut(d);

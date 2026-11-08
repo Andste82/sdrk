@@ -36,12 +36,12 @@ mod common;
 
 use num_complex::Complex64;
 use sdrk_device::formats;
-use sdrk_pipeline::{BuildOptions, InputData, Pipeline, PipelineSpec, Registry};
+use sdrk_pipeline::{BuildOptions, InputData, Pipeline, Registry};
 use sdrk_testkit::nfm::{Audio, ChannelScene, SceneChannel};
 use sdrk_testkit::{ChunkPlan, encode::encode, meters::sinad_db};
 use serde_json::{Value, json};
 
-use common::{build, flow, tone_power, workspace_file};
+use common::{build, flow, tone_power};
 
 /// The input rate of the flow.
 const RATE: f64 = 2_400_000.0;
@@ -473,16 +473,17 @@ fn the_flow_validates_without_warnings_and_reports_its_lanes() {
     }
 }
 
+#[cfg(feature = "yaml")]
 #[test]
 fn the_yaml_twin_parses_to_the_same_spec() {
     let read = |ext: &str| {
-        std::fs::read_to_string(workspace_file(&format!(
+        std::fs::read_to_string(common::workspace_file(&format!(
             "examples/flows/pmr446_monitor.{ext}"
         )))
         .unwrap()
     };
-    let yaml = PipelineSpec::from_yaml(&read("yaml")).unwrap();
-    let json = PipelineSpec::from_json(&read("json")).unwrap();
+    let yaml = sdrk_pipeline::PipelineSpec::from_yaml(&read("yaml")).unwrap();
+    let json = sdrk_pipeline::PipelineSpec::from_json(&read("json")).unwrap();
     assert_eq!(yaml, json);
     assert_eq!(yaml.to_json() + "\n", read("json"));
 }

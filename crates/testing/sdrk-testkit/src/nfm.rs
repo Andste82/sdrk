@@ -47,6 +47,10 @@
 //! # Ok::<(), sdrk_testkit::nfm::SceneError>(())
 //! ```
 
+// The renderer holds up to `MAX_SCENE_CHANNELS` transmitters inline (no heap, about 5 KiB), and
+// the lint counts every temporary of it in `renderer` separately; a test helper, not a block.
+#![allow(clippy::large_stack_frames)]
+
 use core::f64::consts::PI;
 
 use num_complex::Complex64;
@@ -247,7 +251,7 @@ impl ChannelScene<'_> {
         let mut transmitters = heapless::Vec::new();
         for (i, c) in self.channels.iter().enumerate() {
             let carrier_hz = f64::from(c.offset_index) * self.spacing_hz;
-            if !(carrier_hz.abs() < self.fs / 2.0) {
+            if carrier_hz.is_nan() || carrier_hz.abs() >= self.fs / 2.0 {
                 return Err(SceneError::InvalidParameter("offset_index"));
             }
             if !c.deviation_hz.is_finite() {

@@ -19,7 +19,9 @@
     clippy::float_cmp,
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
-    clippy::needless_pass_by_value
+    clippy::needless_pass_by_value,
+    clippy::unreadable_literal,
+    clippy::large_stack_frames
 )]
 
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -193,7 +195,7 @@ fn the_kinds_are_registered() {
     let chan = registry.factory("channelize").unwrap();
     assert_eq!(chan.kernels(), ["channelize"]);
     let sel = registry.factory("channel_select").unwrap();
-    assert!(sel.kernels().is_empty());
+    assert_eq!(sel.kernels().len(), 0);
     assert_eq!(registry.descriptions().count(), 65);
 }
 
@@ -207,9 +209,9 @@ fn four_readers_build_and_get_the_channels_of_the_blocks() {
     let got = run(&mut p, &x, &mut std::iter::repeat(1000));
     let want = reference(&x, &CHANNELS);
     assert_eq!(want[0].len(), 1000);
-    assert!(got == want);
+    assert_eq!(got, want);
     // The tone sits in channel -1 (both readers of it), not in the centre channel.
-    let power = |v: &[C32]| v[100..].iter().map(|c| c.norm_sqr()).sum::<f32>() / 900.0;
+    let power = |v: &[C32]| v[100..].iter().map(C32::norm_sqr).sum::<f32>() / 900.0;
     assert!(power(&got[1]) > 0.9, "{}", power(&got[1]));
     assert!(power(&got[0]) < 0.2, "{}", power(&got[0]));
     assert_eq!(got[1], got[3]);
@@ -501,7 +503,7 @@ fn the_whole_graph_is_chunk_invariant_with_20_plans() {
         &x,
         &mut std::iter::repeat(4096),
     );
-    assert!(want == reference(&x, &CHANNELS));
+    assert_eq!(want, reference(&x, &CHANNELS));
     for k in 0..20 {
         let plan = ChunkPlan::new(SEED, 1 + 200 * k);
         let got = run(&mut build(&flow(&CHANNELS)), &x, &mut plan.sizes());
@@ -516,5 +518,5 @@ fn reset_restarts_the_channelizer() {
     let _ = run(&mut p, &x[..1001], &mut std::iter::repeat(1001));
     p.reset();
     let got = run(&mut p, &x, &mut std::iter::repeat(3000));
-    assert!(got == reference(&x, &CHANNELS));
+    assert_eq!(got, reference(&x, &CHANNELS));
 }

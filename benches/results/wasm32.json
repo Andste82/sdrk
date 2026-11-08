@@ -669,6 +669,45 @@
           "status": "release",
           "verdict": "pass"
         },
+        "channel_bank_channelize": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 537.13,
+          "ours_instr_per_sample": 537.13,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 138.81,
+            "ours": 138.81
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "channel_bank_ddc": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 1657.26,
+          "ours_instr_per_sample": 1657.26,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 139.04,
+            "ours": 139.04
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "channel_select_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 13.3,
+          "ours_instr_per_sample": 13.3,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "channelize": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
           "goal": true,
@@ -699,6 +738,19 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "channelize_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 270.93,
+          "ours_instr_per_sample": 270.93,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 140.82,
+            "ours": 140.82
+          },
+          "status": "info",
+          "verdict": "info"
         },
         "channelize_fallback": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",

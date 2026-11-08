@@ -253,6 +253,7 @@ What each kernel is compared with:
 | `equalize_fallback` C32 (the measured side is our fallback) | GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` (`benches/refs/gr-equalizer.c`, D838): the same decision-directed NLMS work per symbol (an FIR of 11 complex taps, the QPSK decision, the window power and the normalized update of every tap); ours adds the phase tracker and the smoothed `mse`; `dev` until the first count; not measured at `avx2-runtime` |
 | `channelize` C32 (M45), 16 channels, 8 taps per branch (the block default), 4096 input samples of noise per call | liquid-dsp 1.8.3 `firpfbch2_crcf` analyzer (`benches/refs/liquid-channelizer.c`, D919): the 2x oversampled M/2-hop bank of ours, once per hop with SDRk's prototype, the SIMD dot product of the level and FFTW 3.3.10 for the transform (liquid's default build where FFTW is found; on wasm32 liquid's own FFT and the portable dot product); liquid also scales the transform by `1 / M`; our fallback as information |
 | `channelize_fallback` C32 (the measured side is our fallback) | the same `firpfbch2_crcf` with liquid's portable dot product and its own FFT (portable C) |
+| `channelize_block`, `channel_select_block` (the blocks `channelize` and `channel_select`, M45); `channel_bank_channelize`, `channel_bank_ddc` (M45 test 9: one channelizer with eight readers against eight `ddc` blocks) | our own code as information (`info`, `Family::Own`; the library comparison of the channelizer is the kernel entry `channelize`, D928, D930; [Channelizer blocks](#channelizer-blocks-and-channel-banks-m45)) |
 | `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
 | `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
 | `rfft` f32, N = 1024 | FFTW's real-input transform (`fftwf_plan_dft_r2c_1d`, out of place) at `sse2` and `sse4.2` (FFTW has no codelets above SSE2, so it is the stronger reference there too), rustfft's real-input planner (`realfft` 3.5, forward, out of place) elsewhere; the other of the two and our fallback as information (FFTW also on `neon`) |
@@ -526,6 +527,10 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 0.70 | 0.69 | 0.73 | 0.67 | 0.89 | 0.54 |
 | `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 0.28 | 0.28 | 0.15 | 0.17 | 0.17 | 0.29 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 0.45 | 0.44 | 0.35 | 0.36 | 0.51 | 0.46 |
+| `channelize_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `channel_select_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `channel_bank_channelize` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `channel_bank_ddc` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
@@ -735,6 +740,10 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 502.98 / 722.54 | 496.45 / 722.54 | 533.11 / 729.03 | - | 492.09 / 729.03 | 437.31 / 493.03 | 1027.31 / 1900.06 |
 | `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 93.20 / 337.96 | 94.69 / 339.96 | 50.42 / 326.64 | 50.03 | 56.63 / 334.08 | 62.54 / 361.58 | 270.93 / 949.71 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 192.43 / 431.21 | 189.18 / 429.58 | 145.84 / 412.39 | - | 143.76 / 398.71 | 151.01 / 297.08 | 436.07 / 949.71 |
+| `channelize_block` (our code, per input sample) | 94.70 / 94.70 | 94.67 / 94.67 | 51.04 / 51.04 | 50.65 | 57.12 / 57.12 | 63.04 / 63.04 | 270.93 / 270.93 |
+| `channel_select_block` (our code, per output sample) | 3.52 / 3.52 | 4.02 / 4.02 | 3.53 / 3.53 | 3.52 | 2.29 / 2.29 | 3.51 / 3.51 | 13.30 / 13.30 |
+| `channel_bank_channelize` (our code, per input sample) | 194.26 / 194.26 | 194.75 / 194.75 | 84.59 / 84.59 | 84.10 | 104.70 / 104.70 | 130.41 / 130.41 | 537.13 / 537.13 |
+| `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -944,6 +953,10 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | exact / 127.5 | exact / 127.5 | exact / 127.5 | exact / 127.5 | exact / 127.2 | exact / 127.5 |
 | `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 140.9 / 141.2 | 140.9 / 141.2 | 141.4 / 141.6 | 141.4 / 141.4 | 141.4 / 141.3 | 140.9 / 140.9 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 140.7 / 140.9 | 140.7 / 140.9 | 140.7 / 140.9 | 140.7 / 140.9 | 140.7 / 140.9 | 140.7 / 140.9 |
+| `channelize_block` (our code, per input sample) | 140.8 / 140.8 | 140.8 / 140.8 | 141.3 / 141.3 | 141.3 / 141.3 | 141.3 / 141.3 | 140.8 / 140.8 |
+| `channel_select_block` (our code, per output sample) | exact | exact | exact | exact | exact | exact |
+| `channel_bank_channelize` (our code, per input sample) | 138.8 / 138.8 | 138.8 / 138.8 | 139.2 / 139.2 | 139.2 / 139.2 | 139.2 / 139.2 | 138.8 / 138.8 |
+| `channel_bank_ddc` (our code, per input sample) | 139.0 / 139.0 | 139.0 / 139.0 | 140.5 / 140.5 | 140.3 / 140.3 | 139.4 / 139.4 | 139.0 / 139.0 |
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
@@ -1129,7 +1142,11 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 2.62 | 4.17 | 0.63 | 3.12 | 4.64 | 0.67 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.22 | 207.22 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 46.24 | 46.24 | 1.00 | 52.66 | 52.66 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 227.45 | 227.45 | 1.00 | 212.36 | 212.36 | 1.00 | sdrk fallback |
+| `channel_select_block` | 0.79 | 0.79 | 1.00 | 0.91 | 0.91 | 1.00 | sdrk fallback |
 | `channelize` | 25.93 | 171.64 | 0.15 | 27.72 | 176.30 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 26.79 | 26.79 | 1.00 | 27.83 | 27.83 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.43 | 180.90 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 115.06 | 115.06 | 1.00 | 99.06 | 99.06 | 1.00 | sdrk fallback |
 | `costas_fallback` | 115.06 | 86.69 | 1.33 | 99.06 | 80.45 | 1.23 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -1344,7 +1361,11 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 1.23 | 3.17 | 0.39 | 1.15 | 3.57 | 0.32 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.22 | 207.22 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 46.19 | 46.19 | 1.00 | 52.78 | 52.78 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 227.20 | 227.20 | 1.00 | 212.46 | 212.46 | 1.00 | sdrk fallback |
+| `channel_select_block` | 1.03 | 1.03 | 1.00 | 1.03 | 1.03 | 1.00 | sdrk fallback |
 | `channelize` | 21.95 | 171.63 | 0.13 | 28.21 | 176.29 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 26.51 | 26.51 | 1.00 | 27.84 | 27.84 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.83 | 166.73 | 0.32 | 58.12 | 180.51 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 115.06 | 115.06 | 1.00 | 98.55 | 98.55 | 1.00 | sdrk fallback |
 | `costas_fallback` | 115.06 | 86.69 | 1.33 | 98.55 | 80.45 | 1.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -1560,7 +1581,11 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `am_mod_cq15_fallback` | 0.45 | 2.97 | 0.15 | 0.56 | 2.30 | 0.24 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `am_mod_fallback` | 0.65 | 0.53 | 1.22 | 0.47 | 0.54 | 0.87 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 164.98 | 164.98 | 1.00 | 169.39 | 169.39 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 21.44 | 21.44 | 1.00 | 27.30 | 27.30 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 72.75 | 72.75 | 1.00 | 65.45 | 65.45 | 1.00 | sdrk fallback |
+| `channel_select_block` | 1.24 | 1.24 | 1.00 | 2.28 | 2.28 | 1.00 | sdrk fallback |
 | `channelize` | 12.08 | 120.69 | 0.10 | 12.75 | 99.98 | 0.13 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 12.21 | 12.21 | 1.00 | 12.87 | 12.87 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 34.92 | 149.61 | 0.23 | 32.41 | 131.39 | 0.25 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 81.08 | 81.08 | 1.00 | 104.05 | 104.05 | 1.00 | sdrk fallback |
 | `costas_fallback` | 81.08 | 54.40 | 1.49 | 104.05 | 32.27 | 3.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -1776,7 +1801,11 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 0.32 | 2.85 | 0.11 | 0.48 | 2.37 | 0.20 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `am_mod_fallback` | 0.38 | 0.53 | 0.73 | 0.30 | 0.54 | 0.56 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 161.09 | 161.09 | 1.00 | 168.96 | 168.96 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 791.29 | 791.29 | 1.00 | 99.43 | 99.43 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 516.23 | 516.13 | 1.00 | 96.78 | 96.79 | 1.00 | sdrk fallback |
+| `channel_select_block` | 0.55 | 0.55 | 1.00 | 3.67 | 3.67 | 1.00 | sdrk fallback |
 | `channelize` | 12.68 | 104.12 | 0.12 | 16.01 | 84.10 | 0.19 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 12.69 | 12.69 | 1.00 | 16.12 | 16.12 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 38.10 | 107.09 | 0.36 | 32.11 | 118.99 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 84.05 | 84.05 | 1.00 | 102.05 | 102.05 | 1.00 | sdrk fallback |
 | `costas_fallback` | 84.05 | 68.92 | 1.22 | 102.05 | 66.57 | 1.53 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -1992,7 +2021,11 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 1.28 | 2.27 | 1.52 | 1.03 | 1.48 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 296.16 | 296.16 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 92.68 | 92.68 | 1.00 | 70.61 | 70.61 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 308.18 | 308.18 | 1.00 | 263.36 | 263.36 | 1.00 | sdrk fallback |
+| `channel_select_block` | 2.04 | 2.04 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
 | `channelize` | 42.56 | 302.17 | 0.14 | 32.70 | 240.53 | 0.14 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 42.70 | 42.70 | 1.00 | 32.82 | 32.82 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 98.73 | 222.34 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 131.06 | 131.06 | 1.00 | 77.05 | 77.05 | 1.00 | sdrk fallback |
 | `costas_fallback` | 131.06 | 87.89 | 1.49 | 77.05 | 75.07 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
@@ -2160,6 +2193,61 @@ Instructions per input sample (`simd128`: wasmtime fuel) and simulated cycles pe
 Models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2). At 240 kHz `rds_demod` costs about 17 cycles per input sample at `avx2` (4 Mcycles per second of signal); the channel filter (583 taps, decimation 12, about 49 real-by-complex products per input sample in `fir_decimate`) is most of it, then `rotate` and `interleave`; `symbol_sync` and `costas` run at 20 kHz and 2375 Hz and the biphase decoding at 2375 chips per second. The `avx512` row of the reference model `znver4` (477 cycles, port-bound 128 cycles per sample, efficiency 0.27) is far above the counter-model `sapphirerapids` (53) and above `znver3` at `avx2` (17) for fewer instructions (41 against 46); the same kind of gap appears for `halfband_decimate_fallback` at `avx512` (61 against 13). It is a property of the `znver4` model for some instruction of that build, not of the block; the instruction counts are the robust figure there. `rds_decode` costs 32 to 39 instructions and 7 to 12 cycles per soft bit (at 1187.5 bit/s about 10 kcycles per second). Before the per-bit path was split from the block ends and the search and inlined (D678) it took 58.6 instructions per bit at `sse2`.
 
 **SIMD (D678).** Neither block gains from a SIMD branch of its own. The time of `rds_demod` is in `fir_decimate`, `rotate` and `interleave`, which already have SIMD paths at every level (46 instructions per sample at `avx2` against 138 at `sse2`); the scalar part is `symbol_sync` and `costas` (feedback loops, not accelerated anywhere) and the biphase step at about 1 % of the input rate. `rds_decode` is a bit-serial recurrence over GF(2) at 1187.5 bit/s: each syndrome depends on the one before, and the bit rate is 200 times lower than the multiplex rate of the demodulator in front of it.
+
+## Channelizer blocks and channel banks (M45)
+
+The blocks `channelize` and `channel_select` and the two banks of M45 test 9 are our own code, information only (`Family::Own`, `info` on every level, ours and fallback the same block code; D928, D930). The library comparison of the channelizer's work is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf` (D919, the results tables above). Counted on all four platforms on 2026-11-08 (`cargo xtask count --platform <p> --kernel channelize_block --kernel channel_select_block --kernel channel_bank_channelize --kernel channel_bank_ddc --merge`, the levels of x86_64 one at a time), with their cycles simulated by `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above).
+
+**Workloads.**
+- `channelize_block`: the default block (16 channels, 8 taps per branch, 0.5 / 1.0), 4096 input samples of noise per call, per input sample.
+- `channel_select_block`: channel -1 of 16 lanes, 4096 steps per call, per output sample.
+- `channel_bank_channelize`: the bank of the flow `pmr446_monitor`. One `ChannelizeBlock` (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `ChannelSelectBlock` (lanes -8 to -1, PMR446 channels 1 to 8), per input sample at 200 kS/s.
+- `channel_bank_ddc`: eight `DdcBlock` for the same eight channels from the same 200 kS/s (decimation 8, the -6 dB point at 6.25 kHz with a transition of 2.5 kHz, 60 dB; flat to 0.4 and 60 dB down from 0.6 of the spacing like the channelizer, 290 taps against its 291 Kaiser taps), per input sample.
+
+Both banks give eight channels at 25 kS/s, and both use 4096 samples of noise per call.
+
+Simulated cycles per sample, reference model (whole-loop):
+
+| Entry | `sse2` (`skylake`) | `sse4.2` (`skylake`) | `avx2` (`znver3`) | `avx512` (`znver4`) | `neon` (`cortex-a72`) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `channelize_block` | 26.79 | 26.51 | 12.21 | 12.69 | 42.70 |
+| `channel_select_block` | 0.79 | 1.03 | 1.24 | 0.55 | 2.04 |
+| `channel_bank_channelize` | 46.24 | 46.19 | 21.44 | 791.29 | 92.68 |
+| `channel_bank_ddc` | 227.45 | 227.20 | 72.75 | 516.23 | 308.18 |
+
+Simulated cycles per sample, counter-model (whole-loop):
+
+| Entry | `sse2` (`znver2`) | `sse4.2` (`znver2`) | `avx2` (`alderlake`) | `avx512` (`sapphirerapids`) | `neon` (`cortex-a76`) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `channelize_block` | 27.83 | 27.84 | 12.87 | 16.12 | 32.82 |
+| `channel_select_block` | 0.91 | 1.03 | 2.28 | 3.67 | 2.03 |
+| `channel_bank_channelize` | 52.66 | 52.78 | 27.30 | 99.43 | 70.61 |
+| `channel_bank_ddc` | 212.36 | 212.46 | 65.45 | 96.78 | 263.36 |
+
+Instructions per sample (`simd128`: wasmtime fuel, no core model, so no cycles):
+
+| Entry | `sse2` | `sse4.2` | `avx2` | `avx2-runtime` | `avx512` | `neon` | `simd128` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `channelize_block` | 94.70 | 94.67 | 51.04 | 50.65 | 57.12 | 63.04 | 270.93 |
+| `channel_select_block` | 3.52 | 4.02 | 3.53 | 3.52 | 2.29 | 3.51 | 13.30 |
+| `channel_bank_channelize` | 194.26 | 194.75 | 84.59 | 84.10 | 104.70 | 130.41 | 537.13 |
+| `channel_bank_ddc` | 721.18 | 721.77 | 234.33 | 241.94 | 178.06 | 436.60 | 1657.26 |
+
+Report cost of the two banks as pipeline graphs (`sdrk-pipeline/tests/pmr446.rs`, `the_cost_of_one_channelizer_against_eight_ddc`), per input sample:
+
+| Graph from 200 kS/s | Report cost per input sample |
+| --- | ---: |
+| one `channelize` (16 channels, 24 taps per branch) and eight `channel_select` | 35 |
+| eight `ddc` (decimation 8, cutoff 6.25 kHz, transition 2.5 kHz) | 1204 |
+
+Remarks:
+- **Test 9: the channelizer bank against the `ddc` bank.** Leaving out `avx512` (next remark), the channelizer bank needs 0.20 to 0.42 of the cycles of the `ddc` bank. On the reference model it is 46.24 against 227.45 at `sse2` (0.20), 21.44 against 72.75 at `avx2` (0.29) and 92.68 against 308.18 at `neon` (0.30). On the counter-model it is 52.66 against 212.36 (0.25), 27.30 against 65.45 (0.42) and 70.61 against 263.36 (0.27). In instructions it is 0.27 (`sse2`), 0.36 (`avx2`), 0.30 (`neon`) and 0.32 (`simd128`). The report cost is a model of the arithmetic, not of the code. It puts the channelizer bank at 0.03 of the `ddc` bank: 24 + 10 for the channelizer plus 1/8 per `channel_select`, against 150.5 per `ddc`.
+- **Artifact at `avx512`.** The `avx512` values of both banks are an artifact of the simulation, like the `rep stosb` note of the cycle tables. Both blocks shift their history with `copy_within`. Under SDE's `-spr` CPU, glibc does these copies with `rep movsb`, and SDE counts every byte as one execution of the instruction. `znver4` rates each execution at 100 cycles and `sapphirerapids` at 8.
+  - `channel_bank_channelize` copies 502336 bytes in 65536 samples. That is 770 of its 791 cycles on `znver4` and about 61 of its 99 on `sapphirerapids`, so without the copies it is about 21 and 38.
+  - `channel_bank_ddc` copies 294400 bytes. That is about 454 of its 516 cycles and about 36 of its 97, so without the copies it is about 62 and 61.
+  - `channelize_block` (12.69 on `znver4`, its history of 8 taps per branch) is not affected.
+- **The readers.** One `channel_select` costs 0.55 to 3.67 cycles per step, and a step comes every 8 input samples. The eight readers of the bank add about 0.5 to 3.7 cycles per input sample together.
+- **D935.** Before D935, `channel_select_block` counted 11.01 instructions per output sample at `sse2` and `avx2`, and `channel_bank_channelize` 201.67 and 91.89.
 
 ## Pipeline benchmark
 

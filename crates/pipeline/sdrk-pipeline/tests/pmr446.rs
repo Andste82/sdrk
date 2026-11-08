@@ -26,7 +26,10 @@
     clippy::cast_sign_loss,
     clippy::float_cmp,
     clippy::doc_markdown,
-    clippy::needless_pass_by_value
+    clippy::needless_pass_by_value,
+    clippy::unreadable_literal,
+    clippy::large_stack_frames,
+    clippy::print_stdout
 )]
 
 mod common;
@@ -167,13 +170,29 @@ fn adjacent_sinad(neighbour_db: f64) -> (f64, f64) {
     edges.push(json!({ "from": "demod5", "to": "wide" }));
     doc["outputs"]["wide"] = json!({ "type": "stream", "capacity": 65536, "drop": "error" });
     let mut wide = build(&doc.to_string());
-    let tap = run(&mut p, &bytes, &mut std::iter::repeat(4096), &["audio", "tap"]).remove(1);
-    let demod5 = run(&mut wide, &bytes, &mut std::iter::repeat(4096), &["audio", "wide"]).remove(1);
+    let tap = run(
+        &mut p,
+        &bytes,
+        &mut std::iter::repeat(4096),
+        &["audio", "tap"],
+    )
+    .remove(1);
+    let demod5 = run(
+        &mut wide,
+        &bytes,
+        &mut std::iter::repeat(4096),
+        &["audio", "wide"],
+    )
+    .remove(1);
     assert!(tap.len() as f64 >= 0.49 * AUDIO_RATE);
     assert!(demod5.len() as f64 >= 0.49 * CHANNEL_RATE);
     (
         sinad_db(&window(&tap, 0.1, 0.5, AUDIO_RATE), AUDIO_RATE, 1000.0),
-        sinad_db(&window(&demod5, 0.1, 0.5, CHANNEL_RATE), CHANNEL_RATE, 1000.0),
+        sinad_db(
+            &window(&demod5, 0.1, 0.5, CHANNEL_RATE),
+            CHANNEL_RATE,
+            1000.0,
+        ),
     )
 }
 
@@ -335,16 +354,22 @@ fn noise_only(seconds: f64) -> (usize, usize) {
 fn noise_keeps_every_squelch_closed() {
     let (nonzero, total) = noise_only(NOISE_SECONDS);
     assert!(total as f64 >= (NOISE_SECONDS - 0.01) * AUDIO_RATE);
-    assert_eq!(nonzero, 0, "{nonzero} of {total} audio samples are not zero");
+    assert_eq!(
+        nonzero, 0,
+        "{nonzero} of {total} audio samples are not zero"
+    );
 }
 
 /// The 60 s of the spec (to be confirmed): long in a debug build.
 #[test]
-#[ignore = "60 s of noise through the flow: run with --release -- --ignored"]
+#[ignore = "60 s of noise through the flow: run with --profile emulated -- --ignored"]
 fn sixty_seconds_of_noise_keep_every_squelch_closed() {
     let (nonzero, total) = noise_only(60.0);
     assert!(total as f64 >= 59.99 * AUDIO_RATE);
-    assert_eq!(nonzero, 0, "{nonzero} of {total} audio samples are not zero");
+    assert_eq!(
+        nonzero, 0,
+        "{nonzero} of {total} audio samples are not zero"
+    );
 }
 
 // ------------------------------------------------------------------ test 9
@@ -417,7 +442,7 @@ fn the_cost_of_one_channelizer_against_eight_ddc() {
             .nodes
             .iter()
             .filter(|n| n.name.starts_with("ch") && n.name != "chan")
-            .map(|n| n.rate_out.clone())
+            .map(|n| n.rate_out)
             .collect();
         assert_eq!(rates.len(), 8);
         assert!(rates.iter().all(|x| *x == rates[0]));
@@ -437,7 +462,10 @@ fn the_flow_validates_without_warnings_and_reports_its_lanes() {
     let names: Vec<&str> = report.nodes.iter().map(|n| n.name.as_str()).collect();
     for n in 1..=8 {
         for prefix in ["sel", "gate", "demod"] {
-            assert!(names.contains(&format!("{prefix}{n}").as_str()), "{prefix}{n}");
+            assert!(
+                names.contains(&format!("{prefix}{n}").as_str()),
+                "{prefix}{n}"
+            );
         }
     }
     for n in 1..=7 {

@@ -39,15 +39,15 @@
 use std::hint::black_box;
 
 use cref_sys::{Firpfbch2Build, LiquidFirpfbch2};
+use sdrk::Rate;
 use sdrk::kernels::channelize::{Channelize, ChannelizeState, history_len};
-use sdrk::{C32, Fallback, Sdrk};
 use sdrk::kernels::decim::FirDecimState;
 use sdrk::kernels::fused::Ddc;
 use sdrk::kernels::mix::Nco;
-use sdrk::Rate;
+use sdrk::{C32, Fallback, Sdrk};
 use sdrk_blocks::{
-    ArenaStorage, Block, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig,
-    DdcBlock, DdcConfig, LanesMut, LanesRef,
+    ArenaStorage, Block, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock,
+    ChannelizeConfig, DdcBlock, DdcConfig, LanesMut, LanesRef,
 };
 use sdrk_core::Reference;
 
@@ -256,7 +256,8 @@ pub(crate) struct ChannelizeBlockK {
 
 fn channelize_block() -> ChannelizeBlock<ArenaStorage<'static>> {
     let cfg = ChannelizeConfig::default();
-    let bytes = ChannelizeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg).expect("storage") + 16;
+    let bytes =
+        ChannelizeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg).expect("storage") + 16;
     // The block lives as long as the measurement binary; its arena is leaked once.
     let mem: &'static mut [u8] = Box::leak(vec![0u8; bytes].into_boxed_slice());
     ChannelizeBlock::new(&cfg, &mut ArenaStorage::new(mem)).expect("channelize block")
@@ -281,7 +282,9 @@ fn channelize_block_call(
     out: &mut [C32],
 ) -> usize {
     match LanesMut::new(out, CHANNELS) {
-        Ok(view) => block.process(black_box(input), view).map_or(0, |p| p.produced),
+        Ok(view) => block
+            .process(black_box(input), view)
+            .map_or(0, |p| p.produced),
         Err(_) => 0,
     }
 }
@@ -383,8 +386,10 @@ impl Kernel for ChannelSelectBlockK {
                 .out
                 .iter()
                 .zip(self.lanes.chunks_exact(CHANNELS))
-                .all(|(o, step)| o.re.to_bits() == step[lane].re.to_bits()
-                    && o.im.to_bits() == step[lane].im.to_bits());
+                .all(|(o, step)| {
+                    o.re.to_bits() == step[lane].re.to_bits()
+                        && o.im.to_bits() == step[lane].im.to_bits()
+                });
         if ok { 999.0 } else { 0.0 }
     }
 
@@ -541,7 +546,7 @@ fn bank_ddc_config(channel: i64) -> DdcConfig {
 }
 
 fn bank_rate() -> Rate {
-    Rate::hz(BANK_RATE_HZ).expect("rate")
+    Rate::hz(u64::from(BANK_RATE_HZ)).expect("rate")
 }
 
 /// `channel_bank_ddc`: eight `ddc` blocks over the same `n` input samples per call.
@@ -618,13 +623,10 @@ impl Kernel for DdcBankK {
             let n = spec.num_taps(fs, cfg.max_taps).expect("taps");
             let mut h = vec![0.0f64; n];
             spec.design(fs, cfg.max_taps, &mut h).expect("design");
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "the f32 taps of the block"
-            )]
+            #[allow(clippy::cast_possible_truncation, reason = "the f32 taps of the block")]
             let taps: Vec<f32> = h.iter().map(|&v| v as f32).collect();
-            let mut fir =
-                FirDecimState::new(taps, vec![C32::default(); n - 1], BANK_DECIMATION).expect("fir");
+            let mut fir = FirDecimState::new(taps, vec![C32::default(); n - 1], BANK_DECIMATION)
+                .expect("fir");
             let mut nco = Nco::new(-cfg.frequency_hz, rate).expect("nco");
             let mut want = vec![C32::default(); out.len()];
             let mut scratch = vec![C32::default(); self.input.len()];

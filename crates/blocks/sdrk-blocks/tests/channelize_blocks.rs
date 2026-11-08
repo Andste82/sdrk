@@ -14,7 +14,8 @@
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    clippy::many_single_char_names
 )]
 
 use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
@@ -193,7 +194,6 @@ fn a_short_prototype_names_the_required_taps_per_branch() {
                 stopband: 0.8,
                 attenuation_db: 80.0,
                 taps_per_branch: 12,
-                ..grid
             },
             channelizer_taps_per_branch(64, 0.45, 0.8, 80.0).unwrap(),
         ),

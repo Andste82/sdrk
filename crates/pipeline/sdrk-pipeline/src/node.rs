@@ -106,7 +106,7 @@ pub trait NodeSlice: StreamElem {
 
 /// How the port views of a block are taken out of a [`NodeInput`] or [`NodeOutput`]: the slices
 /// of a stream element (every [`NodeSlice`]) or the views of a lane stream (`Lanes<C32>`).
-/// The trait of the ports of [`LanesNode`].
+/// The trait of the ports of [`LanesNode`] and of the input of [`PacketOutNode`].
 pub trait NodePort: Ports {
     /// The read-only view of this port type, if the input has the matching variant.
     fn input(i: NodeInput<'_>) -> Option<Self::Ref<'_>>;
@@ -540,10 +540,12 @@ where
     forward_node!();
 }
 
-/// A [`Node`] around a [`Block`] with a stream input and a packet output (`Out = Packets`):
-/// the node of a decoder such as `frame_decode`. The packet indices are those of the block
-/// (counted from its construction or reset); the runner moves them into the index domain of
-/// the node's input.
+/// A [`Node`] around a [`Block`] with a packet output (`Out = Packets`): the node of a
+/// decoder such as `frame_decode` (a stream input) or `band_pulse_detect` (a lane input,
+/// [`Lanes<C32>`](Lanes), M45.1); the input is taken out of the [`NodeInput`] by [`NodePort`].
+/// The packet indices are those of the block (counted from its construction or reset, in
+/// samples of a stream input or time steps of a lane input); the runner moves them into the
+/// index domain of the node's input.
 ///
 /// ```
 /// use sdrk::Rate;
@@ -573,7 +575,7 @@ impl<B: Block> PacketOutNode<B> {
 impl<B, I> Node for PacketOutNode<B>
 where
     B: Block<In = I, Out = Packets>,
-    I: NodeSlice,
+    I: NodePort,
 {
     fn process(
         &mut self,
@@ -581,7 +583,7 @@ where
         output: NodeOutput<'_>,
         _meta: &mut Option<FrameMeta>,
     ) -> Result<Progress, BlockError> {
-        let input = <I as NodeSlice>::input(input).ok_or_else(mismatch)?;
+        let input = <I as NodePort>::input(input).ok_or_else(mismatch)?;
         let NodeOutput::Packets(output) = output else {
             return Err(mismatch());
         };

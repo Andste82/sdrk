@@ -1643,8 +1643,7 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)",
-      "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 15.17 / 15.11 cycles per sample of the fallback on `cortex-a72` (15.170 / 15.106, 1.004; 12.90 / 28.09 on `cortex-a76`), both bound by the latency of the recursion of the filter on that model; kept with open item I30-4"
+      "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "simd128": {
       "status": "info",

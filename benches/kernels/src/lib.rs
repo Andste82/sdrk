@@ -48,6 +48,7 @@ mod costas_family;
 mod equalize_family;
 mod fir_family;
 mod halfband_family;
+mod ism_family;
 mod math_family;
 mod morse_family;
 mod noise_family;
@@ -355,7 +356,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 212] = [
+pub const KERNELS: [&str; 213] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -568,6 +569,7 @@ pub const KERNELS: [&str; 212] = [
     "channel_select_block",
     "channel_bank_channelize",
     "channel_bank_ddc",
+    "band_pulse_detect_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -778,6 +780,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "channel_bank_channelize" => Box::new(channelize_family::ChannelBankK::new(rng, layout)),
         "channel_bank_ddc" => Box::new(channelize_family::DdcBankK::new(rng, layout)),
+        "band_pulse_detect_block" => Box::new(ism_family::BandPulseDetectBlockK::new(rng, layout)),
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

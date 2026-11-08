@@ -389,6 +389,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "band_pulse_detect_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 138.17,
+          "ours_instr_per_sample": 138.17,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
           "goal": true,
@@ -5339,6 +5352,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "band_pulse_detect_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 138.17,
+          "ours_instr_per_sample": 145.29,
+          "ratio": 1.05,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "biquad": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -7175,6 +7201,19 @@
           ],
           "other_instr_per_sample": 689.89,
           "ours_instr_per_sample": 689.89,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "band_pulse_detect_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 146.67,
+          "ours_instr_per_sample": 146.67,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -12461,6 +12500,19 @@
           ],
           "other_instr_per_sample": 689.89,
           "ours_instr_per_sample": 689.89,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "band_pulse_detect_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 145.36,
+          "ours_instr_per_sample": 145.36,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

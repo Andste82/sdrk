@@ -13,30 +13,30 @@ use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
     AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
     AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
-    AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
-    BlockSample, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig,
-    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, CostasBlock,
-    CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
-    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
-    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
-    EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
-    FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
-    FmStereoRdsModBlock, FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig,
-    FrameEncodeBlock, FrameEncodeConfig, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
-    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock,
-    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
-    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
-    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
-    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
-    RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
-    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    AutoNotchRealBlock, BandPulseDetectBlock, BandPulseDetectConfig, BiquadBlock, BiquadConfig,
+    BiquadRealBlock, Block, BlockDescription, BlockSample, ChannelSelectBlock, ChannelSelectConfig,
+    ChannelizeBlock, ChannelizeConfig, ConvertBlock, ConvertConfig, ConvertOutBlock,
+    ConvertOutConfig, ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig,
+    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
+    DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig,
+    DelayRealBlock, DesignSpec, DucBlock, DucConfig, EqualizeBlock, EqualizeConfig, FirBlock,
+    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
+    FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
+    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HalfbandDecimateBlock,
+    HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig,
+    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig,
+    InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MorseDecodeBlock,
+    MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock, MulRealBlock, NcoBlock,
+    NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig,
+    OokModBlock, OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
+    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock,
+    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock,
+    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
+    StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -4251,6 +4251,78 @@ impl Kind for ChannelSelectKind {
         Ok(Box::new(LanesNode::new(ChannelSelectBlock::new(
             &cfg.config,
             cfg.width,
+        )?)))
+    }
+}
+
+// ---------------------------------------------------------------- band_pulse_detect
+
+/// The configuration of `band_pulse_detect` with the width of its input.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BandPulseDetectCfg {
+    config: BandPulseDetectConfig,
+    width: usize,
+}
+
+pub(crate) struct BandPulseDetectKind;
+
+impl Kind for BandPulseDetectKind {
+    type Cfg = BandPulseDetectCfg;
+
+    const KIND: &'static str = "band_pulse_detect";
+    fn kernels() -> &'static [&'static str] {
+        &["mag"]
+    }
+    fn default_cfg() -> BandPulseDetectCfg {
+        BandPulseDetectCfg {
+            config: BandPulseDetectConfig::default(),
+            width: 0,
+        }
+    }
+    fn set(cfg: &mut BandPulseDetectCfg, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.config.set(name, value)
+    }
+    fn input_width(cfg: &mut BandPulseDetectCfg, width: usize) -> BlockResult<()> {
+        cfg.width = width;
+        Ok(())
+    }
+    fn plan(
+        cfg: &BandPulseDetectCfg,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if !input.is_lanes() {
+            return Err(mismatch("band_pulse_detect needs a lane stream"));
+        }
+        // A step rate below 100 kHz is `Unsupported`, which the factory reports as
+        // `rate_unsupported` at the node.
+        let (c, m) = (&cfg.config, cfg.width);
+        Ok(Figures {
+            // The packet stream gets the nominal rate `rate * max_per_input` (M / 16 per step).
+            rate_out: BandPulseDetectBlock::<VecStorage>::rate_out(c, rate, m)?,
+            memory_bytes: BandPulseDetectBlock::<VecStorage>::storage_bytes(c, m)?,
+            // §3 of M45.1: 12 per lane value, the magnitude, the envelope low-pass, the noise
+            // tracker and the trigger of every lane, plus the detectors of the busy lanes.
+            cost: 12.0 * m as f64,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &BandPulseDetectCfg,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(BandPulseDetectBlock::new(
+            &cfg.config,
+            rate,
+            cfg.width,
+            st,
         )?)))
     }
 }

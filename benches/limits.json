@@ -4990,5 +4990,35 @@
       "status": "info",
       "waiver": "`channel_bank_ddc` runs the kernel `ddc` through the facade, which the run-time-detection build dispatches to the AVX2 path at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D930)"
     }
+  },
+  "band_pulse_detect_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles and instructions per lane value, 16 lanes at 250 kHz; D962, D963)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles and instructions per lane value, 16 lanes at 250 kHz; D962, D963)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles and instructions per lane value, 16 lanes at 250 kHz; D962, D963)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles and instructions per lane value, 16 lanes at 250 kHz; D962, D963)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles and instructions per lane value, 16 lanes at 250 kHz; D962, D963)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles and instructions per lane value, 16 lanes at 250 kHz; D962, D963)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`band_pulse_detect_block` is not accelerated beyond the kernel `mag`: the run-time-detection build runs the code compiled for the baseline x86-64 target with `mag` detected at run time, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

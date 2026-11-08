@@ -7,6 +7,7 @@ pub mod agc;
 pub mod am_demod;
 pub mod am_mod;
 pub mod auto_notch;
+pub mod band_pulse_detect;
 pub mod biquad;
 pub mod channel_select;
 pub mod channelize;

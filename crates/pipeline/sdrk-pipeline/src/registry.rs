@@ -10,17 +10,17 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AdsbDecodeKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind, BiquadKind,
-    ChannelSelectKind, ChannelizeKind, ConvertKind, ConvertOutKind, CostasKind, DcBlockKind,
-    DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, EqualizeKind, Factory, FirKind,
-    FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind, FmStereoRdsModKind,
-    FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind, HalfbandDecimateKind,
-    HdlcDecodeKind, HdlcEncodeKind, ImagPartKind, InterpolateKind, Kind, MagKind, MakeComplexKind,
-    MorseDecodeKind, MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, OokDemodKind, OokModKind,
-    PreemphLimitKind, PskDemodKind, PskModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind,
-    RdsEncodeKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SliceKind,
-    SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind,
-    SymbolSyncKind, ToComplexKind,
+    AddKind, AdsbDecodeKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind,
+    BandPulseDetectKind, BiquadKind, ChannelSelectKind, ChannelizeKind, ConvertKind,
+    ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind,
+    DucKind, EqualizeKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
+    FmStereoModKind, FmStereoRdsModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind,
+    FskModKind, HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind,
+    InterpolateKind, Kind, MagKind, MakeComplexKind, MorseDecodeKind, MorseEncodeKind, MulKind,
+    NcoKind, NoiseBlankKind, OokDemodKind, OokModKind, PreemphLimitKind, PskDemodKind, PskModKind,
+    QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind, RealPartKind, RealToIqKind,
+    ResampleKind, RotateKind, ScaleKind, SliceKind, SpectrumKind, SquelchKind, SsbDemodKind,
+    SsbModKind, StereoMatrixKind, StereoPllKind, SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -253,7 +253,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 65);
+/// assert_eq!(registry.descriptions().count(), 66);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -346,6 +346,7 @@ impl Registry {
         register::<MorseDecodeKind>(&mut factories);
         register::<ChannelizeKind>(&mut factories);
         register::<ChannelSelectKind>(&mut factories);
+        register::<BandPulseDetectKind>(&mut factories);
         Self { factories }
     }
 

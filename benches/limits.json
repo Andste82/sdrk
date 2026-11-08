@@ -4869,5 +4869,65 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "channelize_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D928)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D928)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D928)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D928)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D928)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D928)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`channelize_block` runs the kernel through the facade, which the run-time-detection build dispatches to the AVX2 path of the kernel at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D928)"
+    }
+  },
+  "channel_select_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles and instructions per output sample, D928)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles and instructions per output sample, D928)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles and instructions per output sample, D928)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles and instructions per output sample, D928)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles and instructions per output sample, D928)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles and instructions per output sample, D928)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`channel_select_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

@@ -4,6 +4,13 @@
 //! | --- | --- | --- | --- |
 //! | `channelize` | facade | liquid-dsp `firpfbch2_crcf` with the SIMD dot product of the level and FFTW (liquid's own FFT on wasm32) | our fallback |
 //! | `channelize_fallback` | our fallback | liquid-dsp `firpfbch2_crcf` with the portable dot product and liquid's own FFT | — |
+//! | `channelize_block` | the block `ChannelizeBlock` (the kernel through the facade) | none (`info`) | one input sample |
+//! | `channel_select_block` | the block `ChannelSelectBlock` (channel -1 of 16 lanes) | none (`info`) | one output sample (one time step) |
+//!
+//! The two block entries (D928) are information: `channelize_block` is the kernel entry
+//! `channelize` plus the block around it (the library comparison of the work is the kernel
+//! entry, on the same workload), `channel_select_block` is a strided copy that no library has
+//! as a block of its own; `ours` and `fallback` run the same block code.
 //!
 //! The workload is the default of the block `channelize`, the search grid of M45.1: 16 channels
 //! with 8 taps per branch (a prototype of 128 taps from `design::channelizer_prototype` with the
@@ -25,6 +32,10 @@ use std::hint::black_box;
 use cref_sys::{Firpfbch2Build, LiquidFirpfbch2};
 use sdrk::kernels::channelize::{Channelize, ChannelizeState, history_len};
 use sdrk::{C32, Fallback, Sdrk};
+use sdrk_blocks::{
+    ArenaStorage, Block, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, LanesMut,
+    LanesRef,
+};
 use sdrk_core::Reference;
 
 use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32_pairs, c32s, noise_c32, snr_db};
@@ -217,6 +228,160 @@ impl Kernel for ChannelizeK {
             Impl::Liquid => {
                 "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10"
             }
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The block `channelize` (the default configuration, the workload of `channelize`) over `n`
+/// input samples per call: the kernel through the facade plus the block around it.
+pub(crate) struct ChannelizeBlockK {
+    block: ChannelizeBlock<ArenaStorage<'static>>,
+    input: Vec<C32>,
+    out: Vec<C32>,
+}
+
+fn channelize_block() -> ChannelizeBlock<ArenaStorage<'static>> {
+    let cfg = ChannelizeConfig::default();
+    let bytes = ChannelizeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg).expect("storage") + 16;
+    // The block lives as long as the measurement binary; its arena is leaked once.
+    let mem: &'static mut [u8] = Box::leak(vec![0u8; bytes].into_boxed_slice());
+    ChannelizeBlock::new(&cfg, &mut ArenaStorage::new(mem)).expect("channelize block")
+}
+
+impl ChannelizeBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        // Whole hops only, so that every call consumes all of its input.
+        let n = layout.n / (CHANNELS / 2) * (CHANNELS / 2);
+        ChannelizeBlockK {
+            block: channelize_block(),
+            input: noise_c32(rng, n, 0.9, 0).to_vec(),
+            out: vec![C32::default(); 2 * n],
+        }
+    }
+}
+
+#[inline(never)]
+fn channelize_block_call(
+    block: &mut ChannelizeBlock<ArenaStorage<'static>>,
+    input: &[C32],
+    out: &mut [C32],
+) -> usize {
+    match LanesMut::new(out, CHANNELS) {
+        Ok(view) => block.process(black_box(input), view).map_or(0, |p| p.produced),
+        Err(_) => 0,
+    }
+}
+
+impl Kernel for ChannelizeBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    channelize_block_call(&mut self.block, &self.input, &mut self.out);
+                }
+                other => unreachable!("channelize_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// The SNR of one call from a reset against the f64 model of `Reference` with the taps of
+    /// the block.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        let mut got = vec![C32::default(); self.out.len()];
+        let steps = channelize_block_call(&mut self.block, &self.input, &mut got);
+        // The block holds the taps time-reversed; the state takes them in time order.
+        let mut taps = self.block.taps().to_vec();
+        taps.reverse();
+        let mut want = vec![C32::default(); self.out.len()];
+        let _ = Reference.channelize(&mut state(&taps), &self.input, &mut want);
+        if steps * CHANNELS != want.len() {
+            return 0.0;
+        }
+        snr_db(&c32s(&want), &c32s(&got))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The block `channel_select` (channel -1 of 16 lanes) over `n` time steps per call.
+pub(crate) struct ChannelSelectBlockK {
+    block: ChannelSelectBlock,
+    lanes: Vec<C32>,
+    out: Vec<C32>,
+}
+
+impl ChannelSelectBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let block = ChannelSelectBlock::new(&ChannelSelectConfig { channel: -1 }, CHANNELS)
+            .expect("channel_select block");
+        ChannelSelectBlockK {
+            block,
+            lanes: noise_c32(rng, layout.n * CHANNELS, 0.9, 0).to_vec(),
+            out: vec![C32::default(); layout.n],
+        }
+    }
+}
+
+#[inline(never)]
+fn channel_select_call(block: &mut ChannelSelectBlock, lanes: &[C32], out: &mut [C32]) -> usize {
+    match LanesRef::new(black_box(lanes), CHANNELS) {
+        Ok(view) => block.process(view, out).map_or(0, |p| p.produced),
+        Err(_) => 0,
+    }
+}
+
+impl Kernel for ChannelSelectBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    channel_select_call(&mut self.block, &self.lanes, &mut self.out);
+                }
+                other => unreachable!("channel_select_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// 999 when the output is lane 15 (channel -1) of every step, bit for bit.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        let n = channel_select_call(&mut self.block, &self.lanes, &mut self.out);
+        let lane = CHANNELS - 1;
+        let ok = n == self.out.len()
+            && self
+                .out
+                .iter()
+                .zip(self.lanes.chunks_exact(CHANNELS))
+                .all(|(o, step)| o.re.to_bits() == step[lane].re.to_bits()
+                    && o.im.to_bits() == step[lane].im.to_bits());
+        if ok { 999.0 } else { 0.0 }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }

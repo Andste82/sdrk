@@ -4,8 +4,9 @@
 //! The tests register two small test kinds: `lane_spread` (`C32` -> `Lanes<C32>`, one step of
 //! `channels` lanes per two input samples, lane `k` of step `i` is `x[2i]·(k+1) + x[2i+1]`,
 //! group delay 1/2 input sample) and `lane_pick` (`Lanes<C32>` -> `C32`, copies the lane
-//! `lane`, which must be below the width of its input). The full test 6 with `channelize` and
-//! `channel_select`, including the counting allocator, follows with those kinds.
+//! `lane`, which must be below the width of its input). The rest of test 6 with the kinds
+//! `channelize` and `channel_select`, including the counting allocator, is in
+//! `tests/channelize_kinds.rs`; the last test here checks their shared lane buffer.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -453,8 +454,8 @@ fn four_readers_share_one_lane_buffer_and_get_their_lanes() {
     let got = run(&mut p, &x, &mut std::iter::repeat(1000));
     let want = reference(&x);
     assert_eq!(got, want);
-    // Nothing was reallocated while running (the counting allocator of the full test 6
-    // follows with the `channelize` kind).
+    // Nothing was reallocated while running (the counting allocator of test 6 is in
+    // `tests/channelize_kinds.rs`).
     assert_eq!(lane_buffers(&p)[0].3, data);
     let stats = p.stats();
     let chan = stats.iter().find(|s| s.name == "chan").unwrap();
@@ -680,4 +681,27 @@ fn a_lane_edge_cannot_cross_groups() {
         "{}",
         report.to_json()
     );
+}
+
+#[test]
+fn the_channelize_kind_has_one_lane_buffer_for_four_readers() {
+    // Spec test 6 with the standard kinds: `channelize` with four `channel_select` readers.
+    let mut spec = flow();
+    spec["nodes"]["chan"] = json!({ "kind": "channelize", "params": { "channels": 16 } });
+    for (i, channel) in [0, -1, 7, -1].iter().enumerate() {
+        spec["nodes"][format!("sel{i}")] =
+            json!({ "kind": "channel_select", "params": { "channel": channel } });
+    }
+    let mut p = Registry::standard()
+        .build_json(&spec.to_string(), &BuildOptions::default())
+        .unwrap();
+    let buffers = lane_buffers(&p);
+    assert_eq!(buffers.len(), 1);
+    let (width, _, readers, data) = buffers[0];
+    assert_eq!((width, readers), (16, 4));
+    let x = signal(4000);
+    let got = run(&mut p, &x, &mut std::iter::repeat(1000));
+    assert!(got.iter().all(|g| g.len() == 500));
+    assert_eq!(got[1], got[3]);
+    assert_eq!(lane_buffers(&p)[0].3, data);
 }

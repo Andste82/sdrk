@@ -34,25 +34,25 @@ use sdrk_blocks::{
     AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
     AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
     AutoNotchRealBlock, BiquadBlock, BiquadConfig, BiquadRealBlock, Block, BlockDescription,
-    ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig, CostasBlock, CostasConfig,
-    DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig,
-    DeemphasisConfig, DelayConfig, DucBlock, DucConfig, EqConstellation, EqualizeBlock,
-    EqualizeConfig, Error, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
-    FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
-    FmStereoRdsModBlock, FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig,
-    FrameEncodeBlock, FrameEncodeConfig, FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock,
-    FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig,
-    ImagPartBlock, InterpolateConfig, MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig,
-    MorseEncodeBlock, MorseEncodeConfig, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig,
-    NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock,
-    OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock,
-    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock,
-    all_descriptions,
+    ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, ConvertBlock,
+    ConvertConfig, ConvertOutBlock, ConvertOutConfig, CostasBlock, CostasConfig, DcBlockBlock,
+    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig,
+    DelayConfig, DucBlock, DucConfig, EqConstellation, EqualizeBlock, EqualizeConfig, Error,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
+    FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
+    FramePolarity, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HdlcDecodeBlock,
+    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig,
+    MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
+    MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock,
+    NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamKind,
+    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
+    PskModBlock, PskModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -74,8 +74,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 63);
-    assert_eq!(all_descriptions().len(), 63);
+    assert_eq!(kinds.len(), 65);
+    assert_eq!(all_descriptions().len(), 65);
     for kind in [
         "convert",
         "convert_out",
@@ -140,6 +140,8 @@ fn there_are_sixty_one_unique_kinds() {
         "fm_stereo_rds_mod",
         "morse_encode",
         "morse_decode",
+        "channelize",
+        "channel_select",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -375,6 +377,12 @@ fn config_defaults_match_the_descriptions() {
     );
     defaults_match("morse_encode", |n| MorseEncodeConfig::default().get(n), &[]);
     defaults_match("morse_decode", |n| MorseDecodeConfig::default().get(n), &[]);
+    defaults_match("channelize", |n| ChannelizeConfig::default().get(n), &[]);
+    defaults_match(
+        "channel_select",
+        |n| ChannelSelectConfig::default().get(n),
+        &[],
+    );
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -490,6 +498,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("fm_stereo_rds_mod", FmStereoRdsModConfig);
     round_trip!("morse_encode", MorseEncodeConfig);
     round_trip!("morse_decode", MorseDecodeConfig);
+    round_trip!("channelize", ChannelizeConfig);
+    round_trip!("channel_select", ChannelSelectConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -839,6 +849,14 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "morse_decode",
         &mut MorseDecodeBlock::new(&MorseDecodeConfig::default(), rate(8_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "channelize",
+        &mut ChannelizeBlock::new(&ChannelizeConfig::default(), &mut s).unwrap(),
+    );
+    check_block_params(
+        "channel_select",
+        &mut ChannelSelectBlock::new(&ChannelSelectConfig { channel: -3 }, 16).unwrap(),
     );
     let pd = PskDemodConfig {
         order: 8,

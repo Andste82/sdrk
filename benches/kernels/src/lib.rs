@@ -355,7 +355,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 208] = [
+pub const KERNELS: [&str; 210] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -564,6 +564,8 @@ pub const KERNELS: [&str; 208] = [
     "morse_decode_block",
     "channelize",
     "channelize_fallback",
+    "channelize_block",
+    "channel_select_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -768,6 +770,10 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "equalize_fallback" => Box::new(equalize_family::EqualizeK::new(rng, layout, true)),
         "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
         "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
+        "channelize_block" => Box::new(channelize_family::ChannelizeBlockK::new(rng, layout)),
+        "channel_select_block" => {
+            Box::new(channelize_family::ChannelSelectBlockK::new(rng, layout))
+        }
         "dc_block" => Box::new(DcBlockK::<C32>::new(rng, layout, simd)),
         "dc_block_cq15" => Box::new(DcBlockK::<CQ15>::new(rng, layout, simd)),
         "dc_block_fallback" => Box::new(DcBlockK::<C32>::new(rng, layout, fallback)),

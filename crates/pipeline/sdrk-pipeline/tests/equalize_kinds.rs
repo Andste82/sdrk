@@ -114,7 +114,7 @@ fn equalize_is_registered_with_its_kernel() {
     let f = registry.factory("equalize").unwrap();
     assert_eq!(f.kernels(), ["equalize"]);
     assert_eq!(f.description().kind, "equalize");
-    assert_eq!(registry.descriptions().count(), 63);
+    assert_eq!(registry.descriptions().count(), 65);
 }
 
 #[test]

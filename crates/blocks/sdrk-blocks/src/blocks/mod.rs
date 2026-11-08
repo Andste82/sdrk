@@ -8,6 +8,8 @@ pub mod am_demod;
 pub mod am_mod;
 pub mod auto_notch;
 pub mod biquad;
+pub mod channel_select;
+pub mod channelize;
 pub mod convert;
 pub mod convert_out;
 pub mod costas;

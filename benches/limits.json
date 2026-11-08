@@ -4929,5 +4929,65 @@
       "status": "info",
       "waiver": "`channel_select_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "channel_bank_channelize": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`channel_bank_channelize` runs the kernel `channelize` through the facade, which the run-time-detection build dispatches to the AVX2 path at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D930)"
+    }
+  },
+  "channel_bank_ddc": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code, D930)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`channel_bank_ddc` runs the kernel `ddc` through the facade, which the run-time-detection build dispatches to the AVX2 path at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D930)"
+    }
   }
 }

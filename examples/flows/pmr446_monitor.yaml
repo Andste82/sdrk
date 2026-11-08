@@ -1,0 +1,213 @@
+# SDRk pipeline: listen to eight PMR446 channels at once and mix their audio (YAML twin of
+# pmr446_monitor.json). YAML is accepted as input; JSON stays the canonical format.
+#
+# Channel numbering: the 16 analogue PMR446 channels are at 446.00625 + 0.0125 * (n - 1) MHz.
+# The tuner is centred on channel 9 (446.10625 MHz), so after the channelizer channel n is the
+# signed lane n - 9: channel 1 is -8, channel 8 is -1, channel 9 is 0 and channel 16 is +7.
+# This flow monitors channels 1 to 8 (lanes -8 to -1). Channels 9 to 16 are the obvious
+# extension: another eight chains sel -> gate -> demod with channel 0 to 7, three more levels
+# of `add` nodes and one more `add` that joins the two trees. The repetition of the eight
+# identical chains is the motivating case of the `for_each` item of the backlog (templates in
+# flow descriptions).
+sdrk: 1
+name: pmr446-monitor
+description: "Monitor PMR446 channels 1 to 8 at once: one polyphase channelizer, a squelch and an NFM demodulator per channel, the audio summed to 48 kHz."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s, centred at 446.10625 MHz (channel 9).
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ centred at 446.10625 MHz"
+nodes:
+  # The band: decimate by 12 (2.4 MS/s -> 200 kS/s, 16 channels of 12.5 kHz). The cutoff is
+  # the -6 dB point and the transition band is centred on it: flat to 93.75 kHz (channels 2
+  # to 16), 60 dB down from 106.25 kHz, so nothing that would alias into channels 2 to 16 (an
+  # alias of 106.25 kHz or more lands in channel 2 or 16) gets through. Channel 1 at -100 kHz
+  # sits on the edge of the 200 kS/s band, exactly in the transition band: its carrier is 6 dB
+  # down and its band lies on the slope, which turns into a little amplitude modulation that
+  # the squelch and the FM demodulator tolerate (the half of channel 1 beyond -100 kHz aliases
+  # to the top of the band, where the channelizer folds it back into lane -8). The transition
+  # at 2.4 MS/s needs about 700 taps, so max_taps is raised.
+  dec:
+    kind: ddc
+    params:
+      cutoff_hz: 100000
+      decimation: 12
+      max_taps: 2048
+      transition_hz: 12500
+  # Polyphase channelizer: 16 lanes of 12.5 kHz at 25 kS/s each (twice the spacing). The
+  # PMR plan needs sharp neighbour rejection: flat to 0.4 of the spacing (+-5 kHz), 60 dB
+  # down from 0.6 (+-7.5 kHz); the Kaiser estimate needs 24 taps per branch (fewer are
+  # rejected with the required number in the message).
+  chan:
+    kind: channelize
+    params:
+      channels: 16
+      passband: 0.4
+      stopband: 0.6
+      taps_per_branch: 24
+  # One lane per channel: channel_select takes the signed lane (channel n -> n - 9).
+  sel1:
+    kind: channel_select
+    params:
+      channel: -8
+  sel2:
+    kind: channel_select
+    params:
+      channel: -7
+  sel3:
+    kind: channel_select
+    params:
+      channel: -6
+  sel4:
+    kind: channel_select
+    params:
+      channel: -5
+  sel5:
+    kind: channel_select
+    params:
+      channel: -4
+  sel6:
+    kind: channel_select
+    params:
+      channel: -3
+  sel7:
+    kind: channel_select
+    params:
+      channel: -2
+  sel8:
+    kind: channel_select
+    params:
+      channel: -1
+  # Power squelch per channel with the defaults of nfm_receiver: it opens at -40 dBFS, closes
+  # 3 dB lower and averages over 10 ms. The squelch before the sum is essential: without it the
+  # noise of eight channels adds up. threshold_db can be changed while the flow runs.
+  gate1:
+    kind: squelch
+  gate2:
+    kind: squelch
+  gate3:
+    kind: squelch
+  gate4:
+    kind: squelch
+  gate5:
+    kind: squelch
+  gate6:
+    kind: squelch
+  gate7:
+    kind: squelch
+  gate8:
+    kind: squelch
+  # NFM demodulators for 12.5 kHz channels: 2.5 kHz deviation reads full scale, the 530 us
+  # de-emphasis of two-way radio (ETSI EN 300 296, as in nfm_receiver). The audio stays at
+  # 25 kS/s (audio_decimation 1; audio_cutoff_hz only matters with a decimation).
+  demod1:
+    kind: fm_demod
+    params: &nfm
+      audio_cutoff_hz: 3000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  demod2:
+    kind: fm_demod
+    params: *nfm
+  demod3:
+    kind: fm_demod
+    params: *nfm
+  demod4:
+    kind: fm_demod
+    params: *nfm
+  demod5:
+    kind: fm_demod
+    params: *nfm
+  demod6:
+    kind: fm_demod
+    params: *nfm
+  demod7:
+    kind: fm_demod
+    params: *nfm
+  demod8:
+    kind: fm_demod
+    params: *nfm
+  # The audio of the eight channels summed in a tree of seven `add` nodes (8 -> 4 -> 2 -> 1).
+  # The sum is not normalized: with the squelches, usually one channel is open at a time. For
+  # several open channels at once, put a `scale` (for example gain 0.25) between mix7 and out.
+  mix1:
+    kind: add
+  mix2:
+    kind: add
+  mix3:
+    kind: add
+  mix4:
+    kind: add
+  mix5:
+    kind: add
+  mix6:
+    kind: add
+  mix7:
+    kind: add
+  # 25 kS/s -> 48 kHz audio (rational 48/25), with the speech band of PMR446 as its low-pass:
+  # the -6 dB point at 4 kHz, flat to 3 kHz, 60 dB down from 5 kHz. The demodulators keep the
+  # whole channel (up to 12.5 kHz), so this filter removes the noise and the neighbour products
+  # above the speech band once for all channels. It needs about 2200 taps, more than the
+  # default max_taps of 1023.
+  out:
+    kind: resample
+    params:
+      cutoff_hz: 4000
+      max_taps: 4096
+      rate_out_hz: 48000
+      transition_hz: 2000
+# Band, channelizer, eight channel chains, the mixing tree, the resampler.
+edges:
+  - { from: rf, to: dec }
+  - { from: dec, to: chan }
+  - { from: chan, to: sel1 }
+  - { from: chan, to: sel2 }
+  - { from: chan, to: sel3 }
+  - { from: chan, to: sel4 }
+  - { from: chan, to: sel5 }
+  - { from: chan, to: sel6 }
+  - { from: chan, to: sel7 }
+  - { from: chan, to: sel8 }
+  - { from: sel1, to: gate1 }
+  - { from: sel2, to: gate2 }
+  - { from: sel3, to: gate3 }
+  - { from: sel4, to: gate4 }
+  - { from: sel5, to: gate5 }
+  - { from: sel6, to: gate6 }
+  - { from: sel7, to: gate7 }
+  - { from: sel8, to: gate8 }
+  - { from: gate1, to: demod1 }
+  - { from: gate2, to: demod2 }
+  - { from: gate3, to: demod3 }
+  - { from: gate4, to: demod4 }
+  - { from: gate5, to: demod5 }
+  - { from: gate6, to: demod6 }
+  - { from: gate7, to: demod7 }
+  - { from: gate8, to: demod8 }
+  - { from: demod1, to: mix1, port: a }
+  - { from: demod2, to: mix1, port: b }
+  - { from: demod3, to: mix2, port: a }
+  - { from: demod4, to: mix2, port: b }
+  - { from: demod5, to: mix3, port: a }
+  - { from: demod6, to: mix3, port: b }
+  - { from: demod7, to: mix4, port: a }
+  - { from: demod8, to: mix4, port: b }
+  - { from: mix1, to: mix5, port: a }
+  - { from: mix2, to: mix5, port: b }
+  - { from: mix3, to: mix6, port: a }
+  - { from: mix4, to: mix6, port: b }
+  - { from: mix5, to: mix7, port: a }
+  - { from: mix6, to: mix7, port: b }
+  - { from: mix7, to: out }
+  - { from: out, to: audio }
+# The mixed audio at 48 kHz (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

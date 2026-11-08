@@ -135,3 +135,13 @@ let mut source = Text { packets, next: 0 };
 let mut rf = vec![0u8; 16384];
 let (n, _) = pipeline.pull("rf", &mut rf, &mut source)?;
 ```
+
+`pmr446_monitor` (M45) listens to eight PMR446 channels at once with one polyphase channelizer. The input is an RTL-SDR recording (`cu8` at 2.4 MS/s) centred on PMR446 channel 9 (446.10625 MHz), so the channel `n` (446.00625 + 0.0125 (n - 1) MHz) is the signed lane `n - 9` of the channelizer. `dec` (`ddc` by 12) gives the 200 kS/s band of 16 channels, `chan` (`channelize`, 16 channels, 24 taps per branch, flat to 0.4 of the spacing and 60 dB down from 0.6) gives one lane stream of 16 channels at 25 kS/s, and eight chains `selN` (`channel_select`, channel `N - 9`) -> `gateN` (`squelch`) -> `demodN` (`fm_demod`, 2.5 kHz deviation, 530 us de-emphasis) for the channels 1 to 8 feed a tree of seven `add` nodes; `out` (`resample` to 48 kHz with the speech band as its low-pass) writes the stream `audio`:
+
+```sh
+rtl_sdr -f 446106250 -s 2400000 pmr.cu8
+cargo run -p fm-receiver -- --input pmr.cu8 --format cu8 --rate 2400000 \
+    --flow examples/flows/pmr446_monitor.json --output pmr.wav
+```
+
+The sum is not normalized: with the squelches, usually one channel is open at a time; for several open channels put a `scale` between `mix7` and `out` (the YAML comment shows where). The YAML twin also explains how to add channels 9 to 16 (another eight chains on the lanes 0 to 7). `crates/pipeline/sdrk-pipeline/tests/pmr446.rs` runs the flow on NFM channel scenes of the testkit (`sdrk_testkit::nfm::ChannelScene`).

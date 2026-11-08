@@ -4,9 +4,10 @@
 //! the history and the hop boundaries), compiled at the dispatched level; per hop the branch
 //! sums are formed with the vectors of the level and the `M`-point transform is the `C32` FFT of
 //! this backend at the same level (`fft::forward_at`, no second dispatch per hop; the radix-2
-//! transform of `channel_fft` for 4 and 8 channels, which the FFT kernel does not cover). The class is *tolerance* (`docs/kernels.md`): the branch sums use
-//! fused multiply-adds where the level has them, and the FFT is within its own contract, so the
-//! output agrees with the fallback within the 100 dB of the contract, not bit for bit.
+//! transform of `channel_fft` for 4 and 8 channels, which the FFT kernel does not cover). The
+//! class is *tolerance* (`docs/kernels.md`): the branch sums use fused multiply-adds where the
+//! level has them, and the FFT is within its own contract, so the output agrees with the
+//! fallback within the 100 dB of the contract, not bit for bit.
 //!
 //! **Branch sums.** Column `c` of the window is multiplied by the real tap `g[p M + c]` of every
 //! row `p` and summed over the rows: a real tap times an interleaved complex sample, so a vector
@@ -15,8 +16,9 @@
 //!
 //! - Generic code (SSE2, SSE4.2, NEON, SIMD128 and the scalar level): four taps in one 128-bit
 //!   vector, `zip_low` / `zip_high` of it with itself for the two vectors of two samples each.
-//! - AVX2 and AVX-512 (`x86` below): eight taps in one 256-bit vector, `vpermps` with the
-//!   indices `0 0 1 1 2 2 3 3` and `4 4 5 5 6 6 7 7` for the two vectors of four samples each.
+//! - AVX2 and AVX-512 (`x86` below): four taps loaded into both 128-bit halves of a 256-bit
+//!   vector (`vinsertf128`) and duplicated in each half with `vpermilps` (`0 0 1 1` in the low
+//!   half, `2 2 3 3` in the high half) for one vector of four samples.
 //!
 //! The columns are summed in blocks (sixteen columns at AVX2 and AVX-512, eight in the generic
 //! code, four and two for 8 and 4 channels) whose partial sums stay in registers over all rows,

@@ -708,10 +708,10 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 161.36,
+              "other_instr_per_sample": 151.01,
               "other_snr_db": 140.71,
               "ours_instr_per_sample": 62.54,
-              "ratio": 0.39
+              "ratio": 0.41
             },
             {
               "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
@@ -741,13 +741,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 297.08,
               "other_snr_db": null,
-              "ours_instr_per_sample": 161.36,
-              "ratio": 0.54
+              "ours_instr_per_sample": 151.01,
+              "ratio": 0.51
             }
           ],
           "other_instr_per_sample": 297.08,
-          "ours_instr_per_sample": 161.36,
-          "ratio": 0.54,
+          "ours_instr_per_sample": 151.01,
+          "ratio": 0.51,
           "snr_db": {
             "other": 140.86,
             "ours": 140.71

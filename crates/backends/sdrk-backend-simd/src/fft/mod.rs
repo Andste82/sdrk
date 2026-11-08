@@ -27,5 +27,7 @@
 //! (`sdrk_core::kernels::fft::irfft_with`) compiled at the dispatched level (see `real`).
 
 mod c32;
+
+pub(crate) use c32::forward_at;
 mod q15;
 mod real;

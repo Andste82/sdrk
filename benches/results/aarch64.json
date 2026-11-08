@@ -701,6 +701,60 @@
           "status": "release",
           "verdict": "pass"
         },
+        "channelize": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 161.36,
+              "other_snr_db": 140.71,
+              "ours_instr_per_sample": 62.54,
+              "ratio": 0.39
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 361.58,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 62.54,
+              "ratio": 0.17
+            }
+          ],
+          "other_instr_per_sample": 361.58,
+          "ours_instr_per_sample": 62.54,
+          "ratio": 0.17,
+          "snr_db": {
+            "other": 141.3,
+            "ours": 141.4
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "channelize_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 297.08,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 161.36,
+              "ratio": 0.54
+            }
+          ],
+          "other_instr_per_sample": 297.08,
+          "ours_instr_per_sample": 161.36,
+          "ratio": 0.54,
+          "snr_db": {
+            "other": 140.86,
+            "ours": 140.71
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "convert_cq15_cs8": {
           "compared_with": "volk_8i_convert_16i",
           "goal": true,

@@ -53,6 +53,7 @@
 mod agc;
 mod am_mod;
 mod biquad;
+mod channelize;
 mod convert;
 mod convert_out;
 mod demod;

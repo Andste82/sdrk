@@ -4826,5 +4826,48 @@
       "status": "info",
       "waiver": "`morse_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "channelize": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    },
+    "avx2-runtime": {
+      "status": "release"
+    }
+  },
+  "channelize_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
   }
 }

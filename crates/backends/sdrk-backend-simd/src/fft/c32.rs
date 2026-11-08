@@ -2065,6 +2065,32 @@ mod sized {
     }
 }
 
+/// The forward unnormalised transform of `data` at the level of `simd`, for a caller that is
+/// already dispatched (`channelize`): no second dispatch per transform, which the build with
+/// run-time detection would otherwise pay on every call. 16 points (the default of the block
+/// `channelize`) take the transform with the constant size, every other size the transform of
+/// any size.
+///
+/// # Errors
+/// `LengthMismatch` if `data.len()` differs from the plan.
+#[inline(always)]
+pub(crate) fn forward_at<S: SimdToken, Tw: AsRef<[C32]>>(
+    simd: S,
+    plan: &FftPlan<C32, Tw>,
+    data: &mut [C32],
+) -> Result<()> {
+    check_len(plan.len(), data.len())?;
+    let tw: &[f32] = bytemuck::cast_slice(plan.twiddles());
+    let floats: &mut [f32] = bytemuck::cast_slice_mut(data);
+    let stride = plan.twiddle_stride();
+    if plan.log2_len() == 4 {
+        fft_c32_of::<S, 16>(simd, floats, tw, stride, false, true);
+    } else {
+        fft_c32_of::<S, 0>(simd, floats, tw, stride, false, true);
+    }
+    Ok(())
+}
+
 impl Fft<C32> for Simd {
     fn fft<Tw: AsRef<[C32]>>(
         &self,

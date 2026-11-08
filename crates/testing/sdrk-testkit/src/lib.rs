@@ -13,6 +13,7 @@
 //! - [`e2e_ssb`]: the end-to-end SSB receive with squelch and AGC (M21),
 //! - [`e2e_stereo`]: the end-to-end FM stereo receive with channel separation, switching and mono checks (M24),
 //! - [`fm`]: the analytic FM baseband generator,
+//! - [`ism`]: `Transmission` and `Scene`, short-range OOK and FSK bursts of the ISM bands with noise, clock error and interferers (M45.1),
 //! - [`nfm`]: `ChannelScene`, deterministic scenes of NFM transmitters on a channel grid (M45),
 //! - [`meters`]: tone fit, SINAD, frequency estimate and spectral mask,
 //! - [`design_helpers`]: the windowed-sinc low-pass used by tests until M09,
@@ -72,6 +73,7 @@ pub mod r#gen;
 #[cfg(feature = "std")]
 pub mod golden;
 pub mod invariance;
+pub mod ism;
 pub mod meters;
 pub mod metrics;
 pub mod nfm;

@@ -2,7 +2,8 @@
 //! framing, PN9 data whitening, the PRBS generators of the bit error rate tests, the Radio
 //! Data System (`rds`: checkwords, syndromes, groups, programme service name and radiotext),
 //! NRZI and HDLC framing with the AX.25 address header (APRS), the fields and parity of
-//! Mode S frames (ADS-B), and Morse code (`morse`: the table, an encoder and a decoder).
+//! Mode S frames (ADS-B), Morse code (`morse`: the table, an encoder and a decoder), and the
+//! pulse trains of short-range devices (`pulses`: the payload of `band_pulse_detect`).
 //!
 //! Layer `crates/proto`, heap-free; depends on `sdrk-device` only. Digital modes end in bytes:
 //! a decoder turns bits into [`Packet`]s, an encoder turns packets back into bits. The blocks
@@ -38,6 +39,7 @@ pub mod morse;
 pub mod nrzi;
 mod packet;
 pub mod prbs;
+pub mod pulses;
 pub mod rds;
 pub mod whiten;
 

@@ -7,7 +7,7 @@
 //! decision of the 8PSK point to the detector and the metric, and the three products of
 //! `T4` to the metric, D659). The loop keeps the state in
 //! locals and is specialized for the order, so the detector and the metric have no branch on
-//! it. The time is the chain from one symbol's phase to the next, which the forms of D980 keep
+//! it. The time is the chain from one symbol's phase to the next, which the forms of D1100 keep
 //! short with the same bits: `phase_step_f32` takes `floor(v 2^32 + 0.5) as i64 as u32` from
 //! the bits of the `f32` with one arithmetic shift (the `phase_step` of `fm_mod` in `f64` on
 //! `wasm32` and for large values), `detector4` turns sign bits instead of multiplying,
@@ -45,7 +45,7 @@ fn clamp_f32(v: f32, limit: f32) -> f32 {
 /// `clamp_f32(flush_denormal(t), limit)` with the test of the flush beside the clamp instead
 /// of before it: a flushed `t` is 0, and the clamp of 0 is 0 for every limit that is not
 /// negative, so `flush ? 0 : clamp(t)` is the same value, one select after the clamp on the
-/// chain from symbol to symbol instead of the whole flush (D980).
+/// chain from symbol to symbol instead of the whole flush (D1100).
 #[inline]
 fn flush_clamp(t: f32, limit: f32) -> f32 {
     let flushed = flush_denormal(t) == 0.0;
@@ -56,7 +56,7 @@ fn flush_clamp(t: f32, limit: f32) -> f32 {
 /// The integrator `clamp_f32(flush_denormal(t), limit)`: inside the limit and above the flush
 /// threshold (the case of a running loop) it is `t` itself, so the common case takes `t` after
 /// one well-predicted branch and the selects of [`flush_clamp`] leave the chain from symbol to
-/// symbol (D980).
+/// symbol (D1100).
 #[inline]
 fn integrate(t: f32, limit: f32) -> f32 {
     let a = libm::fabsf(t);
@@ -69,7 +69,7 @@ fn integrate(t: f32, limit: f32) -> f32 {
 
 /// `sign(x) * y` of the order-4 detector without the multiplication on the chain: `1 y` is `y`
 /// and `-1 y` is `-y`, the sign of `y` turned by the sign bit of `x`; `0 y` (zero and NaN `x`)
-/// is computed as `0.0 * y` beside it; one comparison `|x| > 0` selects (D980).
+/// is computed as `0.0 * y` beside it; one comparison `|x| > 0` selects (D1100).
 #[inline]
 fn sign_times(x: f32, y: f32) -> f32 {
     const SIGN: u32 = 0x8000_0000;
@@ -81,7 +81,7 @@ fn sign_times(x: f32, y: f32) -> f32 {
 /// The order-4 detector `sign(y.re) y.im - sign(y.im) y.re` of `detector` with [`sign_times`];
 /// a non-finite value counts as 0, as there. The 0 comes from a cold call, so the compiler
 /// takes a well-predicted branch instead of a select whose test (on AArch64 a move of `e` to
-/// a general register) would lie on the chain from symbol to symbol (D980).
+/// a general register) would lie on the chain from symbol to symbol (D1100).
 #[inline]
 fn detector4(y: C32) -> f32 {
     let e = sign_times(y.re, y.im) - sign_times(y.im, y.re);
@@ -96,7 +96,7 @@ fn not_finite() -> f32 {
 }
 
 /// The phase step `(floor(f64(v) 2^32 + 0.5) as i64) as u32` of the contract, from the bits of
-/// the `f32` `v` with integer operations (D980). `v = +-m 2^(exp - 150)` with the 24-bit
+/// the `f32` `v` with integer operations (D1100). `v = +-m 2^(exp - 150)` with the 24-bit
 /// significand `m`, so `X = v 2^32 = S 2^-(157 - exp)` with `S = +-(m << 39)` (`|S| < 2^63`);
 /// `X` and `X + 0.5` are exact in `f64` wherever the step can be other than 0 (`X + 0.5` loses
 /// bits only for `X < 2^-30`). With the arithmetic shift, `q = S >> (156 - exp)` is
@@ -177,7 +177,7 @@ impl Costas for Fallback {
 
 #[cfg(test)]
 mod tests {
-    //! The forms of D980 must equal the formulas of the contract bit for bit (NaN payloads
+    //! The forms of D1100 must equal the formulas of the contract bit for bit (NaN payloads
     //! aside, which are not part of it).
 
     use std::vec::Vec;

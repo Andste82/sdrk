@@ -216,7 +216,7 @@ fn the_kind_is_registered() {
     let registry = Registry::standard();
     let det = registry.factory("band_pulse_detect").unwrap();
     assert_eq!(det.kernels(), ["mag"]);
-    assert_eq!(registry.descriptions().count(), 66);
+    assert_eq!(registry.descriptions().count(), 68);
 }
 
 #[test]

@@ -23,20 +23,22 @@ use sdrk_blocks::{
     FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
     FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
     FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
-    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HalfbandDecimateBlock,
-    HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig,
-    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig,
-    InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock, MorseDecodeBlock,
-    MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock, MulRealBlock, NcoBlock,
-    NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig,
-    OokModBlock, OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig,
-    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QuadDemodBlock,
-    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
-    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock,
-    SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock,
-    StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    FrameRotations, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
+    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
+    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock,
+    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
+    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
+    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
+    PskModConfig, PskVariant, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig,
+    QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig,
+    RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
+    ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
+    ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -2964,8 +2966,14 @@ impl Kind for FrameDecodeKind {
         Ok(Figures {
             rate_out: rate.scale(block.timing().ratio)?,
             memory_bytes: FrameDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
-            // A shift, a compare and a population count per input sample.
-            cost: 1.0,
+            // A shift, a compare and a population count per input sample; the rotations
+            // `four` test four shift registers after the inverse rotations of every symbol
+            // (D993).
+            cost: if cfg.rotations == FrameRotations::Four {
+                4.0
+            } else {
+                1.0
+            },
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,
@@ -3508,6 +3516,135 @@ impl Kind for PskDemodKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(PskDemodBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ---------------------------------------------------------------------- qam_mod
+
+pub(crate) struct QamModKind;
+
+impl Kind for QamModKind {
+    type Cfg = QamModConfig;
+
+    const KIND: &'static str = "qam_mod";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate"]
+    }
+    fn default_cfg() -> QamModConfig {
+        QamModConfig::default()
+    }
+    fn set(cfg: &mut QamModConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &QamModConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("qam_mod needs real f32 soft bits"));
+        }
+        let block = QamModBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: QamModBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: QamModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The pulse shaping of `psk_mod`, 4 span per input sample (D651); the table lookup
+            // of the point is part of it (D992).
+            cost: 4.0 * cfg.span as f64,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &QamModConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(QamModBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// -------------------------------------------------------------------- qam_demod
+
+pub(crate) struct QamDemodKind;
+
+impl Kind for QamDemodKind {
+    type Cfg = QamDemodConfig;
+
+    const KIND: &'static str = "qam_demod";
+    fn kernels() -> &'static [&'static str] {
+        &["fir", "symbol_sync", "equalize", "costas"]
+    }
+    /// `equalizer_taps` 0 leaves out `equalize`; the default (11) and every other count keep it.
+    fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
+        let off = params
+            .get("equalizer_taps")
+            .and_then(Value::as_i64)
+            .is_some_and(|t| t == 0);
+        if off {
+            &["fir", "symbol_sync", "costas"]
+        } else {
+            Self::kernels()
+        }
+    }
+    fn default_cfg() -> QamDemodConfig {
+        QamDemodConfig::default()
+    }
+    fn set(cfg: &mut QamDemodConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &QamDemodConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("qam_demod needs c32 samples"));
+        }
+        let block = QamDemodBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        let sps = rate.as_f64() / cfg.symbol_rate_hz;
+        Ok(Figures {
+            rate_out: QamDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: QamDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The matched filter 4 span per input sample; per symbol the timing loop 10 (the
+            // 40 of `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D986), the
+            // soft bits of `slice` 10 or 18 (D980) and the equalizer 8 per weight (D830; D992).
+            cost: 4.0 * cfg.span as f64
+                + (55.0 + if cfg.order == 64 { 18.0 } else { 10.0 }) / sps
+                + 8.0 * cfg.equalizer_taps as f64 / sps,
+            taps: block.num_taps(),
+            delay: block.timing().delay,
+            min_input: block.min_input(),
+            output: stream(PortType::F32),
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        if matches!(
+            e,
+            sdrk_blocks::Error::InvalidParameter {
+                name: "symbol_rate_hz",
+                ..
+            }
+        ) {
+            d.code = DiagCode::RateUnsupported;
+        }
+    }
+    fn build(
+        cfg: &QamDemodConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(QamDemodBlock::new(
             cfg, rate, st,
         )?)))
     }

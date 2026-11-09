@@ -1,9 +1,10 @@
 //! The kinds of M40: `costas`, `psk_mod` and `psk_demod` (registration with their kernels, the
 //! costs 30, `4 span` and `4 span + 40 / sps`, the rates and delays, the required parameters,
 //! `rate_unsupported` with the hint to resample, `invalid_value` for the order 3, the type
-//! checks), the parameter `polarity` of `frame_decode`, a push-mode `psk_mod` and `psk_demod`
-//! that equal the blocks, and packets through `frame_encode` -> `psk_mod` -> an inverted
-//! channel -> `psk_demod` -> `frame_decode` with `polarity` both. M40.1: `order` 8, the
+//! checks), the parameter `rotations` of `frame_decode` (M44, formerly `polarity`), a
+//! push-mode `psk_mod` and `psk_demod` that equal the blocks, and packets through
+//! `frame_encode` -> `psk_mod` -> an inverted channel -> `psk_demod` -> `frame_decode` with
+//! `rotations` both. M40.1: `order` 8, the
 //! `variant` (`invalid_value` for the combinations that do not fit, the costs and delays) and
 //! push-mode 8PSK, pi/4-DQPSK and OQPSK in pieces of seed 564 equal to the blocks.
 #![allow(
@@ -78,7 +79,7 @@ fn the_kinds_are_registered_with_their_kernels() {
         assert_eq!(f.kernels(), kernels, "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    assert_eq!(registry.descriptions().count(), 66);
+    assert_eq!(registry.descriptions().count(), 68);
 }
 
 /// A `psk_demod` node of 8 samples per symbol at 200 kHz with `params` and `backend`.
@@ -338,21 +339,45 @@ fn psk_demod_costs_and_rate_rule() {
 }
 
 #[test]
-fn frame_decode_has_the_polarity_choice() {
-    let doc = |polarity: &str| {
+fn frame_decode_has_the_rotations_choice() {
+    let doc = |rotations: &str, bits: i64| {
         json!({
             "sdrk": 1, "name": "t", "settings": { "precision": "f32", "max_chunk": 1024 },
             "inputs": { "in": { "type": "f32", "rate_hz": 50_000 } },
-            "nodes": { "n": { "kind": "frame_decode", "params": { "polarity": polarity } } },
+            "nodes": { "n": { "kind": "frame_decode", "params": {
+                "rotations": rotations, "bits_per_symbol": bits
+            } } },
             "edges": [ { "from": "in", "to": "n" }, { "from": "n", "to": "out" } ],
             "outputs": { "out": { "type": "packets" } }
         })
     };
-    for polarity in ["normal", "both"] {
-        let report = validate(&doc(polarity));
-        assert!(report.is_ok(), "{}", report.to_json());
+    for (rotations, bits) in [
+        ("normal", 2),
+        ("both", 1),
+        ("both", 3),
+        ("four", 2),
+        ("four", 6),
+    ] {
+        let report = validate(&doc(rotations, bits));
+        assert!(report.is_ok(), "{rotations} {bits}: {}", report.to_json());
     }
-    assert!(!validate(&doc("inverted")).is_ok());
+    assert!(!validate(&doc("inverted", 2)).is_ok());
+    // four needs an even count; 7 is outside 1 to 6
+    for (rotations, bits) in [("four", 3), ("normal", 7), ("four", 0)] {
+        assert!(
+            !validate(&doc(rotations, bits)).is_ok(),
+            "{rotations} {bits}"
+        );
+    }
+    // the former name is gone (M44, no alias)
+    let old = json!({
+        "sdrk": 1, "name": "t", "settings": { "precision": "f32", "max_chunk": 1024 },
+        "inputs": { "in": { "type": "f32", "rate_hz": 50_000 } },
+        "nodes": { "n": { "kind": "frame_decode", "params": { "polarity": "both" } } },
+        "edges": [ { "from": "in", "to": "n" }, { "from": "n", "to": "out" } ],
+        "outputs": { "out": { "type": "packets" } }
+    });
+    assert!(!validate(&old).is_ok());
 }
 
 /// Pushes `input` in pieces of 1 to 1024 samples (seed 559, stream `stream`) and reads the
@@ -460,7 +485,7 @@ fn psk_mod_and_psk_demod_kinds_equal_the_blocks() {
 }
 
 #[test]
-fn inverted_bpsk_frames_are_found_with_polarity_both() {
+fn inverted_bpsk_frames_are_found_with_rotations_both() {
     // transmitter: packets -> frame_encode -> psk_mod (BPSK, 4 samples per symbol)
     let tx_doc = json!({
         "sdrk": 1, "name": "tx", "settings": { "precision": "f32", "max_chunk": 4096 },
@@ -501,13 +526,13 @@ fn inverted_bpsk_frames_are_found_with_polarity_both() {
     // the channel turns the carrier by 180 degrees; a tail flushes the filters
     let mut rx_in: Vec<C32> = sig.iter().map(|x| C32::new(-x.re, -x.im)).collect();
     rx_in.extend(std::iter::repeat_n(C32::default(), 400));
-    for (polarity, expected) in [("normal", 0usize), ("both", 20)] {
+    for (rotations, expected) in [("normal", 0usize), ("both", 20)] {
         let rx_doc = json!({
             "sdrk": 1, "name": "rx", "settings": { "precision": "f32", "max_chunk": 4096 },
             "inputs": { "in": { "type": "c32", "rate_hz": 40_000 } },
             "nodes": {
                 "demod": { "kind": "psk_demod", "params": { "order": 2, "symbol_rate_hz": 10_000 } },
-                "dec": { "kind": "frame_decode", "params": { "polarity": polarity } }
+                "dec": { "kind": "frame_decode", "params": { "rotations": rotations } }
             },
             "edges": [
                 { "from": "in", "to": "demod" }, { "from": "demod", "to": "dec" },
@@ -530,9 +555,13 @@ fn inverted_bpsk_frames_are_found_with_polarity_both() {
         }
         // the 21st frame may or may not survive its truncated tail
         if expected == 0 {
-            assert!(got.is_empty(), "polarity {polarity}");
+            assert!(got.is_empty(), "rotations {rotations}");
         } else {
-            assert!(got.len() >= expected, "polarity {polarity}: {}", got.len());
+            assert!(
+                got.len() >= expected,
+                "rotations {rotations}: {}",
+                got.len()
+            );
         }
         for (g, s) in got.iter().zip(&packets) {
             assert_eq!(g.data(), s.data());

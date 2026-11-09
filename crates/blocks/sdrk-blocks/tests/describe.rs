@@ -41,19 +41,19 @@ use sdrk_blocks::{
     EqConstellation, EqualizeBlock, EqualizeConfig, Error, FirBlock, FirConfig, FmDemodBlock,
     FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
     FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock, FmStereoRdsModConfig,
-    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FramePolarity,
+    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FrameRotations,
     FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig,
     HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
     MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
     MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamKind, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock, SliceConfig,
-    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    PskModConfig, QamDemodConfig, QamModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig,
+    RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock,
+    SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
+    SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock,
+    StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -75,8 +75,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 66);
-    assert_eq!(all_descriptions().len(), 66);
+    assert_eq!(kinds.len(), 68);
+    assert_eq!(all_descriptions().len(), 68);
     for kind in [
         "convert",
         "convert_out",
@@ -363,6 +363,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("costas", |n| CostasConfig::default().get(n), &[]);
     defaults_match("psk_mod", |n| PskModConfig::default().get(n), &[]);
     defaults_match("psk_demod", |n| PskDemodConfig::default().get(n), &[]);
+    defaults_match("qam_mod", |n| QamModConfig::default().get(n), &[]);
+    defaults_match("qam_demod", |n| QamDemodConfig::default().get(n), &[]);
     defaults_match("rds_demod", |n| RdsDemodConfig::default().get(n), &[]);
     defaults_match("rds_decode", |n| RdsDecodeConfig::default().get(n), &[]);
     defaults_match("hdlc_decode", |n| HdlcDecodeConfig::default().get(n), &[]);
@@ -1317,8 +1319,8 @@ fn the_rds_tx_kinds_describe_their_ports_and_parameters() {
 /// The kinds of M40: `costas` (`c32` to `c32`, four build parameters; the first is the choice
 /// `constellation` of M44 §3, which replaced `order`), `psk_mod` (`f32` soft
 /// bits to `c32`, `samples_per_symbol` required), `psk_demod` (`c32` to `f32` soft bits,
-/// `symbol_rate_hz` required) and the parameter `polarity` of `frame_decode` (last, build,
-/// choice `normal`/`both`).
+/// `symbol_rate_hz` required) and the parameters `rotations` (M44, formerly `polarity`; build,
+/// choice `normal`/`both`/`four`) and `bits_per_symbol` of `frame_decode`.
 #[test]
 fn the_psk_kinds_describe_their_ports_and_parameters() {
     let costas = find("costas");
@@ -1424,27 +1426,54 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     for word in [
         "agc",
         "resample",
-        "polarity both",
+        "rotations both or four",
         "differential",
         "symbol_sync",
     ] {
         assert!(d.details.contains(word), "psk_demod details: {word}");
     }
+    // M44 §4: `rotations` replaced `polarity` (the last two parameters are `rotations` and
+    // `bits_per_symbol`)
     let fd = find("frame_decode");
-    let last = fd.params.last().unwrap();
-    assert_eq!(last.name, "polarity");
-    assert_eq!(last.mutability, Mutability::Build);
+    assert!(fd.param("polarity").is_none());
+    let rot = fd.param("rotations").unwrap();
+    assert_eq!(rot.mutability, Mutability::Build);
     assert_eq!(
-        last.kind,
+        rot.kind,
         ParamKind::Choice {
-            options: &["normal", "both"],
+            options: &["normal", "both", "four"],
             default: 0
         }
     );
+    let last = fd.params.last().unwrap();
+    assert_eq!(last.name, "bits_per_symbol");
+    assert_eq!(last.mutability, Mutability::Build);
+    assert_eq!(
+        last.kind,
+        ParamKind::I64 {
+            min: 1,
+            max: 6,
+            default: Some(2)
+        }
+    );
     let mut cfg = FrameDecodeConfig::default();
-    cfg.set("polarity", ParamValue::Choice(1)).unwrap();
-    assert_eq!(cfg.polarity, FramePolarity::Both);
-    assert_eq!(cfg.get("polarity"), Ok(ParamValue::Choice(1)));
+    cfg.set("rotations", ParamValue::Choice(1)).unwrap();
+    assert_eq!(cfg.rotations, FrameRotations::Both);
+    assert_eq!(cfg.get("rotations"), Ok(ParamValue::Choice(1)));
+    cfg.set("rotations", ParamValue::Choice(2)).unwrap();
+    assert_eq!(cfg.rotations, FrameRotations::Four);
+    cfg.set("bits_per_symbol", ParamValue::I64(6)).unwrap();
+    assert_eq!(cfg.get("bits_per_symbol"), Ok(ParamValue::I64(6)));
+    assert!(cfg.validate().is_ok());
+    cfg.set("bits_per_symbol", ParamValue::I64(5)).unwrap();
+    assert!(matches!(
+        cfg.validate(),
+        Err(Error::InvalidParameter {
+            name: "bits_per_symbol",
+            ..
+        })
+    ));
+    assert!(cfg.set("bits_per_symbol", ParamValue::I64(7)).is_err());
     // the orders 3, 5, 6 and 7 lie inside the range of the description but are no orders
     for (kind, r) in [
         (

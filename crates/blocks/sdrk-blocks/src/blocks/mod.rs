@@ -48,6 +48,8 @@ pub mod ook_mod;
 pub mod preemph_limit;
 pub mod psk_demod;
 pub mod psk_mod;
+pub mod qam_demod;
+pub mod qam_mod;
 pub mod quad_demod;
 pub mod rds_decode;
 pub mod rds_demod;

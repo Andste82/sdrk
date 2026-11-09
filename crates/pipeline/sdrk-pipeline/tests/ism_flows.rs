@@ -163,10 +163,11 @@ const TEST5_LEAD_S: f64 = 0.010;
 /// The level from which test 5 asks for every transmission.
 const MIN_SNR: f64 = 12.0;
 /// Regression guards of test 5 (I45.1-2): the shares of the transmissions from 12 dB on that
-/// are emitted once as FSK, and of those with every transition within 1 and 3 steps.
-const TEST5_MIN_ONCE: f64 = 0.94;
-const TEST5_MIN_WITHIN_1: f64 = 0.38;
-const TEST5_MIN_WITHIN_3: f64 = 0.75;
+/// are emitted once as FSK, and of those with every transition within 1 and 3 steps (measured
+/// with the symbol grid of D1025 and the merging of D1026: 0.968, 0.947 and 0.947).
+const TEST5_MIN_ONCE: f64 = 0.96;
+const TEST5_MIN_WITHIN_1: f64 = 0.94;
+const TEST5_MIN_WITHIN_3: f64 = 0.94;
 
 struct Test5Tx {
     bit_us: f64,

@@ -616,13 +616,14 @@ const TEST4_TOL: f64 = 1.0;
 /// The shares of the OOK and of the FSK transmissions of test 4 emitted once with their own
 /// train, and of those with every width (OOK) or transition (FSK) within 1 and 3 steps: the
 /// spec for the OOK trains (measured 128 of 128), regression guards on the measured shares
-/// elsewhere (I45.1-3: OOK widths 0.992 and 0.992; FSK 0.962, 0.568 and 0.674); the trains of no
-/// transmission (measured 3 with the edges of D1023, I45.1-3: single pulses in the lane of
-/// -1 MHz next to strong OOK transmissions, and one pulse 11 steps long and 19 dB below a
-/// Manchester transmission in the neighbour lane).
+/// elsewhere (OOK widths 0.992 and 1.000; FSK with the symbol grid of D1025 0.947, 0.924 and
+/// 0.924, I45.1-3); the trains of no transmission (measured 5, D1027: three single pulses in
+/// far lanes, which D1027 allows (two in the lane of -1 MHz next to strong OOK transmissions,
+/// one 11 steps long and 19 dB below a Manchester transmission in the neighbour lane), and two
+/// OOK trains of FSK transmissions in a neighbour lane, part of I45.1-3).
 const TEST4_MIN_OOK: [f64; 3] = [1.0, 0.97, 0.97];
-const TEST4_MIN_FSK: [f64; 3] = [0.93, 0.53, 0.64];
-const TEST4_MAX_STRAYS: usize = 3;
+const TEST4_MIN_FSK: [f64; 3] = [0.94, 0.92, 0.92];
+const TEST4_MAX_STRAYS: usize = 5;
 
 /// One transmission of test 4.
 struct Test4Tx {
@@ -880,7 +881,7 @@ fn simultaneous_transmissions_are_each_emitted() {
     // The spec asks for every transmission with its own train: asserted for the OOK trains,
     // which all have it; the detector does not reach it for every FSK transmission (open item
     // I45.1-3), and the widths are not part of the spec's criterion (one Manchester transmission
-    // has a width 4.5 steps off): regression guards on the measured shares.
+    // has a width 2.5 steps off): regression guards on the measured shares.
     for (m, min) in [TEST4_MIN_OOK, TEST4_MIN_FSK].iter().enumerate() {
         for (got, want) in shares[m].iter().zip(min) {
             assert!(got >= want, "{m}: {:?} against {min:?}", shares[m]);

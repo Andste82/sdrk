@@ -30,12 +30,14 @@ use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, CostasConstellation, EqConstellation, EqMode, EqualizeBlock,
     EqualizeConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet,
-    PacketFlags, ParamValue, PortType, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig,
-    SliceBlock, SliceConfig, SliceConstellation,
+    PacketFlags, ParamValue, PortType, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS,
+    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock, SliceConfig,
+    SliceConstellation,
 };
 use sdrk_core::kernels::constellation::{Qam, rotate_symbol};
 use sdrk_core::kernels::costas::{Costas, CostasState};
 use sdrk_core::kernels::equalize::{EqParams, Equalize, EqualizeState};
+use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState, Ted};
@@ -549,10 +551,85 @@ fn received(order: u32, sps: usize, n_sym: usize, noise: f64, stream: u64) -> Ve
         .collect()
 }
 
-/// `qam_demod` composed from the kernels in one call each: the matched filter, `symbol_sync`
-/// (Gardner at the exact samples per symbol), `equalize` (the QAM constellation, no feedback,
-/// `mu_cma` 0.05, `mu_dd` 0.02, 1000 CMA symbols, the tracker at `carrier_bw`), `costas` with
-/// the QAM constellation, and the soft bits of M44 §2 in `f32` ([`axis_bits`]).
+/// The symbols of the frequency acquisition of `qam_demod`: skipped after the start, then
+/// collected, and the FFT size of the estimate.
+const ACQ_SKIP: usize = 256;
+const ACQ_SYMBOLS: usize = 512;
+const ACQ_FFT: usize = 1024;
+
+/// The frequency acquisition of `qam_demod` written out (M44, I44-3, I44-4) over the symbols
+/// `x` of the timing loop: the smoothed power `p = p + (|x|^2 - p) / 64` (from 0, finite
+/// values only), and from symbol 256 on windows of 512 symbols of `q = x^4 / (p p)` (`x^4` as
+/// `(x^2)^2`, both parts divided by `p p`, in `f32`; 0 when `p` is not above 0 or `q` is not
+/// finite), zero-padded to 1024 points, the kernel `fft`, the largest bin `k` (the first of
+/// equal ones), used when `|X_k|^2 >= 12 sum |q|^2`, refined by the parabola through the
+/// magnitudes of the bins `k - 1`, `k`, `k + 1`, giving
+/// `((k + delta) / 1024 wrapped into [-0.5, 0.5)) / 4` cycles per symbol; a window without a
+/// clear peak is followed by the next one. Returns the number of symbols after which the
+/// estimate was used, and the estimate.
+fn acquire_kernels(x: &[C32]) -> Option<(usize, f64)> {
+    let plan = FftPlan::new(ACQ_FFT, vec![C32::default(); ACQ_FFT / 2]).unwrap();
+    let mut p = 0.0f32;
+    let mut buf = vec![C32::default(); ACQ_FFT];
+    let mut fill = 0;
+    for (n, v) in x.iter().enumerate() {
+        let e = v.re * v.re + v.im * v.im;
+        if e.is_finite() {
+            p += (e - p) / 64.0;
+            if p.abs() < f32::MIN_POSITIVE {
+                p = 0.0;
+            }
+        }
+        if n < ACQ_SKIP {
+            continue;
+        }
+        let a = C32::new(v.re * v.re - v.im * v.im, 2.0 * v.re * v.im);
+        let pp = p * p;
+        let q = C32::new((a.re * a.re - a.im * a.im) / pp, (2.0 * a.re * a.im) / pp);
+        let ok = p > 0.0 && q.re.is_finite() && q.im.is_finite();
+        buf[fill] = if ok { q } else { C32::default() };
+        fill += 1;
+        if fill < ACQ_SYMBOLS {
+            continue;
+        }
+        fill = 0;
+        let energy: f32 = buf[..ACQ_SYMBOLS]
+            .iter()
+            .map(|v| v.re * v.re + v.im * v.im)
+            .sum();
+        buf[ACQ_SYMBOLS..].fill(C32::default());
+        <Sdrk as Fft<C32>>::fft(&Sdrk, &plan, &mut buf, Direction::Forward, Scaling::Default)
+            .unwrap();
+        let power: Vec<f32> = buf.iter().map(|v| v.re * v.re + v.im * v.im).collect();
+        let mut k = 0;
+        for i in 1..ACQ_FFT {
+            if power[i] > power[k] {
+                k = i;
+            }
+        }
+        if !(energy.is_finite() && energy > 0.0 && power[k] >= 12.0 * energy) {
+            continue;
+        }
+        let mag = |i: usize| f64::from(power[i % ACQ_FFT]).sqrt();
+        let (a, b, c) = (mag(k + ACQ_FFT - 1), mag(k), mag(k + 1));
+        let den = a - 2.0 * b + c;
+        let delta = if den < 0.0 { 0.5 * (a - c) / den } else { 0.0 };
+        let mut w = (k as f64 + delta) / ACQ_FFT as f64;
+        if w >= 0.5 {
+            w -= 1.0;
+        }
+        return Some((n + 1, w / 4.0));
+    }
+    None
+}
+
+/// `qam_demod` composed from the kernels: the matched filter, `symbol_sync` (Gardner at the
+/// exact samples per symbol), `equalize` (the QAM constellation, no feedback, `mu_cma` 0.05,
+/// `mu_dd` 0.02, 1000 CMA symbols, the tracker at `carrier_bw`), `costas` with the QAM
+/// constellation, and the soft bits of M44 §2 in `f32` ([`axis_bits`]); the equalizer and the
+/// carrier loop run in two calls split after the symbol at which the frequency acquisition
+/// ([`acquire_kernels`]) used its estimate `f`, which then goes to the equalizer's tracker (and
+/// the carrier loop's frequency to 0), or without the equalizer to the carrier loop.
 fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32> {
     let q = if cfg.order == 16 {
         Qam::Qam16
@@ -578,10 +655,8 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
     assert_eq!(p.consumed, input.len());
     syms.truncate(p.produced);
     let t = cfg.equalizer_taps;
-    let eq = if t == 0 {
-        syms
-    } else {
-        let mut st = EqualizeState::new(
+    let mut eq = (t != 0).then(|| {
+        EqualizeState::new(
             vec![C32::default(); t],
             vec![C32::default(); t],
             EqParams {
@@ -597,19 +672,34 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
                 phase_bw: cfg.carrier_bw,
             },
         )
-        .unwrap();
-        let mut y = vec![C32::default(); syms.len()];
-        <Sdrk as Equalize>::equalize(&Sdrk, &mut st, &syms, &mut y).unwrap();
-        y
-    };
+        .unwrap()
+    });
     let c = if q == Qam::Qam16 {
         CostasConstellation::Qam16
     } else {
         CostasConstellation::Qam64
     };
     let mut st = CostasState::new(c, cfg.carrier_bw, 0.7071, 0.05).unwrap();
-    let mut y = vec![C32::default(); eq.len()];
-    <Sdrk as Costas>::costas(&Sdrk, &mut st, &eq, &mut y).unwrap();
+    let acquired = acquire_kernels(&syms);
+    let split = acquired.map_or(syms.len(), |(n, _)| n);
+    let mut y = vec![C32::default(); syms.len()];
+    for (from, to) in [(0, split), (split, syms.len())] {
+        let mut e = syms[from..to].to_vec();
+        if let Some(eq) = eq.as_mut() {
+            <Sdrk as Equalize>::equalize(&Sdrk, eq, &syms[from..to], &mut e).unwrap();
+        }
+        <Sdrk as Costas>::costas(&Sdrk, &mut st, &e, &mut y[from..to]).unwrap();
+        if let Some((n, f)) = acquired.filter(|&(n, _)| n == to) {
+            assert_eq!(n, split);
+            match eq.as_mut() {
+                Some(eq) => {
+                    eq.set_frequency(f as f32);
+                    st.set_frequency(0.0);
+                }
+                None => st.set_frequency(f),
+            }
+        }
+    }
     reference(q, 1.0, &y)
 }
 
@@ -801,11 +891,19 @@ fn best_match(sent: &[f32], soft: &[f32], k: usize, n: usize) -> (u32, usize, us
 
 #[test]
 fn qam_mod_to_qam_demod_with_little_noise_is_error_free() {
-    // (order, samples per symbol, carrier offset in cycles per symbol); 64-QAM with a smaller
-    // offset (the decision-directed loops pull in a narrower range on its denser grid)
-    for (i, (order, sps, offset)) in [(16u32, 4usize, 0.0005), (64, 4, 0.0001), (16, 8, 0.0005)]
-        .into_iter()
-        .enumerate()
+    // (order, samples per symbol, carrier offset in cycles per symbol): the frequency
+    // acquisition brings 64-QAM the offsets of 16-QAM (before it, 64-QAM pulled in 0.0001 but
+    // not 0.0005 here, I44-3) and both orders offsets up to the edge of its range of +-0.125
+    for (i, (order, sps, offset)) in [
+        (16u32, 4usize, 0.0005),
+        (64, 4, 0.0005),
+        (16, 8, 0.0005),
+        (64, 4, 0.04),
+        (16, 4, -0.1),
+        (64, 8, -0.12),
+    ]
+    .into_iter()
+    .enumerate()
     {
         let mcfg = QamModConfig {
             order,
@@ -842,9 +940,71 @@ fn qam_mod_to_qam_demod_with_little_noise_is_error_free() {
         let (r, lag, errs) = best_match(&sent, &soft, k, 2000);
         assert_eq!(errs, 0, "case {i}: rotation {r}, lag {lag}");
         assert!(rx.locked(), "case {i}");
-        // the equalizer's phase tracker and the carrier loop share the offset
-        let f = rx.frequency() + f64::from(rx.equalizer().unwrap().frequency());
+        // the acquisition finds the offset, and the equalizer's phase tracker and the carrier
+        // loop together hold it
+        let a = rx.acquired_frequency().unwrap();
+        assert!((a - offset).abs() < 1e-4, "case {i}: acquired {a}");
+        let f = rx.frequency();
         assert!((f - offset).abs() < 1e-4, "case {i}: {f}");
+    }
+}
+
+#[test]
+fn qam_demod_acquires_once_after_its_window_and_again_after_reset() {
+    // the window of the definition above is that of the block
+    assert_eq!(
+        (QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS),
+        (ACQ_SKIP, ACQ_SYMBOLS)
+    );
+    // 16-QAM at 4 samples per symbol with the offset 0.001 of `received`
+    let fs = rate(38_400);
+    for taps in [11usize, 0] {
+        let cfg = QamDemodConfig {
+            order: 16,
+            symbol_rate_hz: 9600.0,
+            equalizer_taps: taps,
+            ..QamDemodConfig::default()
+        };
+        let input = received(16, 4, 2000, 0.01, 50);
+        let mut block = QamDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+        let mut soft = vec![0.0f32; 4 * 4000];
+        // 700 symbols: the window (symbols 256 to 767 of the timing loop) is not complete
+        let p = block.process(&input[..2800], &mut soft).unwrap();
+        assert_eq!(p.consumed, 2800);
+        assert_eq!(block.acquired_frequency(), None, "taps {taps}");
+        block.process(&input[2800..], &mut soft).unwrap();
+        let f = block.acquired_frequency().unwrap();
+        assert!((f - 0.001).abs() < 1e-4, "taps {taps}: {f}");
+        match block.equalizer() {
+            // the tracker took the estimate (and kept tracking)
+            Some(eq) => assert!((f64::from(eq.frequency()) - 0.001).abs() < 1e-4),
+            None => assert!((block.frequency() - 0.001).abs() < 1e-4),
+        }
+        block.reset();
+        assert_eq!(block.acquired_frequency(), None);
+        assert_eq!(block.frequency(), 0.0);
+        // silence: no clear spectral peak, so no estimate is used
+        let silence = vec![C32::default(); 4000];
+        block.process(&silence, &mut soft).unwrap();
+        assert_eq!(block.acquired_frequency(), None, "taps {taps}");
+        assert_eq!(block.frequency(), 0.0, "taps {taps}");
+        // noise of unit power for the first window, then the signal: a window without a clear
+        // peak is followed by the next one, which finds the offset
+        block.reset();
+        let mut rng = Pcg32::new(SEED, 60);
+        let mut late: Vec<C32> = (0..4 * 800)
+            .map(|_| C32::new(rng.normal() as f32, rng.normal() as f32) * 0.7)
+            .collect();
+        late.extend_from_slice(&input);
+        let p = block.process(&late[..4 * 790], &mut soft).unwrap();
+        assert_eq!(p.consumed, 4 * 790);
+        assert_eq!(block.acquired_frequency(), None, "taps {taps}");
+        let mut rest = &late[4 * 790..];
+        while !rest.is_empty() {
+            rest = &rest[block.process(rest, &mut soft).unwrap().consumed..];
+        }
+        let f = block.acquired_frequency().unwrap();
+        assert!((f - 0.001).abs() < 1e-4, "taps {taps}: late {f}");
     }
 }
 

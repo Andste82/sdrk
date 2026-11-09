@@ -484,6 +484,30 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
         self.freq
     }
 
+    /// Sets the tracker's frequency integrator in cycles per symbol (a frequency estimate from
+    /// outside, as the acquisition of `qam_demod`); the value is clipped to `[-0.125, 0.125]`
+    /// (the limit of the integrator), flushed when subnormal, and NaN gives 0. The phase, the
+    /// weights and the mode stay.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::equalize::{EqParams, EqualizeState}, C32};
+    /// let mut st = EqualizeState::new([C32::default(); 3], [C32::default(); 3], EqParams::default())?;
+    /// st.set_frequency(0.04);
+    /// assert_eq!(st.frequency(), 0.04);
+    /// st.set_frequency(-0.3);
+    /// assert_eq!(st.frequency(), -0.125);
+    /// st.set_frequency(f32::NAN);
+    /// assert_eq!(st.frequency(), 0.0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_frequency(&mut self, freq: f32) {
+        self.freq = if freq.is_nan() {
+            0.0
+        } else {
+            clip(flush_denormal(freq), PHASE_MAX_FREQ)
+        };
+    }
+
     /// The tracker gains `(kp, ki)` in cycles per symbol per unit of the detector output.
     pub fn phase_gains(&self) -> (f32, f32) {
         (self.kp, self.ki)

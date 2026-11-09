@@ -4556,8 +4556,8 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 192.32,
-          "ours_instr_per_sample": 192.32,
+          "other_instr_per_sample": 191.31,
+          "ours_instr_per_sample": 191.31,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

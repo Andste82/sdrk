@@ -404,6 +404,10 @@ fn par_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R>
 }
 
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "statistical acceptance test, about 7 minutes per wasm variant under wasmtime; runs on the native hosts (D979)"
+)]
 fn every_frequency_is_received() {
     let txs = test3_transmissions();
     let results: Vec<Test3Result> = par_map(
@@ -770,6 +774,10 @@ fn test4_scene(txs: &[Test4Tx], first: usize) -> (Vec<(Result<(), String>, f64)>
 /// apart: every one is emitted once with its own pulse train (every OOK width, every FSK
 /// transition within one step; the modulation; the frequency within 10 kHz).
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "statistical acceptance test, about 7 minutes per wasm variant under wasmtime; runs on the native hosts (D979)"
+)]
 fn simultaneous_transmissions_are_each_emitted() {
     let txs = test4_transmissions();
     let (results, stray): (Vec<_>, Vec<_>) = par_map(
@@ -989,6 +997,10 @@ fn overlap_868_scene(txs: &[Overlap868Tx], first: usize) -> (Vec<Result<(), Stri
 /// 10 kHz); the wideband rule (D965, D975) does not merge them (measured before D975: 46 of the
 /// 150 transmissions lost).
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "statistical acceptance test, about 7 minutes per wasm variant under wasmtime; runs on the native hosts (D979)"
+)]
 fn overlapping_transmissions_through_8_lanes_are_each_emitted() {
     let txs = overlap_868_transmissions();
     let (results, strays): (Vec<_>, Vec<_>) = par_map(
@@ -1161,6 +1173,10 @@ fn level_at(p: &[f64], q: f64) -> f64 {
 /// same detector on its output as a lane view of width 1 (the same samples): the levels at which
 /// half and 90 % of the trials are detected (a train of all 16 pulses) agree within 1 dB.
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "statistical acceptance test, about 7 minutes per wasm variant under wasmtime; runs on the native hosts (D979)"
+)]
 fn the_channelizer_costs_no_sensitivity() {
     let counts: Vec<(usize, usize)> = par_map((0..TEST6_LEVELS.len()).collect(), test6_level);
     println!("level dB | channelizer detected | ddc detected (of {TEST6_TRIALS})");

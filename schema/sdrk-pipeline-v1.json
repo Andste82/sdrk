@@ -1438,7 +1438,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Recovers the carrier of BPSK, QPSK or 8PSK symbols: removes phase and frequency offset.",
+            "description": "Recovers the carrier of BPSK, QPSK, 8PSK, 16-QAM or 64-QAM symbols: removes phase and frequency offset.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -1461,6 +1461,18 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The constellation of the phase detector: bpsk, qpsk or 8psk (the points of psk_mod), qam16 or qam64 (decision-directed against the grid of qam_mod). Typical: bpsk; the constellation of the transmitter. Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
                   "damping": {
                     "default": 0.7071,
                     "description": "Damping factor of the loop. Typical: 0.7071. Build-time.",
@@ -1481,13 +1493,6 @@
                     "maximum": 0.25,
                     "minimum": 0.0,
                     "type": "number"
-                  },
-                  "order": {
-                    "default": 2,
-                    "description": "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK). Typical: 2 for BPSK, 4 for QPSK, 8 for 8PSK. Build-time.",
-                    "maximum": 8,
-                    "minimum": 2,
-                    "type": "integer"
                   }
                 },
                 "type": "object"
@@ -1864,7 +1869,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Adaptive equalizer: removes the inter-symbol interference of multipath and filters from PSK symbols.",
+            "description": "Adaptive equalizer: removes the inter-symbol interference of multipath and filters from PSK and QAM symbols.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -1896,11 +1901,13 @@
                   },
                   "constellation": {
                     "default": "qpsk",
-                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod). Typical: qpsk; the constellation of the transmitter. Build-time.",
+                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod), qam16 or qam64 (the unit-power Gray points of qam_mod; the CMA radius R2 = E|s|^4 / E|s|^2 is 1.32 and 1.381). Typical: qpsk; the constellation of the transmitter. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
-                      "8psk"
+                      "8psk",
+                      "qam16",
+                      "qam64"
                     ],
                     "type": "string"
                   },

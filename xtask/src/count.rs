@@ -904,7 +904,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 215] = [
+pub static KERNELS: [KernelSpec; 219] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1130,6 +1130,10 @@ pub static KERNELS: [KernelSpec; 215] = [
     spec("dot_complex_fallback", Family::FallbackVsCmsis, false),
     spec("equalize", Family::Own, false),
     spec("equalize_fallback", Family::FallbackVsGnuRadio, false),
+    spec("costas_qam16", Family::Own, false),
+    spec("costas_qam16_fallback", Family::FallbackVsGnuRadio, false),
+    spec("equalize_qam16", Family::Own, false),
+    spec("equalize_qam16_fallback", Family::FallbackVsGnuRadio, false),
     spec("rds_shape", Family::Own, false),
     spec("stereo_encode_rds", Family::Own, false),
     proto("morse_encode_block", Family::Own),
@@ -4734,6 +4738,50 @@ mod tests {
         assert_eq!(kernel("costas_fallback").family.measured(), "fallback");
         for k in ["costas", "costas_fallback"] {
             assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
+        }
+        // M44: the QAM path of the carrier loop and of the equalizer, the facade entries against
+        // our own fallback, the fallbacks against GNU Radio's `constellation_receiver_cb` and
+        // `linear_equalizer` on a `constellation_rect` (D990).
+        for (simd, fallback) in [
+            ("costas_qam16", "costas_qam16_fallback"),
+            ("equalize_qam16", "equalize_qam16_fallback"),
+        ] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(simd)),
+                    (Reference::Fallback, Vec::new()),
+                    "{simd} at {level}"
+                );
+                assert_eq!(
+                    comparisons(plan(level), kernel(fallback)).0,
+                    Reference::GnuRadio,
+                    "{fallback} at {level}"
+                );
+            }
+            assert!(kernel(simd).family.measured_at(plan("avx2-runtime")));
+            assert!(!kernel(fallback).family.measured_at(plan("avx2-runtime")));
+            assert_eq!(kernel(fallback).family.measured(), "fallback");
+        }
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        for name in [
+            "costas_qam16",
+            "costas_qam16_fallback",
+            "equalize_qam16",
+            "equalize_qam16_fallback",
+        ] {
+            for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
+                let Some(limit) = limits.get(name, p.level) else {
+                    assert!(
+                        p.baseline.is_some(),
+                        "{name} at {}: no entry in limits.json",
+                        p.level
+                    );
+                    continue;
+                };
+                if limit.status == Status::Info {
+                    assert!(limit.waiver.is_some(), "{name} at {}", p.level);
+                }
+            }
         }
         // The filter design `rrc` is not a kernel and has no entry (D606).
         assert!(KERNELS.iter().all(|s| !s.name.starts_with("rrc")));

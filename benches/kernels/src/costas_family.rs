@@ -22,7 +22,7 @@
 use std::hint::black_box;
 
 use cref_sys::GrCostasLoopCc;
-use sdrk::kernels::costas::{Costas, CostasState};
+use sdrk::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk::{C32, Fallback, Sdrk};
 use sdrk_core::Reference;
 
@@ -30,6 +30,8 @@ use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32_pairs, c32_pairs_ref, c32s
 
 /// The block defaults of `costas` (D604).
 const ORDER: u32 = 4;
+/// The constellation of [`ORDER`].
+const CONSTELLATION: CostasConstellation = CostasConstellation::Qpsk;
 const LOOP_BW: f64 = 0.02;
 #[allow(clippy::approx_constant)]
 const DAMPING: f64 = 0.7071;
@@ -123,7 +125,7 @@ impl CostasK {
     }
 
     fn state() -> CostasState {
-        CostasState::new(ORDER, LOOP_BW, DAMPING, MAX_OFFSET).expect("costas")
+        CostasState::new(CONSTELLATION, LOOP_BW, DAMPING, MAX_OFFSET).expect("costas")
     }
 }
 

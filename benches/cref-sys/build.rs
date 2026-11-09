@@ -1,7 +1,7 @@
 //! Links the static C reference libraries that `benches/refs/build.sh` built into the prefix
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
 //! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_grrotator`,
-//! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_grcrc`, `has_grcostas`, `has_grequalizer`, `has_liquiddc`, `has_liquidnco`, `has_liquidam`, `has_kfr`, `has_cmsis`,
+//! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_grcrc`, `has_grcostas`, `has_grequalizer`, `has_grconstellation`, `has_liquiddc`, `has_liquidnco`, `has_liquidam`, `has_kfr`, `has_cmsis`,
 //! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`, `has_volkgeneric`) unset, and its wrapper then reports that the library is not available.
 //!
 //! The biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 15] = [
+const LIBRARIES: [(&str, &str, &str); 16] = [
     ("has_fftw", "libfftw3f.a", "fftw3f"),
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
@@ -26,6 +26,11 @@ const LIBRARIES: [(&str, &str, &str); 15] = [
     ("has_grcrc", "libgrcrc.a", "grcrc"),
     ("has_grcostas", "libgrcostas.a", "grcostas"),
     ("has_grequalizer", "libgrequalizer.a", "grequalizer"),
+    (
+        "has_grconstellation",
+        "libgrconstellation.a",
+        "grconstellation",
+    ),
     ("has_liquiddc", "libliquiddc.a", "liquiddc"),
     ("has_liquidnco", "libliquidnco.a", "liquidnco"),
     ("has_liquidam", "libliquidam.a", "liquidam"),

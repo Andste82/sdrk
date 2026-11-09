@@ -3,7 +3,7 @@
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
-use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate};
 use sdrk_core::kernels::math::Interleave;
 use sdrk_core::kernels::mix::{Nco, Rotate};
@@ -409,7 +409,12 @@ impl<S: Storage> RdsDemodBlock<S> {
         // Two chips of the timing loop, in input samples.
         let min_input = block.min_input().saturating_mul(2).saturating_mul(d);
         let sync = *block.state();
-        let costas = CostasState::new(2, config.carrier_bw, DEFAULT_DAMPING, DEFAULT_MAX_OFFSET)?;
+        let costas = CostasState::new(
+            CostasConstellation::Bpsk,
+            config.carrier_bw,
+            DEFAULT_DAMPING,
+            DEFAULT_MAX_OFFSET,
+        )?;
         Ok(Self {
             config: *config,
             d,

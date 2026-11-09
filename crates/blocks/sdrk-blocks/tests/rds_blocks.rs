@@ -29,7 +29,7 @@ use sdrk_blocks::{
     ArenaStorage, Block, DesignSpec, Error, Packet, PacketFlags, ParamValue, RdsDecodeBlock,
     RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolSyncConfig,
 };
-use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::kernels::decim::{FirDecimState, FirDecimate};
 use sdrk_core::kernels::math::Interleave;
 use sdrk_core::kernels::mix::{Nco, Rotate};
@@ -97,7 +97,7 @@ fn demod_kernels(cfg: &RdsDemodConfig, fs: Rate, input: &[f32]) -> Vec<f32> {
     let q = <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, &mut sync, &dec, &mut chips).unwrap();
     assert_eq!(q.consumed, dec.len());
     chips.truncate(q.produced);
-    let mut st = CostasState::new(2, cfg.carrier_bw, 0.7071, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Bpsk, cfg.carrier_bw, 0.7071, 0.05).unwrap();
     let mut y = vec![C32::default(); chips.len()];
     <Sdrk as Costas>::costas(&Sdrk, &mut st, &chips, &mut y).unwrap();
     // biphase: chip j >= 1 completes a pair of pairing (j - 1) mod 2

@@ -11,7 +11,13 @@ lock detector unchanged (D603); the order-4 lock metric is ``-cos(4 arg y)`` (D6
 (M40.1) decides the 8PSK point ``d`` of the half-open octant of ``y`` from the signs and the
 comparison of the magnitudes (D641), measures ``e = y.im dr - y.re di`` and uses the metric
 ``cos(8 err) = T4(u)``, computed as ``((8 w) (w - 1)) + 1`` with ``w = u u``,
-``u = ((r r) / p) 2 - 1`` and ``r = y.re dr + y.im di`` (D640, D659).
+``u = ((r r) / p) 2 - 1`` and ``r = y.re dr + y.im di`` (D640, D659). 16-QAM (M44 section 3)
+decides the grid point ``d`` of ``y`` per axis (``floor(v (sqrt E / 2) + m / 2)`` clamped to
+``0 .. m - 1``, NaN to 0, D982), measures the exact phase ``e = atan2f(i, r)`` of ``y conj d``
+with ``r = y.re dr + y.im di`` and ``i = y.im dr - y.re di`` (the ``atan2f`` of FreeBSD's msun,
+the algorithm of the Rust ``libm`` crate, transcribed operation by operation in ``atan2f.py``,
+D987) and uses the metric ``T4(u)`` of 8PSK with ``u = ((r r) / (p q)) 2 - 1``,
+``q = dr dr + di di`` (D988).
 
 The signals use ``math.sin`` and ``math.cos`` one value at a time and the noise comes from
 ``rng.standard_normal``; nothing that feeds a committed byte uses NumPy transcendentals or BLAS, so
@@ -30,6 +36,7 @@ import struct
 import numpy as np
 
 from .. import f32model as fm
+from ..atan2f import atan2f
 from ..registry import Array, case
 from .stereo import COS_F32_SHA256, _interp_f32
 
@@ -56,6 +63,34 @@ S8 = fm.f32(math.sin(math.pi / 8.0))
 # The Gray mapping of M40.1 section 1: g = b0 4 + b1 2 + b2 -> symbol index k.
 GRAY_TO_INDEX8 = (0, 1, 3, 2, 7, 6, 4, 5)
 GUARD_SKIP = 0
+
+# The square QAM of M44 section 1: levels per axis m and the power E of the integer grid.
+QAM = {"qam16": (4, 10), "qam64": (8, 42)}
+
+
+def qam_levels_f32(name):
+    """The float32 level values ``(2 i - (m - 1)) / sqrt E`` in level-index order."""
+    m, e = QAM[name]
+    return [fm.f32((2 * i - (m - 1)) / math.sqrt(e)) for i in range(m)]
+
+
+def qam_decide_f32(name, v):
+    """The grid level value of one float32 component (D982): ``floor(v (sqrt E / 2) + m / 2)``
+    clamped to ``0 .. m - 1`` (NaN to level 0)."""
+    m, e = QAM[name]
+    t = fm.add(fm.mul(v, fm.f32(math.sqrt(e) / 2.0)), fm.f32(m / 2.0))
+    if np.isnan(t) or t < 0.0:
+        t = fm.f32(0.0)
+    if t > m - 1:
+        t = fm.f32(m - 1)
+    return qam_levels_f32(name)[int(math.floor(float(t)))]
+
+
+def qam_decide_f64(name, v):
+    """The grid level of a float64 component: nearest level, the same boundaries rule."""
+    m, e = QAM[name]
+    t = min(max(v * (math.sqrt(e) / 2.0) + m / 2.0, 0.0), m - 1)
+    return (2 * int(math.floor(t)) - (m - 1)) / math.sqrt(e)
 
 
 def f32_bits(x):
@@ -124,9 +159,13 @@ def costas_f32(x, order, kp64, ki64, max64):
             e = fm.mul(yr, yi)
         elif order == 4:
             e = fm.sub(fm.mul(_sign(yr), yi), fm.mul(_sign(yi), yr))
-        else:
+        elif order == 8:
             dr, di = _point8_f32(_octant8(yr, yi))
             e = fm.sub(fm.mul(yi, dr), fm.mul(yr, di))
+        else:
+            dr, di = qam_decide_f32(order, yr), qam_decide_f32(order, yi)
+            r = fm.add(fm.mul(yr, dr), fm.mul(yi, di))
+            e = atan2f(fm.sub(fm.mul(yi, dr), fm.mul(yr, di)), r)
         if not fm.is_finite(e):
             e = ZERO
         freq = fm.flush_denormal(fm.add(freq, fm.mul(ki, e)))
@@ -142,10 +181,17 @@ def costas_f32(x, order, kp64, ki64, max64):
             m = fm.div(d, p)
         elif order == 4:
             m = fm.div(fm.sub(fm.mul(fm.mul(FOUR, a), b), fm.mul(d, d)), fm.mul(p, p))
-        else:
+        elif order == 8:
             dr, di = _point8_f32(_octant8(yr, yi))
             r = fm.add(fm.mul(yr, dr), fm.mul(yi, di))
             u = fm.sub(fm.mul(fm.div(fm.mul(r, r), p), TWO), ONE)
+            w = fm.mul(u, u)
+            m = fm.add(fm.mul(fm.mul(EIGHT, w), fm.sub(w, ONE)), ONE)
+        else:
+            dr, di = qam_decide_f32(order, yr), qam_decide_f32(order, yi)
+            r = fm.add(fm.mul(yr, dr), fm.mul(yi, di))
+            q = fm.add(fm.mul(dr, dr), fm.mul(di, di))
+            u = fm.sub(fm.mul(fm.div(fm.mul(r, r), fm.mul(p, q)), TWO), ONE)
             w = fm.mul(u, u)
             m = fm.add(fm.mul(fm.mul(EIGHT, w), fm.sub(w, ONE)), ONE)
         if fm.is_finite(m):
@@ -173,9 +219,12 @@ def costas_f64(x, order, kp, ki, mx):
         elif order == 4:
             sg = lambda u: 1.0 if u > 0.0 else (-1.0 if u < 0.0 else 0.0)  # noqa: E731
             e = sg(yr) * yi - sg(yi) * yr
-        else:
+        elif order == 8:
             a8 = (2 * _octant8(yr, yi) + 1) * math.pi / 8.0
             e = yi * math.cos(a8) - yr * math.sin(a8)
+        else:
+            dr, di = qam_decide_f64(order, yr), qam_decide_f64(order, yi)
+            e = math.atan2(yi * dr - yr * di, yr * dr + yi * di)
         freq = min(max(freq + ki * e, -mx), mx)
         phase = (phase + int(math.floor((freq + kp * e) * 4294967296.0 + 0.5))) & MASK
     return out
@@ -222,10 +271,39 @@ def psk_signal(rng, n, order, phase0, offset, ebn0_db):
     return np.array(x, dtype=np.complex128).astype(np.complex64), sigma
 
 
-def run_case(rng, order, offset, ebn0_db, notes):
+def qam_signal(rng, n, name, phase0, offset, ebn0_db):
+    """Unit-power square QAM with the Gray mapping of M44 section 1 (the first ``k / 2`` bits the
+    in-phase level index by its Gray code, the last ``k / 2`` the quadrature one), rotated by
+    ``phase0 + 2 pi offset k`` plus complex noise with ``sigma^2 = 1 / (2 k Eb/N0)``."""
+    m, e = QAM[name]
+    b = m.bit_length() - 1
+    k_bits = 2 * b
+    data = rng.integers(0, 2, n * k_bits).tolist()
+    nre, nim = rng.standard_normal(n).tolist(), rng.standard_normal(n).tolist()
+    sigma = math.sqrt(1.0 / (2.0 * k_bits * 10.0 ** (ebn0_db / 10.0)))
+    gray_to_index = {i ^ (i >> 1): i for i in range(m)}
+    x = []
+    for k in range(n):
+        bits = data[k * k_bits : (k + 1) * k_bits]
+        gi = int("".join(str(v) for v in bits[:b]), 2)
+        gq = int("".join(str(v) for v in bits[b:]), 2)
+        li, lq = gray_to_index[gi], gray_to_index[gq]
+        sym = complex(2 * li - (m - 1), 2 * lq - (m - 1)) / math.sqrt(e)
+        turns = (phase0 / math.tau + offset * k) % 1.0
+        w = complex(math.cos(math.tau * turns), math.sin(math.tau * turns))
+        v = sym * w
+        x.append(complex(v.real + sigma * nre[k], v.imag + sigma * nim[k]))
+    return np.array(x, dtype=np.complex128).astype(np.complex64), sigma
+
+
+def run_case(rng, order, offset, ebn0_db, notes, phase0=None):
     n = 8192
-    phase0 = float(rng.uniform(0.0, math.tau))
-    x, sigma = psk_signal(rng, n, order, phase0, offset, ebn0_db)
+    if phase0 is None:
+        phase0 = float(rng.uniform(0.0, math.tau))
+    if order in QAM:
+        x, sigma = qam_signal(rng, n, order, phase0, offset, ebn0_db)
+    else:
+        x, sigma = psk_signal(rng, n, order, phase0, offset, ebn0_db)
     kp, ki = gains(LOOP_BW, DAMPING)
     out, flags, (phase, freq, level, locked) = costas_f32(x, order, kp, ki, MAX_OFFSET)
     guard = guard_db(out, costas_f64(x, order, float(fm.f32(kp)), float(fm.f32(ki)), float(fm.f32(MAX_OFFSET))))
@@ -233,9 +311,10 @@ def run_case(rng, order, offset, ebn0_db, notes):
     assert locked and all(flags[n // 2:]), order
     if offset != 0.0:
         assert abs(float(freq) - offset) < 0.002, float(freq)
+    first = {"constellation": order} if order in QAM else {"order": order}
     return dict(
         params={
-            "order": order,
+            **first,
             "loop_bw": LOOP_BW,
             "damping": DAMPING,
             "max_offset": MAX_OFFSET,
@@ -271,6 +350,20 @@ def psk8_lock(rng):
         "noise for Eb/N0 14 dB; order 8 (the decision-directed detector against the point of the "
         "octant of y) with the block defaults; exact float32 model over the whole input; locked is "
         "the lock flag after every symbol; snr_db_guard compares with the float64 loop (D111)",
+    )
+
+
+@case(kernel="costas", name="dd_qam16_c32_8192", seed=600)
+def dd_qam16(rng):
+    return run_case(
+        rng, "qam16", 0.0005, 16.0,
+        "16-QAM with the Gray mapping of M44 section 1 (unit average power), one sample per symbol, "
+        "rotated by the start phase phase0_rad (0.3 rad) and a carrier offset of 0.0005 cycles per "
+        "symbol, complex noise for Eb/N0 16 dB; constellation qam16 (the decision-directed detector "
+        "arg(y conj d) against the grid decision, atan2f of msun) with the block defaults; exact "
+        "float32 model over the whole input; locked is the lock flag after every symbol; "
+        "snr_db_guard compares with the float64 loop (D111)",
+        phase0=0.3,
     )
 
 

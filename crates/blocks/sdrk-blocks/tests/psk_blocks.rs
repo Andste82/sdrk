@@ -33,7 +33,7 @@ use sdrk_blocks::{
     PSK8_GRAY, Packet, PacketFlags, ParamValue, PskDemodBlock, PskDemodConfig, PskModBlock,
     PskModConfig, PskVariant, SliceBlock, SliceConfig, SliceConstellation,
 };
-use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
@@ -222,7 +222,8 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     } else {
         // The equalizer before the carrier loop (D825).
         let syms = eq_kernel(cfg, syms);
-        let mut st = CostasState::new(cfg.order, cfg.carrier_bw, 0.7071, cfg.max_offset).unwrap();
+        let mut st =
+            CostasState::new(psk(cfg.order), cfg.carrier_bw, 0.7071, cfg.max_offset).unwrap();
         <Sdrk as Costas>::costas(&Sdrk, &mut st, &syms, &mut y).unwrap();
     }
     soft_of(cfg, y)
@@ -293,9 +294,14 @@ fn offset_kernels(
     sync: &mut SymbolSyncState<C32>,
     mf: &[C32],
 ) -> Vec<C32> {
-    let g = CostasState::new(4, cfg.carrier_bw, 0.7071, cfg.max_offset)
-        .unwrap()
-        .gains();
+    let g = CostasState::new(
+        CostasConstellation::Qpsk,
+        cfg.carrier_bw,
+        0.7071,
+        cfg.max_offset,
+    )
+    .unwrap()
+    .gains();
     let step = |v: f64| (v * 4_294_967_296.0 + 0.5).floor() as i64 as u32;
     let sign = |x: f32| {
         if x > 0.0 {
@@ -410,7 +416,7 @@ fn received_v(
 fn costas_block_equals_the_kernel_whole_and_in_cut_plans() {
     for order in [2u32, 4] {
         let cfg = CostasConfig {
-            order,
+            constellation: psk(order),
             loop_bw: 0.03,
             ..CostasConfig::default()
         };
@@ -428,7 +434,7 @@ fn costas_block_equals_the_kernel_whole_and_in_cut_plans() {
                 )
             })
             .collect();
-        let mut st = CostasState::new(order, 0.03, 0.7071, 0.05).unwrap();
+        let mut st = CostasState::new(psk(order), 0.03, 0.7071, 0.05).unwrap();
         let mut want = vec![C32::default(); input.len()];
         <Sdrk as Costas>::costas(&Sdrk, &mut st, &input, &mut want).unwrap();
         check_block(
@@ -457,7 +463,7 @@ fn costas_block_equals_the_kernel_whole_and_in_cut_plans() {
         block.reset();
         assert_eq!(
             block.state(),
-            &CostasState::new(order, 0.03, 0.7071, 0.05).unwrap()
+            &CostasState::new(psk(order), 0.03, 0.7071, 0.05).unwrap()
         );
         // a short output takes as many symbols as fit
         let p = block
@@ -472,8 +478,6 @@ fn costas_block_parameters() {
     let ok = CostasConfig::default();
     assert!(ok.validate().is_ok());
     let bad = [
-        CostasConfig { order: 3, ..ok },
-        CostasConfig { order: 9, ..ok },
         CostasConfig {
             loop_bw: 0.00009,
             ..ok
@@ -1134,7 +1138,7 @@ fn slice_8psk_gives_max_log_soft_bits() {
 #[test]
 fn costas_block_takes_order_8() {
     let cfg = CostasConfig {
-        order: 8,
+        constellation: CostasConstellation::Psk8,
         loop_bw: 0.03,
         ..CostasConfig::default()
     };
@@ -1153,7 +1157,7 @@ fn costas_block_takes_order_8() {
             )
         })
         .collect();
-    let mut st = CostasState::new(8, 0.03, 0.7071, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Psk8, 0.03, 0.7071, 0.05).unwrap();
     let mut want = vec![C32::default(); input.len()];
     <Sdrk as Costas>::costas(&Sdrk, &mut st, &input, &mut want).unwrap();
     check_block(
@@ -1178,30 +1182,30 @@ fn costas_block_takes_order_8() {
     {
         assert!((y.re - s.re).hypot(y.im - s.im) < 0.15, "{y:?} {s:?}");
     }
-    // the orders between 2 and 8 that are no PSK order, and the orders outside the range
-    for order in [3u32, 5, 6, 7] {
+    // the constellation is a choice: every name maps to its constellation and back, and an
+    // index outside the choice is rejected
+    let names = ["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+    let all = [
+        CostasConstellation::Bpsk,
+        CostasConstellation::Qpsk,
+        CostasConstellation::Psk8,
+        CostasConstellation::Qam16,
+        CostasConstellation::Qam64,
+    ];
+    for (i, (name, want)) in names.iter().zip(all).enumerate() {
         let mut c = CostasConfig::default();
-        assert!(
-            matches!(
-                c.set("order", ParamValue::I64(i64::from(order))),
-                Err(Error::InvalidParameter { name: "order", .. })
-            ),
-            "{order}"
-        );
-        assert!(matches!(
-            CostasConfig { order, ..cfg }.validate(),
-            Err(Error::InvalidParameter { name: "order", .. })
-        ));
-    }
-    for order in [0u32, 1, 9, 16] {
-        assert!(matches!(
-            CostasConfig { order, ..cfg }.validate(),
-            Err(Error::OutOfRange { name: "order", .. })
-        ));
+        c.set("constellation", ParamValue::Choice(i as u16))
+            .unwrap();
+        assert_eq!(c.constellation, want, "{name}");
+        assert_eq!(c.get("constellation"), Ok(ParamValue::Choice(i as u16)));
+        assert!(c.validate().is_ok());
     }
     let mut c = CostasConfig::default();
-    c.set("order", ParamValue::I64(8)).unwrap();
-    assert_eq!(c.get("order"), Ok(ParamValue::I64(8)));
+    assert!(c.set("constellation", ParamValue::Choice(5)).is_err());
+    assert_eq!(
+        c.set("order", ParamValue::I64(8)),
+        Err(Error::UnknownParameter)
+    );
 }
 
 /// The combinations of `order`, `differential`, `variant` and the samples per symbol (M40.1 §4,
@@ -1774,5 +1778,15 @@ fn psk_demod_with_equalizer_decodes_a_clean_signal() {
             assert!(rx.locked(), "{what}");
             assert!(rx.equalizer().unwrap().mse() < 0.05, "{what}");
         }
+    }
+}
+
+/// The carrier-loop constellation of a PSK order (2, 4 or 8).
+fn psk(order: u32) -> CostasConstellation {
+    match order {
+        2 => CostasConstellation::Bpsk,
+        4 => CostasConstellation::Qpsk,
+        8 => CostasConstellation::Psk8,
+        _ => panic!("no PSK order {order}"),
     }
 }

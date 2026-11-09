@@ -13,7 +13,7 @@ use sdrk_core::num::flush_denormal;
 
 use super::costas::{
     DEFAULT_DAMPING, DEFAULT_LOOP_BW, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MAX_OFFSET_LIMIT,
-    MIN_LOOP_BW, check_f64, check_order,
+    MIN_LOOP_BW, check_f64, check_order, costas_constellation_of_order,
 };
 use super::equalize::{
     DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS, EqualizeConfig,
@@ -612,7 +612,7 @@ impl<S: Storage> PskDemodBlock<S> {
         };
         let (ratio, sync) = timing_loop(config, rate_in, bps, storage)?;
         let costas = CostasState::new(
-            config.order,
+            costas_constellation_of_order(config.order),
             config.carrier_bw,
             DEFAULT_DAMPING,
             config.max_offset,

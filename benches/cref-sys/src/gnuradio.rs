@@ -15,6 +15,10 @@
 //!   `has_grcrc`), the reference of the CRCs of `sdrk-proto`;
 //! - [`GrCostasLoopCc`]: the loop of `digital.costas_loop_cc` with `gr::blocks::control_loop`
 //!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`;
+//! - [`GrConstellationReceiverCb`], [`GrLinearEqualizerRect`]: `digital.constellation_receiver_cb`
+//!   and `digital.linear_equalizer` with `adaptive_algorithm_nlms` on a `constellation_rect`
+//!   (`gr-constellation.c`, cfg `has_grconstellation`), the references of the QAM paths of
+//!   `costas` and `equalize` (M44);
 //! - [`GrLinearEqualizer`]: `digital.linear_equalizer` with `adaptive_algorithm_nlms`, the QPSK
 //!   decision and VOLK's generic dot products (`gr-equalizer.c`, cfg `has_grequalizer`), the
 //!   reference of the `equalize` fallback.
@@ -691,6 +695,268 @@ impl Drop for GrLinearEqualizer {
         // SAFETY: the state was initialized by `new` and is freed once.
         unsafe {
             equalizer_ffi::sdrk_gr_linear_equalizer_free(&raw mut *self.state);
+        }
+    }
+}
+
+#[cfg(has_grconstellation)]
+mod constellation_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_constellation_receiver_cb_new(
+            points: *const [f32; 2],
+            arity: core::ffi::c_uint,
+            real_sectors: core::ffi::c_uint,
+            imag_sectors: core::ffi::c_uint,
+            width_real: f32,
+            width_imag: f32,
+            loop_bw: f32,
+            fmin: f32,
+            fmax: f32,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_constellation_receiver_cb_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_constellation_receiver_cb_alpha(state: *const core::ffi::c_void) -> f32;
+        pub fn sdrk_gr_constellation_receiver_cb_beta(state: *const core::ffi::c_void) -> f32;
+        pub fn sdrk_gr_constellation_receiver_cb_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_gr_linear_equalizer_rect_new(
+            num_taps: core::ffi::c_uint,
+            step_size: f32,
+            taps: *const [f32; 2],
+            capacity: core::ffi::c_uint,
+            points: *const [f32; 2],
+            arity: core::ffi::c_uint,
+            real_sectors: core::ffi::c_uint,
+            imag_sectors: core::ffi::c_uint,
+            width_real: f32,
+            width_imag: f32,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_linear_equalizer_rect_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_linear_equalizer_rect_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// A `constellation_rect` of GNU Radio as the C translations take it: the points in symbol
+/// order, the sectors per axis and their widths, without normalization.
+#[derive(Clone, Copy, Debug)]
+pub struct GrRect<'a> {
+    /// The points in symbol order (at most 64).
+    pub points: &'a [[f32; 2]],
+    /// The sectors of the real axis.
+    pub real_sectors: u32,
+    /// The sectors of the imaginary axis.
+    pub imag_sectors: u32,
+    /// The width of a real sector.
+    pub width_real: f32,
+    /// The width of an imaginary sector.
+    pub width_imag: f32,
+}
+
+/// The loop of GNU Radio's `constellation_receiver_cb(constellation_rect, loop_bw, fmin, fmax)`
+/// (no tags, the derotated sample as the output): per sample `sincosf` of the phase, a complex
+/// product, the sector decision, `-arg(sample conj(point))` and the second-order loop of
+/// `control_loop`.
+pub struct GrConstellationReceiverCb {
+    #[cfg_attr(not(has_grconstellation), allow(dead_code))]
+    object: *mut core::ffi::c_void,
+}
+
+// SAFETY: the C object is owned by the wrapper and used by one thread at a time.
+unsafe impl Send for GrConstellationReceiverCb {}
+
+impl GrConstellationReceiverCb {
+    /// The block for the constellation and the loop; `None` without the library or when the C
+    /// side refuses the constellation.
+    #[must_use]
+    pub fn new(rect: GrRect<'_>, loop_bw: f32, fmin: f32, fmax: f32) -> Option<Self> {
+        if !cfg!(has_grconstellation) {
+            return None;
+        }
+        #[cfg(has_grconstellation)]
+        {
+            let arity = u32::try_from(rect.points.len()).ok()?;
+            // SAFETY: `points` holds `arity` pairs; the C side copies them.
+            let object = unsafe {
+                constellation_ffi::sdrk_gr_constellation_receiver_cb_new(
+                    rect.points.as_ptr(),
+                    arity,
+                    rect.real_sectors,
+                    rect.imag_sectors,
+                    rect.width_real,
+                    rect.width_imag,
+                    loop_bw,
+                    fmin,
+                    fmax,
+                )
+            };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrConstellationReceiverCb { object })
+        }
+        #[cfg(not(has_grconstellation))]
+        {
+            let _ = (rect, loop_bw, fmin, fmax);
+            None
+        }
+    }
+
+    /// The gains `(alpha, beta)` of the loop.
+    #[must_use]
+    pub fn gains(&self) -> (f32, f32) {
+        #[cfg(has_grconstellation)]
+        // SAFETY: the object was created by `new`.
+        unsafe {
+            (
+                constellation_ffi::sdrk_gr_constellation_receiver_cb_alpha(self.object),
+                constellation_ffi::sdrk_gr_constellation_receiver_cb_beta(self.object),
+            )
+        }
+        #[cfg(not(has_grconstellation))]
+        (0.0, 0.0)
+    }
+
+    /// `work` over `input`.
+    ///
+    /// # Panics
+    /// If the buffers differ in length or hold more than `u32::MAX` samples.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(
+            input.len(),
+            output.len(),
+            "constellation_receiver_cb: length mismatch"
+        );
+        let n = u32::try_from(input.len()).expect("constellation_receiver_cb: too many samples");
+        #[cfg(has_grconstellation)]
+        // SAFETY: both buffers hold `n` pairs and do not overlap; the object was created by
+        // `new`.
+        unsafe {
+            constellation_ffi::sdrk_gr_constellation_receiver_cb_work(
+                self.object,
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                n,
+            );
+        }
+        #[cfg(not(has_grconstellation))]
+        let _ = n;
+    }
+}
+
+impl Drop for GrConstellationReceiverCb {
+    fn drop(&mut self) {
+        #[cfg(has_grconstellation)]
+        // SAFETY: the object was created by `new` and is freed once.
+        unsafe {
+            constellation_ffi::sdrk_gr_constellation_receiver_cb_free(self.object);
+        }
+    }
+}
+
+/// GNU Radio's `linear_equalizer(num_taps, 1, adaptive_algorithm_nlms(constellation_rect,
+/// step_size))` with `set_taps(taps)`, decision-directed from the start: per symbol the FIR of the
+/// last `num_taps` samples, the sector decision of the constellation, the error `d - y`, the
+/// input power of the window and the NLMS update of every tap.
+pub struct GrLinearEqualizerRect {
+    #[cfg_attr(not(has_grconstellation), allow(dead_code))]
+    object: *mut core::ffi::c_void,
+    capacity: usize,
+}
+
+// SAFETY: the C object owns its buffers and is used by one thread at a time.
+unsafe impl Send for GrLinearEqualizerRect {}
+
+impl GrLinearEqualizerRect {
+    /// The block for `taps` (natural order), the normalized step size and the constellation,
+    /// for at most `capacity` samples per call; `None` without the library or when the C side
+    /// cannot allocate or refuses the constellation.
+    #[must_use]
+    pub fn new(
+        taps: &[[f32; 2]],
+        step_size: f32,
+        capacity: usize,
+        rect: GrRect<'_>,
+    ) -> Option<Self> {
+        if !cfg!(has_grconstellation) || taps.is_empty() {
+            return None;
+        }
+        #[cfg(has_grconstellation)]
+        {
+            let n = u32::try_from(taps.len()).ok()?;
+            let c = u32::try_from(capacity).ok()?;
+            let arity = u32::try_from(rect.points.len()).ok()?;
+            // SAFETY: `taps` holds `n` pairs, `points` `arity` pairs; the C side copies both.
+            let object = unsafe {
+                constellation_ffi::sdrk_gr_linear_equalizer_rect_new(
+                    n,
+                    step_size,
+                    taps.as_ptr(),
+                    c,
+                    rect.points.as_ptr(),
+                    arity,
+                    rect.real_sectors,
+                    rect.imag_sectors,
+                    rect.width_real,
+                    rect.width_imag,
+                )
+            };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrLinearEqualizerRect { object, capacity })
+        }
+        #[cfg(not(has_grconstellation))]
+        {
+            let _ = (step_size, capacity, rect);
+            None
+        }
+    }
+
+    /// `work` over `input` (at most the capacity of [`GrLinearEqualizerRect::new`]).
+    ///
+    /// # Panics
+    /// If the buffers differ in length or hold more than the capacity.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(
+            input.len(),
+            output.len(),
+            "linear_equalizer: length mismatch"
+        );
+        assert!(
+            input.len() <= self.capacity,
+            "linear_equalizer: above the capacity"
+        );
+        let n = u32::try_from(input.len()).expect("linear_equalizer: too many samples");
+        #[cfg(has_grconstellation)]
+        // SAFETY: both buffers hold `n` pairs (at most the capacity) and do not overlap; the
+        // object was created by `new`.
+        unsafe {
+            constellation_ffi::sdrk_gr_linear_equalizer_rect_work(
+                self.object,
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                n,
+            );
+        }
+        #[cfg(not(has_grconstellation))]
+        let _ = n;
+    }
+}
+
+impl Drop for GrLinearEqualizerRect {
+    fn drop(&mut self) {
+        #[cfg(has_grconstellation)]
+        // SAFETY: the object was created by `new` and is freed once.
+        unsafe {
+            constellation_ffi::sdrk_gr_linear_equalizer_rect_free(self.object);
         }
     }
 }

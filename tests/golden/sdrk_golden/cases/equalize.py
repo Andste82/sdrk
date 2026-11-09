@@ -17,7 +17,8 @@ fed-back decisions ``h[N..N + M]``) and the weights ``w``:
    per component on ``+-1/sqrt 2`` as float32, ``-0.0`` and NaN count as not negative; 8PSK the
    half-open octant point of ``costas`` order 8), ``ed = z - d``, ``p = ed.re ed.re + ed.im ed.im``
    and, if ``p`` is finite, ``mse = flush(mse + 0.01 (p - mse))``;
-3. CMA ``f = (y.re y.re + y.im y.im) - 1`` and ``e = (clip(y.re f), clip(y.im f))`` (clip to
+3. CMA ``f = (y.re y.re + y.im y.im) - R2`` (``R2`` 1 for PSK, the float32 of ``33 / 25`` for
+   16-QAM and of ``29 / 21`` for 64-QAM) and ``e = (clip(y.re f), clip(y.im f))`` (clip to
    ``[-1, 1]``) with ``mu_cma`` and the feedback value 0; decision mode ``e = (ed.re c - ed.im s,
    ed.re s + ed.im c)`` with ``mu_dd`` and the feedback value ``(d.re c - d.im s, d.re s + d.im c)``;
 4. ``P`` = the sum of ``h.re h.re + h.im h.im`` over the ``N + M`` elements in ascending order from
@@ -62,7 +63,9 @@ import numpy as np
 
 from .. import f32model as fm
 from ..registry import Array, case
-from .costas import C8, GRAY_TO_INDEX8, S8, _octant8, _point8_f32, gains
+from .costas import (
+    C8, GRAY_TO_INDEX8, QAM, S8, _octant8, _point8_f32, gains, qam_decide_f32, qam_decide_f64,
+)
 from .dot_complex import PARTIALS
 from .stereo import _interp_f32
 
@@ -111,7 +114,14 @@ def start_weights(n, taps):
     return wr, wi
 
 
+# The CMA radius R2 = E|s|^4 / E|s|^2 of the unit-power constellations: 1 for PSK, the exact
+# fractions of M44 section 1 for QAM (33 / 25 and 29 / 21).
+R2 = {"qpsk": 1.0, "8psk": 1.0, "qam16": 33.0 / 25.0, "qam64": 29.0 / 21.0}
+
+
 def decide_f32(constellation, yr, yi):
+    if constellation in QAM:
+        return qam_decide_f32(constellation, yr), qam_decide_f32(constellation, yi)
     if constellation == "qpsk":
         return (-QPSK_A if yr < ZERO else QPSK_A), (-QPSK_A if yi < ZERO else QPSK_A)
     if constellation == "8psk":
@@ -149,6 +159,7 @@ def equalize_f32(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
     final weights (complex64), the final ``mse`` (float32), the final mode and the final tracker
     phase and frequency."""
     mu_c, mu_d = F32(mu_cma), F32(mu_dd)
+    r2 = F32(R2[constellation])
     kp, ki = tracker_gains(phase_bw)
     n = taps + feedback
     wr, wi = start_weights(n, taps)
@@ -182,7 +193,7 @@ def equalize_f32(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
                 if np.isfinite(p):
                     mse = fm.flush_denormal(mse + ALPHA * (p - mse))
                 if mode == "cma":
-                    f = (yr * yr + yi * yi) - ONE
+                    f = (yr * yr + yi * yi) - r2
                     er, ei, mu = clip(yr * f, CMA_CLIP), clip(yi * f, CMA_CLIP), mu_c
                 else:
                     er, ei = er * c - ei * s, er * s + ei * c
@@ -233,6 +244,8 @@ def flush_f64(v):
 
 
 def decide_f64(constellation, yr, yi):
+    if constellation in QAM:
+        return qam_decide_f64(constellation, yr), qam_decide_f64(constellation, yi)
     if constellation == "qpsk":
         a = QPSK_A_F64
         return (-a if yr < 0.0 else a), (-a if yi < 0.0 else a)
@@ -248,6 +261,7 @@ def equalize_f64(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
     """The float64 guard loop (same steps, the filter and power sums in ascending ``i``, the
     exact cosine and sine of the tracker phase)."""
     mu_c, mu_d = float(F32(mu_cma)), float(F32(mu_dd))
+    r2 = float(F32(R2[constellation]))
     kp, ki = (float(v) for v in tracker_gains(phase_bw))
     n = taps + feedback
     w = [[0.0, 0.0] for _ in range(n)]
@@ -271,7 +285,7 @@ def equalize_f64(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
         mse = flush_f64(mse + 0.01 * ((er * er + ei * ei) - mse))
         fed = [0.0, 0.0]
         if mode == "cma":
-            f = (yr * yr + yi * yi) - 1.0
+            f = (yr * yr + yi * yi) - r2
             er, ei, mu = min(max(yr * f, -1.0), 1.0), min(max(yi * f, -1.0), 1.0), mu_c
         else:
             er, ei = er * c - ei * s, er * s + ei * c
@@ -333,6 +347,22 @@ def symbols(rng, n, order):
             g = data[3 * k] * 4 + data[3 * k + 1] * 2 + data[3 * k + 2]
             out.append(polar(1.0, (2 * GRAY_TO_INDEX8[g] + 1) * math.pi / 8.0))
     return out, bps
+
+
+def qam_symbols(rng, n, name):
+    """Unit-power square QAM with the Gray mapping of M44 section 1: the first ``k / 2`` bits give
+    the in-phase level index by its Gray code, the last ``k / 2`` the quadrature one."""
+    m, e = QAM[name]
+    b = m.bit_length() - 1
+    data = rng.integers(0, 2, n * 2 * b).tolist()
+    gray_to_index = {i ^ (i >> 1): i for i in range(m)}
+    out = []
+    for k in range(n):
+        bits = data[k * 2 * b : (k + 1) * 2 * b]
+        li = gray_to_index[int("".join(str(v) for v in bits[:b]), 2)]
+        lq = gray_to_index[int("".join(str(v) for v in bits[b:]), 2)]
+        out.append(complex(2 * li - (m - 1), 2 * lq - (m - 1)) / math.sqrt(e))
+    return out, 2 * b
 
 
 def channel(sym, taps, phase, sigma, rng):
@@ -421,6 +451,54 @@ def cma_qpsk(rng):
         "phase_bw 0.02; exact float32 model over the whole input in one call; weights are the final "
         "weights, final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; "
         "the dispersion mean((|y|^2 - 1)^2) of the last 4096 inputs and outputs is information; "
+        "snr_db_guard compares with the float64 loop (D111)",
+    )
+
+
+@case(kernel="equalize", name="dd_qam16_c32_16384", seed=601)
+def dd_qam16(rng):
+    n, taps, feedback, mu_cma, mu_dd, ebn0_db, phase_bw = 16384, 11, 0, 0.02, 0.01, 20.0, 0.02
+    cma_symbols, phase = 4000, 0.2
+    sym, bps = qam_symbols(rng, n, "qam16")
+    chan = [(0, 1.0 + 0j), (1, polar(0.25, 0.9)), (2, polar(0.1, -1.7))]
+    sigma = math.sqrt(1.0 / (2.0 * bps * 10.0 ** (ebn0_db / 10.0)))
+    x = channel(sym, chan, phase, sigma, rng)
+    args = (taps, feedback, "qam16", mu_cma, mu_dd, cma_symbols, phase_bw)
+    out, w, mse, mode, ph, fr = equalize_f32(x, *args)
+    guard = guard_db(out, equalize_f64(x, *args))
+    # CMA with the 16-QAM radius opens the eye, the decision mode and the tracker settle on the
+    # grid; the generator asserts that every decision of the second half is the transmitted
+    # symbol delayed by (taps - 1) / 2, turned by the quarter turn the blind start settled on.
+    delay = (taps - 1) // 2
+    best = None
+    for quarter in range(4):
+        turn = 1j**quarter
+        errors = 0
+        for k in range(n // 2, n):
+            d = decide_f64("qam16", float(out[k].real), float(out[k].imag))
+            errors += abs(complex(*d) - turn * sym[k - delay]) > 1e-6
+        if best is None or errors < best[1]:
+            best = (quarter, errors)
+    assert mode == "decision" and float(mse) < 0.02 and best[1] == 0, (float(mse), best)
+    return dict(
+        params=eq_params(
+            *args[:3], mu_cma, mu_dd, cma_symbols, phase_bw, (mse, mode, ph, fr), guard,
+            ebn0_db=ebn0_db, sigma=sigma, phase_rad=phase, channel=channel_param(chan), delay=delay,
+            quarter_turns=best[0], symbol_errors_second_half=best[1],
+        ),
+        arrays={"input": Array("cf32", x), "expected": Array("cf32", out), "weights": Array("cf32", w)},
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="16-QAM with the Gray mapping of M44 section 1 (unit average power), one sample per "
+        "symbol, through the symbol-spaced channel 1 + 0.25 e^(j0.9) z^-1 + 0.1 e^(-j1.7) z^-2 "
+        "(channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise "
+        "for Eb/N0 20 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the "
+        "constellation qam16 (CMA radius R2 = 33 / 25), mu_cma 0.02 for the first 4000 symbols, then "
+        "decision-directed with mu_dd 0.01, the phase tracker at phase_bw 0.02; exact float32 model "
+        "over the whole input in one call; weights are the final weights, final_mse_bits, "
+        "final_mode, final_phase and final_frequency_bits the final state; the generator asserts "
+        "that every decision of the second half is the transmitted symbol delayed by 5 and turned "
+        "by quarter_turns quarter turns (symbol_errors_second_half) and that mse ends below 0.02; "
         "snr_db_guard compares with the float64 loop (D111)",
     )
 

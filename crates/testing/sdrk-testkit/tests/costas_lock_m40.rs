@@ -24,7 +24,7 @@
 use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_core::C32;
-use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_testkit::Pcg32;
 use sdrk_testkit::channel::{Awgn, FrequencyOffset, Impairment};
 
@@ -35,7 +35,7 @@ const OFFSET: f64 = 0.01;
 const EBN0_DB: f64 = 10.0;
 
 fn new_loop() -> CostasState {
-    CostasState::new(4, 0.02, 0.7071, 0.05).unwrap()
+    CostasState::new(CostasConstellation::Qpsk, 0.02, 0.7071, 0.05).unwrap()
 }
 
 /// Random QPSK symbols of the seed.

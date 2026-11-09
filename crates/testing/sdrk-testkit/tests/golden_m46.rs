@@ -11,8 +11,10 @@
 //!
 //! Test 4 (seed 646): a flipped bit in the payload or the check of a device with a CRC or checksum
 //! gives no reading (`BadIntegrity`); Nexus, a device without a check, gives a reading only when
-//! two equal frames are left. Test 5 (seed 647): out-of-range values and truncated rows give no
+//! three equal frames are left (D1138). Test 5 (seed 647): out-of-range values and truncated rows give no
 //! reading. The trains of tests 4 and 5 are rendered by the helpers below from the coding rules.
+//! The corrections of the fact document (D1136 to D1142) have their own tests at the end of the
+//! file (seed 776: the choice of the ids; 777: the frames that pass the Rubicson check).
 //! The case `bresser_3ch_recorded` holds the four messages recorded from the sensor (22.11 C 64 %, 15.5 C 60 %,
 //! 22.5 C 71 % and 14.39 C 81 %, D1119, two decimals D1123).
 #![cfg(feature = "std")]
@@ -37,9 +39,10 @@ use sdrk_testkit::golden::{self, Array, GoldenCase};
 use sdrk_testkit::rng::Pcg32;
 
 const RATE: u32 = 250_000;
-const CASES: [&str; 6] = [
+const CASES: [&str; 7] = [
     "bresser_3ch",
     "lacrosse_tx29",
+    "lacrosse_tx35",
     "nexus",
     "oregon_v21",
     "wh1080",
@@ -50,6 +53,9 @@ const RECORDED: &str = "bresser_3ch_recorded";
 /// The seeds of tests 4 and 5.
 const SEED_INTEGRITY: u64 = 646;
 const SEED_RANGE: u64 = 647;
+/// The seeds of the tests of the corrected protocols (D1143).
+const SEED_CORRECTED: u64 = 776;
+const SEED_RUBICSON: u64 = 777;
 
 #[test]
 fn the_cases_of_m46_are_present() {
@@ -67,6 +73,7 @@ fn the_cases_of_m46_are_present() {
         ("oregon_v21", 639),
         ("wh1080", 644),
         ("lacrosse_tx29", 645),
+        ("lacrosse_tx35", 775),
     ] {
         assert_eq!(golden::load("sensors", name).unwrap().seed, seed, "{name}");
     }
@@ -258,6 +265,13 @@ fn pwm_runs(bits: &[bool]) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// The pulse widths of the WH1080: 544 and 1524 us (D1140).
+fn pwm_runs_wh1080(bits: &[bool]) -> Vec<(f64, f64)> {
+    bits.iter()
+        .map(|&b| (if b { 544.0 } else { 1524.0 }, 1000.0))
+        .collect()
+}
+
 fn ppm_runs(bits: &[bool]) -> Vec<(f64, f64)> {
     let mut v: Vec<_> = bits
         .iter()
@@ -314,7 +328,11 @@ fn bytes_bits(b: &[u8]) -> Vec<bool> {
 }
 
 fn crc_msb(data: &[u8]) -> u8 {
-    let mut crc = 0u8;
+    crc_msb_init(0, data)
+}
+
+fn crc_msb_init(init: u8, data: &[u8]) -> u8 {
+    let mut crc = init;
     for &b in data {
         crc ^= b;
         for _ in 0..8 {
@@ -328,6 +346,7 @@ fn crc_msb(data: &[u8]) -> u8 {
     crc
 }
 
+/// The reflected CRC of the earlier assumption (D1106), which the fact document replaced.
 fn crc_dallas(data: &[u8]) -> u8 {
     let mut crc = 0u8;
     for &b in data {
@@ -343,22 +362,32 @@ fn crc_dallas(data: &[u8]) -> u8 {
     crc
 }
 
-fn wh2_bits(id: u32, raw_temp: u32, hum: u8) -> Vec<bool> {
+/// The WH2 message with the type nibble `ty` and the CRC `crc` of the payload.
+fn wh2_bits_with(ty: u8, id: u32, raw_temp: u32, hum: u8, crc: fn(&[u8]) -> u8) -> Vec<bool> {
     let p = [
-        (id >> 4) as u8,
+        (ty << 4) | (id >> 4) as u8,
         (((id & 0xF) << 4) | (raw_temp >> 8)) as u8,
         raw_temp as u8,
         hum,
     ];
     let mut b = vec![0xFF];
     b.extend_from_slice(&p);
-    b.push(crc_dallas(&p));
+    b.push(crc(&p));
     bytes_bits(&b)
 }
 
+fn wh2_bits(id: u32, raw_temp: u32, hum: u8) -> Vec<bool> {
+    wh2_bits_with(4, id, raw_temp, hum, crc_msb)
+}
+
 fn nexus_bits(id: u8, bat: bool, ch: u8, temp12: u32, hum: u8) -> Vec<bool> {
+    nexus_bits_test(id, bat, false, ch, temp12, hum)
+}
+
+/// A Nexus frame with the test-button bit.
+fn nexus_bits_test(id: u8, bat: bool, test: bool, ch: u8, temp12: u32, hum: u8) -> Vec<bool> {
     let mut v = bits_of(u64::from(id), 8);
-    v.extend([bat, false]);
+    v.extend([bat, test]);
     v.extend(bits_of(u64::from(ch), 2));
     v.extend(bits_of(u64::from(temp12), 12));
     v.extend([true; 4]);
@@ -367,8 +396,13 @@ fn nexus_bits(id: u8, bat: bool, ch: u8, temp12: u32, hum: u8) -> Vec<bool> {
 }
 
 fn oregon_bits(nibbles: &[u8]) -> Vec<bool> {
+    oregon_bits_post(nibbles, &[0, 0])
+}
+
+/// The Oregon data bits with a chosen post-amble (none: the message ends with its checksum).
+fn oregon_bits_post(nibbles: &[u8], post: &[u8]) -> Vec<bool> {
     let mut data = vec![true; 16];
-    for n in std::iter::once(&0xA).chain(nibbles).chain(&[0, 0]) {
+    for n in std::iter::once(&0xA).chain(nibbles).chain(post) {
         data.extend((0..4).map(|j| (n >> j) & 1 == 1));
     }
     data.iter().flat_map(|&d| [!d, d]).collect()
@@ -388,7 +422,12 @@ fn with_sum(mut n: Vec<u8>) -> Vec<u8> {
 }
 
 fn tx29_bits(frame: [u8; 5]) -> Vec<bool> {
-    let mut b = vec![0xAA; 4];
+    tx29_bits_pre(&[0xAA; 4], frame)
+}
+
+/// A TX29 frame with the preamble bytes `pre`.
+fn tx29_bits_pre(pre: &[u8], frame: [u8; 5]) -> Vec<bool> {
+    let mut b = pre.to_vec();
     b.extend([0x2D, 0xD4]);
     b.extend_from_slice(&frame);
     bytes_bits(&b)
@@ -408,10 +447,16 @@ struct Dev {
 
 fn dev(name: &str) -> Dev {
     match name {
-        "wh2" | "wh1080" => Dev {
-            name: if name == "wh2" { "wh2" } else { "wh1080" },
+        "wh2" => Dev {
+            name: "wh2",
             slicer: Box::new(Pwm::new(500.0, 1500.0, 1000.0, 2500.0, true).unwrap()),
             render: pwm_runs,
+            gap: 8000.0,
+        },
+        "wh1080" => Dev {
+            name: "wh1080",
+            slicer: Box::new(Pwm::new(544.0, 1524.0, 1000.0, 2500.0, true).unwrap()),
+            render: pwm_runs_wh1080,
             gap: 8000.0,
         },
         "nexus" => Dev {
@@ -478,14 +523,14 @@ fn assert_reading(r: &Reading, model: &str, id: u32, ch: Option<u8>, t: f32, h: 
 
 #[test]
 fn the_worked_examples_of_the_descriptions_decode() {
-    // Nexus: 5c910ff38 is id 0x5c, battery good, channel 2, 27.1 C, 56 %; two equal frames.
+    // Nexus: 5c910ff38 is id 0x5c, battery good, channel 2, 27.1 C, 56 %; three equal frames.
     let d = dev("nexus");
     let bits = bits_of(0x5_c910_ff38, 36);
-    let frames = vec![(d.render)(&bits); 2];
+    let frames = vec![(d.render)(&bits); 3];
     let (res, r) = d.decode(&join(&frames, d.gap));
     assert_eq!(res, DecodeResult::Decoded(1));
     assert_reading(&r[0], "nexus", 0x5c, Some(2), 27.1, Some(56.0));
-    assert_eq!((r[0].battery_ok, r[0].repeats), (Some(true), 2));
+    assert_eq!((r[0].battery_ok, r[0].repeats), (Some(true), 3));
 
     // Oregon Scientific v2.1, two examples of the document (the sensor 1D20).
     let d = dev("oregon_v21");
@@ -506,11 +551,12 @@ fn the_worked_examples_of_the_descriptions_decode() {
         assert_eq!(r[0].battery_ok, Some(bat));
     }
 
-    // LaCrosse IT+: the two examples of the article.
+    // LaCrosse IT+: the two examples of the article (the ids are 8 and 10 with the 6 bit id of
+    // the fact document, D1141; they were 32 and 40 with the whole byte of D1110).
     let d = dev("lacrosse_tx29");
     for (frame, id, t, h) in [
-        ([0x92, 0x03, 0x94, 0x59, 0x3C], 32, -0.6, 89.0),
-        ([0x92, 0x86, 0x24, 0x28, 0xDE], 40, 22.4, 40.0),
+        ([0x92, 0x03, 0x94, 0x59, 0x3C], 8, -0.6, 89.0),
+        ([0x92, 0x86, 0x24, 0x28, 0xDE], 10, 22.4, 40.0),
     ] {
         let (res, r) = d.decode(&join(&[nrz_runs(&tx29_bits(frame))], d.gap));
         assert_eq!(res, DecodeResult::Decoded(1), "{frame:02X?}");
@@ -569,7 +615,7 @@ fn a_flipped_bit_gives_no_reading() {
 }
 
 #[test]
-fn nexus_needs_two_equal_frames() {
+fn nexus_needs_three_equal_frames() {
     let c = golden::load("sensors", "nexus").unwrap();
     let d = dev("nexus");
     let mut rng = Pcg32::new(SEED_INTEGRITY, 2);
@@ -589,19 +635,27 @@ fn nexus_needs_two_equal_frames() {
             (res, r.len(), r[0].repeats),
             (DecodeResult::Decoded(1), 1, 3)
         );
-        // two equal frames: one reading
-        let (res, r) = d.decode(&d.train(&rows[..2]));
-        assert_eq!(
-            (res, r.len(), r[0].repeats),
-            (DecodeResult::Decoded(1), 1, 2)
-        );
-        // one frame flipped: the other two still agree
-        let t = d.train(&[flip(&rows[0], a), rows[1].clone(), rows[2].clone()]);
+        // four frames, one flipped: the other three still agree
+        let t = d.train(&[
+            flip(&rows[0], a),
+            rows[1].clone(),
+            rows[2].clone(),
+            rows[0].clone(),
+        ]);
         let (res, r) = d.decode(&t);
         assert_eq!(
             (res, r.len(), r[0].repeats),
-            (DecodeResult::Decoded(1), 1, 2)
+            (DecodeResult::Decoded(1), 1, 3)
         );
+        // two equal frames: no reading, the device needs three
+        let (res, r) = d.decode(&d.train(&rows[..2]));
+        assert!(r.is_empty(), "train {i}: {r:?}");
+        assert_eq!(res, DecodeResult::BadIntegrity);
+        // three frames with one flipped: only two agree
+        let t = d.train(&[flip(&rows[0], a), rows[1].clone(), rows[2].clone()]);
+        let (res, r) = d.decode(&t);
+        assert!(r.is_empty(), "train {i}: {r:?}");
+        assert_eq!(res, DecodeResult::BadIntegrity);
         // two frames flipped in different places: only one frame is left
         let t = d.train(&[flip(&rows[0], a), flip(&rows[1], b), rows[2].clone()]);
         let (res, r) = d.decode(&t);
@@ -628,6 +682,7 @@ fn three_copies(bits: &[bool]) -> Vec<Pair> {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn out_of_range_values_give_no_reading() {
     // (device, train): every train has a valid check and a value the device cannot send
     let oregon = |dev_id: [u8; 4], ch: u8, temp: [u8; 4], hum: Option<[u8; 2]>| {
@@ -643,7 +698,7 @@ fn out_of_range_values_give_no_reading() {
     let wh1080 = |temp_raw: u32, hum: u8| {
         let b = [
             0xFFu8,
-            0x12,
+            0xA1,
             0x30 | (temp_raw >> 8) as u8,
             temp_raw as u8,
             hum,
@@ -659,11 +714,8 @@ fn out_of_range_values_give_no_reading() {
         bytes_bits(&v)
     };
     let cases: Vec<(&str, Vec<Pair>)> = vec![
-        ("wh2", two_copies("wh2", &wh2_bits(0x123, 900, 50))),
-        (
-            "wh2",
-            two_copies("wh2", &wh2_bits(0x123, 0x800 | 0xFA, 101)),
-        ),
+        ("wh2", two_copies("wh2", &wh2_bits(0x12, 900, 50))),
+        ("wh2", two_copies("wh2", &wh2_bits(0x12, 0x800 | 0xFA, 101))),
         ("nexus", three_copies(&nexus_bits(0x5C, true, 1, 900, 50))),
         ("nexus", three_copies(&nexus_bits(0x5C, true, 1, 250, 101))),
         ("nexus", three_copies(&nexus_bits(0x5C, true, 1, 0xE0C, 50))),
@@ -695,7 +747,6 @@ fn out_of_range_values_give_no_reading() {
                 &oregon([0x1, 0xD, 0x2, 0x0], 1, [4, 5, 2, 0], Some([1, 10])),
             ),
         ),
-        ("wh1080", two_copies("wh1080", &wh1080(1500, 50))),
         ("wh1080", two_copies("wh1080", &wh1080(800, 120))),
         (
             "lacrosse_tx29",
@@ -709,6 +760,30 @@ fn out_of_range_values_give_no_reading() {
             two_copies(
                 "lacrosse_tx29",
                 &tx29_bits(tx29_frame([0x92, 0x03, 0x94, 107])),
+            ),
+        ),
+        (
+            // the humidity 125 is the probe of the TX25U
+            "lacrosse_tx29",
+            two_copies(
+                "lacrosse_tx29",
+                &tx29_bits(tx29_frame([0x92, 0x03, 0x94, 125])),
+            ),
+        ),
+        // the sign nibble of the Oregon sensors is 8 or 0: other bits are out of range
+        (
+            "oregon_v21",
+            two_copies(
+                "oregon_v21",
+                &oregon([0xE, 0xC, 0x4, 0x0], 1, [4, 5, 2, 0x9], None),
+            ),
+        ),
+        (
+            // THN132N below -50.0 C
+            "oregon_v21",
+            two_copies(
+                "oregon_v21",
+                &oregon([0xE, 0xC, 0x4, 0x0], 1, [1, 0, 5, 0x8], None),
             ),
         ),
     ];
@@ -1113,14 +1188,17 @@ fn the_rust_encoders_reproduce_the_readings_of_the_independent_python_encoders()
             let mut text = String::new();
             x.to_json(&mut text).unwrap();
             let y = Reading::from_json(&text).unwrap();
-            // a train of the Rust encoder with 2 to 4 repeats (Nexus needs 2, the sink holds 4)
-            let repeats = 2 + rng.below(3);
+            // a train of the Rust encoder with 3 or 4 repeats (Nexus needs 3, the sink holds 4)
+            let repeats = 3 + rng.below(2);
             let mut storage = vec![Pair::default(); MAX_TRAIN_PAIRS];
             let mut sink = TrainSink::new(&mut storage);
             match enc.encode(&y, repeats, &mut sink) {
                 Ok(()) => {}
                 Err(EncodeError::Unrepresentable) => {
-                    assert_eq!(name, "lacrosse_tx29");
+                    assert!(
+                        matches!(name, "lacrosse_tx29" | "lacrosse_tx35" | "nexus"),
+                        "{name}"
+                    );
                     continue;
                 }
                 Err(e) => panic!("{name} train {i}: {text}: {e}"),
@@ -1146,5 +1224,321 @@ fn the_rust_encoders_reproduce_the_readings_of_the_independent_python_encoders()
             checked += 1;
         }
     }
-    assert!(checked >= 6 * 18, "{checked}");
+    assert!(checked >= 7 * 18, "{checked}");
+}
+
+// ---------------------------------------------------------------- the fact document (D1136 to D1142)
+
+/// `n` copies of the row `bits` of device `name`.
+fn copies_of(name: &str, bits: &[bool], n: usize) -> Vec<Pair> {
+    let d = dev(name);
+    join(&vec![(d.render)(bits); n], d.gap)
+}
+
+fn bytes_of_bits(bits: &[bool]) -> Vec<u8> {
+    bits.chunks(8)
+        .map(|c| c.iter().fold(0u8, |a, &b| (a << 1) | u8::from(b)))
+        .collect()
+}
+
+#[test]
+fn wh2_uses_the_msb_first_crc_the_type_nibble_4_and_an_8_bit_id() {
+    let mut rng = Pcg32::new(SEED_CORRECTED, 1);
+    for _ in 0..40 {
+        let id = rng.below(256);
+        let raw = rng.below(0x321) | if rng.below(2) == 0 { 0x800 } else { 0 };
+        let hum = rng.below(101) as u8;
+        let good = wh2_bits(id, raw, hum);
+        let (res, r) = decode_with("wh2", Modulation::Ook, &copies_of("wh2", &good, 2));
+        assert_eq!(res, DecodeResult::Decoded(2), "id {id}");
+        assert_eq!((r[0].id, r[0].humidity), (id, Some(f32::from(hum))));
+        // the reflected CRC of the earlier assumption is a bad CRC now
+        let old = wh2_bits_with(4, id, raw, hum, crc_dallas);
+        if old != good {
+            let (res, r) = decode_with("wh2", Modulation::Ook, &copies_of("wh2", &old, 2));
+            assert_eq!(r.len(), 0);
+            assert_eq!(res, DecodeResult::BadIntegrity);
+        }
+        // any other type nibble is another device
+        let other = wh2_bits_with(rng.below(4) as u8, id, raw, hum, crc_msb);
+        let (res, r) = decode_with("wh2", Modulation::Ook, &copies_of("wh2", &other, 2));
+        assert_eq!(r.len(), 0);
+        assert_eq!(res, DecodeResult::NoMatch);
+        // the humidity byte 0xFF means no humidity sensor
+        let none = wh2_bits(id, raw, 0xFF);
+        let (res, r) = decode_with("wh2", Modulation::Ook, &copies_of("wh2", &none, 2));
+        assert_eq!(res, DecodeResult::Decoded(2));
+        assert_eq!((r[0].id, r[0].humidity), (id, None));
+    }
+}
+
+#[test]
+fn nexus_accepts_the_test_button_rejects_channel_3_and_reads_humidity_0_as_none() {
+    // the test-button bit (bit 6 of the second byte) is no reason to reject a frame
+    let mut found = 0;
+    for id in 0..=255u8 {
+        let b = nexus_bits_test(id, true, true, 1, 0x0F5, 56);
+        let by = bytes_of_bits(&b);
+        if crc_msb_init(0x6C, &[by[0], by[1], by[2], 0xF0, 56]) == 0 {
+            continue; // a Rubicson frame, tested below
+        }
+        let (res, r) = decode_with("nexus", Modulation::Ook, &copies_of("nexus", &b, 3));
+        assert_eq!(res, DecodeResult::Decoded(1), "id {id}");
+        assert_eq!(
+            (r[0].id, r[0].channel, r[0].battery_ok, r[0].humidity),
+            (u32::from(id), Some(2), Some(true), Some(56.0))
+        );
+        found += 1;
+    }
+    assert!(found > 250);
+    // the channel value 3 is invalid
+    let b = nexus_bits(0x5C, true, 3, 0x0F5, 56);
+    let (res, r) = decode_with("nexus", Modulation::Ook, &copies_of("nexus", &b, 3));
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::NoMatch);
+    // humidity 0: no humidity sensor
+    let b = nexus_bits(0x5C, true, 1, 0x0F5, 0);
+    let (res, r) = decode_with("nexus", Modulation::Ook, &copies_of("nexus", &b, 3));
+    assert_eq!(res, DecodeResult::Decoded(1));
+    assert_eq!((r[0].humidity, r[0].temperature_c), (None, Some(24.5)));
+}
+
+#[test]
+fn nexus_frames_that_pass_the_rubicson_check_are_not_nexus_frames() {
+    let mut rng = Pcg32::new(SEED_RUBICSON, 1);
+    let mut hits = 0;
+    for _ in 0..200_000 {
+        let (id, ch, t, hum) = (
+            rng.below(256) as u8,
+            rng.below(3) as u8,
+            rng.below(0x321),
+            1 + rng.below(100) as u8,
+        );
+        let b = nexus_bits_test(id, rng.below(2) == 1, rng.below(2) == 1, ch, t, hum);
+        let by = bytes_of_bits(&b);
+        let is_rubicson = crc_msb_init(0x6C, &[by[0], by[1], by[2], 0xF0, hum]) == 0;
+        let (res, r) = decode_with("nexus", Modulation::Ook, &copies_of("nexus", &b, 3));
+        if is_rubicson {
+            hits += 1;
+            assert!(r.is_empty(), "{b:?}");
+            assert_eq!(res, DecodeResult::NoMatch);
+        } else {
+            assert_eq!(res, DecodeResult::Decoded(1));
+        }
+        if hits >= 12 {
+            break;
+        }
+    }
+    assert!(hits >= 12, "{hits}");
+}
+
+#[test]
+fn oregon_has_the_length_of_the_device_type_and_the_sign_bit_3() {
+    let d = dev("oregon_v21");
+    let thn = |sign: u8| {
+        let mut n = nibbles("EC4015A2");
+        n.extend([0x4, 0x5, 0x2, sign]);
+        with_sum(n)
+    };
+    let train = |bits: &[bool]| join(&[manchester_runs(bits)], d.gap);
+    // THN132N: 14 nibbles + checksum with the post-amble is 64 bits, without it 56 bits
+    for post in [&[0u8, 0][..], &[]] {
+        let (res, r) = d.decode(&train(&oregon_bits_post(&thn(0), post)));
+        assert_eq!(res, DecodeResult::Decoded(1), "post {post:?}");
+        assert_eq!(
+            (r[0].model, r[0].temperature_c),
+            ("oregon_thn132n", Some(25.4))
+        );
+    }
+    // the same id with 76 bits is another device (THR228N): not decoded
+    let (res, r) = d.decode(&train(&oregon_bits_post(&thn(0), &[0, 0, 0, 0, 0])));
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::NoMatch);
+    // THGR: 76 bits with the post-amble, 68 bits (THGR228N) without it
+    let body = nibbles("1D20485C4808828");
+    for post in [&[0u8, 0][..], &[]] {
+        let n = with_sum(body.clone());
+        let (res, r) = d.decode(&train(&oregon_bits_post(&n, post)));
+        assert_eq!(res, DecodeResult::Decoded(1), "post {post:?}");
+        assert_eq!(r[0].model, "oregon_thgr122nx");
+    }
+    // the sign is bit 3 of the nibble 11; the bits 0 to 2 are 0 in practice
+    for (sign, ok) in [(8u8, true), (0, true), (9, false), (0xC, false), (4, false)] {
+        let (res, r) = d.decode(&train(&oregon_bits(&thn(sign))));
+        assert_eq!(!r.is_empty(), ok, "sign {sign:#x}");
+        if ok {
+            let want = if sign == 8 { -25.4 } else { 25.4 };
+            assert_close(r[0].temperature_c, Some(want), "temperature");
+        } else {
+            assert_eq!(res, DecodeResult::OutOfRange);
+        }
+    }
+    // the THN132N is plausible from -50.0 C; the THGR keeps -70.0
+    for (hex, tenths, ok) in [
+        ("EC4015A2", 500u32, true),
+        ("EC4015A2", 501, false),
+        ("1D20485C", 700, true),
+    ] {
+        let mut n = nibbles(hex);
+        n.extend([
+            (tenths % 10) as u8,
+            (tenths / 10 % 10) as u8,
+            (tenths / 100) as u8,
+            8,
+        ]);
+        n.splice(4..8, [4, 5, 2, 0x4]);
+        if hex.starts_with("1D") {
+            n.extend([1, 2, 0]);
+        }
+        let (res, r) = d.decode(&train(&oregon_bits(&with_sum(n))));
+        assert_eq!(!r.is_empty(), ok, "{hex} {tenths}: {res:?}");
+        if !ok {
+            assert_eq!(res, DecodeResult::OutOfRange);
+        }
+    }
+}
+
+/// The WH1080 bits from the ten bytes B0 to B9 and `extra` stray bits after the CRC; the CRC is
+/// the CRC-8 with init 0xFF over all eleven bytes.
+fn wh1080_row(b: [u8; 10], extra: usize) -> Vec<bool> {
+    let crc = crc_msb_init(0xFF, &b);
+    assert_eq!(
+        crc,
+        crc_msb(&b[1..]),
+        "init 0xFF over B0..B9 is init 0 over B1..B9"
+    );
+    let mut v = b.to_vec();
+    v.push(crc);
+    let mut bits = bytes_bits(&v);
+    bits.extend(std::iter::repeat_n(true, extra));
+    bits
+}
+
+#[test]
+fn wh1080_follows_the_fact_document() {
+    let d = dev("wh1080");
+    let decode = |bits: &[bool]| d.decode(&join(&[(d.render)(bits), (d.render)(bits)], d.gap));
+    // type A, id 0x2B, raw temperature 0x2F5 = 757 (35.7 C), humidity 55, wind 10 and 20 counts,
+    // rain 0x123 counts, status 1 (battery low), direction nibble 9 (203 degrees)
+    let b = [0xFF, 0xA2, 0xB2, 0xF5, 55, 10, 20, 0x01, 0x23, 0x19];
+    let (res, r) = decode(&wh1080_row(b, 0));
+    assert_eq!(res, DecodeResult::Decoded(2));
+    let r = &r[0];
+    assert_eq!(
+        (r.id, r.battery_ok, r.humidity),
+        (0x2B, Some(false), Some(55.0))
+    );
+    assert_close(r.temperature_c, Some(35.7), "temperature");
+    assert_close(r.wind_avg_km_h, Some(10.0 * 0.34 * 3.6), "wind");
+    assert_close(r.wind_max_km_h, Some(20.0 * 0.34 * 3.6), "gust");
+    assert_close(r.rain_mm, Some(0x123 as f32 * 0.3), "rain");
+    assert_close(r.wind_dir_deg, Some(203.0), "direction");
+    // a status nibble other than 1 is a good battery
+    let mut g = b;
+    g[9] = 0x09;
+    let (_, r) = decode(&wh1080_row(g, 0));
+    assert_eq!(r[0].battery_ok, Some(true));
+    // the whole table of directions
+    for (k, deg) in [
+        0, 23, 45, 68, 90, 113, 135, 158, 180, 203, 225, 248, 270, 293, 315, 338,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut g = b;
+        g[9] = k as u8;
+        let (_, r) = decode(&wh1080_row(g, 0));
+        assert_close(r[0].wind_dir_deg, Some(deg as f32), "direction");
+    }
+    // the temperature has 10 bits: the bits 3 and 2 of B2 are not part of it
+    let mut g = b;
+    g[2] = 0xB2 | 0x0C;
+    let (_, r) = decode(&wh1080_row(g, 0));
+    assert_close(r[0].temperature_c, Some(35.7), "temperature");
+    // rows of 88 to 99 bits are messages, 100 and more are not, 87 is a cut one
+    for extra in [0, 5, 11] {
+        let (res, _) = decode(&wh1080_row(b, extra));
+        assert_eq!(res, DecodeResult::Decoded(2), "{extra} extra bits");
+    }
+    let (res, r) = decode(&wh1080_row(b, 12));
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::NoMatch);
+    let cut = wh1080_row(b, 0)[..87].to_vec();
+    let (res, r) = decode(&cut);
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::Truncated);
+    // the time (0xB) and the UV (0x7) messages are not weather messages
+    for ty in [0xB0, 0x70, 0x00] {
+        let mut g = b;
+        g[1] = ty | 0x02;
+        let (res, r) = decode(&wh1080_row(g, 0));
+        assert_eq!(r.len(), 0);
+        assert_eq!(res, DecodeResult::NoMatch, "type {ty:#x}");
+    }
+}
+
+#[test]
+fn lacrosse_tx29_has_a_6_bit_id_and_the_24_bit_pattern() {
+    let d = dev("lacrosse_tx29");
+    let decode = |bits: &[bool]| d.decode(&join(&[nrz_runs(bits)], d.gap));
+    // id 63 (the low nibble of B0 = F and the top two bits of B1 = 3), the new-battery flag
+    // (bit 5 of B1) and the unused bit 4 set: neither is part of the temperature
+    let frame = tx29_frame([0x9F, 0xF3, 0x94, 0x59]);
+    let (res, r) = decode(&tx29_bits(frame));
+    assert_eq!(res, DecodeResult::Decoded(1));
+    assert_eq!(r[0].id, 63);
+    assert_close(r[0].temperature_c, Some(-0.6), "temperature");
+    // the same frame without the flags has the same temperature and id
+    let (_, r2) = decode(&tx29_bits(tx29_frame([0x9F, 0xC3, 0x94, 0x59])));
+    assert_eq!((r2[0].id, r2[0].temperature_c), (63, r[0].temperature_c));
+    // 0x6A: no humidity sensor
+    let (_, r) = decode(&tx29_bits(tx29_frame([0x92, 0x03, 0x94, 0x6A])));
+    assert_eq!(r[0].humidity, None);
+    // the pattern needs the last nibble of the preamble (0xA) before the sync word
+    let (res, r) = decode(&tx29_bits_pre(&[0xA5, 0xA5, 0xA5, 0xA5], frame));
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::NoMatch);
+    // ... and the model nibble 9 after it
+    let (res, r) = decode(&tx29_bits(tx29_frame([0x82, 0x03, 0x94, 0x59])));
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::NoMatch);
+    // the document names 55 us, the decoder reads both 55 and 58 us per bit
+    let runs = level_runs(&tx29_bits(frame), 55.0);
+    let (res, r) = d.decode(&join(&[runs], d.gap));
+    assert_eq!(res, DecodeResult::Decoded(1));
+    assert_eq!(r[0].id, 63);
+}
+
+#[test]
+fn lacrosse_tx35_is_the_tx29_frame_at_105_us_per_bit() {
+    let frame = tx29_frame([0x92, 0x03, 0x94, 0x59]);
+    let at = |name: &str, unit: f64, frame: [u8; 5]| {
+        let runs = level_runs(&tx29_bits(frame), unit);
+        decode_with(name, Modulation::Fsk, &join(&[runs.clone(), runs], 4000.0))
+    };
+    // the worked example of the TX29 at 105 us per bit is a reading of the TX35 (id 8, -0.6 C)
+    let (res, r) = at("lacrosse_tx35", 105.0, frame);
+    assert_eq!(res, DecodeResult::Decoded(2));
+    assert_reading(&r[0], "lacrosse_tx35", 8, None, -0.6, Some(89.0));
+    assert_eq!(r[0].battery_ok, Some(true));
+    // 9.58 kbit/s is 104.4 us per bit
+    let (res, r) = at("lacrosse_tx35", 104.4, frame);
+    assert_eq!(res, DecodeResult::Decoded(2));
+    assert_eq!(r[0].id, 8);
+    // the models are told apart by the bit rate alone
+    let (res, r) = at("lacrosse_tx29", 105.0, frame);
+    assert!(r.is_empty(), "{res:?}");
+    let (res, r) = at("lacrosse_tx35", 58.0, frame);
+    assert!(r.is_empty(), "{res:?}");
+    let (res, r) = at("lacrosse_tx29", 58.0, frame);
+    assert_eq!(res, DecodeResult::Decoded(2));
+    assert_eq!(r[0].model, "lacrosse_tx29");
+    // a flipped bit of the payload is a CRC error; humidity 0x6A is none, weak battery bit 7
+    let mut bad = frame;
+    bad[2] ^= 0x04;
+    let (res, r) = at("lacrosse_tx35", 105.0, bad);
+    assert_eq!(r.len(), 0);
+    assert_eq!(res, DecodeResult::BadIntegrity);
+    let (_, r) = at("lacrosse_tx35", 105.0, tx29_frame([0x92, 0x03, 0x94, 0xEA]));
+    assert_eq!((r[0].humidity, r[0].battery_ok), (None, Some(false)));
 }

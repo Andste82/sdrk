@@ -33,7 +33,7 @@
     "pairs": {
       "dtype": "i32",
       "file": "wh1080.pairs.bin",
-      "len": 7040
+      "len": 7476
     },
     "rain_mm": {
       "dtype": "f64",
@@ -64,7 +64,7 @@
   "case": "wh1080",
   "format_version": 1,
   "kernel": "sensors",
-  "notes": "WH1080 messages (88 bits, PWM timing of the WH2 assumed, CRC-8 0x31 init 0 MSB first over B1 to B9; the status nibble of B9 is random), two copies in a train 8 ms apart, clock error +-8 % and width error +-5 %, 250 kHz",
+  "notes": "WH1080 messages (PWM 544/1524 us pulses, gaps of 1000 us assumed, 88 to 99 bits: type nibble 0xA, 8 bit id, 10 bit temperature, CRC-8 0x31 MSB first init 0xFF over 11 bytes; the status nibble is random, 1 = battery low, the direction is one of the 16 table values), two copies in a train 8 ms apart, clock error +-8 % and width error +-5 %, 250 kHz",
   "params": {
     "decoder": "wh1080",
     "max_abs_err": 0.001,

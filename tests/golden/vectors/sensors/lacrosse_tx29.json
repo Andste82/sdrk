@@ -33,7 +33,7 @@
     "pairs": {
       "dtype": "i32",
       "file": "lacrosse_tx29.pairs.bin",
-      "len": 2568
+      "len": 2576
     },
     "rain_mm": {
       "dtype": "f64",
@@ -64,7 +64,7 @@
   "case": "lacrosse_tx29",
   "format_version": 1,
   "kernel": "sensors",
-  "notes": "LaCrosse IT+ TX29 frames (FSK, NRZ at 17.241 kbit/s: four bytes 0xAA, the sync word 0x2DD4 and five bytes with CRC-8 0x31 init 0 over the first four), two copies in a train 4 ms apart, clock error +-1 % and width error +-0.03 bit; trailing zero bits of a copy are not part of the train, 250 kHz",
+  "notes": "LaCrosse IT+ TX29 frames (FSK, NRZ at 17.241 kbit/s: four bytes 0xAA, the sync word 0x2DD4 and five bytes with the model nibble 9, a 6 bit id, a random new-battery flag and CRC-8 0x31 init 0 over the first four), two copies in a train 4 ms apart, clock error +-1 % and width error +-0.03 bit; trailing zero bits of a copy are not part of the train, 250 kHz",
   "params": {
     "decoder": "lacrosse_tx29",
     "max_abs_err": 0.001,

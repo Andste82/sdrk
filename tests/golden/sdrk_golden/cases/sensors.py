@@ -4,9 +4,11 @@ One case per decoder (and one more, ``bresser_3ch_recorded``, for the three reco
 the sensor labelled AS2-WS-6B, which uses the Bresser 3CH protocol, D1119): 20 messages with random fields, each as the pulse train a detector would
 report (pulse and gap widths in samples at 250 kHz, with timing error), and the readings the
 decoder must return. The encoders are written from the public descriptions of the devices
-(listed in the decisions log, D1106 to D1110) without looking at the Rust decoders; the CRC and
-checksum models are bitwise and independent of the Rust code. The worked examples of the sources
-are checked at import time (``_self_test``).
+(listed in the decisions log, D1106 to D1110) and from the protocol facts of the
+maintainer-provided fact document about the rtl_433 decoders (written by a third party, nothing
+copied; the corrections D1136 to D1142) without looking at the Rust decoders; the CRC and checksum
+models are bitwise and independent of the Rust code. The worked examples of the sources are checked
+at import time (``_self_test``).
 
 Layout of a case: ``pairs`` all pulse and gap widths back to back (``i32``, pulse first),
 ``pair_counts`` the number of pairs of each train (``i32``); the expected readings, one entry per
@@ -15,7 +17,7 @@ device has none), ``model_ids`` (the index into the parameter ``models``), ``tem
 ``wind_dir_deg`` and ``rain_mm`` (``f64``, NaN when the device does not report the value).
 Parameters: the rate, the model names (``models``), the number of copies of the message in a train
 (``repeats``) and the number of readings the decoder returns for a train
-(``readings_per_train``: one per copy, one for the device without a check, which needs two equal
+(``readings_per_train``: one per copy, one for the device without a check, which needs three equal
 copies), and the tolerance of the values.
 
 The ``cu8`` bursts of the spec are not part of the cases: one burst of a WH2 message is 120 ms,
@@ -66,19 +68,6 @@ def crc8_poly31_msb(data, init=0):
             if top ^ bit:
                 reg ^= 0x31
     return reg
-
-
-def crc8_dallas(data):
-    """The CRC-8 of the OneWire family (reflected polynomial 0x8C, init 0)."""
-    crc = 0
-    for byte in data:
-        for _ in range(8):
-            mix = (crc ^ byte) & 1
-            crc >>= 1
-            if mix:
-                crc ^= 0x8C
-            byte >>= 1
-    return crc
 
 
 # ---------------------------------------------------------------- pulse trains
@@ -183,15 +172,19 @@ def blank(model):
                 wind_avg_km_h=NAN, wind_max_km_h=NAN, wind_dir_deg=NAN, rain_mm=NAN)
 
 
-def wh2_message(f, temp_tenths, hum, dev_id):
-    """48 bits: eight 1 bits, 12 bit type and id (first bit 0), 12 bit temperature as sign and
-    magnitude in tenths, 8 bit humidity, CRC-8 of the four payload bytes."""
-    assert 0 <= dev_id < 0x800
+WH2_NO_HUMIDITY = 0xFF
+
+
+def wh2_message(temp_tenths, hum, dev_id):
+    """48 bits: eight 1 bits, the type nibble 4, the 8 bit id, 12 bit temperature as sign and
+    magnitude in tenths, 8 bit humidity (0xFF: none), CRC-8 (0x31, MSB first, init 0) of the
+    four payload bytes."""
+    assert 0 <= dev_id < 0x100
     sign = 1 if temp_tenths < 0 else 0
     raw = (sign << 11) | abs(temp_tenths)
-    payload = bits_of(dev_id, 12) + bits_of(raw, 12) + bits_of(hum, 8)
+    payload = bits_of(4, 4) + bits_of(dev_id, 8) + bits_of(raw, 12) + bits_of(hum, 8)
     data = [int("".join(map(str, payload[i:i + 8])), 2) for i in range(0, 32, 8)]
-    return [1] * 8 + payload + bits_of(crc8_dallas(data), 8)
+    return [1] * 8 + payload + bits_of(crc8_poly31_msb(data), 8)
 
 
 @case("sensors", "wh2", 637)
@@ -200,25 +193,38 @@ def wh2(rng):
     msgs = []
     for _ in range(20):
         f = blank("wh2")
-        f["id"] = int(rng.integers(0, 0x800))
+        f["id"] = int(rng.integers(0, 0x100))
         t = int(rng.integers(-300, 501))
         f["temperature_c"] = t / 10.0
-        f["humidity"] = float(rng.integers(0, 101))
-        bits = wh2_message(f, t, int(f["humidity"]), f["id"])
+        if rng.integers(0, 5) == 0:
+            hum = WH2_NO_HUMIDITY  # no humidity sensor: the reading has no humidity
+        else:
+            hum = int(rng.integers(0, 101))
+            f["humidity"] = float(hum)
+        bits = wh2_message(t, hum, f["id"])
         copies = [runs_pwm(bits, 500.0, 1500.0, 1000.0)] * reps
         pairs = distort(rng, join_copies(copies, 8000.0), 0.08, 0.05)
         msgs.append((f, pairs))
     return finish(msgs, "wh2", reps, reps, 637,
-                  "WH2 messages (PWM 500/1500 us pulses, 1000 us gaps, 48 bits with CRC-8 "
-                  "0x31 reflected, init 0), two copies in a train 8 ms apart, clock error "
-                  "+-8 % and width error +-5 %, 250 kHz")
+                  "WH2 messages (PWM 500/1500 us pulses, 1000 us gaps, 48 bits: type nibble 4, "
+                  "8 bit id, CRC-8 0x31 MSB first init 0; humidity 0xFF = none in about a fifth), "
+                  "two copies in a train 8 ms apart, clock error +-8 % and width error +-5 %, "
+                  "250 kHz")
 
 
-def nexus_message(dev_id, battery_ok, channel, temp_tenths, hum):
-    """36 bits: id, battery, 0, channel - 1, 12 bit two's complement temperature in tenths,
-    1111, humidity."""
-    return (bits_of(dev_id, 8) + [1 if battery_ok else 0, 0] + bits_of(channel - 1, 2)
+def nexus_message(dev_id, battery_ok, channel, temp_tenths, hum, test=0):
+    """36 bits: id, battery, test button, channel - 1, 12 bit two's complement temperature in
+    tenths, 1111, humidity (0: no humidity sensor)."""
+    return (bits_of(dev_id, 8) + [1 if battery_ok else 0, test] + bits_of(channel - 1, 2)
             + bits_of(temp_tenths & 0xFFF, 12) + [1, 1, 1, 1] + bits_of(hum, 8))
+
+
+def nexus_is_rubicson(dev_id, battery_ok, channel, temp_tenths, hum, test=0):
+    """A frame that passes the check of the Rubicson protocol (CRC-8 0x31, init 0x6C, over the id,
+    the two temperature bytes, the nibble F as 0xF0 and the humidity as a byte) is no Nexus frame."""
+    bits = nexus_message(dev_id, battery_ok, channel, temp_tenths, hum, test)
+    b = [int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, 24, 8)]
+    return crc8_poly31_msb(b + [0xF0, hum], 0x6C) == 0
 
 
 def bits_to_hex(bits):
@@ -233,21 +239,27 @@ def nexus(rng):
     msgs = []
     for _ in range(20):
         f = blank("nexus")
-        f["id"] = int(rng.integers(0, 256))
-        f["channel"] = int(rng.integers(1, 5))
-        f["battery_ok"] = int(rng.integers(0, 2))
-        t = int(rng.integers(-300, 501))
-        f["temperature_c"] = t / 10.0
-        f["humidity"] = float(rng.integers(1, 100))
-        bits = nexus_message(f["id"], f["battery_ok"], f["channel"], t, int(f["humidity"]))
+        while True:
+            f["id"] = int(rng.integers(0, 256))
+            f["channel"] = int(rng.integers(1, 4))
+            f["battery_ok"] = int(rng.integers(0, 2))
+            t = int(rng.integers(-300, 501))
+            f["temperature_c"] = t / 10.0
+            test = int(rng.integers(0, 2))
+            hum = 0 if rng.integers(0, 5) == 0 else int(rng.integers(1, 101))
+            if not nexus_is_rubicson(f["id"], f["battery_ok"], f["channel"], t, hum, test):
+                break
+        f["humidity"] = float(hum) if hum else NAN
+        bits = nexus_message(f["id"], f["battery_ok"], f["channel"], t, hum, test)
         copies = [runs_ppm(bits, 500.0, 1000.0, 2000.0, 4000.0)] * reps
         pairs = distort(rng, join_copies(copies, 4000.0), 0.08, 0.05)
         msgs.append((f, pairs))
     return finish(msgs, "nexus", reps, 1, 638,
                   "Nexus frames (PPM, 500 us pulses, gaps 1000/2000 us, 4000 us between frames, "
-                  "36 bits, no check), three equal frames in a train, one reading per train "
-                  "(a device without a check needs two equal frames), clock error +-8 % and "
-                  "width error +-5 %, 250 kHz")
+                  "36 bits, no check; the test-button bit random, humidity 0 = none in about a "
+                  "fifth, no frame that passes the Rubicson check), three equal frames in a train, "
+                  "one reading per train (a device without a check needs three equal frames), "
+                  "clock error +-8 % and width error +-5 %, 250 kHz")
 
 
 OREGON_PREAMBLE = [1] * 16
@@ -314,10 +326,20 @@ def oregon_v21(rng):
                   "250 kHz")
 
 
+WH1080_DIRECTIONS = [0, 23, 45, 68, 90, 113, 135, 158, 180, 203, 225, 248, 270, 293, 315, 338]
+
+
 def wh1080_message(dev_id, temp_raw, hum, wind_avg, wind_max, rain_raw, status, direction):
-    b = [0xFF, dev_id >> 4, ((dev_id & 0xF) << 4) | (temp_raw >> 8), temp_raw & 0xFF, hum,
-         wind_avg, wind_max, rain_raw >> 8, rain_raw & 0xFF, (status << 4) | direction]
-    b.append(crc8_poly31_msb(b[1:10]))
+    """88 bits: the preamble 0xFF, the type nibble 0xA with the id (8 bits), the temperature (10
+    bits, offset 400), humidity, wind, gust, rain (12 bits), the status nibble and the direction
+    nibble, the CRC-8 (0x31, MSB first) over the 11 bytes with init 0xFF, which is zero for the
+    first ten bytes and the CRC byte."""
+    assert 0 <= dev_id < 0x100 and 0 <= temp_raw < 0x400
+    b = [0xFF, 0xA0 | (dev_id >> 4), ((dev_id & 0xF) << 4) | (temp_raw >> 8), temp_raw & 0xFF,
+         hum, wind_avg, wind_max, rain_raw >> 8, rain_raw & 0xFF, (status << 4) | direction]
+    crc = crc8_poly31_msb(b, 0xFF)
+    assert crc8_poly31_msb(b + [crc], 0xFF) == 0
+    b.append(crc)
     return bytes_to_bits(b)
 
 
@@ -327,7 +349,7 @@ def wh1080(rng):
     msgs = []
     for _ in range(20):
         f = blank("wh1080")
-        f["id"] = int(rng.integers(0, 0x1000))
+        f["id"] = int(rng.integers(0, 0x100))
         raw = int(rng.integers(100, 801))
         f["temperature_c"] = (raw - 400) / 10.0
         f["humidity"] = float(rng.integers(10, 100))
@@ -336,27 +358,34 @@ def wh1080(rng):
         f["wind_avg_km_h"] = avg * 0.34 * 3.6
         f["wind_max_km_h"] = gust * 0.34 * 3.6
         d = int(rng.integers(0, 16))
-        f["wind_dir_deg"] = d * 22.5
+        f["wind_dir_deg"] = float(WH1080_DIRECTIONS[d])
         rain = int(rng.integers(0, 4096))
         f["rain_mm"] = rain * 0.3
-        bits = wh1080_message(f["id"], raw, int(f["humidity"]), avg, gust, rain,
-                              int(rng.integers(0, 16)), d)
-        copies = [runs_pwm(bits, 500.0, 1500.0, 1000.0)] * reps
+        status = int(rng.integers(0, 16))
+        f["battery_ok"] = 0 if status == 1 else 1
+        bits = wh1080_message(f["id"], raw, int(f["humidity"]), avg, gust, rain, status, d)
+        bits += [1] * int(rng.integers(0, 12))  # up to 11 stray bits after the CRC
+        copies = [runs_pwm(bits, 544.0, 1524.0, 1000.0)] * reps
         pairs = distort(rng, join_copies(copies, 8000.0), 0.08, 0.05)
         msgs.append((f, pairs))
     return finish(msgs, "wh1080", reps, reps, 644,
-                  "WH1080 messages (88 bits, PWM timing of the WH2 assumed, CRC-8 0x31 init 0 "
-                  "MSB first over B1 to B9; the status nibble of B9 is random), two copies in a "
-                  "train 8 ms apart, clock error +-8 % and width error +-5 %, 250 kHz")
+                  "WH1080 messages (PWM 544/1524 us pulses, gaps of 1000 us assumed, 88 to 99 "
+                  "bits: type nibble 0xA, 8 bit id, 10 bit temperature, CRC-8 0x31 MSB first "
+                  "init 0xFF over 11 bytes; the status nibble is random, 1 = battery low, the "
+                  "direction is one of the 16 table values), two copies in a train 8 ms apart, "
+                  "clock error +-8 % and width error +-5 %, 250 kHz")
 
 
 TX29_BIT_US = 58.0
 
 
-def tx29_frame(dev_id, temp_tenths, hum, weak):
+def tx29_frame(dev_id, temp_tenths, hum, weak, new_battery=0):
+    """Five bytes: the model nibble 9 and the 6 bit id (low nibble of byte 0 and the top two bits
+    of byte 1), the new-battery flag (bit 5 of byte 1), the temperature as three decimal digits of
+    t + 40, the humidity (106: none) with the weak battery bit on top, the CRC-8."""
     digits = temp_tenths + 400
-    assert 0 <= digits <= 999
-    b = [0x90 | (dev_id >> 4), ((dev_id & 0xF) << 4) | (digits // 100),
+    assert 0 <= digits <= 999 and 0 <= dev_id < 64
+    b = [0x90 | (dev_id >> 2), ((dev_id & 3) << 6) | (new_battery << 5) | (digits // 100),
          (((digits // 10) % 10) << 4) | (digits % 10), (weak << 7) | hum]
     b.append(crc8_poly31_msb(b))
     return b
@@ -372,7 +401,7 @@ def lacrosse_tx29(rng):
     msgs = []
     for _ in range(20):
         f = blank("lacrosse_tx29")
-        f["id"] = int(rng.integers(0, 256))
+        f["id"] = int(rng.integers(0, 64))
         t = int(rng.integers(-300, 451))
         f["temperature_c"] = t / 10.0
         no_hum = rng.integers(0, 5) == 0
@@ -381,7 +410,7 @@ def lacrosse_tx29(rng):
             f["humidity"] = float(hum)
         weak = int(rng.integers(0, 2))
         f["battery_ok"] = 0 if weak else 1
-        frame = tx29_frame(f["id"], t, hum, weak)
+        frame = tx29_frame(f["id"], t, hum, weak, int(rng.integers(0, 2)))
         copies = [runs_nrz(tx29_bits(frame), TX29_BIT_US)] * reps
         # a gap of 4 ms between the copies: the frame ends with the last bit, trailing zeros
         # are not seen, so the gap is the rest of the low run
@@ -389,9 +418,56 @@ def lacrosse_tx29(rng):
         msgs.append((f, pairs))
     return finish(msgs, "lacrosse_tx29", reps, reps, 645,
                   "LaCrosse IT+ TX29 frames (FSK, NRZ at 17.241 kbit/s: four bytes 0xAA, the sync "
-                  "word 0x2DD4 and five bytes with CRC-8 0x31 init 0 over the first four), two "
+                  "word 0x2DD4 and five bytes with the model nibble 9, a 6 bit id, a random "
+                  "new-battery flag and CRC-8 0x31 init 0 over the first four), two "
                   "copies in a train 4 ms apart, clock error +-1 % and width error +-0.03 bit; "
                   "trailing zero bits of a copy are not part of the train, 250 kHz")
+
+
+TX35_BIT_US = 105.0
+
+
+def trailing_zeros(bits):
+    n = 0
+    for b in reversed(list(bits)):
+        if b:
+            break
+        n += 1
+    return n
+
+
+@case("sensors", "lacrosse_tx35", 775)
+def lacrosse_tx35(rng):
+    """The TX35DTH-IT: the frame of the TX29 (pattern 0xA2DD49, 40 bits after it) at 105 us per
+    bit (about 9.58 kbit/s) in the fact document; same humidity rule (106: none)."""
+    reps = 2
+    msgs = []
+    while len(msgs) < 20:
+        f = blank("lacrosse_tx35")
+        f["id"] = int(rng.integers(0, 64))
+        t = int(rng.integers(-300, 451))
+        f["temperature_c"] = t / 10.0
+        no_hum = rng.integers(0, 5) == 0
+        hum = 106 if no_hum else int(rng.integers(1, 100))
+        if not no_hum:
+            f["humidity"] = float(hum)
+        weak = int(rng.integers(0, 2))
+        f["battery_ok"] = 0 if weak else 1
+        frame = tx29_frame(f["id"], t, hum, weak, int(rng.integers(0, 2)))
+        bits = tx29_bits(frame)
+        if trailing_zeros(bits) > 7:
+            # the decoder reads at most seven missing bits as zeros (a burst ends at its last 1)
+            continue
+        copies = [runs_nrz(bits, TX35_BIT_US)] * reps
+        pairs = distort(rng, join_copies(copies, 4000.0), 0.01, 0.0, 0.03 * TX35_BIT_US)
+        msgs.append((f, pairs))
+    return finish(msgs, "lacrosse_tx35", reps, reps, 775,
+                  "LaCrosse IT+ TX35DTH-IT frames (FSK, NRZ at 105 us per bit: four bytes 0xAA, "
+                  "the sync word 0x2DD4 and five bytes with the model nibble 9, a 6 bit id, a "
+                  "random new-battery flag and CRC-8 0x31 init 0 over the first four, written "
+                  "from the fact document), two copies in a train 4 ms apart, clock error +-1 % "
+                  "and width error +-0.03 bit; frames that end in more than seven zero bits are "
+                  "not drawn; 250 kHz")
 
 
 BRESSER_PREAMBLE_US = 735.0
@@ -568,6 +644,9 @@ def finish(msgs, model, reps, per_train, seed, notes, extra_arrays=None, extra_p
 def _self_test():
     # Nexus: the example of the description, 5c910ff38 (id 0x5c, channel 2, 27.1 C, 56 %, battery 1)
     assert bits_to_hex(nexus_message(0x5C, 1, 2, 271, 56)) == "5c910ff38"
+    # WH1080: the CRC with init 0xFF over eleven bytes is the CRC with init 0 over bytes 1 to 9
+    probe = [0xFF, 0xA1, 0x23, 0x45, 0x50, 3, 4, 0, 5, 0x1A]
+    assert crc8_poly31_msb(probe, 0xFF) == crc8_poly31_msb(probe[1:])
     # Oregon Scientific v2.1, two examples of the document (THGR122NX)
     ex1 = oregon_nibbles(0x1D20, 4, 0x58, 0xC, -84, 28, 8)
     assert "".join("%X" % n for n in ex1) == "1D20485C480882835"
@@ -576,9 +655,13 @@ def _self_test():
     # LaCrosse IT+: the two examples of the article
     assert crc8_poly31_msb([0x92, 0x03, 0x94, 0x59]) == 0x3C
     assert crc8_poly31_msb([0x92, 0x86, 0x24, 0x28]) == 0xDE
-    assert tx29_frame(0x20, -6, 89, 0) == [0x92, 0x03, 0x94, 0x59, 0x3C]
-    assert tx29_frame(0x28, 224, 40, 0) == [0x92, 0x86, 0x24, 0x28, 0xDE]
+    # (the ids are 8 and 10 with the 6 bit id of the fact document, not 32 and 40)
+    assert tx29_frame(8, -6, 89, 0) == [0x92, 0x03, 0x94, 0x59, 0x3C]
+    assert tx29_frame(10, 224, 40, 0) == [0x92, 0x86, 0x24, 0x28, 0xDE]
+    # the pattern 0xA2DD49: the last preamble nibble, the sync word, the model nibble
+    assert bytes_to_bits([0xAA, 0x2D, 0xD4, 0x92])[4:28] == bits_of(0xA2DD49, 24)
     assert math.isclose(1e6 / 17241.0, TX29_BIT_US, abs_tol=0.01)
+    assert math.isclose(1e6 / 9580.0, TX35_BIT_US, abs_tol=0.7)
     # Bresser 3CH: the three recorded frames carry their own sums (battery ok, button, channel
     # 2), and the display values of two recordings follow from the temperature scale
     assert bresser_frame(0xD8, 0, 1, 2, 0x5C7, 0x51) == [0xD8, 0x65, 0xC7, 0x51, 0x55]

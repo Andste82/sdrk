@@ -3,7 +3,7 @@
 //!
 //! A decoder takes a pulse train of `band_pulse_detect`, configures a slicer of
 //! [`crate::slicers`], finds its sync pattern and length in the rows, checks the integrity field
-//! (a checksum or CRC; a device without one needs two equal repeats and records
+//! (a checksum or CRC; a device without one needs three equal repeats and records
 //! [`Mic::Repeat`]) and fills [`Reading`]s. A value outside the range of the device rejects the
 //! message ([`DecodeResult::OutOfRange`]). Decoders hold no state and never allocate; they are
 //! zero-sized types listed in [`DECODERS`].
@@ -42,6 +42,7 @@ mod bresser_3ch;
 mod encoder;
 mod json;
 mod lacrosse_tx29;
+mod lacrosse_tx35;
 mod nexus;
 mod oregon_v21;
 mod reading;
@@ -53,6 +54,7 @@ pub use bresser_3ch::Bresser3ch;
 pub use encoder::{EncodeError, MAX_TRAIN_PAIRS, SensorEncoder, TRAIN_RATE_HZ, TrainSink};
 pub use json::JsonError;
 pub use lacrosse_tx29::LacrosseTx29;
+pub use lacrosse_tx35::LacrosseTx35;
 pub use nexus::Nexus;
 pub use oregon_v21::OregonV21;
 pub use reading::{JsonBuf, Mic, Reading};
@@ -190,8 +192,8 @@ pub trait SensorDecoder: Sync {
 }
 
 /// The built-in decoders in a fixed order: 433 MHz (`wh2`, `nexus`, `oregon_v21`, `wh1080`),
-/// 868 MHz (`lacrosse_tx29`), then `bresser_3ch` (433 MHz), added last so that the bits of the
-/// `decoders` mask of the block keep their meaning.
+/// 868 MHz (`lacrosse_tx29`), then `bresser_3ch` (433 MHz) and `lacrosse_tx35` (868 MHz), added
+/// last so that the bits of the `decoders` mask of the block keep their meaning.
 pub static DECODERS: &[&dyn SensorDecoder] = &[
     &Wh2,
     &Nexus,
@@ -199,6 +201,7 @@ pub static DECODERS: &[&dyn SensorDecoder] = &[
     &Wh1080,
     &LacrosseTx29,
     &Bresser3ch,
+    &LacrosseTx35,
 ];
 
 /// The decoder of that name.
@@ -207,7 +210,7 @@ pub fn by_name(name: &str) -> Option<&'static dyn SensorDecoder> {
 }
 
 /// The built-in encoders in the order of [`DECODERS`]: `wh2`, `nexus`, `oregon_v21`, `wh1080`,
-/// `lacrosse_tx29` (868 MHz FSK, which the OOK transmit chain cannot send), `bresser_3ch`.
+/// `lacrosse_tx29` (868 MHz FSK), `bresser_3ch`, `lacrosse_tx35` (868 MHz FSK).
 pub static ENCODERS: &[&dyn SensorEncoder] = &[
     &Wh2,
     &Nexus,
@@ -215,6 +218,7 @@ pub static ENCODERS: &[&dyn SensorEncoder] = &[
     &Wh1080,
     &LacrosseTx29,
     &Bresser3ch,
+    &LacrosseTx35,
 ];
 
 /// The encoder of that name (the name of its decoder).

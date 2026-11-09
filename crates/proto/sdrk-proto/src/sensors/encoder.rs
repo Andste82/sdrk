@@ -19,11 +19,11 @@
 //! resolution of the device (half away from zero), so `decode(encode(x)) == x` holds for every
 //! reading a decoder can produce (tested over the whole range of every device).
 //!
-//! The encoders inherit what the decoders assume: the CRC variant of the `wh2`, the band and the
-//! timings of the `wh1080` and the bit time of the `lacrosse_tx29` rest on unconfirmed
-//! assumptions (decisions D1106 to D1111, open item I46-1), and so do the transmitted trains.
-//! The button flag of the `bresser_3ch` (bit 6 of byte 1) is not part of a [`Reading`] and is
-//! sent as 0.
+//! The encoders inherit what the decoders assume: the gap between the pulses of the `wh1080`, the
+//! band of the `wh1080` and the repeat gaps rest on assumptions that no source states
+//! (decisions D1109, D1124 and D1136 to D1146), and so do the transmitted trains. The flags a
+//! [`Reading`] has no field for (the test button of the `bresser_3ch` and the `nexus`, the
+//! new-battery flag of the `lacrosse_tx29`) are sent as 0.
 //!
 //! ```
 //! use sdrk_proto::pulses::{self, Header, Modulation};
@@ -84,7 +84,9 @@ pub enum EncodeError {
     /// The train does not fit the storage of the sink.
     BufferTooSmall,
     /// The message cannot be seen by the decoder: its last bits are zeros of an FSK frame that
-    /// the burst end hides (more than seven, see `lacrosse_tx29`).
+    /// the burst end hides (more than seven, see `lacrosse_tx29`), or it is a frame that the
+    /// decoder takes for another device (a `nexus` frame that passes the check of the Rubicson
+    /// protocol).
     Unrepresentable,
 }
 
@@ -97,7 +99,9 @@ impl fmt::Display for EncodeError {
             Self::OutOfRange(n) => write!(f, "the value of {n} is outside the range of the device"),
             Self::InvalidRepeats => f.write_str("repeats must be at least 1"),
             Self::BufferTooSmall => f.write_str("the train does not fit the buffer"),
-            Self::Unrepresentable => f.write_str("the message ends in zeros that no burst shows"),
+            Self::Unrepresentable => {
+                f.write_str("the message cannot be told from a message the decoder rejects")
+            }
         }
     }
 }
@@ -355,6 +359,13 @@ pub(crate) fn temperature(r: &Reading, scale: f32, lo: i32, hi: i32) -> Result<i
 pub(crate) fn humidity(r: &Reading) -> Result<u8, EncodeError> {
     let h = r.humidity.ok_or(EncodeError::MissingField("humidity"))?;
     Ok(scaled_in(h, 1.0, 0, 100, "humidity")? as u8)
+}
+
+/// The optional humidity, a whole percent within 0 to 100 (`None` when the reading has none).
+pub(crate) fn humidity_opt(r: &Reading) -> Result<Option<u8>, EncodeError> {
+    r.humidity
+        .map(|h| scaled_in(h, 1.0, 0, 100, "humidity").map(|v| v as u8))
+        .transpose()
 }
 
 /// The channel (default 1) within `1..=max`.

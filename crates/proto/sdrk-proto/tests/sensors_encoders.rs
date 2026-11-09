@@ -1,7 +1,9 @@
 //! The sensor encoders (M46 extension, D1123 to D1127): `decode(encode(x)) == x` for every
 //! device over its whole range, through the JSON form and through packets, the recorded
 //! messages of the Bresser sensor, rejected readings, small buffers and `Reading::from_json`.
-//! Seeds 770 (random readings), 771 (the raw values of the Bresser sensor), 773 (`from_json`).
+//! Seeds 770 (random readings), 771 (the raw values of the Bresser sensor), 773 (`from_json`),
+//! 776 (the corrected protocols: the ranges of D1137 to D1141) and 777 (the frames of the
+//! `nexus` that pass the Rubicson check).
 
 #![allow(
     clippy::unwrap_used,
@@ -112,37 +114,49 @@ fn random_reading(rng: &mut Rng, model: &'static str) -> Reading {
     let hum99 = |rng: &mut Rng| Some(rng.range(0, 99) as f32);
     match model {
         "wh2" => {
-            r.id = rng.range(0, 0x7FF) as u32;
+            r.id = rng.range(0, 0xFF) as u32;
             r.temperature_c = t(rng.range(-800, 800));
-            r.humidity = hum(rng);
+            // humidity 0xFF is a sensor without humidity
+            if rng.below(5) != 0 {
+                r.humidity = hum(rng);
+            }
         }
         "nexus" => {
             r.id = rng.range(0, 255) as u32;
-            r.channel = Some(rng.range(1, 4) as u8);
+            r.channel = Some(rng.range(1, 3) as u8);
             r.battery_ok = Some(rng.below(2) == 1);
             r.temperature_c = t(rng.range(-400, 800));
-            r.humidity = hum(rng);
+            // humidity 0 is a sensor without humidity
+            if rng.below(5) != 0 {
+                r.humidity = Some(rng.range(1, 100) as f32);
+            }
         }
         "oregon_thn132n" | "oregon_thgr122nx" => {
             r.id = rng.range(0, 255) as u32;
             r.channel = Some(rng.range(1, 3) as u8);
             r.battery_ok = Some(rng.below(2) == 1);
-            r.temperature_c = t(rng.range(-700, 700));
+            let lo = if model == "oregon_thn132n" {
+                -500
+            } else {
+                -700
+            };
+            r.temperature_c = t(rng.range(lo, 700));
             if model == "oregon_thgr122nx" {
                 r.humidity = hum99(rng);
             }
         }
         "wh1080" => {
-            r.id = rng.range(0, 0xFFF) as u32;
-            r.temperature_c = t(rng.range(-400, 600));
+            r.id = rng.range(0, 0xFF) as u32;
+            r.temperature_c = t(rng.range(-400, 623));
             r.humidity = hum(rng);
+            r.battery_ok = Some(rng.below(2) == 1);
             r.wind_avg_km_h = Some(rng.range(0, 255) as f32 * 1.224);
             r.wind_max_km_h = Some(rng.range(0, 255) as f32 * 1.224);
-            r.wind_dir_deg = Some(rng.range(0, 15) as f32 * 22.5);
+            r.wind_dir_deg = Some(f32::from(WH1080_DIRECTIONS[rng.below(16) as usize]));
             r.rain_mm = Some(rng.range(0, 4095) as f32 * 0.3);
         }
-        "lacrosse_tx29" => {
-            r.id = rng.range(0, 255) as u32;
+        "lacrosse_tx29" | "lacrosse_tx35" => {
+            r.id = rng.range(0, 63) as u32;
             // the expression of the decoder: it is not the nearest float of the tenths
             r.temperature_c = Some((rng.range(0, 999) as f32) / 10.0 - 40.0);
             if rng.below(5) != 0 {
@@ -169,7 +183,12 @@ fn hundredths(raw: i32) -> i32 {
     (f64::from(raw - 1220) * 100.0 / 18.0).round() as i32
 }
 
-const MODELS: [&str; 7] = [
+/// The wind directions of the wh1080 in whole degrees (the fact document, D1140).
+const WH1080_DIRECTIONS: [u16; 16] = [
+    0, 23, 45, 68, 90, 113, 135, 158, 180, 203, 225, 248, 270, 293, 315, 338,
+];
+
+const MODELS: [&str; 8] = [
     "wh2",
     "nexus",
     "oregon_thn132n",
@@ -177,6 +196,7 @@ const MODELS: [&str; 7] = [
     "wh1080",
     "lacrosse_tx29",
     "Bresser-3CH",
+    "lacrosse_tx35",
 ];
 
 #[test]
@@ -222,12 +242,15 @@ fn random_readings_round_trip_through_json_packets_and_the_decoder() {
             let repeats = if k % 3 == 0 {
                 enc.default_repeats()
             } else {
-                rng.range(2, 4) as u32
+                rng.range(3, 4) as u32
             };
             let pairs = match encode(&y, repeats) {
                 Ok(p) => p,
                 Err(EncodeError::Unrepresentable) => {
-                    assert_eq!(model, "lacrosse_tx29");
+                    assert!(
+                        matches!(model, "lacrosse_tx29" | "lacrosse_tx35" | "nexus"),
+                        "{model}"
+                    );
                     unrepresentable += 1;
                     continue;
                 }
@@ -246,7 +269,8 @@ fn random_readings_round_trip_through_json_packets_and_the_decoder() {
             assert_eq!(copies, repeats, "{model}: {text}");
         }
     }
-    // a frame whose CRC byte is 0x00 cannot be shown by a burst: about 1 in 256
+    // a frame whose CRC byte is 0x00 cannot be shown by a burst, and a nexus frame can pass the
+    // check of the Rubicson protocol: about 1 in 256 each
     assert!(unrepresentable < 20, "{unrepresentable}");
 }
 
@@ -448,10 +472,11 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
     for (model, lo, hi) in [
         ("wh2", -80.1, 80.1),
         ("nexus", -40.1, 80.1),
-        ("oregon_thn132n", -70.1, 70.1),
+        ("oregon_thn132n", -50.1, 70.1),
         ("oregon_thgr122nx", -70.1, 70.1),
-        ("wh1080", -40.1, 60.1),
+        ("wh1080", -40.1, 62.4),
         ("lacrosse_tx29", -40.1, 60.0),
+        ("lacrosse_tx35", -40.1, 60.0),
         ("Bresser-3CH", -28.95, 71.17),
     ] {
         for t in [lo, hi] {
@@ -463,9 +488,27 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
     let mut r = base("nexus");
     r.channel = Some(0);
     cases.push(("nexus", r, oor("channel")));
+    for ch in [4, 5] {
+        // the channel value 3 of the device (shown as 4) is invalid
+        let mut r = base("nexus");
+        r.channel = Some(ch);
+        cases.push(("nexus", r, oor("channel")));
+    }
     let mut r = base("nexus");
-    r.channel = Some(5);
-    cases.push(("nexus", r, oor("channel")));
+    r.humidity = Some(0.0); // 0 means "no humidity sensor": say it with no humidity
+    cases.push(("nexus", r, oor("humidity")));
+    let mut r = base("wh2");
+    r.id = 256;
+    cases.push(("wh2", r, oor("id")));
+    let mut r = base("wh1080");
+    r.id = 256;
+    cases.push(("wh1080", r, oor("id")));
+    let mut r = base("lacrosse_tx29");
+    r.id = 64;
+    cases.push(("lacrosse_tx29", r, oor("id")));
+    let mut r = base("lacrosse_tx35");
+    r.id = 64;
+    cases.push(("lacrosse_tx35", r, oor("id")));
     let mut r = base("Bresser-3CH");
     r.channel = Some(4);
     cases.push(("Bresser-3CH", r, oor("channel")));
@@ -515,12 +558,15 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
         ("wh2", 80.0),
         ("nexus", -40.0),
         ("nexus", 80.0),
-        ("oregon_thn132n", -70.0),
+        ("oregon_thn132n", -50.0),
+        ("oregon_thgr122nx", -70.0),
         ("oregon_thgr122nx", 70.0),
         ("wh1080", -40.0),
-        ("wh1080", 60.0),
+        ("wh1080", 62.3),
         ("lacrosse_tx29", -40.0),
         ("lacrosse_tx29", 59.9),
+        ("lacrosse_tx35", -40.0),
+        ("lacrosse_tx35", 59.9),
         ("Bresser-3CH", -28.89),
         ("Bresser-3CH", 71.11),
     ] {
@@ -592,8 +638,11 @@ fn the_pair_counts_and_timings_follow_the_decoders() {
     assert!(p.iter().all(|p| p.pulse == 500));
     assert_eq!((p[36].gap, p[73].gap), (4000, 0));
     assert!(p[..36].iter().all(|p| p.gap == 1000 || p.gap == 2000));
-    // wh1080: 88 bits
-    assert_eq!(one("wh1080").len(), 88);
+    // wh1080: 88 bits of 544 or 1524 us pulses with gaps of 1000 us
+    let p = one("wh1080");
+    assert_eq!(p.len(), 88);
+    assert!(p.iter().all(|p| p.pulse == 544 || p.pulse == 1524));
+    assert!(p[..87].iter().all(|p| p.gap == 1000));
     // oregon: runs of one or two half bits of 488 us
     for m in ["oregon_thn132n", "oregon_thgr122nx"] {
         for p in one(m) {
@@ -612,24 +661,41 @@ fn the_pair_counts_and_timings_follow_the_decoders() {
             .modulation(),
         Modulation::Fsk
     );
+    // lacrosse TX35: NRZ runs of 105 us, FSK
+    for p in one("lacrosse_tx35") {
+        assert_eq!(p.pulse % 105, 0);
+        assert_eq!(p.gap % 105, 0);
+    }
+    assert_eq!(
+        sensors::encoder_by_model("lacrosse_tx35")
+            .unwrap()
+            .modulation(),
+        Modulation::Fsk
+    );
     // bresser: 44 pairs per frame
     assert_eq!(one("Bresser-3CH").len(), 44);
 }
 
 #[test]
 fn a_frame_with_a_crc_of_zero_is_unrepresentable_for_the_fsk_device() {
+    for model in ["lacrosse_tx29", "lacrosse_tx35"] {
+        crc_zero_is_unrepresentable(model);
+    }
+}
+
+fn crc_zero_is_unrepresentable(model: &'static str) {
     // search the ids for a frame whose CRC byte is 0x00 (more than seven trailing zeros)
     let mut found = 0;
-    for id in 0..256 {
-        for t in [-40.0f32, 0.0, 21.3] {
-            let mut r = reading("lacrosse_tx29", id);
+    for id in 0..64 {
+        for t in (-400..590).step_by(10).map(|t| t as f32 / 10.0) {
+            let mut r = reading(model, id);
             r.temperature_c = Some(t);
             r.humidity = Some(50.0);
             r.battery_ok = Some(true);
             match encode(&r, 2) {
                 Ok(pairs) => {
                     let (res, got) = decode(&r, &pairs);
-                    assert_eq!(res.count(), 2);
+                    assert_eq!(res.count(), 2, "{model} {id} {t} {res:?}");
                     assert!(got[0].same_content(&r));
                 }
                 Err(EncodeError::Unrepresentable) => found += 1,
@@ -637,7 +703,81 @@ fn a_frame_with_a_crc_of_zero_is_unrepresentable_for_the_fsk_device() {
             }
         }
     }
-    assert!(found > 0, "no frame of this kind among 768");
+    assert!(found > 0, "no frame of this kind among 6336");
+}
+
+#[test]
+fn nexus_frames_that_pass_the_rubicson_check_are_unrepresentable() {
+    // about 1 frame in 256 passes the CRC-8 (0x31, init 0x6C) of the Rubicson protocol; the
+    // decoder takes it for another device, so the encoder refuses it (seed 777 draws the ids)
+    let mut rng = Rng::new(777);
+    let mut refused = 0;
+    let mut sent = 0;
+    for _ in 0..4000 {
+        let mut r = reading("nexus", rng.range(0, 255) as u32);
+        r.channel = Some(rng.range(1, 3) as u8);
+        r.battery_ok = Some(rng.below(2) == 1);
+        r.temperature_c = Some(rng.range(-400, 800) as f32 / 10.0);
+        r.humidity = Some(rng.range(1, 100) as f32);
+        match encode(&r, 3) {
+            Ok(pairs) => {
+                let (res, got) = decode(&r, &pairs);
+                assert_eq!(res, DecodeResult::Decoded(1), "{r:?}");
+                assert!(got[0].same_content(&r));
+                assert_eq!(got[0].repeats, 3);
+                sent += 1;
+            }
+            Err(EncodeError::Unrepresentable) => refused += 1,
+            Err(e) => panic!("{e}"),
+        }
+    }
+    assert!(refused > 5 && refused < 40, "{refused} of 4000");
+    assert_eq!(refused + sent, 4000);
+    // two equal frames are no reading: the device needs three (the fact document)
+    let mut r = reading("nexus", 0x5C);
+    r.channel = Some(2);
+    r.battery_ok = Some(true);
+    r.temperature_c = Some(27.1);
+    r.humidity = Some(56.0);
+    let (res, got) = decode(&r, &encode(&r, 2).unwrap());
+    assert_eq!(got.len(), 0);
+    assert_eq!(res, DecodeResult::BadIntegrity);
+}
+
+#[test]
+fn the_fields_a_device_may_leave_out_round_trip_as_absent() {
+    // wh2 and nexus: no humidity sensor (0xFF and 0), the reading has no humidity
+    for model in ["wh2", "nexus"] {
+        let mut r = base(model);
+        r.humidity = None;
+        if model == "nexus" {
+            (r.channel, r.battery_ok) = (Some(1), Some(true));
+        }
+        let (res, got) = decode(&r, &encode(&r, 3).unwrap());
+        assert!(matches!(res, DecodeResult::Decoded(_)), "{model}: {res:?}");
+        assert_eq!(got[0].humidity, None, "{model}");
+        assert!(got[0].same_content(&r), "{model}");
+    }
+    // wh1080: a low battery is the status nibble 1, a good one 0 (both round trip)
+    for ok in [true, false] {
+        let mut r = base("wh1080");
+        r.battery_ok = Some(ok);
+        let (_, got) = decode(&r, &encode(&r, 2).unwrap());
+        assert_eq!(got[0].battery_ok, Some(ok));
+    }
+    // wh1080: a direction that is no table value goes to the nearest one, 360 to north
+    for (deg, want) in [
+        (22.5, 23.0),
+        (350.0, 0.0),
+        (360.0, 0.0),
+        (11.0, 0.0),
+        (12.0, 23.0),
+    ] {
+        let mut r = base("wh1080");
+        r.wind_dir_deg = Some(deg);
+        let (_, got) = decode(&r, &encode(&r, 2).unwrap());
+        assert_eq!(got[0].wind_dir_deg, Some(want), "{deg}");
+    }
 }
 
 // ---------------------------------------------------------------- from_json

@@ -3530,7 +3530,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Keys a carrier: pulse train packets to the on-off envelope (+1 on, -1 off) at the rate of a clock stream.",
+            "description": "Keys a transmitter: pulse train packets to an on-off envelope or FSK soft bits at the clock rate.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -3559,6 +3559,15 @@
                     "maximum": 1000000,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "mode": {
+                    "default": "ook",
+                    "description": "ook keys on-off trains; fsk keys frequency shift trains as soft bits for fsk_mod (0 outside a train). Typical: ook; fsk for the 868 MHz sensors (lacrosse_tx29, lacrosse_tx35). Build-time.",
+                    "enum": [
+                      "ook",
+                      "fsk"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -4198,9 +4207,9 @@
                     "type": "integer"
                   },
                   "decoders": {
-                    "default": 63,
-                    "description": "The enabled decoders as a bit mask in the order of sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch. Typical: 63 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch. Build-time.",
-                    "maximum": 63,
+                    "default": 127,
+                    "description": "The enabled decoders as a bit mask in the order of sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35. Typical: 127 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35. Build-time.",
+                    "maximum": 127,
                     "minimum": 1,
                     "type": "integer"
                   },

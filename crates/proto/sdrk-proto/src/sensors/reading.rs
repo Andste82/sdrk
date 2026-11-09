@@ -12,7 +12,7 @@ pub enum Mic {
     Crc,
     /// A simple checksum (a sum of nibbles or bytes).
     Checksum,
-    /// The device has no check: two equal repeats were required.
+    /// The device has no check: three equal repeats were required.
     Repeat,
 }
 

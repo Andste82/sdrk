@@ -35,8 +35,8 @@ const READINGS: [&str; 7] = [
     r#"{"model":"nexus","id":92,"channel":2,"battery_ok":true,"temperature_C":-3.5,"humidity":71}"#,
     r#"{"model":"oregon_thn132n","id":123,"channel":1,"battery_ok":true,"temperature_C":21.3}"#,
     r#"{"model":"oregon_thgr122nx","id":45,"channel":2,"battery_ok":false,"temperature_C":-7.4,"humidity":55}"#,
-    r#"{"model":"wh1080","id":1234,"temperature_C":18.5,"humidity":40,"wind_avg_km_h":12.2,"wind_max_km_h":24.5,"wind_dir_deg":90.0,"rain_mm":15.0}"#,
-    r#"{"model":"lacrosse_tx29","id":77,"battery_ok":true,"temperature_C":12.3,"humidity":48}"#,
+    r#"{"model":"wh1080","id":123,"battery_ok":true,"temperature_C":18.5,"humidity":40,"wind_avg_km_h":12.2,"wind_max_km_h":24.5,"wind_dir_deg":90.0,"rain_mm":15.0}"#,
+    r#"{"model":"lacrosse_tx29","id":45,"battery_ok":true,"temperature_C":12.3,"humidity":48}"#,
     r#"{"model":"Bresser-3CH","id":66,"channel":1,"battery_ok":true,"temperature_C":22.56,"humidity":66}"#,
 ];
 

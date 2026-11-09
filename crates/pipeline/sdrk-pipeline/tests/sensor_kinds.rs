@@ -188,8 +188,9 @@ fn train_packets() -> Vec<Packet> {
         "wh1080",
         "lacrosse_tx29",
         "bresser_3ch",
+        "lacrosse_tx35",
     ] {
-        let m = if name == "lacrosse_tx29" {
+        let m = if name.starts_with("lacrosse") {
             Modulation::Fsk
         } else {
             Modulation::Ook
@@ -376,7 +377,7 @@ fn an_encoder_still_cannot_read_the_packets_of_a_decoder() {
 fn a_bad_decoder_mask_is_reported_at_its_parameter() {
     for (key, value) in [
         ("decoders", json!(0)),
-        ("decoders", json!(64)),
+        ("decoders", json!(128)),
         ("merge_s", json!(-1.0)),
     ] {
         let mut spec = packet_flow();

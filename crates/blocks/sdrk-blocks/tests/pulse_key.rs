@@ -22,13 +22,14 @@ mod common;
 use sdrk::Rate;
 use sdrk_blocks::{
     Block, Error, PULSE_KEY_PAIRS, PULSE_KEY_QUEUE, Packet, ParamValue, PulseKeyBlock,
-    PulseKeyConfig,
+    PulseKeyConfig, PulseKeyMode,
 };
 use sdrk_proto::PacketFlags;
 use sdrk_proto::pulses::{self, CONTINUED, Header, Modulation, Pair};
 use sdrk_testkit::VecStorage;
 
 const SEED_CHUNKS: u64 = 774;
+const SEED_FSK: u64 = 778;
 
 fn header(rate_hz: u32, m: Modulation) -> Header {
     Header {
@@ -43,7 +44,10 @@ fn header(rate_hz: u32, m: Modulation) -> Header {
 
 fn key(guard_us: u32, rate: u64) -> PulseKeyBlock<VecStorage> {
     PulseKeyBlock::new(
-        &PulseKeyConfig { guard_us },
+        &PulseKeyConfig {
+            guard_us,
+            ..PulseKeyConfig::default()
+        },
         Rate::hz(rate).unwrap(),
         &mut VecStorage,
     )
@@ -423,4 +427,107 @@ fn the_parameter_the_arena_and_the_struct() {
     );
     fn send_sync<T: Send + Sync>() {}
     send_sync::<PulseKeyBlock<VecStorage>>();
+}
+
+fn fsk_train(index: u64, rate_hz: u32, pairs: &[Pair]) -> Vec<Packet> {
+    pulses::packets(
+        index,
+        PacketFlags::NONE,
+        &header(rate_hz, Modulation::Fsk),
+        pairs,
+    )
+    .map(|p| p.unwrap())
+    .collect()
+}
+
+fn key_mode(mode: PulseKeyMode, guard_us: u32, rate: u64) -> PulseKeyBlock<VecStorage> {
+    PulseKeyBlock::new(
+        &PulseKeyConfig { guard_us, mode },
+        Rate::hz(rate).unwrap(),
+        &mut VecStorage,
+    )
+    .unwrap()
+}
+
+/// 58 us and 105 us bits of an NRZ frame as pairs at 1 MHz: 1 1 0 1 0 0 0 1 1 1.
+fn nrz_like() -> Vec<Pair> {
+    vec![
+        Pair {
+            pulse: 116,
+            gap: 58,
+        },
+        Pair {
+            pulse: 58,
+            gap: 174,
+        },
+        Pair {
+            pulse: 105,
+            gap: 105,
+        },
+        Pair { pulse: 315, gap: 0 },
+    ]
+}
+
+#[test]
+fn the_fsk_mode_keys_the_pulse_up_and_the_gap_down_and_is_zero_outside() {
+    let mut b = key_mode(PulseKeyMode::Fsk, 100, 500_000);
+    let mut packets = train(0, 1_000_000, &nrz_like());
+    packets.extend(fsk_train(1, 1_000_000, &nrz_like()));
+    let out = run(&mut b, &packets, 1000, 1000);
+    assert_eq!(b.ignored_packets(), 1, "the on-off train");
+    assert_eq!(b.trains_sent(), 1);
+    // Cumulative edges at 500 kHz: 116 us is 58 samples, then 29 down, 29 up, 87 down.
+    let r = runs(&out);
+    let want = [(1.0, 58), (-1.0, 29), (1.0, 29), (-1.0, 87)];
+    assert_eq!(&r[..4], &want);
+    // The train is 116 + 58 + 58 + 174 + 105 + 105 + 315 = 931 us = 465.5 -> 466 samples, then
+    // zero (idle and guard).
+    assert!(out[..466].iter().all(|&y| y.abs() == 1.0));
+    assert!(out[466..].iter().all(|&y| y == 0.0));
+    // The square is the gate: 1 in the train, 0 outside.
+    let gate: Vec<f32> = out.iter().map(|y| y * y).collect();
+    assert_eq!(gate.iter().filter(|&&g| g == 1.0).count(), 466);
+    // An OOK block ignores the FSK train and an FSK block the OOK one.
+    let mut o = key(0, 500_000);
+    run(&mut o, &packets, 1000, 1000);
+    assert_eq!(o.ignored_packets(), 1);
+    assert_eq!(o.trains_sent(), 1);
+}
+
+#[test]
+fn the_fsk_modes_are_chunk_invariant_over_20_plans() {
+    let mut packets = fsk_train(0, 1_000_000, &nrz_like());
+    packets.extend(train(1, 1_000_000, &nrz_like()));
+    packets.extend(fsk_train(2, 1_000_000, &nrz_like()));
+    let n = 4000;
+    for mode in [PulseKeyMode::Ook, PulseKeyMode::Fsk] {
+        let want = run(&mut key_mode(mode, 800, 500_000), &packets, n, n);
+        for (k, plan) in common::twenty_plans(SEED_FSK).into_iter().enumerate() {
+            let mut b = key_mode(mode, 800, 500_000);
+            let clock = vec![0.0f32; 4096];
+            let mut sizes = plan.sizes();
+            let mut got = Vec::new();
+            let mut first = true;
+            while got.len() < n {
+                let m = sizes.next().unwrap().min(n - got.len()).min(clock.len());
+                let mut buf = vec![0.0f32; m];
+                b.process((&clock[..m], if first { &packets } else { &[] }), &mut buf)
+                    .unwrap();
+                first = false;
+                got.extend_from_slice(&buf);
+            }
+            assert!(got == want, "{mode:?} plan {k}");
+        }
+    }
+}
+
+#[test]
+fn the_mode_parameter() {
+    let mut cfg = PulseKeyConfig::default();
+    assert_eq!(cfg.mode, PulseKeyMode::Ook);
+    cfg.set("mode", ParamValue::Choice(1)).unwrap();
+    assert_eq!(cfg.mode, PulseKeyMode::Fsk);
+    assert_eq!(cfg.get("mode").unwrap(), ParamValue::Choice(1));
+    assert!(cfg.set("mode", ParamValue::Choice(2)).is_err());
+    assert!(cfg.set("mode", ParamValue::I64(1)).is_err());
 }

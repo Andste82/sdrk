@@ -112,6 +112,7 @@ pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
 pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
 pub use blocks::pulse_key::{
     PULSE_KEY_OFF, PULSE_KEY_ON, PULSE_KEY_PAIRS, PULSE_KEY_QUEUE, PulseKeyBlock, PulseKeyConfig,
+    PulseKeyMode,
 };
 pub use blocks::qam_demod::{QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig};
 pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};

@@ -19,23 +19,6 @@ pub(crate) fn crc8_msb(init: u8, bytes: impl IntoIterator<Item = u8>) -> u8 {
     crc
 }
 
-/// CRC-8 of the polynomial 0x31 in its reflected form (0x8C, the Dallas/Maxim variant), init 0,
-/// no final xor, over `bytes`.
-pub(crate) fn crc8_reflected(bytes: impl IntoIterator<Item = u8>) -> u8 {
-    let mut crc = 0u8;
-    for b in bytes {
-        crc ^= b;
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0x8C
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
-}
-
 /// Byte `i` of a row (bits `8 i .. 8 i + 8`), `None` past the end.
 pub(crate) fn byte_at(row: &Row, i: usize) -> Option<u8> {
     row.field(i.checked_mul(8)?, 8).map(|v| v as u8)

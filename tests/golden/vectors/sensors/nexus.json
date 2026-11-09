@@ -64,7 +64,7 @@
   "case": "nexus",
   "format_version": 1,
   "kernel": "sensors",
-  "notes": "Nexus frames (PPM, 500 us pulses, gaps 1000/2000 us, 4000 us between frames, 36 bits, no check), three equal frames in a train, one reading per train (a device without a check needs two equal frames), clock error +-8 % and width error +-5 %, 250 kHz",
+  "notes": "Nexus frames (PPM, 500 us pulses, gaps 1000/2000 us, 4000 us between frames, 36 bits, no check; the test-button bit random, humidity 0 = none in about a fifth, no frame that passes the Rubicson check), three equal frames in a train, one reading per train (a device without a check needs three equal frames), clock error +-8 % and width error +-5 %, 250 kHz",
   "params": {
     "decoder": "nexus",
     "max_abs_err": 0.001,

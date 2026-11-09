@@ -118,6 +118,13 @@ fn build_nodes(
                 .src_b
                 .and_then(|sb| streams.get(sb))
                 .is_some_and(|s| s.ty == PortType::Packets),
+            // Packets in and packets out: encoders (packets in, samples out) map normally.
+            packets_in: pn.src_b.is_none()
+                && streams
+                    .get(pn.src)
+                    .is_some_and(|s| s.ty == PortType::Packets)
+                && matches!(pn.dst, PlanDst::Stream(d)
+                    if streams.get(d).is_some_and(|s| s.ty == PortType::Packets)),
             dst: match pn.dst {
                 PlanDst::Stream(s) => Dst::Stream(s),
                 PlanDst::Frames { output } => Dst::Frames(output),

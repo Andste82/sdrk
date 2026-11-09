@@ -59,6 +59,7 @@ pub mod real_to_iq;
 pub mod resample;
 pub mod rotate;
 pub mod scale;
+pub mod sensor_decode;
 pub mod slice;
 pub mod spectrum;
 pub mod squelch;

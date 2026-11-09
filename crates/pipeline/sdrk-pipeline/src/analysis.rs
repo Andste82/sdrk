@@ -439,7 +439,8 @@ fn check_groups(spec: &PipelineSpec, report: &mut Report) {
 
 /// How the nodes read a packet input: `(port a, port b)` readers. Port `a` of a node whose
 /// first input takes packets is an encoder of kind `Source`; port `b` is the packet port of a
-/// clocked encoder.
+/// clocked encoder. Only the readers of a pipeline input are listed: the packets of a node
+/// (`sensor_encode` into `pulse_key`) need no rate.
 fn packet_readers(registry: &Registry, spec: &PipelineSpec, input: &str) -> (bool, bool) {
     let mut readers = (false, false);
     for edge in spec.edges.iter().filter(|e| e.from == input) {
@@ -450,6 +451,15 @@ fn packet_readers(registry: &Registry, spec: &PipelineSpec, input: &str) -> (boo
         else {
             continue;
         };
+        // A decoder with a packet output (`sensor_decode`) reads packets without a rate.
+        if factory
+            .description()
+            .outputs
+            .iter()
+            .any(|p| p.types.contains(&PortType::Packets))
+        {
+            continue;
+        }
         let port = edge.port_or_default();
         let takes_packets = factory
             .description()
@@ -1570,12 +1580,17 @@ impl<'a> Stage2<'a> {
     /// An encoder of kind `Source` (packets at port `a`) takes its output rate from the
     /// `rate_hz` of a packet input and starts that input's clock domain (D526). A packet stream
     /// of a decoder has a nominal rate for buffer sizing only (D513) and the clock of the
-    /// decoder's input, so it cannot feed such an encoder: `type_mismatch` at the edge.
+    /// decoder's input, so it cannot feed such an encoder: `type_mismatch` at the edge. A node
+    /// with a packet output (`sensor_decode`, `sensor_encode`, M46) only passes the packets on
+    /// and may read the packets of a decoder (`packet_out`). Port `b` of a clocked node is not
+    /// checked here: it may read the packets of any node with a packet output (`sensor_encode`
+    /// into `pulse_key`) as well as those of a pipeline input.
     fn source_packets_ok(
         &mut self,
         name: &str,
         ports: &[PortInfo],
         first: Option<(usize, usize)>,
+        packet_out: bool,
     ) -> bool {
         let Some((k, s)) = first else {
             return true;
@@ -1587,7 +1602,8 @@ impl<'a> Stage2<'a> {
             .streams
             .get(s)
             .is_some_and(|x| x.ty == PortType::Packets);
-        if !takes_packets || !is_packets || self.inputs.iter().any(|i| i.stream == s) {
+        if !takes_packets || !is_packets || packet_out || self.inputs.iter().any(|i| i.stream == s)
+        {
             return true;
         }
         let from = self.spec.edges.get(k).map_or("", |e| e.from.as_str());
@@ -1631,7 +1647,12 @@ impl<'a> Stage2<'a> {
         let (Some(&(_, mut src)), second) = (feeds.first(), feeds.get(1).copied()) else {
             return;
         };
-        if !self.source_packets_ok(name, &ports, feeds.first().copied()) {
+        let packet_out = factory
+            .description()
+            .outputs
+            .iter()
+            .any(|p| p.types.contains(&PortType::Packets));
+        if !self.source_packets_ok(name, &ports, feeds.first().copied(), packet_out) {
             self.produced.insert(name.to_string(), Produced::Failed);
             return;
         }

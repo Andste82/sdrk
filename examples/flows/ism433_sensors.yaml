@@ -1,0 +1,67 @@
+# SDRk pipeline: the sensor readings of every weather and temperature sensor in the 433 MHz ISM band
+# at once: the chain of the flow ism433_pulses followed by the block sensor_decode.
+# (YAML twin of ism433_sensors.json). YAML is accepted as input; JSON stays the canonical format.
+#
+# The band 433.05 ... 434.79 MHz (1.74 MHz) lies inside +-1 MHz of 433.92 MHz, so one RTL-SDR at
+# 2 MS/s centred at 433.92 MHz sees all of it. Cheap sensors, remote controls and door contacts
+# use crystals or SAW resonators that are tens of kHz off, so their frequency is unknown: a
+# channelizer splits the band into 16 overlapping channels of 125 kHz (each passes +-62.5 kHz
+# flat), and band_pulse_detect runs a pulse detector in every channel, merges what neighbouring
+# channels see of the same transmission and emits each transmission as one pulse train.
+#
+# HackRF variant: the same flow with `format: cs8` (signed 8-bit IQ) at the same rate.
+sdrk: 1
+name: ism433-sensors
+description: "Decode the sensor readings of every short-range weather and temperature sensor of the 433 MHz ISM band at once (wh2, nexus, oregon_v21, wh1080, bresser_3ch): the chain of ism433_pulses followed by sensor_decode, one JSON text packet per reading."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # RTL-SDR: unsigned 8-bit IQ at 2 MS/s centred at 433.92 MHz (the automatic rf__convert turns
+  # it into c32). For a HackRF write `format: cs8`.
+  rf:
+    format: cu8
+    rate_hz: 2000000
+    description: "RTL-SDR IQ at 2 MS/s centred at 433.92 MHz"
+nodes:
+  # 16 channels 125 kHz apart, each at 250 kS/s (twice the spacing), the search grid: flat to
+  # half the spacing, 60 dB down from one spacing, so a transmitter anywhere in the band lies in
+  # the flat pass band of at least one channel. Channel c (-8 ... 7) is at 433.92 MHz + c * 125 kHz.
+  chan:
+    kind: channelize
+    params:
+      channels: 16
+      taps_per_branch: 8
+  # The pulse detector in every channel (OOK and FSK, modulation auto, a burst starts 9 dB above
+  # the noise; min_snr_db can be changed while the flow runs). The packets carry the offset
+  # from the centre; center_hz is the RF centre that a tool reads from the flow for the absolute
+  # frequency (freq_hz of the JSON form of sdrk_proto::pulses).
+  det:
+    kind: band_pulse_detect
+    params:
+      center_hz: 433920000
+  # The sensor decoders: every pulse train is offered to the decoders of its modulation (here
+  # OOK and FSK: wh2, nexus, oregon_v21, wh1080, bresser_3ch and, for an FSK train, the two
+  # LaCrosse decoders, which find nothing at 433 MHz). A train is a reading only with a valid
+  # CRC or checksum and plausible values; copies of the same reading within 2 s are one reading
+  # with `repeats` (merge_s). center_hz is the RF centre of the band: freq_MHz in the JSON is
+  # the absolute frequency. `decoders` (a bit mask, default all) and `emit_unknown` are build
+  # parameters, see docs/blocks.md.
+  dec:
+    kind: sensor_decode
+    params:
+      center_hz: 433920000
+edges:
+  - { from: rf, to: chan }
+  - { from: chan, to: det }
+  - { from: det, to: dec }
+  - { from: dec, to: readings }
+outputs:
+  # One packet per reading: the payload is one JSON object (time, model, id, channel,
+  # battery_ok, the values, mic, freq_MHz, rssi_dB, repeats), a line of JSON Lines when a
+  # tool writes the payloads one per line. The index is the index of the pulse train.
+  readings:
+    type: packets
+    queue: 1024
+    description: "One packet per reading: the JSON text of the reading (model, id, values, mic, freq_MHz, rssi_dB, repeats), indexed like the pulse train it came from"

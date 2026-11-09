@@ -1,0 +1,98 @@
+{
+  "arrays": {
+    "battery_ok": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.battery_ok.bin",
+      "len": 4
+    },
+    "channels": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.channels.bin",
+      "len": 4
+    },
+    "humidity": {
+      "dtype": "f64",
+      "file": "bresser_3ch_recorded.humidity.bin",
+      "len": 4
+    },
+    "ids": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.ids.bin",
+      "len": 4
+    },
+    "model_ids": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.model_ids.bin",
+      "len": 4
+    },
+    "pair_counts": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.pair_counts.bin",
+      "len": 4
+    },
+    "pairs": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.pairs.bin",
+      "len": 7832
+    },
+    "rain_mm": {
+      "dtype": "f64",
+      "file": "bresser_3ch_recorded.rain_mm.bin",
+      "len": 4
+    },
+    "repeat_counts": {
+      "dtype": "i32",
+      "file": "bresser_3ch_recorded.repeat_counts.bin",
+      "len": 4
+    },
+    "temperature_c": {
+      "dtype": "f64",
+      "file": "bresser_3ch_recorded.temperature_c.bin",
+      "len": 4
+    },
+    "wind_avg_km_h": {
+      "dtype": "f64",
+      "file": "bresser_3ch_recorded.wind_avg_km_h.bin",
+      "len": 4
+    },
+    "wind_dir_deg": {
+      "dtype": "f64",
+      "file": "bresser_3ch_recorded.wind_dir_deg.bin",
+      "len": 4
+    },
+    "wind_max_km_h": {
+      "dtype": "f64",
+      "file": "bresser_3ch_recorded.wind_max_km_h.bin",
+      "len": 4
+    }
+  },
+  "case": "bresser_3ch_recorded",
+  "format_version": 1,
+  "kernel": "sensors",
+  "notes": "The four recorded messages of the sensor labelled AS2-WS-6B, type 60109 (D8 65 C7 51 55, D8 66 52 40 D0, D8 66 59 47 DE, D8 65 DB 3C 54; id 0xD8, channel 2, battery ok, button pressed) with the measured widths, 4 preamble pairs and 22, 23, 24 and 20 frames; the expected values are 14.39 C 81 % (display not known), 22.11 C 64 %, 22.50 C 71 % and 15.50 C 60 % (the displays of recordings 2 to 4 show 22.1, 22.5 and 15.5 C; two decimals, D1123); no random value, 250 kHz",
+  "params": {
+    "decoder": "bresser_3ch",
+    "max_abs_err": 0.001,
+    "models": [
+      "Bresser-3CH"
+    ],
+    "rate_hz": 250000,
+    "readings_per_train": 1,
+    "recorded": true,
+    "repeats": 22,
+    "seed": 649,
+    "trains": 4
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 649,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.001,
+    "skip": 0
+  }
+}

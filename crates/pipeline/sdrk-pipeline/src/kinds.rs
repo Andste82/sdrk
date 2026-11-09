@@ -31,14 +31,15 @@ use sdrk_blocks::{
     MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig,
-    QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig,
-    RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
-    ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
-    ToComplexBlock,
+    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, QamDemodBlock, QamDemodConfig,
+    QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
+    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
+    RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
+    SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SliceBlock, SliceConfig,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -4468,6 +4469,166 @@ impl Kind for BandPulseDetectKind {
             rate,
             cfg.width,
             st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ sensor_decode
+
+pub(crate) struct SensorDecodeKind;
+
+impl Kind for SensorDecodeKind {
+    type Cfg = SensorDecodeConfig;
+
+    const KIND: &'static str = "sensor_decode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> SensorDecodeConfig {
+        SensorDecodeConfig::default()
+    }
+    fn set(cfg: &mut SensorDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SensorDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch(
+                "sensor_decode needs the pulse trains of band_pulse_detect",
+            ));
+        }
+        let block = SensorDecodeBlock::<VecStorage>::new(cfg, &mut VecStorage)?;
+        Ok(Figures {
+            // The packet stream gets the nominal rate `rate * max_per_input` (4 readings per
+            // train at most, an upper bound: D1116).
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: SensorDecodeBlock::<VecStorage>::storage_bytes(cfg)?,
+            // M46 section 4: 50 per pulse train; the estimate counts every nominal packet (D1116).
+            cost: 50.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &SensorDecodeConfig,
+        _input: PortType,
+        _rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(SensorDecodeBlock::new(
+            cfg, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ sensor_encode
+
+pub(crate) struct SensorEncodeKind;
+
+impl Kind for SensorEncodeKind {
+    type Cfg = SensorEncodeConfig;
+
+    const KIND: &'static str = "sensor_encode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> SensorEncodeConfig {
+        SensorEncodeConfig::default()
+    }
+    fn set(cfg: &mut SensorEncodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SensorEncodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch(
+                "sensor_encode needs the JSON text packets of readings",
+            ));
+        }
+        let block = SensorEncodeBlock::<VecStorage>::new(cfg, &mut VecStorage)?;
+        Ok(Figures {
+            // The packet stream gets the nominal rate `rate * max_per_input` (at most 40
+            // packets per reading, an upper bound: D1128).
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: SensorEncodeBlock::<VecStorage>::storage_bytes(cfg)?,
+            // 200 per reading plus 1 per pair; the estimate counts every nominal packet (D1128).
+            cost: 200.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &SensorEncodeConfig,
+        _input: PortType,
+        _rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(SensorEncodeBlock::new(
+            cfg, st,
+        )?)))
+    }
+}
+
+// ----------------------------------------------------------------------- pulse_key
+
+pub(crate) struct PulseKeyKind;
+
+impl Kind for PulseKeyKind {
+    type Cfg = PulseKeyConfig;
+
+    const KIND: &'static str = "pulse_key";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> PulseKeyConfig {
+        PulseKeyConfig::default()
+    }
+    fn set(cfg: &mut PulseKeyConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &PulseKeyConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("pulse_key needs an f32 stream as its clock"));
+        }
+        Ok(Figures {
+            rate_out: PulseKeyBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: PulseKeyBlock::<VecStorage>::storage_bytes(cfg)?,
+            // One compare and one store per sample (D1129).
+            cost: 2.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::F32),
+        })
+    }
+    fn build(
+        cfg: &PulseKeyConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(ClockedNode::new(PulseKeyBlock::new(
+            cfg, rate, st,
         )?)))
     }
 }

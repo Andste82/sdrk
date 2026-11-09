@@ -106,7 +106,8 @@ pub trait NodeSlice: StreamElem {
 
 /// How the port views of a block are taken out of a [`NodeInput`] or [`NodeOutput`]: the slices
 /// of a stream element (every [`NodeSlice`]) or the views of a lane stream (`Lanes<C32>`).
-/// The trait of the ports of [`LanesNode`] and of the input of [`PacketOutNode`].
+/// The trait of the ports of [`LanesNode`] and of the input of [`PacketOutNode`] (also
+/// [`Packets`], the input of a packet to packet block such as `sensor_decode`, M46).
 pub trait NodePort: Ports {
     /// The read-only view of this port type, if the input has the matching variant.
     fn input(i: NodeInput<'_>) -> Option<Self::Ref<'_>>;
@@ -124,6 +125,21 @@ impl NodePort for Lanes<C32> {
     fn output(o: NodeOutput<'_>) -> Option<LanesMut<'_, C32>> {
         match o {
             NodeOutput::Lanes { data, width } => LanesMut::new(data, width).ok(),
+            _ => None,
+        }
+    }
+}
+
+impl NodePort for Packets {
+    fn input(i: NodeInput<'_>) -> Option<&[Packet]> {
+        match i {
+            NodeInput::Packets(s) => Some(s),
+            _ => None,
+        }
+    }
+    fn output(o: NodeOutput<'_>) -> Option<&mut [Packet]> {
+        match o {
+            NodeOutput::Packets(s) => Some(s),
             _ => None,
         }
     }
@@ -545,7 +561,9 @@ where
 /// [`Lanes<C32>`](Lanes), M45.1); the input is taken out of the [`NodeInput`] by [`NodePort`].
 /// The packet indices are those of the block (counted from its construction or reset, in
 /// samples of a stream input or time steps of a lane input); the runner moves them into the
-/// index domain of the node's input.
+/// index domain of the node's input. A block with a [`Packets`] input (`sensor_decode`) copies
+/// the index of the packet it reads, which is already in the domain of the upstream node, so
+/// the runner does not move it again (`NodeRt::packets_in`).
 ///
 /// ```
 /// use sdrk::Rate;
@@ -588,6 +606,10 @@ where
             return Err(mismatch());
         };
         self.block.process(input, output)
+    }
+
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        self.block.reading(index)
     }
 
     forward_node!();

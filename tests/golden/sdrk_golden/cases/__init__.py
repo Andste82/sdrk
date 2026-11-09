@@ -45,6 +45,7 @@ from . import (  # noqa: F401
     resample,
     rotate,
     scale,
+    sensors,
     squelch,
     ssb_mod,
     stereo,

@@ -48,12 +48,14 @@ use sdrk_blocks::{
     MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamKind, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, QamDemodConfig, QamModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig,
-    RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SliceBlock,
-    SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig,
-    SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock,
-    StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    PskModConfig, PulseKeyBlock, PulseKeyConfig, QamDemodConfig, QamModConfig, QuadDemodConfig,
+    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
+    RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
+    ScaleBlock, ScaleConfig, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
+    SensorEncodeConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted,
+    ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -75,8 +77,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 68);
-    assert_eq!(all_descriptions().len(), 68);
+    assert_eq!(kinds.len(), 71);
+    assert_eq!(all_descriptions().len(), 71);
     for kind in [
         "convert",
         "convert_out",
@@ -144,6 +146,9 @@ fn there_are_sixty_one_unique_kinds() {
         "channelize",
         "channel_select",
         "band_pulse_detect",
+        "sensor_decode",
+        "sensor_encode",
+        "pulse_key",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -392,6 +397,17 @@ fn config_defaults_match_the_descriptions() {
         |n| BandPulseDetectConfig::default().get(n),
         &[],
     );
+    defaults_match(
+        "sensor_decode",
+        |n| SensorDecodeConfig::default().get(n),
+        &[],
+    );
+    defaults_match(
+        "sensor_encode",
+        |n| SensorEncodeConfig::default().get(n),
+        &[],
+    );
+    defaults_match("pulse_key", |n| PulseKeyConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -514,6 +530,9 @@ fn configs_accept_every_described_parameter() {
     round_trip!("channelize", ChannelizeConfig);
     round_trip!("channel_select", ChannelSelectConfig);
     round_trip!("band_pulse_detect", BandPulseDetectConfig);
+    round_trip!("sensor_decode", SensorDecodeConfig);
+    round_trip!("sensor_encode", SensorEncodeConfig);
+    round_trip!("pulse_key", PulseKeyConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -881,6 +900,18 @@ fn blocks_accept_and_report_every_described_parameter() {
             &mut s,
         )
         .unwrap(),
+    );
+    check_block_params(
+        "sensor_decode",
+        &mut SensorDecodeBlock::new(&SensorDecodeConfig::default(), &mut s).unwrap(),
+    );
+    check_block_params(
+        "sensor_encode",
+        &mut SensorEncodeBlock::new(&SensorEncodeConfig::default(), &mut s).unwrap(),
+    );
+    check_block_params(
+        "pulse_key",
+        &mut PulseKeyBlock::new(&PulseKeyConfig::default(), rate(48_000), &mut s).unwrap(),
     );
     let pd = PskDemodConfig {
         order: 8,

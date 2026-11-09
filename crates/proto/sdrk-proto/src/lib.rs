@@ -3,7 +3,8 @@
 //! Data System (`rds`: checkwords, syndromes, groups, programme service name and radiotext),
 //! NRZI and HDLC framing with the AX.25 address header (APRS), the fields and parity of
 //! Mode S frames (ADS-B), Morse code (`morse`: the table, an encoder and a decoder), and the
-//! pulse trains of short-range devices (`pulses`: the payload of `band_pulse_detect`).
+//! pulse trains of short-range devices (`pulses`: the payload of `band_pulse_detect`), the
+//! slicers that cut them into rows of bits (`slicers`) and the sensor readings (`sensors`).
 //!
 //! Layer `crates/proto`, heap-free; depends on `sdrk-device` only. Digital modes end in bytes:
 //! a decoder turns bits into [`Packet`]s, an encoder turns packets back into bits. The blocks
@@ -41,6 +42,8 @@ mod packet;
 pub mod prbs;
 pub mod pulses;
 pub mod rds;
+pub mod sensors;
+pub mod slicers;
 pub mod whiten;
 
 pub use error::{Error, ProtoError, Result};

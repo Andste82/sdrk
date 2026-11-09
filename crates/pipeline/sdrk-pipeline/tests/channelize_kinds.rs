@@ -196,7 +196,7 @@ fn the_kinds_are_registered() {
     assert_eq!(chan.kernels(), ["channelize"]);
     let sel = registry.factory("channel_select").unwrap();
     assert_eq!(sel.kernels().len(), 0);
-    assert_eq!(registry.descriptions().count(), 68);
+    assert_eq!(registry.descriptions().count(), 71);
 }
 
 #[test]

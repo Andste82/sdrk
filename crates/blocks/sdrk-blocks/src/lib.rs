@@ -110,6 +110,10 @@ pub use blocks::ook_mod::{OOK_MOD_CHUNK, OokModBlock, OokModConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
 pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
+pub use blocks::pulse_key::{
+    PULSE_KEY_OFF, PULSE_KEY_ON, PULSE_KEY_PAIRS, PULSE_KEY_QUEUE, PulseKeyBlock, PulseKeyConfig,
+    PulseKeyMode,
+};
 pub use blocks::qam_demod::{QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig};
 pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
@@ -127,6 +131,13 @@ pub use blocks::resample::{
 };
 pub use blocks::rotate::{RotateBlock, RotateConfig};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
+pub use blocks::sensor_decode::{
+    SENSOR_ALL_DECODERS, SENSOR_CROSS_CHANNEL_S, SENSOR_SEEN, SENSOR_TRAIN_PAIRS,
+    SensorDecodeBlock, SensorDecodeConfig,
+};
+pub use blocks::sensor_encode::{
+    SENSOR_ENCODE_MAX_REPEATS, SENSOR_ENCODE_PACKETS, SensorEncodeBlock, SensorEncodeConfig,
+};
 pub use blocks::slice::{PSK8_GRAY, SliceBlock, SliceConfig, SliceConstellation, SliceElem};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};

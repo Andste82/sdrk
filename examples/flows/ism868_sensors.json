@@ -1,0 +1,63 @@
+{
+  "sdrk": 1,
+  "name": "ism868-sensors",
+  "description": "Decode the sensor readings of the LaCrosse IT+ sensors (lacrosse_tx29, lacrosse_tx35, FSK) of the 868 MHz SRD band at once: the chain of ism868_pulses followed by sensor_decode, one JSON text packet per reading.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2000000,
+      "description": "RTL-SDR IQ at 2 MS/s centred at 868.5 MHz"
+    }
+  },
+  "nodes": {
+    "chan": {
+      "kind": "channelize",
+      "params": {
+        "channels": 8,
+        "taps_per_branch": 8
+      }
+    },
+    "dec": {
+      "kind": "sensor_decode",
+      "params": {
+        "center_hz": 868500000
+      }
+    },
+    "det": {
+      "kind": "band_pulse_detect",
+      "params": {
+        "center_hz": 868500000,
+        "modulation": "auto"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "chan"
+    },
+    {
+      "from": "chan",
+      "to": "det"
+    },
+    {
+      "from": "det",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "readings"
+    }
+  ],
+  "outputs": {
+    "readings": {
+      "type": "packets",
+      "queue": 1024,
+      "description": "One packet per reading: the JSON text of the reading (model, id, values, mic, freq_MHz, rssi_dB, repeats), indexed like the pulse train it came from"
+    }
+  }
+}

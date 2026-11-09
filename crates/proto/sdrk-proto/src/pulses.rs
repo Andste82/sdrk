@@ -142,7 +142,8 @@ pub struct Header {
 }
 
 /// One pulse and the gap after it, in samples of the header's rate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
 pub struct Pair {
     /// Width of the pulse.
     pub pulse: u32,
@@ -167,7 +168,29 @@ pub fn encode(header: &Header, pairs: &[Pair], out: &mut [u8]) -> Result<usize> 
             max: MAX_PACKET_BYTES,
         });
     }
-    let len = payload_len(pairs.len());
+    encode_joined(header, pairs, out)
+}
+
+/// Writes the payload of a whole train of any number of pairs (an [`Assembled`] train, which
+/// no longer fits one packet) to the front of `out` and returns its length; [`decode`] reads
+/// it, so the slicers and the sensor decoders work on joined trains. The result is not a packet
+/// payload when it has more than [`MAX_PAIRS`] pairs.
+///
+/// ```
+/// use sdrk_proto::pulses::{self, Header, Modulation, Pair};
+/// let header = Header { modulation: Modulation::Ook, channel: 0, freq_offset_hz: 0,
+///     level_db10: 0, noise_db10: 0, rate_hz: 250_000 };
+/// let pairs = [Pair { pulse: 5, gap: 9 }; 100];
+/// let mut buf = [0u8; 1024];
+/// let n = pulses::encode_joined(&header, &pairs, &mut buf)?;
+/// assert_eq!(pulses::decode(&buf[..n])?.len(), 100);
+/// # Ok::<(), sdrk_proto::Error>(())
+/// ```
+///
+/// # Errors
+/// [`Error::BufferTooSmall`] when `out` is shorter than the payload.
+pub fn encode_joined(header: &Header, pairs: &[Pair], out: &mut [u8]) -> Result<usize> {
+    let len = HEADER_BYTES.saturating_add(pairs.len().saturating_mul(PAIR_BYTES));
     let got = out.len();
     let out = out
         .get_mut(..len)

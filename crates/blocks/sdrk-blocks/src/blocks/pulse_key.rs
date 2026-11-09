@@ -1,7 +1,8 @@
 //! `pulse_key`: pulse train packets to the on-off keying envelope at the rate of a clock
 //! stream (M46 extension, D1124): the keying of a transmitter. The clock (port a) only paces
 //! the block (its rate and its sample count matter, as with `rds_encode`), the trains of
-//! `sensor_encode` arrive at port b, the output is the envelope for `ook_mod`.
+//! `sensor_encode` arrive at port b, the output is the envelope for `ook_mod` (mode `ook`) or
+//! the soft bits for `fsk_mod` (mode `fsk`, D1146).
 
 use sdrk::{Progress, Rate};
 use sdrk_proto::Packet;
@@ -29,16 +30,60 @@ pub const PULSE_KEY_ON: f32 = 1.0;
 /// resampler behind it rings at a step from 0, D1129).
 pub const PULSE_KEY_OFF: f32 = -1.0;
 
+/// The names of the `mode` choice, in index order.
+const MODE_OPTIONS: &[&str] = &["ook", "fsk"];
+
+/// What the block keys (D1146).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PulseKeyMode {
+    /// On-off keying trains: +1 on a pulse, -1 on a gap and outside a train (for `ook_mod`).
+    #[default]
+    Ook,
+    /// Frequency shift keying trains: +1 on a pulse (the upper frequency), -1 on a gap and 0
+    /// outside a train and in the guard (the soft bits for `fsk_mod`; the square of the output
+    /// is the gate of the burst).
+    Fsk,
+}
+
+impl PulseKeyMode {
+    const fn index(self) -> u16 {
+        match self {
+            Self::Ook => 0,
+            Self::Fsk => 1,
+        }
+    }
+
+    const fn from_index(i: u16) -> Self {
+        match i {
+            1 => Self::Fsk,
+            _ => Self::Ook,
+        }
+    }
+
+    /// The modulation of the trains this mode keys.
+    const fn modulation(self) -> Modulation {
+        match self {
+            Self::Ook => Modulation::Ook,
+            Self::Fsk => Modulation::Fsk,
+        }
+    }
+}
+
 /// Description of the `pulse_key` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "pulse_key",
-    summary: "Keys a carrier: pulse train packets to the on-off envelope (+1 on, -1 off) at the \
-        rate of a clock stream.",
+    summary: "Keys a transmitter: pulse train packets to an on-off envelope or FSK soft bits \
+        at the clock rate.",
     details: "Port a is the clock: any f32 stream at the rate of the output (for a transmitter \
         the audio input of the flow); its values are ignored and one output sample is produced \
         per clock sample. Port b takes the pulse train packets of sensor_encode (a train longer \
-        than 30 pairs is several packets with the continued flag; only on-off keying trains \
-        count, any other packet is ignored and counted in ignored_packets). The output is +1.0 \
+        than 30 pairs is several packets with the continued flag; only the trains of the \
+        modulation of the mode count, any other packet is ignored and counted in \
+        ignored_packets). Mode ook (default) keys on-off trains. Mode fsk keys frequency shift \
+        trains: +1.0 on a pulse (the upper frequency), -1.0 on a gap and 0.0 outside a train \
+        and in the guard, for fsk_mod; the product of the output with itself is 1 in a train and \
+        0 outside, the gate of the burst (mul, ook_mod), so that the transmitter is silent \
+        between the bursts. In mode ook the output is +1.0 \
         while the carrier is on (a pulse), -1.0 while it is off (a gap, between trains and \
         before the first one) with delay 0: the output is bipolar because ook_mod keys at a \
         value above 0 and the resampler in front of a transmitter rings at a step from 0. The \
@@ -71,18 +116,32 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         types: &[PortType::F32],
         description: "The envelope: +1.0 carrier on, -1.0 off, at the clock rate, for ook_mod.",
     }],
-    params: &[ParamDesc {
-        name: "guard_us",
-        unit: Unit::Microseconds,
-        kind: ParamKind::I64 {
-            min: 0,
-            max: 1_000_000,
-            default: Some(20_000),
+    params: &[
+        ParamDesc {
+            name: "guard_us",
+            unit: Unit::Microseconds,
+            kind: ParamKind::I64 {
+                min: 0,
+                max: 1_000_000,
+                default: Some(20_000),
+            },
+            typical: "20000; longer than the repeat gap of the devices (8000)",
+            mutability: Mutability::Build,
+            description: "The carrier stays off this long after every train.",
         },
-        typical: "20000; longer than the repeat gap of the devices (8000)",
-        mutability: Mutability::Build,
-        description: "The carrier stays off this long after every train.",
-    }],
+        ParamDesc {
+            name: "mode",
+            unit: Unit::None,
+            kind: ParamKind::Choice {
+                options: MODE_OPTIONS,
+                default: 0,
+            },
+            typical: "ook; fsk for the 868 MHz sensors (lacrosse_tx29, lacrosse_tx35)",
+            mutability: Mutability::Build,
+            description: "ook keys on-off trains; fsk keys frequency shift trains as soft bits for \
+            fsk_mod (0 outside a train).",
+        },
+    ],
     required: &[],
 };
 
@@ -94,17 +153,23 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// assert_eq!(cfg.guard_us, 20_000);
 /// cfg.set("guard_us", ParamValue::I64(0))?;
 /// assert!(cfg.set("guard_us", ParamValue::I64(-1)).is_err());
+/// assert_eq!(cfg.mode, sdrk_blocks::PulseKeyMode::Ook);
 /// # Ok::<(), sdrk_blocks::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PulseKeyConfig {
     /// The carrier stays off this long after every train, in microseconds.
     pub guard_us: u32,
+    /// What the block keys.
+    pub mode: PulseKeyMode,
 }
 
 impl Default for PulseKeyConfig {
     fn default() -> Self {
-        Self { guard_us: 20_000 }
+        Self {
+            guard_us: 20_000,
+            mode: PulseKeyMode::Ook,
+        }
     }
 }
 
@@ -132,6 +197,12 @@ impl PulseKeyConfig {
                 self.guard_us =
                     u32::try_from(value.as_i64()?).map_err(|_| Error::WrongParamType)?;
             }
+            "mode" => {
+                let ParamValue::Choice(i) = value else {
+                    return Err(Error::WrongParamType);
+                };
+                self.mode = PulseKeyMode::from_index(i);
+            }
             _ => return unknown(),
         }
         Ok(())
@@ -144,6 +215,7 @@ impl PulseKeyConfig {
     pub fn get(&self, name: &str) -> Result<ParamValue> {
         match name {
             "guard_us" => Ok(ParamValue::I64(i64::from(self.guard_us))),
+            "mode" => Ok(ParamValue::Choice(self.mode.index())),
             _ => unknown(),
         }
     }
@@ -181,7 +253,7 @@ struct Play {
 /// use sdrk_blocks::{ArenaStorage, Block, PulseKeyBlock, PulseKeyConfig};
 /// use sdrk_proto::PacketFlags;
 /// use sdrk_proto::pulses::{self, Header, Modulation, Pair};
-/// let cfg = PulseKeyConfig { guard_us: 0 };
+/// let cfg = PulseKeyConfig { guard_us: 0, ..PulseKeyConfig::default() };
 /// let rate = Rate::hz(48_000)?;
 /// let mut mem = vec![0u8; PulseKeyBlock::<ArenaStorage<'_>>::storage_bytes(&cfg)? + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
@@ -318,7 +390,7 @@ impl<S: Storage> PulseKeyBlock<S> {
     fn take(&mut self, packets: &[Packet]) {
         for p in packets {
             let train = match pulses::decode(p.data()) {
-                Ok(t) if t.header().modulation == Modulation::Ook => t,
+                Ok(t) if t.header().modulation == self.config.mode.modulation() => t,
                 _ => {
                     self.ignored += 1;
                     continue;
@@ -390,6 +462,14 @@ impl<S: Storage> PulseKeyBlock<S> {
         }
     }
 
+    /// The level outside a train: off (-1) for on-off keying, 0 for frequency shift keying.
+    fn idle_level(&self) -> f32 {
+        match self.config.mode {
+            PulseKeyMode::Ook => PULSE_KEY_OFF,
+            PulseKeyMode::Fsk => 0.0,
+        }
+    }
+
     /// The clock sample of the cumulative width `t` of the header rate (half up).
     fn edge(&self, t: u64, rate_hz: u32) -> u64 {
         let unit = u128::from(self.den) * u128::from(rate_hz.max(1));
@@ -414,7 +494,7 @@ impl<S: Storage> PulseKeyBlock<S> {
             let room = (out.len() - n) as u64;
             if self.guard_left > 0 {
                 let k = self.guard_left.min(room);
-                fill(out, &mut n, k, PULSE_KEY_OFF);
+                fill(out, &mut n, k, self.idle_level());
                 self.guard_left -= k;
                 continue;
             }
@@ -431,7 +511,7 @@ impl<S: Storage> PulseKeyBlock<S> {
                     continue;
                 }
                 let k = room;
-                fill(out, &mut n, k, PULSE_KEY_OFF);
+                fill(out, &mut n, k, self.idle_level());
                 continue;
             };
             let Some(slot) = self.slots.get(self.head).copied() else {

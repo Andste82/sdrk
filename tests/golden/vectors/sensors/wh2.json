@@ -64,7 +64,7 @@
   "case": "wh2",
   "format_version": 1,
   "kernel": "sensors",
-  "notes": "WH2 messages (PWM 500/1500 us pulses, 1000 us gaps, 48 bits with CRC-8 0x31 reflected, init 0), two copies in a train 8 ms apart, clock error +-8 % and width error +-5 %, 250 kHz",
+  "notes": "WH2 messages (PWM 500/1500 us pulses, 1000 us gaps, 48 bits: type nibble 4, 8 bit id, CRC-8 0x31 MSB first init 0; humidity 0xFF = none in about a fifth), two copies in a train 8 ms apart, clock error +-8 % and width error +-5 %, 250 kHz",
   "params": {
     "decoder": "wh2",
     "max_abs_err": 0.001,

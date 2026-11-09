@@ -392,8 +392,8 @@
         "band_pulse_detect_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 128.23,
-          "ours_instr_per_sample": 128.23,
+          "other_instr_per_sample": 128.2,
+          "ours_instr_per_sample": 128.2,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -5512,8 +5512,8 @@
         "band_pulse_detect_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 128.23,
-          "ours_instr_per_sample": 136.89,
+          "other_instr_per_sample": 128.2,
+          "ours_instr_per_sample": 136.86,
           "ratio": 1.07,
           "snr_db": {
             "other": 999.0,
@@ -7460,8 +7460,8 @@
         "band_pulse_detect_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 138.28,
-          "ours_instr_per_sample": 138.28,
+          "other_instr_per_sample": 138.25,
+          "ours_instr_per_sample": 138.25,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -12916,8 +12916,8 @@
         "band_pulse_detect_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 136.73,
-          "ours_instr_per_sample": 136.73,
+          "other_instr_per_sample": 136.69,
+          "ours_instr_per_sample": 136.69,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

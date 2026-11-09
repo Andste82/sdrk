@@ -25,7 +25,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
-use sdrk::Rate;
+use sdrk::{C32, Rate};
 use sdrk_blocks::{
     Block, Packet, PulseKeyBlock, PulseKeyConfig, SensorEncodeBlock, SensorEncodeConfig,
 };
@@ -395,4 +395,77 @@ fn the_counter_notices_allocations() {
     // Guards the test above against a counter that never counts.
     let (_, n) = count_allocations(|| std::hint::black_box(vec![1u8; 100]));
     assert!(n >= 1);
+}
+
+/// The FSK transmit chain of the 868 MHz sensors (D1146): `pulse_key` in mode `fsk` at a clock of
+/// 400 kHz, `fsk_mod` (5 samples per symbol) and the square of the key, held by `ook_mod`, as the
+/// gate of the burst: `mul` of both.
+fn fsk_flow() -> Value {
+    json!({
+        "sdrk": 1, "name": "sensor_868_tx", "settings": { "precision": "f32", "max_chunk": 512 },
+        "inputs": {
+            "clock": { "type": "f32", "rate_hz": 400_000 },
+            "reading": { "type": "packets" }
+        },
+        "nodes": {
+            "enc": { "kind": "sensor_encode", "params": {} },
+            "key": { "kind": "pulse_key", "params": { "mode": "fsk" } },
+            "fsk": { "kind": "fsk_mod",
+                "params": { "samples_per_symbol": 5, "deviation_hz": 35_000 } },
+            "sq": { "kind": "mul", "params": {} },
+            "hold": { "kind": "ook_mod", "params": { "samples_per_symbol": 5, "level": 1 } },
+            "burst": { "kind": "mul", "params": {} }
+        },
+        "edges": [
+            { "from": "clock", "to": "key" },
+            { "from": "reading", "to": "enc" },
+            { "from": "enc", "to": "key", "port": "b" },
+            { "from": "key", "to": "fsk" },
+            { "from": "key", "to": "sq", "port": "a" },
+            { "from": "key", "to": "sq", "port": "b" },
+            { "from": "sq", "to": "hold" },
+            { "from": "fsk", "to": "burst", "port": "a" },
+            { "from": "hold", "to": "burst", "port": "b" },
+            { "from": "burst", "to": "out" }
+        ],
+        "outputs": { "out": { "type": "stream" } }
+    })
+}
+
+const TX35: &str =
+    r#"{"model":"lacrosse_tx35","id":17,"battery_ok":true,"temperature_C":-3.7,"humidity":81}"#;
+
+#[test]
+fn the_fsk_chain_validates_and_gates_the_burst_exactly() {
+    let report = validate(&fsk_flow());
+    assert!(report.is_ok(), "{}", report.to_json());
+    let mut p = build(&fsk_flow());
+    p.push_packets("reading", &[reading(0, TX35)]).unwrap();
+    let mut buf = vec![C32::default(); 4000];
+    let mut got = Vec::new();
+    while got.len() < 400_000 {
+        let (n, _) = p.pull_samples::<C32>("out", &mut buf, &mut Zeros).unwrap();
+        assert_eq!(n, 4000);
+        got.extend_from_slice(&buf);
+    }
+    // At 2 MS/s: a constant envelope of 1 inside the burst, exactly 0 outside.
+    let mag: Vec<f32> = got
+        .iter()
+        .map(|c| (c.re * c.re + c.im * c.im).sqrt())
+        .collect();
+    let on: Vec<usize> = (0..mag.len()).filter(|&i| mag[i] > 0.5).collect();
+    assert_ne!(on.len(), 0, "no burst");
+    assert!(mag.iter().all(|&m| m < 1e-6 || (m - 1.0).abs() < 1e-3));
+    let (first, last) = (on[0], on[on.len() - 1]);
+    // The burst is one block of consecutive samples; the frame is 40 bits of 105 us (about
+    // 4.2 ms) and a preamble, sent twice or more at 2 MS/s.
+    assert_eq!(on.len(), last - first + 1, "gaps inside the burst");
+    // Both pulse and gap levels of the key are inside it: the frequency takes both signs.
+    let freq = |i: usize| (got[i + 1] * got[i].conj()).arg();
+    let up = (first..last).filter(|&i| freq(i) > 0.05).count();
+    let down = (first..last).filter(|&i| freq(i) < -0.05).count();
+    assert!(up > 1000 && down > 1000, "up {up} down {down}");
+    // 35 kHz at 2 MS/s is 0.11 rad per sample.
+    let hi = (first..last).map(freq).fold(0.0f32, f32::max);
+    assert!((hi - 0.11).abs() < 0.01, "{hi}");
 }

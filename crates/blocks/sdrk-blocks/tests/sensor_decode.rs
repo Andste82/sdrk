@@ -30,13 +30,14 @@ use sdrk_testkit::{ChunkPlan, VecStorage};
 const RATE: u32 = 250_000;
 const SEED_UNKNOWN: u64 = 642;
 const SEED_CHUNKS: u64 = 643;
-const CASES: [&str; 6] = [
+const CASES: [&str; 7] = [
     "wh2",
     "nexus",
     "oregon_v21",
     "wh1080",
     "lacrosse_tx29",
     "bresser_3ch",
+    "lacrosse_tx35",
 ];
 
 fn header(m: Modulation, channel: i16) -> Header {
@@ -576,6 +577,7 @@ fn parameters_are_validated_and_read_only() {
             "wh1080",
             "lacrosse_tx29",
             "bresser_3ch",
+            "lacrosse_tx35",
         ])
         .unwrap(),
         SENSOR_ALL_DECODERS
@@ -588,7 +590,7 @@ fn parameters_are_validated_and_read_only() {
         })
     ));
     assert!(matches!(
-        cfg.set("decoders", ParamValue::I64(1 << 6)),
+        cfg.set("decoders", ParamValue::I64(1 << 7)),
         Err(Error::OutOfRange {
             name: "decoders",
             ..

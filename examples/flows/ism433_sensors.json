@@ -1,0 +1,62 @@
+{
+  "sdrk": 1,
+  "name": "ism433-sensors",
+  "description": "Decode the sensor readings of every short-range weather and temperature sensor of the 433 MHz ISM band at once (wh2, nexus, oregon_v21, wh1080, bresser_3ch): the chain of ism433_pulses followed by sensor_decode, one JSON text packet per reading.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2000000,
+      "description": "RTL-SDR IQ at 2 MS/s centred at 433.92 MHz"
+    }
+  },
+  "nodes": {
+    "chan": {
+      "kind": "channelize",
+      "params": {
+        "channels": 16,
+        "taps_per_branch": 8
+      }
+    },
+    "dec": {
+      "kind": "sensor_decode",
+      "params": {
+        "center_hz": 433920000
+      }
+    },
+    "det": {
+      "kind": "band_pulse_detect",
+      "params": {
+        "center_hz": 433920000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "chan"
+    },
+    {
+      "from": "chan",
+      "to": "det"
+    },
+    {
+      "from": "det",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "readings"
+    }
+  ],
+  "outputs": {
+    "readings": {
+      "type": "packets",
+      "queue": 1024,
+      "description": "One packet per reading: the JSON text of the reading (model, id, values, mic, freq_MHz, rssi_dB, repeats), indexed like the pulse train it came from"
+    }
+  }
+}

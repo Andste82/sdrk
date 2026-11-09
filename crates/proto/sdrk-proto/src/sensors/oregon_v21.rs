@@ -1,8 +1,10 @@
 //! Oregon Scientific v2.1 sensors THN132N / THR238NF (id EC40, temperature) and THGR122NX /
 //! THGN123N (id 1D20, temperature and humidity), 433 MHz, on-off keying.
 //!
-//! Source: "Oregon Scientific RF Protocol Description (Versions 1.0, 2.1, 3.0)", June 2011;
-//! see decision D1108. Manchester coding at 1024 bit/s (half bit 488 us), a 0 is a rising and a
+//! Source: "Oregon Scientific RF Protocol Description (Versions 1.0, 2.1, 3.0)", June 2011
+//! (decision D1108), corrected and completed with protocol facts from the maintainer-provided
+//! fact document about the `rtl_433` decoders (written by a third party, nothing copied; decision
+//! D1139). Manchester coding at 1024 bit/s (half bit 488 us), a 0 is a rising and a
 //! 1 a falling edge in the middle of the bit (IEEE 802.3), and in version 2.1 every data bit is
 //! sent twice: first inverted, then as it is (the decoder keeps the second bit of each pair and
 //! checks that the two differ). The data bits are: a preamble of sixteen 1 bits, the sync nibble
@@ -10,10 +12,13 @@
 //! sent least significant bit first. Payload nibbles: 0 to 3 the sensor id, 4 the channel
 //! (1, 2 or 4 for the channels 1 to 3), 5 and 6 the rolling code (low nibble first, used as the
 //! device id), 7 the flags (bit 0x4: battery low), 8 to 10 the temperature as BCD digits
-//! (tenths first), 11 the sign (non-zero: negative); for the id 1D20 also 12 and 13 the
+//! (tenths first), 11 the sign (bit 3; the other bits are 0); for the id 1D20 also 12 and 13 the
 //! humidity (ones first) and 14 an unknown nibble. The checksum is the sum of the nibbles from
 //! the id up to the checksum, sent as two nibbles, low nibble first; the message has 14 nibbles
-//! for EC40 and 17 for 1D20 including the checksum.
+//! for EC40 and 17 for 1D20 including the checksum. The length of the message in data bits
+//! after the sync nibble is part of the device type: EC40 with 64 bits is the THN132N (the same
+//! id with 76 bits is the THR228N and is not decoded), 1D20 with 76 or 68 bits the THGR122N or
+//! THGR228N.
 
 use super::encoder::{
     self, BATTERY, CHANNEL, Carries, EncodeError, HUMIDITY, SensorEncoder, TrainSink,
@@ -29,6 +34,13 @@ pub struct OregonV21;
 
 /// The most preamble bits that are skipped before the sync nibble.
 const MAX_PREAMBLE: usize = 24;
+/// The data bits after the sync nibble of a message, as `(least, most)` per device: the
+/// message without the post-amble up to the length of the next device type (the half way
+/// point), so that a detector that loses the end of the train still reads the message.
+const EC40_BITS: (usize, usize) = (56, 70);
+const THGR_BITS: (usize, usize) = (68, 79);
+/// The range of the temperature of the THN132N in tenths of a degree (the THGR keeps +-70.0).
+const EC40_MIN_TENTHS: i32 = -500;
 /// The least preamble bits (a detector may lose the first ones).
 const MIN_PREAMBLE: usize = 8;
 
@@ -91,11 +103,20 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
     for i in 0..4 {
         id |= u32::from(nibble(i)?) << (4 * (3 - i));
     }
-    let (n, model, has_humidity) = match id {
-        0xEC40 => (14, "oregon_thn132n", false),
-        0x1D20 => (17, "oregon_thgr122nx", true),
+    let (n, model, has_humidity, bits) = match id {
+        0xEC40 => (14, "oregon_thn132n", false, EC40_BITS),
+        0x1D20 => (17, "oregon_thgr122nx", true, THGR_BITS),
         _ => return Err(DecodeResult::NoMatch),
     };
+    // the data bits after the sync nibble: a pair of raw bits each (a trailing half bit that
+    // the detector loses makes the last pair incomplete, so it is not counted)
+    let have = (row.len() / 2).saturating_sub(base);
+    if have < bits.0 {
+        return Err(DecodeResult::Truncated);
+    }
+    if have > bits.1 {
+        return Err(DecodeResult::NoMatch);
+    }
     let mut nib = [0u8; 17];
     for (i, slot) in nib.iter_mut().enumerate().take(n) {
         *slot = nibble(i)?;
@@ -119,10 +140,13 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
         return Err(DecodeResult::OutOfRange);
     }
     let mag = i32::from(t2) * 100 + i32::from(t1) * 10 + i32::from(t0);
-    if mag > 700 {
+    if mag > 700 || nib[11] & 7 != 0 {
         return Err(DecodeResult::OutOfRange);
     }
-    let tenths = if nib[11] != 0 { -mag } else { mag };
+    let tenths = if nib[11] & 8 != 0 { -mag } else { mag };
+    if id == 0xEC40 && tenths < EC40_MIN_TENTHS {
+        return Err(DecodeResult::OutOfRange);
+    }
     let mut r = Reading::new(
         model,
         u32::from(nib[5]) | (u32::from(nib[6]) << 4),
@@ -243,8 +267,10 @@ impl SensorEncoder for OregonV21 {
     /// The message of the decoder for `oregon_thn132n` (id EC40, 14 nibbles) or
     /// `oregon_thgr122nx` (id 1D20, with humidity, 17 nibbles): the channel 1 to 3 as the nibble
     /// 1, 2 or 4, the rolling code (the reading's `id`, below 256), the battery flag 0x4, the
-    /// temperature from -70.0 to 70.0 as BCD digits and the nibble sum as checksum; the
-    /// unknown nibble of the THGR122NX is sent as 0; its humidity is two BCD digits (0 to 99). Half bits of 488 us, copies 8 ms apart.
+    /// temperature as BCD digits (-50.0 to 70.0 for the THN132N, -70.0 to 70.0 for the
+    /// THGR122NX) and the nibble sum as checksum, then the post-amble of two nibbles (64 and 76
+    /// data bits after the sync nibble); the unknown nibble of the THGR122NX is sent as 0; its
+    /// humidity is two BCD digits (0 to 99). Half bits of 488 us, copies 8 ms apart.
     fn encode(
         &self,
         r: &Reading,
@@ -256,7 +282,7 @@ impl SensorEncoder for OregonV21 {
         Carries(CHANNEL | BATTERY | (if thgr { HUMIDITY } else { 0 })).check(r)?;
         let rolling = encoder::id(r, 256)?;
         let ch = encoder::channel(r, 3)?;
-        let t = encoder::temperature(r, 10.0, -700, 700)?;
+        let t = encoder::temperature(r, 10.0, if thgr { -700 } else { EC40_MIN_TENTHS }, 700)?;
         let mut nib = [0u8; 17];
         let dev: u16 = if thgr { 0x1D20 } else { 0xEC40 };
         let count = if thgr { 17 } else { 14 };

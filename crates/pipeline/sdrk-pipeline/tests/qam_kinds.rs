@@ -93,7 +93,7 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
             "{params}"
         );
     }
-    assert_eq!(registry.descriptions().count(), 68);
+    assert_eq!(registry.descriptions().count(), 71);
 }
 
 #[test]

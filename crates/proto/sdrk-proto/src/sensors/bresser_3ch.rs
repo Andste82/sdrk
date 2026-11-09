@@ -24,8 +24,12 @@
 //! | 4 | the sum of bytes 0 to 3 modulo 256 (reported as `"mic":"checksum"`) |
 //!
 //! The temperature is in tenths of degrees Fahrenheit plus 900: `F = (T - 900) / 10`, so
-//! `C = (T - 1220) / 18`, written with one decimal. A humidity above 100 or a temperature below
-//! -20 or above 160 degrees Fahrenheit (-28.9 to 71.1 C) rejects the frame. A frame with a valid
+//! `C = (T - 1220) / 18`. A step of the sensor is 0.0556 degrees Celsius, so one decimal would
+//! lose information (raw 1626 is 22.556 C): the reading carries **two decimals**, the exact
+//! fraction `(T - 1220) * 100 / 18` rounded to hundredths in integers, half away from zero (the
+//! fractions are multiples of 1/9, so no tie occurs; decision D1123), and is written with two
+//! decimals (`"temperature_C":22.56`). A humidity above 100 or a temperature below -20 or above
+//! 160 degrees Fahrenheit (-28.89 to 71.11 C) rejects the frame. A frame with a valid
 //! sum is a reading (the sum is the integrity check, as for the other checksum decoders); equal
 //! frames of a train are one reading with `repeats` set to their number.
 //!
@@ -41,7 +45,7 @@
 //! use sdrk_proto::sensors::{Bresser3ch, DecodeResult, ReadingSink, SensorDecoder};
 //!
 //! // 250 kHz: 735 us = 184 samples, 500 us = 125, 250 us = 62
-//! let frame = [0xD8u8, 0x66, 0x52, 0x40, 0xD0]; // channel 2, 22.1 C, 64 %
+//! let frame = [0xD8u8, 0x66, 0x52, 0x40, 0xD0]; // channel 2, 22.11 C, 64 %
 //! let mut pairs = vec![Pair { pulse: 184, gap: 184 }; 4];
 //! for b in frame {
 //!     for i in (0..8).rev() {
@@ -65,10 +69,13 @@
 //! assert_eq!(Bresser3ch.decode(&train, &mut sink), DecodeResult::Decoded(1));
 //! let r = sink.get(0).ok_or("no reading")?;
 //! assert_eq!((r.id, r.channel, r.battery_ok), (0xD8, Some(2), Some(true)));
-//! assert_eq!((r.temperature_c, r.humidity, r.repeats), (Some(22.1), Some(64.0), 2));
+//! assert_eq!((r.temperature_c, r.humidity, r.repeats), (Some(22.11), Some(64.0), 2));
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+use super::encoder::{
+    self, BATTERY, CHANNEL, Carries, EncodeError, HUMIDITY, SensorEncoder, TrainSink,
+};
 use super::{DecodeResult, MAX_READINGS, Mic, Reading, ReadingSink, SensorDecoder};
 use crate::pulses::{Modulation, PulseTrain};
 use crate::slicers::Tolerance;
@@ -160,12 +167,30 @@ impl Shapes {
     }
 }
 
+/// The temperature of a raw value in hundredths of a degree Celsius: the exact fraction
+/// `(raw - 1220) * 100 / 18` rounded half away from zero, in integers (the factor 1/18 gives
+/// repeating decimals, so one rule must say how they end; no tie occurs for this device because
+/// the fractions are multiples of 1/9).
+pub(crate) fn hundredths_of_raw(raw: i32) -> i32 {
+    let n = (raw - T_ZERO) * 100;
+    (2 * n + if n < 0 { -18 } else { 18 }) / 36
+}
+
+/// The raw value of a temperature in hundredths of a degree Celsius, the inverse of
+/// [`hundredths_of_raw`] for every hundredth it can produce: `round(h * 18 / 100)`, half away
+/// from zero. Consecutive raw values are 5.56 hundredths apart, so the nearest raw value is
+/// unique and the round trip is exact.
+pub(crate) fn raw_of_hundredths(h: i32) -> i32 {
+    let n = h * 18;
+    T_ZERO + (2 * n + if n < 0 { -100 } else { 100 }) / 200
+}
+
 /// The checked contents of a frame.
 struct Frame {
     id: u8,
     battery_ok: bool,
     channel: u8,
-    tenths: i32,
+    hundredths: i32,
     humidity: u8,
 }
 
@@ -181,9 +206,7 @@ fn parse(bits: u64) -> Result<Frame, DecodeResult> {
         return Err(DecodeResult::NoMatch);
     }
     let raw = (i32::from(b1 & 0x0F) << 8) | i32::from(b2);
-    // tenths of a degree = round((raw - 1220) * 10 / 18), half away from zero (no tie occurs)
-    let n = (raw - T_ZERO) * 5;
-    let tenths = (2 * n + if n < 0 { -9 } else { 9 }) / 18;
+    let hundredths = hundredths_of_raw(raw);
     if !(MIN_RAW..=MAX_RAW).contains(&raw) || b3 > 100 {
         return Err(DecodeResult::OutOfRange);
     }
@@ -191,7 +214,7 @@ fn parse(bits: u64) -> Result<Frame, DecodeResult> {
         id: b0,
         battery_ok: b1 & 0x80 == 0,
         channel,
-        tenths,
+        hundredths,
         humidity: b3,
     })
 }
@@ -270,7 +293,8 @@ impl SensorDecoder for Bresser3ch {
             let mut r = Reading::new("Bresser-3CH", u32::from(f.id), Mic::Checksum, &header);
             r.channel = Some(f.channel);
             r.battery_ok = Some(f.battery_ok);
-            r.temperature_c = Some(f.tenths as f32 / 10.0);
+            r.temperature_c = Some(f.hundredths as f32 / 100.0);
+            r.temp_decimals = 2;
             r.humidity = Some(f32::from(f.humidity));
             r.repeats = *repeats;
             if out.push(r) {
@@ -282,5 +306,88 @@ impl SensorDecoder for Bresser3ch {
         } else {
             res
         }
+    }
+}
+
+/// Preamble pairs the encoder sends before a frame (the maintainer's sensor sent 3 to 5; with 4
+/// the frames start 36 ms apart, as recorded).
+const PREAMBLE_PAIRS: u32 = 4;
+
+impl SensorEncoder for Bresser3ch {
+    fn name(&self) -> &'static str {
+        "bresser_3ch"
+    }
+
+    fn models(&self) -> &'static [&'static str] {
+        &["Bresser-3CH"]
+    }
+
+    fn modulation(&self) -> Modulation {
+        Modulation::Ook
+    }
+
+    fn mic(&self) -> Mic {
+        Mic::Checksum
+    }
+
+    fn temp_decimals(&self) -> u8 {
+        2
+    }
+
+    fn default_repeats(&self) -> u32 {
+        22
+    }
+
+    fn repeat_gap_us(&self) -> u32 {
+        0
+    }
+
+    /// `repeats` frames back to back (the gap of the last bit of a frame is the start of the
+    /// next preamble; the pause after the last frame is the end of the train): four preamble
+    /// pairs of 735 us, then 40 bits, a 1 as 500 us and 250 us, a 0 as 250 us and 500 us. The
+    /// frame is the id (below 256), the byte 1 (battery low bit 7, **the button flag bit 6 sent
+    /// as 0**, the channel 1 to 3, the high four bits of the raw temperature), the low byte, the
+    /// humidity and the sum. The raw temperature is the inverse of the decoder's rule: the
+    /// hundredths of the reading (rounded from the value) times 18 / 100, rounded half away from
+    /// zero, plus 1220; it must be 700 to 2500 (-28.89 to 71.11 degrees). A frame has 44 pairs,
+    /// so at most 27 frames fit a train.
+    fn encode(
+        &self,
+        r: &Reading,
+        repeats: u32,
+        out: &mut TrainSink<'_>,
+    ) -> Result<(), EncodeError> {
+        encoder::model(r, self.models())?;
+        Carries(CHANNEL | BATTERY | HUMIDITY).check(r)?;
+        let id = encoder::id(r, 256)? as u8;
+        let ch = encoder::channel(r, 3)?;
+        let hundredths = encoder::temperature(r, 100.0, -3000, 7200)?;
+        let raw = raw_of_hundredths(hundredths);
+        if !(MIN_RAW..=MAX_RAW).contains(&raw) {
+            return Err(EncodeError::OutOfRange("temperature_C"));
+        }
+        let h = encoder::humidity(r)?;
+        let low = u8::from(r.battery_ok == Some(false));
+        let b1 = (low << 7) | (ch << 4) | (raw >> 8) as u8;
+        let b = [id, b1, raw as u8, h];
+        let sum = b.iter().fold(0u8, |a, &v| a.wrapping_add(v));
+        let frame = [b[0], b[1], b[2], b[3], sum];
+        out.atomic(|o| {
+            o.copies(repeats, 0, |o| {
+                for _ in 0..PREAMBLE_PAIRS {
+                    o.push(735, 735)?;
+                }
+                for v in frame {
+                    for k in (0..8).rev() {
+                        if v >> k & 1 == 1 {
+                            o.push(500, 250)?;
+                        } else {
+                            o.push(250, 500)?;
+                        }
+                    }
+                }
+                Ok(())
+            })
+        })
     }
 }

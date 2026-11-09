@@ -42,8 +42,13 @@ pub struct Reading {
     pub channel: Option<u8>,
     /// Battery state: `Some(true)` for good, `Some(false)` for low.
     pub battery_ok: Option<bool>,
-    /// Temperature in degrees Celsius (written with one decimal).
+    /// Temperature in degrees Celsius, written with [`temp_decimals`](Self::temp_decimals)
+    /// decimals.
     pub temperature_c: Option<f32>,
+    /// The decimals of `temperature_C` in the JSON form: 1 for every device except
+    /// `Bresser-3CH`, whose steps of 0.1 degree Fahrenheit (0.0556 degrees Celsius) need 2
+    /// (decision D1123). It is a function of the model, not part of the content.
+    pub temp_decimals: u8,
     /// Relative humidity in percent (written as an integer).
     pub humidity: Option<f32>,
     /// Average wind speed in km/h (one decimal).
@@ -92,6 +97,7 @@ impl Reading {
             channel: None,
             battery_ok: None,
             temperature_c: None,
+            temp_decimals: 1,
             humidity: None,
             wind_avg_km_h: None,
             wind_max_km_h: None,
@@ -180,8 +186,8 @@ impl Reading {
 
     /// Writes the reading as one JSON object without a trailing newline. The fields come in
     /// a fixed order and only when present: `time`, `model`, `id`, `channel`, `battery_ok`,
-    /// `temperature_C`, `humidity`, `wind_avg_km_h`, `wind_max_km_h`, `wind_dir_deg`,
-    /// `rain_mm`, `pressure_hPa`, `mic`, `freq_MHz` (four decimals), `rssi_dB` (one decimal),
+    /// `temperature_C` (one decimal, two for `Bresser-3CH`), `humidity`, `wind_avg_km_h`,
+    /// `wind_max_km_h`, `wind_dir_deg`, `rain_mm`, `pressure_hPa`, `mic`, `freq_MHz` (four decimals), `rssi_dB` (one decimal),
     /// `repeats`.
     ///
     /// # Errors
@@ -201,7 +207,12 @@ impl Reading {
         if let Some(b) = self.battery_ok {
             write!(w, ",\"battery_ok\":{}", if b { "true" } else { "false" })?;
         }
-        value(w, "temperature_C", self.temperature_c, 1)?;
+        value(
+            w,
+            "temperature_C",
+            self.temperature_c,
+            usize::from(self.temp_decimals),
+        )?;
         value(w, "humidity", self.humidity, 0)?;
         value(w, "wind_avg_km_h", self.wind_avg_km_h, 1)?;
         value(w, "wind_max_km_h", self.wind_max_km_h, 1)?;

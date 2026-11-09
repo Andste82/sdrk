@@ -142,7 +142,8 @@ pub struct Header {
 }
 
 /// One pulse and the gap after it, in samples of the header's rate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
 pub struct Pair {
     /// Width of the pulse.
     pub pulse: u32,

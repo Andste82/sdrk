@@ -3530,6 +3530,47 @@
           },
           {
             "additionalProperties": false,
+            "description": "Keys a carrier: pulse train packets to the on-off envelope (+1 on, -1 off) at the rate of a clock stream.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "pulse_key"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "guard_us": {
+                    "default": 20000,
+                    "description": "The carrier stays off this long after every train. Unit: us. Typical: 20000; longer than the repeat gap of the devices (8000). Build-time.",
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Demodulates 16-QAM or 64-QAM to soft bits: matched filter, symbol timing, equalizer and carrier recovery.",
             "properties": {
               "align": {
@@ -4174,6 +4215,47 @@
                     "maximum": 3600.0,
                     "minimum": 0.0,
                     "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Encodes sensor readings (JSON text packets) into the pulse trains of the sensor devices.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "sensor_encode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "repeats": {
+                    "default": 0,
+                    "description": "Copies of the message in one train; 0 takes the figure of the device. More than fit 1200 pairs reject the reading (too_long). Typical: 0 (the figure of the device); 22 for bresser_3ch, 3 for wh2. Build-time.",
+                    "maximum": 64,
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 },
                 "type": "object"

@@ -99,7 +99,7 @@ fn the_kinds_are_registered_with_their_kernels() {
         assert_eq!(f.kernels(), kernels, "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    assert_eq!(registry.descriptions().count(), 69);
+    assert_eq!(registry.descriptions().count(), 71);
 }
 
 /// `rds_encode` costs 12 per sample at every clock type, keeps the rate, reports no delay and

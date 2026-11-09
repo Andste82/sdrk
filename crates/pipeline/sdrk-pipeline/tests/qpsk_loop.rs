@@ -10,7 +10,7 @@
 //! receiver.
 //!
 //! Coherent QPSK leaves a carrier phase ambiguity of 90 degrees; `frame_decode` with
-//! `polarity` both resolves 180 degrees only. The receiver flow is exactly equivariant to a
+//! `rotations` both resolves 180 degrees only. The receiver flow is exactly equivariant to a
 //! rotation of its input by 90 degrees (the filters are real, the AGC, Gardner and the Costas
 //! detector are symmetric under the swaps and negations), so the test runs it on the channel
 //! output rotated by 0, 90, 180 and 270 degrees: the two rotations that put the lock on 0 or
@@ -295,7 +295,7 @@ fn qpsk_flows_carry_1000_packets_through_noise_and_a_carrier_offset() {
          180, 270 degrees: {summary:?}; missing packets {missing:?}",
         tx.len()
     );
-    // `polarity` both: the rotations by 180 degrees give the same packets.
+    // `rotations` both: the rotations by 180 degrees give the same packets.
     assert_eq!(results[0], results[2]);
     assert_eq!(results[1], results[3]);
     let (good, bad) = if results[0].0.len() >= results[1].0.len() {

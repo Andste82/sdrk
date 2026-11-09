@@ -4,7 +4,7 @@
 //! or the differential product -> soft bits), each equal to its kernels whole and in 20 cut
 //! plans of seed 559; the timing, rates and parameter checks; the extremes (NaN, infinity,
 //! silence, full scale); the loop `psk_mod` -> `psk_demod` without noise is error-free for
-//! BPSK and QPSK, coherent and differential; `frame_decode` with `polarity` both. M40.1: the
+//! BPSK and QPSK, coherent and differential; `frame_decode` with `rotations` both. M40.1: the
 //! `costas` order 8, the 8PSK and pi/4-DQPSK symbol tables, the `variant` combinations, the
 //! timing of 8PSK and OQPSK, the new options equal to their kernel chains whole and in 20 cut
 //! plans of seed 564, the noiseless loop and the extremes for 8PSK, pi/4-DQPSK and OQPSK.
@@ -29,7 +29,7 @@ use common::{check_block, rate, run_block, same_bits};
 use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
-    Block, CostasBlock, CostasConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FramePolarity,
+    Block, CostasBlock, CostasConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
     PSK8_GRAY, Packet, PacketFlags, ParamValue, PskDemodBlock, PskDemodConfig, PskModBlock,
     PskModConfig, PskVariant, SliceBlock, SliceConfig, SliceConstellation,
 };
@@ -1002,10 +1002,10 @@ fn extremes_nan_infinity_silence_and_full_scale() {
     }
 }
 
-// ---- frame_decode polarity ---------------------------------------------------------------
+// ---- frame_decode rotations --------------------------------------------------------------
 
 #[test]
-fn frame_decode_with_both_polarities_reads_inverted_frames() {
+fn frame_decode_with_rotations_both_reads_inverted_frames() {
     let sent = Packet::new(0, PacketFlags::NONE, b"polarity").unwrap();
     let mut bits = vec![0u8; sdrk_proto::frame::frame_bits(8, 4)];
     sdrk_proto::frame::encode(&sent, 4, sdrk_proto::frame::Whitening::None, &mut bits).unwrap();
@@ -1014,9 +1014,9 @@ fn frame_decode_with_both_polarities_reads_inverted_frames() {
         .map(|&b| if b == 1 { 1.0 } else { -1.0 })
         .collect();
     let inverted: Vec<f32> = normal.iter().map(|x| -x).collect();
-    let decode = |polarity, soft: &[f32]| {
+    let decode = |rotations, soft: &[f32]| {
         let cfg = FrameDecodeConfig {
-            polarity,
+            rotations,
             ..FrameDecodeConfig::default()
         };
         let mut dec =
@@ -1027,11 +1027,11 @@ fn frame_decode_with_both_polarities_reads_inverted_frames() {
         out
     };
     // normal: only the sent polarity
-    assert_eq!(decode(FramePolarity::Normal, &normal).len(), 1);
-    assert!(decode(FramePolarity::Normal, &inverted).is_empty());
+    assert_eq!(decode(FrameRotations::Normal, &normal).len(), 1);
+    assert!(decode(FrameRotations::Normal, &inverted).is_empty());
     // both: either polarity, same packet and index
     for soft in [&normal, &inverted] {
-        let got = decode(FramePolarity::Both, soft);
+        let got = decode(FrameRotations::Both, soft);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].data(), b"polarity");
         assert_eq!(got[0].flags, PacketFlags::CRC_OK);
@@ -1040,7 +1040,7 @@ fn frame_decode_with_both_polarities_reads_inverted_frames() {
     // a normal frame after an inverted one: the polarity is found per frame
     let mut two = inverted.clone();
     two.extend_from_slice(&normal);
-    let got = decode(FramePolarity::Both, &two);
+    let got = decode(FrameRotations::Both, &two);
     assert_eq!(got.len(), 2);
     assert_eq!(got[1].index, (normal.len() + 32) as u64);
     assert!(got.iter().all(|p| p.data() == b"polarity"));

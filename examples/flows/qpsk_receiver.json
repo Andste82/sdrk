@@ -24,7 +24,7 @@
       "kind": "frame_decode",
       "params": {
         "max_sync_errors": 2,
-        "polarity": "both"
+        "rotations": "both"
       }
     },
     "demod": {

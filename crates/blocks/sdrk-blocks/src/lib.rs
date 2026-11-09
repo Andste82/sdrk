@@ -82,7 +82,7 @@ pub use blocks::fm_mod::{FmModBlock, FmModConfig};
 pub use blocks::fm_stereo_demod::{FM_STEREO_DEMOD_CHUNK, FmStereoDemodBlock, FmStereoDemodConfig};
 pub use blocks::fm_stereo_mod::{FmStereoModBlock, FmStereoModConfig};
 pub use blocks::fm_stereo_rds_mod::{FmStereoRdsModBlock, FmStereoRdsModConfig};
-pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig, FramePolarity};
+pub use blocks::frame_decode::{FrameDecodeBlock, FrameDecodeConfig, FrameRotations};
 pub use blocks::frame_encode::{FrameEncodeBlock, FrameEncodeConfig, FrameIdle};
 pub use blocks::fsk_demod::{
     FSK_DEMOD_CHUNK, FskDemodBlock, FskDemodConfig, TED_GAIN_2FSK, TED_GAIN_4FSK,
@@ -110,6 +110,8 @@ pub use blocks::ook_mod::{OOK_MOD_CHUNK, OokModBlock, OokModConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
 pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
+pub use blocks::qam_demod::{QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig};
+pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::rds_decode::{RdsDecodeBlock, RdsDecodeConfig};
 pub use blocks::rds_demod::{

@@ -3106,6 +3106,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "frame_decode_four_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 83.85,
+          "ours_instr_per_sample": 83.85,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "frame_encode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -4220,6 +4233,32 @@
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 175.97,
+          "ours_instr_per_sample": 175.97,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 33.62,
+          "ours_instr_per_sample": 33.62,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 143.71,
+            "ours": 143.71
           },
           "status": "info",
           "verdict": "info"
@@ -6263,6 +6302,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "frame_decode_four_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 83.85,
+          "ours_instr_per_sample": 86.76,
+          "ratio": 1.03,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "frame_encode_block": {
           "compared_with": "ours at avx2",
           "goal": true,
@@ -6597,6 +6649,32 @@
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 175.97,
+          "ours_instr_per_sample": 178.73,
+          "ratio": 1.02,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 33.62,
+          "ours_instr_per_sample": 32.06,
+          "ratio": 0.95,
+          "snr_db": {
+            "other": 143.71,
+            "ours": 143.71
           },
           "status": "info",
           "verdict": "info"
@@ -10142,6 +10220,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "frame_decode_four_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 87.06,
+          "ours_instr_per_sample": 87.06,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "frame_encode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -11248,6 +11339,32 @@
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 303.1,
+          "ours_instr_per_sample": 303.1,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 56.57,
+          "ours_instr_per_sample": 56.57,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 143.67,
+            "ours": 143.67
           },
           "status": "info",
           "verdict": "info"
@@ -15505,6 +15622,19 @@
           "status": "info",
           "verdict": "info"
         },
+        "frame_decode_four_block": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "other_instr_per_sample": 86.07,
+          "ours_instr_per_sample": 86.07,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "frame_encode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -16611,6 +16741,32 @@
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 300.74,
+          "ours_instr_per_sample": 300.74,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 56.57,
+          "ours_instr_per_sample": 56.57,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 143.67,
+            "ours": 143.67
           },
           "status": "info",
           "verdict": "info"

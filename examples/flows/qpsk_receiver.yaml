@@ -20,15 +20,16 @@ nodes:
     params:
       reference_db: 0
   # Decoder: max_sync_errors 2 accepts a sync word with up to 2 wrong bits on a noisy link.
-  # polarity both also accepts the inverted sync word and inverts the frame: the carrier loop
+  # rotations both also accepts the inverted sync word and inverts the frame: the carrier loop
   # may lock 180 degrees off. A lock 90 or 270 degrees off swaps and inverts the bits of the
-  # pairs, which polarity both does not resolve; the receiver then decodes nothing until the
-  # loop slips (use differential: true on both sides where that matters).
+  # pairs, which rotations both does not resolve; the receiver then decodes nothing until the
+  # loop slips (rotations four with bits_per_symbol 2 resolves all four, or use differential:
+  # true on both sides).
   dec:
     kind: frame_decode
     params:
       max_sync_errors: 2
-      polarity: both
+      rotations: both
   # Demodulator: root-raised-cosine matched filter (roll-off 0.35, span 10, as the
   # transmitter), Gardner symbol timing (sync_bw 0.01) and the Costas loop of order 4. The
   # carrier loop is wider than the default (carrier_bw 0.04 instead of 0.02) and its frequency

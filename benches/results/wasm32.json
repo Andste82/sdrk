@@ -1555,14 +1555,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 228.05,
+              "other_instr_per_sample": 222.05,
               "other_snr_db": null,
-              "ours_instr_per_sample": 228.05,
+              "ours_instr_per_sample": 222.05,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 228.05,
-          "ours_instr_per_sample": 228.05,
+          "other_instr_per_sample": 222.05,
+          "ours_instr_per_sample": 222.05,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -1580,13 +1580,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 255.33,
               "other_snr_db": null,
-              "ours_instr_per_sample": 228.05,
-              "ratio": 0.89
+              "ours_instr_per_sample": 222.05,
+              "ratio": 0.87
             }
           ],
           "other_instr_per_sample": 255.33,
-          "ours_instr_per_sample": 228.05,
-          "ratio": 0.89,
+          "ours_instr_per_sample": 222.05,
+          "ratio": 0.87,
           "snr_db": {
             "other": 129.23,
             "ours": 999.0
@@ -4232,8 +4232,8 @@
         "rds_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 340.3,
-          "ours_instr_per_sample": 340.3,
+          "other_instr_per_sample": 340.22,
+          "ours_instr_per_sample": 340.22,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

@@ -515,7 +515,7 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `symbol_sync` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `symbol_sync_real` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `costas` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
-| `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 0.76 | 0.74 | 0.70 | 0.69 | 0.85 | 0.89 |
+| `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 0.75 | 0.73 | 0.72 | 0.70 | 0.87 | 0.87 |
 | `rds_demod_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_shape` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 0.99 info |
@@ -728,9 +728,9 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `frame_decode_block` (our code, per input sample) | 23.28 / 23.28 | 23.28 / 23.28 | 22.86 / 22.86 | 23.07 | 22.79 / 22.79 | 20.23 / 20.23 | 53.71 / 53.71 |
 | `symbol_sync` C32 (our fallback) | 69.30 / 69.30 | 65.89 / 65.89 | 60.28 / 60.28 | 69.30 | 56.62 / 56.62 | 46.62 / 46.62 | 138.13 / 138.13 |
 | `symbol_sync_real` f32 (our fallback) | 34.16 / 34.16 | 32.79 / 32.79 | 28.66 / 28.66 | 34.16 | 27.29 / 27.29 | 23.41 / 23.41 | 64.45 / 64.45 |
-| `costas` C32 (our fallback) | 116.03 / 116.03 | 112.03 / 112.03 | 96.03 / 96.03 | 116.03 | 95.03 / 95.03 | 89.03 / 89.03 | 228.05 / 228.05 |
-| `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 116.03 / 151.96 | 112.03 / 151.96 | 96.03 / 137.67 | - | 95.03 / 137.67 | 89.03 / 105.13 | 228.05 / 255.33 |
-| `rds_demod_block` (our code, per input sample) | 138.05 / 138.05 | 137.86 / 137.86 | 46.46 / 46.46 | 48.05 | 41.09 / 41.09 | 78.82 / 78.82 | 340.30 / 340.30 |
+| `costas` C32 (our fallback) | 114.03 / 114.03 | 111.03 / 111.03 | 99.03 / 99.03 | 114.03 | 97.03 / 97.03 | 91.03 / 91.03 | 222.05 / 222.05 |
+| `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 114.03 / 151.96 | 111.03 / 151.96 | 99.03 / 137.67 | - | 97.03 / 137.67 | 91.03 / 105.13 | 222.05 / 255.33 |
+| `rds_demod_block` (our code, per input sample) | 138.04 / 138.04 | 137.86 / 137.85 | 47.12 / 47.12 | 48.07 | 41.24 / 41.24 | 78.47 / 78.47 | 340.22 / 340.22 |
 | `rds_decode_block` (our code, per input sample) | 39.08 / 39.08 | 38.42 / 38.42 | 37.88 / 37.88 | 38.77 | 37.83 / 37.83 | 32.85 / 32.85 | 84.97 / 84.97 |
 | `rds_shape` f32 (our fallback) | 113.16 / 113.16 | 110.16 / 110.16 | 79.16 / 79.16 | 113.16 | 72.16 / 72.16 | 82.13 / 82.13 | 168.41 / 169.41 |
 | `stereo_encode_rds` C32 and f32 to f32 (our fallback) | 70.03 / 70.03 | 60.03 / 60.03 | 24.17 / 24.17 | 70.03 | 8.28 / 8.28 | 49.02 / 49.02 | 53.05 / 53.05 |
@@ -964,7 +964,7 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
-The M40 entries `costas` and `costas_fallback` were counted on all four platforms (`cargo xtask count --platform <p> --kernel costas --kernel costas_fallback --merge`, 2026-11-05) and measured with `cargo measure costas` and `cargo measure costas_fallback` on every level with a core model (D608). The fallback counts 0.69 to 0.89 of the instructions of GNU Radio's `costas_loop_cc` but simulates 1.03 to 1.57 of its cycles (D948, D949: 1.33 / 1.23 at `sse2`, 1.33 / 1.22 at `sse4.2`, 1.06 / 1.57 at `avx2`, 1.22 / 1.54 at `avx512`, 1.42 / 1.03 at `neon`, reference / counter model): both loops are bound by the latency from one symbol to the next, and ours has the longer chain (the table lookup with the integer-to-float conversion of the fraction, the derotation, the detector, the flushed and clamped integrator and the exact `f64` phase step of the contract). GNU Radio's chain runs through the `sincosf` of libm, which the simulation takes as units of their own after the loop body (a call is no edge of the graph); the polynomial of `sincosf` is a chain in itself, so the two add up as on the core, one after the other, and the comparison is fair (D949, open item I133-1). Before D948 the `avx2` row read 1.49 / 3.20: callgrind's line for the PLT stub of `sincosf` counted the call twice, so the loop seemed to run twice as often and `sincosf` was not simulated at all. The cycle ratios against the libraries are not gated. M40.1 (order 8, D645) changed the order dispatch of the fallback (one loop per order 2, 4 and 8); both entries were counted again on all four platforms (2026-11-06) with the same instructions per symbol (116.03 `sse2`, 112.03 `sse4.2`, 96.03 `avx2`, 95.03 `avx512`, 89.03 `neon`, 228.05 `simd128`; GNU Radio 151.96, 151.96, 137.67, 137.67, 105.13, 255.33) and measured on every level with a core model with the same cycles up to 0.01 (`znver2` at `sse2` 99.06, `cortex-a76` at `neon` 77.05). The workload stays QPSK at order 4; order 8 has no entry of its own (GNU Radio's `costas_loop_cc` has another order-8 detector).
+The M40 entries `costas` and `costas_fallback` were counted on all four platforms (`cargo xtask count --platform <p> --kernel costas --kernel costas_fallback --merge`, 2026-11-05) and measured with `cargo measure costas` and `cargo measure costas_fallback` on every level with a core model (D608). Both loops are bound by the latency from one symbol to the next. GNU Radio's chain runs through the `sincosf` of libm, which the simulation takes as units of their own after the loop body (a call is no edge of the graph); the polynomial of `sincosf` is a chain in itself, so the two add up as on the core, one after the other, and the comparison is fair (D949). Until D980 ours had the longer chain and simulated 1.03 to 1.57 of GNU Radio's cycles (D948, D949: 1.33 / 1.23 at `sse2`, 1.33 / 1.22 at `sse4.2`, 1.06 / 1.57 at `avx2`, 1.22 / 1.54 at `avx512`, 1.42 / 1.03 at `neon`, reference / counter model; open item I133-1). D980 shortened the chain with the same bits (the phase step from the bits of the `f32` with one arithmetic shift instead of the `f64` path, the order-4 detector with a turned sign bit instead of a multiplication, the integrator inside its limit after one well-predicted branch, and the rule for a non-finite detector value out of line): 75.14 / 86.69 (0.87) and 63.16 / 80.46 (0.78) at `sse2`, 73.15 / 86.69 (0.84) and 62.15 / 80.46 (0.77) at `sse4.2`, 56.17 / 76.48 (0.73) and 68.16 / 66.29 (1.03) at `avx2`, 55.09 / 68.92 (0.80) and 68.07 / 66.44 (1.02) at `avx512`, 86.13 / 82.40 (1.05) and 54.10 / 75.07 (0.72) at `neon`; instructions per symbol 114.03, 111.03, 99.03, 97.03, 91.03 and 222.05 (`simd128`, which keeps the `f64` phase step: fewer instructions there), 0.70 to 0.87 of GNU Radio's (2026-11-09). Before D948 the `avx2` row read 1.49 / 3.20: callgrind's line for the PLT stub of `sincosf` counted the call twice, so the loop seemed to run twice as often and `sincosf` was not simulated at all. The cycle ratios against the libraries are not gated. M40.1 (order 8, D645) changed the order dispatch of the fallback (one loop per order 2, 4 and 8); both entries were counted again on all four platforms (2026-11-06) with the same instructions per symbol (116.03 `sse2`, 112.03 `sse4.2`, 96.03 `avx2`, 95.03 `avx512`, 89.03 `neon`, 228.05 `simd128`; GNU Radio 151.96, 151.96, 137.67, 137.67, 105.13, 255.33) and measured on every level with a core model with the same cycles up to 0.01 (`znver2` at `sse2` 99.06, `cortex-a76` at `neon` 77.05). The workload stays QPSK at order 4; order 8 has no entry of its own (GNU Radio's `costas_loop_cc` has another order-8 detector).
 
 The M47 entries `morse_encode_block` and `morse_decode_block` (our blocks, per output and per input sample of an 8 kHz envelope; no library has them, so information against our own code, D910) were counted on all four platforms (`cargo xtask count --platform <p> --kernel morse_encode_block --kernel morse_decode_block --merge`, 2026-11-07) and measured with `cargo measure` on every level with a core model. Cycles per sample, whole-loop, reference / counter model: the encoder 6.60 / 7.58 (`sse2`, `sse4.2`), 4.44 / 4.50 (`avx2`), 4.20 / 4.64 (`avx512`) and 8.56 / 9.45 (`neon`, `cortex-a72` / `cortex-a76`); the decoder 16.81 / 20.53 (`sse2`), 16.62 / 20.31 (`sse4.2`), 13.06 / 16.08 (`avx2`), 13.19 / 17.03 (`avx512`) and 22.26 / 28.43 (`neon`). The decoder had 147.92 instructions per sample at `avx2` before the speed round of D909 and has 69.08 now; the cycles above are those of the final code. Both blocks are scalar code with a dependency from one sample to the next (the smoother, the level trackers, the run counter), so the levels differ only by code generation.
 
@@ -1153,8 +1153,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize` | 25.93 | 171.64 | 0.15 | 27.72 | 176.30 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 26.79 | 26.79 | 1.00 | 27.83 | 27.83 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.43 | 180.90 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
-| `costas` | 115.06 | 115.06 | 1.00 | 99.06 | 99.06 | 1.00 | sdrk fallback |
-| `costas_fallback` | 115.06 | 86.69 | 1.33 | 99.06 | 80.46 | 1.23 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas` | 75.14 | 75.14 | 1.00 | 63.16 | 63.16 | 1.00 | sdrk fallback |
+| `costas_fallback` | 75.14 | 86.69 | 0.87 | 63.16 | 80.46 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1184,7 +1184,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 44.51 | 44.52 | 1.00 | 39.74 | 39.75 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 44.03 | 44.03 | 1.00 | 39.34 | 39.34 | 1.00 | sdrk fallback |
 | `rds_shape` | 83.94 | 83.94 | 1.00 | 75.83 | 75.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.53 | 57.25 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_airspy` | 5.31 | 11.28 | 0.47 | 5.53 | 9.37 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
@@ -1373,8 +1373,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize` | 21.95 | 171.63 | 0.13 | 28.21 | 176.29 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 26.51 | 26.51 | 1.00 | 27.84 | 27.84 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.83 | 166.73 | 0.32 | 58.12 | 180.51 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
-| `costas` | 115.06 | 115.06 | 1.00 | 98.55 | 98.55 | 1.00 | sdrk fallback |
-| `costas_fallback` | 115.06 | 86.69 | 1.33 | 98.55 | 80.46 | 1.22 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas` | 73.15 | 73.15 | 1.00 | 62.15 | 62.15 | 1.00 | sdrk fallback |
+| `costas_fallback` | 73.15 | 86.69 | 0.84 | 62.15 | 80.46 | 0.77 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1404,7 +1404,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 44.51 | 44.50 | 1.00 | 39.67 | 39.68 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 44.01 | 44.00 | 1.00 | 39.25 | 39.24 | 1.00 | sdrk fallback |
 | `rds_shape` | 78.95 | 78.95 | 1.00 | 71.83 | 71.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.34 | 55.36 | 0.10 | 5.44 | 50.25 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.90 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
@@ -1594,8 +1594,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize` | 12.08 | 119.62 | 0.10 | 12.75 | 101.71 | 0.13 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 12.09 | 12.09 | 1.00 | 12.87 | 12.87 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 34.38 | 147.96 | 0.23 | 32.18 | 133.26 | 0.24 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
-| `costas` | 81.08 | 81.08 | 1.00 | 104.05 | 104.05 | 1.00 | sdrk fallback |
-| `costas_fallback` | 81.08 | 76.48 | 1.06 | 104.05 | 66.29 | 1.57 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas` | 56.17 | 56.17 | 1.00 | 68.16 | 68.16 | 1.00 | sdrk fallback |
+| `costas_fallback` | 56.17 | 76.48 | 0.73 | 68.16 | 66.29 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1625,7 +1625,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 16.92 | 16.92 | 1.00 | 15.20 | 15.20 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 16.69 | 16.69 | 1.00 | 14.89 | 14.89 | 1.00 | sdrk fallback |
 | `rds_shape` | 50.41 | 50.41 | 1.00 | 78.60 | 78.60 | 1.00 | sdrk fallback |
 | `real_to_complex` | 2.50 | 91.87 | 0.03 | 2.29 | 35.24 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15` | 3.60 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
@@ -1815,8 +1815,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `channelize` | 12.68 | 104.12 | 0.12 | 16.01 | 84.10 | 0.19 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 12.69 | 12.69 | 1.00 | 16.13 | 16.13 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 38.10 | 107.09 | 0.36 | 32.11 | 118.99 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
-| `costas` | 84.05 | 84.05 | 1.00 | 102.05 | 102.05 | 1.00 | sdrk fallback |
-| `costas_fallback` | 84.05 | 68.92 | 1.22 | 102.05 | 66.44 | 1.54 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas` | 55.09 | 55.09 | 1.00 | 68.07 | 68.07 | 1.00 | sdrk fallback |
+| `costas_fallback` | 55.09 | 68.92 | 0.80 | 68.07 | 66.44 | 1.02 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1846,7 +1846,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 481.99 | 481.54 | 1.00 | 51.33 | 51.32 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 481.13 | 481.29 | 1.00 | 51.10 | 51.11 | 1.00 | sdrk fallback |
 | `rds_shape` | 42.06 | 42.06 | 1.00 | 39.42 | 39.42 | 1.00 | sdrk fallback |
 | `real_to_complex` | 1.99 | 53.98 | 0.04 | 1.57 | 23.02 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15` | 4.28 | 220.09 | 0.02 | 5.03 | 25.92 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
@@ -2036,8 +2036,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `channelize` | 30.93 | 302.17 | 0.10 | 22.59 | 240.53 | 0.09 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 30.99 | 30.99 | 1.00 | 22.71 | 22.71 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 98.73 | 222.34 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
-| `costas` | 117.06 | 117.06 | 1.00 | 77.05 | 77.05 | 1.00 | sdrk fallback |
-| `costas_fallback` | 117.06 | 82.40 | 1.42 | 77.05 | 75.07 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas` | 86.13 | 86.13 | 1.00 | 54.10 | 54.10 | 1.00 | sdrk fallback |
+| `costas_fallback` | 86.13 | 82.40 | 1.05 | 54.10 | 75.07 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.11 | 8.17 | 0.99 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2067,7 +2067,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 55.36 | 55.36 | 1.00 | 49.36 | 49.36 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 54.78 | 54.78 | 1.00 | 49.56 | 49.56 | 1.00 | sdrk fallback |
 | `rds_shape` | 53.93 | 53.93 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
 | `real_to_complex` | 10.15 | 86.75 | 0.12 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15` | 10.69 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
@@ -2194,8 +2194,8 @@ Instructions per input sample (`simd128`: wasmtime fuel) and simulated cycles pe
 
 | Entry | `sse2` | `sse4.2` | `avx2` | `avx2-runtime` | `avx512` | `neon` | `simd128` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `rds_demod_block`, instructions | 138.05 | 137.86 | 46.46 | 48.05 | 41.09 | 78.82 | 340.30 |
-| `rds_demod_block`, cycles | 44.52 / 38.82 | 44.50 / 38.75 | 16.82 / 15.22 | - | 477.42 / 53.46 | 55.78 / 49.36 | - |
+| `rds_demod_block`, instructions | 138.04 | 137.86 | 47.12 | 48.07 | 41.24 | 78.47 | 340.22 |
+| `rds_demod_block`, cycles | 44.03 / 39.34 | 44.01 / 39.25 | 16.69 / 14.89 | - | 481.13 / 51.10 | 54.78 / 49.56 | - |
 | `rds_decode_block`, instructions | 39.08 | 38.42 | 37.88 | 38.77 | 37.83 | 32.85 | 84.97 |
 | `rds_decode_block`, cycles | 9.18 / 11.80 | 8.74 / 11.42 | 7.39 / 7.97 | - | 7.31 / 7.96 | 12.14 / 13.67 | - |
 

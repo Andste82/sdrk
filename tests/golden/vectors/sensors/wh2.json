@@ -1,0 +1,92 @@
+{
+  "arrays": {
+    "battery_ok": {
+      "dtype": "i32",
+      "file": "wh2.battery_ok.bin",
+      "len": 20
+    },
+    "channels": {
+      "dtype": "i32",
+      "file": "wh2.channels.bin",
+      "len": 20
+    },
+    "humidity": {
+      "dtype": "f64",
+      "file": "wh2.humidity.bin",
+      "len": 20
+    },
+    "ids": {
+      "dtype": "i32",
+      "file": "wh2.ids.bin",
+      "len": 20
+    },
+    "model_ids": {
+      "dtype": "i32",
+      "file": "wh2.model_ids.bin",
+      "len": 20
+    },
+    "pair_counts": {
+      "dtype": "i32",
+      "file": "wh2.pair_counts.bin",
+      "len": 20
+    },
+    "pairs": {
+      "dtype": "i32",
+      "file": "wh2.pairs.bin",
+      "len": 3840
+    },
+    "rain_mm": {
+      "dtype": "f64",
+      "file": "wh2.rain_mm.bin",
+      "len": 20
+    },
+    "temperature_c": {
+      "dtype": "f64",
+      "file": "wh2.temperature_c.bin",
+      "len": 20
+    },
+    "wind_avg_km_h": {
+      "dtype": "f64",
+      "file": "wh2.wind_avg_km_h.bin",
+      "len": 20
+    },
+    "wind_dir_deg": {
+      "dtype": "f64",
+      "file": "wh2.wind_dir_deg.bin",
+      "len": 20
+    },
+    "wind_max_km_h": {
+      "dtype": "f64",
+      "file": "wh2.wind_max_km_h.bin",
+      "len": 20
+    }
+  },
+  "case": "wh2",
+  "format_version": 1,
+  "kernel": "sensors",
+  "notes": "WH2 messages (PWM 500/1500 us pulses, 1000 us gaps, 48 bits with CRC-8 0x31 reflected, init 0), two copies in a train 8 ms apart, clock error +-8 % and width error +-5 %, 250 kHz",
+  "params": {
+    "decoder": "wh2",
+    "max_abs_err": 0.001,
+    "models": [
+      "wh2"
+    ],
+    "rate_hz": 250000,
+    "readings_per_train": 2,
+    "repeats": 2,
+    "seed": 637,
+    "trains": 20
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 637,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.001,
+    "skip": 0
+  }
+}

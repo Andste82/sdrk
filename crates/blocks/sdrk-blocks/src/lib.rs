@@ -127,6 +127,10 @@ pub use blocks::resample::{
 };
 pub use blocks::rotate::{RotateBlock, RotateConfig};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
+pub use blocks::sensor_decode::{
+    SENSOR_ALL_DECODERS, SENSOR_CROSS_CHANNEL_S, SENSOR_SEEN, SENSOR_TRAIN_PAIRS,
+    SensorDecodeBlock, SensorDecodeConfig,
+};
 pub use blocks::slice::{PSK8_GRAY, SliceBlock, SliceConfig, SliceConstellation, SliceElem};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};

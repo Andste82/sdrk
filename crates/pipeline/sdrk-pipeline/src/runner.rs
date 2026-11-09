@@ -765,6 +765,10 @@ pub(crate) struct NodeRt {
     /// True for a clocked node: port `b` carries packets and lockstep applies to port `a`
     /// only.
     pub(crate) clocked: bool,
+    /// True for a node that reads a packet stream (`sensor_decode`): the packets it writes
+    /// carry the index of the packet it read, which is already in the index domain of the
+    /// upstream node, so `n0_in` is not added to it and the index maps to itself (M46).
+    pub(crate) packets_in: bool,
     pub(crate) dst: Dst,
     /// Output elements per input element (`num`, `den`).
     pub(crate) ratio: (u64, u64),
@@ -915,6 +919,7 @@ fn step_stream(
         }
     }
     let mut meta: Option<FrameMeta> = None;
+    let shift = if n.packets_in { 0 } else { n.n0_in };
     let p = if let Some((data, off)) = direct {
         let ds = at_mut(streams, d)?;
         let input = data
@@ -931,7 +936,7 @@ fn step_stream(
         if p.consumed > avail || ds.end + p.produced > ds.cap() {
             return Err(internal("block reported impossible progress"));
         }
-        ds.buf.shift_packets(ds.end..ds.end + p.produced, n.n0_in);
+        ds.buf.shift_packets(ds.end..ds.end + p.produced, shift);
         ds.end += p.produced;
         ds.total_el += p.produced as u64;
         n.consumed += p.consumed as u64;
@@ -954,7 +959,7 @@ fn step_stream(
         if p.consumed > avail || ds.end + p.produced > ds.cap() {
             return Err(internal("block reported impossible progress"));
         }
-        ds.buf.shift_packets(ds.end..ds.end + p.produced, n.n0_in);
+        ds.buf.shift_packets(ds.end..ds.end + p.produced, shift);
         ds.end += p.produced;
         ds.total_el += p.produced as u64;
         n.consumed += p.consumed as u64;

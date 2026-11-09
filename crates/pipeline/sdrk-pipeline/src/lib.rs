@@ -53,6 +53,8 @@ mod lanes_test;
 mod latency;
 mod model;
 mod node;
+#[cfg(test)]
+mod packets_in_test;
 mod params;
 mod pull;
 mod registry;

@@ -1,0 +1,92 @@
+{
+  "arrays": {
+    "battery_ok": {
+      "dtype": "i32",
+      "file": "nexus.battery_ok.bin",
+      "len": 20
+    },
+    "channels": {
+      "dtype": "i32",
+      "file": "nexus.channels.bin",
+      "len": 20
+    },
+    "humidity": {
+      "dtype": "f64",
+      "file": "nexus.humidity.bin",
+      "len": 20
+    },
+    "ids": {
+      "dtype": "i32",
+      "file": "nexus.ids.bin",
+      "len": 20
+    },
+    "model_ids": {
+      "dtype": "i32",
+      "file": "nexus.model_ids.bin",
+      "len": 20
+    },
+    "pair_counts": {
+      "dtype": "i32",
+      "file": "nexus.pair_counts.bin",
+      "len": 20
+    },
+    "pairs": {
+      "dtype": "i32",
+      "file": "nexus.pairs.bin",
+      "len": 4440
+    },
+    "rain_mm": {
+      "dtype": "f64",
+      "file": "nexus.rain_mm.bin",
+      "len": 20
+    },
+    "temperature_c": {
+      "dtype": "f64",
+      "file": "nexus.temperature_c.bin",
+      "len": 20
+    },
+    "wind_avg_km_h": {
+      "dtype": "f64",
+      "file": "nexus.wind_avg_km_h.bin",
+      "len": 20
+    },
+    "wind_dir_deg": {
+      "dtype": "f64",
+      "file": "nexus.wind_dir_deg.bin",
+      "len": 20
+    },
+    "wind_max_km_h": {
+      "dtype": "f64",
+      "file": "nexus.wind_max_km_h.bin",
+      "len": 20
+    }
+  },
+  "case": "nexus",
+  "format_version": 1,
+  "kernel": "sensors",
+  "notes": "Nexus frames (PPM, 500 us pulses, gaps 1000/2000 us, 4000 us between frames, 36 bits, no check), three equal frames in a train, one reading per train (a device without a check needs two equal frames), clock error +-8 % and width error +-5 %, 250 kHz",
+  "params": {
+    "decoder": "nexus",
+    "max_abs_err": 0.001,
+    "models": [
+      "nexus"
+    ],
+    "rate_hz": 250000,
+    "readings_per_train": 1,
+    "repeats": 3,
+    "seed": 638,
+    "trains": 20
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 638,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.001,
+    "skip": 0
+  }
+}

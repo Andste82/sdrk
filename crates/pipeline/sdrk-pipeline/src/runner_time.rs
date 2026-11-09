@@ -29,6 +29,10 @@ pub(crate) fn map_along(nodes: &[NodeRt], streams: &[Stream], path: &[usize], id
         let Some(n) = nodes.get(*k) else {
             continue;
         };
+        if n.packets_in {
+            // Packet indices stay in the domain of the upstream node.
+            continue;
+        }
         let Dst::Stream(d) = n.dst else {
             // A frame node maps every index to itself.
             continue;
@@ -90,6 +94,9 @@ pub(crate) fn anchor_along(
     let mut time = i128::from(anchor.unix_ns);
     for k in path {
         let node = nodes.get(*k)?;
+        if node.packets_in {
+            continue;
+        }
         let Dst::Stream(dst_stream) = node.dst else {
             continue;
         };

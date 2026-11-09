@@ -4126,6 +4126,66 @@
           },
           {
             "additionalProperties": false,
+            "description": "Decodes the pulse trains of band_pulse_detect into sensor readings as JSON text packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "sensor_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "center_hz": {
+                    "default": 0,
+                    "description": "RF centre of the band in Hz; freq_MHz is this plus the frequency offset of the train. Unit: Hz. Typical: 433920000; 0 writes the offset from the band centre. Build-time.",
+                    "maximum": 4000000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "decoders": {
+                    "default": 31,
+                    "description": "The enabled decoders as a bit mask in the order of sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29. Typical: 31 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29. Build-time.",
+                    "maximum": 31,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "emit_unknown": {
+                    "default": false,
+                    "description": "Write a train that no decoder accepts as a JSON object with model unknown and its pulse and gap widths. Typical: false; true to analyse a new device. Build-time.",
+                    "type": "boolean"
+                  },
+                  "merge_s": {
+                    "default": 2.0,
+                    "description": "A copy of a reading on the same radio channel within this time of the first copy is dropped; 0 keeps every copy on the same channel. Unit: s. Typical: 2; the time a sender needs for its repeats. Build-time.",
+                    "maximum": 3600.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Turns symbols into soft bits: f32 values whose sign is the bit and whose size is the confidence.",
             "properties": {
               "align": {

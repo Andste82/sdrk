@@ -19,9 +19,9 @@ use crate::kinds::{
     InterpolateKind, Kind, MagKind, MakeComplexKind, MorseDecodeKind, MorseEncodeKind, MulKind,
     NcoKind, NoiseBlankKind, OokDemodKind, OokModKind, PreemphLimitKind, PskDemodKind, PskModKind,
     QamDemodKind, QamModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind,
-    RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SliceKind, SpectrumKind,
-    SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, SymbolSyncKind,
-    ToComplexKind,
+    RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SensorDecodeKind, SliceKind,
+    SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind,
+    SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -254,7 +254,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 68);
+/// assert_eq!(registry.descriptions().count(), 69);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -350,6 +350,7 @@ impl Registry {
         register::<ChannelizeKind>(&mut factories);
         register::<ChannelSelectKind>(&mut factories);
         register::<BandPulseDetectKind>(&mut factories);
+        register::<SensorDecodeKind>(&mut factories);
         Self { factories }
     }
 

@@ -35,10 +35,10 @@ use sdrk_blocks::{
     QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig,
     RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock,
     ResampleBlock, ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock,
-    ScaleConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig,
-    ToComplexBlock,
+    ScaleConfig, SensorDecodeBlock, SensorDecodeConfig, SliceBlock, SliceConfig,
+    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -4468,6 +4468,61 @@ impl Kind for BandPulseDetectKind {
             rate,
             cfg.width,
             st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ sensor_decode
+
+pub(crate) struct SensorDecodeKind;
+
+impl Kind for SensorDecodeKind {
+    type Cfg = SensorDecodeConfig;
+
+    const KIND: &'static str = "sensor_decode";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> SensorDecodeConfig {
+        SensorDecodeConfig::default()
+    }
+    fn set(cfg: &mut SensorDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SensorDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch(
+                "sensor_decode needs the pulse trains of band_pulse_detect",
+            ));
+        }
+        let block = SensorDecodeBlock::<VecStorage>::new(cfg, &mut VecStorage)?;
+        Ok(Figures {
+            // The packet stream gets the nominal rate `rate * max_per_input` (4 readings per
+            // train at most, an upper bound: D1116).
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: SensorDecodeBlock::<VecStorage>::storage_bytes(cfg)?,
+            // M46 section 4: 50 per pulse train; the estimate counts every nominal packet (D1116).
+            cost: 50.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &SensorDecodeConfig,
+        _input: PortType,
+        _rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(SensorDecodeBlock::new(
+            cfg, st,
         )?)))
     }
 }

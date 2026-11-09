@@ -1,13 +1,15 @@
-//! `qam_demod`: 16-QAM and 64-QAM demodulator (matched filter, symbol timing, equalizer,
-//! decision-directed carrier recovery, soft bits).
+//! `qam_demod`: 16-QAM and 64-QAM demodulator (matched filter, symbol timing, frequency
+//! acquisition, equalizer, decision-directed carrier recovery, soft bits).
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::kernels::equalize::{EqConstellation, Equalize, EqualizeState};
+use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, Scaling};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
+use sdrk_core::num::flush_denormal;
 
 use super::costas::{DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW, check_f64};
 use super::equalize::{
@@ -54,7 +56,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         (otherwise the rate is unsupported: resample first). A matched root-raised-cosine \
         filter (rolloff, span symbols, normalized so that the pulse of qam_mod gives the \
         points at the symbol centres) is followed by symbol_sync (Gardner, loop bandwidth \
-        sync_bw, default 0.005, damping 0.7071, max_deviation 0.005, ted_gain 1), the adaptive equalizer \
+        sync_bw, default 0.005, damping 0.7071, max_deviation 0.005, ted_gain 1), a frequency \
+        acquisition (the carrier offset from the spectrum of the fourth powers of 512 symbols \
+        from symbol 256 on, range +-0.125 cycles per symbol, repeated on the next 512 symbols \
+        until its peak stands clear of the noise; the offset then goes to the phase tracker of \
+        the equalizer, or to the carrier loop without it), the adaptive equalizer \
         equalize (constellation qam16 or qam64 of the order, equalizer_taps taps, no feedback \
         taps, mu_cma 0.05, mu_dd 0.02, 1000 CMA symbols, then decision-directed with its \
         phase tracker at carrier_bw; equalizer_taps 0 leaves it out), the decision-directed \
@@ -148,7 +154,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 max: MAX_LOOP_BW,
                 default: Some(DEFAULT_CARRIER_BW),
             },
-            typical: "0.005; wider for large frequency offsets or phase noise",
+            typical: "0.005; wider for phase noise",
             mutability: Mutability::Build,
             description: "Loop bandwidth of the carrier loop and of the equalizer's phase \
                 tracker, normalized to the symbol rate.",
@@ -344,6 +350,186 @@ impl QamDemodConfig {
     }
 }
 
+/// Symbols skipped after a start or `reset` before the frequency acquisition collects its
+/// first window (the pull-in of the timing loop).
+pub const QAM_ACQUISITION_SKIP: usize = 256;
+/// Symbols of the fourth-power frequency estimate of `qam_demod`.
+pub const QAM_ACQUISITION_SYMBOLS: usize = 512;
+/// The FFT size of the estimate: the symbols zero-padded to twice their number.
+const ACQUISITION_FFT: usize = 2 * QAM_ACQUISITION_SYMBOLS;
+/// The smallest peak of the periodogram of the fourth powers, relative to their energy
+/// (`|X_k|^2 >= ACQUISITION_MIN_PEAK sum |q_n|^2`), for which the estimate is used. Gaussian
+/// noise reaches it in 2 of 10000 windows; QAM gives 13 to 46 in the tests (D1403).
+const ACQUISITION_MIN_PEAK: f32 = 12.0;
+/// The smoothing factor of the symbol power `p` by which the fourth powers are normalized
+/// (`p = p + ACQUISITION_POWER_ALPHA (|x|^2 - p)`, a time constant of 64 symbols), so that a
+/// level that still changes (an AGC that settles) does not weight the end of the window more.
+const ACQUISITION_POWER_ALPHA: f32 = 1.0 / 64.0;
+
+/// The frequency acquisition of `qam_demod` (I44-3, I44-4, D1403): a feed-forward estimate of
+/// the carrier offset from the fourth powers of the symbols of the timing loop, made during the
+/// blind (CMA) symbols of the equalizer when the signal is there from the start.
+///
+/// Per symbol `x` the smoothed power `p = flush(p + (|x|^2 - p) / 64)` (finite values only,
+/// from 0 at the start). From symbol [`QAM_ACQUISITION_SKIP`] on, windows of
+/// [`QAM_ACQUISITION_SYMBOLS`] symbols of `q = x^4 / (p p)` (0 when not finite or `p` is not above 0;
+/// the normalization keeps a level that still settles, as behind an AGC, from weighting the
+/// end of the window more). For square QAM the mean of `x^4` is `E[s^4] e^(j 2 pi 4 f n)` with
+/// the offset `f` in cycles per symbol (`E[s^4]` = -0.68 and -0.62 at unit power, not 0). The
+/// periodogram of `q` zero-padded to `ACQUISITION_FFT` points (the kernel `fft`) has its
+/// largest bin `k` near `4 f ACQUISITION_FFT`; the parabola through the magnitudes of the bins
+/// `k - 1`, `k`, `k + 1` refines it, and `f = ((k + delta) / ACQUISITION_FFT wrapped into
+/// [-0.5, 0.5)) / 4`, the range `[-0.125, 0.125)` cycles per symbol of the fourth power. The
+/// estimate is used when the peak stands clear of the noise (`|X_k|^2 >= ACQUISITION_MIN_PEAK
+/// sum |q_n|^2`); otherwise the next window follows. After a used estimate nothing more is
+/// computed until `reset`.
+struct Acquisition<S: Storage> {
+    /// The twiddles of the FFT (the plan is made from them for each estimate, so that the block
+    /// stays small).
+    twiddles: S::Buf<C32>,
+    /// The fourth powers, then the spectrum.
+    buf: S::Buf<C32>,
+    /// Symbols seen since the start or the last window without a clear peak (counted from
+    /// [`QAM_ACQUISITION_SKIP`] then), up to the end of the window.
+    seen: u32,
+    /// The estimate, once one was used.
+    estimate: Option<f64>,
+    /// The smoothed symbol power.
+    power: f32,
+}
+
+impl<S: Storage> Acquisition<S> {
+    fn new(storage: &mut S) -> Result<Self> {
+        let mut twiddles = storage.alloc::<C32>(ACQUISITION_FFT / 2)?;
+        FftPlan::new(ACQUISITION_FFT, twiddles.as_mut())?;
+        Ok(Self {
+            twiddles,
+            buf: storage.alloc::<C32>(ACQUISITION_FFT)?,
+            seen: 0,
+            estimate: None,
+            power: 0.0,
+        })
+    }
+
+    fn plan(plan: &mut Plan) -> Result<()> {
+        plan.add::<C32>(ACQUISITION_FFT / 2)?;
+        plan.add::<C32>(ACQUISITION_FFT)?;
+        Ok(())
+    }
+
+    fn reset(&mut self) {
+        self.seen = 0;
+        self.estimate = None;
+        self.power = 0.0;
+    }
+
+    /// Symbols until the window is complete; `None` once an estimate is used.
+    fn remaining(&self) -> Option<usize> {
+        match self.estimate {
+            Some(_) => None,
+            None => Some(QAM_ACQUISITION_SKIP + QAM_ACQUISITION_SYMBOLS - self.seen as usize),
+        }
+    }
+
+    /// Takes the next symbols (at most [`Acquisition::remaining`]).
+    fn collect(&mut self, x: &[C32]) {
+        if self.estimate.is_some() {
+            return;
+        }
+        let buf = self.buf.as_mut();
+        for &v in x {
+            let p = v.re * v.re + v.im * v.im;
+            if p.is_finite() {
+                self.power =
+                    flush_denormal(self.power + ACQUISITION_POWER_ALPHA * (p - self.power));
+            }
+            let n = self.seen as usize;
+            if let Some(slot) = n
+                .checked_sub(QAM_ACQUISITION_SKIP)
+                .and_then(|i| buf.get_mut(i))
+            {
+                *slot = normalized_fourth_power(v, self.power);
+            }
+            self.seen += 1;
+        }
+    }
+
+    /// The estimate in cycles per symbol when a window is complete and its peak is clear (then
+    /// the acquisition ends); a window without a clear peak starts the next one.
+    fn take(&mut self) -> Result<Option<f64>> {
+        if self.remaining() != Some(0) {
+            return Ok(None);
+        }
+        let f = self.estimate_now()?;
+        match f {
+            Some(_) => self.estimate = f,
+            None => self.seen = QAM_ACQUISITION_SKIP as u32,
+        }
+        Ok(f)
+    }
+
+    fn estimate_now(&mut self) -> Result<Option<f64>> {
+        let buf = self.buf.as_mut();
+        let (fourth, pad) = buf.split_at_mut(QAM_ACQUISITION_SYMBOLS);
+        let energy: f32 = fourth.iter().map(|v| v.re * v.re + v.im * v.im).sum();
+        pad.fill(C32::new(0.0, 0.0));
+        let plan = FftPlan::from_twiddles(ACQUISITION_FFT, self.twiddles.as_ref())?;
+        <Sdrk as Fft<C32>>::fft(&Sdrk, &plan, buf, Direction::Forward, Scaling::Default)?;
+        let power = |v: &C32| v.re * v.re + v.im * v.im;
+        let mut bin = 0usize;
+        let mut peak = -1.0f32;
+        for (i, v) in buf.iter().enumerate() {
+            let p = power(v);
+            if p > peak {
+                peak = p;
+                bin = i;
+            }
+        }
+        if !(energy.is_finite() && peak.is_finite() && energy > 0.0)
+            || peak < ACQUISITION_MIN_PEAK * energy
+        {
+            return Ok(None);
+        }
+        let size = ACQUISITION_FFT;
+        let mag = |i: usize| {
+            buf.get(i % size)
+                .map_or(0.0, |v| libm::sqrt(f64::from(power(v))))
+        };
+        let (below, top, above) = (mag(bin + size - 1), mag(bin), mag(bin + 1));
+        let den = below - 2.0 * top + above;
+        let delta = if den < 0.0 {
+            0.5 * (below - above) / den
+        } else {
+            0.0
+        };
+        let mut cycles = (bin as f64 + delta) / size as f64;
+        if cycles >= 0.5 {
+            cycles -= 1.0;
+        }
+        Ok(Some(cycles / 4.0))
+    }
+
+    /// The estimate, if one was made and used.
+    fn frequency(&self) -> Option<f64> {
+        self.estimate
+    }
+}
+
+/// `x^4 / (p p)` in `f32`: `a = x^2 = (x.re x.re - x.im x.im, 2 x.re x.im)`,
+/// `q = a^2 = (a.re a.re - a.im a.im, 2 a.re a.im)`, each part divided by `p p`; 0 when `p` is
+/// not above 0 or the result is not finite.
+#[inline]
+fn normalized_fourth_power(x: C32, p: f32) -> C32 {
+    let a = C32::new(x.re * x.re - x.im * x.im, 2.0 * x.re * x.im);
+    let pp = p * p;
+    let q = C32::new((a.re * a.re - a.im * a.im) / pp, (2.0 * a.re * a.im) / pp);
+    if p > 0.0 && q.re.is_finite() && q.im.is_finite() {
+        q
+    } else {
+        C32::new(0.0, 0.0)
+    }
+}
+
 /// The state of the equalizer of `qam_demod` on the storage `S`.
 type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C32>>;
 
@@ -355,12 +541,19 @@ type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C3
 /// the kernel `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), the kernel
 /// `equalize` (when `equalizer_taps` is above 0), the kernel `costas` with the constellation
 /// `qam16` or `qam64`, and the soft bits of `slice` `qam16` or `qam64` (scale 1), the same
-/// functions as the blocks. Soft bits that do not fit into the output wait in a buffer and are
+/// functions as the blocks. Until it has found the carrier offset, the frequency acquisition
+/// (I44-3, I44-4) collects the normalized fourth powers of the symbols of the timing loop in
+/// windows of [`QAM_ACQUISITION_SYMBOLS`] from symbol [`QAM_ACQUISITION_SKIP`] on and estimates the
+/// offset from their spectrum (the kernel `fft`); the equalizer and the carrier loop run in two
+/// calls split after the symbol that completes a window, and a clear estimate goes to the
+/// equalizer's phase tracker (the carrier loop's frequency to 0) or, without the equalizer, to
+/// the carrier loop. Soft bits that do not fit into the output wait in a buffer and are
 /// written first by the next call (which then consumes no input). Timing: variable ratio
 /// `symbol_rate bits / fs`, delay `(span + equalizer_taps - 1) n / 2 + 1` input samples.
 /// Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32` (filter
-/// output, symbols, waiting soft bits as `f32`) and for `equalizer_taps` `t > 0` the `t`
-/// weights and the `t` history values of the equalizer.
+/// output, symbols, waiting soft bits as `f32`), the 1024 `C32` of the acquisition's FFT and
+/// its 512 twiddles, and for `equalizer_taps` `t > 0` the `t` weights and the `t` history
+/// values of the equalizer.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -401,6 +594,8 @@ pub struct QamDemodBlock<S: Storage> {
     len: u32,
     /// The equalizer before the carrier loop; `None` for `equalizer_taps` 0.
     eq: Option<EqState<S>>,
+    /// The frequency acquisition.
+    acq: Acquisition<S>,
 }
 
 impl<S: Storage> core::fmt::Debug for QamDemodBlock<S> {
@@ -418,6 +613,10 @@ impl<S: Storage> QamDemodBlock<S> {
     ///
     /// # Errors
     /// As [`QamDemodConfig::validate`]; `Storage` when the storage is too small.
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporary of every `?` separately; the real frame is small"
+    )]
     pub fn new(config: &QamDemodConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         let n = config.derive(rate_in)?;
         let qam = config.qam();
@@ -435,6 +634,7 @@ impl<S: Storage> QamDemodBlock<S> {
             Some(e) => Some(e.state(storage)?),
             None => None,
         };
+        let acq = Acquisition::new(storage)?;
         let block = SymbolSyncBlock::<C32, S>::new(&config.sync(), rate_in, storage)?;
         let ratio = block.timing().ratio.mul(Ratio::new(bps as u64, 1)?)?;
         let costas = CostasState::new(
@@ -459,6 +659,7 @@ impl<S: Storage> QamDemodBlock<S> {
             at: 0,
             len: 0,
             eq,
+            acq,
         })
     }
 
@@ -477,6 +678,7 @@ impl<S: Storage> QamDemodBlock<S> {
         if let Some(e) = config.equalizer() {
             e.plan(&mut plan)?;
         }
+        Acquisition::<S>::plan(&mut plan)?;
         Ok(plan.bytes())
     }
 
@@ -506,9 +708,17 @@ impl<S: Storage> QamDemodBlock<S> {
         self.costas.locked()
     }
 
-    /// The carrier loop's frequency estimate in cycles per symbol.
+    /// The estimated carrier offset in cycles per symbol: the frequency of the carrier loop plus
+    /// that of the equalizer's phase tracker (which holds the acquired frequency).
     pub fn frequency(&self) -> f64 {
-        self.costas.frequency()
+        self.costas.frequency() + self.eq.as_ref().map_or(0.0, |e| f64::from(e.frequency()))
+    }
+
+    /// The carrier offset in cycles per symbol found by the frequency acquisition (the
+    /// fourth-power estimate over windows of 512 symbols from symbol 256 after a start or
+    /// `reset`, the first whose spectral peak stands clear of the noise); `None` before.
+    pub fn acquired_frequency(&self) -> Option<f64> {
+        self.acq.frequency()
     }
 
     /// The state of the equalizer (`None` for `equalizer_taps` 0).
@@ -550,13 +760,40 @@ impl<S: Storage> QamDemodBlock<S> {
             )));
         }
         let ns = p.produced;
-        // `b` -> `a` (the equalizer, or a copy without it) -> `b` (the carrier loop).
-        match self.eq.as_mut() {
-            Some(eq) => <Sdrk as Equalize>::equalize(&Sdrk, eq, head(b, ns)?, head_mut(a, ns)?)?,
-            None => head_mut(a, ns)?.copy_from_slice(head(b, ns)?),
+        // `b` -> `a` (the equalizer, or a copy without it) -> `b` (the carrier loop), in runs
+        // that end where the frequency acquisition completes its window.
+        let mut at = 0;
+        while at < ns {
+            let end = self.acq.remaining().map_or(ns, |r| ns.min(at + r));
+            let src = head(tail(b, at)?, end - at)?;
+            self.acq.collect(src);
+            let dst = head_mut(tail_mut(a, at)?, end - at)?;
+            match self.eq.as_mut() {
+                Some(eq) => <Sdrk as Equalize>::equalize(&Sdrk, eq, src, dst)?,
+                None => dst.copy_from_slice(src),
+            }
+            let out = head_mut(tail_mut(b, at)?, end - at)?;
+            <Sdrk as Costas>::costas(&Sdrk, &mut self.costas, dst, out)?;
+            if let Some(f) = self.acq.take()? {
+                apply::<S>(&mut self.eq, &mut self.costas, f);
+            }
+            at = end;
         }
-        <Sdrk as Costas>::costas(&Sdrk, &mut self.costas, head(a, ns)?, head_mut(b, ns)?)?;
         Ok(ns)
+    }
+}
+
+/// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer its
+/// phase tracker takes `f` and the carrier loop starts again from frequency 0 (it sees the
+/// equalizer output turned back by the tracker); without it the carrier loop takes `f` (within
+/// its `max_offset`).
+fn apply<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState, f: f64) {
+    match eq.as_mut() {
+        Some(eq) => {
+            eq.set_frequency(f as f32);
+            costas.set_frequency(0.0);
+        }
+        None => costas.set_frequency(f),
     }
 }
 
@@ -629,6 +866,7 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         if let Some(eq) = self.eq.as_mut() {
             eq.reset();
         }
+        self.acq.reset();
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {

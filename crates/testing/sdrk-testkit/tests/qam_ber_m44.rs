@@ -12,6 +12,10 @@
 //!   symbol and a clock drift of 20 ppm at Eb/N0 14 dB: the receiver acquires within 5000
 //!   symbols (the carrier loop reports lock at symbol 5000, and from there the BER over 10^6
 //!   bits is within 1 dB of the formula of test 3 without slips).
+//! - **Test 6 for 64-QAM and large offsets** (I44-3, D1403; seeds 770 to 774): 64-QAM with 0.001
+//!   cycles per symbol and 20 ppm at Eb/N0 18 dB within 1.5 dB, and both orders with 0.04 and
+//!   -0.1 cycles per symbol and 20 ppm within the windows of tests 6 and 4; the frequency
+//!   acquisition of `qam_demod` finds every offset within 1e-4 cycles per symbol.
 //!
 //! "Within x dB" (as D818 of M43): the measured BER is at most the formula at `Eb/N0 - x dB`
 //! over the counted bits, with no slip of the meter; there is no lower edge (the formula at
@@ -129,8 +133,8 @@ enum Channel {
     Awgn,
     /// `Multipath::mild(4.0)` (test 5).
     Mild,
-    /// The carrier offset and the clock drift of test 6.
-    OffsetDrift,
+    /// A carrier offset in cycles per symbol and the clock drift of test 6.
+    OffsetDrift(f64),
 }
 
 /// The stages of a channel, applied in order.
@@ -139,8 +143,8 @@ fn stages(channel: Channel) -> Vec<Box<dyn Impairment>> {
     match channel {
         Channel::Awgn => Vec::new(),
         Channel::Mild => vec![Box::new(Multipath::mild(SPS as f64).unwrap())],
-        Channel::OffsetDrift => vec![
-            Box::new(FrequencyOffset::new(OFFSET * SYMBOL_RATE as f64, fs).unwrap()),
+        Channel::OffsetDrift(offset) => vec![
+            Box::new(FrequencyOffset::new(offset * SYMBOL_RATE as f64, fs).unwrap()),
             Box::new(ClockDrift::new(DRIFT_PPM).unwrap()),
         ],
     }
@@ -216,6 +220,8 @@ struct Outcome {
     lag: usize,
     /// Whether the carrier loop reported lock when the first counted symbol came out.
     locked_at_start: bool,
+    /// The carrier offset the frequency acquisition of the receiver found, if any.
+    acquired: Option<f64>,
 }
 
 /// Symbols per window of the slip count.
@@ -354,6 +360,7 @@ impl Receiver {
             rotation,
             lag,
             locked_at_start: self.locked_at_start.unwrap_or(false),
+            acquired: self.demod.acquired_frequency(),
         }
     }
 }
@@ -370,7 +377,9 @@ fn ber_run(
 ) -> Vec<Outcome> {
     let b = bps(order);
     let power = received_power(order, channel, seed);
-    let nbits = (skip + ALIGN_SYMBOLS + MAX_LAG + 400) * b + BER_BITS as usize + 20_000;
+    // Two chunks of the transmitter more than needed (it sends whole chunks).
+    let nbits =
+        (skip + ALIGN_SYMBOLS + MAX_LAG + 400) * b + BER_BITS as usize + 2 * (CHUNK / SPS) * b;
     let bits = random_soft(nbits, seed);
     let sent = symbols(&bits, b);
     let rate = Rate::hz(SYMBOL_RATE * b as u64).unwrap();
@@ -402,7 +411,7 @@ fn ber_run(
             eprintln!(
                 "{order}-QAM {channel:?} Eb/N0 {ebn0} dB (received power {power:.5}), \
                  equalizer_taps {}: {} errors in {} bits, BER {:.4e}, rotation {}, lag {}, slips \
-                 {}, locked at the first counted symbol {}; theory {:.4e}",
+                 {}, locked at the first counted symbol {}, acquired offset {:?}; theory {:.4e}",
                 o.taps,
                 o.errors,
                 o.bits,
@@ -411,6 +420,7 @@ fn ber_run(
                 o.lag,
                 o.slips,
                 o.locked_at_start,
+                o.acquired,
                 qam_theory(order, ebn0)
             );
             o
@@ -496,11 +506,77 @@ fn qam16_mild_multipath() {
 fn qam16_offset_and_drift_acquire_within_5000_symbols() {
     let r = ber_run(
         16,
-        Channel::OffsetDrift,
+        Channel::OffsetDrift(OFFSET),
         605,
         &[(11, IMPAIRED_EBN0)],
         ACQUISITION_SYMBOLS,
     );
     assert!(r[0].locked_at_start, "{:?}", r[0]);
     assert_within("16-QAM offset and drift", 16, &r[0], IMPAIRED_EBN0, 1.0);
+    assert_acquired(&r[0], OFFSET);
+}
+
+/// The largest error of the offset found by the frequency acquisition of `qam_demod` in these
+/// tests (measured: at most 5.6e-5 cycles per symbol, D1406).
+const ACQUIRED_TOLERANCE: f64 = 1e-4;
+
+/// Asserts that the frequency acquisition found `offset` within [`ACQUIRED_TOLERANCE`].
+fn assert_acquired(o: &Outcome, offset: f64) {
+    let a = o.acquired.unwrap_or(f64::NAN);
+    assert!(
+        (a - offset).abs() <= ACQUIRED_TOLERANCE,
+        "acquired {a} for {offset}: {o:?}"
+    );
+}
+
+/// The Eb/N0 of the 64-QAM acquisition tests (the lower point of test 4).
+const QAM64_IMPAIRED_EBN0: f64 = 18.0;
+
+/// Test 6 for 64-QAM (I44-3, seed 770): 0.001 cycles per symbol and 20 ppm at Eb/N0 18 dB
+/// acquire within 5000 symbols: lock at symbol 5000, and the BER from there within 1.5 dB of
+/// the formula (the window of test 4) without slips.
+#[test]
+fn qam64_offset_and_drift_acquire_within_5000_symbols() {
+    let r = ber_run(
+        64,
+        Channel::OffsetDrift(OFFSET),
+        770,
+        &[(11, QAM64_IMPAIRED_EBN0)],
+        ACQUISITION_SYMBOLS,
+    );
+    assert!(r[0].locked_at_start, "{:?}", r[0]);
+    assert_within(
+        "64-QAM offset and drift",
+        64,
+        &r[0],
+        QAM64_IMPAIRED_EBN0,
+        1.5,
+    );
+    assert_acquired(&r[0], OFFSET);
+}
+
+/// Large offsets (I44-3, I44-4; seeds 771 to 774): 16-QAM at Eb/N0 14 dB and 64-QAM at 18 dB
+/// with 0.04 cycles per symbol (the 1 kHz of test 7) and -0.1 (near the edge of the range of
+/// +-0.125 of the fourth power) and 20 ppm drift acquire within 5000 symbols with the block
+/// defaults (`carrier_bw` 0.005): lock at symbol 5000 and the windows of tests 6 and 4.
+#[test]
+fn large_offsets_acquire_within_5000_symbols() {
+    for (order, offset, seed, ebn0, window) in [
+        (16u32, 0.04, 771u64, IMPAIRED_EBN0, 1.0),
+        (16, -0.1, 772, IMPAIRED_EBN0, 1.0),
+        (64, 0.04, 773, QAM64_IMPAIRED_EBN0, 1.5),
+        (64, -0.1, 774, QAM64_IMPAIRED_EBN0, 1.5),
+    ] {
+        let r = ber_run(
+            order,
+            Channel::OffsetDrift(offset),
+            seed,
+            &[(11, ebn0)],
+            ACQUISITION_SYMBOLS,
+        );
+        let name = format!("{order}-QAM offset {offset}");
+        assert!(r[0].locked_at_start, "{name}: {:?}", r[0]);
+        assert_within(&name, order, &r[0], ebn0, window);
+        assert_acquired(&r[0], offset);
+    }
 }

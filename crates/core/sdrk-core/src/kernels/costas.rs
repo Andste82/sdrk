@@ -267,6 +267,30 @@ impl CostasState {
         self.phase = phase;
     }
 
+    /// Sets the frequency integrator in cycles per symbol (a frequency estimate from outside, as
+    /// the acquisition of `qam_demod`): the value as `f32`, flushed when subnormal and clamped to
+    /// `[-max_offset, max_offset]`; NaN gives 0. The phase and the lock detector stay.
+    ///
+    /// ```
+    /// use sdrk_core::kernels::costas::{CostasConstellation, CostasState};
+    /// let mut st = CostasState::new(CostasConstellation::Qam16, 0.005, 0.7071, 0.05)?;
+    /// st.set_frequency(0.01);
+    /// assert_eq!(st.frequency(), f64::from(0.01f32));
+    /// st.set_frequency(-0.2);
+    /// assert_eq!(st.frequency(), f64::from(-0.05f32));
+    /// st.set_frequency(f64::NAN);
+    /// assert_eq!(st.frequency(), 0.0);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_frequency(&mut self, freq: f64) {
+        let f = flush_denormal(freq as f32);
+        self.freq = if f.is_nan() {
+            0.0
+        } else {
+            f.clamp(-self.max, self.max)
+        };
+    }
+
     /// The constellation of the detector and the lock metric.
     pub fn constellation(&self) -> CostasConstellation {
         self.constellation

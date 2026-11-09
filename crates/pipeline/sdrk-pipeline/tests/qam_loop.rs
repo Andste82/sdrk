@@ -50,8 +50,11 @@ use common::{build, flow};
 const SEED: u64 = 606;
 /// Packets counted.
 const PACKETS: usize = 1000;
-/// Packets that must arrive with `CRC_OK` and the payload unchanged (M44 test 7).
-const REQUIRED: usize = 990;
+/// Packets that must arrive with `CRC_OK` and the payload unchanged: M44 test 7 asks for 990;
+/// the test guards 995, since the frequency acquisition of `qam_demod` lets the flow run the
+/// narrow default `carrier_bw` (measured 999 to 1000 on the seeds 606 and 770 to 773 at every
+/// rotation, I44-4).
+const REQUIRED: usize = 995;
 /// Bytes of a filler packet (the counted packets have 0 to 63 bytes).
 const FILLER_BYTES: usize = 64;
 /// Sample rate of the transmitter output and of the receiver input in Hz.
@@ -60,8 +63,8 @@ const FS: f64 = 1_000_000.0;
 const SPS: usize = 40;
 /// Bits per 16-QAM symbol.
 const BITS_PER_SYMBOL: usize = 4;
-/// Carrier offset of the channel in Hz (0.04 cycles per symbol; the receiver flow pulls it in
-/// with `carrier_bw` 0.1, D1219).
+/// Carrier offset of the channel in Hz (0.04 cycles per symbol; the frequency acquisition of
+/// `qam_demod` finds it, and the loops run at the default `carrier_bw` 0.005).
 const OFFSET_HZ: f64 = 1000.0;
 /// Eb/N0 of the channel in dB.
 const EBN0_DB: f64 = 16.0;

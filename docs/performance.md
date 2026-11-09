@@ -769,7 +769,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
 | `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
-| `qam_demod_block` (our code, per input sample) | 304.24 / 304.24 | 301.88 / 301.88 | 177.18 / 177.18 | 179.88 | 161.44 / 161.44 | 192.32 / 192.32 | 571.70 / 571.70 |
+| `qam_demod_block` (our code, per input sample) | 303.15 / 303.15 | 300.79 / 300.79 | 175.70 / 175.70 | 178.81 | 160.56 / 160.56 | 191.31 / 191.31 | 569.18 / 569.18 |
 | `qam_mod_block` (our code, per output sample) | 56.57 / 56.57 | 56.57 / 56.57 | 33.62 / 33.62 | 32.06 | 27.23 / 27.23 | 37.44 / 37.44 | 108.55 / 108.55 |
 | `slice_qam16_block` (our code, per input symbol) | 8.01 / 8.01 | 11.51 / 11.51 | 2.95 / 2.95 | 8.01 | 1.95 / 1.95 | 4.51 / 4.51 | 18.02 / 18.02 |
 | `slice_qam64_block` (our code, per input symbol) | 16.01 / 16.01 | 15.51 / 15.51 | 7.76 / 7.76 | 16.01 | 4.76 / 4.76 | 6.51 / 6.51 | 51.02 / 51.02 |
@@ -1223,7 +1223,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 116.95 | 116.95 | 1.00 | 106.84 | 106.84 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 116.74 | 116.74 | 1.00 | 106.71 | 106.71 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 16.36 | 16.36 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 44.03 | 44.03 | 1.00 | 39.34 | 39.33 | 1.00 | sdrk fallback |
@@ -1452,7 +1452,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 117.18 | 117.18 | 1.00 | 106.04 | 106.04 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 117.00 | 117.00 | 1.00 | 105.92 | 105.92 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 16.36 | 16.36 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 44.01 | 44.00 | 1.00 | 39.25 | 39.24 | 1.00 | sdrk fallback |
@@ -1682,7 +1682,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 67.94 | 67.94 | 1.00 | 74.05 | 74.05 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 67.53 | 67.53 | 1.00 | 73.83 | 73.83 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 7.99 | 7.99 | 1.00 | 7.38 | 7.38 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 16.69 | 16.69 | 1.00 | 14.89 | 14.89 | 1.00 | sdrk fallback |
@@ -1912,7 +1912,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 66.71 | 66.71 | 1.00 | 71.76 | 71.76 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 66.95 | 66.95 | 1.00 | 71.77 | 71.77 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 6.63 | 6.63 | 1.00 | 6.10 | 6.10 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 480.81 | 481.29 | 1.00 | 51.09 | 51.11 | 1.00 | sdrk fallback |
@@ -2142,7 +2142,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 136.37 | 136.37 | 1.00 | 100.98 | 100.98 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 136.40 | 136.40 | 1.00 | 100.05 | 100.05 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 17.40 | 17.40 | 1.00 | 16.67 | 16.67 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 54.78 | 54.78 | 1.00 | 49.56 | 49.56 | 1.00 | sdrk fallback |
@@ -2440,7 +2440,7 @@ Simulated cycles per sample, reference model / counter-model, mode `whole-loop` 
 | Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
 | --- | --- | --- | --- | --- | --- |
 | `qam_mod_block` (per output sample) | 14.04 / 16.36 | 14.04 / 16.36 | 7.99 / 7.38 | 6.63 / 6.10 | 17.40 / 16.67 |
-| `qam_demod_block` (per input sample) | 116.95 / 106.84 | 117.18 / 106.04 | 67.94 / 74.05 | 66.71 / 71.76 | 136.37 / 100.98 |
+| `qam_demod_block` (per input sample) | 116.74 / 106.71 | 117.00 / 105.92 | 67.53 / 73.83 | 66.95 / 71.77 | 136.40 / 100.05 |
 | `frame_decode_four_block` (per soft bit) | 34.77 / 33.53 | 34.82 / 33.27 | 23.43 / 20.77 | 22.08 / 21.17 | 47.75 / 45.47 |
 
 Instructions per sample (`simd128` has no core model):
@@ -2448,10 +2448,10 @@ Instructions per sample (`simd128` has no core model):
 | Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `qam_mod_block` | 56.57 | 56.57 | 33.62 | 32.06 | 27.23 | 37.44 | 108.55 |
-| `qam_demod_block` | 304.24 | 301.88 | 177.18 | 179.88 | 161.44 | 192.32 | 571.70 |
+| `qam_demod_block` | 303.15 | 300.79 | 175.70 | 178.81 | 160.56 | 191.31 | 569.18 |
 | `frame_decode_four_block` | 87.06 | 86.07 | 83.82 | 86.76 | 83.19 | 77.21 | 166.41 |
 
-- **Where the cycles go.** `qam_mod_block` is the 81-tap interpolation of `fir_interpolate` (about 10 taps per output sample) and one table lookup per symbol; throughput-bound (efficiency 0.80 to 0.95). `qam_demod_block` at 8 samples per symbol is about 544 cycles per symbol at `avx2` (`znver3`): the 81-tap matched filter per sample and, per symbol, the timing loop, the 11-tap equalizer (`equalize_qam16_fallback` 135 cycles per symbol), the carrier loop (`costas_qam16_fallback` 141) and the soft bits; latency-bound (efficiency 0.47 to 0.76), the recursions of the equalizer and the carrier loop.
+- **Where the cycles go.** `qam_mod_block` is the 81-tap interpolation of `fir_interpolate` (about 10 taps per output sample) and one table lookup per symbol; throughput-bound (efficiency 0.80 to 0.95). `qam_demod_block` at 8 samples per symbol is about 544 cycles per symbol at `avx2` (`znver3`): the 81-tap matched filter per sample and, per symbol, the timing loop, the 11-tap equalizer (`equalize_qam16_fallback` 135 cycles per symbol), the carrier loop (`costas_qam16_fallback` 141) and the soft bits; latency-bound (efficiency 0.47 to 0.76), the recursions of the equalizer and the carrier loop. The frequency acquisition of D1404 (I44-3, I44-4) is a one-off computation until it has found the offset (in the warm-up of the entry): in the counted steady state it costs one branch per piece, and the equalizer and the carrier loop run in one call per piece as before; simulated cycles per input sample before -> after (D1407), reference / counter model: `sse2` 116.69 / 106.64 -> 116.74 / 106.71, `sse4.2` 116.92 / 105.85 -> 117.00 / 105.92, `avx2` 67.93 / 74.17 -> 67.53 / 73.83, `avx512` 66.82 / 71.75 -> 66.95 / 71.77, `neon` 136.38 / 100.49 -> 136.40 / 100.05; `simd128` 568.95 -> 569.18 instructions.
 - **`frame_decode` `four`** costs 3.4 / 3.6 times the simulated cycles of the plain block per bit at `avx2` (23.43 / 20.77 against 6.91 / 5.80, reference model / counter-model; 3.5 times its instructions; four hunting registers, the inverse rotations of every symbol); it runs in its own type, `sdrk_proto::frame::RotatingDecoder`, with its own bit loop in the block, so `normal` and `both` keep their cycles: simulated cycles per bit, reference model / counter-model, after M44 on main against the committed rows of main (D1221, the corrected `llvm-mca`) `frame_decode` `sse2` 6.20 / 8.43 (6.18 / 8.41), `sse4.2` 6.27 / 8.52 (6.24 / 8.50), `avx2` 5.57 / 6.18 (5.56 / 6.17), `avx512` 5.69 / 6.18 (5.68 / 6.17), `neon` 8.84 / 10.38 (8.83 / 10.38); `frame_decode_block` 6.03 / 7.98 (6.01 / 7.96), 6.06 / 7.98 (6.06 / 7.96), 6.91 / 5.80 (6.89 / 5.78), 6.90 / 5.79 (6.88 / 5.78), 8.81 / 9.48 (8.83 / 9.55), at most +0.03 cycles (on the branch against its base commit 596ec8a at most +0.02, D1220; the rows of the cycle tables and of the protocol section). Instructions per bit at `avx2` 26.15 and 24.15 against 26.12 and 24.12 (with the rule tested inside `Decoder::push_bit` they had become 28.7, D1213). At `simd128` (instructions, no core model) `frame_decode_block` costs 60.51 against 56.49 on the base commit, +7.1 %, an open item (I44-6); `frame_decode` there is 61.50 against 61.48.
 
 ## Pipeline benchmark

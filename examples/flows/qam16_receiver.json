@@ -33,7 +33,6 @@
     "demod": {
       "kind": "qam_demod",
       "params": {
-        "carrier_bw": 0.1,
         "equalizer_taps": 15,
         "order": 16,
         "symbol_rate_hz": 25000,

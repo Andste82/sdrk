@@ -3555,7 +3555,7 @@
                 "properties": {
                   "carrier_bw": {
                     "default": 0.005,
-                    "description": "Loop bandwidth of the carrier loop and of the equalizer's phase tracker, normalized to the symbol rate. Typical: 0.005; wider for large frequency offsets or phase noise. Build-time.",
+                    "description": "Loop bandwidth of the carrier loop and of the equalizer's phase tracker, normalized to the symbol rate. Typical: 0.005; wider for phase noise. Build-time.",
                     "maximum": 0.2,
                     "minimum": 0.0001,
                     "type": "number"

@@ -318,7 +318,7 @@ The cost is an estimate, in multiply-accumulates (a complex tap counts like the 
 | `frame_encode` | 1 per output sample (its `rate_in` is the `rate_hz` of the packet input) |
 | `frame_decode` | 1 |
 | `symbol_sync` | `2 + 24 / sps` (two cubic interpolations per symbol, `sps = rate_in / symbol_rate_hz`; `c32` or `f32` input, `rate_unsupported` below 2 samples per symbol) |
-| `slice` | 1 (one product per soft bit; `real` and `fsk4` take `f32`, `bpsk`, `qpsk` and `8psk` take `c32`, the other combinations are `invalid_value` at `params.constellation`); 16 for `8psk` (eight squared distances, six minimum searches and three products per symbol, D644) |
+| `slice` | 1 (one product per soft bit; `real` and `fsk4` take `f32`, `bpsk`, `qpsk`, `8psk`, `qam16` and `qam64` take `c32`, the other combinations are `invalid_value` at `params.constellation`); 16 for `8psk` (eight squared distances, six minimum searches and three products per symbol, D644); 10 for `qam16` and 18 for `qam64` (`c32`; the products by `sqrt(E)`, the magnitudes, differences and products of the piecewise-linear soft bits, D980) |
 | `fsk_mod` | `8 + span * samples_per_symbol` (the level map, the pulse filter and the oscillator; `f32` input) |
 | `fsk_demod` | `12 + round(sps) + 24 / sps` (discriminator, boxcar of `round(sps)` taps and the timing loop, `sps = rate_in / symbol_rate_hz`; `c32` input, `rate_unsupported` below 4 or above 1024 samples per symbol) |
 | `afc` | 20 (rotation, discriminator and the sum; `c32` input) |

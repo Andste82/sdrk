@@ -1078,7 +1078,7 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         slice.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["real", "bpsk", "qpsk", "fsk4", "8psk"],
+            options: &["real", "bpsk", "qpsk", "fsk4", "8psk", "qam16", "qam64"],
             default: 1
         }
     );

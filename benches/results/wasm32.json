@@ -4805,6 +4805,32 @@
           "status": "dev",
           "verdict": "warn"
         },
+        "slice_qam16_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 18.02,
+          "ours_instr_per_sample": 18.02,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 149.16,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "slice_qam64_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 51.02,
+          "ours_instr_per_sample": 51.02,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 145.89,
+            "ours": 145.89
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
           "goal": true,

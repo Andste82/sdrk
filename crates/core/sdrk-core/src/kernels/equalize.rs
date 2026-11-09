@@ -109,7 +109,7 @@ impl EqConstellation {
     /// The nearest constellation point, with the decision rule of `slice` and `costas`:
     /// BPSK `+1` for `re >= 0` (including `-0.0`), else `-1`; QPSK the signs of both components
     /// in the same way, scaled by `1 / sqrt(2)` (as `f32`); 8PSK the point of the half-open
-    /// octant of `costas` order 8 (zero takes point 0). A NaN component counts as not negative.
+    /// octant of `costas` `8psk` (zero takes point 0). A NaN component counts as not negative.
     /// 16-QAM and 64-QAM the grid decision of [`Qam::decide`] (a NaN component takes level 0).
     ///
     /// ```

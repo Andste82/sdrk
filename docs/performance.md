@@ -968,7 +968,7 @@ The M40 entries `costas` and `costas_fallback` were counted on all four platform
 
 The M47 entries `morse_encode_block` and `morse_decode_block` (our blocks, per output and per input sample of an 8 kHz envelope; no library has them, so information against our own code, D910) were counted on all four platforms (`cargo xtask count --platform <p> --kernel morse_encode_block --kernel morse_decode_block --merge`, 2026-11-07) and measured with `cargo measure` on every level with a core model. Cycles per sample, whole-loop, reference / counter model: the encoder 6.60 / 7.58 (`sse2`, `sse4.2`), 4.44 / 4.50 (`avx2`), 4.20 / 4.64 (`avx512`) and 8.56 / 9.45 (`neon`, `cortex-a72` / `cortex-a76`); the decoder 16.81 / 20.53 (`sse2`), 16.62 / 20.31 (`sse4.2`), 13.06 / 16.08 (`avx2`), 13.19 / 17.03 (`avx512`) and 22.26 / 28.43 (`neon`). The decoder had 147.92 instructions per sample at `avx2` before the speed round of D909 and has 69.08 now; the cycles above are those of the final code. Both blocks are scalar code with a dependency from one sample to the next (the smoother, the level trackers, the run counter), so the levels differ only by code generation.
 
-The M45 entries `channelize` and `channelize_fallback` (16 channels, 8 taps per branch, per input sample) were counted on all four platforms (`cargo xtask count --platform <p> --kernel channelize --kernel channelize_fallback --merge`, 2026-11-07, recounted 2026-11-08 after D922 and after D939) and measured with `cargo measure channelize --no-golden` on every level with a core model, against liquid-dsp's `firpfbch2_crcf` (D919); both are `release` on every level. Cycles per sample, whole-loop, reference / counter model, ours against liquid: the SIMD path 25.93 / 27.72 against 171.64 / 176.30 (`sse2`), 21.95 / 28.21 against 171.63 / 176.29 (`sse4.2`), 12.08 / 12.75 against 119.62 / 101.71 (`avx2`; D948), 12.68 / 16.01 against 104.12 / 84.10 (`avx512`) and 30.93 / 22.59 against 302.17 / 240.53 (`neon`; 42.56 / 32.70 before the two-hop branch sums of D939, open item I45-1); the fallback 53.40 / 58.43, 53.83 / 58.12, 34.38 / 32.18, 38.10 / 32.11 and 98.73 / 81.02 against 166.47 / 180.90, 166.73 / 180.51, 147.96 / 133.26, 107.09 / 118.99 and 222.34 / 165.45 (liquid portable). The SIMD path simulates 0.28 to 0.50 of the cycles of its fallback on every level and both models (D321 holds), at `simd128` it counts 270.93 instructions per sample against 436.07 of the fallback. liquid runs a window object and a dot-product object per branch (`windowcf_push`, `dotprod_crcf_execute` through a call each) and scales every output; ours sums the columns of one history in registers. Before the round of D918 and D920 the SIMD path simulated 24.22 / 22.35 at `avx2` and the fallback 38.11 / 34.13; D922 (the fallback's rows as whole chunks of `M`) took the fallback from 101.68 / 86.10 to 98.73 / 81.02 at `neon` and from 34.70 to 38.10 on the `avx512` reference model (ARM preferred).
+The M45 entries `channelize` and `channelize_fallback` (16 channels, 8 taps per branch, per input sample) were counted on all four platforms (`cargo xtask count --platform <p> --kernel channelize --kernel channelize_fallback --merge`, 2026-11-07, recounted 2026-11-08 after D922 and after D939) and measured with `cargo measure channelize --no-golden` on every level with a core model (again on 2026-11-09 with the corrected `llvm-mca` of D942, D981), against liquid-dsp's `firpfbch2_crcf` (D919); both are `release` on every level. Cycles per sample, whole-loop, reference / counter model, ours against liquid: the SIMD path 25.93 / 27.90 against 171.64 / 176.13 (`sse2`), 21.95 / 28.38 against 171.63 / 176.12 (`sse4.2`), 12.08 / 12.75 against 119.62 / 101.71 (`avx2`), 12.44 / 16.04 against 103.02 / 85.19 (`avx512`) and 30.92 / 22.59 against 294.02 / 240.53 (`neon`; 42.56 / 32.70 before the two-hop branch sums of D939, open item I45-1); the fallback 53.40 / 58.24, 53.83 / 57.87, 34.38 / 32.18, 37.41 / 32.12 and 97.44 / 81.02 against 166.47 / 182.49, 166.73 / 182.23, 147.96 / 133.26, 105.93 / 118.74 and 221.93 / 165.45 (liquid portable). The SIMD path simulates 0.28 to 0.50 of the cycles of its fallback on every level and both models (D321 holds), at `simd128` it counts 270.93 instructions per sample against 436.07 of the fallback. liquid runs a window object and a dot-product object per branch (`windowcf_push`, `dotprod_crcf_execute` through a call each) and scales every output; ours sums the columns of one history in registers. Before the round of D918 and D920 the SIMD path simulated 24.22 / 22.35 at `avx2` and the fallback 38.11 / 34.13; D922 (the fallback's rows as whole chunks of `M`) took the fallback from 101.68 / 86.10 to 98.73 / 81.02 at `neon` and from 34.70 to 38.10 on the `avx512` reference model (ARM preferred).
 
 The M43 entries `dot_complex`, `dot_complex_fallback`, `equalize` and `equalize_fallback` were counted on all four platforms (`cargo xtask count --platform <p> --kernel dot_complex --kernel dot_complex_fallback --kernel equalize --kernel equalize_fallback --merge`, 2026-11-07) and measured with `cargo measure dot_complex` and `cargo measure equalize` on every level with a core model, after the performance round of D840 to D845. All judged entries are within the release limit and are `release`. `dot_complex` simulates 0.24 to 0.86 of the cycles of its fallback and 0.58 (`znver3`) to 1.03 (`cortex-a72`) of VOLK's protokernel without FMA. `equalize` runs the fallback on every backend (D841), so the facade entry equals the fallback (1.00, D321 holds). `equalize_fallback` counts 0.54 to 0.89 of the instructions of GNU Radio's `linear_equalizer` and simulates 0.12 to 0.93 of its cycles on x86 and 0.81 on `cortex-a76`; on `cortex-a72` it simulates 1.14 (262.11 against 229.47), the cost of the phase tracker and the smoothed `mse` that GNU Radio's loop does not have (D845: about 81 cycles per symbol on `cortex-a72`). Before D840 the fallback simulated 1.18 to 2.32 of GNU Radio's cycles where it was not below and the SIMD entry was slower than the fallback at every level. `dot_complex` at `avx2` and `avx512` counts 2.35 (after the two-block loop of `dot_complex_avx2`, 2.29 before; the cycles are unchanged), and at `avx2-runtime` 2.36 against 2.35 of the fixed `avx2` build (1.00, limit 1.02): the run-time build no longer needs a waiver (open item I43-5, closed).
 
@@ -1128,11 +1128,11 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `oscillate_cq15` | 3.78 | 5.34 | 0.71 | 3.79 | 6.82 | 0.55 | sdrk fallback |
 | `oscillate_cq15_fallback` | 5.34 | 21.81 | 0.24 | 6.82 | 19.33 | 0.35 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `oscillate_fallback` | 4.90 | 56.29 | 0.09 | 6.35 | 51.64 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_1024` | 7.20 | 6.91 | 1.04 | 6.37 | 6.78 | 0.94 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
+| `fft_1024` | 7.19 | 6.91 | 1.04 | 6.37 | 6.78 | 0.94 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
 | `fft_1024_fallback` | 31.46 | 26.16 | 1.20 | 30.31 | 28.91 | 1.05 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_4096` | 8.15 | 10.41 | 0.78 | 7.32 | 8.77 | 0.83 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
+| `fft_4096` | 8.14 | 10.41 | 0.78 | 7.32 | 8.77 | 0.83 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
 | `fft_4096_fallback` | 37.63 | 30.53 | 1.23 | 36.49 | 32.90 | 1.11 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fft_64` | 4.46 | 5.86 | 0.76 | 3.95 | 5.51 | 0.72 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
+| `fft_64` | 4.58 | 5.86 | 0.78 | 4.03 | 5.51 | 0.73 | FFTW (fftwf_plan_dft_1d, FFTW_ESTIMATE, forward, out of place) |
 | `fft_64_fallback` | 20.08 | 15.15 | 1.33 | 19.29 | 17.76 | 1.09 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fft_cq15_1024` | 8.84 | 52.83 | 0.17 | 9.71 | 63.00 | 0.15 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default` | 7.37 | 52.83 | 0.14 | 7.76 | 63.00 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
@@ -1146,13 +1146,13 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 2.62 | 4.17 | 0.63 | 3.12 | 4.64 | 0.67 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 57.16 | 57.16 | 1.00 | 56.49 | 56.49 | 1.00 | sdrk fallback |
-| `channel_bank_channelize` | 46.06 | 46.06 | 1.00 | 52.54 | 52.54 | 1.00 | sdrk fallback |
-| `channel_bank_ddc` | 227.45 | 227.45 | 1.00 | 212.36 | 212.36 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 57.16 | 57.16 | 1.00 | 56.87 | 56.87 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 46.18 | 46.18 | 1.00 | 53.35 | 53.35 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 227.45 | 227.45 | 1.00 | 212.82 | 212.82 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
-| `channelize` | 25.93 | 171.64 | 0.15 | 27.72 | 176.30 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
-| `channelize_block` | 26.79 | 26.79 | 1.00 | 27.83 | 27.83 | 1.00 | sdrk fallback |
-| `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.43 | 180.90 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
+| `channelize` | 25.93 | 171.64 | 0.15 | 27.90 | 176.13 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 26.88 | 26.88 | 1.00 | 28.65 | 28.65 | 1.00 | sdrk fallback |
+| `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.24 | 182.49 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 75.14 | 75.14 | 1.00 | 63.16 | 63.16 | 1.00 | sdrk fallback |
 | `costas_fallback` | 75.14 | 86.69 | 0.87 | 63.16 | 80.46 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1164,7 +1164,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `frame_decode` | 6.18 | 6.18 | 1.00 | 8.41 | 8.41 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.01 | 6.01 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 7.01 | 59.03 | 0.12 | 7.93 | 50.49 | 0.16 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2) |
+| `halfband_decimate` | 7.00 | 59.03 | 0.12 | 7.92 | 50.49 | 0.16 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2) |
 | `halfband_decimate_cq15` | 16.69 | 39.56 | 0.42 | 16.24 | 46.15 | 0.35 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 39.56 | 41.57 | 0.95 | 46.15 | 50.09 | 0.92 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `halfband_decimate_fallback` | 15.16 | 82.14 | 0.18 | 17.48 | 69.57 | 0.25 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
@@ -1184,7 +1184,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 44.03 | 44.03 | 1.00 | 39.34 | 39.34 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 44.03 | 44.03 | 1.00 | 39.34 | 39.33 | 1.00 | sdrk fallback |
 | `rds_shape` | 83.94 | 83.94 | 1.00 | 75.83 | 75.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.53 | 57.25 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_airspy` | 5.31 | 11.28 | 0.47 | 5.53 | 9.37 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
@@ -1348,11 +1348,11 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `oscillate_cq15` | 2.61 | 8.08 | 0.32 | 3.04 | 7.08 | 0.43 | sdrk fallback |
 | `oscillate_cq15_fallback` | 8.08 | 21.81 | 0.37 | 7.08 | 19.33 | 0.37 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `oscillate_fallback` | 4.90 | 51.98 | 0.09 | 6.35 | 50.82 | 0.12 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_1024` | 7.20 | 9.32 | 0.77 | 6.37 | 9.55 | 0.67 | rustfft (FftPlanner, forward, in place) |
+| `fft_1024` | 7.19 | 9.32 | 0.77 | 6.37 | 9.55 | 0.67 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 31.40 | 25.79 | 1.22 | 30.63 | 28.60 | 1.07 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_4096` | 8.15 | 10.68 | 0.76 | 7.32 | 10.77 | 0.68 | rustfft (FftPlanner, forward, in place) |
+| `fft_4096` | 8.14 | 10.68 | 0.76 | 7.32 | 10.77 | 0.68 | rustfft (FftPlanner, forward, in place) |
 | `fft_4096_fallback` | 37.57 | 30.53 | 1.23 | 36.80 | 32.90 | 1.12 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fft_64` | 4.46 | 8.57 | 0.52 | 3.95 | 8.08 | 0.49 | rustfft (FftPlanner, forward, in place) |
+| `fft_64` | 4.58 | 8.57 | 0.53 | 4.03 | 8.08 | 0.50 | rustfft (FftPlanner, forward, in place) |
 | `fft_64_fallback` | 20.02 | 15.17 | 1.32 | 19.61 | 17.78 | 1.10 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fft_cq15_1024` | 6.27 | 52.83 | 0.12 | 7.29 | 63.00 | 0.12 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default` | 5.39 | 52.83 | 0.10 | 6.16 | 63.00 | 0.10 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
@@ -1366,13 +1366,13 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 1.23 | 3.17 | 0.39 | 1.15 | 3.60 | 0.32 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 57.54 | 57.54 | 1.00 | 56.66 | 56.66 | 1.00 | sdrk fallback |
-| `channel_bank_channelize` | 45.77 | 45.77 | 1.00 | 52.53 | 52.53 | 1.00 | sdrk fallback |
-| `channel_bank_ddc` | 227.20 | 227.20 | 1.00 | 212.46 | 212.46 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 57.54 | 57.54 | 1.00 | 57.04 | 57.04 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 46.06 | 46.06 | 1.00 | 53.35 | 53.35 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 227.20 | 227.20 | 1.00 | 212.93 | 212.93 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
-| `channelize` | 21.95 | 171.63 | 0.13 | 28.21 | 176.29 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
-| `channelize_block` | 26.51 | 26.51 | 1.00 | 27.84 | 27.84 | 1.00 | sdrk fallback |
-| `channelize_fallback` | 53.83 | 166.73 | 0.32 | 58.12 | 180.51 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
+| `channelize` | 21.95 | 171.63 | 0.13 | 28.38 | 176.12 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 26.83 | 26.83 | 1.00 | 28.63 | 28.63 | 1.00 | sdrk fallback |
+| `channelize_fallback` | 53.83 | 166.73 | 0.32 | 57.87 | 182.23 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 73.15 | 73.15 | 1.00 | 62.15 | 62.15 | 1.00 | sdrk fallback |
 | `costas_fallback` | 73.15 | 86.69 | 0.84 | 62.15 | 80.46 | 0.77 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1381,7 +1381,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `equalize` | 146.43 | 146.43 | 1.00 | 157.82 | 157.82 | 1.00 | sdrk fallback |
 | `equalize_fallback` | 146.43 | 168.47 | 0.87 | 157.82 | 201.30 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 6.25 | 6.25 | 1.00 | 8.50 | 8.50 | 1.00 | sdrk fallback |
+| `frame_decode` | 6.24 | 6.25 | 1.00 | 8.50 | 8.50 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.06 | 6.06 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 6.77 | 59.03 | 0.11 | 7.75 | 50.48 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2) |
@@ -1587,7 +1587,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `am_mod_cq15_fallback` | 0.43 | 2.91 | 0.15 | 0.56 | 2.30 | 0.24 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `am_mod_fallback` | 0.65 | 0.53 | 1.22 | 0.47 | 0.54 | 0.87 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 164.98 | 164.98 | 1.00 | 164.85 | 164.85 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 46.96 | 46.96 | 1.00 | 42.86 | 42.86 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 45.18 | 45.18 | 1.00 | 43.23 | 43.23 | 1.00 | sdrk fallback |
 | `channel_bank_channelize` | 20.88 | 20.88 | 1.00 | 25.61 | 25.61 | 1.00 | sdrk fallback |
 | `channel_bank_ddc` | 72.73 | 72.73 | 1.00 | 65.29 | 65.29 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.76 | 0.76 | 1.00 | 0.52 | 0.52 | 1.00 | sdrk fallback |
@@ -1794,7 +1794,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `fft_1024_fallback` | 17.03 | 17.82 | 0.96 | 16.75 | 18.53 | 0.90 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fft_4096` | 2.70 | 3.03 | 0.89 | 1.93 | 3.71 | 0.52 | rustfft (FftPlanner, forward, in place) |
 | `fft_4096_fallback` | 20.57 | 20.57 | 1.00 | 20.23 | 21.21 | 0.95 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fft_64` | 1.58 | 1.82 | 0.87 | 1.63 | 1.82 | 0.89 | rustfft (FftPlanner, forward, in place) |
+| `fft_64` | 1.64 | 1.82 | 0.90 | 1.66 | 1.82 | 0.91 | rustfft (FftPlanner, forward, in place) |
 | `fft_64_fallback` | 10.91 | 11.76 | 0.93 | 10.73 | 11.39 | 0.94 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fft_cq15_1024` | 2.32 | 45.37 | 0.05 | 2.65 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default` | 2.08 | 45.37 | 0.05 | 2.34 | 48.58 | 0.05 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
@@ -1808,13 +1808,13 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 0.32 | 2.82 | 0.11 | 0.48 | 2.37 | 0.20 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `am_mod_fallback` | 0.38 | 0.53 | 0.73 | 0.30 | 0.54 | 0.56 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 161.09 | 161.09 | 1.00 | 163.36 | 163.36 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 52.43 | 52.43 | 1.00 | 48.06 | 48.06 | 1.00 | sdrk fallback |
-| `channel_bank_channelize` | 792.49 | 792.49 | 1.00 | 97.78 | 97.78 | 1.00 | sdrk fallback |
-| `channel_bank_ddc` | 516.23 | 516.13 | 1.00 | 96.78 | 96.79 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 51.51 | 51.51 | 1.00 | 48.52 | 48.52 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 792.25 | 792.25 | 1.00 | 97.78 | 97.78 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 514.12 | 514.11 | 1.00 | 85.19 | 85.19 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.28 | 0.28 | 1.00 | 1.83 | 1.83 | 1.00 | sdrk fallback |
-| `channelize` | 12.68 | 104.12 | 0.12 | 16.01 | 84.10 | 0.19 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
-| `channelize_block` | 12.69 | 12.69 | 1.00 | 16.13 | 16.13 | 1.00 | sdrk fallback |
-| `channelize_fallback` | 38.10 | 107.09 | 0.36 | 32.11 | 118.99 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
+| `channelize` | 12.44 | 103.02 | 0.12 | 16.04 | 85.19 | 0.19 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 12.45 | 12.45 | 1.00 | 16.15 | 16.15 | 1.00 | sdrk fallback |
+| `channelize_fallback` | 37.41 | 105.93 | 0.35 | 32.12 | 118.74 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 55.09 | 55.09 | 1.00 | 68.07 | 68.07 | 1.00 | sdrk fallback |
 | `costas_fallback` | 55.09 | 68.92 | 0.80 | 68.07 | 66.44 | 1.02 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1826,7 +1826,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `frame_decode` | 5.68 | 5.68 | 1.00 | 6.17 | 6.17 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.88 | 6.88 | 1.00 | 5.78 | 5.78 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.60 | 1.60 | 1.00 | 1.72 | 1.72 | 1.00 | sdrk fallback |
-| `halfband_decimate` | 2.59 | 107.90 | 0.02 | 3.45 | 34.07 | 0.10 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
+| `halfband_decimate` | 2.59 | 107.90 | 0.02 | 3.44 | 34.07 | 0.10 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `halfband_decimate_cq15` | 7.14 | 11.94 | 0.60 | 8.54 | 13.27 | 0.64 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 11.94 | 30.34 | 0.39 | 13.27 | 33.28 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `halfband_decimate_fallback` | 60.73 | 118.25 | 0.51 | 12.98 | 65.16 | 0.20 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
@@ -1846,7 +1846,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 481.13 | 481.29 | 1.00 | 51.10 | 51.11 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 480.81 | 481.29 | 1.00 | 51.09 | 51.11 | 1.00 | sdrk fallback |
 | `rds_shape` | 42.06 | 42.06 | 1.00 | 39.42 | 39.42 | 1.00 | sdrk fallback |
 | `real_to_complex` | 1.99 | 53.98 | 0.04 | 1.57 | 23.02 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15` | 4.28 | 220.09 | 0.02 | 5.03 | 25.92 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
@@ -1918,7 +1918,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `resample` | 55.28 | 140.12 | 0.39 | 50.99 | 114.43 | 0.45 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
 | `resample_cq15` | 144.07 | 193.79 | 0.74 | 122.69 | 184.92 | 0.66 | sdrk fallback |
 | `resample_cq15_fallback` | 193.79 | 140.28 | 1.38 | 184.92 | 139.74 | 1.32 | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `resample_fallback` | 175.90 | 134.66 | 1.31 | 142.04 | 151.50 | 0.94 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `resample_fallback` | 175.90 | 134.65 | 1.31 | 142.04 | 151.50 | 0.94 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `resample_real` | 32.35 | 109.41 | 0.30 | 29.36 | 85.87 | 0.34 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 139.69 | 67.33 | 2.07 | 121.24 | 75.75 | 1.60 | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `resample_real_q15` | 97.68 | 113.70 | 0.86 | 78.50 | 107.71 | 0.73 | sdrk fallback |
@@ -1934,7 +1934,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `quad_demod` | 14.55 | 15.15 | 0.96 | 6.91 | 10.40 | 0.66 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
 | `quad_demod_cq15` | 19.37 | 120.12 | 0.16 | 10.61 | 115.54 | 0.09 | sdrk fallback |
 | `quad_demod_cq15_fallback` | 120.12 | 138.91 | 0.86 | 115.54 | 136.18 | 0.85 | CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop |
-| `quad_demod_fallback` | 71.50 | 72.39 | 0.99 | 74.45 | 55.28 | 1.35 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
+| `quad_demod_fallback` | 71.50 | 72.39 | 0.99 | 74.45 | 55.27 | 1.35 | GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags) |
 | `fm_mod` | 10.17 | 54.90 | 0.19 | 5.26 | 57.43 | 0.09 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
 | `fm_mod_cq15` | 8.34 | 18.86 | 0.44 | 4.59 | 15.77 | 0.29 | sdrk fallback |
 | `fm_mod_cq15_fallback` | 18.86 | 54.29 | 0.35 | 15.77 | 47.65 | 0.33 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
@@ -2011,11 +2011,11 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `oscillate_cq15` | 3.82 | 7.74 | 0.49 | 3.29 | 9.05 | 0.36 | sdrk fallback |
 | `oscillate_cq15_fallback` | 7.74 | 51.51 | 0.15 | 9.05 | 45.00 | 0.20 | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `oscillate_fallback` | 8.10 | 52.62 | 0.15 | 10.06 | 46.15 | 0.22 | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fft_1024` | 12.84 | 17.22 | 0.75 | 8.55 | 13.55 | 0.63 | rustfft (FftPlanner, forward, in place) |
+| `fft_1024` | 12.83 | 17.22 | 0.74 | 8.54 | 13.55 | 0.63 | rustfft (FftPlanner, forward, in place) |
 | `fft_1024_fallback` | 33.24 | 38.54 | 0.86 | 34.77 | 39.16 | 0.89 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_4096` | 15.06 | 20.37 | 0.74 | 10.02 | 16.16 | 0.62 | rustfft (FftPlanner, forward, in place) |
 | `fft_4096_fallback` | 37.38 | 39.40 | 0.95 | 39.15 | 43.25 | 0.91 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fft_64` | 8.85 | 13.02 | 0.68 | 7.05 | 10.68 | 0.66 | rustfft (FftPlanner, forward, in place) |
+| `fft_64` | 10.62 | 13.02 | 0.82 | 8.89 | 10.68 | 0.83 | rustfft (FftPlanner, forward, in place) |
 | `fft_64_fallback` | 21.69 | 22.44 | 0.97 | 20.29 | 24.31 | 0.83 | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fft_cq15_1024` | 11.77 | 67.26 | 0.17 | 10.10 | 77.63 | 0.13 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default` | 10.18 | 67.26 | 0.15 | 8.48 | 77.63 | 0.11 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
@@ -2029,13 +2029,13 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 1.28 | 2.27 | 1.52 | 1.03 | 1.48 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 263.70 | 263.70 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 88.55 | 88.55 | 1.00 | 70.36 | 70.36 | 1.00 | sdrk fallback |
-| `channel_bank_channelize` | 60.07 | 60.07 | 1.00 | 42.71 | 42.71 | 1.00 | sdrk fallback |
-| `channel_bank_ddc` | 308.18 | 308.18 | 1.00 | 263.36 | 263.36 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 83.50 | 83.50 | 1.00 | 70.14 | 70.14 | 1.00 | sdrk fallback |
+| `channel_bank_channelize` | 60.05 | 60.05 | 1.00 | 42.71 | 42.71 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 299.57 | 299.57 | 1.00 | 263.36 | 263.36 | 1.00 | sdrk fallback |
 | `channel_select_block` | 1.27 | 1.27 | 1.00 | 1.27 | 1.27 | 1.00 | sdrk fallback |
-| `channelize` | 30.93 | 302.17 | 0.10 | 22.59 | 240.53 | 0.09 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
-| `channelize_block` | 30.99 | 30.99 | 1.00 | 22.71 | 22.71 | 1.00 | sdrk fallback |
-| `channelize_fallback` | 98.73 | 222.34 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
+| `channelize` | 30.92 | 294.02 | 0.11 | 22.59 | 240.53 | 0.09 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 30.98 | 30.98 | 1.00 | 22.71 | 22.71 | 1.00 | sdrk fallback |
+| `channelize_fallback` | 97.44 | 221.93 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 86.13 | 86.13 | 1.00 | 54.10 | 54.10 | 1.00 | sdrk fallback |
 | `costas_fallback` | 86.13 | 82.40 | 1.05 | 54.10 | 75.07 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2219,19 +2219,19 @@ Simulated cycles per sample, reference model (whole-loop):
 
 | Entry | `sse2` (`skylake`) | `sse4.2` (`skylake`) | `avx2` (`znver3`) | `avx512` (`znver4`) | `neon` (`cortex-a72`) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `channelize_block` | 26.79 | 26.51 | 12.09 | 12.69 | 30.99 |
-| `channel_select_block` | 0.60 | 0.60 | 0.76 | 0.28 | 1.27 |
-| `channel_bank_channelize` | 46.06 | 45.77 | 20.88 | 792.49 | 60.07 |
-| `channel_bank_ddc` | 227.45 | 227.20 | 72.73 | 516.23 | 308.18 |
+| `channelize_block` | 26.88 | 26.83 | 12.09 | 12.45 | 94.70 |
+| `channel_select_block` | 0.60 | 0.60 | 0.76 | 0.28 | 3.02 |
+| `channel_bank_channelize` | 46.18 | 46.06 | 20.88 | 792.25 | 193.80 |
+| `channel_bank_ddc` | 227.45 | 227.20 | 72.73 | 514.12 | 721.18 |
 
 Simulated cycles per sample, counter-model (whole-loop):
 
 | Entry | `sse2` (`znver2`) | `sse4.2` (`znver2`) | `avx2` (`alderlake`) | `avx512` (`sapphirerapids`) | `neon` (`cortex-a76`) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `channelize_block` | 27.83 | 27.84 | 12.87 | 16.13 | 22.71 |
-| `channel_select_block` | 0.77 | 0.77 | 0.52 | 1.83 | 1.27 |
-| `channel_bank_channelize` | 52.54 | 52.53 | 25.61 | 97.78 | 42.71 |
-| `channel_bank_ddc` | 212.36 | 212.46 | 65.29 | 96.78 | 263.36 |
+| `channelize_block` | 28.65 | 28.63 | 12.87 | 16.15 | 50.65 |
+| `channel_select_block` | 0.77 | 0.77 | 0.52 | 1.83 | 3.02 |
+| `channel_bank_channelize` | 53.35 | 53.35 | 25.61 | 97.78 | 83.64 |
+| `channel_bank_ddc` | 212.82 | 212.93 | 65.29 | 85.19 | 241.94 |
 
 Instructions per sample (`simd128`: wasmtime fuel, no core model, so no cycles):
 

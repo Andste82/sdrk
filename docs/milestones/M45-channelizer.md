@@ -300,11 +300,11 @@ Cycles per sample (simulated by llvm-mca, whole-loop mode, reference / counter m
 
 | level | `channelize` SIMD | `channelize_fallback` | liquid-dsp `firpfbch2_crcf` (SIMD dot products, FFTW) | liquid-dsp portable |
 | --- | --- | --- | --- | --- |
-| `sse2` | 25.93 / 27.72 | 53.40 / 58.43 | 171.64 / 176.30 | 166.47 / 180.90 |
-| `sse4.2` | 21.95 / 28.21 | 53.83 / 58.12 | 171.63 / 176.29 | 166.73 / 180.51 |
+| `sse2` | 25.93 / 27.90 | 53.40 / 58.24 | 171.64 / 176.13 | 166.47 / 182.49 |
+| `sse4.2` | 21.95 / 28.38 | 53.83 / 57.87 | 171.63 / 176.12 | 166.73 / 182.23 |
 | `avx2` | 12.08 / 12.75 | 34.38 / 32.18 | 119.62 / 101.71 | 147.96 / 133.26 |
-| `avx512` | 12.68 / 16.01 | 38.10 / 32.11 | 104.12 / 84.10 | 107.09 / 118.99 |
-| `neon` | 30.93 / 22.59 | 98.73 / 81.02 | 302.17 / 240.53 | 222.34 / 165.45 |
+| `avx512` | 12.44 / 16.04 | 37.41 / 32.12 | 103.02 / 85.19 | 105.93 / 118.74 |
+| `neon` | 30.92 / 22.59 | 97.44 / 81.02 | 294.02 / 240.53 | 221.93 / 165.45 |
 
 `simd128` (no core model, instructions per sample): SIMD 270.93, fallback 436.07, liquid-dsp 949.71. The blocks, cycles per sample at `avx2`: `channelize_block` 12.21 / 12.87 per input sample, `channel_select_block` 0.76 / 0.52 per output sample (1.24 / 2.28 with the step slices of D935, before the one-element-slice copy of D941); test 9 (one `channelize` with eight `channel_select` against eight `ddc`, per input sample): 21.00 / 25.61 against 72.75 / 65.45 at `avx2`, 46.06 / 52.54 against 227.45 / 212.36 at `sse2`, 60.07 / 42.71 against 308.18 / 263.36 at `neon`. The `neon` SIMD path sums two hops at once (D939, open item I45-1, closed by D938): 42.56 / 32.70 before, the test 9 bank 92.68 / 70.61 before. The other levels are in [performance.md](../performance.md#channelizer-blocks-and-channel-banks-m45).
 

@@ -17,7 +17,7 @@
 //! over the counted bits, with no slip of the meter; there is no lower edge (the formula at
 //! `Eb/N0 + x dB` expects too few errors in 10^6 bits to bound the BER from below).
 //!
-//! The chain (D997): random bits (`Pcg32` of the test's seed, stream 1) as soft bits `+-1` ->
+//! The chain (D1217): random bits (`Pcg32` of the test's seed, stream 1) as soft bits `+-1` ->
 //! `QamModBlock` (4 samples per symbol, roll-off 0.35, span 10) -> the channel of the test
 //! (`FrequencyOffset` and `ClockDrift`, or `Multipath::mild(4.0)`, or nothing) ->
 //! `Awgn::from_ebn0` (the test's seed) with the measured mean power of the signal after the

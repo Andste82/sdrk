@@ -233,7 +233,7 @@ fn decide_f64(c: EqConstellation, yr: f64, yi: f64) -> (f64, f64) {
     }
 }
 
-/// The grid level of a float64 component (M44 §1 with the boundaries of D982): the level index
+/// The grid level of a float64 component (M44 §1 with the boundaries of D1202): the level index
 /// `floor(v sqrt(E) / 2 + m / 2)` clamped to `0 .. m - 1`, as the unit-power level value.
 fn qam_level_f64(q: Qam, v: f64) -> f64 {
     let m = q.levels_per_axis() as f64;

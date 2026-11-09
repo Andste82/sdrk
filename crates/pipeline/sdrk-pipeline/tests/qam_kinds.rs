@@ -1,9 +1,9 @@
 //! The kinds of M44 §4: `qam_mod` and `qam_demod` (registration with their kernels, the costs
-//! `4 span` and `4 span + (55 + 10 or 18) / sps + 8 equalizer_taps / sps` of D992, the rates and
+//! `4 span` and `4 span + (55 + 10 or 18) / sps + 8 equalizer_taps / sps` of D1212, the rates and
 //! delays, the required parameters, `rate_unsupported` with the hint to resample,
 //! `invalid_value` for the orders 17 to 63 and an even `equalizer_taps`, the type checks, the
 //! kernels without `equalize` for `equalizer_taps` 0), `frame_decode` `rotations` `four` (cost
-//! 4, D993), and push-mode `qam_mod` and `qam_demod` in pieces of 1 to 1024 samples (seed 607)
+//! 4, D1213), and push-mode `qam_mod` and `qam_demod` in pieces of 1 to 1024 samples (seed 607)
 //! equal to the blocks bit for bit.
 #![allow(
     clippy::needless_pass_by_value,

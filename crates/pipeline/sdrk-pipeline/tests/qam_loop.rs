@@ -7,7 +7,7 @@
 //! [`FILLER_BYTES`] random bytes, longer than every counted packet so that the two cannot be
 //! confused. The idle signal of `frame_encode` (the preamble bits 0x55, one constant 16-QAM
 //! symbol) would leave the timing loop and the blind equalizer without anything to train on
-//! (D998). The `cs16` samples are read as complex samples, passed through `Multipath::mild` (at
+//! (D1218). The `cs16` samples are read as complex samples, passed through `Multipath::mild` (at
 //! 40 samples per symbol), shifted by 1 kHz (0.04 cycles per symbol at 25 kBd) and given white
 //! Gaussian noise at Eb/N0 = 16 dB (all from `sdrk_testkit::channel`, seed 606), then scaled and
 //! rounded to the `cs16` input of the receiver.
@@ -21,7 +21,7 @@
 //! their payload unchanged, so `rotations` four resolves every lock position. The quarter turns
 //! reported in the packet flags are printed (they step with the rotation of the input; the
 //! test does not assert it, because a decision exactly on a boundary takes the upper level,
-//! D982, which breaks the symmetry in rare cases).
+//! D1202, which breaks the symmetry in rare cases).
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -61,7 +61,7 @@ const SPS: usize = 40;
 /// Bits per 16-QAM symbol.
 const BITS_PER_SYMBOL: usize = 4;
 /// Carrier offset of the channel in Hz (0.04 cycles per symbol; the receiver flow pulls it in
-/// with `carrier_bw` 0.1, D999).
+/// with `carrier_bw` 0.1, D1219).
 const OFFSET_HZ: f64 = 1000.0;
 /// Eb/N0 of the channel in dB.
 const EBN0_DB: f64 = 16.0;

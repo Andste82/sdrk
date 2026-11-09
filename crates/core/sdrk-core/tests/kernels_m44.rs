@@ -2,7 +2,7 @@
 //! (the decision-directed detector `arg(y conj d)` against the grid decision, the lock metric
 //! `cos(8 err)` with the QAM decision; M44 §3) and the `equalize` constellations `qam16` and
 //! `qam64` (the grid decision and the CMA radius). Lock and frequency tracking on noisy QAM, the
-//! detector against `libm::atan2f`, the lock levels on QAM and on noise (D988), block-size
+//! detector against `libm::atan2f`, the lock levels on QAM and on noise (D1208), block-size
 //! invariance, `reset`, silence, full scale and beyond, non-finite input, and the convergence of
 //! the equalizer on 16-QAM and 64-QAM through a channel. The comparison of `Fallback` with
 //! `Reference` runs only with the feature `reference`. Seeds 600 to 607 of M44 (this file: 605
@@ -192,14 +192,14 @@ fn qam_locks_onto_the_grid_and_follows_an_offset() {
     }
 }
 
-/// D988: the lock metric `cos(8 err)` against the grid decision. On noisy 16-QAM it is well above
+/// D1208: the lock metric `cos(8 err)` against the grid decision. On noisy 16-QAM it is well above
 /// the on level and on noise near 0, so the 16-QAM loop locks on the signal and never on noise;
 /// on 64-QAM the dense grid keeps every sample close to a point, so the metric stays near the on
 /// level on noise as well (open item I44-2). The measured levels are guarded.
 #[test]
 #[allow(
     clippy::print_stdout,
-    reason = "the measured lock levels of the QAM metric (D988)"
+    reason = "the measured lock levels of the QAM metric (D1208)"
 )]
 fn qam_lock_levels_on_the_signal_and_on_noise() {
     let mut noise_rng = Rng::new(41);

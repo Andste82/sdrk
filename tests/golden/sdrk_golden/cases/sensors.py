@@ -1,6 +1,7 @@
 """Cases for the sensor decoders of ``sdrk_proto::sensors`` (M46, test 2).
 
-One case per decoder: 20 messages with random fields, each as the pulse train a detector would
+One case per decoder (and one more, ``bresser_3ch_recorded``, for the three recorded messages of
+the sensor labelled AS2-WS-6B, which uses the Bresser 3CH protocol, D1119): 20 messages with random fields, each as the pulse train a detector would
 report (pulse and gap widths in samples at 250 kHz, with timing error), and the readings the
 decoder must return. The encoders are written from the public descriptions of the devices
 (listed in the decisions log, D1106 to D1110) without looking at the Rust decoders; the CRC and
@@ -23,6 +24,7 @@ chain test renders its bursts in Rust from the same coding rules.
 """
 
 import math
+from fractions import Fraction
 
 import numpy as np
 
@@ -164,6 +166,11 @@ def distort(rng, pairs, clock, jitter_rel=0.0, jitter_abs=0.0):
             row.append(max(1, int(round(w * 1e-6 * RATE))))
         out.append(tuple(row))
     return out
+
+
+def quantise(pairs):
+    """The widths in samples of ``RATE`` without any timing error; a gap of 0 stays 0."""
+    return [tuple(0 if w == 0 else max(1, int(round(w * 1e-6 * RATE))) for w in p) for p in pairs]
 
 
 # ---------------------------------------------------------------- devices
@@ -387,7 +394,126 @@ def lacrosse_tx29(rng):
                   "trailing zero bits of a copy are not part of the train, 250 kHz")
 
 
-def finish(msgs, model, reps, per_train, seed, notes):
+BRESSER_PREAMBLE_US = 735.0
+
+
+def bresser_frame(dev_id, battery_low, button, channel, raw_t, hum):
+    """The five bytes of a frame of the Bresser 3CH family (the sensor labelled "AS2-WS-6B, type
+    60109"): the id, byte 1 with battery low (bit 7), the test button flag (bit 6), the channel
+    (bits 5 and 4) and the high four bits of the 12 bit temperature value, the low byte of the
+    value, the humidity in percent as a binary number and the sum of the four bytes modulo 256."""
+    assert 0 <= raw_t < 0x1000 and 0 <= channel < 4
+    b1 = (battery_low << 7) | (button << 6) | (channel << 4) | (raw_t >> 8)
+    b = [dev_id, b1, raw_t & 0xFF, hum]
+    return b + [sum(b) & 0xFF]
+
+
+def bresser_celsius(raw_t):
+    """The temperature: tenths of a degree Fahrenheit plus 900 (F = (T - 900) / 10), so
+    C = (T - 1220) / 18, rounded half away from zero to one decimal with exact fractions."""
+    tenths = Fraction((raw_t - 1220) * 10, 18)
+    mag = int(math.floor(abs(tenths) + Fraction(1, 2)))
+    return (mag if tenths >= 0 else -mag) / 10.0
+
+
+def bresser_frame_pairs(frame, preamble, one=(500.0, 250.0), zero=(250.0, 500.0)):
+    """A frame: ``preamble`` pairs of pulse and gap of 735 us, then 40 bits MSB first with a fixed
+    bit period of 750 us (1: pulse 500 us and gap 250 us, 0: pulse 250 us and gap 500 us); the gap
+    of the last bit runs into the preamble of the next frame."""
+    pairs = [(BRESSER_PREAMBLE_US, BRESSER_PREAMBLE_US)] * preamble
+    return pairs + [one if bit else zero for bit in bytes_to_bits(frame)]
+
+
+def bresser_burst(frame, preamble, frames, one=(500.0, 250.0), zero=(250.0, 500.0)):
+    """``frames`` identical frames back to back; the last gap is the pause, written as 0."""
+    pairs = bresser_frame_pairs(frame, preamble, one, zero) * frames
+    pairs[-1] = (pairs[-1][0], 0.0)
+    return pairs
+
+
+@case("sensors", "bresser_3ch", 649)
+def bresser_3ch(rng):
+    msgs, frames_of, preambles, lost = [], [], [], []
+    for _ in range(20):
+        f = blank("Bresser-3CH")
+        f["id"] = int(rng.integers(0, 256))
+        f["channel"] = int(rng.integers(1, 4))
+        low = int(rng.integers(0, 2))
+        button = int(rng.integers(0, 2))
+        f["battery_ok"] = 0 if low else 1
+        raw_t = int(rng.integers(700, 2501))  # -20 F to 160 F, the limits of the device
+        f["temperature_c"] = bresser_celsius(raw_t)
+        f["humidity"] = float(rng.integers(0, 101))
+        frame = bresser_frame(f["id"], low, button, f["channel"], raw_t, int(f["humidity"]))
+        preamble = int(rng.integers(3, 6))
+        frames = int(rng.integers(20, 25))
+        drop_first = int(rng.integers(0, 4) == 0)
+        pairs = bresser_burst(frame, preamble, frames)
+        if drop_first:
+            # the detector lost the first pulse of the burst: the train starts one pair later
+            pairs = pairs[1:]
+        msgs.append((f, distort(rng, pairs, 0.08, 0.05)))
+        frames_of.append(frames)
+        preambles.append(preamble)
+        lost.append(drop_first)
+    return finish(msgs, "bresser_3ch", 22, 1, 649,
+                  "Bresser 3CH messages (OOK, 3 to 5 preamble pairs of 735 us, 40 bits with a bit "
+                  "period of 750 us, 1 = 500/250 us, 0 = 250/500 us, sum of bytes 0 to 3 as "
+                  "check; battery, button and channel in the high nibble of byte 1), 20 to 24 "
+                  "identical frames back to back in a train (one reading with repeats = the "
+                  "number of frames), the first pair dropped in about a quarter of the trains, "
+                  "clock error +-8 % and width error +-5 %, 250 kHz",
+                  extra_arrays={
+                      "repeat_counts": Array("i32", np.array(frames_of, dtype=np.int32)),
+                      "preamble_pairs": Array("i32", np.array(preambles, dtype=np.int32)),
+                      "first_pair_lost": Array("i32", np.array(lost, dtype=np.int32)),
+                  })
+
+
+@case("sensors", "bresser_3ch_recorded", 649)
+def bresser_3ch_recorded(rng):
+    """The four messages recorded from the maintainer's sensor (cu8 at 2 MS/s, 2026-11-09). They
+    are facts about the device, not generated data: no random value is drawn. The widths are the
+    measured ones (bit 1: 496/238 us, bit 0: 252/480 us, preamble 735/735 us); the number of
+    frames per train (22, 23, 24 and 20) and the preamble length (4 pairs) are illustrative."""
+    recorded = [  # (bytes of the frame, the display of the sensor)
+        ([0xD8, 0x65, 0xC7, 0x51, 0x55], None),  # recording 1: display not known
+        ([0xD8, 0x66, 0x52, 0x40, 0xD0], (22.1, 64)),  # recording 2
+        ([0xD8, 0x66, 0x59, 0x47, 0xDE], (22.5, 71)),  # recording 3
+        ([0xD8, 0x65, 0xDB, 0x3C, 0x54], (15.5, 60)),  # recording 4, outdoors, 20 frames
+    ]
+    frame_counts = [22, 23, 24, 20]
+    msgs, frames_of = [], []
+    for k, (frame, display) in enumerate(recorded):
+        raw_t = ((frame[1] & 0x0F) << 8) | frame[2]
+        # the flags of byte 1 in all recordings: battery ok, button pressed, channel 2
+        assert frame == bresser_frame(frame[0], 0, 1, 2, raw_t, frame[3])  # the sum checks
+        f = blank("Bresser-3CH")
+        f["id"] = frame[0]
+        f["channel"] = 2
+        f["battery_ok"] = 1
+        f["temperature_c"] = bresser_celsius(raw_t)
+        f["humidity"] = float(frame[3])
+        if display is not None:
+            assert (f["temperature_c"], f["humidity"]) == (display[0], float(display[1]))
+        frames = frame_counts[k]
+        pairs = bresser_burst(frame, 4, frames, one=(496.0, 238.0), zero=(252.0, 480.0))
+        msgs.append((f, quantise(pairs)))
+        frames_of.append(frames)
+    return finish(msgs, "bresser_3ch", 22, 1, 649,
+                  "The four recorded messages of the sensor labelled AS2-WS-6B, type 60109 (D8 "
+                  "65 C7 51 55, D8 66 52 40 D0, D8 66 59 47 DE, D8 65 DB 3C 54; id 0xD8, "
+                  "channel 2, battery ok, button pressed) with the measured widths, 4 preamble "
+                  "pairs and 22, 23, 24 and 20 frames; the expected values are 14.4 C 81 % "
+                  "(display not known), 22.1 C 64 %, 22.5 C 71 % and 15.5 C 60 % (the displays "
+                  "of recordings 2 to 4); no random value, 250 kHz",
+                  extra_arrays={
+                      "repeat_counts": Array("i32", np.array(frames_of, dtype=np.int32)),
+                  },
+                  extra_params={"recorded": True})
+
+
+def finish(msgs, model, reps, per_train, seed, notes, extra_arrays=None, extra_params=None):
     pairs, counts = [], []
     for _, p in msgs:
         counts.append(len(p))
@@ -414,8 +540,10 @@ def finish(msgs, model, reps, per_train, seed, notes):
     for key in ("temperature_c", "humidity", "wind_avg_km_h", "wind_max_km_h", "wind_dir_deg",
                 "rain_mm"):
         arrays[key] = Array("f64", col(key, np.float64))
+    arrays.update(extra_arrays or {})
     return dict(
         params={
+            **(extra_params or {}),
             "rate_hz": RATE,
             "models": models,
             "decoder": model,
@@ -448,6 +576,13 @@ def _self_test():
     assert tx29_frame(0x20, -6, 89, 0) == [0x92, 0x03, 0x94, 0x59, 0x3C]
     assert tx29_frame(0x28, 224, 40, 0) == [0x92, 0x86, 0x24, 0x28, 0xDE]
     assert math.isclose(1e6 / 17241.0, TX29_BIT_US, abs_tol=0.01)
-
+    # Bresser 3CH: the three recorded frames carry their own sums (battery ok, button, channel
+    # 2), and the display values of two recordings follow from the temperature scale
+    assert bresser_frame(0xD8, 0, 1, 2, 0x5C7, 0x51) == [0xD8, 0x65, 0xC7, 0x51, 0x55]
+    assert bresser_frame(0xD8, 0, 1, 2, 0x652, 0x40) == [0xD8, 0x66, 0x52, 0x40, 0xD0]
+    assert bresser_frame(0xD8, 0, 1, 2, 0x659, 0x47) == [0xD8, 0x66, 0x59, 0x47, 0xDE]
+    assert bresser_frame(0xD8, 0, 1, 2, 0x5DB, 0x3C) == [0xD8, 0x65, 0xDB, 0x3C, 0x54]
+    assert (bresser_celsius(0x652), bresser_celsius(0x659), bresser_celsius(0x5C7),
+            bresser_celsius(0x5DB)) == (22.1, 22.5, 14.4, 15.5)
 
 _self_test()

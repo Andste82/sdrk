@@ -24,6 +24,9 @@
 //!   D974).
 //! - Chunk invariance of the block with 20 plans of input chunks and output room (seed 635, the
 //!   block part of test 8), on a scene with overlapping OOK and FSK transmissions.
+//! - Spec §3 through 4 lanes (two FSK frames two spacings apart with the same timing are both
+//!   emitted, the wideband rule is off below 8 lanes), test 7 with burst timeouts of 16 steps
+//!   (one train per burst), the refined edges with `min_pulse_us` of 50 steps (D1031).
 //! - Two transmissions two channel spacings apart that overlap in time are both emitted; an FSK
 //!   transmission is emitted as FSK with its transitions within 1 step; the checks of the
 //!   configuration, the runtime parameter, the split of long trains and reset (no seed of the
@@ -1248,8 +1251,15 @@ const TEST7_BURST_S: f64 = 0.001;
 /// Spec test 7 over `seconds` (at most 60, 15 bursts) through `channels` lanes around
 /// `center` (16 at 433.92 MHz: the 433 MHz flow; 8 at 868.5 MHz: the 868 MHz flow): noise, a CW
 /// carrier and wideband bursts give no train except for the bursts (never from the carrier), at
-/// most `per_burst` per burst; returns the trains per burst.
-fn false_alarms(seconds: f64, per_burst: usize, channels: usize, center: f64) -> Vec<usize> {
+/// most `per_burst` per burst; returns the trains per burst. `cfg` is the detector
+/// configuration (the default in the spec test).
+fn false_alarms(
+    seconds: f64,
+    per_burst: usize,
+    channels: usize,
+    center: f64,
+    cfg: &BandPulseDetectConfig,
+) -> Vec<usize> {
     let bursts = ((seconds - TEST7_FIRST_S) / TEST7_BURST_EVERY_S).ceil() as usize;
     let mut interferers = vec![Interferer::Carrier {
         freq_offset_hz: 312.5e3 + 17e3,
@@ -1271,7 +1281,7 @@ fn false_alarms(seconds: f64, per_burst: usize, channels: usize, center: f64) ->
         interferers: &interferers,
         seed: SEED_FALSE_ALARMS,
     };
-    let trains = stream_detect(&scene, seconds, channels, &BandPulseDetectConfig::default());
+    let trains = stream_detect(&scene, seconds, channels, cfg);
     let mut counts = vec![0usize; bursts];
     for tr in &trains {
         let t_s = tr.index as f64 / (2.0 * FS / channels as f64);
@@ -1297,8 +1307,14 @@ const CENTER_868: f64 = 868.5e6;
 /// s of the spec run in `sixty_seconds_of_noise_give_no_false_alarms`.
 #[test]
 fn noise_a_carrier_and_bursts_give_no_false_alarms() {
-    false_alarms(4.0, 1, CHANNELS, CENTER);
-    false_alarms(4.0, 1, CHANNELS_868, CENTER_868);
+    false_alarms(4.0, 1, CHANNELS, CENTER, &BandPulseDetectConfig::default());
+    false_alarms(
+        4.0,
+        1,
+        CHANNELS_868,
+        CENTER_868,
+        &BandPulseDetectConfig::default(),
+    );
 }
 
 /// Spec test 7 (seed 633) over the 60 s of the spec (15 bursts) through the 16 lanes of the
@@ -1309,8 +1325,33 @@ fn noise_a_carrier_and_bursts_give_no_false_alarms() {
 #[test]
 #[ignore = "60 s of 2 MS/s; run with --profile emulated -- --ignored"]
 fn sixty_seconds_of_noise_give_no_false_alarms() {
-    false_alarms(60.0, 1, CHANNELS, CENTER);
-    false_alarms(60.0, 1, CHANNELS_868, CENTER_868);
+    false_alarms(60.0, 1, CHANNELS, CENTER, &BandPulseDetectConfig::default());
+    false_alarms(
+        60.0,
+        1,
+        CHANNELS_868,
+        CENTER_868,
+        &BandPulseDetectConfig::default(),
+    );
+}
+
+/// Spec test 7 (seed 633, the first 2 s: the carrier and one burst) with the shortest burst
+/// timeouts for which the wideband rule sees every burst (D1031): `gap_ratio` 1.6 makes the
+/// timeout of a burst without a pulse 16 steps, and the block of the rule shrinks to 8 steps,
+/// so no fragment of a wideband burst is decided before a wideband block of it has closed;
+/// wideband blocks up to 100 us apart stay one event.
+#[test]
+fn short_burst_timeouts_keep_one_train_per_wideband_burst() {
+    let cfg = BandPulseDetectConfig {
+        gap_ratio: 1.6,
+        ..BandPulseDetectConfig::default()
+    };
+    false_alarms(2.0, 1, CHANNELS, CENTER, &cfg);
+    let cfg = BandPulseDetectConfig {
+        max_gap_ms: 0.032,
+        ..BandPulseDetectConfig::default()
+    };
+    false_alarms(2.0, 1, CHANNELS_868, CENTER_868, &cfg);
 }
 
 /// A scene with OOK and FSK transmissions that overlap in time on frequencies at least two
@@ -1441,6 +1482,124 @@ fn overlapping_transmissions_two_spacings_apart_are_both_emitted() {
         )
         .unwrap();
     }
+}
+
+/// Spec §3 through 4 lanes (500 kHz apart, 1 MHz steps): two FSK transmissions two spacings
+/// apart, each between two lane centres and with the same timing, keep all 4 lanes above their
+/// trigger level for the whole frame; the wideband rule is off below 8 lanes (D1031), so both
+/// are emitted (with the rule from 4 lanes on, the second frame was taken as part of a wideband
+/// event).
+#[test]
+fn overlapping_transmissions_through_4_lanes_are_both_emitted() {
+    let mut rng = Pcg32::new(13, 3);
+    let bits = random_bits(&mut rng, 32);
+    let tx = |freq: f64| Transmission {
+        coding: Coding::Fsk {
+            bit_us: 100.0,
+            deviation_hz: 50e3,
+        },
+        bits: &bits,
+        repeats: 1,
+        repeat_gap_us: 0.0,
+        freq_offset_hz: freq,
+        level_db: -20.0,
+        timing_error: 0.0,
+    };
+    let placed = [
+        Placed {
+            start_s: 0.008,
+            transmission: tx(250e3),
+        },
+        Placed {
+            start_s: 0.008,
+            transmission: tx(-750e3),
+        },
+    ];
+    let scene = Scene {
+        fs: FS,
+        center_hz: CENTER,
+        clock_error_ppm: 0.0,
+        noise_db: NOISE_DB,
+        transmissions: &placed,
+        interferers: &[],
+        seed: 9,
+    };
+    let lanes = lanes_of(&scene, 0.030, 4);
+    let trains = detect_all(&BandPulseDetectConfig::default(), &lanes, 1e6, 4);
+    for p in &placed {
+        let f = p.transmission.freq_offset_hz;
+        let n = trains
+            .iter()
+            .filter(|tr| (f64::from(tr.header.freq_offset_hz) - f).abs() < 60e3)
+            .count();
+        assert_eq!(n, 1, "{f}: {trains:?}");
+    }
+}
+
+/// Pulses with `min_pulse_us` of 200 (50 steps, longer than the ring of 32 raw magnitudes):
+/// the second stage of every edge runs at most 26 samples after the envelope crossing, while
+/// the ring still holds the samples before it (D1031), so the widths are as good as with the
+/// default `min_pulse_us` of 40 (refined at the confirmation, 10 steps) on the same scene at
+/// 14 dB: 8 PWM transmissions of 24 bits (400 / 800 us pulses), the rms width error at most
+/// 0.05 steps above. A refinement at the confirmation lost the samples before the crossing and
+/// put every edge on the first plateau sample of the window.
+#[test]
+fn long_minimum_pulses_keep_their_refined_edges() {
+    let mut rng = Pcg32::new(14, 3);
+    let bits: Vec<Vec<bool>> = (0..8).map(|_| random_bits(&mut rng, 24)).collect();
+    let placed: Vec<Placed<'_>> = bits
+        .iter()
+        .enumerate()
+        .map(|(i, b)| Placed {
+            start_s: 0.006 + 0.045 * i as f64,
+            transmission: Transmission {
+                coding: Coding::Pwm {
+                    short_us: 400.0,
+                    long_us: 800.0,
+                    gap_us: 400.0,
+                },
+                bits: b,
+                repeats: 1,
+                repeat_gap_us: 0.0,
+                freq_offset_hz: -437.5e3 + 125e3 * i as f64 + 7e3,
+                level_db: noise_in_channel() + 14.0,
+                timing_error: 0.0,
+            },
+        })
+        .collect();
+    let scene = Scene {
+        fs: FS,
+        center_hz: CENTER,
+        clock_error_ppm: 0.0,
+        noise_db: NOISE_DB,
+        transmissions: &placed,
+        interferers: &[],
+        seed: 10,
+    };
+    let lanes = lanes_of(&scene, 0.006 + 0.045 * 8.0, CHANNELS);
+    let rms = |min_pulse_us: f64| {
+        let cfg = BandPulseDetectConfig {
+            min_pulse_us,
+            ..BandPulseDetectConfig::default()
+        };
+        let trains = detect_all(&cfg, &lanes, 250e3, CHANNELS);
+        assert_eq!(trains.len(), placed.len(), "{min_pulse_us}: {trains:?}");
+        let mut e = Vec::new();
+        for (tr, p) in trains.iter().zip(&placed) {
+            let want = expected_pairs(&p.transmission, &scene);
+            assert_eq!(tr.pairs.len(), want.len(), "{min_pulse_us}: {tr:?}");
+            for (k, (g, w)) in tr.pairs.iter().zip(&want).enumerate() {
+                e.push(f64::from(g.pulse) - w.0 / 4.0);
+                if k + 1 < want.len() {
+                    e.push(f64::from(g.gap) - w.1 / 4.0);
+                }
+            }
+        }
+        width_stats(&e).0
+    };
+    let (short, long) = (rms(40.0), rms(200.0));
+    println!("rms width error: min_pulse_us 40 {short:.3} steps, 200 {long:.3} steps");
+    assert!(long <= short + 0.05, "{long} against {short}");
 }
 
 /// The lane of channel -8 is centred on the edge of the input band (plus and minus 1 MHz): a

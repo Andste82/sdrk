@@ -66,7 +66,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         19000) (Kaiser design, cutoff 2400 Hz, transition 1500 Hz, 60 dB, DC gain 50, so a \
         subcarrier at 4 % of the multiplex gives chips of about 1), recovers the chip clock at \
         2375 Hz (symbol_sync, Gardner, sync_bw, damping 0.7071, max_deviation 0.005) and the \
-        carrier (costas order 2, carrier_bw), which puts the BPSK chips on the real axis. \
+        carrier (costas constellation bpsk, carrier_bw), which puts the BPSK chips on the real axis. \
         Biphase decoding forms u = (c0.re - c1.re) / 2 from two chips; both pairings (even and \
         odd chips first) run, each keeps the average of |u| over 32 bits, and the block \
         outputs the pairing with the larger average, switching only when the other is larger \
@@ -320,7 +320,8 @@ impl Biphase {
 /// the facade: `interleave` (the multiplex as the real part), `rotate` by -57000 Hz,
 /// `fir_decimate` by `d = floor(fs / 19000)` with the channel filter (Kaiser, cutoff 2400 Hz,
 /// transition 1500 Hz, 60 dB; the taps of the design times 50 as `f32`), `symbol_sync`
-/// (Gardner at the exact `(fs / d) / 2375` samples per chip) and `costas` order 2. Then, in
+/// (Gardner at the exact `(fs / d) / 2375` samples per chip) and `costas` with the
+/// `constellation` `bpsk`. Then, in
 /// scalar code per chip `c` (the real part after the carrier loop): with `p` the previous chip,
 /// `u = (p - c) / 2` completes a pair of the pairing that alternates with every chip (the
 /// first chip after construction or reset only starts the even pairing). That pairing updates

@@ -5,7 +5,7 @@
 //! plans of seed 559; the timing, rates and parameter checks; the extremes (NaN, infinity,
 //! silence, full scale); the loop `psk_mod` -> `psk_demod` without noise is error-free for
 //! BPSK and QPSK, coherent and differential; `frame_decode` with `rotations` both. M40.1: the
-//! `costas` order 8, the 8PSK and pi/4-DQPSK symbol tables, the `variant` combinations, the
+//! `costas` constellation `8psk`, the 8PSK and pi/4-DQPSK symbol tables, the `variant` combinations, the
 //! timing of 8PSK and OQPSK, the new options equal to their kernel chains whole and in 20 cut
 //! plans of seed 564, the noiseless loop and the extremes for 8PSK, pi/4-DQPSK and OQPSK.
 #![allow(
@@ -442,7 +442,7 @@ fn costas_block_equals_the_kernel_whole_and_in_cut_plans() {
             &input,
             SEED,
             || CostasBlock::<VecStorage>::new(&cfg, rate(1000), &mut VecStorage).unwrap(),
-            &format!("costas order {order}"),
+            &format!("costas {:?}", psk(order)),
         );
         let mut block = CostasBlock::<VecStorage>::new(&cfg, rate(1000), &mut VecStorage).unwrap();
         let got = run_block(&mut block, &input, None);
@@ -1165,7 +1165,7 @@ fn costas_block_takes_order_8() {
         &input,
         M40_1_SEED,
         || CostasBlock::<VecStorage>::new(&cfg, rate(1000), &mut VecStorage).unwrap(),
-        "costas order 8",
+        "costas 8psk",
     );
     let mut block = CostasBlock::<VecStorage>::new(&cfg, rate(1000), &mut VecStorage).unwrap();
     let got = run_block(&mut block, &input, None);

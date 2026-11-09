@@ -3075,8 +3075,8 @@
         "frame_decode": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 58.7,
-          "ours_instr_per_sample": 58.7,
+          "other_instr_per_sample": 61.5,
+          "ours_instr_per_sample": 61.5,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -3088,8 +3088,8 @@
         "frame_decode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 53.71,
-          "ours_instr_per_sample": 53.71,
+          "other_instr_per_sample": 60.51,
+          "ours_instr_per_sample": 60.51,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

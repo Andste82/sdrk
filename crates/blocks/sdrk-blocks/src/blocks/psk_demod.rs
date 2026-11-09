@@ -1002,8 +1002,8 @@ fn interp1(xm1: f32, x0: f32, x1: f32, x2: f32, mu: f32) -> f32 {
 
 /// The carrier loop of the variant `offset` (D686 to D688): an oscillator at the sample rate
 /// that derotates the matched-filter output before the in-phase delay, a proportional-integral
-/// loop filter per symbol with the gains of `costas` order 4 and the lock detector of `costas`
-/// order 4 on the realigned symbols.
+/// loop filter per symbol with the gains of `costas` `qpsk` and the lock detector of `costas`
+/// `qpsk` on the realigned symbols.
 ///
 /// Per sample `n` the derotated `r_n = x_n exp(j psi_n)` (kernel `rotate`, phase `psi` and
 /// increment `inc` as `u32` turns) goes into a ring of `h = n / 2` samples; `symbol_sync`
@@ -1048,7 +1048,7 @@ struct OffsetLoop<S: Storage> {
 const WINDOW: usize = 4;
 
 impl<S: Storage> OffsetLoop<S> {
-    /// The loop gains are those of `costas` order 4 (`kp`, `ki`, `max_offset` of
+    /// The loop gains are those of `costas` `qpsk` (`kp`, `ki`, `max_offset` of
     /// [`CostasState::gains`]), passed in by the block, which keeps that state.
     fn new(n: usize, storage: &mut S) -> Result<Self> {
         let half = n / 2;

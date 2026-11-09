@@ -10,6 +10,7 @@
 //! nibble of B9 the wind direction (16 points of 22.5 degrees) and B10 a CRC-8 (polynomial 0x31,
 //! init 0, MSB first) over B1 to B9. The status nibble of B9 is not interpreted.
 
+use super::encoder::{self, Carries, EncodeError, HUMIDITY, RAIN, SensorEncoder, TrainSink, WIND};
 use super::util::{byte_at, collect, crc8_msb, prefix_result};
 use super::{DecodeResult, Mic, Reading, ReadingSink, SensorDecoder};
 use crate::pulses::{Header, Modulation, PulseTrain};
@@ -77,4 +78,78 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
     r.wind_dir_deg = Some(f32::from(b[9] & 0x0F) * 22.5);
     r.rain_mm = Some(rain as f32 * 0.3);
     Ok(r)
+}
+
+/// The pause between two copies (the repeat gap, decision D1124).
+const REPEAT_GAP_US: u32 = 8000;
+
+impl SensorEncoder for Wh1080 {
+    fn name(&self) -> &'static str {
+        "wh1080"
+    }
+
+    fn models(&self) -> &'static [&'static str] {
+        &["wh1080"]
+    }
+
+    fn modulation(&self) -> Modulation {
+        Modulation::Ook
+    }
+
+    fn mic(&self) -> Mic {
+        Mic::Crc
+    }
+
+    fn default_repeats(&self) -> u32 {
+        2
+    }
+
+    fn repeat_gap_us(&self) -> u32 {
+        REPEAT_GAP_US
+    }
+
+    /// The 88 bits of the decoder (B0 = 0xFF, the 12 bit id, the temperature from -40.0 to 60.0
+    /// as `(t + 40) * 10`, humidity, wind speed and gust as counts of 0.34 m/s, the rain counter
+    /// of 0.3 mm, the wind direction as a multiple of 22.5 degrees, the CRC-8) with the pulse
+    /// widths of the WH2 (500 / 1500 us, gaps 1000 us), copies 8 ms apart. The status nibble of
+    /// B9 is sent as 0. Wind, gust, direction and rain default to 0 when absent; `channel` and
+    /// `battery_ok` are not carried. The band and the timings are the unconfirmed assumptions of
+    /// the decoder (D1109).
+    fn encode(
+        &self,
+        r: &Reading,
+        repeats: u32,
+        out: &mut TrainSink<'_>,
+    ) -> Result<(), EncodeError> {
+        encoder::model(r, self.models())?;
+        Carries(HUMIDITY | WIND | RAIN).check(r)?;
+        let id = encoder::id(r, 0x1000)?;
+        let raw = encoder::temperature(r, 10.0, -400, 600)? + 400;
+        let h = encoder::humidity(r)?;
+        let count = |v: Option<f32>, scale: f32, hi: i32, name: &'static str| {
+            encoder::scaled_in(v.unwrap_or(0.0), scale, 0, hi, name)
+        };
+        let avg = count(r.wind_avg_km_h, 1.0 / KMH_PER_COUNT, 255, "wind_avg_km_h")?;
+        let gust = count(r.wind_max_km_h, 1.0 / KMH_PER_COUNT, 255, "wind_max_km_h")?;
+        let rain = count(r.rain_mm, 1.0 / 0.3, 4095, "rain_mm")?;
+        let dir = count(r.wind_dir_deg, 1.0 / 22.5, 16, "wind_dir_deg")? & 0xF;
+        let mut b = [
+            0xFF,
+            (id >> 4) as u8,
+            (((id & 0xF) << 4) as u8) | (raw >> 8) as u8,
+            raw as u8,
+            h,
+            avg as u8,
+            gust as u8,
+            (rain >> 8) as u8,
+            rain as u8,
+            dir as u8,
+            0,
+        ];
+        let crc = crc8_msb(0, b.iter().skip(1).take(9).copied());
+        if let Some(last) = b.last_mut() {
+            *last = crc;
+        }
+        out.atomic(|o| o.copies(repeats, REPEAT_GAP_US, |o| o.pwm_bytes(&b, 500, 1500, 1000)))
+    }
 }

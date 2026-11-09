@@ -200,7 +200,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 740–749 | M54 (`code_track`) |
 | 750–759 | M55 (`pilot_equalize`) |
 | 760–769 | M56 (`fwht`) |
-| 770–999 | free, for backlog milestones |
+| 770–774 | M46 extension: the sensor encoders (D1127) |
+| 775–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

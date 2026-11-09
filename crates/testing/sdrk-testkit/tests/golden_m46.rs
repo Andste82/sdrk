@@ -13,8 +13,8 @@
 //! gives no reading (`BadIntegrity`); Nexus, a device without a check, gives a reading only when
 //! two equal frames are left. Test 5 (seed 647): out-of-range values and truncated rows give no
 //! reading. The trains of tests 4 and 5 are rendered by the helpers below from the coding rules.
-//! The case `bresser_3ch_recorded` holds the four messages recorded from the sensor (22.1 C 64 %, 15.5 C 60 %,
-//! 22.5 C 71 % and 14.4 C 81 %, D1119).
+//! The case `bresser_3ch_recorded` holds the four messages recorded from the sensor (22.11 C 64 %, 15.5 C 60 %,
+//! 22.5 C 71 % and 14.39 C 81 %, D1119, two decimals D1123).
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -815,7 +815,12 @@ fn the_three_recorded_messages_decode_to_the_display_values() {
     assert_eq!(list.len(), 4);
     let frames = i32s(&c, "repeat_counts");
     // recording 1 (display not known), 2 (22.1 C, 64 %), 3 (22.5 C, 71 %) and 4 (15.5 C, 60 %)
-    let want = [(14.4f32, 81.0f32), (22.1, 64.0), (22.5, 71.0), (15.5, 60.0)];
+    let want = [
+        (14.39f32, 81.0f32),
+        (22.11, 64.0),
+        (22.5, 71.0),
+        (15.5, 60.0),
+    ];
     for (i, pairs) in list.iter().enumerate() {
         let (res, r) = bresser_decode(pairs);
         assert_eq!(res, DecodeResult::Decoded(1), "recording {}", i + 1);
@@ -879,7 +884,7 @@ fn bresser_one_frame_with_a_valid_sum_is_a_reading() {
         assert_eq!(res, DecodeResult::Decoded(1), "preamble {preamble}");
         assert_eq!(
             (r[0].id, r[0].temperature_c, r[0].repeats),
-            (0x11, Some(22.1), 1)
+            (0x11, Some(22.11), 1)
         );
     }
     // one preamble pair is not enough, and neither is none
@@ -938,10 +943,12 @@ fn bresser_out_of_range_values_give_no_reading() {
     }
     // the limits themselves are readings
     for (raw, hum, t) in [
-        (700, 0, -28.9f32),
-        (2500, 100, 71.1),
+        (700, 0, -28.89f32),
+        (2500, 100, 71.11),
         (1220, 50, 0.0),
         (1229, 50, 0.5),
+        (1230, 50, 0.56),
+        (1626, 50, 22.56),
     ] {
         let (_, r) = bresser_decode(&bresser_train(&[bresser_raw(0x11, 6, raw, hum); 22], 4));
         assert_eq!(r[0].temperature_c, Some(t), "{raw}");
@@ -1014,7 +1021,7 @@ fn bresser_two_different_messages_in_one_train_are_two_readings() {
             r[1].temperature_c,
             r[1].repeats
         ),
-        (Some(22.1), 10, Some(22.5), 12)
+        (Some(22.11), 10, Some(22.5), 12)
     );
 }
 
@@ -1036,6 +1043,108 @@ fn bresser_tolerates_the_timing_of_the_real_chain() {
         pairs.last_mut().unwrap().gap = 0;
         let (res, r) = bresser_decode(&pairs);
         assert_eq!(res, DecodeResult::Decoded(1), "scale {scale}");
-        assert_eq!(r[0].temperature_c, Some(22.1));
+        assert_eq!(r[0].temperature_c, Some(22.11));
     }
+}
+
+// ---------------------------------------------------------------- the encoders (D1123 to D1127)
+
+/// Seed of the choice of the repeats in the test of the encoders.
+const SEED_ENCODERS: u64 = 772;
+
+/// The model string of the golden case as a `'static` string of the registry.
+fn registry_model(model: &str) -> &'static str {
+    sensors::encoder_by_model(model)
+        .unwrap()
+        .models()
+        .iter()
+        .copied()
+        .find(|m| *m == model)
+        .unwrap()
+}
+
+#[test]
+fn the_rust_encoders_reproduce_the_readings_of_the_independent_python_encoders() {
+    use sdrk_proto::sensors::{EncodeError, MAX_TRAIN_PAIRS, TrainSink};
+    let mut rng = Pcg32::new(SEED_ENCODERS, 0);
+    let mut checked = 0;
+    for name in CASES {
+        let c = golden::load("sensors", name).unwrap();
+        let models: Vec<String> = c.params["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m.as_str().unwrap().to_string())
+            .collect();
+        let (ids, chans, bats, mids) = (
+            i32s(&c, "ids"),
+            i32s(&c, "channels"),
+            i32s(&c, "battery_ok"),
+            i32s(&c, "model_ids"),
+        );
+        let temp = f64s(&c, "temperature_c");
+        let hum = f64s(&c, "humidity");
+        let wavg = f64s(&c, "wind_avg_km_h");
+        let wmax = f64s(&c, "wind_max_km_h");
+        let wdir = f64s(&c, "wind_dir_deg");
+        let rain = f64s(&c, "rain_mm");
+        for (i, py_pairs) in trains(&c).iter().enumerate() {
+            // the reading the Python encoder encoded (its expected values), as JSON text and back
+            let model = models[mids[i] as usize].as_str();
+            let enc = sensors::encoder_by_model(model).unwrap();
+            let mut x = Reading::new(
+                registry_model(model),
+                ids[i] as u32,
+                enc.mic(),
+                &header(enc.modulation()),
+            );
+            x.temp_decimals = enc.temp_decimals();
+            x.channel = u8::try_from(chans[i]).ok().filter(|&v| v > 0);
+            x.battery_ok = match bats[i] {
+                -1 => None,
+                b => Some(b == 1),
+            };
+            x.temperature_c = opt(temp[i]);
+            x.humidity = opt(hum[i]);
+            x.wind_avg_km_h = opt(wavg[i]);
+            x.wind_max_km_h = opt(wmax[i]);
+            x.wind_dir_deg = opt(wdir[i]);
+            x.rain_mm = opt(rain[i]);
+            let mut text = String::new();
+            x.to_json(&mut text).unwrap();
+            let y = Reading::from_json(&text).unwrap();
+            // a train of the Rust encoder with 2 to 4 repeats (Nexus needs 2, the sink holds 4)
+            let repeats = 2 + rng.below(3);
+            let mut storage = vec![Pair::default(); MAX_TRAIN_PAIRS];
+            let mut sink = TrainSink::new(&mut storage);
+            match enc.encode(&y, repeats, &mut sink) {
+                Ok(()) => {}
+                Err(EncodeError::Unrepresentable) => {
+                    assert_eq!(name, "lacrosse_tx29");
+                    continue;
+                }
+                Err(e) => panic!("{name} train {i}: {text}: {e}"),
+            }
+            let mut buf = vec![0u8; 16 + 8 * sink.len()];
+            let n = pulses::encode_joined(&enc.header(), sink.pairs(), &mut buf).unwrap();
+            let train = pulses::decode(&buf[..n]).unwrap();
+            let mut got = ReadingSink::new();
+            let res = sensors::by_name(name).unwrap().decode(&train, &mut got);
+            assert!(
+                matches!(res, DecodeResult::Decoded(_)),
+                "{name} train {i}: {res:?}"
+            );
+            // the decoder gives the same readings for the Python train and the Rust train
+            let (_, from_python) = decode_with(name, enc.modulation(), py_pairs);
+            for r in got.iter() {
+                assert!(
+                    r.same_content(&from_python[0]),
+                    "{name} train {i}: {text}\n{r:?}\n{:?}",
+                    from_python[0]
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked >= 6 * 18, "{checked}");
 }

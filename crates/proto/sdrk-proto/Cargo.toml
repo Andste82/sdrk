@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 sdrk-device = { path = "../../core/sdrk-device" }
+bytemuck.workspace = true
 
 [dev-dependencies]
 sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }

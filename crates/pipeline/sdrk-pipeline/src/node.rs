@@ -608,6 +608,10 @@ where
         self.block.process(input, output)
     }
 
+    fn reading(&self, index: usize) -> Option<(&'static str, f64)> {
+        self.block.reading(index)
+    }
+
     forward_node!();
 }
 

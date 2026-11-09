@@ -11,6 +11,9 @@
 //! has no checksum: a reading is reported only when two frames of the train are equal
 //! (`"mic":"repeat"`, `repeats` the number of equal frames).
 
+use super::encoder::{
+    self, BATTERY, CHANNEL, Carries, EncodeError, HUMIDITY, SensorEncoder, TrainSink,
+};
 use super::util::prefix_result;
 use super::{DecodeResult, Mic, Reading, ReadingSink, SensorDecoder};
 use crate::pulses::{Modulation, PulseTrain};
@@ -124,5 +127,68 @@ impl SensorDecoder for Nexus {
             }
         }
         res
+    }
+}
+
+/// The gap between two frames (the end gap of a frame, 4000 us, as the description says).
+const FRAME_GAP_US: u32 = 4000;
+
+impl SensorEncoder for Nexus {
+    fn name(&self) -> &'static str {
+        "nexus"
+    }
+
+    fn models(&self) -> &'static [&'static str] {
+        &["nexus"]
+    }
+
+    fn modulation(&self) -> Modulation {
+        Modulation::Ook
+    }
+
+    fn mic(&self) -> Mic {
+        Mic::Repeat
+    }
+
+    fn default_repeats(&self) -> u32 {
+        4
+    }
+
+    fn repeat_gap_us(&self) -> u32 {
+        FRAME_GAP_US
+    }
+
+    /// The 36 bits of the decoder (id, battery, 0, channel - 1, 12 bit two's complement
+    /// temperature in tenths from -40.0 to 80.0, 1111, humidity) as pulses of 500 us with gaps
+    /// of 1000 us (0) and 2000 us (1), one end pulse and a gap of 4000 us after every frame.
+    /// The decoder needs two equal frames, so `repeats` of 1 is a train it does not read. The
+    /// id is below 256, the channel 1 to 4.
+    fn encode(
+        &self,
+        r: &Reading,
+        repeats: u32,
+        out: &mut TrainSink<'_>,
+    ) -> Result<(), EncodeError> {
+        encoder::model(r, self.models())?;
+        Carries(CHANNEL | BATTERY | HUMIDITY).check(r)?;
+        let id = encoder::id(r, 256)?;
+        let ch = encoder::channel(r, 4)?;
+        let t = encoder::temperature(r, 10.0, -400, 800)?;
+        let h = encoder::humidity(r)?;
+        let bat = u64::from(r.battery_ok.unwrap_or(true));
+        let bits: u64 = (u64::from(id) << 28)
+            | (bat << 27)
+            | (u64::from(ch - 1) << 24)
+            | (((t & 0xFFF) as u64) << 12)
+            | (0xF << 8)
+            | u64::from(h);
+        out.atomic(|o| {
+            o.copies(repeats, FRAME_GAP_US, |o| {
+                for k in (0..36).rev() {
+                    o.push(500, if bits >> k & 1 == 1 { 2000 } else { 1000 })?;
+                }
+                o.push(500, FRAME_GAP_US)
+            })
+        })
     }
 }

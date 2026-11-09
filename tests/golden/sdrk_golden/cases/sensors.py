@@ -410,10 +410,11 @@ def bresser_frame(dev_id, battery_low, button, channel, raw_t, hum):
 
 def bresser_celsius(raw_t):
     """The temperature: tenths of a degree Fahrenheit plus 900 (F = (T - 900) / 10), so
-    C = (T - 1220) / 18, rounded half away from zero to one decimal with exact fractions."""
-    tenths = Fraction((raw_t - 1220) * 10, 18)
-    mag = int(math.floor(abs(tenths) + Fraction(1, 2)))
-    return (mag if tenths >= 0 else -mag) / 10.0
+    C = (T - 1220) / 18; the sensor's step is 0.0556 C, so the value is kept with two decimals:
+    the exact fraction rounded to hundredths, half away from zero (D1123)."""
+    hundredths = Fraction((raw_t - 1220) * 100, 18)
+    mag = int(math.floor(abs(hundredths) + Fraction(1, 2)))
+    return (mag if hundredths >= 0 else -mag) / 100.0
 
 
 def bresser_frame_pairs(frame, preamble, one=(500.0, 250.0), zero=(250.0, 500.0)):
@@ -495,7 +496,9 @@ def bresser_3ch_recorded(rng):
         f["temperature_c"] = bresser_celsius(raw_t)
         f["humidity"] = float(frame[3])
         if display is not None:
-            assert (f["temperature_c"], f["humidity"]) == (display[0], float(display[1]))
+            # the display shows one decimal (truncated: 22.111 shows 22.1), the case two
+            assert math.floor(f["temperature_c"] * 10 + 1e-9) / 10 == display[0]
+            assert f["humidity"] == float(display[1])
         frames = frame_counts[k]
         pairs = bresser_burst(frame, 4, frames, one=(496.0, 238.0), zero=(252.0, 480.0))
         msgs.append((f, quantise(pairs)))
@@ -504,9 +507,9 @@ def bresser_3ch_recorded(rng):
                   "The four recorded messages of the sensor labelled AS2-WS-6B, type 60109 (D8 "
                   "65 C7 51 55, D8 66 52 40 D0, D8 66 59 47 DE, D8 65 DB 3C 54; id 0xD8, "
                   "channel 2, battery ok, button pressed) with the measured widths, 4 preamble "
-                  "pairs and 22, 23, 24 and 20 frames; the expected values are 14.4 C 81 % "
-                  "(display not known), 22.1 C 64 %, 22.5 C 71 % and 15.5 C 60 % (the displays "
-                  "of recordings 2 to 4); no random value, 250 kHz",
+                  "pairs and 22, 23, 24 and 20 frames; the expected values are 14.39 C 81 % "
+                  "(display not known), 22.11 C 64 %, 22.50 C 71 % and 15.50 C 60 % (the "
+                  "displays of recordings 2 to 4 show 22.1, 22.5 and 15.5 C; two decimals, D1123); no random value, 250 kHz",
                   extra_arrays={
                       "repeat_counts": Array("i32", np.array(frames_of, dtype=np.int32)),
                   },
@@ -583,6 +586,6 @@ def _self_test():
     assert bresser_frame(0xD8, 0, 1, 2, 0x659, 0x47) == [0xD8, 0x66, 0x59, 0x47, 0xDE]
     assert bresser_frame(0xD8, 0, 1, 2, 0x5DB, 0x3C) == [0xD8, 0x65, 0xDB, 0x3C, 0x54]
     assert (bresser_celsius(0x652), bresser_celsius(0x659), bresser_celsius(0x5C7),
-            bresser_celsius(0x5DB)) == (22.1, 22.5, 14.4, 15.5)
+            bresser_celsius(0x5DB)) == (22.11, 22.5, 14.39, 15.5)
 
 _self_test()

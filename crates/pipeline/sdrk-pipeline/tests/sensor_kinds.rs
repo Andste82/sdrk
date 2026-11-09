@@ -273,7 +273,7 @@ fn the_kind_is_registered() {
     let registry = Registry::standard();
     let dec = registry.factory("sensor_decode").unwrap();
     assert_eq!(dec.kernels().len(), 0);
-    assert_eq!(registry.descriptions().count(), 69);
+    assert_eq!(registry.descriptions().count(), 71);
 }
 
 #[test]

@@ -2417,10 +2417,11 @@
                 "properties": {
                   "idle": {
                     "default": "zero",
-                    "description": "What is sent between frames: zero sends 0.0, preamble the bits of 0x55 as +1/-1. Typical: zero; preamble to keep a receiver's clock recovery busy. Build-time.",
+                    "description": "What is sent between frames: zero sends 0.0, preamble the bits of 0x55 as +1/-1, pn9 the bits of the PN9 sequence as +1/-1. Typical: zero; preamble to keep a receiver's clock recovery busy; pn9 for QAM and PSK receivers. Build-time.",
                     "enum": [
                       "zero",
-                      "preamble"
+                      "preamble",
+                      "pn9"
                     ],
                     "type": "string"
                   },

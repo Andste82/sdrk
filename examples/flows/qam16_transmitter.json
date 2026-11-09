@@ -25,7 +25,7 @@
     "enc": {
       "kind": "frame_encode",
       "params": {
-        "idle": "preamble",
+        "idle": "pn9",
         "preamble_bytes": 4
       }
     },

@@ -27,14 +27,14 @@ nodes:
       interpolation: 5
       transition_hz: 60000
   # Encoder: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, length, payload and CRC-16, one
-  # +1/-1 sample per bit. Between packets the encoder sends the preamble bits (idle
-  # preamble); in 16-QAM the bits 0101 of 0x55 are one constant symbol, a steady carrier on
-  # which the receiver's timing loop and blind equalizer cannot train. Keep the packet source
-  # busy (filler packets when there is nothing to send) while a receiver must stay locked.
+  # +1/-1 sample per bit. Between packets the encoder sends the bits of the PN9 sequence
+  # (idle pn9): random-looking 16-QAM symbols on which the receiver's timing loop, frequency
+  # acquisition and blind equalizer keep training while there is nothing to send (idle
+  # preamble would be one constant symbol, bits 0101 of 0x55).
   enc:
     kind: frame_encode
     params:
-      idle: preamble
+      idle: pn9
       preamble_bytes: 4
   # Level: -6 dB. The points of qam_mod have unit average power (the corners at 0.95 in I and
   # Q), and the overlapping pulses of a roll-off of 0.35 peak at about 1.5 in I or Q; at

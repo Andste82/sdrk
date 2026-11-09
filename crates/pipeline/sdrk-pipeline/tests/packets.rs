@@ -256,7 +256,7 @@ fn rx_flow() -> Value {
 
 #[test]
 fn frame_loop_exact_in_pull_mode_with_an_idle_source() {
-    for idle in ["zero", "preamble"] {
+    for idle in ["zero", "preamble", "pn9"] {
         let packets = random_packets(1000, 1);
         let mut tx = build(&tx_flow(idle));
         let mut rx = build(&rx_flow());

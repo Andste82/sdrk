@@ -6,6 +6,7 @@ use core::marker::PhantomData;
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::Packet;
 use sdrk_proto::frame::{MAX_PAYLOAD, Whitening, encode_bytes, frame_bits};
+use sdrk_proto::whiten::{PN9_PERIOD, pn9_byte};
 
 use super::{WHITENING_OPTIONS, check_count, unknown, whitening_choice, whitening_from_choice};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -54,7 +55,10 @@ fn bit_sample(frame: &[u8], pos: usize) -> f32 {
 }
 
 /// The names of the `idle` choice, in index order.
-const IDLE_OPTIONS: &[&str] = &["zero", "preamble"];
+const IDLE_OPTIONS: &[&str] = &["zero", "preamble", "pn9"];
+
+/// Bits of one period of the `pn9` idle signal (511 bytes).
+const PN9_IDLE_BITS: usize = 8 * PN9_PERIOD;
 
 /// Description of the `frame_encode` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
@@ -64,8 +68,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     details: "Sends every packet as one frame of the test framing of sdrk_proto::frame: \
         preamble_bytes bytes 0x55, the sync word 0x1ACFFC1D, a length byte, the payload and a \
         CRC-16/CCITT-FALSE over length and payload, most significant bit first. A 1 bit is \
-        +1.0, a 0 bit -1.0. Between packets the block sends idle samples: 0.0 (idle zero) or \
-        the alternating bits of 0x55 (idle preamble). It is a source: the output rate is the \
+        +1.0, a 0 bit -1.0. Between packets the block sends idle samples: 0.0 (idle zero), \
+        the alternating bits of 0x55 (idle preamble) or the bits of the PN9 sequence of \
+        sdrk_proto::whiten, most significant bit of each byte first, continued from gap to \
+        gap and restarted only by reset (idle pn9: random-looking symbols on which the timing \
+        loop and the blind equalizer of a QAM or PSK receiver keep training). It is a source: the output rate is the \
         rate_hz of the packet input of the pipeline, and in push mode the block only produces \
         the samples of the packets it has. A packet is consumed when its last sample is \
         written. With whitening pn9 the length byte, the payload and the CRC are XORed with \
@@ -102,10 +109,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 options: IDLE_OPTIONS,
                 default: 0,
             },
-            typical: "zero; preamble to keep a receiver's clock recovery busy",
+            typical: "zero; preamble to keep a receiver's clock recovery busy; pn9 for QAM \
+                and PSK receivers",
             mutability: Mutability::Build,
             description: "What is sent between frames: zero sends 0.0, preamble the bits of \
-                0x55 as +1/-1.",
+                0x55 as +1/-1, pn9 the bits of the PN9 sequence as +1/-1.",
         },
         ParamDesc {
             name: "whitening",
@@ -136,6 +144,11 @@ pub enum FrameIdle {
     Zero,
     /// The alternating bits of `0x55` (`-1.0`, `+1.0`, ...).
     Preamble,
+    /// The bits of the PN9 sequence of [`sdrk_proto::whiten`] (seed `0x1FF`, first bytes
+    /// `FF E1 1D 9A`), most significant bit of each byte first, as `+1.0` for 1 and `-1.0`
+    /// for 0. The sequence continues from one idle gap to the next (period 4088 bits) and
+    /// starts again only after `reset`.
+    Pn9,
 }
 
 /// Configuration of [`FrameEncodeBlock`].
@@ -188,7 +201,8 @@ impl FrameEncodeConfig {
             "idle" => {
                 self.idle = match value.as_choice()? {
                     0 => FrameIdle::Zero,
-                    _ => FrameIdle::Preamble,
+                    1 => FrameIdle::Preamble,
+                    _ => FrameIdle::Pn9,
                 }
             }
             "whitening" => self.whitening = whitening_from_choice(value.as_choice()?),
@@ -207,6 +221,7 @@ impl FrameEncodeConfig {
             "idle" => Ok(ParamValue::Choice(match self.idle {
                 FrameIdle::Zero => 0,
                 FrameIdle::Preamble => 1,
+                FrameIdle::Pn9 => 2,
             })),
             "whitening" => Ok(ParamValue::Choice(whitening_choice(self.whitening))),
             _ => unknown(),
@@ -257,6 +272,8 @@ pub struct FrameEncodeBlock<S: Storage> {
     pos: usize,
     /// Next idle bit of the `preamble` idle signal (true: +1.0).
     idle_bit: bool,
+    /// Next bit of the `pn9` idle signal, `0 .. PN9_IDLE_BITS`.
+    idle_pos: usize,
     /// Largest number of output samples of one packet.
     max_samples: Ratio,
     _storage: PhantomData<fn() -> S>,
@@ -276,6 +293,7 @@ impl<S: Storage> FrameEncodeBlock<S> {
             frame_len: 0,
             pos: 0,
             idle_bit: false,
+            idle_pos: 0,
             max_samples: Ratio::new(max as u64, 1)?,
             _storage: PhantomData,
         })
@@ -377,7 +395,48 @@ impl<S: Storage> FrameEncodeBlock<S> {
                     self.idle_bit = !self.idle_bit;
                 }
             }
+            FrameIdle::Pn9 => self.fill_pn9(out),
         }
+    }
+
+    /// Fills `out` with the next bits of the PN9 sequence: bit by bit up to the next byte
+    /// boundary, then whole bytes from the nibble table, then the bits of a partial byte.
+    fn fill_pn9(&mut self, out: &mut [f32]) {
+        let pn9_bit = |pos: usize| {
+            if (pn9_byte(pos / 8) >> (7 - pos % 8)) & 1 == 1 {
+                1.0
+            } else {
+                -1.0
+            }
+        };
+        let lead = ((8 - self.idle_pos % 8) % 8).min(out.len());
+        let (head, rest) = out.split_at_mut(lead);
+        for o in head {
+            *o = pn9_bit(self.idle_pos);
+            self.idle_pos += 1;
+        }
+        self.idle_pos %= PN9_IDLE_BITS;
+        if rest.is_empty() {
+            return; // `idle_pos` may be inside a byte
+        }
+        let mut byte = self.idle_pos / 8;
+        let mut chunks = rest.chunks_exact_mut(8);
+        for chunk in &mut chunks {
+            let b = pn9_byte(byte);
+            let (hi, lo) = chunk.split_at_mut(4);
+            let nibble = |n: u8| NIBBLE_SAMPLES.get(usize::from(n & 15)).copied();
+            if let (Some(h), Some(l)) = (nibble(b >> 4), nibble(b)) {
+                hi.copy_from_slice(&h);
+                lo.copy_from_slice(&l);
+            }
+            byte = (byte + 1) % PN9_PERIOD;
+        }
+        self.idle_pos = byte * 8;
+        for o in chunks.into_remainder() {
+            *o = pn9_bit(self.idle_pos);
+            self.idle_pos += 1;
+        }
+        self.idle_pos %= PN9_IDLE_BITS;
     }
 }
 
@@ -435,6 +494,7 @@ impl<S: Storage> Block for FrameEncodeBlock<S> {
         self.frame_len = 0;
         self.pos = 0;
         self.idle_bit = false;
+        self.idle_pos = 0;
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {

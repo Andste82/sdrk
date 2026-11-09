@@ -1,16 +1,17 @@
 //! M44 test 7: the example flows `qam16_transmitter` -> channel -> `qam16_receiver`.
 //!
-//! The transmitter runs in pull mode. Its packet source always has a packet to send: before
-//! the [`PACKETS`] counted packets (for the first [`LEAD_SYMBOLS`] symbols, while the
-//! receiver's loops and its blind equalizer train) and after them (for [`TAIL_SYMBOLS`]
-//! symbols, the frames still queued and the delay of the receiver) it sends filler packets of
-//! [`FILLER_BYTES`] random bytes, longer than every counted packet so that the two cannot be
-//! confused. The idle signal of `frame_encode` (the preamble bits 0x55, one constant 16-QAM
-//! symbol) would leave the timing loop and the blind equalizer without anything to train on
-//! (D1218). The `cs16` samples are read as complex samples, passed through `Multipath::mild` (at
-//! 40 samples per symbol), shifted by 1 kHz (0.04 cycles per symbol at 25 kBd) and given white
-//! Gaussian noise at Eb/N0 = 16 dB (all from `sdrk_testkit::channel`, seed 606), then scaled and
-//! rounded to the `cs16` input of the receiver.
+//! The transmitter runs in pull mode: the packet source is idle for the first
+//! [`LEAD_SYMBOLS`] symbols (the encoder sends its idle signal, the PN9 sequence, while the
+//! receiver's loops, its frequency acquisition and its blind equalizer train), then hands over
+//! the [`PACKETS`] packets, three per call, and is idle again for [`TAIL_SYMBOLS`] symbols
+//! after the last call (the frames still queued and the delay of the receiver). Whenever the
+//! encoder runs ahead of the source it fills the gap with PN9 idle bits (I44-5); random-looking
+//! 16-QAM symbols keep the timing loop and the equalizer trained, which the constant symbol of
+//! the idle preamble 0x55 did not (D1218: filler packets before I44-5; D1408, D1410). The
+//! `cs16` samples are read as complex samples, passed through `Multipath::mild` (at 40 samples
+//! per symbol), shifted by 1 kHz (0.04 cycles per symbol at 25 kBd) and given white Gaussian
+//! noise at Eb/N0 = 16 dB (all from `sdrk_testkit::channel`, seed 606), then scaled and rounded
+//! to the `cs16` input of the receiver.
 //!
 //! Coherent 16-QAM leaves a carrier phase ambiguity of 90 degrees, which `frame_decode` with
 //! `rotations` four resolves at the sync word. The receiver flow is exactly equivariant to a
@@ -46,17 +47,15 @@ use sdrk_testkit::channel::{Awgn, ChannelChain, FrequencyOffset, Impairment, Mul
 
 use common::{build, flow};
 
-/// Seed of the test (payloads: streams 71 and 72; noise: the `Awgn` of the seed).
+/// Seed of the test (payloads: stream 71; noise: the `Awgn` of the seed).
 const SEED: u64 = 606;
 /// Packets counted.
 const PACKETS: usize = 1000;
 /// Packets that must arrive with `CRC_OK` and the payload unchanged: M44 test 7 asks for 990;
 /// the test guards 995, since the frequency acquisition of `qam_demod` lets the flow run the
-/// narrow default `carrier_bw` (measured 999 to 1000 on the seeds 606 and 770 to 773 at every
-/// rotation, I44-4).
+/// narrow default `carrier_bw` (I44-4); with the PN9 idle signal measured 1000 at every
+/// rotation on the seeds 606 and 770 to 774 (D1410).
 const REQUIRED: usize = 995;
-/// Bytes of a filler packet (the counted packets have 0 to 63 bytes).
-const FILLER_BYTES: usize = 64;
 /// Sample rate of the transmitter output and of the receiver input in Hz.
 const FS: f64 = 1_000_000.0;
 /// Samples per symbol at `FS` (25 kBd).
@@ -68,10 +67,12 @@ const BITS_PER_SYMBOL: usize = 4;
 const OFFSET_HZ: f64 = 1000.0;
 /// Eb/N0 of the channel in dB.
 const EBN0_DB: f64 = 16.0;
-/// Symbols of filler packets before the first counted packet: the 1000 CMA symbols of the
-/// equalizer and the pull-in of the carrier loop (as the 20000 idle symbols of `qpsk_loop`).
+/// Idle symbols before the first packet: the frequency acquisition, the 1000 CMA symbols of
+/// the equalizer and the pull-in of the carrier loop (as the 20000 idle symbols of
+/// `qpsk_loop`).
 const LEAD_SYMBOLS: usize = 20_000;
-/// Symbols of filler packets after the source handed over the last counted packet.
+/// Symbols pulled after the source handed over the last packet (the frames still queued in
+/// the encoder, then idle symbols that flush the filters and the decoder).
 const TAIL_SYMBOLS: usize = 2000;
 /// Bytes per pull of the transmitter (`cs16`: four bytes per sample).
 const PULL_BYTES: usize = 16_000;
@@ -80,46 +81,22 @@ const PUSH_SAMPLES: usize = 4096;
 /// RMS amplitude of the receiver input relative to the `cs16` full scale.
 const RX_RMS: f64 = 0.1;
 
-/// The packet source of the transmitter: filler packets until `open`, then the counted
-/// packets, then filler packets again; up to three packets per call.
+/// The packet source of the transmitter: idle until `open`, then up to three packets per call.
 struct Sender {
     packets: Vec<Packet>,
     next: usize,
     open: bool,
-    filler: Pcg32,
-    buf: Vec<Packet>,
-}
-
-impl Sender {
-    fn new(packets: &[Packet]) -> Self {
-        Self {
-            packets: packets.to_vec(),
-            next: 0,
-            open: false,
-            filler: Pcg32::new(SEED, 72),
-            buf: Vec::new(),
-        }
-    }
 }
 
 impl PullSource for Sender {
     fn provide(&mut self, _input: &str, max: usize) -> Result<InputData<'_>, PullError> {
-        let n = 3.min(max);
-        if self.open && self.next < self.packets.len() {
-            let n = n.min(self.packets.len() - self.next);
-            let from = self.next;
-            self.next += n;
-            return Ok(InputData::Packets(&self.packets[from..from + n]));
+        if !self.open || self.next == self.packets.len() {
+            return Ok(InputData::Packets(&[]));
         }
-        self.buf.clear();
-        for _ in 0..n {
-            let data: Vec<u8> = (0..FILLER_BYTES)
-                .map(|_| self.filler.next_u32() as u8)
-                .collect();
-            self.buf
-                .push(Packet::new(0, PacketFlags::NONE, &data).unwrap());
-        }
-        Ok(InputData::Packets(&self.buf))
+        let n = 3.min(max).min(self.packets.len() - self.next);
+        let from = self.next;
+        self.next += n;
+        Ok(InputData::Packets(&self.packets[from..from + n]))
     }
 }
 
@@ -139,7 +116,11 @@ fn random_packets() -> Vec<Packet> {
 /// complex baseband (the `cs16` samples divided by 32768).
 fn transmit(packets: &[Packet]) -> Vec<Complex64> {
     let mut tx = build(&flow("qam16_transmitter"));
-    let mut source = Sender::new(packets);
+    let mut source = Sender {
+        packets: packets.to_vec(),
+        next: 0,
+        open: false,
+    };
     let mut out = Vec::new();
     let mut bytes = vec![0u8; PULL_BYTES];
     let mut tail_from = None;
@@ -201,7 +182,7 @@ struct Received {
     ok: Vec<usize>,
     /// The quarter turns the flags of these packets report (one entry per value seen).
     rotations: Vec<u32>,
-    /// Packets out (counted, filler and bad).
+    /// Packets out (with `CRC_OK` or not).
     out: usize,
 }
 
@@ -218,7 +199,7 @@ fn receive(bytes: &[u8], packets: &[Packet]) -> Received {
     let mut ok = Vec::new();
     let mut rotations = Vec::new();
     for out in &got {
-        if !out.flags.contains(PacketFlags::CRC_OK) || out.data().len() >= FILLER_BYTES {
+        if !out.flags.contains(PacketFlags::CRC_OK) {
             continue;
         }
         if let Some(k) = (next..packets.len()).find(|&k| packets[k].data() == out.data()) {

@@ -176,7 +176,7 @@ fn descriptions_name_packet_ports() {
     assert!(matches!(
         idle.kind,
         sdrk_blocks::ParamKind::Choice {
-            options: ["zero", "preamble"],
+            options: ["zero", "preamble", "pn9"],
             ..
         }
     ));
@@ -418,6 +418,98 @@ fn encoder_idle_zero_and_preamble() {
     assert_eq!(out, [-1.0, 1.0, -1.0]);
 }
 
+/// The first `n` samples of the PN9 idle signal, by the register of `sdrk_proto::whiten`
+/// stepped bit by bit (independent of the table of the block).
+fn pn9_idle_reference(n: usize) -> Vec<f32> {
+    let mut state: u16 = 0x1FF;
+    let mut out = Vec::with_capacity(n + 8);
+    while out.len() < n {
+        let byte = state & 0xFF;
+        for k in (0..8).rev() {
+            out.push(if (byte >> k) & 1 == 1 { 1.0 } else { -1.0 });
+        }
+        for _ in 0..8 {
+            let bit = (state ^ (state >> 5)) & 1;
+            state = (state >> 1) | (bit << 8);
+        }
+    }
+    out.truncate(n);
+    out
+}
+
+#[test]
+fn encoder_idle_pn9() {
+    // M44 (I44-5): the bits of PN9 (FF E1 1D 9A ...), most significant bit first, continued
+    // across calls of every length, over more than two periods of 4088 bits.
+    let cfg = FrameEncodeConfig {
+        idle: FrameIdle::Pn9,
+        ..FrameEncodeConfig::default()
+    };
+    let mut enc = encoder(&cfg);
+    assert_eq!(enc.param("idle"), Ok(ParamValue::Choice(2)));
+    let mut rng = Pcg32::new(SEED, 9);
+    let mut idle = Vec::new();
+    while idle.len() < 3 * 4088 {
+        let n = rng.below(40) as usize;
+        let mut out = vec![f32::NAN; n];
+        let r = enc.process(&[], &mut out).unwrap();
+        assert_eq!((r.consumed, r.produced), (0, n));
+        idle.extend(out);
+    }
+    let want = pn9_idle_reference(idle.len());
+    assert_eq!(&want[..8], &[1.0; 8]); // 0xFF
+    assert_eq!(&want[8..16], &[1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0]); // 0xE1
+    assert_eq!(idle, want);
+    // Every bit of the byte sequence is a bit of the m-sequence of period 511, which has 256
+    // ones: a period of 4088 bits has 8 x 256 ones and 8 x 255 zeros.
+    let ones = idle[..4088].iter().filter(|&&x| x > 0.0).count();
+    assert_eq!(ones, 2048);
+    // A frame in between does not move the idle sequence; `reset` restarts it.
+    let mut enc = encoder(&cfg);
+    let mut out = vec![0.0f32; 13];
+    enc.process(&[], &mut out).unwrap();
+    let p = Packet::new(0, PacketFlags::NONE, b"pn9").unwrap();
+    let mut frame = vec![0.0f32; enc.frame_samples(p.len())];
+    assert_eq!(enc.process(&[p], &mut frame).unwrap().consumed, 1);
+    assert_eq!(frame, frame_samples(&p, 4));
+    let mut more = vec![0.0f32; 20];
+    enc.process(&[], &mut more).unwrap();
+    assert_eq!(more, pn9_idle_reference(33)[13..]);
+    enc.reset();
+    enc.process(&[], &mut out).unwrap();
+    assert_eq!(out, pn9_idle_reference(13));
+}
+
+#[test]
+fn pn9_idle_never_starts_a_frame() {
+    // The PN9 idle signal differs from the sync word in at least 6 bits at every position, for
+    // the plain decoder with both polarities and for the rotating decoder of 2, 4 and 6 bits
+    // per symbol at every symbol phase and in all four rotations: even the largest
+    // `max_sync_errors` (4) never leaves the hunt on it.
+    let idle = pn9_idle_reference(4 * 4088 + 6);
+    let bit = |x: f32| x > 0.0;
+    let mut plain = frame::Decoder::new(frame::MAX_SYNC_ERRORS, true, Whitening::None)
+        .unwrap()
+        .with_both_polarities(true);
+    for (k, &x) in idle.iter().enumerate() {
+        assert!(plain.push_bit(bit(x), k as u64).is_none());
+        assert!(plain.is_hunting(), "plain decoder left the hunt at bit {k}");
+    }
+    for bits_per_symbol in [2, 4, 6] {
+        for phase in 0..bits_per_symbol as usize {
+            let decoder = frame::Decoder::new(frame::MAX_SYNC_ERRORS, true, Whitening::None);
+            let mut dec = frame::RotatingDecoder::new(decoder.unwrap(), bits_per_symbol).unwrap();
+            for (k, &x) in idle[phase..].iter().enumerate() {
+                assert!(dec.push_bit(bit(x), k as u64).is_none());
+                assert!(
+                    dec.is_hunting(),
+                    "{bits_per_symbol} bits per symbol, phase {phase}: left the hunt at bit {k}"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn encoder_rejects_a_payload_above_253_bytes() {
     let ok = Packet::new(0, PacketFlags::NONE, &[1, 2, 3]).unwrap();
@@ -598,7 +690,7 @@ fn decoder_options_sync_errors_and_bad_frames() {
 fn encoder_to_decoder_loop() {
     let mut rng = Pcg32::new(SEED, 5);
     let packets = random_packets(&mut rng, 200);
-    for idle in [FrameIdle::Zero, FrameIdle::Preamble] {
+    for idle in [FrameIdle::Zero, FrameIdle::Preamble, FrameIdle::Pn9] {
         let cfg = FrameEncodeConfig {
             preamble_bytes: 2,
             idle,

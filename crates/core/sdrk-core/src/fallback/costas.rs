@@ -8,7 +8,7 @@
 //! `T4` to the metric, D659; 16-QAM and 64-QAM the grid decision, `libm::atan2f` and a second
 //! division). The loop keeps the state in locals and is specialized for the constellation, so
 //! the detector and the metric have no branch on it. The time is the chain from one symbol's
-//! phase to the next, which the forms of D980 keep short with the same bits: `phase_step_f32`
+//! phase to the next, which the forms of D1100 keep short with the same bits: `phase_step_f32`
 //! takes `floor(v 2^32 + 0.5) as i64 as u32` from the bits of the `f32` with one arithmetic
 //! shift (the `phase_step` of `fm_mod` in `f64` on `wasm32` and for large values), `detector4`
 //! (QPSK) turns sign bits instead of multiplying, `integrate` takes the integrator inside its

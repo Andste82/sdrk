@@ -3,16 +3,17 @@
 //! Bit-exact with `Reference`. The loop is a recursion over the symbols (the phase of every
 //! symbol depends on the detector output of the previous one), so the kernel is not
 //! vectorized; per symbol it costs one interpolated table pair, a complex rotation, the
-//! detector, the loop filter and the lock metric (one division; order 8 adds the octant
+//! detector, the loop filter and the lock metric (one division; 8PSK adds the octant
 //! decision of the 8PSK point to the detector and the metric, and the three products of
-//! `T4` to the metric, D659). The loop keeps the state in
-//! locals and is specialized for the order, so the detector and the metric have no branch on
-//! it. The time is the chain from one symbol's phase to the next, which the forms of D980 keep
-//! short with the same bits: `phase_step_f32` takes `floor(v 2^32 + 0.5) as i64 as u32` from
-//! the bits of the `f32` with one arithmetic shift (the `phase_step` of `fm_mod` in `f64` on
-//! `wasm32` and for large values), `detector4` turns sign bits instead of multiplying,
-//! `integrate` takes the integrator inside its limit after one well-predicted branch, and a
-//! non-finite detector value is handled out of line.
+//! `T4` to the metric, D659; 16-QAM and 64-QAM the grid decision, `libm::atan2f` and a second
+//! division). The loop keeps the state in locals and is specialized for the constellation, so
+//! the detector and the metric have no branch on it. The time is the chain from one symbol's
+//! phase to the next, which the forms of D980 keep short with the same bits: `phase_step_f32`
+//! takes `floor(v 2^32 + 0.5) as i64 as u32` from the bits of the `f32` with one arithmetic
+//! shift (the `phase_step` of `fm_mod` in `f64` on `wasm32` and for large values), `detector4`
+//! (QPSK) turns sign bits instead of multiplying, `integrate` takes the integrator inside its
+//! limit after one well-predicted branch, and a non-finite detector value is handled out of
+//! line.
 
 #![allow(clippy::many_single_char_names)]
 
@@ -22,7 +23,8 @@ use crate::fallback::mix::interp_f32_pair;
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::costas::{
-    Costas, CostasState, LOCK_ALPHA, LOCK_OFF, LOCK_ON, derotate, detector, lock_metric,
+    BPSK, Costas, CostasState, LOCK_ALPHA, LOCK_OFF, LOCK_ON, PSK8, QAM16, QAM64, QPSK, derotate,
+    detector, lock_metric,
 };
 use crate::num::flush_denormal;
 use crate::types::C32;
@@ -130,10 +132,10 @@ fn phase_step_f32(v: f32) -> u32 {
 
 #[allow(
     clippy::inline_always,
-    reason = "each order must be compiled as a loop of its own, without a call"
+    reason = "each constellation must be compiled as a loop of its own, without a call"
 )]
 #[inline(always)]
-fn run<const ORDER: u32>(s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
+fn run<const CODE: u8>(s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
     let (kp, ki, max) = (s.kp, s.ki, s.max);
     let (mut phase, mut freq, mut level, mut locked) = (s.phase, s.freq, s.level, s.locked);
     let mut ok = true;
@@ -144,14 +146,14 @@ fn run<const ORDER: u32>(s: &mut CostasState, input: &[C32], output: &mut [C32])
         };
         let y = derotate(x, c, sn);
         *o = y;
-        let e = if ORDER == 4 {
+        let e = if CODE == QPSK {
             detector4(y)
         } else {
-            detector(ORDER, y)
+            detector(CODE, y)
         };
         freq = integrate(freq + ki * e, max);
         phase = phase.wrapping_add(phase_step_f32(freq + kp * e));
-        if let Some(m) = lock_metric(ORDER, y) {
+        if let Some(m) = lock_metric(CODE, y) {
             level = flush_denormal(level + LOCK_ALPHA * (m - level));
             if level > LOCK_ON {
                 locked = true;
@@ -167,11 +169,22 @@ fn run<const ORDER: u32>(s: &mut CostasState, input: &[C32], output: &mut [C32])
 impl Costas for Fallback {
     fn costas(&self, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
         check_len(input.len(), output.len())?;
-        match s.order {
-            2 => run::<2>(s, input, output),
-            4 => run::<4>(s, input, output),
-            _ => run::<8>(s, input, output),
+        match s.constellation.code() {
+            BPSK => run::<BPSK>(s, input, output),
+            QPSK => run::<QPSK>(s, input, output),
+            PSK8 => run::<PSK8>(s, input, output),
+            code => run_qam(code, s, input, output),
         }
+    }
+}
+
+/// The QAM loops, a function of their own, so that the PSK loops keep the code of M40.1.
+#[inline(never)]
+fn run_qam(code: u8, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
+    if code == QAM16 {
+        run::<QAM16>(s, input, output)
+    } else {
+        run::<QAM64>(s, input, output)
     }
 }
 
@@ -184,7 +197,7 @@ mod tests {
 
     use super::{TURN, clamp_f32, detector4, flush_clamp, integrate, phase_step_f32};
     use crate::fallback::modulate::phase_step;
-    use crate::kernels::costas::detector;
+    use crate::kernels::costas::{QPSK, detector};
     use crate::num::flush_denormal;
     use crate::types::C32;
 
@@ -291,7 +304,7 @@ mod tests {
         for &re in &s {
             for &im in &s {
                 let y = C32::new(re, im);
-                let (got, want) = (detector4(y), detector(4, y));
+                let (got, want) = (detector4(y), detector(QPSK, y));
                 assert!(
                     got.to_bits() == want.to_bits() || (got.is_nan() && want.is_nan()),
                     "{re:e} {im:e}: {got:e} against {want:e}"

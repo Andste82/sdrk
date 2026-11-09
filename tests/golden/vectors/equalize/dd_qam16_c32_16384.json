@@ -1,0 +1,72 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "dd_qam16_c32_16384.expected.bin",
+      "len": 16384
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "dd_qam16_c32_16384.input.bin",
+      "len": 16384
+    },
+    "weights": {
+      "dtype": "cf32",
+      "file": "dd_qam16_c32_16384.weights.bin",
+      "len": 11
+    }
+  },
+  "case": "dd_qam16_c32_16384",
+  "format_version": 1,
+  "kernel": "equalize",
+  "model": "float32",
+  "notes": "16-QAM with the Gray mapping of M44 section 1 (unit average power), one sample per symbol, through the symbol-spaced channel 1 + 0.25 e^(j0.9) z^-1 + 0.1 e^(-j1.7) z^-2 (channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise for Eb/N0 20 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the constellation qam16 (CMA radius R2 = 33 / 25), mu_cma 0.02 for the first 4000 symbols, then decision-directed with mu_dd 0.01, the phase tracker at phase_bw 0.02; exact float32 model over the whole input in one call; weights are the final weights, final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the generator asserts that every decision of the second half is the transmitted symbol delayed by 5 and turned by quarter_turns quarter turns (symbol_errors_second_half) and that mse ends below 0.02; snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "channel": [
+      [
+        0,
+        1.0,
+        0.0
+      ],
+      [
+        1,
+        0.25,
+        0.9
+      ],
+      [
+        2,
+        0.1,
+        -1.7
+      ]
+    ],
+    "cma_symbols": 4000,
+    "constellation": "qam16",
+    "delay": 5,
+    "ebn0_db": 20.0,
+    "feedback_taps": 0,
+    "final_frequency_bits": 3088368388,
+    "final_mode": "decision",
+    "final_mse_bits": 993208887,
+    "final_phase": 137687163,
+    "guard_skip": 0,
+    "mu_cma": 0.02,
+    "mu_dd": 0.01,
+    "phase_bw": 0.02,
+    "phase_rad": 0.2,
+    "quarter_turns": 0,
+    "sigma": 0.035355339059327376,
+    "snr_db_guard": 126.4,
+    "symbol_errors_second_half": 0,
+    "taps": 11
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 601,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

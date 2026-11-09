@@ -1722,6 +1722,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "costas_qam16": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 228.84,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 228.84,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 228.84,
+          "ours_instr_per_sample": 228.84,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_qam16_fallback": {
+          "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 220.84,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 228.84,
+              "ratio": 1.04
+            }
+          ],
+          "other_instr_per_sample": 220.84,
+          "ours_instr_per_sample": 228.84,
+          "ratio": 1.04,
+          "snr_db": {
+            "other": 126.79,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "crc16_ccitt_false": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
           "goal": true,
@@ -2478,14 +2524,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 437.31,
+              "other_instr_per_sample": 430.16,
               "other_snr_db": null,
-              "ours_instr_per_sample": 437.31,
+              "ours_instr_per_sample": 430.16,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 437.31,
-          "ours_instr_per_sample": 437.31,
+          "other_instr_per_sample": 430.16,
+          "ours_instr_per_sample": 430.16,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -2503,15 +2549,61 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 493.03,
               "other_snr_db": null,
-              "ours_instr_per_sample": 437.31,
-              "ratio": 0.89
+              "ours_instr_per_sample": 430.16,
+              "ratio": 0.87
             }
           ],
           "other_instr_per_sample": 493.03,
-          "ours_instr_per_sample": 437.31,
-          "ratio": 0.89,
+          "ours_instr_per_sample": 430.16,
+          "ratio": 0.87,
           "snr_db": {
             "other": 127.23,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "equalize_qam16": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 447.3,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 447.3,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 447.3,
+          "ours_instr_per_sample": 447.3,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "equalize_qam16_fallback": {
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 508.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 447.3,
+              "ratio": 0.88
+            }
+          ],
+          "other_instr_per_sample": 508.03,
+          "ours_instr_per_sample": 447.3,
+          "ratio": 0.88,
+          "snr_db": {
+            "other": 134.15,
             "ours": 999.0
           },
           "status": "release",
@@ -5669,6 +5761,11 @@
       "gnuradio_agc_cc": {
         "build": "-O3",
         "sha256": "aa5dd7a43c9a3cc4adf68b8f64ed9086f7c3970afecdfdbdff45520841a76bd2",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_constellation": {
+        "build": "gr-constellation.c (constellation_receiver_cb and linear_equalizer with adaptive_algorithm_nlms on a constellation_rect, VOLK 3.3.0 generic dot products): -O3",
+        "sha256": "d61d5e3e4dcbc49f7aac00d1fd8f47eb6b657664cd1663a6ca3e7bc30057583d",
         "version": "main at ec1bf15"
       },
       "gnuradio_costas_loop_cc": {

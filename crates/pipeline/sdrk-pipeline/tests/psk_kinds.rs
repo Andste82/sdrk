@@ -167,7 +167,12 @@ fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
 
 #[test]
 fn costas_costs_30_and_keeps_the_rate() {
-    let report = validate(&single("costas", "c32", 25_000, json!({ "order": 4 })));
+    let report = validate(&single(
+        "costas",
+        "c32",
+        25_000,
+        json!({ "constellation": "qpsk" }),
+    ));
     assert!(report.is_ok(), "{}", report.to_json());
     assert_eq!(report.cost_per_input_sample, 30.0);
     let node = &report.nodes[0];
@@ -177,13 +182,33 @@ fn costas_costs_30_and_keeps_the_rate() {
         let (_, code, _) = first_error(&single("costas", ty, 1000, json!({})));
         assert_eq!(code, DiagCode::TypeMismatch, "{ty}");
     }
-    let (path, code, _) = first_error(&single("costas", "c32", 1000, json!({ "order": 3 })));
-    assert_eq!(
-        (path.as_str(), code),
-        ("nodes.n.params.order", DiagCode::InvalidValue)
-    );
+    // M44 §3: the QAM constellations cost 45 per symbol (D986), the PSK ones 30
+    for (c, cost) in [
+        ("bpsk", 30.0),
+        ("8psk", 30.0),
+        ("qam16", 45.0),
+        ("qam64", 45.0),
+    ] {
+        let report = validate(&single(
+            "costas",
+            "c32",
+            25_000,
+            json!({ "constellation": c }),
+        ));
+        assert!(report.is_ok(), "{c}: {}", report.to_json());
+        assert_eq!(report.cost_per_input_sample, cost, "{c}");
+    }
+    // the former `order` is gone (M44 §3, a hard break), `constellation` is a choice
+    assert!(!validate(&single("costas", "c32", 1000, json!({ "order": 4 }))).is_ok());
+    let (path, _, _) = first_error(&single(
+        "costas",
+        "c32",
+        1000,
+        json!({ "constellation": "qam256" }),
+    ));
+    assert_eq!(path.as_str(), "nodes.n.params.constellation");
     for bad in [
-        json!({ "order": 9 }),
+        json!({ "constellation": 4 }),
         json!({ "loop_bw": 0.3 }),
         json!({ "damping": 0 }),
         json!({ "max_offset": 0.3 }),
@@ -545,17 +570,13 @@ fn slice_takes_8psk() {
 /// `params.variant` for the combinations that do not fit (D648).
 #[test]
 fn psk_kinds_take_order_8_and_the_variants() {
-    let report = validate(&single("costas", "c32", 25_000, json!({ "order": 8 })));
+    let report = validate(&single(
+        "costas",
+        "c32",
+        25_000,
+        json!({ "constellation": "8psk" }),
+    ));
     assert!(report.is_ok(), "{}", report.to_json());
-    for order in [3, 5, 6, 7] {
-        let (path, code, _) =
-            first_error(&single("costas", "c32", 1000, json!({ "order": order })));
-        assert_eq!(
-            (path.as_str(), code),
-            ("nodes.n.params.order", DiagCode::InvalidValue),
-            "{order}"
-        );
-    }
     // psk_mod: rate, delay and cost
     for (params, rate_out, delay) in [
         (

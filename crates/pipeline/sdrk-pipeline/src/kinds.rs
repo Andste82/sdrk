@@ -3297,8 +3297,13 @@ impl Kind for CostasKind {
             rate_out: rate,
             memory_bytes: CostasBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // Two table interpolations, the derotation, the detector, the loop filter and the
-            // lock detector per symbol (D615).
-            cost: 30.0,
+            // lock detector per symbol (D615); the QAM detector adds the grid decision, an
+            // arctangent and a second division (D986).
+            cost: if cfg.constellation.qam().is_some() {
+                45.0
+            } else {
+                30.0
+            },
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,

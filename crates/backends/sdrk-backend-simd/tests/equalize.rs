@@ -140,12 +140,14 @@ fn equalize_is_bit_exact_with_the_fallback() {
         EqConstellation::Bpsk,
         EqConstellation::Qpsk,
         EqConstellation::Psk8,
+        EqConstellation::Qam16,
+        EqConstellation::Qam64,
     ];
     for (case, taps) in [3usize, 5, 7, 9, 11, 15, 17, 23, 31, 63]
         .into_iter()
         .enumerate()
     {
-        let c = constellations[case % 3];
+        let c = constellations[case % 5];
         let feedback = [0usize, 3, 0, 5, 1][case % 5].min(63 - taps);
         for (mu_cma, mu_dd, cma, phase_bw) in [
             (0.05, 0.02, 300u32, 0.02),
@@ -203,7 +205,12 @@ fn equalize_is_bit_exact_with_special_inputs() {
     let input: Vec<C32> = (0..3000)
         .map(|_| C32::new(special(&mut rng), special(&mut rng)))
         .collect();
-    for c in [EqConstellation::Qpsk, EqConstellation::Psk8] {
+    for c in [
+        EqConstellation::Qpsk,
+        EqConstellation::Psk8,
+        EqConstellation::Qam16,
+        EqConstellation::Qam64,
+    ] {
         let mut a = EqualizeState::new(
             [C32::default(); 13],
             [C32::default(); 13],

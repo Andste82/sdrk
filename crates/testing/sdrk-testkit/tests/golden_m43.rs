@@ -8,6 +8,9 @@
 //! phase and frequency, and the history of the whole run. Every case checks its `snr_db_guard` against its own float64 loop on
 //! the stored inputs (the regression guard of decision D111).
 //!
+//! The M44 case `dd_qam16_c32_16384` (seed 601, M44 test 2: the constellation `qam16`, CMA with
+//! its radius, then the grid decisions) runs with the same machinery and checks.
+//!
 //! `dot_complex`: every window of every case must match the golden file bit for bit on every
 //! implementation, and the float64 sum of the products checks the stored `snr_db_guard`.
 #![cfg(feature = "std")]
@@ -23,6 +26,7 @@
 )]
 
 use sdrk::Sdrk;
+use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
 use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
 use sdrk_core::{C32, Fallback, Reference};
@@ -36,7 +40,11 @@ const PLANS: u64 = 20;
 /// The largest chunk of the plans.
 const MAX_CHUNK: usize = 700;
 
-const EQ_CASES: [&str; 2] = ["cma_qpsk_c32_16384", "dd_8psk_c32_16384"];
+const EQ_CASES: [&str; 3] = [
+    "cma_qpsk_c32_16384",
+    "dd_8psk_c32_16384",
+    "dd_qam16_c32_16384",
+];
 const DOT_CASES: [&str; 2] = ["c32_1021", "c32_13"];
 
 type State = EqualizeState<Vec<C32>, Vec<C32>>;
@@ -62,6 +70,8 @@ fn constellation_of(case: &GoldenCase) -> EqConstellation {
     match case.param_str("constellation").unwrap() {
         "qpsk" => EqConstellation::Qpsk,
         "8psk" => EqConstellation::Psk8,
+        "qam16" => EqConstellation::Qam16,
+        "qam64" => EqConstellation::Qam64,
         other => panic!("{}: unknown constellation {other}", case.case),
     }
 }
@@ -217,8 +227,19 @@ fn decide_f64(c: EqConstellation, yr: f64, yi: f64) -> (f64, f64) {
             (S8_F64, -C8_F64),
             (C8_F64, -S8_F64),
         ][octant(yr, yi)],
+        EqConstellation::Qam16 => (qam_level_f64(Qam::Qam16, yr), qam_level_f64(Qam::Qam16, yi)),
+        EqConstellation::Qam64 => (qam_level_f64(Qam::Qam64, yr), qam_level_f64(Qam::Qam64, yi)),
         _ => panic!("no float64 guard for {c:?}"),
     }
+}
+
+/// The grid level of a float64 component (M44 §1 with the boundaries of D982): the level index
+/// `floor(v sqrt(E) / 2 + m / 2)` clamped to `0 .. m - 1`, as the unit-power level value.
+fn qam_level_f64(q: Qam, v: f64) -> f64 {
+    let m = q.levels_per_axis() as f64;
+    let e = libm::sqrt(q.energy());
+    let t = (v * (e / 2.0) + m / 2.0).clamp(0.0, m - 1.0);
+    (2.0 * libm::floor(t) - (m - 1.0)) / e
 }
 
 fn flush(v: f64) -> f64 {
@@ -235,6 +256,8 @@ fn equalize_f64(x: &[C32], st: &State) -> Vec<(f64, f64)> {
     let (kp, ki) = st.phase_gains();
     let (kp, ki) = (f64::from(kp), f64::from(ki));
     let cma_symbols = st.cma_symbols();
+    // The CMA radius as the float64 value of its f32 (1 for PSK).
+    let r2 = f64::from(st.constellation().cma_r2());
     let mut w = vec![(0.0f64, 0.0f64); n];
     w[taps / 2].0 = 1.0;
     let mut h = vec![(0.0f64, 0.0f64); n];
@@ -257,7 +280,7 @@ fn equalize_f64(x: &[C32], st: &State) -> Vec<(f64, f64)> {
         let (mut er, mut ei) = (zr - dr, zi - di);
         let mut fed = (0.0, 0.0);
         let mu = if cma {
-            let f = (yr * yr + yi * yi) - 1.0;
+            let f = (yr * yr + yi * yi) - r2;
             er = (yr * f).clamp(-1.0, 1.0);
             ei = (yi * f).clamp(-1.0, 1.0);
             mu_c

@@ -58,8 +58,9 @@ pub mod volk_nofma;
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use gnuradio::{
-    CostasLoopState, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
-    GrQuadratureDemodCf, GrRotator,
+    CostasLoopState, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFmDeemph,
+    GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect, GrQuadratureDemodCf, GrRect,
+    GrRotator,
 };
 pub use halfband::{
     AirspyFloat, AirspyInt16, LiquidFirhilbf, LiquidResamp2Crcf, LiquidResamp2Rrrf,

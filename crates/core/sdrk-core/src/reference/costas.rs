@@ -10,7 +10,8 @@
 use crate::Reference;
 use crate::error::Result;
 use crate::kernels::check_len;
-use crate::kernels::costas::{Costas, CostasState};
+use crate::kernels::constellation::Qam;
+use crate::kernels::costas::{Costas, CostasConstellation, CostasState};
 use crate::num::flush_denormal;
 use crate::tables::COS_F32;
 use crate::types::C32;
@@ -93,8 +94,40 @@ fn point8(y: C32) -> (f32, f32) {
     POINTS8.get(octant(y)).copied().unwrap_or((0.0, 0.0))
 }
 
-fn phase_error(order: u32, y: C32) -> f32 {
-    let e = match order {
+/// The grid level of one component, written as the contract states it: the floor of
+/// `v (sqrt(E) / 2) + m / 2` clamped to `0 .. m - 1` (NaN to 0), as the level value of the
+/// unit-power grid.
+fn grid_level(q: Qam, v: f32) -> f32 {
+    let levels = q.levels();
+    let m = levels.len() as f32;
+    let half_sqrt_e = (libm::sqrt(q.energy()) / 2.0) as f32;
+    let t = v * half_sqrt_e + m / 2.0;
+    let t = if t.is_nan() {
+        0.0
+    } else {
+        t.clamp(0.0, m - 1.0)
+    };
+    levels.get(libm::floorf(t) as usize).copied().unwrap_or(0.0)
+}
+
+/// The QAM decision `d` of `y` and the parts `(re, im)` of `y conj d`.
+fn qam_conj(q: Qam, y: C32) -> ((f32, f32), (f32, f32)) {
+    let dr = grid_level(q, y.re);
+    let di = grid_level(q, y.im);
+    let rr = y.re * dr;
+    let ii = y.im * di;
+    let ir = y.im * dr;
+    let ri = y.re * di;
+    ((dr, di), (rr + ii, ir - ri))
+}
+
+fn phase_error(c: CostasConstellation, y: C32) -> f32 {
+    if let Some(q) = c.qam() {
+        let (_, (r, i)) = qam_conj(q, y);
+        let e = libm::atan2f(i, r);
+        return if e.is_finite() { e } else { 0.0 };
+    }
+    let e = match c.psk_order().unwrap_or(2) {
         2 => y.re * y.im,
         4 => {
             let a = sgn(y.re) * y.im;
@@ -111,12 +144,26 @@ fn phase_error(order: u32, y: C32) -> f32 {
     if e.is_finite() { e } else { 0.0 }
 }
 
-fn metric(order: u32, y: C32) -> f32 {
+fn metric(c: CostasConstellation, y: C32) -> f32 {
     let re2 = y.re * y.re;
     let im2 = y.im * y.im;
     let power = re2 + im2;
     let diff = re2 - im2;
-    match order {
+    if let Some(q) = c.qam() {
+        let ((dr, di), (r, _)) = qam_conj(q, y);
+        let d2 = dr * dr + di * di;
+        let r2 = r * r;
+        let den = power * d2;
+        let ratio = r2 / den;
+        let twice = ratio * 2.0;
+        let u = twice - 1.0;
+        let w = u * u;
+        let eight_w = 8.0 * w;
+        let w_less_one = w - 1.0;
+        let prod = eight_w * w_less_one;
+        return prod + 1.0;
+    }
+    match c.psk_order().unwrap_or(2) {
         2 => diff / power,
         4 => {
             let four_re2 = 4.0 * re2;
@@ -161,13 +208,13 @@ impl Costas for Reference {
             let sn = cos_f32(s.phase.wrapping_sub(QUARTER));
             let y = rotate_back(x, c, sn);
             *o = y;
-            let e = phase_error(s.order, y);
+            let e = phase_error(s.constellation, y);
             let integrated = flush_denormal(s.freq + s.ki * e);
             s.freq = integrated.clamp(-s.max, s.max);
             let step = s.kp * e;
             let v = s.freq + step;
             s.phase = s.phase.wrapping_add(correction(v));
-            let m = metric(s.order, y);
+            let m = metric(s.constellation, y);
             if m.is_finite() {
                 let delta = m - s.level;
                 s.level = flush_denormal(s.level + 0.01 * delta);

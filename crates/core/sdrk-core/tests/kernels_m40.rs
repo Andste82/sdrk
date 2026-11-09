@@ -7,6 +7,7 @@
 
 #![allow(
     clippy::unwrap_used,
+    clippy::panic,
     clippy::float_cmp,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -15,7 +16,7 @@
     clippy::many_single_char_names
 )]
 
-use sdrk_core::kernels::costas::{Costas, CostasGains, CostasState};
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasGains, CostasState};
 use sdrk_core::{C32, Delay, Error, Fallback, Ratio, RatioKind, Timing};
 use sdrk_device::{ErrorKind, SdrkError};
 
@@ -82,6 +83,16 @@ fn symbols(seed: u64, n: usize, order: u32, phase0: f64, offset: f64, noise: f32
         .collect()
 }
 
+/// The carrier-loop constellation of a PSK order (2, 4 or 8).
+fn psk(order: u32) -> CostasConstellation {
+    match order {
+        2 => CostasConstellation::Bpsk,
+        4 => CostasConstellation::Qpsk,
+        8 => CostasConstellation::Psk8,
+        _ => panic!("no PSK order {order}"),
+    }
+}
+
 fn run(st: &mut CostasState, x: &[C32]) -> Vec<C32> {
     let mut y = vec![C32::default(); x.len()];
     Fallback.costas(st, x, &mut y).unwrap();
@@ -94,33 +105,45 @@ fn bits(x: &[C32]) -> Vec<(u32, u32)> {
 
 #[test]
 fn construction_rules() {
-    assert!(CostasState::new(2, 0.02, DAMP, 0.05).is_ok());
-    assert!(CostasState::new(4, 0.02, DAMP, 0.05).is_ok());
-    // Order 8 (8PSK) since M40.1.
-    assert_eq!(CostasState::new(8, 0.02, DAMP, 0.05).unwrap().order(), 8);
-    for order in [0, 1, 3, 5, 6, 7, 9, 16] {
-        let e = CostasState::new(order, 0.02, DAMP, 0.05).unwrap_err();
-        assert_eq!(e.kind(), ErrorKind::InvalidArgument, "{order}");
-        assert!(
-            matches!(
-                CostasState::new(order, 0.02, DAMP, 0.05),
-                Err(Error::InvalidParameter(_))
-            ),
-            "{order}"
+    assert!(CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 0.05).is_ok());
+    assert!(CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, 0.05).is_ok());
+    // 8PSK since M40.1, 16-QAM and 64-QAM since M44.
+    for c in [
+        CostasConstellation::Psk8,
+        CostasConstellation::Qam16,
+        CostasConstellation::Qam64,
+    ] {
+        assert_eq!(
+            CostasState::new(c, 0.02, DAMP, 0.05)
+                .unwrap()
+                .constellation(),
+            c
         );
     }
+    let e = CostasState::new(CostasConstellation::Qpsk, 0.3, DAMP, 0.05).unwrap_err();
+    assert_eq!(e.kind(), ErrorKind::InvalidArgument);
+    assert!(matches!(e, Error::InvalidParameter(_)));
     for bw in [0.0, 0.000_09, 0.200_001, f64::NAN, f64::INFINITY] {
-        assert!(CostasState::new(4, bw, DAMP, 0.05).is_err(), "{bw}");
+        assert!(
+            CostasState::new(CostasConstellation::Qpsk, bw, DAMP, 0.05).is_err(),
+            "{bw}"
+        );
     }
     for d in [0.09, 4.01, f64::NAN] {
-        assert!(CostasState::new(4, 0.02, d, 0.05).is_err(), "{d}");
+        assert!(
+            CostasState::new(CostasConstellation::Qpsk, 0.02, d, 0.05).is_err(),
+            "{d}"
+        );
     }
     for m in [-0.001, 0.2501, f64::NAN] {
-        assert!(CostasState::new(4, 0.02, DAMP, m).is_err(), "{m}");
+        assert!(
+            CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, m).is_err(),
+            "{m}"
+        );
     }
     // The bounds themselves are allowed.
     for (bw, d, m) in [(0.0001, 0.1, 0.0), (0.2, 4.0, 0.25)] {
-        let st = CostasState::new(2, bw, d, m).unwrap();
+        let st = CostasState::new(CostasConstellation::Bpsk, bw, d, m).unwrap();
         assert_eq!((st.loop_bw(), st.damping(), st.max_offset()), (bw, d, m));
     }
 }
@@ -128,7 +151,7 @@ fn construction_rules() {
 #[test]
 fn loop_constants_follow_the_formula() {
     for (bw, d) in [(0.02, DAMP), (0.0001, 0.1), (0.2, 4.0), (0.05, 1.0)] {
-        let st = CostasState::new(4, bw, d, 0.05).unwrap();
+        let st = CostasState::new(CostasConstellation::Qpsk, bw, d, 0.05).unwrap();
         let theta = bw / (d + 1.0 / (4.0 * d));
         let den = (1.0 + (2.0 * d) * theta) + theta * theta;
         let kp = (((4.0 * d) * theta) / den) / core::f64::consts::TAU;
@@ -146,7 +169,7 @@ fn loop_constants_follow_the_formula() {
 
 #[test]
 fn timing_is_one_to_one_without_delay() {
-    let st = CostasState::new(2, 0.02, DAMP, 0.05).unwrap();
+    let st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 0.05).unwrap();
     assert_eq!(st.ratio(), Ratio::ONE);
     assert_eq!(st.ratio_kind(), RatioKind::Constant);
     assert_eq!(st.group_delay(), Delay::ZERO);
@@ -154,7 +177,7 @@ fn timing_is_one_to_one_without_delay() {
 
 #[test]
 fn unequal_lengths_change_nothing() {
-    let mut st = CostasState::new(4, 0.02, DAMP, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, 0.05).unwrap();
     let before = st;
     let mut y = [C32::default(); 3];
     let e = Fallback
@@ -174,7 +197,7 @@ fn unequal_lengths_change_nothing() {
 fn bpsk_locks_onto_the_real_axis() {
     for (k, phase0) in [0.3, 1.2, -0.7, 2.9].into_iter().enumerate() {
         let x = symbols(10 + k as u64, 3000, 2, phase0, 0.0, 0.0);
-        let mut st = CostasState::new(2, 0.02, DAMP, 0.05).unwrap();
+        let mut st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 0.05).unwrap();
         let y = run(&mut st, &x);
         assert!(st.locked(), "{phase0}");
         for v in &y[2000..] {
@@ -192,7 +215,7 @@ fn qpsk_locks_onto_the_diagonals_and_follows_an_offset() {
     let r = core::f32::consts::FRAC_1_SQRT_2;
     for (k, offset) in [0.0, 0.004, -0.01, 0.02].into_iter().enumerate() {
         let x = symbols(20 + k as u64, 4000, 4, 0.5 + k as f64, offset, 0.0);
-        let mut st = CostasState::new(4, 0.02, DAMP, 0.05).unwrap();
+        let mut st = CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, 0.05).unwrap();
         let y = run(&mut st, &x);
         assert!(st.locked(), "{offset}");
         assert!(
@@ -226,7 +249,7 @@ fn psk8_locks_onto_the_octant_centres_and_follows_an_offset() {
         .enumerate()
     {
         let x = symbols(10 + k as u64, 6000, 8, phase0, offset, 0.0);
-        let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
+        let mut st = CostasState::new(CostasConstellation::Psk8, 0.02, DAMP, 0.05).unwrap();
         let y = run(&mut st, &x);
         assert!(st.locked(), "{phase0} {offset}");
         assert!(
@@ -251,7 +274,7 @@ fn psk8_detector_and_metric_follow_the_octants() {
         for (delta, forward) in [(0.05, true), (-0.05, false)] {
             let a = centre + delta;
             let x = C32::new(a.cos() as f32, a.sin() as f32);
-            let mut st = CostasState::new(8, 0.2, 4.0, 0.25).unwrap();
+            let mut st = CostasState::new(CostasConstellation::Psk8, 0.2, 4.0, 0.25).unwrap();
             run(&mut st, &[x]);
             let step = st.phase() as i32;
             assert_eq!(step > 0, forward, "octant {k}, delta {delta}: {step}");
@@ -279,7 +302,7 @@ fn psk8_detector_and_metric_follow_the_octants() {
                 )
             }
         };
-        let mut st = CostasState::new(8, 0.2, 4.0, 0.25).unwrap();
+        let mut st = CostasState::new(CostasConstellation::Psk8, 0.2, 4.0, 0.25).unwrap();
         run(&mut st, &[x]);
         assert!(
             (st.phase() as i32) < 0,
@@ -298,7 +321,7 @@ fn psk8_locks_on_8psk_and_unlocks_on_noise() {
     // D659 (maintainer decision on I40.1-1): the order-8 metric is cos(8 err) against the
     // nearest point, 1 on the points and about 0 on noise, so the order-8 detector behaves as
     // orders 2 and 4: it locks on noisy 8PSK and turns off on noise.
-    let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Psk8, 0.02, DAMP, 0.05).unwrap();
     run(&mut st, &symbols(42, 3000, 8, 1.1, 0.002, 0.05));
     assert!(st.locked(), "level {}", st.lock_level());
     let signal = st.lock_level();
@@ -310,7 +333,7 @@ fn psk8_locks_on_8psk_and_unlocks_on_noise() {
     run(&mut st, &noise[..1500]);
     assert!(!st.locked(), "level {}", st.lock_level());
     // A fresh loop on noise never locks; the level stays near 0.
-    let mut st = CostasState::new(8, 0.02, DAMP, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Psk8, 0.02, DAMP, 0.05).unwrap();
     let mut levels = Vec::new();
     let mut y = [C32::default(); 1];
     for x in &noise {
@@ -335,11 +358,11 @@ const LOCK_ON_LEVEL: f32 = 0.5;
 fn the_frequency_integrator_stops_at_its_limit() {
     // An offset of 0.04 cycles per symbol against a limit of 0.01.
     let x = symbols(30, 3000, 2, 0.0, 0.04, 0.0);
-    let mut st = CostasState::new(2, 0.02, DAMP, 0.01).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 0.01).unwrap();
     run(&mut st, &x);
     assert!(st.frequency().abs() <= f64::from(0.01f32));
     // max_offset 0: the integrator never moves.
-    let mut st = CostasState::new(2, 0.02, DAMP, 0.0).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 0.0).unwrap();
     run(&mut st, &x);
     assert_eq!(st.frequency(), 0.0);
 }
@@ -349,14 +372,14 @@ fn a_tiny_max_offset_is_flushed_and_the_integrator_never_holds_a_subnormal() {
     // R6.3: a limit below 1e-30 (subnormal as f32, or normal but below the flush level) is 0.
     let x = symbols(31, 500, 2, 0.0, 0.04, 0.0);
     for m in [1e-40, 1e-38, 1e-31, f64::MIN_POSITIVE] {
-        let mut st = CostasState::new(2, 0.02, DAMP, m).unwrap();
+        let mut st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, m).unwrap();
         assert_eq!(st.gains().max_offset.to_bits(), 0, "{m}");
         assert_eq!(st.max_offset(), m);
         run(&mut st, &x);
         assert_eq!(st.frequency(), 0.0, "{m}");
     }
     // A normal limit at the flush level is kept and the integrator ends on it.
-    let mut st = CostasState::new(2, 0.02, DAMP, 2e-30).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 2e-30).unwrap();
     assert_eq!(st.gains().max_offset, 2e-30f32);
     run(&mut st, &x);
     assert!(
@@ -369,7 +392,7 @@ fn a_tiny_max_offset_is_flushed_and_the_integrator_never_holds_a_subnormal() {
 
 #[test]
 fn the_lock_detector_turns_off_on_noise() {
-    let mut st = CostasState::new(4, 0.02, DAMP, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, 0.05).unwrap();
     run(&mut st, &symbols(40, 2000, 4, 0.4, 0.0, 0.05));
     assert!(st.locked());
     // Noise alone: the metric averages to about 0, below the off level within a few hundred
@@ -382,7 +405,7 @@ fn the_lock_detector_turns_off_on_noise() {
     assert!(!st.locked(), "level {}", st.lock_level());
     assert!(st.lock_level().abs() < 0.3);
     // A fresh loop on noise never locks.
-    let mut st = CostasState::new(2, 0.02, DAMP, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Bpsk, 0.02, DAMP, 0.05).unwrap();
     let mut y = [C32::default(); 1];
     for x in &noise {
         Fallback
@@ -396,10 +419,10 @@ fn the_lock_detector_turns_off_on_noise() {
 fn output_does_not_depend_on_the_block_size() {
     for order in [2, 4, 8] {
         let x = symbols(50 + u64::from(order), 1500, order, 2.0, 0.006, 0.2);
-        let mut whole = CostasState::new(order, 0.03, DAMP, 0.05).unwrap();
+        let mut whole = CostasState::new(psk(order), 0.03, DAMP, 0.05).unwrap();
         let want = run(&mut whole, &x);
         for size in [1usize, 2, 3, 7, 64, 499, 1500] {
-            let mut st = CostasState::new(order, 0.03, DAMP, 0.05).unwrap();
+            let mut st = CostasState::new(psk(order), 0.03, DAMP, 0.05).unwrap();
             let mut y = vec![C32::default(); x.len()];
             for (xi, yi) in x.chunks(size).zip(y.chunks_mut(size)) {
                 Fallback.costas(&mut st, xi, yi).unwrap();
@@ -416,11 +439,14 @@ fn output_does_not_depend_on_the_block_size() {
 
 #[test]
 fn reset_returns_to_the_new_state() {
-    let mut st = CostasState::new(4, 0.02, DAMP, 0.05).unwrap();
+    let mut st = CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, 0.05).unwrap();
     let x = symbols(60, 1000, 4, 1.0, 0.01, 0.05);
     let first = run(&mut st, &x);
     st.reset();
-    assert_eq!(st, CostasState::new(4, 0.02, DAMP, 0.05).unwrap());
+    assert_eq!(
+        st,
+        CostasState::new(CostasConstellation::Qpsk, 0.02, DAMP, 0.05).unwrap()
+    );
     assert_eq!(bits(&run(&mut st, &x)), bits(&first));
     st.set_phase(123);
     assert_eq!(st.phase(), 123);
@@ -429,7 +455,7 @@ fn reset_returns_to_the_new_state() {
 #[test]
 fn silence_gives_zeros_and_a_resting_loop() {
     for order in [2, 4, 8] {
-        let mut st = CostasState::new(order, 0.02, DAMP, 0.05).unwrap();
+        let mut st = CostasState::new(psk(order), 0.02, DAMP, 0.05).unwrap();
         st.set_phase(0x1234_5678);
         let y = run(&mut st, &[C32::new(0.0, 0.0); 500]);
         assert!(y.iter().all(|v| v.re == 0.0 && v.im == 0.0));
@@ -450,7 +476,7 @@ fn full_scale_and_beyond_keep_the_loop_bounded() {
                 .iter()
                 .map(|v| C32::new(v.re * amp, v.im * amp))
                 .collect();
-            let mut st = CostasState::new(order, 0.02, DAMP, 0.05).unwrap();
+            let mut st = CostasState::new(psk(order), 0.02, DAMP, 0.05).unwrap();
             run(&mut st, &x);
             assert!(st.frequency().abs() <= 0.05 + 1e-9, "{order} {amp}");
             assert!(st.lock_level().is_finite() && st.lock_level().abs() <= 1.0 + 1e-6);
@@ -469,7 +495,7 @@ fn non_finite_input_stays_in_its_own_symbols() {
             x[1000 + i] = C32::new(v, 0.5);
             x[1010 + i] = C32::new(0.5, v);
         }
-        let mut st = CostasState::new(order, 0.02, DAMP, 0.05).unwrap();
+        let mut st = CostasState::new(psk(order), 0.02, DAMP, 0.05).unwrap();
         let y = run(&mut st, &x);
         // NaN and infinity reach the output of their own symbol only.
         assert!(
@@ -521,7 +547,7 @@ mod against_the_reference {
                     x[500 + 7 * j] = C32::new(*s, 0.3);
                     x[900 + 7 * j] = C32::new(-0.3, *s);
                 }
-                let mut a = CostasState::new(order, 0.05, DAMP, 0.05).unwrap();
+                let mut a = CostasState::new(psk(order), 0.05, DAMP, 0.05).unwrap();
                 let mut b = a;
                 let mut ya = vec![C32::default(); x.len()];
                 let mut yb = vec![C32::default(); x.len()];
@@ -539,7 +565,7 @@ mod against_the_reference {
                 .iter()
                 .flat_map(|&a| SPECIALS.iter().map(move |&b| C32::new(a, b)))
                 .collect();
-            let mut a = CostasState::new(order, 0.2, 4.0, 0.25).unwrap();
+            let mut a = CostasState::new(psk(order), 0.2, 4.0, 0.25).unwrap();
             let mut b = a;
             let mut ya = vec![C32::default(); x.len()];
             let mut yb = vec![C32::default(); x.len()];

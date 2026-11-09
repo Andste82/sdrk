@@ -286,9 +286,14 @@ fn construction_rules() {
     }
     // The tracker gains are those of costas; phase_bw 0 gives 0.
     let st = new(11, 11, params(0, 0.01, 0.01, 0.02)).unwrap();
-    let g = sdrk_core::kernels::costas::CostasState::new(4, 0.02, 0.7071, 0.05)
-        .unwrap()
-        .gains();
+    let g = sdrk_core::kernels::costas::CostasState::new(
+        sdrk_core::kernels::costas::CostasConstellation::Qpsk,
+        0.02,
+        0.7071,
+        0.05,
+    )
+    .unwrap()
+    .gains();
     assert_eq!(st.phase_gains(), (g.kp, g.ki));
     let st = new(11, 11, params(0, 0.01, 0.01, 0.0)).unwrap();
     assert_eq!(st.phase_gains(), (0.0, 0.0));

@@ -1314,7 +1314,8 @@ fn the_rds_tx_kinds_describe_their_ports_and_parameters() {
     }
 }
 
-/// The kinds of M40: `costas` (`c32` to `c32`, four build parameters), `psk_mod` (`f32` soft
+/// The kinds of M40: `costas` (`c32` to `c32`, four build parameters; the first is the choice
+/// `constellation` of M44 §3, which replaced `order`), `psk_mod` (`f32` soft
 /// bits to `c32`, `samples_per_symbol` required), `psk_demod` (`c32` to `f32` soft bits,
 /// `symbol_rate_hz` required) and the parameter `polarity` of `frame_decode` (last, build,
 /// choice `normal`/`both`).
@@ -1332,12 +1333,22 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         names,
         [
-            ("order", Mutability::Build),
+            ("constellation", Mutability::Build),
             ("loop_bw", Mutability::Build),
             ("damping", Mutability::Build),
             ("max_offset", Mutability::Build),
         ]
     );
+    assert_eq!(
+        costas.param("constellation").unwrap().kind,
+        ParamKind::Choice {
+            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+            default: 0
+        }
+    );
+    for word in ["arg(y conj(d))", "constellation_receiver_cb", "qam64"] {
+        assert!(costas.details.contains(word), "costas details: {word}");
+    }
     let m = find("psk_mod");
     assert_eq!(m.inputs[0].types, [PortType::F32]);
     assert_eq!(m.outputs[0].types, [PortType::C32]);
@@ -1387,7 +1398,7 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
         assert_eq!(p.mutability, Mutability::Build, "{}", p.name);
     }
     // M40.1: the orders 2, 4 and 8, and the variant choice (last, build, default plain)
-    for desc in [m, d, costas] {
+    for desc in [m, d] {
         assert_eq!(
             desc.param("order").unwrap().kind,
             ParamKind::I64 {
@@ -1437,20 +1448,12 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     // the orders 3, 5, 6 and 7 lie inside the range of the description but are no orders
     for (kind, r) in [
         (
-            "costas",
-            CostasConfig::default().set("order", ParamValue::I64(5)),
-        ),
-        (
             "psk_mod",
             PskModConfig::default().set("order", ParamValue::I64(6)),
         ),
         (
             "psk_demod",
             PskDemodConfig::default().set("order", ParamValue::I64(7)),
-        ),
-        (
-            "costas",
-            CostasConfig::default().set("order", ParamValue::I64(3)),
         ),
         (
             "psk_mod",
@@ -1466,6 +1469,11 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             "{kind}: {r:?}"
         );
     }
+    // costas takes the constellation as a choice (M44 §3) and has no order any more
+    assert_eq!(
+        CostasConfig::default().set("order", ParamValue::I64(4)),
+        Err(Error::UnknownParameter)
+    );
     let b = CostasBlock::new(&CostasConfig::default(), rate(1000), &mut VecStorage).unwrap();
     assert!(std::ptr::eq(b.description(), costas));
 }
@@ -1615,7 +1623,7 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
     assert_eq!(
         eq.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["bpsk", "qpsk", "8psk"],
+            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
             default: 1
         }
     );

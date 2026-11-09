@@ -3,7 +3,11 @@
 //!
 //! Every `costas` case is run in one piece, one symbol per call (which also checks the lock flag
 //! after every symbol) and in 20 chunk plans (seed 559 for the cases of M40, 564 for the 8PSK
-//! case of M40.1, chunks of 1 to 700 symbols). Every run
+//! case of M40.1, 607 for the 16-QAM case of M44, chunks of 1 to 700 symbols). The cases of M40
+//! and M40.1 store the PSK order, which gives the constellations `bpsk`, `qpsk` and `8psk`: the
+//! files are unchanged since M40.1, so these constellations give the bits of the former orders 2,
+//! 4 and 8 (M44 test 1). The M44 case `dd_qam16_c32_8192` (seed 600, test 2) stores the
+//! constellation. Every run
 //! must match the golden file bit for bit (the exact float32 model) and end in the stored state.
 //! The state is built from the parameters stored in the case, and its loop constants must equal
 //! the IEEE bits the generator computed. Every case checks its `snr_db_guard` against its own
@@ -25,7 +29,8 @@
 use num_complex::Complex64;
 use sdrk::Sdrk;
 use sdrk_blocks::design::{rrc, rrc_len};
-use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::constellation::Qam;
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::tables::COS_F32;
 use sdrk_core::{C32, Fallback, Reference};
 use sdrk_testkit::golden::{self, Array, GoldenCase, Tolerance};
@@ -36,14 +41,17 @@ use sha2::{Digest, Sha256};
 const PLAN_SEED: u64 = 559;
 /// The seed of the chunk plans of the 8PSK case (test 5 of M40.1, D646).
 const PLAN_SEED_8PSK: u64 = 564;
+/// The seed of the chunk plans of the QAM case (M44, seed 607).
+const PLAN_SEED_QAM: u64 = 607;
 /// Chunk plans per case.
 const PLANS: u64 = 20;
 /// The largest chunk of the plans.
 const MAX_CHUNK: usize = 700;
 
-const CASES: [&str; 4] = [
+const CASES: [&str; 5] = [
     "8psk_lock_c32_8192",
     "bpsk_lock_c32_8192",
+    "dd_qam16_c32_8192",
     "qpsk_lock_c32_8192",
     "qpsk_offset_c32_8192",
 ];
@@ -169,11 +177,32 @@ fn rrc_rejects_its_bounds() {
     assert_eq!(rrc_len(1024, 32).unwrap(), 32 * 1024 + 1);
 }
 
+/// The carrier-loop constellation of the PSK order of a case (2, 4 or 8): the cases of M40 and
+/// M40.1 store the order, and `bpsk`, `qpsk` and `8psk` give the bits of the former orders.
+fn psk(order: u32) -> CostasConstellation {
+    match order {
+        2 => CostasConstellation::Bpsk,
+        4 => CostasConstellation::Qpsk,
+        8 => CostasConstellation::Psk8,
+        _ => panic!("no PSK order {order}"),
+    }
+}
+
+/// The constellation of a case: the stored constellation (M44) or the PSK order (M40, M40.1).
+fn constellation_of(case: &GoldenCase) -> CostasConstellation {
+    match case.param_str("constellation") {
+        Ok("qam16") => CostasConstellation::Qam16,
+        Ok("qam64") => CostasConstellation::Qam64,
+        Ok(other) => panic!("{}: constellation {other}", case.case),
+        Err(_) => psk(case.param_u64("order").unwrap() as u32),
+    }
+}
+
 /// The state of the case; its loop constants must be the generator's bits.
 fn state_of(case: &GoldenCase) -> CostasState {
     let p = |key: &str| case.param_f64(key).unwrap();
     let st = CostasState::new(
-        case.param_u64("order").unwrap() as u32,
+        constellation_of(case),
         p("loop_bw"),
         p("damping"),
         p("max_offset"),
@@ -231,10 +260,10 @@ fn run<K: Costas>(
     match plan {
         None => kernel.costas(&mut st, input, &mut out).unwrap(),
         Some(k) => {
-            let seed = if st.order() == 8 {
-                PLAN_SEED_8PSK
-            } else {
-                PLAN_SEED
+            let seed = match st.constellation() {
+                CostasConstellation::Psk8 => PLAN_SEED_8PSK,
+                CostasConstellation::Qam16 | CostasConstellation::Qam64 => PLAN_SEED_QAM,
+                _ => PLAN_SEED,
             };
             let mut sizes = ChunkPlan::new(seed * 100 + k, MAX_CHUNK).sizes();
             let mut pos = 0;
@@ -311,13 +340,22 @@ fn octant8(yr: f64, yi: f64) -> u32 {
     }
 }
 
+/// The grid level of a float64 component (M44 §1 with the boundaries of D982): the level index
+/// `floor(v sqrt(E) / 2 + m / 2)` clamped to `0 .. m - 1`, as the unit-power level value.
+fn qam_level_f64(q: Qam, v: f64) -> f64 {
+    let m = q.levels_per_axis() as f64;
+    let e = q.energy().sqrt();
+    let t = (v * (e / 2.0) + m / 2.0).clamp(0.0, m - 1.0);
+    (2.0 * t.floor() - (m - 1.0)) / e
+}
+
 /// The loop of section 2 in f64 with exact sine and cosine of the `u32` phase (order 8 against
 /// the f64 points of the octants).
 fn costas_f64(case: &GoldenCase, input: &[C32]) -> Vec<Complex64> {
     let st = state_of(case);
     let g = st.gains();
     let (kp, ki, mx) = (f64::from(g.kp), f64::from(g.ki), f64::from(g.max_offset));
-    let order = st.order();
+    let constellation = st.constellation();
     let sg = |u: f64| {
         if u > 0.0 {
             1.0
@@ -335,12 +373,17 @@ fn costas_f64(case: &GoldenCase, input: &[C32]) -> Vec<Complex64> {
         let (xr, xi) = (f64::from(x.re), f64::from(x.im));
         let (yr, yi) = (xr * c + xi * s, xi * c - xr * s);
         out.push(Complex64::new(yr, yi));
-        let e = match order {
-            2 => yr * yi,
-            4 => sg(yr) * yi - sg(yi) * yr,
-            _ => {
+        let e = match constellation {
+            CostasConstellation::Bpsk => yr * yi,
+            CostasConstellation::Qpsk => sg(yr) * yi - sg(yi) * yr,
+            CostasConstellation::Psk8 => {
                 let a = f64::from(2 * octant8(yr, yi) + 1) * core::f64::consts::PI / 8.0;
                 yi * a.cos() - yr * a.sin()
+            }
+            c => {
+                let q = c.qam().unwrap();
+                let (dr, di) = (qam_level_f64(q, yr), qam_level_f64(q, yi));
+                (yi * dr - yr * di).atan2(yr * dr + yi * di)
             }
         };
         freq = (freq + ki * e).clamp(-mx, mx);

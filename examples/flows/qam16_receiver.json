@@ -1,0 +1,81 @@
+{
+  "sdrk": 1,
+  "name": "qam16-receiver",
+  "description": "Receive 16-QAM at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, demodulator with symbol timing, equalizer and carrier recovery, and the decoded packets of the test framing.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cs16",
+      "rate_hz": 1000000,
+      "description": "IQ at 1 MS/s with the signal at 0 Hz"
+    }
+  },
+  "nodes": {
+    "agc": {
+      "kind": "agc",
+      "params": {
+        "attack_s": 0.02,
+        "reference_db": 0,
+        "release_s": 0.02
+      }
+    },
+    "dec": {
+      "kind": "frame_decode",
+      "params": {
+        "bits_per_symbol": 4,
+        "max_sync_errors": 2,
+        "rotations": "four"
+      }
+    },
+    "demod": {
+      "kind": "qam_demod",
+      "params": {
+        "carrier_bw": 0.1,
+        "equalizer_taps": 15,
+        "order": 16,
+        "symbol_rate_hz": 25000,
+        "sync_bw": 0.002
+      }
+    },
+    "tune": {
+      "kind": "ddc",
+      "params": {
+        "cutoff_hz": 50000,
+        "decimation": 5,
+        "transition_hz": 60000
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "tune"
+    },
+    {
+      "from": "tune",
+      "to": "agc"
+    },
+    {
+      "from": "agc",
+      "to": "demod"
+    },
+    {
+      "from": "demod",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "packets"
+    }
+  ],
+  "outputs": {
+    "packets": {
+      "type": "packets",
+      "queue": 1024,
+      "description": "The decoded packets with CRC_OK and the sample index of their sync word"
+    }
+  }
+}

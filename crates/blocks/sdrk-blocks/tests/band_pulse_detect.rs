@@ -385,20 +385,34 @@ fn width_error(got: &[Pair], want: &[(f64, f64)], us_per_step: f64) -> f64 {
 /// most one train each; every pulse and gap within 1 step of the generator's widths from
 /// `WIDTH_SNR` on (the spec: from 12 dB, I45.1-1) and the share `MIN_WIDTH_SHARE` of the
 /// widths within 1 step from 12 dB to `WIDTH_SNR`.
+/// Runs `f` on every item, in parallel threads where the target has them and one after the
+/// other on wasm32 (WASI has no threads); the order of the results is the order of the items,
+/// and every scene has its own seed, so the results do not depend on the schedule.
+fn par_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R> {
+    #[cfg(target_family = "wasm")]
+    {
+        items.into_iter().map(f).collect()
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let f = &f;
+        std::thread::scope(|s| {
+            let handles: Vec<_> = items.into_iter().map(|x| s.spawn(move || f(x))).collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        })
+    }
+}
+
 #[test]
 fn every_frequency_is_received() {
     let txs = test3_transmissions();
-    let results: Vec<Test3Result> = std::thread::scope(|s| {
-        let handles: Vec<_> = txs
-            .chunks(TEST3_PER_SCENE)
-            .enumerate()
-            .map(|(k, part)| s.spawn(move || test3_scene(part, SEED_FREQUENCIES + 1000 * k as u64)))
-            .collect();
-        handles
-            .into_iter()
-            .flat_map(|h| h.join().unwrap())
-            .collect()
-    });
+    let results: Vec<Test3Result> = par_map(
+        txs.chunks(TEST3_PER_SCENE).enumerate().collect(),
+        |(k, part)| test3_scene(part, SEED_FREQUENCIES + 1000 * k as u64),
+    )
+    .into_iter()
+    .flatten()
+    .collect();
     // The measured numbers per 2 dB of level.
     println!(
         "level dB | transmissions | emitted once | all widths within 1 | share of widths within 1 | worst width | worst freq Hz"
@@ -758,16 +772,12 @@ fn test4_scene(txs: &[Test4Tx], first: usize) -> (Vec<(Result<(), String>, f64)>
 #[test]
 fn simultaneous_transmissions_are_each_emitted() {
     let txs = test4_transmissions();
-    let (results, stray): (Vec<_>, Vec<_>) = std::thread::scope(|s| {
-        let handles: Vec<_> = (0..TEST4_GROUPS)
-            .step_by(TEST4_PER_SCENE)
-            .map(|first| {
-                let txs = &txs;
-                s.spawn(move || test4_scene(txs, first))
-            })
-            .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).unzip()
-    });
+    let (results, stray): (Vec<_>, Vec<_>) = par_map(
+        (0..TEST4_GROUPS).step_by(TEST4_PER_SCENE).collect(),
+        |first| test4_scene(&txs, first),
+    )
+    .into_iter()
+    .unzip();
     let (results, worst): (Vec<Result<(), String>>, Vec<f64>) =
         results.into_iter().flatten().unzip();
     assert_eq!(results.len(), txs.len());
@@ -981,16 +991,14 @@ fn overlap_868_scene(txs: &[Overlap868Tx], first: usize) -> (Vec<Result<(), Stri
 #[test]
 fn overlapping_transmissions_through_8_lanes_are_each_emitted() {
     let txs = overlap_868_transmissions();
-    let (results, strays): (Vec<_>, Vec<_>) = std::thread::scope(|s| {
-        let handles: Vec<_> = (0..OVERLAP_868_GROUPS)
+    let (results, strays): (Vec<_>, Vec<_>) = par_map(
+        (0..OVERLAP_868_GROUPS)
             .step_by(OVERLAP_868_PER_SCENE)
-            .map(|first| {
-                let txs = &txs;
-                s.spawn(move || overlap_868_scene(txs, first))
-            })
-            .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).unzip()
-    });
+            .collect(),
+        |first| overlap_868_scene(&txs, first),
+    )
+    .into_iter()
+    .unzip();
     let results: Vec<Result<(), String>> = results.into_iter().flatten().collect();
     assert_eq!(results.len(), txs.len());
     let mut failed = 0;
@@ -1154,12 +1162,7 @@ fn level_at(p: &[f64], q: f64) -> f64 {
 /// half and 90 % of the trials are detected (a train of all 16 pulses) agree within 1 dB.
 #[test]
 fn the_channelizer_costs_no_sensitivity() {
-    let counts: Vec<(usize, usize)> = std::thread::scope(|s| {
-        let handles: Vec<_> = (0..TEST6_LEVELS.len())
-            .map(|k| s.spawn(move || test6_level(k)))
-            .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
-    });
+    let counts: Vec<(usize, usize)> = par_map((0..TEST6_LEVELS.len()).collect(), test6_level);
     println!("level dB | channelizer detected | ddc detected (of {TEST6_TRIALS})");
     for (l, (c, d)) in TEST6_LEVELS.iter().zip(&counts) {
         println!("{l} | {c} | {d}");

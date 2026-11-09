@@ -5020,5 +5020,65 @@
       "status": "info",
       "waiver": "`band_pulse_detect_block` is not accelerated beyond the kernel `mag`: the run-time-detection build runs the code compiled for the baseline x86-64 target with `mag` detected at run time, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "slice_qam16_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is the block `slice` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits of 16-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is the block `slice` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits of 16-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is the block `slice` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits of 16-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is the block `slice` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits of 16-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is the block `slice` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits of 16-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is the block `slice` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits of 16-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`slice_qam16_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "slice_qam64_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is the block `slice` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits of 64-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is the block `slice` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits of 64-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is the block `slice` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits of 64-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is the block `slice` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits of 64-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is the block `slice` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits of 64-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is the block `slice` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits of 64-QAM, branch-free arithmetic without a kernel and without a SIMD branch of its own (the compiler vectorizes the loop where it can). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D981), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`slice_qam64_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

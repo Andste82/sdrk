@@ -878,7 +878,9 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// eight `channel_select` blocks, and `channel_bank_ddc`, eight `ddc` blocks for the same eight
 /// channels, one input sample each; the comparison is between the two banks, D930) and the band
 /// pulse detector of M45.1 (`band_pulse_detect_block`, one lane value; no non-GPL library has
-/// it, D962).
+/// it, D962). The QAM slicer of M44 (`slice_qam16_block`, `slice_qam64_block`, one input symbol
+/// each) is a block without a kernel whose soft bits no library computes the same way (D981):
+/// information too.
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -902,7 +904,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 213] = [
+pub static KERNELS: [KernelSpec; 215] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1139,6 +1141,8 @@ pub static KERNELS: [KernelSpec; 213] = [
     proto("channel_bank_channelize", Family::Own),
     proto("channel_bank_ddc", Family::Own),
     proto("band_pulse_detect_block", Family::Own),
+    proto("slice_qam16_block", Family::Own),
+    proto("slice_qam64_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -4624,6 +4628,8 @@ mod tests {
             "channel_bank_channelize",
             "channel_bank_ddc",
             "band_pulse_detect_block",
+            "slice_qam16_block",
+            "slice_qam64_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
@@ -4686,8 +4692,15 @@ mod tests {
             let fallback = format!("{k}_fallback");
             assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
         }
-        // The block `slice` has no kernel and no entry.
-        assert!(KERNELS.iter().all(|s| !s.name.starts_with("slice")));
+        // The block `slice` has no kernel; only its QAM constellations have entries of the
+        // block (M44, D981).
+        assert!(
+            KERNELS
+                .iter()
+                .filter(|s| s.name.starts_with("slice"))
+                .map(|s| s.name)
+                .eq(["slice_qam16_block", "slice_qam64_block"])
+        );
     }
 
     #[test]

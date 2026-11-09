@@ -1,10 +1,12 @@
 //! `slice`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
-//! QPSK, 4-FSK levels and 8PSK (max-log soft bits). A stateless per-symbol map without a kernel.
+//! QPSK, 4-FSK levels, 8PSK (max-log soft bits) and 16-/64-QAM (piecewise-linear max-log soft
+//! bits). A stateless per-symbol map without a kernel.
 
 use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
+use sdrk_core::kernels::constellation::{QAM16_SQRT_E, QAM64_SQRT_E};
 
 use super::{multiply_rate, unknown};
 use crate::block::{Block, BlockTiming, ParamValue, runtime_param};
@@ -15,9 +17,9 @@ use crate::error::{Error, Result};
 use crate::ports::StreamElem;
 use crate::storage::{Plan, Storage};
 
-/// The names of the `constellation` choice, in index order (`8psk` of M40.1 appended, so the
-/// indices of M38 and M39 stay).
-const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4", "8psk"];
+/// The names of the `constellation` choice, in index order (`8psk` of M40.1 and `qam16`,
+/// `qam64` of M44 appended, so the indices of M38 and M39 stay).
+const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4", "8psk", "qam16", "qam64"];
 
 /// The Gray mapping of 8PSK (M40.1 §1): entry `g = b0 4 + b1 2 + b2` (bit 0 first, the most
 /// significant) is the symbol index `k` of the point `exp(j (2 pi k / 8 + pi / 8))`:
@@ -88,8 +90,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         which is 1 for the negative levels, then scale (|v| - 2/3) for bit 1, which is 1 for \
         the outer levels), 8psk (C32 input, the points exp(j (2 pi k / 8 + pi / 8)) of psk_mod \
         with the Gray code b0 b1 b2, 3 bits, max-log: scale (min |y - p|^2 over the points \
-        whose bit is 0 - the same minimum over the points whose bit is 1) / 4 for each bit). \
-        A soft bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
+        whose bit is 0 - the same minimum over the points whose bit is 1) / 4 for each bit), \
+        qam16 and qam64 (C32 input, the unit-power Gray square QAM of qam_mod: the first half \
+        of the bits from the in-phase level, the second half from the quadrature level, 4 or 6 \
+        bits, the piecewise-linear max-log form per axis with v = component sqrt(E), E = 10 or \
+        42: qam16 scale v, scale (2 - |v|); qam64 scale v, scale (4 - |v|), scale (2 - ||v| - \
+        4|)). A soft bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
         this convention holds for the whole project (frame_decode reads it). Place it after \
         symbol_sync (and carrier recovery for PSK). A receiver that wants log-likelihood \
         ratios sets scale to 2 / sigma^2 of the noise per component. NaN and infinite \
@@ -100,8 +106,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32, PortType::F32],
-        description: "Symbols, one sample per symbol: f32 for real and fsk4, C32 for bpsk, qpsk \
-            and 8psk.",
+        description: "Symbols, one sample per symbol: f32 for real and fsk4, C32 for bpsk, qpsk, \
+            8psk, qam16 and qam64.",
     }],
     outputs: &[PortDesc {
         name: "out",
@@ -117,11 +123,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 default: 1,
             },
             typical: "bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, \
-                8psk for 8PSK",
+                8psk for 8PSK, qam16 and qam64 for QAM",
             mutability: Mutability::Build,
             description: "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk \
-                (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3) or 8psk (C32, \
-                3 bits, max-log, Gray).",
+                (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, \
+                3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, \
+                in-phase bits first, piecewise-linear max-log).",
         },
         ParamDesc {
             name: "scale",
@@ -161,6 +168,15 @@ pub enum SliceConstellation {
     /// `scale ((m0 - m1) / 4)` with `m0`, `m1` the smallest squared distance to the points
     /// whose bit is 0 and 1 (M40.1).
     Psk8,
+    /// 16-QAM (`C32` input), four bits: the Gray code of the in-phase level (`b0 b1`), then of
+    /// the quadrature level (`b2 b3`) of [`sdrk_core::kernels::constellation::Qam::Qam16`]; per
+    /// axis with `v = component √10`: `scale v`, `scale (2 - |v|)` (M44 §2).
+    Qam16,
+    /// 64-QAM (`C32` input), six bits: the Gray code of the in-phase level (`b0 b1 b2`), then
+    /// of the quadrature level (`b3 b4 b5`) of
+    /// [`sdrk_core::kernels::constellation::Qam::Qam64`]; per axis with `v = component √42`:
+    /// `scale v`, `scale (4 - |v|)`, `scale (2 - ||v| - 4|)` (M44 §2).
+    Qam64,
 }
 
 impl SliceConstellation {
@@ -170,6 +186,8 @@ impl SliceConstellation {
             Self::Real | Self::Bpsk => 1,
             Self::Qpsk | Self::Fsk4 => 2,
             Self::Psk8 => 3,
+            Self::Qam16 => 4,
+            Self::Qam64 => 6,
         }
     }
 
@@ -184,7 +202,7 @@ impl SliceConstellation {
     pub const fn input_type(self) -> PortType {
         match self {
             Self::Real | Self::Fsk4 => PortType::F32,
-            Self::Bpsk | Self::Qpsk | Self::Psk8 => PortType::C32,
+            Self::Bpsk | Self::Qpsk | Self::Psk8 | Self::Qam16 | Self::Qam64 => PortType::C32,
         }
     }
 
@@ -195,6 +213,8 @@ impl SliceConstellation {
             Self::Qpsk => 2,
             Self::Fsk4 => 3,
             Self::Psk8 => 4,
+            Self::Qam16 => 5,
+            Self::Qam64 => 6,
         }
     }
 
@@ -204,6 +224,8 @@ impl SliceConstellation {
             2 => Self::Qpsk,
             3 => Self::Fsk4,
             4 => Self::Psk8,
+            5 => Self::Qam16,
+            6 => Self::Qam64,
             _ => Self::Bpsk,
         }
     }
@@ -288,7 +310,7 @@ impl SliceConfig {
 }
 
 /// An input sample type of [`SliceBlock`]: `f32` (constellations `real` and `fsk4`) or `C32`
-/// (`bpsk`, `qpsk`, `8psk`).
+/// (`bpsk`, `qpsk`, `8psk`, `qam16`, `qam64`).
 ///
 /// ```
 /// use sdrk_blocks::SliceElem;
@@ -341,13 +363,15 @@ pub(crate) fn soft_bits<T: SliceElem>(
     }
 }
 
-/// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk`, `qpsk` and
-/// `8psk`), `f32` soft bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and
+/// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk`, `qpsk`,
+/// `8psk`, `qam16` and `qam64`), `f32` soft bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and
 /// its magnitude is the confidence.
 ///
 /// Each soft bit is one `f32` product `scale * component` (`scale` rounded once to `f32`); for
 /// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3); for `8psk` they
-/// are `(m0 - m1) * 0.25` from the squared distances to the points (see [`SliceConstellation`]).
+/// are `(m0 - m1) * 0.25` from the squared distances to the points; for `qam16` and `qam64`
+/// `v`, `2 - |v|` (and `4 - |v|`, `2 - ||v| - 4|`) per axis with `v = component * √E` (one
+/// `f32` product, `√E` rounded once to `f32`; see [`SliceConstellation`]).
 /// A call takes `min(input.len(), output.len() / bits_per_symbol)` symbols. Timing: constant
 /// ratio `bits_per_symbol / 1`, delay 0. The block needs no storage.
 ///
@@ -383,7 +407,8 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
         } else {
             Err(Error::InvalidParameter {
                 name: "constellation",
-                reason: "real and fsk4 need f32 input; bpsk, qpsk and 8psk need c32 input",
+                reason: "real and fsk4 need f32 input; bpsk, qpsk, 8psk, qam16 and qam64 need c32 \
+                    input",
             })
         }
     }
@@ -392,7 +417,8 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
     ///
     /// # Errors
     /// `OutOfRange` for `scale`; `InvalidParameter` for a constellation that does not take
-    /// `T` (`real` and `fsk4` need `f32`, `bpsk`, `qpsk` and `8psk` need `C32`).
+    /// `T` (`real` and `fsk4` need `f32`, `bpsk`, `qpsk`, `8psk`, `qam16` and `qam64` need
+    /// `C32`).
     pub fn new(config: &SliceConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         Self::check(config)?;
         Ok(Self {
@@ -449,6 +475,8 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
                 }
                 input.len().min(output.len() / 3)
             }
+            SliceConstellation::Qam16 => qam16_soft_bits(s, input, output),
+            SliceConstellation::Qam64 => qam64_soft_bits(s, input, output),
             _ => soft_bits(false, s, input, output),
         };
         Ok(Progress {
@@ -532,6 +560,56 @@ pub(crate) fn psk8_bits(s: f32, re: f32, im: f32) -> [f32; 3] {
         *o = s * ((m0 - m1) * 0.25);
     }
     out
+}
+
+/// The components of the first `n` symbols of `input` as `f32`, in memory order (`re`, `im` for
+/// `C32`; the value for `f32`), or none if `input` is shorter.
+#[inline]
+fn components<T: SliceElem>(input: &[T], n: usize) -> &[f32] {
+    let per = core::mem::size_of::<T>() / core::mem::size_of::<f32>();
+    bytemuck::try_cast_slice::<T, f32>(input)
+        .ok()
+        .and_then(|c| c.get(..n * per))
+        .unwrap_or(&[])
+}
+
+/// The four soft bits of 16-QAM (M44 §2) for every symbol of `input` with the factor `s`: per
+/// axis (in-phase first) with `v = component * √10`, `s v` (the first bit of the Gray code, 1
+/// on the positive side) and `s (2 - |v|)` (the second bit, 1 for the inner levels). Takes
+/// `min(input.len(), output.len() / 4)` symbols and returns that count (shared by `slice` and
+/// `qam_demod`). The loop runs over the components in memory order, two soft bits each, which
+/// the compiler vectorizes.
+#[inline]
+pub(crate) fn qam16_soft_bits<T: SliceElem>(s: f32, input: &[T], output: &mut [f32]) -> usize {
+    let n = input.len().min(output.len() / 4);
+    for (o, &x) in output.chunks_exact_mut(2).zip(components(input, n)) {
+        let v = x * QAM16_SQRT_E;
+        if let [b0, b1] = o {
+            *b0 = s * v;
+            *b1 = s * (2.0 - libm::fabsf(v));
+        }
+    }
+    n
+}
+
+/// The six soft bits of 64-QAM (M44 §2) for every symbol of `input` with the factor `s`: per
+/// axis (in-phase first) with `v = component * √42` and `a = |v|`, `s v` (1 on the positive
+/// side), `s (4 - a)` (1 for the levels ±1, ±3) and `s (2 - |a - 4|)` (1 for ±3, ±5). Takes
+/// `min(input.len(), output.len() / 6)` symbols and returns that count (shared by `slice` and
+/// `qam_demod`). The loop runs over the components in memory order, three soft bits each.
+#[inline]
+pub(crate) fn qam64_soft_bits<T: SliceElem>(s: f32, input: &[T], output: &mut [f32]) -> usize {
+    let n = input.len().min(output.len() / 6);
+    for (o, &x) in output.chunks_exact_mut(3).zip(components(input, n)) {
+        let v = x * QAM64_SQRT_E;
+        let a = libm::fabsf(v);
+        if let [b0, b1, b2] = o {
+            *b0 = s * v;
+            *b1 = s * (4.0 - a);
+            *b2 = s * (2.0 - libm::fabsf(a - 4.0));
+        }
+    }
+    n
 }
 
 #[cfg(test)]

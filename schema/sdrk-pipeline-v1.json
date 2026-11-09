@@ -3985,13 +3985,15 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3) or 8psk (C32, 3 bits, max-log, Gray). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK. Build-time.",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 and qam64 for QAM. Build-time.",
                     "enum": [
                       "real",
                       "bpsk",
                       "qpsk",
                       "fsk4",
-                      "8psk"
+                      "8psk",
+                      "qam16",
+                      "qam64"
                     ],
                     "type": "string"
                   },

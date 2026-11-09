@@ -53,6 +53,7 @@ mod math_family;
 mod morse_family;
 mod noise_family;
 mod proto_family;
+mod qam_family;
 mod rds_family;
 mod rds_tx_family;
 mod stereo_family;
@@ -356,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 213] = [
+pub const KERNELS: [&str; 215] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -570,6 +571,8 @@ pub const KERNELS: [&str; 213] = [
     "channel_bank_channelize",
     "channel_bank_ddc",
     "band_pulse_detect_block",
+    "slice_qam16_block",
+    "slice_qam64_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -775,6 +778,16 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
         "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
         "channelize_block" => Box::new(channelize_family::ChannelizeBlockK::new(rng, layout)),
+        "slice_qam16_block" => Box::new(qam_family::SliceQamBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam16,
+        )),
+        "slice_qam64_block" => Box::new(qam_family::SliceQamBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam64,
+        )),
         "channel_select_block" => {
             Box::new(channelize_family::ChannelSelectBlockK::new(rng, layout))
         }

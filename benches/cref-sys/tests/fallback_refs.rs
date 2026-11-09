@@ -4,8 +4,9 @@
 
 use cref_sys::cmsis_dsp as cm;
 use cref_sys::{
-    GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
-    GrQuadratureDemodCf, GrRotator, LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
+    GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc,
+    GrLinearEqualizer, GrLinearEqualizerRect, GrQuadratureDemodCf, GrRect, GrRotator,
+    LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
 };
 use std::f64::consts::PI;
 
@@ -663,6 +664,105 @@ fn gnuradio_linear_equalizer() {
     for v in &out[5000..] {
         assert_close(f64::from(v[0].abs()), sq2, 0.05);
         assert_close(f64::from(v[1].abs()), sq2, 0.05);
+    }
+}
+
+/// The unit-power 16-QAM grid of M44 (levels `(2 i - 3) / sqrt 10`) in an arbitrary symbol
+/// order, and a pseudo-random symbol stream.
+fn qam16() -> (Vec<[f32; 2]>, Vec<usize>) {
+    let l = |i: i32| f64::from(2 * i - 3) / 10f64.sqrt();
+    let points = (0..16)
+        .map(|k| [l(k / 4) as f32, l(k % 4) as f32])
+        .collect();
+    let mut x = 0x2545_f491_u32;
+    let syms = (0..8000)
+        .map(|_| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            (x >> 4) as usize % 16
+        })
+        .collect();
+    (points, syms)
+}
+
+fn qam16_rect(points: &[[f32; 2]]) -> GrRect<'_> {
+    let w = (2.0 / 10f64.sqrt()) as f32;
+    GrRect {
+        points,
+        real_sectors: 4,
+        imag_sectors: 4,
+        width_real: w,
+        width_imag: w,
+    }
+}
+
+#[test]
+fn gnuradio_constellation_receiver() {
+    let (points, syms) = qam16();
+    let f = (2.0 * PI * 0.05) as f32;
+    let Some(mut cr) = GrConstellationReceiverCb::new(qam16_rect(&points), 0.0141, -f, f) else {
+        eprintln!("skipped: the GNU Radio constellation_receiver_cb is not linked");
+        return;
+    };
+    let (alpha, beta) = cr.gains();
+    let (z, bw) = (std::f64::consts::FRAC_1_SQRT_2, 0.0141f64);
+    let d = 1.0 + 2.0 * z * bw + bw * bw;
+    assert_close(f64::from(alpha), 4.0 * z * bw / d, 1e-6);
+    assert_close(f64::from(beta), 4.0 * bw * bw / d, 1e-8);
+    // 16-QAM turned by 0.3 rad and 0.001 rad per symbol: the decision-directed loop turns the
+    // points back onto the grid.
+    let input: Vec<[f32; 2]> = syms
+        .iter()
+        .enumerate()
+        .map(|(k, &s)| {
+            let p = 0.3 + 0.001 * k as f64;
+            let (sn, c) = p.sin_cos();
+            let (re, im) = (f64::from(points[s][0]), f64::from(points[s][1]));
+            [(re * c - im * sn) as f32, (re * sn + im * c) as f32]
+        })
+        .collect();
+    let mut out = vec![[0.0f32; 2]; input.len()];
+    cr.work(&input[..3000], &mut out[..3000]);
+    cr.work(&input[3000..], &mut out[3000..]);
+    for (v, &s) in out[6000..].iter().zip(&syms[6000..]) {
+        assert_close(f64::from(v[0]), f64::from(points[s][0]), 1e-2);
+        assert_close(f64::from(v[1]), f64::from(points[s][1]), 1e-2);
+    }
+}
+
+#[test]
+fn gnuradio_linear_equalizer_on_a_rect_constellation() {
+    let (points, syms) = qam16();
+    let mut taps = vec![[0.0f32; 2]; 11];
+    taps[5] = [1.0, 0.0];
+    let Some(mut eq) = GrLinearEqualizerRect::new(&taps, 0.02, 2000, qam16_rect(&points)) else {
+        eprintln!("skipped: the GNU Radio linear_equalizer on a constellation_rect is not linked");
+        return;
+    };
+    // 16-QAM through 1 + 0.2 e^(j0.6) z^-1: decision-directed NLMS learns the echo.
+    let (gr, gi) = (0.2 * 0.6f64.cos(), 0.2 * 0.6f64.sin());
+    let p = |k: usize| (f64::from(points[syms[k]][0]), f64::from(points[syms[k]][1]));
+    let input: Vec<[f32; 2]> = (0..syms.len())
+        .map(|k| {
+            let (mut re, mut im) = p(k);
+            if k > 0 {
+                let (pr, pi) = p(k - 1);
+                re += gr * pr - gi * pi;
+                im += gr * pi + gi * pr;
+            }
+            [re as f32, im as f32]
+        })
+        .collect();
+    let mut out = vec![[0.0f32; 2]; input.len()];
+    for (i, o) in input.chunks(2000).zip(out.chunks_mut(2000)) {
+        eq.work(i, o);
+    }
+    // the centre tap delays by 5 symbols
+    for k in 7000..syms.len() {
+        let (re, im) = p(k - 5);
+        assert_close(f64::from(out[k][0]), re, 0.05);
+        assert_close(f64::from(out[k][1]), im, 0.05);
     }
 }
 

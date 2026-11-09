@@ -1,4 +1,4 @@
-//! `equalize`: adaptive equalizer on PSK symbols (CMA, then decision-directed, normalized
+//! `equalize`: adaptive equalizer on PSK and QAM symbols (CMA, then decision-directed, normalized
 //! LMS; optional decision feedback; a decision-directed phase tracker on the output).
 
 use sdrk::{Progress, Rate, Sdrk};
@@ -33,20 +33,21 @@ pub(crate) const DEFAULT_CMA_SYMBOLS: u32 = 1000;
 /// Default bandwidth of the phase tracker (that of `costas`).
 pub(crate) const DEFAULT_PHASE_BW: f64 = 0.02;
 /// The names of the constellations, in the order of the choice.
-const CONSTELLATIONS: &[&str] = &["bpsk", "qpsk", "8psk"];
+const CONSTELLATIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
 
 /// Description of the `equalize` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "equalize",
     summary: "Adaptive equalizer: removes the inter-symbol interference of multipath and filters \
-        from PSK symbols.",
+        from PSK and QAM symbols.",
     details: "An adaptive filter at one sample per symbol: y = sum w[i] x[i] over the joint \
         vector x of the last taps symbols (newest first) and, with feedback_taps above 0, the \
         last feedback_taps decisions (a decision feedback equalizer). A decision-directed \
         phase tracker (bandwidth phase_bw, 0 = off) turns the output back, z = y e^(-j theta), \
         and the decision d is the nearest point of the constellation to z. The weights start \
         with the centre tap 1 and adapt with the normalized LMS step mu / (sum |x|^2 + 1e-6): \
-        blind with the constant-modulus algorithm (e = y (|y|^2 - 1), each part clipped to \
+        blind with the constant-modulus algorithm (e = y (|y|^2 - R2) with R2 = 1 for PSK, \
+        1.32 for qam16 and 1.381 for qam64, each part clipped to \
         [-1, 1], step mu_cma) for the first cma_symbols symbols, then decision-directed \
         (e = (z - d) e^(j theta), step mu_dd); w[i] = w[i] - mu e conj(x[i]). The decisions \
         are fed back (as d e^(j theta)) only in decision mode. Chain position: after \
@@ -106,7 +107,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             typical: "qpsk; the constellation of the transmitter",
             mutability: Mutability::Build,
             description: "The constellation of the decisions: bpsk, qpsk or 8psk (the points \
-                of psk_mod).",
+                of psk_mod), qam16 or qam64 (the unit-power Gray points of qam_mod; the CMA \
+                radius R2 = E|s|^4 / E|s|^2 is 1.32 and 1.381).",
         },
         ParamDesc {
             name: "mu_cma",
@@ -164,11 +166,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &[],
 };
 
-/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`).
+/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`).
 const fn constellation_of(i: u16) -> EqConstellation {
     match i {
         0 => EqConstellation::Bpsk,
         2 => EqConstellation::Psk8,
+        3 => EqConstellation::Qam16,
+        4 => EqConstellation::Qam64,
         _ => EqConstellation::Qpsk,
     }
 }
@@ -178,6 +182,8 @@ fn constellation_index(c: EqConstellation) -> u16 {
     match c {
         EqConstellation::Bpsk => 0,
         EqConstellation::Psk8 => 2,
+        EqConstellation::Qam16 => 3,
+        EqConstellation::Qam64 => 4,
         _ => 1,
     }
 }

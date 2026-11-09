@@ -1,0 +1,55 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf32",
+      "file": "dd_qam16_c32_8192.expected.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "dd_qam16_c32_8192.input.bin",
+      "len": 8192
+    },
+    "locked": {
+      "dtype": "u8",
+      "file": "dd_qam16_c32_8192.locked.bin",
+      "len": 8192
+    }
+  },
+  "case": "dd_qam16_c32_8192",
+  "format_version": 1,
+  "kernel": "costas",
+  "model": "float32",
+  "notes": "16-QAM with the Gray mapping of M44 section 1 (unit average power), one sample per symbol, rotated by the start phase phase0_rad (0.3 rad) and a carrier offset of 0.0005 cycles per symbol, complex noise for Eb/N0 16 dB; constellation qam16 (the decision-directed detector arg(y conj d) against the grid decision, atan2f of msun) with the block defaults; exact float32 model over the whole input; locked is the lock flag after every symbol; snr_db_guard compares with the float64 loop (D111)",
+  "params": {
+    "constellation": "qam16",
+    "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
+    "damping": 0.7071,
+    "ebn0_db": 16.0,
+    "final_freq_bits": 973457543,
+    "final_level_bits": 1062187636,
+    "final_locked": 1,
+    "final_phase": 615519274,
+    "first_locked": 112,
+    "guard_skip": 0,
+    "ki_bits": 963058442,
+    "kp_bits": 1007118694,
+    "loop_bw": 0.02,
+    "max_bits": 1028443341,
+    "max_offset": 0.05,
+    "offset_cycles_per_symbol": 0.0005,
+    "phase0_rad": 0.3,
+    "sigma": 0.05603443619228246,
+    "snr_db_guard": 132.0
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 600,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

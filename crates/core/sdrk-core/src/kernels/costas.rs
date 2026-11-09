@@ -1,14 +1,17 @@
-//! Carrier recovery for phase-shift keying: a Costas loop of order 2 (BPSK), 4 (QPSK) or 8
-//! (8PSK) that runs on one sample per symbol (after `symbol_sync`), removes the carrier phase
-//! and frequency offset and reports whether it is locked.
+//! Carrier recovery for phase-shift keying and square QAM: a Costas loop for BPSK, QPSK and
+//! 8PSK and a decision-directed loop for 16-QAM and 64-QAM (M44) that runs on one sample per
+//! symbol (after `symbol_sync`), removes the carrier phase and frequency offset and reports
+//! whether it is locked.
 //!
 //! Per symbol the input is rotated by the phase of a numerically controlled oscillator
 //! (`y = x exp(-j phi)`, sine and cosine from the tables of `rotate`), a decision-directed phase
 //! detector measures the remaining phase error, and a proportional-integral loop filter corrects
-//! the frequency integrator and the phase. A lock detector smooths `cos(order arg y)` (for
-//! QPSK its negative, so that the points at 45 degrees give +1, D601; for 8PSK `cos(8 err)`
-//! against the nearest point, the Chebyshev polynomial `T4` of the `cos(2 err)` of M40.1 §1,
-//! D659). The arithmetic is fixed (float32 model,
+//! the frequency integrator and the phase. A lock detector smooths `cos(2 arg y)` (BPSK),
+//! `-cos(4 arg y)` (QPSK, so that the points at 45 degrees give +1, D601) or `cos(8 err)`
+//! against the decided point (8PSK, the Chebyshev polynomial `T4` of the `cos(2 err)` of M40.1
+//! §1, D659; 16-QAM and 64-QAM the same with the QAM decision, M44 §3). The QAM detector is the
+//! exact phase `arg(y conj d)` of GNU Radio's `constellation_receiver_cb` against the grid
+//! decision `d` of [`crate::kernels::constellation`]. The arithmetic is fixed (float32 model,
 //! see [`Costas`] and `docs/kernels.md`), so `Fallback` and `Reference` are bit-identical.
 
 use core::f64::consts::TAU;
@@ -16,6 +19,7 @@ use core::f64::consts::TAU;
 use sdrk_device::Ratio;
 
 use crate::error::{Error, Result};
+use crate::kernels::constellation::Qam;
 use crate::num::flush_denormal;
 use crate::timing::{Delay, Timing};
 use crate::types::C32;
@@ -39,12 +43,59 @@ pub(crate) const C8: f32 = 0.923_879_5;
 )]
 pub(crate) const S8: f32 = 0.382_683_43;
 
+/// The constellation of the loop: it selects the phase detector and the lock metric.
+///
+/// ```
+/// use sdrk_core::kernels::{constellation::Qam, costas::CostasConstellation};
+/// assert_eq!(CostasConstellation::Qpsk.psk_order(), Some(4));
+/// assert_eq!(CostasConstellation::Qam16.qam(), Some(Qam::Qam16));
+/// assert_eq!(CostasConstellation::default(), CostasConstellation::Bpsk);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum CostasConstellation {
+    /// BPSK, the detector `y.re y.im` (M40).
+    #[default]
+    Bpsk,
+    /// QPSK, the detector `sign(y.re) y.im - sign(y.im) y.re` (M40).
+    Qpsk,
+    /// 8PSK, the detector `im(y conj d)` against the point of the octant (M40.1).
+    Psk8,
+    /// 16-QAM, the detector `arg(y conj d)` against the grid decision (M44).
+    Qam16,
+    /// 64-QAM, the detector `arg(y conj d)` against the grid decision (M44).
+    Qam64,
+}
+
+impl CostasConstellation {
+    /// The order of the phase-shift keying (2, 4 or 8), `None` for QAM.
+    #[inline]
+    pub const fn psk_order(self) -> Option<u32> {
+        match self {
+            Self::Bpsk => Some(2),
+            Self::Qpsk => Some(4),
+            Self::Psk8 => Some(8),
+            Self::Qam16 | Self::Qam64 => None,
+        }
+    }
+
+    /// The square QAM of the constellation, `None` for PSK.
+    #[inline]
+    pub const fn qam(self) -> Option<Qam> {
+        match self {
+            Self::Qam16 => Some(Qam::Qam16),
+            Self::Qam64 => Some(Qam::Qam64),
+            Self::Bpsk | Self::Qpsk | Self::Psk8 => None,
+        }
+    }
+}
+
 /// The loop constants of [`CostasState`], computed in f64 by [`CostasState::new`] and kept as
 /// the `f32` values the loop uses.
 ///
 /// ```
-/// use sdrk_core::kernels::costas::CostasState;
-/// let st = CostasState::new(4, 0.02, 0.7071, 0.05)?;
+/// use sdrk_core::kernels::costas::{CostasConstellation, CostasState};
+/// let st = CostasState::new(CostasConstellation::Qpsk, 0.02, 0.7071, 0.05)?;
 /// let g = st.gains();
 /// assert!(g.kp > 0.0 && g.ki > 0.0 && g.ki < g.kp);
 /// assert_eq!(g.max_offset, 0.05f32);
@@ -63,22 +114,22 @@ pub struct CostasGains {
 }
 
 /// State of the Costas loop: the NCO phase (`u32`, a full turn is `2^32`), the frequency
-/// integrator (`f32`, cycles per symbol), the loop constants, the order and the lock detector.
+/// integrator (`f32`, cycles per symbol), the loop constants, the constellation and the lock
+/// detector.
 ///
 /// ```
-/// use sdrk_core::{kernels::costas::CostasState, Ratio, Timing};
-/// let st = CostasState::new(2, 0.02, 0.7071, 0.05)?;
-/// assert_eq!((st.order(), st.phase(), st.frequency(), st.locked()), (2, 0, 0.0, false));
+/// use sdrk_core::{kernels::costas::{CostasConstellation, CostasState}, Ratio, Timing};
+/// let st = CostasState::new(CostasConstellation::Bpsk, 0.02, 0.7071, 0.05)?;
+/// assert_eq!(st.constellation(), CostasConstellation::Bpsk);
+/// assert_eq!((st.phase(), st.frequency(), st.locked()), (0, 0.0, false));
 /// assert_eq!(st.ratio(), Ratio::ONE);
-/// // Order 8 is 8PSK; order 3 and a loop bandwidth above 0.2 are rejected.
-/// assert_eq!(CostasState::new(8, 0.02, 0.7071, 0.05)?.order(), 8);
-/// assert!(CostasState::new(3, 0.02, 0.7071, 0.05).is_err());
-/// assert!(CostasState::new(4, 0.3, 0.7071, 0.05).is_err());
+/// // A loop bandwidth above 0.2 is rejected.
+/// assert!(CostasState::new(CostasConstellation::Qam16, 0.3, 0.7071, 0.05).is_err());
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CostasState {
-    pub(crate) order: u32,
+    pub(crate) constellation: CostasConstellation,
     pub(crate) loop_bw: f64,
     pub(crate) damping: f64,
     pub(crate) max_offset: f64,
@@ -102,8 +153,8 @@ impl CostasState {
     /// Creates a loop with phase 0, a zero frequency integrator and the lock detector at 0
     /// (unlocked).
     ///
-    /// `order` is 2 (BPSK), 4 (QPSK) or 8 (8PSK, M40.1); any other order gives
-    /// `InvalidParameter`. `loop_bw` (0.0001 to 0.2) is the loop bandwidth normalized to the
+    /// `constellation` selects the phase detector and the lock metric (BPSK, QPSK, 8PSK of M40
+    /// and M40.1, 16-QAM and 64-QAM of M44). `loop_bw` (0.0001 to 0.2) is the loop bandwidth normalized to the
     /// symbol rate, `damping` 0.1 to 4 (1/√2 usual), `max_offset` (0 to 0.25) the limit of
     /// the frequency integrator in cycles per symbol (as `f32`; a value below 1e-30 is flushed
     /// to 0, so the integrator never holds a subnormal). The loop constants, in f64 (the
@@ -114,18 +165,20 @@ impl CostasState {
     /// NaN, gives `InvalidParameter`.
     ///
     /// ```
-    /// use sdrk_core::kernels::costas::CostasState;
-    /// assert!(CostasState::new(2, 0.0001, 0.1, 0.0).is_ok());
-    /// assert!(CostasState::new(4, 0.2, 4.0, 0.25).is_ok());
-    /// assert!(CostasState::new(8, 0.02, 0.7071, 0.05).is_ok());
-    /// assert!(CostasState::new(3, 0.02, 0.7071, 0.05).is_err());
-    /// assert!(CostasState::new(4, 0.02, 0.7071, 0.3).is_err());
-    /// assert!(CostasState::new(4, f64::NAN, 0.7071, 0.05).is_err());
+    /// use sdrk_core::kernels::costas::{CostasConstellation as C, CostasState};
+    /// assert!(CostasState::new(C::Bpsk, 0.0001, 0.1, 0.0).is_ok());
+    /// assert!(CostasState::new(C::Qpsk, 0.2, 4.0, 0.25).is_ok());
+    /// assert!(CostasState::new(C::Psk8, 0.02, 0.7071, 0.05).is_ok());
+    /// assert!(CostasState::new(C::Qam64, 0.005, 0.7071, 0.05).is_ok());
+    /// assert!(CostasState::new(C::Qpsk, 0.02, 0.7071, 0.3).is_err());
+    /// assert!(CostasState::new(C::Qpsk, f64::NAN, 0.7071, 0.05).is_err());
     /// ```
-    pub fn new(order: u32, loop_bw: f64, damping: f64, max_offset: f64) -> Result<Self> {
-        if !matches!(order, 2 | 4 | 8) {
-            return Err(invalid("costas order must be 2, 4 or 8"));
-        }
+    pub fn new(
+        constellation: CostasConstellation,
+        loop_bw: f64,
+        damping: f64,
+        max_offset: f64,
+    ) -> Result<Self> {
         if !(loop_bw.is_finite() && (0.0001..=0.2).contains(&loop_bw)) {
             return Err(invalid(
                 "costas loop bandwidth must be between 0.0001 and 0.2",
@@ -144,7 +197,7 @@ impl CostasState {
             return Err(invalid("costas loop gains must be finite"));
         }
         Ok(Self {
-            order,
+            constellation,
             loop_bw,
             damping,
             max_offset,
@@ -163,14 +216,14 @@ impl CostasState {
     /// detector at 0 and unlocked (the parameters are kept).
     ///
     /// ```
-    /// use sdrk_core::{kernels::costas::{Costas, CostasState}, Fallback, C32};
-    /// let mut st = CostasState::new(2, 0.05, 0.7071, 0.05)?;
+    /// use sdrk_core::{kernels::costas::{Costas, CostasConstellation, CostasState}, Fallback, C32};
+    /// let mut st = CostasState::new(CostasConstellation::Bpsk, 0.05, 0.7071, 0.05)?;
     /// let input = [C32::new(0.6, 0.8); 64];
     /// let mut out = [C32::default(); 64];
     /// Fallback.costas(&mut st, &input, &mut out)?;
     /// assert_ne!(st.phase(), 0);
     /// st.reset();
-    /// assert_eq!(st, CostasState::new(2, 0.05, 0.7071, 0.05)?);
+    /// assert_eq!(st, CostasState::new(CostasConstellation::Bpsk, 0.05, 0.7071, 0.05)?);
     /// # Ok::<(), sdrk_core::Error>(())
     /// ```
     pub fn reset(&mut self) {
@@ -190,7 +243,8 @@ impl CostasState {
         self.locked
     }
 
-    /// The smoothed lock metric `l` (about 1 when locked, about 0 on noise, for every order).
+    /// The smoothed lock metric `l` (about 1 when locked; about 0 on noise for the PSK
+    /// constellations and 16-QAM, see `docs/kernels.md` for 64-QAM).
     pub fn lock_level(&self) -> f32 {
         self.level
     }
@@ -203,8 +257,8 @@ impl CostasState {
     /// Sets the NCO phase (for tests that start the loop at a given phase).
     ///
     /// ```
-    /// use sdrk_core::kernels::costas::CostasState;
-    /// let mut st = CostasState::new(4, 0.02, 0.7071, 0.05)?;
+    /// use sdrk_core::kernels::costas::{CostasConstellation, CostasState};
+    /// let mut st = CostasState::new(CostasConstellation::Qpsk, 0.02, 0.7071, 0.05)?;
     /// st.set_phase(0x4000_0000);
     /// assert_eq!(st.phase(), 0x4000_0000);
     /// # Ok::<(), sdrk_core::Error>(())
@@ -213,9 +267,9 @@ impl CostasState {
         self.phase = phase;
     }
 
-    /// The order: 2 (BPSK), 4 (QPSK) or 8 (8PSK).
-    pub fn order(&self) -> u32 {
-        self.order
+    /// The constellation of the detector and the lock metric.
+    pub fn constellation(&self) -> CostasConstellation {
+        self.constellation
     }
 
     /// The loop bandwidth, normalized to the symbol rate.
@@ -308,41 +362,99 @@ pub(crate) fn octant_point(y: C32) -> (f32, f32) {
     }
 }
 
+/// The detector and lock-metric codes of [`CostasConstellation`], the const parameter of the
+/// fallback's loop.
+pub(crate) const BPSK: u8 = 0;
+/// See [`BPSK`].
+pub(crate) const QPSK: u8 = 1;
+/// See [`BPSK`].
+pub(crate) const PSK8: u8 = 2;
+/// See [`BPSK`].
+pub(crate) const QAM16: u8 = 3;
+/// See [`BPSK`].
+pub(crate) const QAM64: u8 = 4;
+
+impl CostasConstellation {
+    /// The code of the detector and the lock metric.
+    #[inline]
+    pub(crate) const fn code(self) -> u8 {
+        match self {
+            Self::Bpsk => BPSK,
+            Self::Qpsk => QPSK,
+            Self::Psk8 => PSK8,
+            Self::Qam16 => QAM16,
+            Self::Qam64 => QAM64,
+        }
+    }
+}
+
+/// The QAM of a code ([`QAM16`] or [`QAM64`]).
+#[inline]
+const fn qam_of(code: u8) -> Qam {
+    if code == QAM64 {
+        Qam::Qam64
+    } else {
+        Qam::Qam16
+    }
+}
+
+/// `y conj d` against the QAM decision `d` of `y`: `(r, i, |d|^2)` with
+/// `r = y.re d.re + y.im d.im`, `i = y.im d.re - y.re d.im` and `|d|^2 = d.re d.re + d.im d.im`.
+#[allow(clippy::many_single_char_names)]
+#[inline]
+pub(crate) fn qam_product(q: Qam, y: C32) -> (f32, f32, f32) {
+    let d = q.decide(y);
+    let r = y.re * d.re + y.im * d.im;
+    let i = y.im * d.re - y.re * d.im;
+    (r, i, d.re * d.re + d.im * d.im)
+}
+
 /// The phase detector of the contract; a non-finite value counts as 0 (D603).
 #[inline]
-pub(crate) fn detector(order: u32, y: C32) -> f32 {
-    let e = match order {
-        2 => y.re * y.im,
-        4 => sign(y.re) * y.im - sign(y.im) * y.re,
-        _ => {
+pub(crate) fn detector(code: u8, y: C32) -> f32 {
+    let e = match code {
+        BPSK => y.re * y.im,
+        QPSK => sign(y.re) * y.im - sign(y.im) * y.re,
+        PSK8 => {
             let (dr, di) = octant_point(y);
             y.im * dr - y.re * di
+        }
+        _ => {
+            let (r, i, _) = qam_product(qam_of(code), y);
+            libm::atan2f(i, r)
         }
     };
     if e.is_finite() { e } else { 0.0 }
 }
 
-/// The lock metric `c` of the contract (order 2: `cos(2 arg y)`, order 4: `-cos(4 arg y)`,
-/// D601; order 8: `cos(8 err)` as `((8 w) (w - 1)) + 1` with `w = u u` and
+/// The lock metric `c` of the contract (BPSK: `cos(2 arg y)`, QPSK: `-cos(4 arg y)`, D601;
+/// 8PSK: `cos(8 err)` as `((8 w) (w - 1)) + 1` with `w = u u` and
 /// `u = ((r r) / p) 2 - 1 = cos(2 err)`, `r = re(y conj d)` against the octant point `d`,
-/// D640, D659); `None` when it is not finite (`y = 0`, NaN, overflow), and the detector
-/// keeps its level (D603).
+/// D640, D659; QAM the same with the grid decision `d` and `u = ((r r) / (p |d|^2)) 2 - 1`);
+/// `None` when it is not finite (`y = 0`, NaN, overflow), and the detector keeps its level
+/// (D603).
 #[allow(clippy::many_single_char_names)]
 #[inline]
-pub(crate) fn lock_metric(order: u32, y: C32) -> Option<f32> {
+pub(crate) fn lock_metric(code: u8, y: C32) -> Option<f32> {
     let a = y.re * y.re;
     let b = y.im * y.im;
     let p = a + b;
-    let c = match order {
-        2 => (a - b) / p,
-        4 => {
+    let c = match code {
+        BPSK => (a - b) / p,
+        QPSK => {
             let d = a - b;
             ((4.0 * a) * b - d * d) / (p * p)
         }
-        _ => {
+        PSK8 => {
             let (dr, di) = octant_point(y);
             let r = y.re * dr + y.im * di;
             let u = ((r * r) / p) * 2.0 - 1.0;
+            let w = u * u;
+            ((8.0 * w) * (w - 1.0)) + 1.0
+        }
+        _ => {
+            let (r, _, dd) = qam_product(qam_of(code), y);
+            let u = ((r * r) / (p * dd)) * 2.0 - 1.0;
             let w = u * u;
             ((8.0 * w) * (w - 1.0)) + 1.0
         }
@@ -353,7 +465,7 @@ pub(crate) fn lock_metric(order: u32, y: C32) -> Option<f32> {
 /// Carrier recovery with a Costas loop, one sample per symbol.
 ///
 /// ```
-/// use sdrk_core::{kernels::costas::{Costas, CostasState}, Fallback, C32};
+/// use sdrk_core::{kernels::costas::{Costas, CostasConstellation, CostasState}, Fallback, C32};
 /// // QPSK symbols rotated by 30 degrees: the loop turns them back onto the diagonals.
 /// let (s, c) = (0.5f32, 0.75f32.sqrt());
 /// let input: Vec<C32> = (0..2000)
@@ -363,12 +475,26 @@ pub(crate) fn lock_metric(order: u32, y: C32) -> Option<f32> {
 ///         C32::new(re * c - im * s, re * s + im * c)
 ///     })
 ///     .collect();
-/// let mut st = CostasState::new(4, 0.02, 0.7071, 0.05)?;
+/// let mut st = CostasState::new(CostasConstellation::Qpsk, 0.02, 0.7071, 0.05)?;
 /// let mut out = vec![C32::default(); input.len()];
 /// Fallback.costas(&mut st, &input, &mut out)?;
 /// assert!(st.locked());
 /// let y = out[1999];
 /// assert!((y.re.abs() - 0.7071).abs() < 1e-3 && (y.im.abs() - 0.7071).abs() < 1e-3);
+///
+/// // 16-QAM turned by 0.3 rad: the decision-directed loop turns it back onto the grid.
+/// use sdrk_core::kernels::constellation::Qam;
+/// let (s, c) = (0.3f32.sin(), 0.3f32.cos());
+/// let input: Vec<C32> = (0u32..3000)
+///     .map(|k| Qam::Qam16.point(k.wrapping_mul(2_654_435_761) >> 28))
+///     .map(|p| C32::new(p.re * c - p.im * s, p.re * s + p.im * c))
+///     .collect();
+/// let mut st = CostasState::new(CostasConstellation::Qam16, 0.02, 0.7071, 0.05)?;
+/// let mut out = vec![C32::default(); input.len()];
+/// Fallback.costas(&mut st, &input, &mut out)?;
+/// assert!(st.locked());
+/// let (y, d) = (out[2999], Qam::Qam16.decide(out[2999]));
+/// assert!((y - d).norm_sqr() < 1e-6);
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
 pub trait Costas {
@@ -377,17 +503,21 @@ pub trait Costas {
     /// 1. `c = cos phi`, `s = sin phi` from the tables of `rotate` with its interpolation (the
     ///    cosine at `phi` and at `phi - 2^30`).
     /// 2. `y = (x.re c + x.im s, x.im c - x.re s)` (`x exp(-j phi)`); output `y`.
-    /// 3. The detector `e`: order 2 `y.re y.im`; order 4 `sign(y.re) y.im - sign(y.im) y.re`
-    ///    (`sign` is 0 for zero and NaN); order 8 `y.im dr - y.re di` with `(dr, di)` the 8PSK
+    /// 3. The detector `e`: BPSK `y.re y.im`; QPSK `sign(y.re) y.im - sign(y.im) y.re`
+    ///    (`sign` is 0 for zero and NaN); 8PSK `y.im dr - y.re di` with `(dr, di)` the 8PSK
     ///    point of the octant of `y` (`(+-cos(pi/8), +-sin(pi/8))` or swapped, as `f32`; zero
-    ///    and NaN take point 0); a non-finite `e` counts as 0.
+    ///    and NaN take point 0); 16-QAM and 64-QAM `libm::atan2f(i, r)` with
+    ///    `r = y.re dr + y.im di`, `i = y.im dr - y.re di` and `(dr, di)` the grid decision of
+    ///    [`Qam::decide`] on `y` (`arg(y conj d)`); a non-finite `e` counts as 0.
     /// 4. `freq = clamp(flush_denormal(freq + ki e), -max, max)`.
     /// 5. `phi += (floor((freq + kp e) 2^32 + 0.5) as i64) as u32` (the product and the
     ///    rounding in f64, wrapping).
     /// 6. Lock detector with `a = y.re y.re`, `b = y.im y.im`, `p = a + b`, `d = a - b`: the
-    ///    metric `c = d / p` (order 2), `c = ((4 a) b - d d) / (p p)` (order 4) or
+    ///    metric `c = d / p` (BPSK), `c = ((4 a) b - d d) / (p p)` (QPSK) or
     ///    `c = ((8 w) (w - 1)) + 1` with `w = u u`, `u = ((r r) / p) 2 - 1` and
-    ///    `r = y.re dr + y.im di` (order 8, `cos(8 err)`: `T4(u) = 8 u^4 - 8 u^2 + 1`); if `c` is
+    ///    `r = y.re dr + y.im di` (8PSK, `cos(8 err)`: `T4(u) = 8 u^4 - 8 u^2 + 1`), for QAM
+    ///    the same `c` with `u = ((r r) / (p q)) 2 - 1`, `q = dr dr + di di` and the decision
+    ///    of step 3; if `c` is
     ///    finite, `l = flush_denormal(l + 0.01 (c - l))`, locked when `l > 0.5`, unlocked when
     ///    `l < 0.3`; otherwise the detector is unchanged.
     ///

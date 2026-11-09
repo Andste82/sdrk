@@ -23,6 +23,7 @@ use crate::fallback::dot::dot_complex_tree;
 use crate::fallback::mix::interp_f32_pair;
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
+use crate::kernels::constellation::Qam;
 use crate::kernels::costas::{derotate, loop_gains, octant_point};
 use crate::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
 use crate::num::flush_denormal;
@@ -57,6 +58,10 @@ pub(crate) const MSE_ALPHA: f32 = 0.01;
 pub(crate) const MSE_START: f32 = 1.0;
 /// `1 / sqrt(2)` rounded once to `f32`: the components of the QPSK points.
 pub(crate) const QPSK_A: f32 = core::f32::consts::FRAC_1_SQRT_2;
+/// The CMA radius of 16-QAM, [`Qam::cma_r2`] rounded once to `f32`.
+const QAM16_R2: f32 = Qam::Qam16.cma_r2() as f32;
+/// The CMA radius of 64-QAM, [`Qam::cma_r2`] rounded once to `f32`.
+const QAM64_R2: f32 = Qam::Qam64.cma_r2() as f32;
 /// A full turn of the tracker phase, `2^32`.
 pub(crate) const TURN: f64 = 4_294_967_296.0;
 
@@ -94,6 +99,10 @@ pub enum EqConstellation {
     Qpsk,
     /// 8PSK, the points `exp(j (2k + 1) pi / 8)` of M40.1.
     Psk8,
+    /// 16-QAM, the unit-power Gray points of [`Qam::Qam16`] (M44).
+    Qam16,
+    /// 64-QAM, the unit-power Gray points of [`Qam::Qam64`] (M44).
+    Qam64,
 }
 
 impl EqConstellation {
@@ -101,13 +110,16 @@ impl EqConstellation {
     /// BPSK `+1` for `re >= 0` (including `-0.0`), else `-1`; QPSK the signs of both components
     /// in the same way, scaled by `1 / sqrt(2)` (as `f32`); 8PSK the point of the half-open
     /// octant of `costas` order 8 (zero takes point 0). A NaN component counts as not negative.
+    /// 16-QAM and 64-QAM the grid decision of [`Qam::decide`] (a NaN component takes level 0).
     ///
     /// ```
-    /// use sdrk_core::{kernels::equalize::EqConstellation, C32};
+    /// use sdrk_core::{kernels::{constellation::Qam, equalize::EqConstellation}, C32};
     /// assert_eq!(EqConstellation::Bpsk.decide(C32::new(-0.1, 5.0)), C32::new(-1.0, 0.0));
     /// assert_eq!(EqConstellation::Bpsk.decide(C32::new(0.0, -1.0)), C32::new(1.0, 0.0));
     /// let d = EqConstellation::Psk8.decide(C32::new(0.0, 1.0));
     /// assert!(d.re < 0.0 && d.im > 0.9); // the octant [pi/2, 3pi/4)
+    /// let y = C32::new(0.2, -2.0);
+    /// assert_eq!(EqConstellation::Qam16.decide(y), Qam::Qam16.decide(y));
     /// ```
     #[inline]
     pub fn decide(self, y: C32) -> C32 {
@@ -119,20 +131,27 @@ impl EqConstellation {
                 let (re, im) = octant_point(y);
                 C32::new(re, im)
             }
+            Self::Qam16 => Qam::Qam16.decide(y),
+            Self::Qam64 => Qam::Qam64.decide(y),
         }
     }
 
-    /// The CMA radius `R2 = E|s|⁴ / E|s|²` of the constellation: 1 for every PSK constellation
-    /// (QAM in M44 has its own value).
+    /// The CMA radius `R2 = E|s|⁴ / E|s|²` of the constellation: 1 for every PSK constellation,
+    /// for 16-QAM and 64-QAM the exact value of [`Qam::cma_r2`] (`33 / 25` and `29 / 21`)
+    /// rounded once to `f32`.
     ///
     /// ```
     /// use sdrk_core::kernels::equalize::EqConstellation;
     /// assert_eq!(EqConstellation::Bpsk.cma_r2(), 1.0);
+    /// assert_eq!(EqConstellation::Qam16.cma_r2(), 1.32);
+    /// assert_eq!(EqConstellation::Qam64.cma_r2(), (29.0f64 / 21.0) as f32);
     /// ```
     #[inline]
     pub fn cma_r2(self) -> f32 {
         match self {
             Self::Bpsk | Self::Qpsk | Self::Psk8 => 1.0,
+            Self::Qam16 => QAM16_R2,
+            Self::Qam64 => QAM64_R2,
         }
     }
 }
@@ -575,8 +594,19 @@ struct Step {
     g: Option<C32>,
 }
 
-#[inline]
-fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32, forward: f32, m: f32) -> Result<Step> {
+#[allow(
+    clippy::inline_always,
+    reason = "a part of the symbol loop of every path: two instances call it, and LLVM keeps a helper with two callers out of line"
+)]
+#[inline(always)]
+fn step<K: Decide>(
+    p: &mut EqualizeParts<'_>,
+    k: K,
+    mode: EqMode,
+    y: C32,
+    forward: f32,
+    m: f32,
+) -> Result<Step> {
     // Phase 0 is the identity (the table's sine at 0 is not exactly 0).
     let (c, s) = if *p.phase == 0 {
         (1.0, 0.0)
@@ -584,7 +614,7 @@ fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32, forward: f32, m: f32) -
         interp_f32_pair(*p.phase).ok_or(Error::Internal("cosine table index"))?
     };
     let z = derotate(y, c, s);
-    let d = p.constellation.decide(z);
+    let d = k.decide(z);
     let ed = C32::new(z.re - d.re, z.im - d.im);
     let pe = ed.re * ed.re + ed.im * ed.im;
     if pe.is_finite() {
@@ -592,7 +622,7 @@ fn step(p: &mut EqualizeParts<'_>, mode: EqMode, y: C32, forward: f32, m: f32) -
     }
     let (e, feedback) = match mode {
         EqMode::Cma => {
-            let f = (y.re * y.re + y.im * y.im) - p.constellation.cma_r2();
+            let f = (y.re * y.re + y.im * y.im) - k.cma_r2();
             let e = C32::new(clip(y.re * f, CMA_CLIP), clip(y.im * f, CMA_CLIP));
             (e, C32::new(0.0, 0.0))
         }
@@ -641,10 +671,99 @@ where
 {
     check_len(input.len(), output.len())?;
     let mut p = s.parts_mut();
+    match p.constellation {
+        EqConstellation::Qam16 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam16), input, output),
+        EqConstellation::Qam64 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam64), input, output),
+        EqConstellation::Bpsk => equalize_paths(dot, &mut p, PskDecide::Bpsk, input, output),
+        EqConstellation::Psk8 => equalize_paths(dot, &mut p, PskDecide::Psk8, input, output),
+        _ => equalize_paths(dot, &mut p, PskDecide::Qpsk, input, output),
+    }
+}
+
+/// The decision and the CMA radius of the loops of [`equalize_with`], each loop compiled for one
+/// implementation: [`PskDecide`] (the three PSK constellations, chosen per symbol as in M43) and
+/// [`QamDecide`] (M44), so that the PSK loops keep the code of M43 and the QAM loops are a
+/// function of their own.
+trait Decide: Copy {
+    /// [`EqConstellation::decide`].
+    fn decide(self, y: C32) -> C32;
+    /// [`EqConstellation::cma_r2`].
+    fn cma_r2(self) -> f32;
+}
+
+/// The PSK constellations, as the three-variant enum of M43 (so that the decision compiles to
+/// the code of M43).
+#[derive(Clone, Copy)]
+enum PskDecide {
+    Bpsk,
+    Qpsk,
+    Psk8,
+}
+
+impl Decide for PskDecide {
+    #[inline]
+    fn decide(self, y: C32) -> C32 {
+        let side = |v: f32, a: f32| if v < 0.0 { -a } else { a };
+        match self {
+            Self::Bpsk => C32::new(side(y.re, 1.0), 0.0),
+            Self::Qpsk => C32::new(side(y.re, QPSK_A), side(y.im, QPSK_A)),
+            Self::Psk8 => {
+                let (re, im) = octant_point(y);
+                C32::new(re, im)
+            }
+        }
+    }
+
+    #[inline]
+    fn cma_r2(self) -> f32 {
+        1.0
+    }
+}
+
+/// A square QAM constellation.
+#[derive(Clone, Copy)]
+struct QamDecide(Qam);
+
+impl Decide for QamDecide {
+    #[inline]
+    fn decide(self, y: C32) -> C32 {
+        self.0.decide(y)
+    }
+
+    #[inline]
+    fn cma_r2(self) -> f32 {
+        match self.0 {
+            Qam::Qam16 => QAM16_R2,
+            _ => QAM64_R2,
+        }
+    }
+}
+
+/// The paths of [`equalize_with`] for the QAM constellations, a function of their own.
+#[inline(never)]
+fn equalize_qam<D: DotComplex<C32>>(
+    dot: &D,
+    p: &mut EqualizeParts<'_>,
+    k: QamDecide,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
+    equalize_paths(dot, p, k, input, output)
+}
+
+/// The linear path without feedback taps, the joint path with them.
+#[inline]
+fn equalize_paths<D: DotComplex<C32>, K: Decide>(
+    dot: &D,
+    p: &mut EqualizeParts<'_>,
+    k: K,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
     if p.hist.len() == p.taps {
-        equalize_linear(&mut p, input, output)
+        equalize_linear(p, k, input, output)
     } else {
-        equalize_joint(dot, &mut p, input, output)
+        equalize_joint(dot, p, k, input, output)
     }
 }
 
@@ -754,7 +873,11 @@ struct Linear<'a> {
 /// products LLVM pairs the products into one vector and adds them horizontally (many
 /// shuffles per block on SSE2, AVX2 and NEON); with a difference both components compile to
 /// plain lane-wise multiplies and subtractions.
-#[inline]
+#[allow(
+    clippy::inline_always,
+    reason = "a part of the symbol loop of every path: two instances call it, and LLVM keeps a helper with two callers out of line"
+)]
+#[inline(always)]
 fn dot_split(xr: &[f32], xi: &[f32], xn: &[f32], wr: &[f32], wi: &[f32]) -> C32 {
     /// `acc[k] = acc[k] + (a c - b d)` per lane, by whole blocks; a last half block (the length
     /// is a multiple of [`QUAD`]) goes to the partial sums 0 to 3, as its elements do.
@@ -797,7 +920,11 @@ fn dot_split(xr: &[f32], xi: &[f32], xn: &[f32], wr: &[f32], wi: &[f32]) -> C32 
 /// (an integer compare per weight and an `or`, no branch). One flat loop, which LLVM
 /// vectorizes.
 /// Returns whether a new weight is not finite.
-#[inline]
+#[allow(
+    clippy::inline_always,
+    reason = "a part of the symbol loop of every path: two instances call it, and LLVM keeps a helper with two callers out of line"
+)]
+#[inline(always)]
 fn update_split(l: &mut Linear<'_>, at: usize, lanes: usize, g: C32) -> Option<bool> {
     /// The magnitude bits, and those of `f32::MAX`: a value is not finite when its magnitude
     /// bits are above (a signed compare of non-negative values, one instruction on every level).
@@ -845,15 +972,24 @@ fn update_split(l: &mut Linear<'_>, at: usize, lanes: usize, g: C32) -> Option<b
 ///   leave the chain from symbol to symbol.
 /// - The weight update runs over the padding too, which is masked back to zero
 ///   ([`update_split`]).
-fn equalize_linear(p: &mut EqualizeParts<'_>, input: &[C32], output: &mut [C32]) -> Result<()> {
+// A function of its own per decision (as the one linear path of M43), so that the symbol loop
+// keeps its helpers inlined.
+#[inline(never)]
+fn equalize_linear<K: Decide>(
+    p: &mut EqualizeParts<'_>,
+    k: K,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
     let mut h = History::ZERO;
-    linear_state(p, &mut h, input, output)
+    linear_state(p, k, &mut h, input, output)
 }
 
 /// The rest of [`equalize_linear`]: the weight part of the working copy, the copy in and out of
 /// the state and the runs.
-fn linear_state(
+fn linear_state<K: Decide>(
     p: &mut EqualizeParts<'_>,
+    k: K,
     h: &mut History,
     input: &[C32],
     output: &mut [C32],
@@ -861,7 +997,7 @@ fn linear_state(
     let mut w = Weights::ZERO;
     let mut l = Linear { h, w: &mut w };
     load_linear(p, &mut l);
-    let result = linear_runs(p, &mut l, input, output);
+    let result = linear_runs(p, k, &mut l, input, output);
     // The state is written back also after an (internal) error.
     store_linear(p, &l);
     result
@@ -901,8 +1037,9 @@ fn store_linear(p: &mut EqualizeParts<'_>, l: &Linear<'_>) {
 
 /// The runs of [`equalize_linear`]; on return the history is at `RUN..RUN + N`.
 #[inline]
-fn linear_runs(
+fn linear_runs<K: Decide>(
     p: &mut EqualizeParts<'_>,
+    dec: K,
     l: &mut Linear<'_>,
     input: &[C32],
     output: &mut [C32],
@@ -921,7 +1058,7 @@ fn linear_runs(
             *o = if finite && y.re.is_finite() && y.im.is_finite() {
                 let (&pq, &m) = l.w.power.get(at).zip(l.w.steps.get(at)).ok_or_else(index)?;
                 let mode = *p.mode;
-                let st = step(p, mode, y, pq, m)?;
+                let st = step(p, dec, mode, y, pq, m)?;
                 if let Some(g) = st.g
                     && update_split(l, at, lanes, g).ok_or_else(index)?
                 {
@@ -944,7 +1081,11 @@ fn linear_runs(
 /// The start of a run of [`linear_runs`]: the symbols of the run `xs` into the history (from
 /// `first` on), `|x|²` of every value of its windows, the window powers side by side and the
 /// steps `mu / (P + eps)` of the run.
-#[inline]
+#[allow(
+    clippy::inline_always,
+    reason = "a part of the symbol loop of every path: two instances call it, and LLVM keeps a helper with two callers out of line"
+)]
+#[inline(always)]
 fn prepare_run(p: &EqualizeParts<'_>, l: &mut Linear<'_>, xs: &[C32], first: usize) -> Option<()> {
     let n = p.taps;
     let fresh =
@@ -997,7 +1138,11 @@ fn prepare_run(p: &EqualizeParts<'_>, l: &mut Linear<'_>, xs: &[C32], first: usi
 }
 
 /// [`dot_split`] of the window from `at` and the weights, over `padded` samples.
-#[inline]
+#[allow(
+    clippy::inline_always,
+    reason = "a part of the symbol loop of every path: two instances call it, and LLVM keeps a helper with two callers out of line"
+)]
+#[inline(always)]
 fn dot_window(l: &Linear<'_>, at: usize, padded: usize) -> Option<C32> {
     let x = at..at + padded;
     Some(dot_split(
@@ -1025,9 +1170,10 @@ fn start_split(l: &mut Linear<'_>, taps: usize) {
 }
 
 /// The equalizer with feedback taps (`M > 0`): the joint history moves by one per symbol.
-fn equalize_joint<D: DotComplex<C32>>(
+fn equalize_joint<D: DotComplex<C32>, K: Decide>(
     dot: &D,
     p: &mut EqualizeParts<'_>,
+    k: K,
     input: &[C32],
     output: &mut [C32],
 ) -> Result<()> {
@@ -1050,7 +1196,7 @@ fn equalize_joint<D: DotComplex<C32>>(
                 EqMode::Cma => p.mu_cma,
                 EqMode::Decision => p.mu_dd,
             };
-            let st = step(p, mode, y, forward, mu / (power + NLMS_EPS))?;
+            let st = step(p, k, mode, y, forward, mu / (power + NLMS_EPS))?;
             if let Some(g) = st.g {
                 update_weights(p.weights, p.hist, g, n);
             }
@@ -1107,7 +1253,8 @@ pub trait Equalize {
     ///    `z = (y.re c + y.im s, y.im c - y.re s)`, the decision `d` on `z` (the rule of
     ///    [`EqConstellation::decide`]), `ed = z - d`, `p = ed.re ed.re + ed.im ed.im`, and if
     ///    `p` is finite `mse = flush_denormal(mse + 0.01 (p - mse))`.
-    /// 3. The error: CMA `f = (y.re y.re + y.im y.im) - R2` (`R2` = 1 for PSK) and
+    /// 3. The error: CMA `f = (y.re y.re + y.im y.im) - R2` (`R2` = 1 for PSK, the `f32` of
+    ///    `33 / 25` for 16-QAM and of `29 / 21` for 64-QAM, [`EqConstellation::cma_r2`]) and
     ///    `e = (clip(y.re f), clip(y.im f))` with `clip` to `[-1, 1]` (two selects; NaN stays),
     ///    step `mu_cma`, feedback value 0; decision mode `e = (ed.re c - ed.im s,
     ///    ed.re s + ed.im c)` (`ed e^(j theta)`), step `mu_dd`, feedback value

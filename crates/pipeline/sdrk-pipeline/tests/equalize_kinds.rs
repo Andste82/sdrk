@@ -171,6 +171,17 @@ fn equalize_costs_8_taps_and_keeps_the_rate() {
         json!({ "cma_symbols": 4_294_967_295u64 }),
     ));
     assert!(report.is_ok(), "{}", report.to_json());
+    // M44: the QAM constellations, at the cost of the taps (D989)
+    for c in ["qam16", "qam64"] {
+        let report = validate(&single(
+            "equalize",
+            "c32",
+            25_000,
+            json!({ "taps": 15, "constellation": c }),
+        ));
+        assert!(report.is_ok(), "{c}: {}", report.to_json());
+        assert_eq!(report.cost_per_input_sample, 8.0 * 15.0, "{c}");
+    }
 }
 
 /// Push mode in pieces equals the block, the runtime parameters change the node from the next

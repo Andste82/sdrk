@@ -1,10 +1,11 @@
-//! `costas`: carrier recovery for BPSK, QPSK and 8PSK at one sample per symbol (a Costas loop).
+//! `costas`: carrier recovery for BPSK, QPSK, 8PSK, 16-QAM and 64-QAM at one sample per symbol (a
+//! Costas loop, decision-directed for QAM).
 
 use core::marker::PhantomData;
 
 use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::C32;
-use sdrk_core::kernels::costas::{Costas, CostasState};
+use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 
 use super::{unit_timing, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -29,26 +30,34 @@ pub(crate) const MAX_LOOP_BW: f64 = 0.2;
 /// Largest `max_offset` in cycles per symbol.
 pub(crate) const MAX_OFFSET_LIMIT: f64 = 0.25;
 
+/// The names of the constellations, in the order of the choice.
+const CONSTELLATIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+
 /// Description of the `costas` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "costas",
-    summary: "Recovers the carrier of BPSK, QPSK or 8PSK symbols: removes phase and frequency \
-        offset.",
-    details: "A Costas loop at one sample per symbol: every symbol is turned by the phase of \
-        an oscillator, a decision-directed detector (order 2: re im; order 4: sign(re) im - \
-        sign(im) re; order 8: im(y conj(d)) with d the 8PSK point of the octant of y) measures \
-        the remaining phase error and a proportional-integral loop with the bandwidth loop_bw \
-        (relative to the symbol rate) and the damping corrects phase and frequency; the \
-        frequency integrator is limited to max_offset cycles per symbol. A lock detector \
-        reports lock above 0.5 of its smoothed metric and loses it below 0.3 (the metric is \
-        about 1 on the points and about 0 on noise for every order). Place it after \
-        symbol_sync (one sample per symbol, amplitude about 1, after an agc). The output is \
-        the derotated symbol; BPSK settles on the real axis, QPSK on the diagonals (the Gray \
-        points of psk_mod), 8PSK on the odd multiples of 22.5 degrees. The phase ambiguity \
-        (180 degrees for BPSK, 90 degrees for QPSK, 45 degrees for 8PSK) is not resolved \
-        here: use framing with both polarities or differential coding. The order-4 detector \
-        has the slope sqrt(2) at amplitude 1, so a QPSK loop is about 1.4 times wider than \
-        loop_bw. No delay; one output per input.",
+    summary: "Recovers the carrier of BPSK, QPSK, 8PSK, 16-QAM or 64-QAM symbols: removes phase \
+        and frequency offset.",
+    details: "A carrier loop at one sample per symbol: every symbol is turned by the phase of \
+        an oscillator, a decision-directed detector (bpsk: re im; qpsk: sign(re) im - \
+        sign(im) re; 8psk: im(y conj(d)) with d the 8PSK point of the octant of y; qam16 and \
+        qam64: arg(y conj(d)) with d the nearest point of the square grid, the phase detector \
+        of GNU Radio's constellation_receiver_cb) measures the remaining phase error and a \
+        proportional-integral loop with the bandwidth loop_bw (relative to the symbol rate) \
+        and the damping corrects phase and frequency; the frequency integrator is limited to \
+        max_offset cycles per symbol. A lock detector reports lock above 0.5 of its smoothed \
+        metric and loses it below 0.3 (the metric is about 1 on the points; about 0 on noise \
+        for the PSK constellations and qam16; for qam64 the dense grid keeps it near 0.5 on \
+        noise, so its lock flag is not a reliable signal indicator). Place it after \
+        symbol_sync (one sample per symbol, amplitude about 1, after an agc; for QAM after \
+        equalize, which scales the symbols to the unit-power grid). The output is the \
+        derotated symbol; BPSK settles on the real axis, QPSK on the diagonals (the Gray \
+        points of psk_mod), 8PSK on the odd multiples of 22.5 degrees, QAM on the grid of \
+        qam_mod. The phase ambiguity (180 degrees for BPSK, 90 degrees for QPSK and QAM, 45 \
+        degrees for 8PSK) is not resolved here: use framing with both polarities or four \
+        rotations, or differential coding. The qpsk detector has the slope sqrt(2) at \
+        amplitude 1, so a QPSK loop is about 1.4 times wider than loop_bw; the QAM detector \
+        has the slope 1. No delay; one output per input.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32],
@@ -61,16 +70,17 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     }],
     params: &[
         ParamDesc {
-            name: "order",
+            name: "constellation",
             unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 2,
-                max: 8,
-                default: Some(2),
+            kind: ParamKind::Choice {
+                options: CONSTELLATIONS,
+                default: 0,
             },
-            typical: "2 for BPSK, 4 for QPSK, 8 for 8PSK",
+            typical: "bpsk; the constellation of the transmitter",
             mutability: Mutability::Build,
-            description: "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK).",
+            description: "The constellation of the phase detector: bpsk, qpsk or 8psk (the \
+                points of psk_mod), qam16 or qam64 (decision-directed against the grid of \
+                qam_mod).",
         },
         ParamDesc {
             name: "loop_bw",
@@ -115,18 +125,17 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// Configuration of [`CostasBlock`].
 ///
 /// ```
-/// use sdrk_blocks::CostasConfig;
+/// use sdrk_blocks::{CostasConfig, CostasConstellation};
 /// let cfg = CostasConfig::default();
-/// assert_eq!((cfg.order, cfg.loop_bw, cfg.max_offset), (2, 0.02, 0.05));
+/// assert_eq!((cfg.constellation, cfg.loop_bw, cfg.max_offset), (CostasConstellation::Bpsk, 0.02, 0.05));
 /// assert!(cfg.validate().is_ok());
-/// assert!(CostasConfig { order: 3, ..cfg }.validate().is_err());
-/// assert!(CostasConfig { order: 8, ..cfg }.validate().is_ok());
+/// assert!(CostasConfig { constellation: CostasConstellation::Qam16, ..cfg }.validate().is_ok());
 /// assert!(CostasConfig { loop_bw: 0.5, ..cfg }.validate().is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CostasConfig {
-    /// Order: 2 (BPSK), 4 (QPSK) or 8 (8PSK).
-    pub order: u32,
+    /// The constellation of the phase detector.
+    pub constellation: CostasConstellation,
     /// Loop bandwidth normalized to the symbol rate (0.0001 to 0.2).
     pub loop_bw: f64,
     /// Damping of the loop (0.1 to 4).
@@ -136,14 +145,45 @@ pub struct CostasConfig {
 }
 
 impl Default for CostasConfig {
-    /// Order 2, `loop_bw` 0.02, `damping` 0.7071, `max_offset` 0.05 (D604).
+    /// BPSK, `loop_bw` 0.02, `damping` 0.7071, `max_offset` 0.05 (D604).
     fn default() -> Self {
         Self {
-            order: 2,
+            constellation: CostasConstellation::Bpsk,
             loop_bw: DEFAULT_LOOP_BW,
             damping: DEFAULT_DAMPING,
             max_offset: DEFAULT_MAX_OFFSET,
         }
+    }
+}
+
+/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`).
+const fn constellation_of(i: u16) -> CostasConstellation {
+    match i {
+        1 => CostasConstellation::Qpsk,
+        2 => CostasConstellation::Psk8,
+        3 => CostasConstellation::Qam16,
+        4 => CostasConstellation::Qam64,
+        _ => CostasConstellation::Bpsk,
+    }
+}
+
+/// The choice index of a constellation.
+fn constellation_index(c: CostasConstellation) -> u16 {
+    match c {
+        CostasConstellation::Qpsk => 1,
+        CostasConstellation::Psk8 => 2,
+        CostasConstellation::Qam16 => 3,
+        CostasConstellation::Qam64 => 4,
+        _ => 0,
+    }
+}
+
+/// The carrier-loop constellation of a PSK order (2, 4, 8) of `psk_demod` and `rds_demod`.
+pub(crate) fn costas_constellation_of_order(order: u32) -> CostasConstellation {
+    match order {
+        4 => CostasConstellation::Qpsk,
+        8 => CostasConstellation::Psk8,
+        _ => CostasConstellation::Bpsk,
     }
 }
 
@@ -183,10 +223,8 @@ impl CostasConfig {
     /// Checks the ranges.
     ///
     /// # Errors
-    /// `InvalidParameter` for the orders 3, 5, 6 and 7, `OutOfRange` for any other value
-    /// outside its range.
+    /// `OutOfRange` for a value outside its range.
     pub fn validate(&self) -> Result<()> {
-        check_order(self.order)?;
         check_f64("loop_bw", self.loop_bw, MIN_LOOP_BW, MAX_LOOP_BW)?;
         check_f64("damping", self.damping, 0.1, 4.0)?;
         check_f64("max_offset", self.max_offset, 0.0, MAX_OFFSET_LIMIT)
@@ -195,17 +233,12 @@ impl CostasConfig {
     /// Sets a parameter by its description name; checks kind and range.
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders 3,
-    /// 5, 6 and 7.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
         match p.name {
-            "order" => {
-                let o = u32::try_from(value.as_i64()?).unwrap_or(0);
-                check_order(o)?;
-                self.order = o;
-            }
+            "constellation" => self.constellation = constellation_of(value.as_choice()?),
             "loop_bw" => self.loop_bw = value.as_f64()?,
             "damping" => self.damping = value.as_f64()?,
             "max_offset" => self.max_offset = value.as_f64()?,
@@ -220,7 +253,7 @@ impl CostasConfig {
     /// `UnknownParameter`.
     pub fn get(&self, name: &str) -> Result<ParamValue> {
         match name {
-            "order" => Ok(ParamValue::I64(i64::from(self.order))),
+            "constellation" => Ok(ParamValue::Choice(constellation_index(self.constellation))),
             "loop_bw" => Ok(ParamValue::F64(self.loop_bw)),
             "damping" => Ok(ParamValue::F64(self.damping)),
             "max_offset" => Ok(ParamValue::F64(self.max_offset)),
@@ -232,7 +265,7 @@ impl CostasConfig {
     fn state(&self) -> Result<CostasState> {
         self.validate()?;
         Ok(CostasState::new(
-            self.order,
+            self.constellation,
             self.loop_bw,
             self.damping,
             self.max_offset,
@@ -245,9 +278,9 @@ impl CostasConfig {
 ///
 /// ```
 /// use sdrk::{Rate, C32};
-/// use sdrk_blocks::{ArenaStorage, Block, CostasBlock, CostasConfig};
+/// use sdrk_blocks::{ArenaStorage, Block, CostasBlock, CostasConfig, CostasConstellation};
 /// let mut arena = ArenaStorage::new(&mut []);
-/// let cfg = CostasConfig { order: 2, ..CostasConfig::default() };
+/// let cfg = CostasConfig { constellation: CostasConstellation::Bpsk, ..CostasConfig::default() };
 /// let mut costas = CostasBlock::new(&cfg, Rate::hz(1000)?, &mut arena)?;
 /// // BPSK symbols turned by 0.5 rad.
 /// let (s, c) = (0.5f32.sin(), 0.5f32.cos());

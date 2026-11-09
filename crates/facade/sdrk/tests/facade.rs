@@ -323,7 +323,7 @@ fn backend_table_lists_the_m40_kernels() {
 
 #[test]
 fn m40_kernels_give_the_bits_of_the_fallback() -> Result<()> {
-    use sdrk::kernels::costas::{Costas, CostasState};
+    use sdrk::kernels::costas::{Costas, CostasConstellation, CostasState};
 
     let mut seed = 559u64;
     // QPSK symbols with a carrier offset of 0.003 cycles per symbol, a start phase and noise.
@@ -339,8 +339,12 @@ fn m40_kernels_give_the_bits_of_the_fallback() -> Result<()> {
             C32::new(re * c - im * s + n1, re * s + im * c + n2)
         })
         .collect();
-    for order in [2, 4] {
-        let mut a = CostasState::new(order, 0.03, 0.75, 0.05)?;
+    for c in [
+        CostasConstellation::Bpsk,
+        CostasConstellation::Qpsk,
+        CostasConstellation::Qam16,
+    ] {
+        let mut a = CostasState::new(c, 0.03, 0.75, 0.05)?;
         let mut b = a;
         let (mut ya, mut yb) = (vec![C32::default(); 3000], vec![C32::default(); 3000]);
         Sdrk.costas(&mut a, &input, &mut ya)?;

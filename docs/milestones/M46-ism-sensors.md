@@ -201,10 +201,26 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-pr
 
 ## Deliverables checklist
 
-- [ ] `sdrk_proto::slicers` (PWM, PPM, Manchester, NRZ)
-- [ ] `sdrk_proto::sensors` with `SensorDecoder`, `Reading` and JSON; at least four 433 MHz and two 868 MHz decoders with their sources in the decisions log
-- [ ] Block and kind `sensor_decode` with repeat merging; schema
-- [ ] Python encoders and golden protocol cases
+- [x] `sdrk_proto::slicers` (PWM, PPM, Manchester, NRZ)
+- [x] `sdrk_proto::sensors` with `SensorDecoder`, `Reading` and JSON; four 433 MHz decoders and one 868 MHz decoder (the second 868 MHz decoder is open item I46-1, D1111), sources in the decisions log
+- [x] Block and kind `sensor_decode` with repeat merging (D1114: reported once, I46-2); schema
+- [x] Python encoders and golden protocol cases
 - [ ] Flows `ism433_sensors`, `ism868_sensors` with YAML twins
-- [ ] Tests (seeds 636–649)
-- [ ] `docs/blocks.md`, `docs/pipeline.md`, `docs/testing.md`, `examples/README.md`, CHANGELOG, decisions log
+- [x] Tests 1, 2, 4, 5, 6 (block and kind; seeds 636–649); not done: test 3 (whole chain), the flow half of test 6, test 7
+- [x] `docs/blocks.md`, `docs/pipeline.md`, `docs/testing.md`, CHANGELOG, decisions log (`examples/README.md` waits for the flows)
+
+## Status
+
+Partly done (2026-11-09, decisions D1103 to D1118; the block D1103 to D1199 is M46's own). Everything of this run is delivered and the final gate passed (fmt, clippy, sdrk-proto, the complete sdrk-testkit suite, sdrk-blocks, sdrk-pipeline, xtask, doc tests, `cargo xtask check`, `schema --check`, golden `--check`). The milestone stays open for the flows and test 3.
+
+**Done:**
+- §1 `sdrk_proto::slicers`: `Pwm`, `Ppm`, `Manchester` (IEEE 802.3 and Thomas) and `Nrz`, each with a configuration in µs and a `Tolerance` (default 20 %, at least 2 samples), rows of bits (`Row`: bits, `unit_avg_us`, `worst_err`, how it ended) in fixed storage (`Rows`, 8 rows of 256 bits), conventions in D1103.
+- §2 framework `sdrk_proto::sensors`: the trait `SensorDecoder`, `Reading` with `to_json` (fixed order, no heap, `JsonBuf`), `ReadingSink`, `DecodeResult`, the registry `DECODERS` / `by_name` (D1104). 
+- Test 1 (seed 636, `sdrk-proto/tests/slicers.rs`, D1105) and the framework tests in `sdrk-proto/tests/sensors.rs`.
+
+- §3 the device decoders (`wh2`, `nexus`, `oregon_v21`, `wh1080` at 433 MHz, `lacrosse_tx29` at 868 MHz) with their sources, assumptions and corrections in D1106 to D1112; `sdrk_proto::pulses::encode_joined` for joined trains of more than 30 pairs.
+- Test 2: independent Python encoders and the golden cases `sensors/*` (seeds 637, 638, 639, 644, 645; pulse trains with timing error, the `cu8` bursts are not stored, D1112 f), checked by `sdrk-testkit/tests/golden_m46.rs` together with the worked examples of the public descriptions; test 4 (a flipped bit gives no reading, Nexus needs two equal frames, seed 646) and test 5 (out-of-range values and truncated rows, seed 647); the decoders on random trains (seed 648, `sdrk-proto/tests/sensors_decoders.rs`).
+- §4 block `SensorDecodeBlock` and kind `sensor_decode` (D1113 to D1116): joins the packets of a train, offers it to the enabled decoders, drops copies (same radio channel within `merge_s`, another within 0.5 s), `emit_unknown`, `center_hz`; the pipeline support (`NodePort for Packets`, `NodeRt::packets_in`, the validation exceptions, registration, 67 kinds, `schema/sdrk-pipeline-v1.json`); cost 50 per pulse train recorded in `docs/pipeline.md`. Tests: `sdrk-blocks/tests/sensor_decode.rs` (the block equals the decoders on the golden trains, test 6 with 20 chunk plans, seed 643, test 5 `emit_unknown`, seed 642, merging, joining, room, parameters, arena size) and `sdrk-pipeline/tests/sensor_kinds.rs` (validation, rates, `type_mismatch`, the encoder still cannot read a decoder, the flow against the block over 20 plans, the chain `channelize`, `band_pulse_detect`, `sensor_decode` on a scene of `sdrk_testkit::ism`, the indices after a late start, no allocation after build).
+**Not met:** only one 868 MHz decoder instead of two (D1111, open item I46-1); the WH1080 band and timings and the WH2 CRC variant are unconfirmed (D1106, D1109).
+**Not done yet:** a reading is written at its first copy, so `"repeats"` is the number of equal frames of one train, not of all copies (D1114, open item I46-2); no benchmark entry for the cycle tables (D1117).
+**Not part of the current run:** the flows `ism433_sensors` and `ism868_sensors` with YAML twins, `examples/README.md` and the end-to-end test 3 (they wait for the merge of the M45.1 fixes, which add a `noise_blank` node before `chan` in the two ISM flows); test 7 (real recordings).

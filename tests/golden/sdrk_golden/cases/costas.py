@@ -13,11 +13,11 @@ comparison of the magnitudes (D641), measures ``e = y.im dr - y.re di`` and uses
 ``cos(8 err) = T4(u)``, computed as ``((8 w) (w - 1)) + 1`` with ``w = u u``,
 ``u = ((r r) / p) 2 - 1`` and ``r = y.re dr + y.im di`` (D640, D659). 16-QAM (M44 section 3)
 decides the grid point ``d`` of ``y`` per axis (``floor(v (sqrt E / 2) + m / 2)`` clamped to
-``0 .. m - 1``, NaN to 0, D982), measures the exact phase ``e = atan2f(i, r)`` of ``y conj d``
+``0 .. m - 1``, NaN to 0, D1202), measures the exact phase ``e = atan2f(i, r)`` of ``y conj d``
 with ``r = y.re dr + y.im di`` and ``i = y.im dr - y.re di`` (the ``atan2f`` of FreeBSD's msun,
 the algorithm of the Rust ``libm`` crate, transcribed operation by operation in ``atan2f.py``,
-D987) and uses the metric ``T4(u)`` of 8PSK with ``u = ((r r) / (p q)) 2 - 1``,
-``q = dr dr + di di`` (D988).
+D1207) and uses the metric ``T4(u)`` of 8PSK with ``u = ((r r) / (p q)) 2 - 1``,
+``q = dr dr + di di`` (D1208).
 
 The signals use ``math.sin`` and ``math.cos`` one value at a time and the noise comes from
 ``rng.standard_normal``; nothing that feeds a committed byte uses NumPy transcendentals or BLAS, so
@@ -75,7 +75,7 @@ def qam_levels_f32(name):
 
 
 def qam_decide_f32(name, v):
-    """The grid level value of one float32 component (D982): ``floor(v (sqrt E / 2) + m / 2)``
+    """The grid level value of one float32 component (D1202): ``floor(v (sqrt E / 2) + m / 2)``
     clamped to ``0 .. m - 1`` (NaN to level 0)."""
     m, e = QAM[name]
     t = fm.add(fm.mul(v, fm.f32(math.sqrt(e) / 2.0)), fm.f32(m / 2.0))

@@ -170,7 +170,7 @@ fn slice_checks_the_type_per_constellation() {
         ("f32", "real", 1u64, 1.0),
         ("c32", "bpsk", 1, 1.0),
         ("c32", "qpsk", 2, 1.0),
-        // M44: the QAM soft bits (D980).
+        // M44: the QAM soft bits (D1200).
         ("c32", "qam16", 4, 10.0),
         ("c32", "qam64", 6, 18.0),
     ] {

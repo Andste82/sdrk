@@ -37,7 +37,7 @@ pub const QAM_DEMOD_CHUNK: usize = 256;
 const DEFAULT_CARRIER_BW: f64 = 0.005;
 
 /// The default loop bandwidth of the symbol timing of `qam_demod` (half that of `psk_demod`:
-/// the self-noise of the Gardner detector on 64-QAM costs 0.9 dB at 0.01, D995).
+/// the self-noise of the Gardner detector on 64-QAM costs 0.9 dB at 0.01, D1215).
 const DEFAULT_SYNC_BW: f64 = 0.005;
 
 /// The reason of the rate error (a hint to resample).
@@ -501,7 +501,7 @@ impl<S: Storage> QamDemodBlock<S> {
     }
 
     /// Whether the carrier loop reports lock (the lock detector of `costas` with the QAM
-    /// decision, D988).
+    /// decision, D1208).
     pub fn locked(&self) -> bool {
         self.costas.locked()
     }

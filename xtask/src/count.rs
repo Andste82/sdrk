@@ -880,8 +880,8 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// pulse detector of M45.1 (`band_pulse_detect_block`, one lane value; no non-GPL library has
 /// it, D962). The QAM slicer of M44 (`slice_qam16_block`, `slice_qam64_block`, one input
 /// symbol each) is a block without a kernel whose soft bits no library computes the same way
-/// (D981): information too, as are the QAM blocks `qam_mod_block` (one output sample) and `qam_demod_block` (one input
-/// sample), chains of kernels with entries of their own (D996), and `frame_decode_four_block`
+/// (D1201): information too, as are the QAM blocks `qam_mod_block` (one output sample) and `qam_demod_block` (one input
+/// sample), chains of kernels with entries of their own (D1216), and `frame_decode_four_block`
 /// (one soft bit, `frame_decode` with `rotations` `four`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
@@ -4705,7 +4705,7 @@ mod tests {
             assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
         }
         // The block `slice` has no kernel; only its QAM constellations have entries of the
-        // block (M44, D981).
+        // block (M44, D1201).
         assert!(
             KERNELS
                 .iter()
@@ -4749,7 +4749,7 @@ mod tests {
         }
         // M44: the QAM path of the carrier loop and of the equalizer, the facade entries against
         // our own fallback, the fallbacks against GNU Radio's `constellation_receiver_cb` and
-        // `linear_equalizer` on a `constellation_rect` (D990).
+        // `linear_equalizer` on a `constellation_rect` (D1210).
         for (simd, fallback) in [
             ("costas_qam16", "costas_qam16_fallback"),
             ("equalize_qam16", "equalize_qam16_fallback"),

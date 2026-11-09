@@ -183,7 +183,7 @@ fn costas_costs_30_and_keeps_the_rate() {
         let (_, code, _) = first_error(&single("costas", ty, 1000, json!({})));
         assert_eq!(code, DiagCode::TypeMismatch, "{ty}");
     }
-    // M44 §3: the QAM constellations cost 45 per symbol (D986), the PSK ones 30
+    // M44 §3: the QAM constellations cost 45 per symbol (D1206), the PSK ones 30
     for (c, cost) in [
         ("bpsk", 30.0),
         ("8psk", 30.0),

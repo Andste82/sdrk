@@ -454,3 +454,60 @@ fn encode_bytes_packs_the_bits_of_encode() {
         Err(Error::TooLong { .. })
     ));
 }
+
+/// M44: `RotatingDecoder::new` checks `bits_per_symbol` (2, 4 or 6); a frame turned by a
+/// quarter turn (16-QAM symbols of 4 bits) is found and reports the turn, the plain decoder does
+/// not find it, and `reset` drops a partial symbol.
+#[test]
+fn rotating_decoder_checks_bits_per_symbol_and_reset_drops_a_partial_symbol() {
+    use sdrk_proto::frame::{RotatingDecoder, rotate_group, rotation_of};
+    let dec = || Decoder::new(2, false, Whitening::None).unwrap();
+    for (k, ok) in [
+        (2, true),
+        (4, true),
+        (6, true),
+        (0, false),
+        (3, false),
+        (8, false),
+    ] {
+        assert_eq!(RotatingDecoder::new(dec(), k).is_ok(), ok, "{k}");
+    }
+    let p = Packet::new(0, PacketFlags::NONE, b"quarter").unwrap();
+    let mut bits = vec![0u8; frame::frame_bits(7, 4)];
+    frame::encode(&p, 4, Whitening::None, &mut bits).unwrap();
+    // 92 + 64 bits: whole symbols of 4 bits
+    assert_eq!(bits.len() % 4, 0);
+    let turned: Vec<bool> = bits
+        .chunks_exact(4)
+        .flat_map(|c| {
+            let g = c.iter().fold(0u32, |g, &b| (g << 1) | u32::from(b));
+            let t = rotate_group(g, 2, 1);
+            (0..4).rev().map(move |j| (t >> j) & 1 == 1)
+        })
+        .collect();
+    let mut plain = dec().with_both_polarities(true);
+    assert!(
+        turned
+            .iter()
+            .enumerate()
+            .all(|(i, &b)| plain.push_bit(b, i as u64).is_none())
+    );
+    let mut d = RotatingDecoder::new(dec(), 4).unwrap();
+    assert_eq!(d.bits_per_symbol(), 4);
+    assert_eq!(d.decoder().max_sync_errors(), 2);
+    // one stray bit, then a reset: the symbols start again at the next bit
+    assert!(d.push_bit(true, 0).is_none());
+    d.reset();
+    assert!(d.is_hunting());
+    let got: Vec<Packet> = turned
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &b)| d.push_bit(b, i as u64))
+        .collect();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].data(), b"quarter");
+    assert_eq!(rotation_of(got[0].flags), 1);
+    assert!(got[0].flags.contains(PacketFlags::CRC_OK));
+    assert_eq!(got[0].index, 32);
+    assert!(d.is_hunting());
+}

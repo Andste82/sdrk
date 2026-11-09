@@ -5081,6 +5081,96 @@
       "waiver": "`slice_qam64_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
   },
+  "qam_mod_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is the block `qam_mod` (M44 §4) with 16-QAM at 8 samples per symbol: per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D996), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is the block `qam_mod` (M44 §4) with 16-QAM at 8 samples per symbol: per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D996), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is the block `qam_mod` (M44 §4) with 16-QAM at 8 samples per symbol: per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D996), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is the block `qam_mod` (M44 §4) with 16-QAM at 8 samples per symbol: per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D996), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is the block `qam_mod` (M44 §4) with 16-QAM at 8 samples per symbol: per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D996), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is the block `qam_mod` (M44 §4) with 16-QAM at 8 samples per symbol: per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D996), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`qam_mod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "qam_demod_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `slice`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D990). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D996), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `slice`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D990). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D996), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `slice`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D990). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D996), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `slice`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D990). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D996), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `slice`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D990). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D996), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `slice`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D990). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D996), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`qam_demod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "frame_decode_four_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles and instructions per input sample, one soft bit; ours and fallback run the same code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles and instructions per input sample, one soft bit; ours and fallback run the same code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles and instructions per input sample, one soft bit; ours and fallback run the same code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles and instructions per input sample, one soft bit; ours and fallback run the same code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles and instructions per input sample, one soft bit; ours and fallback run the same code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles and instructions per input sample, one soft bit; ours and fallback run the same code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`frame_decode_four_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
   "costas_qam16": {
     "sse2": {
       "status": "info",

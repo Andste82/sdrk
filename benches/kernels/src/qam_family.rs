@@ -1,5 +1,6 @@
 //! The QAM entries of M44: `slice_qam16_block`, `slice_qam64_block`, `costas_qam16`,
-//! `costas_qam16_fallback`, `equalize_qam16` and `equalize_qam16_fallback`.
+//! `costas_qam16_fallback`, `equalize_qam16`, `equalize_qam16_fallback`, `qam_mod_block`,
+//! `qam_demod_block` and `frame_decode_four_block`.
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -9,6 +10,9 @@
 //! | `costas_qam16_fallback` | our fallback | GNU Radio's `constellation_receiver_cb` | one symbol |
 //! | `equalize_qam16` | facade (= the fallback's loop, D841) | none (`info`) | one symbol |
 //! | `equalize_qam16_fallback` | our fallback | GNU Radio's `linear_equalizer` on a `constellation_rect` | one symbol |
+//! | `qam_mod_block` | `sdrk_blocks::QamModBlock`, 16-QAM | none (`info`) | one output sample |
+//! | `qam_demod_block` | `sdrk_blocks::QamDemodBlock`, 16-QAM | none (`info`) | one input sample |
+//! | `frame_decode_four_block` | `sdrk_blocks::FrameDecodeBlock` with `rotations` `four` | none (`info`) | one input sample (one soft bit) |
 //!
 //! The slicer has no kernel: per symbol it puts both components on the integer grid (`v = x √E`)
 //! and forms the piecewise-linear max-log soft bits of M44 §2 (`v`, `2 - |v|`, and for 64-QAM
@@ -17,6 +21,19 @@
 //! Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value (D981), so
 //! both entries are our own code as information (`Family::Own`), and `ours` and `fallback` run
 //! the same code.
+//!
+//! The blocks `qam_mod` and `qam_demod` (M44 §4) are chains of kernels that have their own
+//! entries with their library references (`fir_interpolate`, `fir`, `symbol_sync`,
+//! `equalize_qam16_fallback` and `costas_qam16_fallback` against GNU Radio, the slicer above); no
+//! library has the same block (liquid-dsp's `modemcf` maps and slices but has no pulse shaping,
+//! timing, equalizer or carrier loop in the same object, GNU Radio's receiver is a flowgraph of
+//! blocks), so the block entries are our own code as information (D996), as `channelize_block`
+//! (D928). `qam_mod_block` is 16-QAM at 8 samples per symbol (the flows of M44 §5) writing 4096
+//! output samples (512 symbols) per call; `qam_demod_block` reads 4096 input samples of that
+//! signal per call with the block defaults after a warm-up of 3072 symbols (the equalizer in
+//! decision mode, the loops locked). `frame_decode_four_block` is the decoder of
+//! `frame_decode_block` with `rotations` `four` and 4 bits per symbol on frames turned by one
+//! quarter turn: the cost of the four inverse rotations and sync-word registers.
 //!
 //! Workload: 4096 symbols per call, random points of the constellation with uniform noise of
 //! ±0.05 per component, scale 1.
@@ -52,7 +69,12 @@ use cref_sys::{GrConstellationReceiverCb, GrLinearEqualizerRect, GrRect};
 use sdrk::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk::kernels::equalize::{EqConstellation, EqParams, Equalize, EqualizeState};
 use sdrk::{C32, Fallback, Rate, Sdrk};
-use sdrk_blocks::{ArenaStorage, Block, SliceBlock, SliceConfig, SliceConstellation};
+use sdrk_blocks::{
+    ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet, PacketFlags,
+    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock, SliceConfig,
+    SliceConstellation,
+};
+use sdrk_proto::frame::{self, Whitening};
 use sdrk_core::Reference;
 use sdrk_core::kernels::constellation::Qam;
 
@@ -562,6 +584,373 @@ impl Kernel for EqualizeQamK {
             Impl::GnuRadio => {
                 "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
             }
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The samples per symbol of the block entries `qam_mod_block` and `qam_demod_block`: the
+/// 16-QAM of the flows of M44 §5 (25 kBd at 200 kHz).
+const BLOCK_SPS: usize = 8;
+
+fn block_rate(hz: u64) -> Rate {
+    Rate::hz(hz).expect("rate")
+}
+
+fn leaked_arena(bytes: usize) -> ArenaStorage<'static> {
+    // The block lives as long as the measurement binary; its arena is leaked once.
+    let mem: &'static mut [u8] = Box::leak(vec![0u8; bytes + 16].into_boxed_slice());
+    ArenaStorage::new(mem)
+}
+
+fn qam_mod_config() -> QamModConfig {
+    QamModConfig {
+        order: 16,
+        samples_per_symbol: BLOCK_SPS,
+        ..QamModConfig::default()
+    }
+}
+
+fn qam_mod_block() -> QamModBlock<ArenaStorage<'static>> {
+    let cfg = qam_mod_config();
+    let rate = block_rate(100_000);
+    let bytes = QamModBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
+    QamModBlock::new(&cfg, rate, &mut leaked_arena(bytes)).expect("qam_mod block")
+}
+
+/// Random soft bits `+-1` of `n` 16-QAM symbols.
+fn qam16_bits(rng: &mut Pcg32, n: usize) -> Vec<f32> {
+    (0..4 * n)
+        .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+        .collect()
+}
+
+/// The block `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10) writing `n` output
+/// samples (`n / 8` symbols of random bits) per call.
+pub(crate) struct QamModBlockK {
+    block: QamModBlock<ArenaStorage<'static>>,
+    bits: Vec<f32>,
+    out: Vec<C32>,
+}
+
+impl QamModBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        QamModBlockK {
+            block: qam_mod_block(),
+            bits: qam16_bits(rng, layout.n / BLOCK_SPS),
+            out: vec![C32::default(); layout.n],
+        }
+    }
+}
+
+#[inline(never)]
+fn qam_mod_call(block: &mut QamModBlock<ArenaStorage<'static>>, bits: &[f32], out: &mut [C32]) {
+    let _ = block.process(black_box(bits), out);
+}
+
+/// `qam_mod` in `f64` from a zero history: the points of M44 §1 (`(2 i - 3) / sqrt(10)` per axis
+/// from the Gray code) at every `sps`-th sample, filtered with `rrc(0.35, sps, 10) sqrt(sps)`.
+fn qam_mod_f64(bits: &[f32]) -> Vec<(f64, f64)> {
+    let cfg = qam_mod_config();
+    let sps = cfg.samples_per_symbol;
+    let mut taps = vec![0.0f64; sdrk_blocks::design::rrc_len(sps, cfg.span).expect("rrc")];
+    sdrk_blocks::design::rrc(cfg.rolloff, sps, cfg.span, &mut taps).expect("rrc");
+    #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+    let gain = (sps as f64).sqrt();
+    let level = |b: &[f32]| {
+        let g = usize::from(b[0] > 0.0) * 2 + usize::from(b[1] > 0.0);
+        let i = (0..4usize).find(|&i| i ^ (i >> 1) == g).unwrap_or(0);
+        #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+        let v = (2 * i) as f64 - 3.0;
+        v / 10f64.sqrt()
+    };
+    let syms: Vec<(f64, f64)> = bits
+        .chunks_exact(4)
+        .map(|b| (level(&b[..2]), level(&b[2..])))
+        .collect();
+    let n = syms.len() * sps;
+    (0..n)
+        .map(|t| {
+            let (mut re, mut im) = (0.0, 0.0);
+            for (k, h) in taps.iter().enumerate() {
+                if let Some(j) = t.checked_sub(k).filter(|j| j % sps == 0)
+                    && let Some(&(sr, si)) = syms.get(j / sps)
+                {
+                    re += h * gain * sr;
+                    im += h * gain * si;
+                }
+            }
+            (re, im)
+        })
+        .collect()
+}
+
+impl Kernel for QamModBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => qam_mod_call(&mut self.block, &self.bits, &mut self.out),
+                other => unreachable!("qam_mod_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// One call from the reset state against the `f64` model.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        qam_mod_call(&mut self.block, &self.bits, &mut self.out);
+        let want: Vec<f64> = qam_mod_f64(&self.bits)
+            .into_iter()
+            .flat_map(|(re, im)| [re, im])
+            .collect();
+        snr_db(&want, &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
+    let cfg = QamDemodConfig {
+        order: 16,
+        symbol_rate_hz: 25_000.0,
+        ..QamDemodConfig::default()
+    };
+    let rate = block_rate(200_000);
+    let bytes =
+        QamDemodBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
+    QamDemodBlock::new(&cfg, rate, &mut leaked_arena(bytes)).expect("qam_demod block")
+}
+
+/// Calls of the warm-up of `qam_demod_block`: 6 calls of 512 symbols cover the 1000 CMA symbols
+/// of the equalizer and bring the loops to lock, so the counted calls run in the steady state.
+const DEMOD_WARMUP: usize = 6;
+
+/// The block `qam_demod` (16-QAM at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps,
+/// `carrier_bw` 0.005, `sync_bw` 0.005) reading `n` input samples per call: the output of
+/// `qam_mod` for `n / 8` random symbols (repeated every call; `n / 8` is whole symbols, so the
+/// symbol clock stays on the grid), turned by 0.3 rad with uniform noise of ±0.02 per component.
+/// The state lives across the calls; the warm-up runs in `new`.
+pub(crate) struct QamDemodBlockK {
+    block: QamDemodBlock<ArenaStorage<'static>>,
+    input: Vec<C32>,
+    symbols: Vec<u32>,
+    out: Vec<f32>,
+    produced: usize,
+}
+
+#[inline(never)]
+fn qam_demod_call(
+    block: &mut QamDemodBlock<ArenaStorage<'static>>,
+    input: &[C32],
+    out: &mut [f32],
+) -> usize {
+    block.process(black_box(input), out).map_or(0, |p| p.produced)
+}
+
+impl QamDemodBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let n = layout.n;
+        let bits = qam16_bits(rng, n / BLOCK_SPS);
+        let symbols = bits
+            .chunks_exact(4)
+            .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
+            .collect();
+        let mut tx = qam_mod_block();
+        let mut sig = vec![C32::default(); n];
+        // Two passes: the second starts with the pulse tails of the first, as the repeated
+        // input does at every call.
+        let _ = tx.process(&bits, &mut sig);
+        let _ = tx.process(&bits, &mut sig);
+        let (s, c) = 0.3f32.sin_cos();
+        let input = sig
+            .iter()
+            .map(|x| {
+                C32::new(
+                    x.re * c - x.im * s + 0.02 * rng.unit(),
+                    x.re * s + x.im * c + 0.02 * rng.unit(),
+                )
+            })
+            .collect();
+        let mut k = QamDemodBlockK {
+            block: qam_demod_block(),
+            input,
+            symbols,
+            // Room for every soft bit of a call (a call may give a symbol more than nominal).
+            out: vec![0.0; n / BLOCK_SPS * 4 + 64],
+            produced: 0,
+        };
+        for _ in 0..DEMOD_WARMUP {
+            k.produced = qam_demod_call(&mut k.block, &k.input, &mut k.out);
+        }
+        k
+    }
+}
+
+impl Kernel for QamDemodBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    self.produced = qam_demod_call(&mut self.block, &self.input, &mut self.out);
+                }
+                other => unreachable!("qam_demod_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// 999 when the symbols of one call after the warm-up equal the sent ones at one of the four
+    /// rotations and some lag (the input repeats, so the lag is taken modulo the call), 0
+    /// otherwise.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.run(which, 1);
+        let got: Vec<u32> = self.out[..self.produced]
+            .chunks_exact(4)
+            .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
+            .collect();
+        let m = self.symbols.len();
+        let ok = got.len() + 2 >= m
+            && (0..4u32).any(|r| {
+                (0..m).any(|lag| {
+                    got.iter().enumerate().all(|(j, &s)| {
+                        let back = sdrk_core::kernels::constellation::rotate_symbol(s, 2, 4 - r);
+                        back == self.symbols[(j + m - lag) % m]
+                    })
+                })
+            });
+        if ok { 999.0 } else { 0.0 }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The block `frame_decode` with `rotations` `four` and 4 bits per symbol over `n` soft bits:
+/// frames of a 4-byte preamble and a random 32-byte payload back to back (the workload of
+/// `frame_decode_block`), every symbol of 4 bits turned by one quarter turn.
+pub(crate) struct FrameDecodeFourBlockK {
+    block: FrameDecodeBlock<ArenaStorage<'static>>,
+    soft: Vec<f32>,
+    payloads: Vec<Vec<u8>>,
+    got: Vec<Packet>,
+    produced: usize,
+}
+
+/// Payload bytes and preamble bytes of the frames of `frame_decode_four_block`.
+const FOUR_PAYLOAD: usize = 32;
+const FOUR_PREAMBLE: usize = 4;
+
+impl FrameDecodeFourBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let n = layout.n;
+        let per = frame::frame_bits(FOUR_PAYLOAD, FOUR_PREAMBLE);
+        let mut bits: Vec<u8> = Vec::with_capacity(n);
+        let mut payloads = Vec::new();
+        while bits.len() + per <= n {
+            let payload: Vec<u8> = (0..FOUR_PAYLOAD).map(|_| rng.next_u32() as u8).collect();
+            let p = Packet::new(0, PacketFlags::NONE, &payload).expect("packet");
+            let mut f = vec![0u8; per];
+            frame::encode(&p, FOUR_PREAMBLE, Whitening::None, &mut f).expect("frame");
+            bits.extend(f);
+            payloads.push(payload);
+        }
+        bits.resize(n, 0);
+        let soft = bits
+            .chunks_exact(4)
+            .flat_map(|c| {
+                let g = c.iter().fold(0u32, |g, &b| (g << 1) | u32::from(b));
+                let t = frame::rotate_group(g, 2, 1);
+                (0..4).rev().map(move |j| if (t >> j) & 1 == 1 { 1.0f32 } else { -1.0 })
+            })
+            .collect();
+        let cfg = FrameDecodeConfig {
+            rotations: FrameRotations::Four,
+            bits_per_symbol: 4,
+            ..FrameDecodeConfig::default()
+        };
+        let block = FrameDecodeBlock::new(&cfg, block_rate(100_000), &mut ArenaStorage::new(&mut []))
+            .expect("frame_decode");
+        FrameDecodeFourBlockK {
+            block,
+            soft,
+            payloads,
+            got: vec![Packet::default(); n / 56 + 1],
+            produced: 0,
+        }
+    }
+}
+
+#[inline(never)]
+fn decode_four(
+    block: &mut FrameDecodeBlock<ArenaStorage<'static>>,
+    soft: &[f32],
+    got: &mut [Packet],
+) -> usize {
+    block.process(black_box(soft), got).map_or(0, |p| p.produced)
+}
+
+impl Kernel for FrameDecodeFourBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    self.produced = decode_four(&mut self.block, &self.soft, &mut self.got);
+                }
+                other => unreachable!("frame_decode_four_block has no {other:?}"),
+            }
+            black_box(&self.got);
+        }
+    }
+
+    /// 999 when one call from the reset state gives every frame with `CRC_OK` and the rotation
+    /// 1, 0 otherwise.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        self.run(which, 1);
+        let got = &self.got[..self.produced];
+        let ok = got.len() == self.payloads.len()
+            && got.iter().zip(&self.payloads).all(|(g, p)| {
+                g.data() == p.as_slice()
+                    && g.flags.contains(PacketFlags::CRC_OK)
+                    && frame::rotation_of(g.flags) == 1
+            });
+        if ok { 999.0 } else { 0.0 }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }

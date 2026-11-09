@@ -4,7 +4,9 @@ use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::Packet;
-use sdrk_proto::frame::{Decoder, MAX_SYNC_ERRORS, Whitening, frame_bits};
+use sdrk_proto::frame::{
+    Decoder, MAX_BITS_PER_SYMBOL, MAX_SYNC_ERRORS, RotatingDecoder, Whitening, frame_bits,
+};
 
 use super::{WHITENING_OPTIONS, check_count, unknown, whitening_choice, whitening_from_choice};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -18,23 +20,49 @@ use crate::storage::{Plan, Storage};
 /// Bits of the shortest frame without preamble: sync word, length byte and CRC (56).
 pub(crate) const MIN_FRAME_BITS: usize = frame_bits(0, 0);
 
-/// The names of the `polarity` choice, in index order.
-const POLARITY_OPTIONS: &[&str] = &["normal", "both"];
+/// The names of the `rotations` choice, in index order.
+const ROTATIONS_OPTIONS: &[&str] = &["normal", "both", "four"];
 
-/// The sync-word polarities a [`FrameDecodeBlock`] accepts (parameter `polarity`).
+/// The largest `bits_per_symbol`.
+const MAX_BPS: usize = MAX_BITS_PER_SYMBOL as usize;
+
+/// The sync-word rotations a [`FrameDecodeBlock`] accepts (parameter `rotations`, M44; `Normal`
+/// and `Both` are the former `polarity` of M40).
 ///
 /// ```
-/// use sdrk_blocks::FramePolarity;
-/// assert_eq!(FramePolarity::default(), FramePolarity::Normal);
+/// use sdrk_blocks::FrameRotations;
+/// assert_eq!(FrameRotations::default(), FrameRotations::Normal);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
-pub enum FramePolarity {
+pub enum FrameRotations {
     /// Only the sync word itself.
     #[default]
     Normal,
-    /// The sync word and its inverse; the bits of a frame found by the inverse are inverted.
+    /// The sync word and its inverse; the bits of a frame found by the inverse are inverted
+    /// (`sdrk_proto::frame::Decoder::with_both_polarities`).
     Both,
+    /// The four rotations by 90 degrees of symbols of `bits_per_symbol` bits; the rotation is
+    /// reported in bits 16 and 17 of the packet flags (`sdrk_proto::frame::RotatingDecoder`).
+    Four,
+}
+
+/// The rotation rule of the choice index `i` (0 `normal`, 1 `both`, 2 `four`).
+const fn rotations_of(i: u16) -> FrameRotations {
+    match i {
+        1 => FrameRotations::Both,
+        2 => FrameRotations::Four,
+        _ => FrameRotations::Normal,
+    }
+}
+
+/// The choice index of a rotation rule.
+fn rotations_index(r: FrameRotations) -> u16 {
+    match r {
+        FrameRotations::Both => 1,
+        FrameRotations::Four => 2,
+        _ => 0,
+    }
 }
 
 /// Description of the `frame_decode` block.
@@ -50,9 +78,16 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the first sync word bit, counted since construction or reset. After every frame the \
         hunt starts again with the next bit. With whitening pn9 every byte after the sync \
         word is XORed with the PN9 sequence before it is read, as frame_encode with the same \
-        setting sends it. With polarity both the hunt also accepts the inverted sync word and \
+        setting sends it. With rotations both the hunt also accepts the inverted sync word and \
         then inverts the bits of the frame, which resolves the 180 degree ambiguity of a \
-        coherent psk_demod (not the 90 degree one of QPSK). Pitfall: max_sync_errors above 0 \
+        coherent psk_demod (not the 90 degree one of QPSK). With rotations four the soft bits \
+        are taken in symbols of bits_per_symbol bits (counted from the first input sample \
+        since construction or reset; the in-phase half first), and the hunt tests the sync \
+        word in the four rotations by 90 degrees of a square constellation with Gray coded \
+        axes (one quarter turn maps the bit halves (I, Q) to (Q with its first bit inverted, \
+        I)), which resolves the ambiguity of QPSK (bits_per_symbol 2) and of qam_demod (4 for \
+        16-QAM, 6 for 64-QAM); the frame is read under the inverse rotation, and the packet \
+        flags carry the quarter turns 0 to 3 in bits 16 and 17. Pitfall: max_sync_errors above 0 \
         finds frames with damaged sync words but also false syncs in noise; those mostly fail \
         the CRC.",
     inputs: &[PortDesc {
@@ -99,16 +134,32 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 PN9 sequence is removed).",
         },
         ParamDesc {
-            name: "polarity",
+            name: "rotations",
             unit: Unit::None,
             kind: ParamKind::Choice {
-                options: POLARITY_OPTIONS,
+                options: ROTATIONS_OPTIONS,
                 default: 0,
             },
-            typical: "normal; both behind a coherent psk_demod",
+            typical: "normal; both behind a coherent BPSK psk_demod, four behind QPSK or \
+                qam_demod",
             mutability: Mutability::Build,
             description: "normal accepts only the sync word; both also accepts the inverted \
-                sync word and inverts the bits of that frame.",
+                sync word and inverts the bits of that frame; four accepts the sync word in \
+                the four 90 degree rotations of symbols of bits_per_symbol bits and reports the \
+                rotation in the flags (bits 16 and 17).",
+        },
+        ParamDesc {
+            name: "bits_per_symbol",
+            unit: Unit::None,
+            kind: ParamKind::I64 {
+                min: 1,
+                max: MAX_BPS as i64,
+                default: Some(2),
+            },
+            typical: "2 for QPSK, 4 for 16-QAM, 6 for 64-QAM",
+            mutability: Mutability::Build,
+            description: "Bits per symbol of the rotations four (even, 2 to 6); not used by \
+                normal and both.",
         },
     ],
     required: &[],
@@ -117,15 +168,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// Configuration of [`FrameDecodeBlock`].
 ///
 /// ```
-/// use sdrk_blocks::FrameDecodeConfig;
-/// use sdrk_blocks::FramePolarity;
+/// use sdrk_blocks::{FrameDecodeConfig, FrameRotations};
 /// let cfg = FrameDecodeConfig::default();
 /// assert_eq!((cfg.max_sync_errors, cfg.emit_bad), (0, false));
-/// assert_eq!(cfg.polarity, FramePolarity::Normal);
+/// assert_eq!((cfg.rotations, cfg.bits_per_symbol), (FrameRotations::Normal, 2));
 /// assert!(cfg.validate().is_ok());
 /// assert!(FrameDecodeConfig { max_sync_errors: 5, ..cfg }.validate().is_err());
+/// // four rotations need an even number of bits per symbol
+/// let four = FrameDecodeConfig { rotations: FrameRotations::Four, bits_per_symbol: 4, ..cfg };
+/// assert!(four.validate().is_ok());
+/// assert!(FrameDecodeConfig { bits_per_symbol: 3, ..four }.validate().is_err());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameDecodeConfig {
     /// Sync word bits that may differ (0 to 4).
     pub max_sync_errors: usize,
@@ -133,28 +187,53 @@ pub struct FrameDecodeConfig {
     pub emit_bad: bool,
     /// The whitening of length, payload and CRC that the sender applied.
     pub whitening: Whitening,
-    /// The accepted sync-word polarities (M40).
-    pub polarity: FramePolarity,
+    /// The accepted sync-word rotations (M44; `Both` is the former polarity `both` of M40).
+    pub rotations: FrameRotations,
+    /// Bits per symbol of [`FrameRotations::Four`] (1 to 6, even for `Four`; M44).
+    pub bits_per_symbol: usize,
+}
+
+impl Default for FrameDecodeConfig {
+    /// No sync errors, no bad frames, no whitening, rotations `Normal`, 2 bits per symbol.
+    fn default() -> Self {
+        Self {
+            max_sync_errors: 0,
+            emit_bad: false,
+            whitening: Whitening::None,
+            rotations: FrameRotations::Normal,
+            bits_per_symbol: 2,
+        }
+    }
 }
 
 impl FrameDecodeConfig {
-    /// Checks the ranges.
+    /// Checks the ranges and the combination of `rotations` and `bits_per_symbol`.
     ///
     /// # Errors
-    /// `OutOfRange` for `max_sync_errors` above 4.
+    /// `OutOfRange` for `max_sync_errors` above 4 and `bits_per_symbol` outside 1 to 6;
+    /// `InvalidParameter` of `bits_per_symbol` for an odd count with `rotations` `four`.
     pub fn validate(&self) -> Result<()> {
         check_count(
             "max_sync_errors",
             self.max_sync_errors,
             0,
             MAX_SYNC_ERRORS as usize,
-        )
+        )?;
+        check_count("bits_per_symbol", self.bits_per_symbol, 1, MAX_BPS)?;
+        if self.rotations == FrameRotations::Four && !self.bits_per_symbol.is_multiple_of(2) {
+            return Err(Error::InvalidParameter {
+                name: "bits_per_symbol",
+                reason: "the rotations four need an even number of bits per symbol",
+            });
+        }
+        Ok(())
     }
 
     /// Sets a parameter by its description name; checks kind and range.
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange` (the combination of the parameters
+    /// is checked by [`FrameDecodeConfig::validate`]).
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
@@ -162,13 +241,8 @@ impl FrameDecodeConfig {
             "max_sync_errors" => self.max_sync_errors = value.as_usize()?,
             "emit_bad" => self.emit_bad = value.as_bool()?,
             "whitening" => self.whitening = whitening_from_choice(value.as_choice()?),
-            "polarity" => {
-                self.polarity = if value.as_choice()? == 1 {
-                    FramePolarity::Both
-                } else {
-                    FramePolarity::Normal
-                };
-            }
+            "rotations" => self.rotations = rotations_of(value.as_choice()?),
+            "bits_per_symbol" => self.bits_per_symbol = value.as_usize()?,
             _ => return unknown(),
         }
         Ok(())
@@ -183,12 +257,45 @@ impl FrameDecodeConfig {
             "max_sync_errors" => Ok(ParamValue::I64(self.max_sync_errors as i64)),
             "emit_bad" => Ok(ParamValue::Bool(self.emit_bad)),
             "whitening" => Ok(ParamValue::Choice(whitening_choice(self.whitening))),
-            "polarity" => Ok(ParamValue::Choice(match self.polarity {
-                FramePolarity::Both => 1,
-                _ => 0,
-            })),
+            "rotations" => Ok(ParamValue::Choice(rotations_index(self.rotations))),
+            "bits_per_symbol" => Ok(ParamValue::I64(self.bits_per_symbol as i64)),
             _ => unknown(),
         }
+    }
+}
+
+/// The decoder of a [`FrameDecodeBlock`]: the plain one for `normal` and `both`, the rotating
+/// one for `four`.
+#[derive(Debug)]
+enum Hunt {
+    Plain(Decoder),
+    Four(RotatingDecoder),
+}
+
+impl Hunt {
+    /// The decoder of `config` with `max` sync-word errors. The two kinds are built out of line,
+    /// so that the decoders of a few hundred bytes each do not add up on one stack frame.
+    fn new(config: &FrameDecodeConfig, max: u32) -> Result<Self> {
+        if config.rotations == FrameRotations::Four {
+            Self::four(config, max)
+        } else {
+            Self::plain(config, max)
+        }
+    }
+
+    #[inline(never)]
+    fn plain(config: &FrameDecodeConfig, max: u32) -> Result<Self> {
+        let d = Decoder::new(max, config.emit_bad, config.whitening)?;
+        Ok(Self::Plain(d.with_both_polarities(
+            config.rotations == FrameRotations::Both,
+        )))
+    }
+
+    #[inline(never)]
+    fn four(config: &FrameDecodeConfig, max: u32) -> Result<Self> {
+        let d = Decoder::new(max, config.emit_bad, config.whitening)?;
+        let k = u32::try_from(config.bits_per_symbol).unwrap_or(0);
+        Ok(Self::Four(RotatingDecoder::new(d, k)?))
     }
 }
 
@@ -221,7 +328,7 @@ impl FrameDecodeConfig {
 #[derive(Debug)]
 pub struct FrameDecodeBlock<S: Storage> {
     config: FrameDecodeConfig,
-    decoder: Decoder,
+    decoder: Hunt,
     /// Input samples since construction or reset.
     count: u64,
     /// At most one packet per [`MIN_FRAME_BITS`] input samples.
@@ -233,14 +340,13 @@ impl<S: Storage> FrameDecodeBlock<S> {
     /// Creates the block; it needs no storage.
     ///
     /// # Errors
-    /// `OutOfRange` for an invalid configuration.
+    /// As [`FrameDecodeConfig::validate`].
     pub fn new(config: &FrameDecodeConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         config.validate()?;
         let max = u32::try_from(config.max_sync_errors).unwrap_or(u32::MAX);
         Ok(Self {
             config: *config,
-            decoder: Decoder::new(max, config.emit_bad, config.whitening)?
-                .with_both_polarities(config.polarity == FramePolarity::Both),
+            decoder: Hunt::new(config, max)?,
             count: 0,
             max_per_input: Ratio::new(1, MIN_FRAME_BITS as u64)?,
             _storage: PhantomData,
@@ -250,7 +356,7 @@ impl<S: Storage> FrameDecodeBlock<S> {
     /// Exact bytes of storage the block needs (zero).
     ///
     /// # Errors
-    /// `OutOfRange` for an invalid configuration.
+    /// As [`FrameDecodeConfig::validate`].
     pub fn storage_bytes(config: &FrameDecodeConfig, _rate_in: Rate) -> Result<usize> {
         config.validate()?;
         Ok(Plan::default().bytes())
@@ -279,17 +385,27 @@ impl<S: Storage> Block for FrameDecodeBlock<S> {
         let start = self.count;
         let mut consumed = input.len();
         let mut produced = 0;
-        for (i, &x) in input.iter().enumerate() {
-            let index = start.wrapping_add(i as u64);
-            if let Some(packet) = self.decoder.push_bit(x > 0.0, index) {
-                *slot = packet;
-                produced += 1;
-                let Some(next) = slots.next() else {
-                    consumed = i + 1;
-                    break;
-                };
-                slot = next;
-            }
+        // One loop per decoder type, so that the bit loop of the plain decoder stays free of the
+        // symbol logic of the rotating one.
+        macro_rules! decode {
+            ($dec:expr) => {
+                for (i, &x) in input.iter().enumerate() {
+                    let index = start.wrapping_add(i as u64);
+                    if let Some(packet) = $dec.push_bit(x > 0.0, index) {
+                        *slot = packet;
+                        produced += 1;
+                        let Some(next) = slots.next() else {
+                            consumed = i + 1;
+                            break;
+                        };
+                        slot = next;
+                    }
+                }
+            };
+        }
+        match &mut self.decoder {
+            Hunt::Plain(d) => decode!(d),
+            Hunt::Four(d) => decode!(d),
         }
         self.count = start.wrapping_add(consumed as u64);
         Ok(Progress { consumed, produced })
@@ -306,7 +422,10 @@ impl<S: Storage> Block for FrameDecodeBlock<S> {
     }
 
     fn reset(&mut self) {
-        self.decoder.reset();
+        match &mut self.decoder {
+            Hunt::Plain(d) => d.reset(),
+            Hunt::Four(d) => d.reset(),
+        }
         self.count = 0;
     }
 

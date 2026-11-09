@@ -36,12 +36,12 @@ use crate::{SymbolSyncConfig, Ted};
 pub const PSK_DEMOD_CHUNK: usize = 256;
 
 /// Smallest `symbol_rate_hz`.
-const MIN_SYMBOL_RATE_HZ: f64 = 0.001;
+pub(super) const MIN_SYMBOL_RATE_HZ: f64 = 0.001;
 /// The largest relative distance of `fs / symbol_rate_hz` from an integer.
-const SPS_TOLERANCE: f64 = 0.01;
+pub(super) const SPS_TOLERANCE: f64 = 0.01;
 /// The largest deviation of the symbol clock the timing loop follows (the default of
 /// `symbol_sync`).
-const SYNC_MAX_DEVIATION: f64 = 0.005;
+pub(super) const SYNC_MAX_DEVIATION: f64 = 0.005;
 
 /// A full turn of the phase accumulators, `2^32`.
 const TURN: f64 = 4_294_967_296.0;
@@ -79,7 +79,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         from the OQPSK phase error of the in-phase and quadrature parts half a symbol apart \
         (carrier_bw, damping 0.7071, max_offset as for costas). The phase ambiguity of \
         coherent detection (180 degrees for BPSK, 90 degrees for QPSK, 45 degrees for 8PSK) \
-        is not resolved: use frame_decode with polarity both or differential coding. The \
+        is not resolved: use frame_decode with rotations both or four or differential coding. The \
         output rate is the symbol rate times the bits per symbol and follows the clock of the \
         signal (variable ratio). With equalizer_taps above 0 an equalize stage (taps \
         equalizer_taps, feedback_taps equalizer_feedback_taps, the constellation of order, \
@@ -299,7 +299,7 @@ fn check_feedback_taps(feedback: usize, taps: usize) -> Result<()> {
     Ok(())
 }
 
-fn check_equalizer_taps(taps: usize) -> Result<()> {
+pub(super) fn check_equalizer_taps(taps: usize) -> Result<()> {
     check_count("equalizer_taps", taps, 0, EQ_TAPS.1)?;
     if taps == 0 || (taps >= EQ_TAPS.0 && !taps.is_multiple_of(2)) {
         Ok(())
@@ -944,13 +944,13 @@ fn demod_bits(map: SoftMap, input: &[C32], output: &mut [f32]) -> usize {
 
 /// The length in `C32` of the work buffer `[a | b | pending]`: two pieces of symbols and
 /// `PSK_DEMOD_CHUNK bps` soft bits as `f32` pairs.
-fn work_len(bps: usize) -> usize {
+pub(super) fn work_len(bps: usize) -> usize {
     2 * PSK_DEMOD_CHUNK + (PSK_DEMOD_CHUNK * bps).div_ceil(2)
 }
 
 /// Splits the work buffer into `a` and `b` (`PSK_DEMOD_CHUNK` symbols each) and the soft-bit
 /// buffer `pending` (`f32`).
-fn split_work(work: &mut [C32]) -> Result<(&mut [C32], &mut [C32], &mut [f32])> {
+pub(super) fn split_work(work: &mut [C32]) -> Result<(&mut [C32], &mut [C32], &mut [f32])> {
     let bad = || Error::Core(sdrk_core::Error::Internal("psk_demod work buffer"));
     let (a, rest) = work.split_at_mut_checked(PSK_DEMOD_CHUNK).ok_or_else(bad)?;
     let (b, pending) = rest.split_at_mut_checked(PSK_DEMOD_CHUNK).ok_or_else(bad)?;
@@ -958,7 +958,7 @@ fn split_work(work: &mut [C32]) -> Result<(&mut [C32], &mut [C32], &mut [f32])> 
 }
 
 /// `v` as `u32`, or an internal error.
-fn to_u32(v: usize) -> Result<u32> {
+pub(super) fn to_u32(v: usize) -> Result<u32> {
     u32::try_from(v).map_err(|_| Error::Core(sdrk_core::Error::Internal("psk_demod count")))
 }
 

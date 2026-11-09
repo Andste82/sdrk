@@ -357,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 219] = [
+pub const KERNELS: [&str; 222] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -577,6 +577,9 @@ pub const KERNELS: [&str; 219] = [
     "costas_qam16_fallback",
     "equalize_qam16",
     "equalize_qam16_fallback",
+    "qam_mod_block",
+    "qam_demod_block",
+    "frame_decode_four_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -796,6 +799,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "costas_qam16_fallback" => Box::new(qam_family::CostasQamK::new(rng, layout, true)),
         "equalize_qam16" => Box::new(qam_family::EqualizeQamK::new(rng, layout, false)),
         "equalize_qam16_fallback" => Box::new(qam_family::EqualizeQamK::new(rng, layout, true)),
+        "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(rng, layout)),
+        "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
+        "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),
         "channel_select_block" => {
             Box::new(channelize_family::ChannelSelectBlockK::new(rng, layout))
         }

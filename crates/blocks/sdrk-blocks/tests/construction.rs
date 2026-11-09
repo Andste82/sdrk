@@ -39,9 +39,10 @@ use sdrk_blocks::{
     SymbolSyncConfig, Ted,
 };
 use sdrk_blocks::{
-    CostasBlock, CostasConfig, FramePolarity, MorseDecodeBlock, MorseDecodeConfig,
+    CostasBlock, CostasConfig, FrameRotations, MorseDecodeBlock, MorseDecodeConfig,
     MorseEncodeBlock, MorseEncodeConfig, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
-    PskVariant, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    PskVariant, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, RdsDecodeBlock,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -364,6 +365,38 @@ fn psk_blocks_storage_is_exact() {
             |a| PskDemodBlock::new(&cfg, r, a).map(|_| ()),
         );
     }
+    // M44: qam_mod and qam_demod (with and without the equalizer)
+    for (order, sps, span) in [(16, 8, 10), (64, 2, 4), (16, 64, 32)] {
+        let cfg = QamModConfig {
+            order,
+            samples_per_symbol: sps,
+            span,
+            ..QamModConfig::default()
+        };
+        let r = rate(100_000);
+        check_exact_storage(QamModBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(), |a| {
+            QamModBlock::new(&cfg, r, a).map(|_| ())
+        });
+    }
+    for (order, symbol_rate_hz, fs, span, equalizer_taps) in [
+        (16, 25_000.0, 200_000, 10, 11),
+        (64, 25_000.0, 200_000, 10, 15),
+        (16, 1200.0, 48_000, 32, 0),
+        (64, 50.0, 51_200, 4, 63),
+    ] {
+        let cfg = QamDemodConfig {
+            order,
+            symbol_rate_hz,
+            span,
+            equalizer_taps,
+            ..QamDemodConfig::default()
+        };
+        let r = rate(fs);
+        check_exact_storage(
+            QamDemodBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(),
+            |a| QamDemodBlock::new(&cfg, r, a).map(|_| ()),
+        );
+    }
     // M41: rds_demod at three rates, rds_decode needs no storage
     for fs in [128_000u64, 240_000, 1_000_000] {
         let cfg = RdsDemodConfig::default();
@@ -512,6 +545,10 @@ fn no_block_is_larger_than_512_bytes() {
     check::<PskModBlock<sdrk_testkit::VecStorage>>("PskModBlock<Vec>");
     check::<PskDemodBlock<A<'static>>>("PskDemodBlock");
     check::<PskDemodBlock<sdrk_testkit::VecStorage>>("PskDemodBlock<Vec>");
+    check::<QamModBlock<A<'static>>>("QamModBlock");
+    check::<QamModBlock<sdrk_testkit::VecStorage>>("QamModBlock<Vec>");
+    check::<QamDemodBlock<A<'static>>>("QamDemodBlock");
+    check::<QamDemodBlock<sdrk_testkit::VecStorage>>("QamDemodBlock<Vec>");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
     check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
@@ -592,6 +629,16 @@ fn public_types_are_send() {
     assert_send::<PskDemodConfig>();
     assert_sync::<PskDemodConfig>();
     assert_send::<PskVariant>();
+    assert_send::<QamModBlock<A<'static>>>();
+    assert_send::<QamModBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<QamModBlock<A<'static>>>();
+    assert_send::<QamModConfig>();
+    assert_sync::<QamModConfig>();
+    assert_send::<QamDemodBlock<A<'static>>>();
+    assert_send::<QamDemodBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<QamDemodBlock<A<'static>>>();
+    assert_send::<QamDemodConfig>();
+    assert_sync::<QamDemodConfig>();
     assert_send::<RdsDemodBlock<A<'static>>>();
     assert_send::<RdsDemodBlock<sdrk_testkit::VecStorage>>();
     assert_sync::<RdsDemodBlock<A<'static>>>();
@@ -613,8 +660,8 @@ fn public_types_are_send() {
     assert_send::<MorseDecodeConfig>();
     assert_sync::<MorseDecodeConfig>();
     assert_sync::<PskVariant>();
-    assert_send::<FramePolarity>();
-    assert_sync::<FramePolarity>();
+    assert_send::<FrameRotations>();
+    assert_sync::<FrameRotations>();
     assert_sync::<SliceConfig>();
     assert_send::<SliceConstellation>();
     fn slice_elem<T: SliceElem + Send + Sync>() {}

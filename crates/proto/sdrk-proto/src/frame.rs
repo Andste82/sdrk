@@ -325,6 +325,63 @@ pub fn encode_bytes(
     Ok(total)
 }
 
+/// The largest `bits_per_symbol` of a [`RotatingDecoder`] (64-QAM).
+pub const MAX_BITS_PER_SYMBOL: u32 = 6;
+
+/// The first bit of the rotation in the flags of a packet that a [`RotatingDecoder`] returns: bits 16 and 17 (the protocol bits of [`PacketFlags`]) hold the
+/// number of quarter turns (0 to 3) by which the received symbols were turned against the
+/// sent ones.
+pub const ROTATION_SHIFT: u32 = 16;
+
+/// The mask of the rotation in the flags of a packet (bits 16 and 17, see [`ROTATION_SHIFT`]).
+pub const ROTATION_MASK: u32 = 0b11 << ROTATION_SHIFT;
+
+/// The rotation in quarter turns (0 to 3) that `flags` report (bits 16 and 17; 0 for the
+/// packets of a [`Decoder`]).
+///
+/// ```
+/// use sdrk_proto::PacketFlags;
+/// use sdrk_proto::frame::rotation_of;
+/// assert_eq!(rotation_of(PacketFlags::from_bits(1 | (3 << 16))), 3);
+/// assert_eq!(rotation_of(PacketFlags::CRC_OK), 0);
+/// ```
+pub const fn rotation_of(flags: PacketFlags) -> u32 {
+    (flags.bits() & ROTATION_MASK) >> ROTATION_SHIFT
+}
+
+/// The symbol `group` (its low `2 bits_per_axis` bits, most significant first: the in-phase
+/// bits, then the quadrature bits) of a square constellation with the reflected Gray code per
+/// axis after `quarter_turns` rotations by +90 degrees (modulo 4). One rotation maps the bit
+/// groups `(I, Q)` to `(Q with its first bit inverted, I)`; for QPSK (one bit per axis) these
+/// are the four QPSK rotations. Bits above `2 bits_per_axis` are dropped; `bits_per_axis` 0
+/// or above 15 gives 0. The same map as `sdrk_core::kernels::constellation::rotate_symbol`
+/// (this crate does not depend on `sdrk-core`).
+///
+/// ```
+/// use sdrk_proto::frame::rotate_group;
+/// assert_eq!(rotate_group(0b11, 1, 1), 0b01);
+/// assert_eq!(rotate_group(0b1110, 2, 1), 0b0011); // (I, Q) = (11, 10) -> (00, 11)
+/// assert_eq!(rotate_group(0b1110, 2, 4), 0b1110);
+/// ```
+#[inline]
+pub const fn rotate_group(group: u32, bits_per_axis: u32, quarter_turns: u32) -> u32 {
+    if bits_per_axis == 0 || bits_per_axis > 15 {
+        return 0;
+    }
+    let mask = (1u32 << bits_per_axis) - 1;
+    let msb = 1u32 << (bits_per_axis - 1);
+    let mut i = (group >> bits_per_axis) & mask;
+    let mut q = group & mask;
+    let mut r = quarter_turns % 4;
+    while r > 0 {
+        let ni = q ^ msb;
+        q = i;
+        i = ni;
+        r -= 1;
+    }
+    (i << bits_per_axis) | q
+}
+
 /// The sync words a [`Decoder`] hunts for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Polarity {
@@ -555,6 +612,13 @@ impl Decoder {
     #[cold]
     #[inline(never)]
     fn finish(&self) -> Option<Packet> {
+        self.finish_with(PacketFlags::NONE)
+    }
+
+    /// As [`Decoder::finish`] with `extra` added to the flags of the packet.
+    #[cold]
+    #[inline(never)]
+    fn finish_with(&self, extra: PacketFlags) -> Option<Packet> {
         let len = self.body_need / 8 - 3;
         let (head, crc) = self.body.split_at_checked(len + 1)?;
         let sent = u16::from_be_bytes([*crc.first()?, *crc.get(1)?]);
@@ -567,6 +631,229 @@ impl Decoder {
         } else {
             PacketFlags::CRC_FAIL
         };
-        Packet::new(self.start, flags, head.get(1..)?).ok()
+        Packet::new(self.start, flags | extra, head.get(1..)?).ok()
+    }
+}
+
+impl Decoder {
+    /// One bit of a frame body for [`RotatingDecoder`] (after its inverse rotation), the body
+    /// path of [`Decoder::push_bit`] with `extra` added to the flags of the packet.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn body_bit_with(&mut self, bit: bool, extra: PacketFlags) -> Option<Packet> {
+        self.cur = (self.cur << 1) | u8::from(bit);
+        self.body_bits += 1;
+        if !self.body_bits.is_multiple_of(8) {
+            return None;
+        }
+        let k = self.body_bits / 8 - 1;
+        let byte = self.cur ^ self.whitening.mask(k);
+        let Some(slot) = self.body.get_mut(k) else {
+            self.hunt();
+            return None;
+        };
+        *slot = byte;
+        if self.body_bits == 8 {
+            let len = usize::from(byte);
+            if len > MAX_PAYLOAD {
+                self.hunt();
+                return None;
+            }
+            self.body_need = (len + 3) * 8;
+        }
+        if self.body_bits < self.body_need {
+            return None;
+        }
+        let out = self.finish_with(extra);
+        self.hunt();
+        out
+    }
+}
+
+/// The frame decoder for square constellations whose carrier phase is known only up to a
+/// multiple of 90 degrees (M44): [`Decoder`] with the sync word tested in the four rotations of
+/// [`rotate_group`].
+///
+/// The bits are grouped into symbols of `bits_per_symbol` bits (an even number from 2 to
+/// [`MAX_BITS_PER_SYMBOL`]: the in-phase half first, then the quadrature half), counted from the
+/// first bit after construction or [`RotatingDecoder::reset`]; a symbol is read when its last
+/// bit arrives. The hunt tests the sync word (with at most `max_sync_errors` differing bits)
+/// under the inverse of each rotation by `r` = 0, 1, 2, 3 quarter turns, in this order (the first
+/// match wins), and reads the frame under the inverse of the rotation that matched; the packet
+/// carries `r` in the bits [`ROTATION_MASK`] of its flags ([`rotation_of`]). Everything else
+/// (length, payload, CRC, whitening, `emit_bad`, the index of the first sync-word bit, the hunt
+/// after every frame) is that of [`Decoder`]. A separate type keeps the bit loop of [`Decoder`]
+/// free of the symbol logic.
+///
+/// ```
+/// use sdrk_proto::frame::{self, Decoder, RotatingDecoder, Whitening, rotate_group, rotation_of};
+/// use sdrk_proto::{Packet, PacketFlags};
+///
+/// let p = Packet::new(0, PacketFlags::NONE, b"qam")?;
+/// let mut bits = [0u8; frame::frame_bits(3, 4)];
+/// frame::encode(&p, 4, Whitening::None, &mut bits)?;
+/// let mut dec = RotatingDecoder::new(Decoder::new(0, false, Whitening::None)?, 4)?;
+/// let mut got = None;
+/// // every symbol of 4 bits turned by a quarter turn
+/// for (s, sym) in bits.chunks_exact(4).enumerate() {
+///     let g = sym.iter().fold(0u32, |g, &b| (g << 1) | u32::from(b));
+///     let t = rotate_group(g, 2, 1);
+///     for j in 0..4 {
+///         if let Some(packet) = dec.push_bit((t >> (3 - j)) & 1 == 1, (4 * s + j) as u64) {
+///             got = Some(packet);
+///         }
+///     }
+/// }
+/// let got = got.expect("one frame");
+/// assert_eq!((got.data(), rotation_of(got.flags)), (&b"qam"[..], 1));
+/// assert!(got.flags.contains(PacketFlags::CRC_OK));
+/// # Ok::<(), sdrk_proto::Error>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct RotatingDecoder {
+    /// The frame state and the parameters (its own hunt registers are not used).
+    inner: Decoder,
+    bits_per_symbol: u32,
+    /// The bits of the symbol being collected, newest in bit 0, and their count.
+    group: u32,
+    group_len: u32,
+    /// The last bits while hunting under the inverse of zero to three quarter turns.
+    turned: [u32; 4],
+    /// Bits still missing before `turned` holds 32 bits of this hunt.
+    pending: u8,
+    /// The quarter turns of the frame being read.
+    rotation: u32,
+}
+
+impl RotatingDecoder {
+    /// The rotating decoder with the parameters of `decoder` (`max_sync_errors`, `emit_bad`,
+    /// whitening; an inverted-word rule of `decoder` is not used: the half turn is one of the
+    /// four rotations) and `bits_per_symbol`, hunting at the start of a symbol.
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] for `bits_per_symbol` odd, 0 or above 6.
+    pub fn new(decoder: Decoder, bits_per_symbol: u32) -> Result<Self> {
+        if bits_per_symbol == 0
+            || bits_per_symbol > MAX_BITS_PER_SYMBOL
+            || !bits_per_symbol.is_multiple_of(2)
+        {
+            return Err(Error::InvalidArgument(
+                "bits_per_symbol must be 2, 4 or 6 for four rotations",
+            ));
+        }
+        let mut d = Self {
+            inner: decoder.with_both_polarities(false),
+            bits_per_symbol,
+            group: 0,
+            group_len: 0,
+            turned: [0; 4],
+            pending: 31,
+            rotation: 0,
+        };
+        d.reset();
+        Ok(d)
+    }
+
+    /// The bits per symbol.
+    pub fn bits_per_symbol(&self) -> u32 {
+        self.bits_per_symbol
+    }
+
+    /// The decoder with the parameters (`max_sync_errors`, `emit_bad`, whitening).
+    pub fn decoder(&self) -> &Decoder {
+        &self.inner
+    }
+
+    /// Whether the decoder is hunting for a sync word (not inside a frame).
+    pub fn is_hunting(&self) -> bool {
+        self.inner.is_hunting()
+    }
+
+    /// Back to the state after [`RotatingDecoder::new`]: hunting at the start of a symbol.
+    pub fn reset(&mut self) {
+        self.inner.reset();
+        self.group = 0;
+        self.group_len = 0;
+        self.hunt();
+    }
+
+    fn hunt(&mut self) {
+        self.turned = [0; 4];
+        self.pending = 31;
+        self.rotation = 0;
+    }
+
+    /// Feeds one bit with its sample index; returns a packet when the symbol that this bit
+    /// completes completes a frame that is delivered (at most one per symbol: a frame has more
+    /// than 6 bits).
+    ///
+    /// ```
+    /// use sdrk_proto::frame::{Decoder, RotatingDecoder, Whitening};
+    /// let mut dec = RotatingDecoder::new(Decoder::new(0, false, Whitening::None)?, 6)?;
+    /// assert!(dec.push_bit(true, 0).is_none());
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    #[allow(clippy::many_single_char_names)]
+    pub fn push_bit(&mut self, bit: bool, index: u64) -> Option<Packet> {
+        self.group = (self.group << 1) | u32::from(bit);
+        self.group_len += 1;
+        let k = self.bits_per_symbol;
+        if self.group_len < k {
+            return None;
+        }
+        let g = self.group;
+        self.group = 0;
+        self.group_len = 0;
+        let half = k / 2;
+        // `undo[r]`: the sent symbol if the received one was turned by `r` quarter turns, the
+        // turns of `rotate_group` by `4 - r` written out: one turn maps `(i, q)` to
+        // `(q ^ msb, i)`, two to `(i ^ msb, q ^ msb)`, three to `(q, i ^ msb)`.
+        let mask = (1u32 << half) - 1;
+        let msb = 1u32 << (half - 1);
+        let (i, q) = ((g >> half) & mask, g & mask);
+        let undo = [
+            g,
+            (q << half) | (i ^ msb),
+            ((i ^ msb) << half) | (q ^ msb),
+            ((q ^ msb) << half) | i,
+        ];
+        let first = index.wrapping_sub(u64::from(k - 1));
+        let mut out = None;
+        for j in 0..k {
+            let shift = k - 1 - j;
+            if !self.inner.is_hunting() {
+                let r = undo.get(self.rotation as usize).copied().unwrap_or(g);
+                let extra = PacketFlags::from_bits(self.rotation << ROTATION_SHIFT);
+                if let Some(p) = self.inner.body_bit_with((r >> shift) & 1 == 1, extra) {
+                    out = Some(p);
+                }
+                if self.inner.is_hunting() {
+                    // The frame ended (delivered or not): the hunt starts afresh.
+                    self.hunt();
+                }
+                continue;
+            }
+            for (t, u) in self.turned.iter_mut().zip(undo) {
+                *t = (*t << 1) | ((u >> shift) & 1);
+            }
+            if self.pending != 0 {
+                self.pending -= 1;
+                continue;
+            }
+            let max = self.inner.max_sync_errors;
+            if let Some(r) = self.turned.iter().position(|&s| {
+                let diff = s ^ SYNC_WORD;
+                diff == 0 || (max != 0 && diff.count_ones() <= max)
+            }) {
+                let i = &mut self.inner;
+                i.in_frame = true;
+                i.body_bits = 0;
+                i.body_need = 8;
+                i.start = first.wrapping_add(u64::from(j)).wrapping_sub(31);
+                // `r < 4`.
+                self.rotation = r as u32;
+            }
+        }
+        out
     }
 }

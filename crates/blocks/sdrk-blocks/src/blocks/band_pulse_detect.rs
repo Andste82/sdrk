@@ -103,7 +103,9 @@ const EDGE_WINDOW: f64 = 4.0;
 const FSK_CAND: usize = 8;
 
 /// Raw magnitudes kept per busy lane for the second stage of the envelope edges (a power of 2,
-/// at least `BAND_PULSE_LEAD + HIST`; D1023).
+/// at least `BAND_PULSE_LEAD + HIST`; D1023). An edge is refined at most `RING - REFINE_BACK`
+/// samples after its envelope crossing, so the window still holds the samples before it
+/// (D1031).
 const RING: usize = 32;
 
 /// Steps of raw magnitudes before the current one that the block keeps for every lane (the
@@ -130,8 +132,16 @@ const WIDE_MIN_BLOCK: u32 = 8;
 /// above its noise) in at least this share of the steps of the block (D1029).
 const WIDE_ACTIVE_SHARE: u32 = 4;
 
-/// The fewest lanes for wideband events (D1029): with fewer lanes the rule is off.
-const WIDE_MIN_WIDTH: usize = 4;
+/// The fewest lanes for wideband events (D1029, D1031): with fewer lanes the rule is off.
+/// While all 8 or more lanes can hear a block, a wideband block needs at least 7 active lanes,
+/// more than two narrowband transmissions (at most 3 lanes each) can lift, so two
+/// transmissions two spacings apart are never one wideband event (spec §3).
+const WIDE_MIN_WIDTH: usize = 8;
+
+/// The fewest lanes that must be active in, and able to hear, a wideband block (D1029): lanes
+/// that learned a carrier as their noise cannot hear, so fewer than `WIDE_MIN_WIDTH` may decide
+/// (the margin of spec §3 is then smaller, open item I45.1-8).
+const WIDE_MIN_HEAR: usize = 4;
 
 /// The names of the `modulation` choice, in index order.
 const MODULATIONS: &[&str] = &["ook", "fsk", "auto"];
@@ -188,10 +198,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         are less than a channel spacing apart (modulo the input rate) are one transmission, \
         and only the one with the higher level is emitted; an FSK frame that spans at least \
         half of an OOK train of the same transmission is kept instead of the train. Wideband \
-        events: every 100 us block (at least 8 steps) in which all lanes that can hear it but \
-        at most max(1, L / 8) had their envelope above the trigger level in a quarter of the \
-        steps (L of at least 4 lanes and half of them; a lane that learned a carrier as its \
-        noise cannot hear) is wideband, and wideband blocks at most one block apart are one \
+        events (from 8 lanes on): every 100 us block (at least 8 steps, at most half of the \
+        shortest burst timeout, gap_ratio times min_pulse_us or max_gap_ms) in which all lanes \
+        that can hear it but at most max(1, L / 8) had their envelope above the trigger level \
+        in a quarter of the steps (L of at least 4 lanes and half of them; a lane that learned \
+        a carrier as its noise cannot hear) is wideband, and wideband blocks at most 100 us apart are one \
         event; of the bursts that lie by more than half in an event (widened by a block) only \
         the first decided one is emitted. The frequency is c times the spacing (half the step rate) \
         plus the mean phase rotation of the pulses (FSK: the middle of the two levels). \
@@ -501,10 +512,16 @@ struct Params {
     factor: f32,
     /// Steps of the lead-in: `BAND_PULSE_LEAD`, at most `4 min_steps - 1` (D971).
     lead_len: u32,
-    /// Steps of a block of the wideband rule, and the active steps that make a lane active
-    /// in it (D1029).
+    /// The run length at which an edge is refined: `min_steps`, at most `RING - REFINE_BACK`
+    /// (D1023, D1031).
+    refine_at: u32,
+    /// Steps of a block of the wideband rule (100 us, at most half of `pre_timeout`, at least
+    /// `WIDE_MIN_BLOCK`), and the active steps that make a lane active in it (D1029, D1031).
     wide_block: u32,
     wide_active: u32,
+    /// The longest distance of two wideband blocks of one event: 100 us, at least a block
+    /// (D1031).
+    wide_join: u32,
 }
 
 impl Params {
@@ -515,6 +532,9 @@ impl Params {
         let gap_steps = steps(config.max_gap_ms * 1e-3 * fs);
         let pre = steps(config.gap_ratio * f64::from(min_steps)).min(gap_steps);
         let fsk_min = (min_steps / 2).clamp(2, FSK_CAND as u32);
+        // A block closes at most half of the shortest burst timeout after it starts, so a
+        // fragment of a wideband burst is decided after a wideband block of it (D1031).
+        let wide_block = steps(WIDE_BLOCK_S * fs).min(pre / 2).max(WIDE_MIN_BLOCK);
         let tau = core::f64::consts::TAU;
         Ok(Self {
             modulation: config.modulation,
@@ -531,8 +551,10 @@ impl Params {
             rate_hz: fs,
             factor: config.snr_factor(),
             lead_len: lead_len(min_steps),
-            wide_block: steps(WIDE_BLOCK_S * fs).max(WIDE_MIN_BLOCK),
-            wide_active: (steps(WIDE_BLOCK_S * fs).max(WIDE_MIN_BLOCK) / WIDE_ACTIVE_SHARE).max(1),
+            refine_at: min_steps.min((RING as u64 - REFINE_BACK) as u32),
+            wide_block,
+            wide_active: (wide_block / WIDE_ACTIVE_SHARE).max(1),
+            wide_join: steps(WIDE_BLOCK_S * fs).max(wide_block),
         })
     }
 }
@@ -1641,8 +1663,9 @@ impl Lane {
         } else {
             self.begin_run(edge(idx, cross(ep, e, thr)), idx, on);
         }
-        // Only the edge of a run that is no glitch is refined, when the run is confirmed.
-        if self.ref_pending == 1 && self.run_len >= p.min_steps {
+        // The edge of a run is refined when the run is confirmed, so a glitch is not refined,
+        // or earlier for long `min_steps`, while the ring holds the samples before it (D1031).
+        if self.ref_pending == 1 && self.run_len >= p.refine_at {
             self.ref_pending = 0;
             self.t_run = self.refine(p, noise, on, idx);
         }
@@ -2122,13 +2145,15 @@ impl<S: Storage> BandPulseDetectBlock<S> {
 
     /// The end of a block of the wideband rule (D1029): the block is wideband when all lanes
     /// that can hear it but at most `max(1, L / 8)` were active in it (above the trigger level
-    /// in at least a quarter of its steps; `L` the lanes that can hear, at least 4 and half of
-    /// the lanes). A lane cannot hear when it was not active and its noise level is more than
-    /// the trigger factor above the mean noise level of the active lanes (it learned a carrier
-    /// as its noise). A narrowband transmission lifts one or two lanes (three for a wide FSK
-    /// deviation), so 2 or 3 of them (spec §3, test 4) stay below that from 8 lanes on, while
-    /// noise over the band lifts every lane at once (spec test 7). Wideband blocks at most one
-    /// block apart form one event.
+    /// in at least a quarter of its steps; the rule needs at least 8 lanes, `L` the lanes that
+    /// can hear, at least 4 and half of the lanes). A lane cannot hear when it was not active
+    /// and its noise level is more than the trigger factor above the mean noise level of the
+    /// active lanes (it learned a carrier as its noise). A narrowband transmission lifts one or
+    /// two lanes (three for a wide FSK deviation): while `L` is at least 8 a wideband block
+    /// needs 7 active lanes, so two transmissions (spec §3) are never wideband, and with 16
+    /// lanes (14 of 16) four are not; with fewer hearing lanes (carriers in the band) the
+    /// margin is smaller (I45.1-8). Noise over the band lifts every lane at once (spec test 7).
+    /// Wideband blocks at most 100 us (at least one block) apart form one event (D1029, D1031).
     #[inline(never)]
     fn close_block(&mut self) {
         let n = u64::from(self.blk_n);
@@ -2142,7 +2167,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
                 sum += nz;
             }
         }
-        if w < WIDE_MIN_WIDTH || active < WIDE_MIN_WIDTH || 2 * active < w {
+        if w < WIDE_MIN_WIDTH || active < WIDE_MIN_HEAR || 2 * active < w {
             self.act.as_mut().fill(0);
             return;
         }
@@ -2156,11 +2181,11 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             .count();
         self.act.as_mut().fill(0);
         let hear = w - deaf;
-        if hear < WIDE_MIN_WIDTH || 2 * hear < w || active + (hear / 8).max(1) < hear {
+        if hear < WIDE_MIN_HEAR || 2 * hear < w || active + (hear / 8).max(1) < hear {
             return;
         }
         let block = (self.pos - n, self.pos);
-        if self.wide.1 > self.wide.0 && self.wide.1 + n >= block.0 {
+        if self.wide.1 > self.wide.0 && self.wide.1 + u64::from(self.p.wide_join) >= block.0 {
             self.wide.1 = block.1;
         } else {
             self.wide = block;

@@ -1,6 +1,6 @@
-//! Tests of the M40 kernel of `sdrk-core`: `costas` (with order 8 of M40.1). The construction
+//! Tests of the M40 kernel of `sdrk-core`: `costas` (with 8PSK of M40.1). The construction
 //! rules, the loop constants, timing, the length check, lock and frequency tracking on clean
-//! BPSK, QPSK and 8PSK, the lock detector on and off (for order 8 too, D659), block-size
+//! BPSK, QPSK and 8PSK, the lock detector on and off (for 8PSK too, D659), block-size
 //! invariance (pieces of 1 to N symbols), `reset`, silence, full scale and beyond, non-finite
 //! input and the thread-safety of the public types. The comparison of `Fallback` with
 //! `Reference` runs only with the feature `reference`.

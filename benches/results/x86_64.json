@@ -3083,8 +3083,8 @@
         "frame_decode": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 24.85,
-          "ours_instr_per_sample": 24.85,
+          "other_instr_per_sample": 26.15,
+          "ours_instr_per_sample": 26.15,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -3096,8 +3096,8 @@
         "frame_decode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 22.86,
-          "ours_instr_per_sample": 22.86,
+          "other_instr_per_sample": 24.15,
+          "ours_instr_per_sample": 24.15,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -6279,8 +6279,8 @@
         "frame_decode": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 24.85,
-          "ours_instr_per_sample": 25.07,
+          "other_instr_per_sample": 26.15,
+          "ours_instr_per_sample": 26.36,
           "ratio": 1.01,
           "snr_db": {
             "other": 999.0,
@@ -6292,8 +6292,8 @@
         "frame_decode_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 22.86,
-          "ours_instr_per_sample": 23.07,
+          "other_instr_per_sample": 24.15,
+          "ours_instr_per_sample": 24.36,
           "ratio": 1.01,
           "snr_db": {
             "other": 999.0,
@@ -10197,8 +10197,8 @@
         "frame_decode": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 25.28,
-          "ours_instr_per_sample": 25.28,
+          "other_instr_per_sample": 26.57,
+          "ours_instr_per_sample": 26.57,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -10209,9 +10209,9 @@
         },
         "frame_decode_block": {
           "compared_with": "sdrk fallback",
-          "goal": false,
-          "other_instr_per_sample": 23.28,
-          "ours_instr_per_sample": 23.28,
+          "goal": true,
+          "other_instr_per_sample": 24.58,
+          "ours_instr_per_sample": 24.58,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -15598,9 +15598,9 @@
         },
         "frame_decode": {
           "compared_with": "sdrk fallback",
-          "goal": true,
-          "other_instr_per_sample": 25.28,
-          "ours_instr_per_sample": 25.28,
+          "goal": false,
+          "other_instr_per_sample": 26.57,
+          "ours_instr_per_sample": 26.57,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -15612,8 +15612,8 @@
         "frame_decode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 23.28,
-          "ours_instr_per_sample": 23.28,
+          "other_instr_per_sample": 24.58,
+          "ours_instr_per_sample": 24.58,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

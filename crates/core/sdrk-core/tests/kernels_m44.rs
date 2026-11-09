@@ -513,3 +513,10 @@ mod against_the_reference {
         }
     }
 }
+
+#[test]
+fn new_public_types_are_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<CostasConstellation>();
+    assert_send_sync::<Qam>();
+}

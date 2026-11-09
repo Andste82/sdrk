@@ -1,9 +1,11 @@
 //! Golden protocol cases of the sensor decoders (M46 tests 2, 4 and 5).
 //!
-//! Test 2: for every decoder (`wh2`, `nexus`, `oregon_v21`, `wh1080`, `lacrosse_tx29`) the golden
-//! case holds 20 trains written by the independent Python encoder (seeds 637, 638, 639, 644, 645,
+//! Test 2: for every decoder (`wh2`, `nexus`, `oregon_v21`, `wh1080`, `lacrosse_tx29`, `bresser_3ch`)
+//! the golden case holds 20 trains written by the independent Python encoder (seeds 637, 638, 639,
+//! 644, 645, 649,
 //! recorded in the case) with timing error; the Rust decoder must return exactly the encoded
-//! readings (one per copy, one for the device without a check) and no other decoder may return a
+//! readings (one per copy, one for the device without a check and for `bresser_3ch`, whose frames
+//! are merged and counted in `repeats`) and no other decoder may return a
 //! reading for the same train. The worked examples of the public descriptions are rendered here
 //! and decoded as well.
 //!
@@ -11,6 +13,8 @@
 //! gives no reading (`BadIntegrity`); Nexus, a device without a check, gives a reading only when
 //! two equal frames are left. Test 5 (seed 647): out-of-range values and truncated rows give no
 //! reading. The trains of tests 4 and 5 are rendered by the helpers below from the coding rules.
+//! The case `bresser_3ch_recorded` holds the four messages recorded from the sensor (22.1 C 64 %, 15.5 C 60 %,
+//! 22.5 C 71 % and 14.4 C 81 %, D1119).
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -33,7 +37,16 @@ use sdrk_testkit::golden::{self, Array, GoldenCase};
 use sdrk_testkit::rng::Pcg32;
 
 const RATE: u32 = 250_000;
-const CASES: [&str; 5] = ["lacrosse_tx29", "nexus", "oregon_v21", "wh1080", "wh2"];
+const CASES: [&str; 6] = [
+    "bresser_3ch",
+    "lacrosse_tx29",
+    "nexus",
+    "oregon_v21",
+    "wh1080",
+    "wh2",
+];
+/// The case of the three recorded messages of `bresser_3ch` (not a generated case).
+const RECORDED: &str = "bresser_3ch_recorded";
 /// The seeds of tests 4 and 5.
 const SEED_INTEGRITY: u64 = 646;
 const SEED_RANGE: u64 = 647;
@@ -42,8 +55,13 @@ const SEED_RANGE: u64 = 647;
 fn the_cases_of_m46_are_present() {
     let mut names = golden::list("sensors").unwrap();
     names.sort();
-    assert_eq!(names, CASES);
+    let mut want: Vec<&str> = CASES.to_vec();
+    want.push(RECORDED);
+    want.sort_unstable();
+    assert_eq!(names, want);
     for (name, seed) in [
+        ("bresser_3ch", 649),
+        (RECORDED, 649),
         ("wh2", 637),
         ("nexus", 638),
         ("oregon_v21", 639),
@@ -118,7 +136,7 @@ fn decode_with(decoder: &str, m: Modulation, pairs: &[Pair]) -> (DecodeResult, V
 fn mic_of(decoder: &str) -> Mic {
     match decoder {
         "nexus" => Mic::Repeat,
-        "oregon_v21" => Mic::Checksum,
+        "oregon_v21" | "bresser_3ch" => Mic::Checksum,
         _ => Mic::Crc,
     }
 }
@@ -163,6 +181,11 @@ fn every_decoder_returns_the_encoded_readings() {
         let rain = f64s(&c, "rain_mm");
         let list = trains(&c);
         assert_eq!(list.len(), 20);
+        let frames = if decoder == "bresser_3ch" {
+            i32s(&c, "repeat_counts")
+        } else {
+            Vec::new()
+        };
         let m = modulation_of(&decoder);
         for (i, pairs) in list.iter().enumerate() {
             let (res, readings) = decode_with(&decoder, m, pairs);
@@ -190,11 +213,12 @@ fn every_decoder_returns_the_encoded_readings() {
                 assert_close(r.rain_mm, opt(rain[i]), &format!("{ctx} rain"));
                 assert_eq!(r.pressure_hpa, None, "{ctx}");
                 assert_eq!(r.mic, mic_of(&decoder), "{ctx}");
-                assert_eq!(
-                    r.repeats,
-                    if decoder == "nexus" { repeats } else { 1 },
-                    "{ctx}"
-                );
+                let want_repeats = match decoder.as_str() {
+                    "nexus" => repeats,
+                    "bresser_3ch" => frames[i] as u32,
+                    _ => 1,
+                };
+                assert_eq!(r.repeats, want_repeats, "{ctx}");
                 assert_eq!(r.rssi_db, -25.0, "{ctx}");
             }
             // no other decoder reads the train of this device
@@ -701,8 +725,14 @@ fn truncated_rows_give_no_reading() {
     for name in CASES {
         let c = golden::load("sensors", name).unwrap();
         let copies = c.param_u64("repeats").unwrap() as usize;
+        let frames = if name == "bresser_3ch" {
+            i32s(&c, "repeat_counts")
+        } else {
+            Vec::new()
+        };
         for (i, pairs) in trains(&c).iter().enumerate() {
             // keep a part of the first copy only: 55 to 90 percent of it
+            let copies = frames.get(i).map_or(copies, |&n| n as usize);
             let copy = pairs.len() / copies;
             let keep = copy * (55 + rng.below(36) as usize) / 100;
             let mut cut = pairs[..keep].to_vec();
@@ -733,5 +763,279 @@ fn a_whole_row_that_is_not_a_message_gives_no_match() {
         let (res, r) = decode_with(dcd.name(), dcd.modulation(), &pairs);
         assert!(r.is_empty(), "{}", dcd.name());
         assert!(!matches!(res, DecodeResult::Decoded(_)), "{}", dcd.name());
+    }
+}
+
+// ---------------------------------------------------------------- bresser_3ch (D1119)
+
+/// The frame bytes with their sum, from the id, the byte 1 (flags and high temperature bits),
+/// the low temperature byte and the humidity.
+fn bresser_frame(id: u8, b1: u8, b2: u8, hum: u8) -> [u8; 5] {
+    let sum = id.wrapping_add(b1).wrapping_add(b2).wrapping_add(hum);
+    [id, b1, b2, hum, sum]
+}
+
+/// The frame bytes of a raw temperature value with the flags `flags` in the high nibble of byte
+/// 1 (0x6: battery ok, button pressed, channel 2, as in all recordings).
+fn bresser_raw(id: u8, flags: u8, raw: u32, hum: u8) -> [u8; 5] {
+    bresser_frame(id, (flags << 4) | (raw >> 8) as u8, raw as u8, hum)
+}
+
+/// `preamble` pairs (735 us) then the 40 bits of `frame` (1: 500/250 us, 0: 250/500 us).
+fn bresser_frame_runs(frame: [u8; 5], preamble: usize) -> Vec<(f64, f64)> {
+    let mut runs = vec![(735.0, 735.0); preamble];
+    runs.extend(
+        bytes_bits(&frame)
+            .iter()
+            .map(|&b| if b { (500.0, 250.0) } else { (250.0, 500.0) }),
+    );
+    runs
+}
+
+/// A burst of the frames in `frames` back to back; the last gap is 0 (the pause).
+fn bresser_train(frames: &[[u8; 5]], preamble: usize) -> Vec<Pair> {
+    let mut runs: Vec<(f64, f64)> = frames
+        .iter()
+        .flat_map(|&f| bresser_frame_runs(f, preamble))
+        .collect();
+    runs.last_mut().unwrap().1 = 0.0;
+    to_pairs(&runs)
+}
+
+fn bresser_decode(pairs: &[Pair]) -> (DecodeResult, Vec<Reading>) {
+    decode_with("bresser_3ch", Modulation::Ook, pairs)
+}
+
+#[test]
+fn the_three_recorded_messages_decode_to_the_display_values() {
+    let c = golden::load("sensors", RECORDED).unwrap();
+    assert_eq!(c.param_str("decoder").unwrap(), "bresser_3ch");
+    assert_eq!(c.params["recorded"], true);
+    let list = trains(&c);
+    assert_eq!(list.len(), 4);
+    let frames = i32s(&c, "repeat_counts");
+    // recording 1 (display not known), 2 (22.1 C, 64 %), 3 (22.5 C, 71 %) and 4 (15.5 C, 60 %)
+    let want = [(14.4f32, 81.0f32), (22.1, 64.0), (22.5, 71.0), (15.5, 60.0)];
+    for (i, pairs) in list.iter().enumerate() {
+        let (res, r) = bresser_decode(pairs);
+        assert_eq!(res, DecodeResult::Decoded(1), "recording {}", i + 1);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].model, "Bresser-3CH");
+        assert_eq!(r[0].id, 0xD8);
+        assert_eq!((r[0].channel, r[0].battery_ok), (Some(2), Some(true)));
+        assert_eq!(r[0].mic, Mic::Checksum);
+        assert_eq!(r[0].repeats, frames[i] as u32);
+        assert_eq!(r[0].temperature_c, Some(want[i].0), "recording {}", i + 1);
+        assert_eq!(r[0].humidity, Some(want[i].1), "recording {}", i + 1);
+        // no other decoder reads it
+        for other in sensors::DECODERS {
+            if other.name() != "bresser_3ch" {
+                let (_, r) = decode_with(other.name(), other.modulation(), pairs);
+                assert!(r.is_empty(), "{}", other.name());
+            }
+        }
+    }
+    // the same bytes rendered here give the same readings
+    let frames = [
+        [0xD8, 0x65, 0xC7, 0x51, 0x55],
+        [0xD8, 0x66, 0x52, 0x40, 0xD0],
+        [0xD8, 0x66, 0x59, 0x47, 0xDE],
+        [0xD8, 0x65, 0xDB, 0x3C, 0x54],
+    ];
+    for (f, w) in frames.iter().zip(want) {
+        assert_eq!(*f, bresser_frame(f[0], f[1], f[2], f[3]));
+        let (_, r) = bresser_decode(&bresser_train(&[*f; 23], 4));
+        assert_eq!((r[0].temperature_c, r[0].humidity), (Some(w.0), Some(w.1)));
+    }
+}
+
+#[test]
+fn bresser_flags_are_battery_and_channel() {
+    // high nibble: bit 3 battery low, bit 2 button, bits 1 and 0 the channel
+    for (flags, ch, bat) in [
+        (0x6u8, 2u8, true),
+        (0x1, 1, true),
+        (0x3, 3, true),
+        (0xA, 2, false),
+        (0xD, 1, false),
+        (0xF, 3, false),
+    ] {
+        let (res, r) = bresser_decode(&bresser_train(&[bresser_raw(7, flags, 1618, 64); 3], 4));
+        assert_eq!(res, DecodeResult::Decoded(1), "{flags:X}");
+        assert_eq!((r[0].channel, r[0].battery_ok), (Some(ch), Some(bat)));
+    }
+    // channel 0 is not a frame of the device
+    for flags in [0x0u8, 0x4, 0x8, 0xC] {
+        let (res, r) = bresser_decode(&bresser_train(&[bresser_raw(7, flags, 1618, 64); 3], 4));
+        assert_eq!(r.len(), 0);
+        assert_eq!(res, DecodeResult::NoMatch, "{flags:X}");
+    }
+}
+
+#[test]
+fn bresser_one_frame_with_a_valid_sum_is_a_reading() {
+    for preamble in 2..=6 {
+        let (res, r) = bresser_decode(&bresser_train(&[bresser_raw(0x11, 6, 1618, 64)], preamble));
+        assert_eq!(res, DecodeResult::Decoded(1), "preamble {preamble}");
+        assert_eq!(
+            (r[0].id, r[0].temperature_c, r[0].repeats),
+            (0x11, Some(22.1), 1)
+        );
+    }
+    // one preamble pair is not enough, and neither is none
+    for preamble in [0, 1] {
+        let (res, r) = bresser_decode(&bresser_train(&[bresser_raw(0x11, 6, 1618, 64)], preamble));
+        assert!(r.is_empty(), "preamble {preamble}");
+        assert_eq!(res, DecodeResult::NoMatch);
+    }
+}
+
+#[test]
+fn bresser_a_flipped_bit_gives_no_reading() {
+    let mut rng = Pcg32::new(SEED_INTEGRITY, 3);
+    let c = golden::load("sensors", "bresser_3ch").unwrap();
+    let frames = i32s(&c, "repeat_counts");
+    let preambles = i32s(&c, "preamble_pairs");
+    let ids = i32s(&c, "ids");
+    for i in 0..20 {
+        let raw = 700 + rng.below(1801);
+        let hum = rng.below(101) as u8;
+        let good = bresser_raw(ids[i] as u8, 6, raw, hum);
+        let n = frames[i] as usize;
+        let preamble = preambles[i] as usize;
+        let (res, r) = bresser_decode(&bresser_train(&vec![good; n], preamble));
+        assert_eq!((res, r.len()), (DecodeResult::Decoded(1), 1), "train {i}");
+        // one bit of the first four bytes or of the sum flipped in every frame
+        let bit = rng.below(40) as usize;
+        let mut bad = good;
+        bad[bit / 8] ^= 0x80 >> (bit % 8);
+        let (res, r) = bresser_decode(&bresser_train(&vec![bad; n], preamble));
+        assert!(r.is_empty(), "train {i} bit {bit}: {r:?}");
+        assert_eq!(res, DecodeResult::BadIntegrity, "train {i} bit {bit}");
+        // one damaged frame among good ones: the good ones are still read, counted without it
+        let mut frames_v = vec![good; n];
+        frames_v[n / 2] = bad;
+        let (res, r) = bresser_decode(&bresser_train(&frames_v, preamble));
+        assert_eq!((res, r.len()), (DecodeResult::Decoded(1), 1), "train {i}");
+        assert_eq!(r[0].repeats as usize, n - 1);
+    }
+}
+
+#[test]
+fn bresser_out_of_range_values_give_no_reading() {
+    // (raw temperature, humidity): a valid sum and a value the device cannot send
+    for (raw, hum) in [
+        (1618, 101),
+        (1618, 255),
+        (699, 50),  // -20.1 F
+        (2501, 50), // 160.1 F
+        (0xFFF, 50),
+        (0, 50),
+    ] {
+        let (res, r) = bresser_decode(&bresser_train(&[bresser_raw(0x11, 6, raw, hum); 22], 4));
+        assert!(r.is_empty(), "{raw} {hum}: {r:?}");
+        assert_eq!(res, DecodeResult::OutOfRange, "{raw} {hum}");
+    }
+    // the limits themselves are readings
+    for (raw, hum, t) in [
+        (700, 0, -28.9f32),
+        (2500, 100, 71.1),
+        (1220, 50, 0.0),
+        (1229, 50, 0.5),
+    ] {
+        let (_, r) = bresser_decode(&bresser_train(&[bresser_raw(0x11, 6, raw, hum); 22], 4));
+        assert_eq!(r[0].temperature_c, Some(t), "{raw}");
+    }
+}
+
+#[test]
+fn bresser_trains_that_start_or_end_mid_frame_and_glitches() {
+    let good = bresser_raw(0xD8, 6, 1618, 64);
+    let full = bresser_frame_runs(good, 4);
+    let n = full.len();
+    // the start of the train cut at every pair of the first frame: later frames still read
+    for cut in 0..n {
+        let mut runs: Vec<(f64, f64)> = full[cut..].to_vec();
+        for _ in 0..21 {
+            runs.extend(full.iter().copied());
+        }
+        runs.last_mut().unwrap().1 = 0.0;
+        let (res, r) = bresser_decode(&to_pairs(&runs));
+        assert_eq!(res, DecodeResult::Decoded(1), "cut {cut}");
+        // the first frame survives while two of its four preamble pairs are left
+        let want = if cut <= 2 { 22 } else { 21 };
+        assert_eq!(r[0].repeats, want, "cut {cut}");
+    }
+    // the end of the train cut at every pair of the last frame: one frame less, never a reading
+    // of the cut one
+    for keep in 1..n {
+        let mut runs: Vec<(f64, f64)> = Vec::new();
+        for _ in 0..22 {
+            runs.extend(full.iter().copied());
+        }
+        runs.extend(full[..keep].iter().copied());
+        runs.last_mut().unwrap().1 = 0.0;
+        let (res, r) = bresser_decode(&to_pairs(&runs));
+        assert_eq!(res, DecodeResult::Decoded(1), "keep {keep}");
+        assert_eq!(r[0].repeats, 22, "keep {keep}");
+    }
+    // a glitch pair inside one frame drops that frame only; a pair missing from one drops it too
+    let mut runs: Vec<(f64, f64)> = Vec::new();
+    for k in 0..24 {
+        let mut f = full.clone();
+        match k {
+            5 => f[20] = (100.0, 100.0),
+            9 => {
+                f.remove(30);
+            }
+            14 => f.insert(30, (250.0, 500.0)),
+            _ => {}
+        }
+        runs.extend(f);
+    }
+    runs.last_mut().unwrap().1 = 0.0;
+    let (res, r) = bresser_decode(&to_pairs(&runs));
+    assert_eq!(res, DecodeResult::Decoded(1));
+    assert_eq!(r[0].repeats, 21);
+}
+
+#[test]
+fn bresser_two_different_messages_in_one_train_are_two_readings() {
+    let a = bresser_raw(0xD8, 6, 1618, 64);
+    let b = bresser_raw(0xD8, 6, 1625, 71);
+    let mut frames = vec![a; 10];
+    frames.extend(vec![b; 12]);
+    let (res, r) = bresser_decode(&bresser_train(&frames, 4));
+    assert_eq!(res, DecodeResult::Decoded(2));
+    assert_eq!(
+        (
+            r[0].temperature_c,
+            r[0].repeats,
+            r[1].temperature_c,
+            r[1].repeats
+        ),
+        (Some(22.1), 10, Some(22.5), 12)
+    );
+}
+
+#[test]
+fn bresser_tolerates_the_timing_of_the_real_chain() {
+    // widths within +-3 samples of 4 us (12 us) and a clock error of 10 % on top
+    let mut rng = Pcg32::new(SEED_INTEGRITY, 4);
+    let good = bresser_raw(0xD8, 6, 1618, 64);
+    for scale in [0.9, 1.0, 1.1] {
+        let runs: Vec<(f64, f64)> = (0..22)
+            .flat_map(|_| bresser_frame_runs(good, 4))
+            .map(|(p, g)| (p * scale, g * scale))
+            .collect();
+        let mut pairs = to_pairs(&runs);
+        for p in &mut pairs {
+            p.pulse = (i64::from(p.pulse) + i64::from(rng.below(7)) - 3).max(1) as u32;
+            p.gap = (i64::from(p.gap) + i64::from(rng.below(7)) - 3).max(1) as u32;
+        }
+        pairs.last_mut().unwrap().gap = 0;
+        let (res, r) = bresser_decode(&pairs);
+        assert_eq!(res, DecodeResult::Decoded(1), "scale {scale}");
+        assert_eq!(r[0].temperature_c, Some(22.1));
     }
 }

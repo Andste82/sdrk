@@ -1,0 +1,107 @@
+{
+  "arrays": {
+    "battery_ok": {
+      "dtype": "i32",
+      "file": "bresser_3ch.battery_ok.bin",
+      "len": 20
+    },
+    "channels": {
+      "dtype": "i32",
+      "file": "bresser_3ch.channels.bin",
+      "len": 20
+    },
+    "first_pair_lost": {
+      "dtype": "i32",
+      "file": "bresser_3ch.first_pair_lost.bin",
+      "len": 20
+    },
+    "humidity": {
+      "dtype": "f64",
+      "file": "bresser_3ch.humidity.bin",
+      "len": 20
+    },
+    "ids": {
+      "dtype": "i32",
+      "file": "bresser_3ch.ids.bin",
+      "len": 20
+    },
+    "model_ids": {
+      "dtype": "i32",
+      "file": "bresser_3ch.model_ids.bin",
+      "len": 20
+    },
+    "pair_counts": {
+      "dtype": "i32",
+      "file": "bresser_3ch.pair_counts.bin",
+      "len": 20
+    },
+    "pairs": {
+      "dtype": "i32",
+      "file": "bresser_3ch.pairs.bin",
+      "len": 39330
+    },
+    "preamble_pairs": {
+      "dtype": "i32",
+      "file": "bresser_3ch.preamble_pairs.bin",
+      "len": 20
+    },
+    "rain_mm": {
+      "dtype": "f64",
+      "file": "bresser_3ch.rain_mm.bin",
+      "len": 20
+    },
+    "repeat_counts": {
+      "dtype": "i32",
+      "file": "bresser_3ch.repeat_counts.bin",
+      "len": 20
+    },
+    "temperature_c": {
+      "dtype": "f64",
+      "file": "bresser_3ch.temperature_c.bin",
+      "len": 20
+    },
+    "wind_avg_km_h": {
+      "dtype": "f64",
+      "file": "bresser_3ch.wind_avg_km_h.bin",
+      "len": 20
+    },
+    "wind_dir_deg": {
+      "dtype": "f64",
+      "file": "bresser_3ch.wind_dir_deg.bin",
+      "len": 20
+    },
+    "wind_max_km_h": {
+      "dtype": "f64",
+      "file": "bresser_3ch.wind_max_km_h.bin",
+      "len": 20
+    }
+  },
+  "case": "bresser_3ch",
+  "format_version": 1,
+  "kernel": "sensors",
+  "notes": "Bresser 3CH messages (OOK, 3 to 5 preamble pairs of 735 us, 40 bits with a bit period of 750 us, 1 = 500/250 us, 0 = 250/500 us, sum of bytes 0 to 3 as check; battery, button and channel in the high nibble of byte 1), 20 to 24 identical frames back to back in a train (one reading with repeats = the number of frames), the first pair dropped in about a quarter of the trains, clock error +-8 % and width error +-5 %, 250 kHz",
+  "params": {
+    "decoder": "bresser_3ch",
+    "max_abs_err": 0.001,
+    "models": [
+      "Bresser-3CH"
+    ],
+    "rate_hz": 250000,
+    "readings_per_train": 1,
+    "repeats": 22,
+    "seed": 649,
+    "trains": 20
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 649,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.001,
+    "skip": 0
+  }
+}

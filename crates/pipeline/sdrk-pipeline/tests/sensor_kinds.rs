@@ -181,7 +181,14 @@ fn golden_trains(name: &str) -> Vec<Vec<Pair>> {
 fn train_packets() -> Vec<Packet> {
     let mut out = Vec::new();
     let mut index = 0u64;
-    for name in ["wh2", "nexus", "oregon_v21", "wh1080", "lacrosse_tx29"] {
+    for name in [
+        "wh2",
+        "nexus",
+        "oregon_v21",
+        "wh1080",
+        "lacrosse_tx29",
+        "bresser_3ch",
+    ] {
         let m = if name == "lacrosse_tx29" {
             Modulation::Fsk
         } else {
@@ -266,7 +273,7 @@ fn the_kind_is_registered() {
     let registry = Registry::standard();
     let dec = registry.factory("sensor_decode").unwrap();
     assert_eq!(dec.kernels().len(), 0);
-    assert_eq!(registry.descriptions().count(), 67);
+    assert_eq!(registry.descriptions().count(), 69);
 }
 
 #[test]

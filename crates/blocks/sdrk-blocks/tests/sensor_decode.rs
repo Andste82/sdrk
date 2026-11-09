@@ -30,7 +30,14 @@ use sdrk_testkit::{ChunkPlan, VecStorage};
 const RATE: u32 = 250_000;
 const SEED_UNKNOWN: u64 = 642;
 const SEED_CHUNKS: u64 = 643;
-const CASES: [&str; 5] = ["wh2", "nexus", "oregon_v21", "wh1080", "lacrosse_tx29"];
+const CASES: [&str; 6] = [
+    "wh2",
+    "nexus",
+    "oregon_v21",
+    "wh1080",
+    "lacrosse_tx29",
+    "bresser_3ch",
+];
 
 fn header(m: Modulation, channel: i16) -> Header {
     Header {
@@ -562,8 +569,15 @@ fn parameters_are_validated_and_read_only() {
     let mut cfg = SensorDecodeConfig::default();
     assert_eq!(SENSOR_ALL_DECODERS, (1 << DECODERS.len()) - 1);
     assert_eq!(
-        SensorDecodeConfig::mask_of(&["wh2", "nexus", "oregon_v21", "wh1080", "lacrosse_tx29"])
-            .unwrap(),
+        SensorDecodeConfig::mask_of(&[
+            "wh2",
+            "nexus",
+            "oregon_v21",
+            "wh1080",
+            "lacrosse_tx29",
+            "bresser_3ch",
+        ])
+        .unwrap(),
         SENSOR_ALL_DECODERS
     );
     assert!(matches!(
@@ -574,7 +588,7 @@ fn parameters_are_validated_and_read_only() {
         })
     ));
     assert!(matches!(
-        cfg.set("decoders", ParamValue::I64(1 << 5)),
+        cfg.set("decoders", ParamValue::I64(1 << 6)),
         Err(Error::OutOfRange {
             name: "decoders",
             ..
@@ -627,14 +641,14 @@ fn parameters_are_validated_and_read_only() {
 fn the_arena_size_is_exact_and_the_struct_is_small() {
     let cfg = SensorDecodeConfig::default();
     let bytes = SensorDecodeBlock::<ArenaStorage<'_>>::storage_bytes(&cfg).unwrap();
-    let mut mem = AlignedBytes([0u8; 8192]);
+    let mut mem = AlignedBytes([0u8; 12288]);
     assert!(bytes <= mem.0.len());
     let mut arena = ArenaStorage::new(&mut mem.0[..bytes]);
     let b = SensorDecodeBlock::new(&cfg, &mut arena).unwrap();
     assert_eq!(arena.used(), bytes);
     assert_eq!(arena.remaining(), 0);
     assert_eq!(b.merged(), 0);
-    let mut small = AlignedBytes([0u8; 8192]);
+    let mut small = AlignedBytes([0u8; 12288]);
     let mut arena = ArenaStorage::new(&mut small.0[..bytes - 1]);
     assert!(matches!(
         SensorDecodeBlock::new(&cfg, &mut arena),
@@ -656,7 +670,7 @@ fn the_arena_size_is_exact_and_the_struct_is_small() {
 fn the_block_also_runs_from_an_arena_and_reset_forgets_the_copies() {
     let cfg = SensorDecodeConfig::default();
     let bytes = SensorDecodeBlock::<ArenaStorage<'_>>::storage_bytes(&cfg).unwrap();
-    let mut mem = AlignedBytes([0u8; 8192]);
+    let mut mem = AlignedBytes([0u8; 12288]);
     let mut arena = ArenaStorage::new(&mut mem.0[..bytes]);
     let mut b = SensorDecodeBlock::new(&cfg, &mut arena).unwrap();
     let train = packets_of(0, &header(Modulation::Ook, 0), &nexus_train());

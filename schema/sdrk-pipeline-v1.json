@@ -4157,9 +4157,9 @@
                     "type": "integer"
                   },
                   "decoders": {
-                    "default": 31,
-                    "description": "The enabled decoders as a bit mask in the order of sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29. Typical: 31 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29. Build-time.",
-                    "maximum": 31,
+                    "default": 63,
+                    "description": "The enabled decoders as a bit mask in the order of sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch. Typical: 63 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch. Build-time.",
+                    "maximum": 63,
                     "minimum": 1,
                     "type": "integer"
                   },

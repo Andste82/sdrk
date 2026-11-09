@@ -38,6 +38,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+mod bresser_3ch;
 mod lacrosse_tx29;
 mod nexus;
 mod oregon_v21;
@@ -46,6 +47,7 @@ mod util;
 mod wh1080;
 mod wh2;
 
+pub use bresser_3ch::Bresser3ch;
 pub use lacrosse_tx29::LacrosseTx29;
 pub use nexus::Nexus;
 pub use oregon_v21::OregonV21;
@@ -183,9 +185,17 @@ pub trait SensorDecoder: Sync {
     fn decode(&self, train: &PulseTrain<'_>, out: &mut ReadingSink) -> DecodeResult;
 }
 
-/// The built-in decoders in a fixed order: 433 MHz (`wh2`, `nexus`, `oregon_v21`, `wh1080`)
-/// then 868 MHz (`lacrosse_tx29`).
-pub static DECODERS: &[&dyn SensorDecoder] = &[&Wh2, &Nexus, &OregonV21, &Wh1080, &LacrosseTx29];
+/// The built-in decoders in a fixed order: 433 MHz (`wh2`, `nexus`, `oregon_v21`, `wh1080`),
+/// 868 MHz (`lacrosse_tx29`), then `bresser_3ch` (433 MHz), added last so that the bits of the
+/// `decoders` mask of the block keep their meaning.
+pub static DECODERS: &[&dyn SensorDecoder] = &[
+    &Wh2,
+    &Nexus,
+    &OregonV21,
+    &Wh1080,
+    &LacrosseTx29,
+    &Bresser3ch,
+];
 
 /// The decoder of that name.
 pub fn by_name(name: &str) -> Option<&'static dyn SensorDecoder> {

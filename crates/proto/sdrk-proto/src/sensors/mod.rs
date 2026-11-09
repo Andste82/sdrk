@@ -39,6 +39,8 @@
 //! ```
 
 mod bresser_3ch;
+mod encoder;
+mod json;
 mod lacrosse_tx29;
 mod nexus;
 mod oregon_v21;
@@ -48,6 +50,8 @@ mod wh1080;
 mod wh2;
 
 pub use bresser_3ch::Bresser3ch;
+pub use encoder::{EncodeError, MAX_TRAIN_PAIRS, SensorEncoder, TRAIN_RATE_HZ, TrainSink};
+pub use json::JsonError;
 pub use lacrosse_tx29::LacrosseTx29;
 pub use nexus::Nexus;
 pub use oregon_v21::OregonV21;
@@ -200,4 +204,28 @@ pub static DECODERS: &[&dyn SensorDecoder] = &[
 /// The decoder of that name.
 pub fn by_name(name: &str) -> Option<&'static dyn SensorDecoder> {
     DECODERS.iter().copied().find(|d| d.name() == name)
+}
+
+/// The built-in encoders in the order of [`DECODERS`]: `wh2`, `nexus`, `oregon_v21`, `wh1080`,
+/// `lacrosse_tx29` (868 MHz FSK, which the OOK transmit chain cannot send), `bresser_3ch`.
+pub static ENCODERS: &[&dyn SensorEncoder] = &[
+    &Wh2,
+    &Nexus,
+    &OregonV21,
+    &Wh1080,
+    &LacrosseTx29,
+    &Bresser3ch,
+];
+
+/// The encoder of that name (the name of its decoder).
+pub fn encoder_by_name(name: &str) -> Option<&'static dyn SensorEncoder> {
+    ENCODERS.iter().copied().find(|e| e.name() == name)
+}
+
+/// The encoder that takes readings of `model` (`Reading::model`).
+pub fn encoder_by_model(model: &str) -> Option<&'static dyn SensorEncoder> {
+    ENCODERS
+        .iter()
+        .copied()
+        .find(|e| e.models().contains(&model))
 }

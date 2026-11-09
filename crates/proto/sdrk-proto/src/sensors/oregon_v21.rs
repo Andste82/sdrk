@@ -15,6 +15,9 @@
 //! the id up to the checksum, sent as two nibbles, low nibble first; the message has 14 nibbles
 //! for EC40 and 17 for 1D20 including the checksum.
 
+use super::encoder::{
+    self, BATTERY, CHANNEL, Carries, EncodeError, HUMIDITY, SensorEncoder, TrainSink,
+};
 use super::util::collect;
 use super::{DecodeResult, Mic, Reading, ReadingSink, SensorDecoder};
 use crate::pulses::{Header, Modulation, PulseTrain};
@@ -137,4 +140,160 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
         r.humidity = Some(f32::from(h1 * 10 + h0));
     }
     Ok(r)
+}
+
+/// The half bit in microseconds: 1 / 2048 s = 488.28 us, rounded to a whole microsecond
+/// (0.06 percent short).
+const HALF_BIT_US: u32 = 488;
+/// The pause between two copies (the repeat gap, decision D1124).
+const REPEAT_GAP_US: u32 = 8000;
+/// The levels of a message: every data bit is sent twice and every bit has two half bits.
+const MAX_LEVELS: usize = 4 * (16 + 4 + 4 * 19);
+
+fn run_len(levels: &[bool], from: usize) -> usize {
+    let first = levels.get(from).copied();
+    levels
+        .iter()
+        .skip(from)
+        .take_while(|&&l| Some(l) == first)
+        .count()
+}
+
+/// Writes the Manchester coded message of `nib` (the nibbles from the sensor id to the
+/// checksum): preamble of sixteen 1 bits, the sync nibble 0xA, the nibbles and the post-amble of
+/// two nibbles, every nibble least significant bit first and every data bit twice, first
+/// inverted. A 1 is on-off, a 0 off-on; the idle half bit before a first 0 and after a last 1
+/// is not sent.
+fn write_message(out: &mut TrainSink<'_>, nib: &[u8]) -> Result<(), EncodeError> {
+    let mut levels = [false; MAX_LEVELS];
+    let mut n = 0usize;
+    let mut put = |bit: bool| {
+        // a 1 bit is high then low, a 0 bit low then high; leading low half bits are not sent
+        for level in [bit, !bit] {
+            if n == 0 && !level {
+                continue;
+            }
+            if let Some(slot) = levels.get_mut(n) {
+                *slot = level;
+                n += 1;
+            }
+        }
+    };
+    let mut data = |bit: bool| {
+        put(!bit);
+        put(bit);
+    };
+    for _ in 0..16 {
+        data(true);
+    }
+    for j in 0..4 {
+        data(0xA >> j & 1 == 1);
+    }
+    for &v in nib.iter().chain(&[0u8, 0]) {
+        for j in 0..4 {
+            data(v >> j & 1 == 1);
+        }
+    }
+    // a trailing low half bit is the end of the train
+    while n > 0 && levels.get(n - 1) == Some(&false) {
+        n -= 1;
+    }
+    let levels = levels.get(..n).unwrap_or(&[]);
+    let mut i = 0;
+    while i < levels.len() {
+        let pulse = run_len(levels, i);
+        i += pulse;
+        let gap = if i < levels.len() {
+            let g = run_len(levels, i);
+            i += g;
+            g
+        } else {
+            0
+        };
+        out.push(pulse as u32 * HALF_BIT_US, gap as u32 * HALF_BIT_US)?;
+    }
+    Ok(())
+}
+
+impl SensorEncoder for OregonV21 {
+    fn name(&self) -> &'static str {
+        "oregon_v21"
+    }
+
+    fn models(&self) -> &'static [&'static str] {
+        &["oregon_thn132n", "oregon_thgr122nx"]
+    }
+
+    fn modulation(&self) -> Modulation {
+        Modulation::Ook
+    }
+
+    fn mic(&self) -> Mic {
+        Mic::Checksum
+    }
+
+    fn default_repeats(&self) -> u32 {
+        2
+    }
+
+    fn repeat_gap_us(&self) -> u32 {
+        REPEAT_GAP_US
+    }
+
+    /// The message of the decoder for `oregon_thn132n` (id EC40, 14 nibbles) or
+    /// `oregon_thgr122nx` (id 1D20, with humidity, 17 nibbles): the channel 1 to 3 as the nibble
+    /// 1, 2 or 4, the rolling code (the reading's `id`, below 256), the battery flag 0x4, the
+    /// temperature from -70.0 to 70.0 as BCD digits and the nibble sum as checksum; the
+    /// unknown nibble of the THGR122NX is sent as 0; its humidity is two BCD digits (0 to 99). Half bits of 488 us, copies 8 ms apart.
+    fn encode(
+        &self,
+        r: &Reading,
+        repeats: u32,
+        out: &mut TrainSink<'_>,
+    ) -> Result<(), EncodeError> {
+        encoder::model(r, self.models())?;
+        let thgr = r.model == "oregon_thgr122nx";
+        Carries(CHANNEL | BATTERY | (if thgr { HUMIDITY } else { 0 })).check(r)?;
+        let rolling = encoder::id(r, 256)?;
+        let ch = encoder::channel(r, 3)?;
+        let t = encoder::temperature(r, 10.0, -700, 700)?;
+        let mut nib = [0u8; 17];
+        let dev: u16 = if thgr { 0x1D20 } else { 0xEC40 };
+        let count = if thgr { 17 } else { 14 };
+        let mag = t.unsigned_abs();
+        let digits = [
+            (dev >> 12) as u8 & 0xF,
+            (dev >> 8) as u8 & 0xF,
+            (dev >> 4) as u8 & 0xF,
+            dev as u8 & 0xF,
+            1 << (ch - 1),
+            (rolling & 0xF) as u8,
+            (rolling >> 4) as u8,
+            if r.battery_ok == Some(false) { 0x4 } else { 0 },
+            (mag % 10) as u8,
+            (mag / 10 % 10) as u8,
+            (mag / 100) as u8,
+            if t < 0 { 8 } else { 0 },
+        ];
+        for (slot, v) in nib.iter_mut().zip(digits) {
+            *slot = v;
+        }
+        if thgr {
+            // two BCD digits: the decoder reads 0 to 99
+            let h = encoder::humidity(r)?;
+            if h > 99 {
+                return Err(EncodeError::OutOfRange("humidity"));
+            }
+            for (slot, v) in nib.iter_mut().skip(12).zip([h % 10, h / 10, 0]) {
+                *slot = v;
+            }
+        }
+        let body = count - 2;
+        let sum: u32 = nib.iter().take(body).map(|&v| u32::from(v)).sum();
+        for (slot, v) in nib.iter_mut().skip(body).zip([sum & 0xF, (sum >> 4) & 0xF]) {
+            *slot = v as u8;
+        }
+        let msg = nib.get(..count).unwrap_or(&[]);
+        out.atomic(|o| o.copies(repeats, REPEAT_GAP_US, |o| write_message(o, msg)))
+    }
 }

@@ -346,11 +346,11 @@ pub enum ParamKind {
 ///
 /// ```
 /// let kinds: Vec<_> = sdrk_blocks::all_descriptions().iter().map(|d| d.kind).collect();
-/// assert_eq!(kinds.len(), 69);
+/// assert_eq!(kinds.len(), 71);
 /// assert!(kinds.contains(&"resample"));
 /// ```
 pub fn all_descriptions() -> &'static [&'static BlockDescription] {
-    static ALL: [&BlockDescription; 69] = [
+    static ALL: [&BlockDescription; 71] = [
         &crate::blocks::convert::DESCRIPTION,
         &crate::blocks::convert_out::DESCRIPTION,
         &crate::blocks::scale::DESCRIPTION,
@@ -420,6 +420,8 @@ pub fn all_descriptions() -> &'static [&'static BlockDescription] {
         &crate::blocks::channel_select::DESCRIPTION,
         &crate::blocks::band_pulse_detect::DESCRIPTION,
         &crate::blocks::sensor_decode::DESCRIPTION,
+        &crate::blocks::sensor_encode::DESCRIPTION,
+        &crate::blocks::pulse_key::DESCRIPTION,
     ];
     &ALL
 }

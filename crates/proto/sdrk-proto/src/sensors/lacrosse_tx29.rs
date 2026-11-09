@@ -11,6 +11,7 @@
 //! first) over B0 to B3. The CRC parameters are consistent with both examples of the article
 //! but not confirmed by a source.
 
+use super::encoder::{self, BATTERY, Carries, EncodeError, HUMIDITY, SensorEncoder, TrainSink};
 use super::util::{collect, crc8_msb};
 use super::{DecodeResult, Mic, Reading, ReadingSink, SensorDecoder};
 use crate::pulses::{Header, Modulation, PulseTrain};
@@ -87,4 +88,105 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
     }
     r.battery_ok = Some(b[3] & 0x80 == 0);
     Ok(r)
+}
+
+/// The bit time in microseconds, 17.241 kbit/s rounded to a whole microsecond (the decoder's
+/// 58 us).
+const BIT_US: u32 = 58;
+/// The pause between two copies (the repeat gap, decision D1124).
+const REPEAT_GAP_US: u32 = 4000;
+
+impl SensorEncoder for LacrosseTx29 {
+    fn name(&self) -> &'static str {
+        "lacrosse_tx29"
+    }
+
+    fn models(&self) -> &'static [&'static str] {
+        &["lacrosse_tx29"]
+    }
+
+    fn modulation(&self) -> Modulation {
+        Modulation::Fsk
+    }
+
+    fn mic(&self) -> Mic {
+        Mic::Crc
+    }
+
+    fn default_repeats(&self) -> u32 {
+        2
+    }
+
+    fn repeat_gap_us(&self) -> u32 {
+        REPEAT_GAP_US
+    }
+
+    /// The frame of the decoder as the pulse train of an FSK burst: four bytes 0xAA, the sync
+    /// word 0x2DD4 and the five bytes of the frame (length nibble 9, the 8 bit id, the
+    /// temperature from -40.0 to 59.9 as three decimal digits of `t + 40`, the humidity or 106
+    /// when absent, the weak battery bit, the CRC-8) as NRZ bits of 58 us: a run of ones is a
+    /// pulse (the upper frequency), a run of zeros a gap, copies 4 ms apart. Zeros at the end of
+    /// a frame are not part of the train (the burst ends); a frame with more than seven of
+    /// them (a CRC byte of 0x00) is [`EncodeError::Unrepresentable`]. The OOK transmit chain
+    /// cannot send this train (it keys the carrier on and off, the device uses two
+    /// frequencies); the encoder exists for the symmetry of the registry and for tests.
+    fn encode(
+        &self,
+        r: &Reading,
+        repeats: u32,
+        out: &mut TrainSink<'_>,
+    ) -> Result<(), EncodeError> {
+        encoder::model(r, self.models())?;
+        Carries(BATTERY | HUMIDITY).check(r)?;
+        let id = encoder::id(r, 256)?;
+        let digits = encoder::temperature(r, 10.0, -400, 599)? + 400;
+        let hum = match r.humidity {
+            Some(_) => encoder::humidity(r)?,
+            None => 106,
+        };
+        let weak = u8::from(r.battery_ok == Some(false));
+        let mut frame = [
+            0x90 | (id >> 4) as u8,
+            (((id & 0xF) << 4) as u8) | (digits / 100) as u8,
+            ((digits / 10 % 10) << 4) as u8 | (digits % 10) as u8,
+            (weak << 7) | hum,
+            0,
+        ];
+        let crc = crc8_msb(0, frame.iter().take(4).copied());
+        if let Some(last) = frame.last_mut() {
+            *last = crc;
+        }
+        let mut bytes = [0xAA, 0xAA, 0xAA, 0xAA, 0x2D, 0xD4, 0, 0, 0, 0, 0];
+        for (slot, v) in bytes.iter_mut().skip(6).zip(frame) {
+            *slot = v;
+        }
+        let mut n = bytes.len() * 8;
+        let bit = |k: usize| bytes.get(k / 8).is_some_and(|b| b >> (7 - k % 8) & 1 == 1);
+        while n > 0 && !bit(n - 1) {
+            n -= 1;
+        }
+        if bytes.len() * 8 - n > 7 {
+            return Err(EncodeError::Unrepresentable);
+        }
+        out.atomic(|o| {
+            o.copies(repeats, REPEAT_GAP_US, |o| {
+                let mut k = 0;
+                while k < n {
+                    // the frame starts with a 1: a pulse, then a gap, alternately
+                    let mut pulse = 0;
+                    while k < n && bit(k) {
+                        pulse += 1;
+                        k += 1;
+                    }
+                    let mut gap = 0;
+                    while k < n && !bit(k) {
+                        gap += 1;
+                        k += 1;
+                    }
+                    o.push(pulse * BIT_US, gap * BIT_US)?;
+                }
+                Ok(())
+            })
+        })
+    }
 }

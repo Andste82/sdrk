@@ -121,11 +121,17 @@ const NOISE_POWER: f32 = 0.75 * 4.0 / core::f32::consts::PI;
 /// Samples before the envelope crossing of an edge in which the raw edge is searched (D1023).
 const REFINE_BACK: u64 = 6;
 
-/// The fewest lanes with bursts at the same time that make a wideband event (D965, D975): more
-/// than 3 overlapping narrowband transmissions (spec test 4) of 3 lanes each can lift, so that
-/// transmissions two spacings apart stay apart (spec §3); with fewer lanes than this there are
-/// no wideband events.
-const WIDE_MIN_LANES: usize = 10;
+/// The length of a block of the wideband rule in seconds (D1029): every block of this many
+/// steps (at least `WIDE_MIN_BLOCK`) is classified as wideband or not when it ends.
+const WIDE_BLOCK_S: f64 = 100e-6;
+const WIDE_MIN_BLOCK: u32 = 8;
+
+/// A lane is active in a block when its envelope is above the trigger level (`min_snr_db`
+/// above its noise) in at least this share of the steps of the block (D1029).
+const WIDE_ACTIVE_SHARE: u32 = 4;
+
+/// The fewest lanes for wideband events (D1029): with fewer lanes the rule is off.
+const WIDE_MIN_WIDTH: usize = 4;
 
 /// The names of the `modulation` choice, in index order.
 const MODULATIONS: &[&str] = &["ook", "fsk", "auto"];
@@ -181,11 +187,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         two bursts that overlap by more than half of the shorter one and whose frequencies \
         are less than a channel spacing apart (modulo the input rate) are one transmission, \
         and only the one with the higher level is emitted; an FSK frame that spans at least \
-        half of an OOK train of the same transmission is kept instead of the train. A burst \
-        that shares a step with bursts in more than half of the lanes and in at least 10 lanes \
-        (a wideband event; none with fewer than 10 lanes) is \
-        emitted only when no other lane of the event has emitted it or has it at a higher \
-        level, and later bursts inside the span of the emitted event are dropped. The frequency is c times the spacing (half the step rate) \
+        half of an OOK train of the same transmission is kept instead of the train. Wideband \
+        events: every 100 us block (at least 8 steps) in which all lanes that can hear it but \
+        at most max(1, L / 8) had their envelope above the trigger level in a quarter of the \
+        steps (L of at least 4 lanes and half of them; a lane that learned a carrier as its \
+        noise cannot hear) is wideband, and wideband blocks at most one block apart are one \
+        event; of the bursts that lie by more than half in an event (widened by a block) only \
+        the first decided one is emitted. The frequency is c times the spacing (half the step rate) \
         plus the mean phase rotation of the pulses (FSK: the middle of the two levels). \
         Pitfall: the input must begin with about 4 ms of band noise (1024 steps), and a \
         carrier present from the start is learned as noise.",
@@ -493,6 +501,10 @@ struct Params {
     factor: f32,
     /// Steps of the lead-in: `BAND_PULSE_LEAD`, at most `4 min_steps - 1` (D971).
     lead_len: u32,
+    /// Steps of a block of the wideband rule, and the active steps that make a lane active
+    /// in it (D1029).
+    wide_block: u32,
+    wide_active: u32,
 }
 
 impl Params {
@@ -519,6 +531,8 @@ impl Params {
             rate_hz: fs,
             factor: config.snr_factor(),
             lead_len: lead_len(min_steps),
+            wide_block: steps(WIDE_BLOCK_S * fs).max(WIDE_MIN_BLOCK),
+            wide_active: (steps(WIDE_BLOCK_S * fs).max(WIDE_MIN_BLOCK) / WIDE_ACTIVE_SHARE).max(1),
         })
     }
 }
@@ -1825,12 +1839,13 @@ pub struct BandPulseDetectBlock<S: Storage> {
     pos: u64,
     /// Lanes that are not idle.
     active: usize,
-    /// Per lane: the low-passed envelope, the noise level, the noise step (0 while not idle),
-    /// the trigger factor (infinity while not idle).
+    /// Per lane: the low-passed envelope, the noise level, the noise step (0 while not idle,
+    /// so an idle lane is one with a step above 0), the steps of the current wideband block
+    /// with the envelope above the trigger level (D1029).
     lp: S::Buf<f32>,
     noise: S::Buf<f32>,
     gain: S::Buf<f32>,
-    trigger: S::Buf<f32>,
+    act: S::Buf<u32>,
     /// The last step of the previous call.
     last: S::Buf<C32>,
     /// Magnitudes of a piece (from row `HIST` on) and of the `HIST` steps before it.
@@ -1846,8 +1861,12 @@ pub struct BandPulseDetectBlock<S: Storage> {
     fsk: S::Buf<u32>,
     /// Whether an output record waits for its packets.
     pending: bool,
-    /// The span of the last emitted wideband event (start, end; steps), D965.
+    /// Steps of the current block of the wideband rule (D1029).
+    blk_n: u32,
+    /// The span of the last wideband event (start, end; steps of its wideband blocks) and
+    /// whether a burst of it was emitted (D1029).
     wide: (u64, u64),
+    wide_emitted: bool,
 }
 
 impl<S: Storage> core::fmt::Debug for BandPulseDetectBlock<S> {
@@ -1896,8 +1915,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         let noise = storage.alloc::<f32>(width)?;
         let mut gain = storage.alloc::<f32>(width)?;
         gain.as_mut().fill(NOISE_RATIO);
-        let mut trigger = storage.alloc::<f32>(width)?;
-        trigger.as_mut().fill(factor);
+        let act = storage.alloc::<u32>(width)?;
         let last = storage.alloc::<C32>(width)?;
         let env = storage.alloc::<f32>(width * (HIST + BAND_PULSE_CHUNK))?;
         let lanes = storage.alloc::<Lane>(width)?;
@@ -1914,7 +1932,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             lp,
             noise,
             gain,
-            trigger,
+            act,
             last,
             env,
             lanes,
@@ -1922,7 +1940,9 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             ook,
             fsk,
             pending: false,
+            blk_n: 0,
             wide: (0, 0),
+            wide_emitted: false,
             env_rows: HIST,
         })
     }
@@ -1936,9 +1956,10 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         check_width(width)?;
         check_count("max_pulses", config.max_pulses, 1, MAX_PULSES)?;
         let mut plan = Plan::default();
-        for _ in 0..4 {
+        for _ in 0..3 {
             plan.add::<f32>(width)?;
         }
+        plan.add::<u32>(width)?;
         plan.add::<C32>(width)?;
         plan.add::<f32>(width * (HIST + BAND_PULSE_CHUNK))?;
         plan.add::<Lane>(width)?;
@@ -2099,49 +2120,69 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         ]
     }
 
-    /// Whether the spans `a` and `b` share at least one step.
-    fn touch(a: (u64, u64), b: (u64, u64)) -> bool {
-        a.0.max(b.0) < a.1.min(b.1)
+    /// The end of a block of the wideband rule (D1029): the block is wideband when all lanes
+    /// that can hear it but at most `max(1, L / 8)` were active in it (above the trigger level
+    /// in at least a quarter of its steps; `L` the lanes that can hear, at least 4 and half of
+    /// the lanes). A lane cannot hear when it was not active and its noise level is more than
+    /// the trigger factor above the mean noise level of the active lanes (it learned a carrier
+    /// as its noise). A narrowband transmission lifts one or two lanes (three for a wide FSK
+    /// deviation), so 2 or 3 of them (spec §3, test 4) stay below that from 8 lanes on, while
+    /// noise over the band lifts every lane at once (spec test 7). Wideband blocks at most one
+    /// block apart form one event.
+    #[inline(never)]
+    fn close_block(&mut self) {
+        let n = u64::from(self.blk_n);
+        self.blk_n = 0;
+        let need = self.p.wide_active;
+        let w = self.width;
+        let (mut active, mut sum) = (0usize, 0f32);
+        for (a, nz) in self.act.as_ref().iter().zip(self.noise.as_ref()) {
+            if *a >= need {
+                active += 1;
+                sum += nz;
+            }
+        }
+        if w < WIDE_MIN_WIDTH || active < WIDE_MIN_WIDTH || 2 * active < w {
+            self.act.as_mut().fill(0);
+            return;
+        }
+        let deaf_above = self.factor * sum / active as f32;
+        let deaf = self
+            .act
+            .as_ref()
+            .iter()
+            .zip(self.noise.as_ref())
+            .filter(|(a, nz)| **a < need && **nz > deaf_above)
+            .count();
+        self.act.as_mut().fill(0);
+        let hear = w - deaf;
+        if hear < WIDE_MIN_WIDTH || 2 * hear < w || active + (hear / 8).max(1) < hear {
+            return;
+        }
+        let block = (self.pos - n, self.pos);
+        if self.wide.1 > self.wide.0 && self.wide.1 + n >= block.0 {
+            self.wide.1 = block.1;
+        } else {
+            self.wide = block;
+            self.wide_emitted = false;
+        }
     }
 
-    /// The wideband rule (D965) for the burst `mine` of lane `k` (level `level`): `Some(true)`
-    /// when it is part of a wideband event that another lane emits, `Some(false)` when it is
-    /// the lane that emits a new event, `None` when it is no wideband burst. A burst is part
-    /// of a wideband event when more than half of the lanes, and at least `WIDE_MIN_LANES`
-    /// (D975), have bursts that share a step with it (itself included), whatever their
-    /// frequency; it is dropped when one of them was emitted or
-    /// is in progress at a higher level (equal levels: the lower lane), or when it lies in the
-    /// span of the last emitted event by more than half.
-    fn wideband(&self, k: usize, mine: (u64, u64), level: f32) -> Result<Option<bool>> {
-        let w = self.width;
-        if w < WIDE_MIN_LANES {
-            return Ok(None);
+    /// The wideband rule (D1029) for the burst `mine`: `Some(true)` when it is part of the
+    /// last wideband event and a burst of that event was emitted already (it is dropped),
+    /// `Some(false)` when it is the first burst of the event (it is emitted for the event),
+    /// `None` when it is no part of an event. A burst is part of the event when more than half
+    /// of its span lies in the span of the event widened by one block on either side (the
+    /// first and last blocks of a burst of noise are only partly lifted).
+    fn wideband(&self, mine: (u64, u64)) -> Option<bool> {
+        if self.wide.1 <= self.wide.0 {
+            return None;
         }
-        let in_event = Self::overlap(mine, self.wide) && Self::touch(mine, self.wide);
-        let lanes = self.lanes.as_ref();
-        let (mut busy, mut blocked) = (1usize, false);
-        for j in (0..w).filter(|j| *j != k) {
-            let n = lanes.get(j).ok_or_else(internal)?;
-            let mut hit = false;
-            if n.sum_valid == 1 && Self::touch(mine, (n.sum_start, n.sum_end)) {
-                hit = true;
-                blocked |= n.sum_emitted == 1;
-            }
-            for b in self.spans(n).into_iter().flatten() {
-                if Self::touch(mine, b) {
-                    hit = true;
-                    blocked |= n.high > level || (n.high == level && j < k);
-                }
-            }
-            busy += usize::from(hit);
-        }
-        Ok(if 2 * busy > w && busy >= WIDE_MIN_LANES {
-            Some(blocked || in_event)
-        } else if in_event {
-            Some(true)
-        } else {
-            None
-        })
+        let b = u64::from(self.p.wide_block);
+        let (a, z) = (self.wide.0.saturating_sub(b), self.wide.1 + b);
+        let inside = mine.1.min(z).saturating_sub(mine.0.max(a));
+        let len = mine.1.saturating_sub(mine.0).max(1);
+        (2 * inside > len).then_some(self.wide_emitted)
     }
 
     /// Decides the record `r` of lane `k`: emitted unless a neighbour already emitted the
@@ -2156,7 +2197,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             .ok_or_else(internal)?;
         let mine = (o.index, o.end, self.offset_hz(k, o.freq));
         let fsk = o.fsk == 1;
-        let wide = self.wideband(k, (mine.0, mine.1), o.level)?;
+        let wide = self.wideband((mine.0, mine.1));
         let mut emit = wide != Some(true);
         // The end of the last frame this lane emitted on the same frequency: the part of a
         // neighbour's train before it belongs to that frame (an earlier copy, D1026).
@@ -2208,7 +2249,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             }
         }
         if emit && wide == Some(false) {
-            self.wide = (mine.0, mine.1);
+            self.wide_emitted = true;
         }
         let lane = self.lanes.as_mut().get_mut(k).ok_or_else(internal)?;
         lane.sum_valid = 1;
@@ -2456,9 +2497,6 @@ impl<S: Storage> BandPulseDetectBlock<S> {
                 if let Some(g) = self.gain.as_mut().get_mut(k) {
                     *g = 0.0;
                 }
-                if let Some(t) = self.trigger.as_mut().get_mut(k) {
-                    *t = f32::INFINITY;
-                }
                 Next::Stay
             }
             LEAD => lane.lead(&p, noise, &mut pairs, e, x),
@@ -2476,9 +2514,6 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             }
             if let Some(g) = self.gain.as_mut().get_mut(k) {
                 *g = NOISE_RATIO;
-            }
-            if let Some(t) = self.trigger.as_mut().get_mut(k) {
-                *t = self.factor;
             }
             if let Next::IdleAt(level) = next
                 && let Some(n) = self.noise.as_mut().get_mut(k)
@@ -2532,13 +2567,15 @@ fn train_packet(index: u64, flags: PacketFlags, header: &Header, src: &[u32]) ->
 /// low-pass, the noise level of the idle lanes and whether one of them triggers. In the
 /// warm-up (`warm` is `Some(1 / (n + 1))`) every lane takes the running mean and none
 /// triggers.
+#[allow(clippy::too_many_arguments)]
 fn envelope(
     lp: &mut [f32],
     noise: &mut [f32],
     gain: &[f32],
-    trigger: &[f32],
+    act: &mut [u32],
     mag: &[f32],
     alpha: f32,
+    factor: f32,
     warm: Option<f32>,
 ) -> bool {
     if let Some(g) = warm {
@@ -2551,11 +2588,11 @@ fn envelope(
         return false;
     }
     let mut hit = 0u32;
-    for ((((y, nz), &g), &t), &x) in lp
+    for ((((y, nz), &g), a), &x) in lp
         .iter_mut()
         .zip(noise.iter_mut())
         .zip(gain)
-        .zip(trigger)
+        .zip(act.iter_mut())
         .zip(mag)
     {
         let e = *y + alpha * (x - *y);
@@ -2563,7 +2600,11 @@ fn envelope(
         *y = e;
         let n = (*nz + g * (e - *nz)).max(NOISE_FLOOR);
         *nz = n;
-        hit |= u32::from(e > n * t);
+        // Above the trigger level: an idle lane triggers, and every lane counts the step as
+        // active in the wideband block (D1029).
+        let above = e > n * factor;
+        *a += u32::from(above);
+        hit |= u32::from(above) & u32::from(g > 0.0);
     }
     hit != 0
 }
@@ -2619,18 +2660,23 @@ where
                     self.lp.as_mut(),
                     self.noise.as_mut(),
                     self.gain.as_ref(),
-                    self.trigger.as_ref(),
+                    self.act.as_mut(),
                     self.env
                         .as_ref()
                         .get((HIST + i) * w..)
                         .ok_or_else(internal)?,
                     self.p.alpha,
+                    self.factor,
                     warm,
                 );
                 if hit || self.active > 0 {
                     self.detect(data, i, hit)?;
                 }
                 self.pos += 1;
+                self.blk_n += 1;
+                if self.blk_n >= self.p.wide_block {
+                    self.close_block();
+                }
                 if self.pending {
                     produced += self.flush(output.get_mut(produced..).ok_or_else(internal)?)?;
                     if self.pending {
@@ -2664,13 +2710,15 @@ where
         self.pos = 0;
         self.active = 0;
         self.pending = false;
+        self.blk_n = 0;
         self.wide = (0, 0);
+        self.wide_emitted = false;
+        self.act.as_mut().fill(0);
         self.env.as_mut().fill(0.0);
         self.env_rows = HIST;
         self.lp.as_mut().fill(0.0);
         self.noise.as_mut().fill(0.0);
         self.gain.as_mut().fill(NOISE_RATIO);
-        self.trigger.as_mut().fill(self.factor);
         self.last.as_mut().fill(C32::default());
         self.lanes.as_mut().fill(Lane::default());
         self.busy.as_mut().fill(0);
@@ -2684,17 +2732,6 @@ where
                 self.config = c;
                 self.factor = c.snr_factor();
                 self.p.factor = self.factor;
-                let factor = self.factor;
-                for (t, l) in self
-                    .trigger
-                    .as_mut()
-                    .iter_mut()
-                    .zip(self.lanes.as_ref().iter())
-                {
-                    if l.mode == IDLE {
-                        *t = factor;
-                    }
-                }
                 Ok(())
             }
             Some(_) => Err(Error::ReadOnlyParameter),

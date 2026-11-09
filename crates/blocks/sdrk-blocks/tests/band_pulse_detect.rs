@@ -15,12 +15,13 @@
 //!   FSK shares and the widths (I45.1-3).
 //! - Spec §3 through the 8 lanes of `ism868_pulses` (seed 630, stream 3): 60 groups of 2 or 3
 //!   overlapping OOK transmissions pairwise two spacings apart are each emitted with their own
-//!   train (the wideband rule needs at least 10 lanes, D975).
+//!   train (the wideband blocks of D1029 keep them apart).
 //! - Spec test 6 (seed 632): the detection levels through the channelizer and through a `ddc`
 //!   with the same detector on a lane view of width 1 agree within 1 dB.
 //! - Spec test 7 (seed 633): noise, a carrier and wideband bursts give at most one train per
-//!   burst and nothing else (4 s; the 60 s of the spec in an ignored test that the CI job `soak`
-//!   runs, D974).
+//!   burst and nothing else, through the 16 lanes of the 433 MHz flow and the 8 lanes of the
+//!   868 MHz flow (4 s; the 60 s of the spec in an ignored test that the CI job `soak` runs,
+//!   D974).
 //! - Chunk invariance of the block with 20 plans of input chunks and output room (seed 635, the
 //!   block part of test 8), on a scene with overlapping OOK and FSK transmissions.
 //! - Two transmissions two channel spacings apart that overlap in time are both emitted; an FSK
@@ -1025,8 +1026,9 @@ fn overlap_868_scene(txs: &[Overlap868Tx], first: usize) -> (Vec<Result<(), Stri
 /// transmissions (PWM, PPM, Manchester; 30 to 40 dB above the noise in a channel spacing) that
 /// overlap in time on frequencies pairwise two spacings apart, anywhere in the band, are each
 /// emitted once with their own train (the modulation, the number of pairs, the frequency within
-/// 10 kHz); the wideband rule (D965, D975) does not merge them (measured before D975: 46 of the
-/// 150 transmissions lost).
+/// 10 kHz); the wideband blocks (D1029) do not merge them: they lift at most 6 of the 8 lanes
+/// in a block of 100 us, a wideband block needs 7 (measured; a count of the lanes with bursts at
+/// the same time lost 46 of the 150 transmissions, D975).
 #[test]
 #[cfg_attr(
     target_family = "wasm",
@@ -1243,14 +1245,15 @@ const TEST7_BURST_EVERY_S: f64 = 4.0;
 const TEST7_FIRST_S: f64 = 1.5;
 const TEST7_BURST_S: f64 = 0.001;
 
-/// Spec test 7 over `seconds` (at most 60, 15 bursts): noise, a CW carrier and wideband bursts
-/// give no train except for the bursts (never from the carrier), at most `per_burst` per burst;
-/// returns the trains per burst.
-fn false_alarms(seconds: f64, per_burst: usize) -> Vec<usize> {
+/// Spec test 7 over `seconds` (at most 60, 15 bursts) through `channels` lanes around
+/// `center` (16 at 433.92 MHz: the 433 MHz flow; 8 at 868.5 MHz: the 868 MHz flow): noise, a CW
+/// carrier and wideband bursts give no train except for the bursts (never from the carrier), at
+/// most `per_burst` per burst; returns the trains per burst.
+fn false_alarms(seconds: f64, per_burst: usize, channels: usize, center: f64) -> Vec<usize> {
     let bursts = ((seconds - TEST7_FIRST_S) / TEST7_BURST_EVERY_S).ceil() as usize;
     let mut interferers = vec![Interferer::Carrier {
         freq_offset_hz: 312.5e3 + 17e3,
-        level_db: noise_in_channel() + 25.0,
+        level_db: 10.0f64.mul_add((1.0 / channels as f64).log10(), NOISE_DB) + 25.0,
     }];
     for k in 0..bursts {
         interferers.push(Interferer::WidebandBurst {
@@ -1261,17 +1264,17 @@ fn false_alarms(seconds: f64, per_burst: usize) -> Vec<usize> {
     }
     let scene = Scene {
         fs: FS,
-        center_hz: CENTER,
+        center_hz: center,
         clock_error_ppm: 0.0,
         noise_db: NOISE_DB,
         transmissions: &[],
         interferers: &interferers,
         seed: SEED_FALSE_ALARMS,
     };
-    let trains = stream_detect(&scene, seconds, CHANNELS, &BandPulseDetectConfig::default());
+    let trains = stream_detect(&scene, seconds, channels, &BandPulseDetectConfig::default());
     let mut counts = vec![0usize; bursts];
     for tr in &trains {
-        let t_s = tr.index as f64 / 250e3;
+        let t_s = tr.index as f64 / (2.0 * FS / channels as f64);
         let k = ((t_s - TEST7_FIRST_S) / TEST7_BURST_EVERY_S).round();
         let start = TEST7_FIRST_S + TEST7_BURST_EVERY_S * k;
         assert!(
@@ -1281,30 +1284,33 @@ fn false_alarms(seconds: f64, per_burst: usize) -> Vec<usize> {
         );
         counts[k as usize] += 1;
     }
-    println!("{seconds} s: trains per burst {counts:?}");
+    println!("{seconds} s, {channels} lanes: trains per burst {counts:?}");
     assert!(counts.iter().all(|n| *n <= per_burst), "{counts:?}");
     counts
 }
 
-/// Spec test 7 (seed 633), the first 4 s (the carrier and one burst, which gives one train); the
-/// 60 s of the spec run in `sixty_seconds_of_noise_give_no_false_alarms`.
+/// The 868 MHz flow `ism868_pulses` is centred here.
+const CENTER_868: f64 = 868.5e6;
+
+/// Spec test 7 (seed 633), the first 4 s (the carrier and one burst, which gives one train)
+/// through the 16 lanes of the 433 MHz flow and through the 8 lanes of the 868 MHz flow; the 60
+/// s of the spec run in `sixty_seconds_of_noise_give_no_false_alarms`.
 #[test]
 fn noise_a_carrier_and_bursts_give_no_false_alarms() {
-    false_alarms(4.0, 1);
+    false_alarms(4.0, 1, CHANNELS, CENTER);
+    false_alarms(4.0, 1, CHANNELS_868, CENTER_868);
 }
 
-/// The most trains of one wideband burst over the 60 s of test 7 (measured 3; the spec asks for
-/// at most one, open item I45.1-4).
-const TEST7_MAX_PER_BURST: usize = 3;
-
-/// Spec test 7 (seed 633) over the 60 s of the spec (15 bursts): nothing outside the bursts and
-/// nothing from the carrier, as the spec asks, and at most `TEST7_MAX_PER_BURST` trains per
-/// burst; minutes in a debug build, so it is ignored by default and runs in the CI job `soak`
-/// (D974): `cargo test --profile emulated -p sdrk-blocks --test band_pulse_detect -- --ignored`.
+/// Spec test 7 (seed 633) over the 60 s of the spec (15 bursts) through the 16 lanes of the
+/// 433 MHz flow and the 8 lanes of the 868 MHz flow: nothing outside the bursts, nothing from the
+/// carrier and at most one train per burst (the wideband blocks of D1029); minutes in a debug
+/// build, so it is ignored by default and runs in the CI job `soak` (D974):
+/// `cargo test --profile emulated -p sdrk-blocks --test band_pulse_detect -- --ignored`.
 #[test]
 #[ignore = "60 s of 2 MS/s; run with --profile emulated -- --ignored"]
 fn sixty_seconds_of_noise_give_no_false_alarms() {
-    false_alarms(60.0, TEST7_MAX_PER_BURST);
+    false_alarms(60.0, 1, CHANNELS, CENTER);
+    false_alarms(60.0, 1, CHANNELS_868, CENTER_868);
 }
 
 /// A scene with OOK and FSK transmissions that overlap in time on frequencies at least two

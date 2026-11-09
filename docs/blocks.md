@@ -615,7 +615,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `rds_encode`, `fm_stereo_rds_mod` | RDS groups to the shaped baseband; FM stereo encoder with RDS | M42 (delivered) |
 | `equalize` | adaptive equalizer (CMA, then decision-directed NLMS, optional decision feedback, phase tracker); options `equalizer_taps` and `equalizer_feedback_taps` of `psk_demod` | M43 (delivered) |
 | `morse_encode`, `morse_decode` | Morse code (CW): text to the key envelope, the envelope to words | M47 (delivered) |
-| `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 |
+| `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 (delivered) |
 | `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45 (delivered) |
 | `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 (delivered) |
 | `correlate` | sliding correlation with a PRBS code or a caller reference (kernel `xcorr_fft`) | M50 |

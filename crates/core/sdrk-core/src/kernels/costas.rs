@@ -7,9 +7,10 @@
 //! (`y = x exp(-j phi)`, sine and cosine from the tables of `rotate`), a decision-directed phase
 //! detector measures the remaining phase error, and a proportional-integral loop filter corrects
 //! the frequency integrator and the phase. A lock detector smooths `cos(2 arg y)` (BPSK),
-//! `-cos(4 arg y)` (QPSK, so that the points at 45 degrees give +1, D601) or `cos(8 err)`
+//! `-cos(4 arg y)` (QPSK, so that the points at 45 degrees give +1, D601), `cos(8 err)`
 //! against the decided point (8PSK, the Chebyshev polynomial `T4` of the `cos(2 err)` of M40.1
-//! §1, D659; 16-QAM and 64-QAM the same with the QAM decision, M44 §3). The QAM detector is the
+//! §1, D659) or the decision error `1 - 6 |y - d|^2 / delta^2` against the grid decision
+//! (16-QAM and 64-QAM, M44 §3, D1400: 0 on noise, near 1 at lock). The QAM detector is the
 //! exact phase `arg(y conj d)` of GNU Radio's `constellation_receiver_cb` against the grid
 //! decision `d` of [`crate::kernels::constellation`]. The arithmetic is fixed (float32 model,
 //! see [`Costas`] and `docs/kernels.md`), so `Fallback` and `Reference` are bit-identical.
@@ -243,8 +244,7 @@ impl CostasState {
         self.locked
     }
 
-    /// The smoothed lock metric `l` (about 1 when locked; about 0 on noise for the PSK
-    /// constellations and 16-QAM, see `docs/kernels.md` for 64-QAM).
+    /// The smoothed lock metric `l` (about 1 when locked, about 0 on noise).
     pub fn lock_level(&self) -> f32 {
         self.level
     }
@@ -398,15 +398,15 @@ const fn qam_of(code: u8) -> Qam {
     }
 }
 
-/// `y conj d` against the QAM decision `d` of `y`: `(r, i, |d|^2)` with
-/// `r = y.re d.re + y.im d.im`, `i = y.im d.re - y.re d.im` and `|d|^2 = d.re d.re + d.im d.im`.
+/// `y conj d` against the QAM decision `d` of `y`: `(r, i)` with `r = y.re d.re + y.im d.im`
+/// and `i = y.im d.re - y.re d.im`.
 #[allow(clippy::many_single_char_names)]
 #[inline]
-pub(crate) fn qam_product(q: Qam, y: C32) -> (f32, f32, f32) {
+pub(crate) fn qam_product(q: Qam, y: C32) -> (f32, f32) {
     let d = q.decide(y);
     let r = y.re * d.re + y.im * d.im;
     let i = y.im * d.re - y.re * d.im;
-    (r, i, d.re * d.re + d.im * d.im)
+    (r, i)
 }
 
 /// The phase detector of the contract; a non-finite value counts as 0 (D603).
@@ -420,7 +420,7 @@ pub(crate) fn detector(code: u8, y: C32) -> f32 {
             y.im * dr - y.re * di
         }
         _ => {
-            let (r, i, _) = qam_product(qam_of(code), y);
+            let (r, i) = qam_product(qam_of(code), y);
             libm::atan2f(i, r)
         }
     };
@@ -430,9 +430,8 @@ pub(crate) fn detector(code: u8, y: C32) -> f32 {
 /// The lock metric `c` of the contract (BPSK: `cos(2 arg y)`, QPSK: `-cos(4 arg y)`, D601;
 /// 8PSK: `cos(8 err)` as `((8 w) (w - 1)) + 1` with `w = u u` and
 /// `u = ((r r) / p) 2 - 1 = cos(2 err)`, `r = re(y conj d)` against the octant point `d`,
-/// D640, D659; QAM the same with the grid decision `d` and `u = ((r r) / (p |d|^2)) 2 - 1`);
-/// `None` when it is not finite (`y = 0`, NaN, overflow), and the detector keeps its level
-/// (D603).
+/// D640, D659; QAM the decision error of [`qam_lock_metric`], D1400); `None` when it is not
+/// finite (`y = 0`, NaN, overflow), and the detector keeps its level (D603).
 #[allow(clippy::many_single_char_names)]
 #[inline]
 pub(crate) fn lock_metric(code: u8, y: C32) -> Option<f32> {
@@ -452,14 +451,38 @@ pub(crate) fn lock_metric(code: u8, y: C32) -> Option<f32> {
             let w = u * u;
             ((8.0 * w) * (w - 1.0)) + 1.0
         }
-        _ => {
-            let (r, _, dd) = qam_product(qam_of(code), y);
-            let u = ((r * r) / (p * dd)) * 2.0 - 1.0;
-            let w = u * u;
-            ((8.0 * w) * (w - 1.0)) + 1.0
-        }
+        _ => return qam_lock_metric(qam_of(code), y),
     };
     c.is_finite().then_some(c)
+}
+
+/// `6 / delta^2 = 1.5 E` of the QAM decision-error metric, `delta = 2 / sqrt E` the level
+/// spacing of the unit-power grid: 15 for 16-QAM and 63 for 64-QAM, exact in `f32` (D1400).
+#[inline]
+pub(crate) const fn qam_lock_gain(q: Qam) -> f32 {
+    match q {
+        Qam::Qam16 => 15.0,
+        Qam::Qam64 => 63.0,
+    }
+}
+
+/// The QAM lock metric of the contract (the decision error, D1400): `ex = y.re - dr`,
+/// `ey = y.im - di` against the grid decision `d` of `y`, `c = 1 - g ((ex ex) + (ey ey))` with
+/// `g` = [`qam_lock_gain`]; `None` for `y = 0` (both parts zero, either sign: silence keeps the
+/// detector as for PSK, D603) and for a `c` that is not finite (NaN, overflow), else
+/// `max(c, -1)` (an outlier moves the level by at most as much as a PSK metric can). On samples
+/// uniform within a cell the mean of `c` is 0, at lock `c` is near 1.
+#[inline]
+pub(crate) fn qam_lock_metric(q: Qam, y: C32) -> Option<f32> {
+    let d = q.decide(y);
+    let ex = y.re - d.re;
+    let ey = y.im - d.im;
+    let c = 1.0 - qam_lock_gain(q) * (ex * ex + ey * ey);
+    let silent = y.re == 0.0 && y.im == 0.0;
+    if !c.is_finite() || silent {
+        return None;
+    }
+    Some(if c < -1.0 { -1.0 } else { c })
 }
 
 /// Carrier recovery with a Costas loop, one sample per symbol.
@@ -515,11 +538,12 @@ pub trait Costas {
     /// 6. Lock detector with `a = y.re y.re`, `b = y.im y.im`, `p = a + b`, `d = a - b`: the
     ///    metric `c = d / p` (BPSK), `c = ((4 a) b - d d) / (p p)` (QPSK) or
     ///    `c = ((8 w) (w - 1)) + 1` with `w = u u`, `u = ((r r) / p) 2 - 1` and
-    ///    `r = y.re dr + y.im di` (8PSK, `cos(8 err)`: `T4(u) = 8 u^4 - 8 u^2 + 1`), for QAM
-    ///    the same `c` with `u = ((r r) / (p q)) 2 - 1`, `q = dr dr + di di` and the decision
-    ///    of step 3; if `c` is
-    ///    finite, `l = flush_denormal(l + 0.01 (c - l))`, locked when `l > 0.5`, unlocked when
-    ///    `l < 0.3`; otherwise the detector is unchanged.
+    ///    `r = y.re dr + y.im di` (8PSK, `cos(8 err)`: `T4(u) = 8 u^4 - 8 u^2 + 1`); for QAM the
+    ///    decision error `c = 1 - g ((ex ex) + (ey ey))` with `ex = y.re - dr`,
+    ///    `ey = y.im - di`, the decision of step 3 and `g = 6 / delta^2` (15 for 16-QAM, 63 for
+    ///    64-QAM, `delta` the level spacing), then `c = max(c, -1)`, and no metric for `y = 0`;
+    ///    if `c` is finite, `l = flush_denormal(l + 0.01 (c - l))`, locked when `l > 0.5`,
+    ///    unlocked when `l < 0.3`; otherwise the detector is unchanged.
     ///
     /// The lengths must be equal, otherwise `LengthMismatch` and nothing changes.
     fn costas(&self, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()>;

@@ -500,8 +500,8 @@ impl<S: Storage> QamDemodBlock<S> {
         self.sps as usize
     }
 
-    /// Whether the carrier loop reports lock (the lock detector of `costas` with the QAM
-    /// decision, D1208).
+    /// Whether the carrier loop reports lock (the lock detector of `costas`: the decision error
+    /// against the QAM grid, D1400).
     pub fn locked(&self) -> bool {
         self.costas.locked()
     }

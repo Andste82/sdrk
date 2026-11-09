@@ -16,8 +16,9 @@ decides the grid point ``d`` of ``y`` per axis (``floor(v (sqrt E / 2) + m / 2)`
 ``0 .. m - 1``, NaN to 0, D1202), measures the exact phase ``e = atan2f(i, r)`` of ``y conj d``
 with ``r = y.re dr + y.im di`` and ``i = y.im dr - y.re di`` (the ``atan2f`` of FreeBSD's msun,
 the algorithm of the Rust ``libm`` crate, transcribed operation by operation in ``atan2f.py``,
-D1207) and uses the metric ``T4(u)`` of 8PSK with ``u = ((r r) / (p q)) 2 - 1``,
-``q = dr dr + di di`` (D1208).
+D1207) and uses the decision error ``c = 1 - g ((ex ex) + (ey ey))`` with ``ex = y.re - dr``,
+``ey = y.im - di`` and ``g = 6 / delta^2 = 1.5 E`` (15 and 63), at least -1 and none for
+``y = 0`` (D1400).
 
 The signals use ``math.sin`` and ``math.cos`` one value at a time and the noise comes from
 ``rng.standard_normal``; nothing that feeds a committed byte uses NumPy transcendentals or BLAS, so
@@ -188,12 +189,16 @@ def costas_f32(x, order, kp64, ki64, max64):
             w = fm.mul(u, u)
             m = fm.add(fm.mul(fm.mul(EIGHT, w), fm.sub(w, ONE)), ONE)
         else:
+            # The decision error 1 - g |y - d|^2, g = 6 / delta^2 = 1.5 E, at least -1; no metric
+            # for y = 0 (D1400).
             dr, di = qam_decide_f32(order, yr), qam_decide_f32(order, yi)
-            r = fm.add(fm.mul(yr, dr), fm.mul(yi, di))
-            q = fm.add(fm.mul(dr, dr), fm.mul(di, di))
-            u = fm.sub(fm.mul(fm.div(fm.mul(r, r), fm.mul(p, q)), TWO), ONE)
-            w = fm.mul(u, u)
-            m = fm.add(fm.mul(fm.mul(EIGHT, w), fm.sub(w, ONE)), ONE)
+            ex, ey = fm.sub(yr, dr), fm.sub(yi, di)
+            e2 = fm.add(fm.mul(ex, ex), fm.mul(ey, ey))
+            m = fm.sub(ONE, fm.mul(fm.f32(1.5 * QAM[order][1]), e2))
+            if float(yr) == 0.0 and float(yi) == 0.0:
+                m = fm.f32(math.nan)
+            elif fm.is_finite(m) and m < -ONE:
+                m = -ONE
         if fm.is_finite(m):
             level = fm.flush_denormal(fm.add(level, fm.mul(LOCK_ALPHA, fm.sub(m, level))))
             if level > LOCK_ON:

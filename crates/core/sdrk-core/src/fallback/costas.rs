@@ -5,8 +5,8 @@
 //! vectorized; per symbol it costs one interpolated table pair, a complex rotation, the
 //! detector, the loop filter and the lock metric (one division; 8PSK adds the octant
 //! decision of the 8PSK point to the detector and the metric, and the three products of
-//! `T4` to the metric, D659; 16-QAM and 64-QAM the grid decision, `libm::atan2f` and a second
-//! division). The loop keeps the state in locals and is specialized for the constellation, so
+//! `T4` to the metric, D659; 16-QAM and 64-QAM the grid decision, `libm::atan2f` and the
+//! decision error of the metric, D1400, without a division). The loop keeps the state in locals and is specialized for the constellation, so
 //! the detector and the metric have no branch on it. The time is the chain from one symbol's
 //! phase to the next, which the forms of D1100 keep short with the same bits: `phase_step_f32`
 //! takes `floor(v 2^32 + 0.5) as i64 as u32` from the bits of the `f32` with one arithmetic

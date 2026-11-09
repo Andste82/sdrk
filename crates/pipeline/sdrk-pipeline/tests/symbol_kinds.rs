@@ -166,10 +166,13 @@ fn symbol_sync_needs_the_symbol_rate_and_two_samples_per_symbol() {
 
 #[test]
 fn slice_checks_the_type_per_constellation() {
-    for (ty, constellation, bits) in [
-        ("f32", "real", 1u64),
-        ("c32", "bpsk", 1),
-        ("c32", "qpsk", 2),
+    for (ty, constellation, bits, cost) in [
+        ("f32", "real", 1u64, 1.0),
+        ("c32", "bpsk", 1, 1.0),
+        ("c32", "qpsk", 2, 1.0),
+        // M44: the QAM soft bits (D980).
+        ("c32", "qam16", 4, 10.0),
+        ("c32", "qam64", 6, 18.0),
     ] {
         let report = validate(&single(
             "slice",
@@ -178,14 +181,20 @@ fn slice_checks_the_type_per_constellation() {
             json!({ "constellation": constellation }),
         ));
         assert!(report.is_ok(), "{constellation}: {}", report.to_json());
-        assert_eq!(report.cost_per_input_sample, 1.0);
+        assert_eq!(report.cost_per_input_sample, cost, "{constellation}");
         let node = &report.nodes[0];
         assert_eq!(node.rate_out, Rate::hz(1200 * bits).unwrap());
         assert_eq!(node.delay_samples_in.reduced(), Delay::ZERO.reduced());
     }
     // The default is bpsk.
     assert!(validate(&single("slice", "c32", 1200, json!({}))).is_ok());
-    for (ty, constellation) in [("c32", "real"), ("f32", "bpsk"), ("f32", "qpsk")] {
+    for (ty, constellation) in [
+        ("c32", "real"),
+        ("f32", "bpsk"),
+        ("f32", "qpsk"),
+        ("f32", "qam16"),
+        ("f32", "qam64"),
+    ] {
         let (path, code) = first_error(&single(
             "slice",
             ty,

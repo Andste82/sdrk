@@ -3087,11 +3087,14 @@ impl Kind for SliceKind {
             rate_out,
             memory_bytes,
             // One multiplication per soft bit; 8psk: eight squared distances, six minimum
-            // searches over four points and three products per symbol (D644).
-            cost: if cfg.constellation == SliceConstellation::Psk8 {
-                16.0
-            } else {
-                1.0
+            // searches over four points and three products per symbol (D644); qam16: two
+            // products by sqrt(E), two magnitudes, two differences and four products; qam64:
+            // two products, four magnitudes, four differences and six products (D980).
+            cost: match cfg.constellation {
+                SliceConstellation::Psk8 => 16.0,
+                SliceConstellation::Qam16 => 10.0,
+                SliceConstellation::Qam64 => 18.0,
+                _ => 1.0,
             },
             taps: 0,
             delay: Delay::ZERO,

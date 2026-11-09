@@ -21,7 +21,7 @@ use sdrk_pipeline::{BuildOptions, DiagCode, Error, InputData, PipelineSpec, Regi
 
 use common::{cu8_recording, workspace_file};
 
-const FLOWS: [&str; 35] = [
+const FLOWS: [&str; 37] = [
     "fm_receiver",
     "spectrum_only",
     "resample_audio",
@@ -44,6 +44,8 @@ const FLOWS: [&str; 35] = [
     "gfsk_transmitter",
     "qpsk_transmitter",
     "qpsk_receiver",
+    "qam16_transmitter",
+    "qam16_receiver",
     "fm_rds_receiver",
     "aprs_receiver",
     "aprs_transmitter",

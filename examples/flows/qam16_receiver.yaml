@@ -1,0 +1,77 @@
+# SDRk pipeline: 16-QAM packet receiver (YAML twin of qam16_receiver.json), the counterpart of
+# qam16_transmitter: 1 MS/s IQ in, the packets of the test framing out.
+sdrk: 1
+name: qam16-receiver
+description: "Receive 16-QAM at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, demodulator with symbol timing, equalizer and carrier recovery, and the decoded packets of the test framing."
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  rf:
+    format: cs16
+    rate_hz: 1000000
+    description: "IQ at 1 MS/s with the signal at 0 Hz"
+nodes:
+  # Automatic gain control to amplitude 1 (reference 0 dB) with equal attack and release time
+  # constants of 20 ms (500 symbols): the amplitude of 16-QAM changes from symbol to symbol,
+  # and an AGC that followed it (the default attack of 5 ms against a release of 200 ms pulls
+  # the level down on every outer point) would distort the constellation. The equalizer of
+  # the demodulator sets the exact scale.
+  agc:
+    kind: agc
+    params:
+      attack_s: 0.02
+      reference_db: 0
+      release_s: 0.02
+  # Decoder: max_sync_errors 2 accepts a sync word with up to 2 wrong bits on a noisy link.
+  # rotations four with bits_per_symbol 4 tests the sync word in the four rotations of the
+  # 16-QAM symbols: the decision-directed carrier loop may lock 0, 90, 180 or 270 degrees off,
+  # and the decoder undoes the rotation it found. The quarter turns are reported in bits 16
+  # and 17 of the packet flags.
+  dec:
+    kind: frame_decode
+    params:
+      bits_per_symbol: 4
+      max_sync_errors: 2
+      rotations: four
+  # Demodulator: root-raised-cosine matched filter (roll-off 0.35, span 10, as the
+  # transmitter), Gardner symbol timing, the blind equalizer (1000 CMA symbols, then
+  # decision-directed) and the decision-directed carrier loop of 16-QAM. The values differ
+  # from the defaults for a carrier up to about 1 kHz off and multipath:
+  # - carrier_bw 0.1 (default 0.005): a carrier 1 kHz off is 0.04 cycles per symbol, and a
+  #   decision-directed QAM loop pulls in only offsets well inside its bandwidth (measured
+  #   with the M44 flow test on 1 kHz: 0.01, 0.05 and 0.08 deliver no packet, 0.02 and 0.03
+  #   lock late and lose 22 to 43 % of the packets, 0.1 delivers 992 of 1000). The wide loop
+  #   costs phase jitter: about 1 % of the packets at Eb/N0 16 dB. For a carrier known to
+  #   within about 25 Hz (0.001 cycles per symbol) the default is enough.
+  # - equalizer_taps 15 (default 11): the multipath of the test channel reaches 2.7 symbols.
+  # - sync_bw 0.002 (default 0.005): less timing jitter on 16-QAM.
+  demod:
+    kind: qam_demod
+    params:
+      carrier_bw: 0.1
+      equalizer_taps: 15
+      order: 16
+      symbol_rate_hz: 25000
+      sync_bw: 0.002
+  # Down converter: /5 to 200 kHz (8 samples per symbol). The channel filter passes 20 kHz
+  # and stops from 80 kHz; the matched filter of the demodulator does the rest.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 50000
+      decimation: 5
+      transition_hz: 60000
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: agc }
+  - { from: agc, to: demod }
+  - { from: demod, to: dec }
+  - { from: dec, to: packets }
+outputs:
+  # The decoded packets, with CRC_OK, the rotation and the soft-bit index of their sync word
+  # (100000 bit/s).
+  packets:
+    type: packets
+    queue: 1024
+    description: "The decoded packets with CRC_OK and the sample index of their sync word"

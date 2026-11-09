@@ -1,0 +1,77 @@
+{
+  "sdrk": 1,
+  "name": "qam16-transmitter",
+  "description": "Frame packets, modulate them as 16-QAM at 25 kBd with a root-raised-cosine pulse and output a 1 MHz signed 16-bit baseband for a transmitter, in pull mode.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 64
+  },
+  "inputs": {
+    "msg": {
+      "type": "packets",
+      "rate_hz": 100000,
+      "description": "Packets to send, up to 253 bytes each"
+    }
+  },
+  "nodes": {
+    "duc": {
+      "kind": "duc",
+      "params": {
+        "cutoff_hz": 50000,
+        "interpolation": 5,
+        "transition_hz": 60000
+      }
+    },
+    "enc": {
+      "kind": "frame_encode",
+      "params": {
+        "idle": "preamble",
+        "preamble_bytes": 4
+      }
+    },
+    "level": {
+      "kind": "scale",
+      "params": {
+        "gain_db": -6
+      }
+    },
+    "mod": {
+      "kind": "qam_mod",
+      "params": {
+        "order": 16,
+        "rolloff": 0.35,
+        "samples_per_symbol": 8,
+        "span": 10
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "msg",
+      "to": "enc"
+    },
+    {
+      "from": "enc",
+      "to": "mod"
+    },
+    {
+      "from": "mod",
+      "to": "level"
+    },
+    {
+      "from": "level",
+      "to": "duc"
+    },
+    {
+      "from": "duc",
+      "to": "rf"
+    }
+  ],
+  "outputs": {
+    "rf": {
+      "type": "stream",
+      "format": "cs16",
+      "underrun": "zeros"
+    }
+  }
+}

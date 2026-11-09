@@ -46,9 +46,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         proportional-integral loop with the bandwidth loop_bw (relative to the symbol rate) \
         and the damping corrects phase and frequency; the frequency integrator is limited to \
         max_offset cycles per symbol. A lock detector reports lock above 0.5 of its smoothed \
-        metric and loses it below 0.3 (the metric is about 1 on the points; about 0 on noise \
-        for the PSK constellations and qam16; for qam64 the dense grid keeps it near 0.5 on \
-        noise, so its lock flag is not a reliable signal indicator). Place it after \
+        metric and loses it below 0.3 (the metric is about 1 on the points and about 0 on \
+        noise; for qam16 and qam64 it is the decision error 1 - 6 |y - d|^2 / delta^2 with \
+        delta the level spacing, so it also falls when the amplitude is off the grid). \
+        Place it after \
         symbol_sync (one sample per symbol, amplitude about 1, after an agc; for QAM after \
         equalize, which scales the symbols to the unit-power grid). The output is the \
         derotated symbol; BPSK settles on the real axis, QPSK on the diagonals (the Gray \

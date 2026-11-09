@@ -757,8 +757,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 14.41 / 15.02 | 8.66 / 15.02 | 8.41 / 13.02 | - | 6.41 / 13.02 | 9.03 / 11.52 | 13.20 / 35.30 |
 | `equalize` C32 (our fallback) | 500.36 / 500.36 | 495.82 / 495.82 | 532.85 / 532.85 | 499.59 | 492.57 / 492.57 | 430.16 / 430.16 | 1024.47 / 1024.47 |
 | `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 500.36 / 722.54 | 495.82 / 722.54 | 532.85 / 729.04 | - | 492.57 / 729.03 | 430.16 / 493.03 | 1024.47 / 1900.06 |
-| `costas_qam16` C32 (our fallback) | 254.45 / 254.45 | 254.45 / 254.45 | 239.47 / 239.47 | 254.45 | 239.97 / 239.97 | 222.90 / 222.90 | 445.38 / 445.38 |
-| `costas_qam16_fallback` C32 (GNU Radio `constellation_receiver_cb`) | 254.45 / 286.46 | 254.45 / 286.46 | 239.47 / 272.30 | - | 239.97 / 272.30 | 222.90 / 220.85 | 445.38 / 471.28 |
+| `costas_qam16` C32 (our fallback) | 244.45 / 244.45 | 244.45 / 244.45 | 231.47 / 231.47 | 244.45 | 229.97 / 229.97 | 213.90 / 213.90 | 423.37 / 423.37 |
+| `costas_qam16_fallback` C32 (GNU Radio `constellation_receiver_cb`) | 244.45 / 286.46 | 244.45 / 286.46 | 231.47 / 272.30 | - | 229.97 / 272.30 | 213.90 / 220.85 | 423.37 / 471.28 |
 | `equalize_qam16` C32 (our fallback) | 519.41 / 519.41 | 514.66 / 514.66 | 555.60 / 555.60 | 518.65 | 519.91 / 519.91 | 447.30 / 447.30 | 1090.47 / 1090.47 |
 | `equalize_qam16_fallback` C32 (GNU Radio `linear_equalizer` on `constellation_rect`) | 519.41 / 740.55 | 514.66 / 740.55 | 555.60 / 747.05 | - | 519.91 / 747.04 | 447.30 / 508.03 | 1090.47 / 1952.06 |
 | `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 93.20 / 337.96 | 94.69 / 339.96 | 50.42 / 326.64 | 50.03 | 56.63 / 334.08 | 43.43 / 361.58 | 270.93 / 949.71 |
@@ -1190,8 +1190,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.24 | 182.49 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 75.14 | 75.14 | 1.00 | 63.16 | 63.16 | 1.00 | sdrk fallback |
 | `costas_fallback` | 75.14 | 86.69 | 0.87 | 63.16 | 80.45 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 173.21 | 173.21 | 1.00 | 148.76 | 148.76 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 173.21 | 206.53 | 0.84 | 148.76 | 181.45 | 0.82 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 171.11 | 171.11 | 1.00 | 147.19 | 147.19 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 171.11 | 206.53 | 0.83 | 147.19 | 181.45 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1419,8 +1419,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_fallback` | 53.83 | 166.73 | 0.32 | 57.87 | 182.23 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 73.14 | 73.14 | 1.00 | 62.15 | 62.15 | 1.00 | sdrk fallback |
 | `costas_fallback` | 73.14 | 86.69 | 0.84 | 62.15 | 80.45 | 0.77 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 174.73 | 174.73 | 1.00 | 149.35 | 149.35 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 174.73 | 206.53 | 0.85 | 149.35 | 181.45 | 0.82 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 172.62 | 172.62 | 1.00 | 147.78 | 147.78 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 172.62 | 206.53 | 0.84 | 147.78 | 181.45 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1649,8 +1649,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize_fallback` | 34.38 | 147.96 | 0.23 | 32.18 | 133.26 | 0.24 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 56.17 | 56.17 | 1.00 | 68.16 | 68.16 | 1.00 | sdrk fallback |
 | `costas_fallback` | 56.17 | 76.48 | 0.73 | 68.16 | 66.29 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 141.04 | 141.04 | 1.00 | 163.07 | 163.07 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 141.04 | 166.48 | 0.85 | 163.07 | 172.91 | 0.94 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 140.94 | 140.94 | 1.00 | 163.97 | 163.97 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 140.94 | 166.48 | 0.85 | 163.97 | 172.91 | 0.95 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1879,8 +1879,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `channelize_fallback` | 37.41 | 105.93 | 0.35 | 32.12 | 118.74 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 55.09 | 55.09 | 1.00 | 68.07 | 68.07 | 1.00 | sdrk fallback |
 | `costas_fallback` | 55.09 | 68.92 | 0.80 | 68.07 | 66.44 | 1.02 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 146.80 | 146.80 | 1.00 | 177.29 | 177.29 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 146.80 | 158.60 | 0.93 | 177.29 | 172.91 | 1.03 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 147.70 | 147.70 | 1.00 | 177.21 | 177.21 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 147.70 | 158.60 | 0.93 | 177.21 | 172.91 | 1.02 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2109,8 +2109,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `channelize_fallback` | 97.44 | 221.93 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 86.13 | 86.13 | 1.00 | 54.09 | 54.09 | 1.00 | sdrk fallback |
 | `costas_fallback` | 86.13 | 82.40 | 1.05 | 54.09 | 75.07 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 187.82 | 187.82 | 1.00 | 178.73 | 178.73 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 187.82 | 194.17 | 0.97 | 178.73 | 175.12 | 1.02 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 187.72 | 187.72 | 1.00 | 174.75 | 174.75 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 187.72 | 194.17 | 0.97 | 174.75 | 175.12 | 1.00 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.11 | 8.17 | 0.99 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2412,18 +2412,20 @@ Instructions per input symbol (`simd128` has no core model):
 
 ## QAM carrier loop and equalizer (M44)
 
-The QAM paths of `costas` (constellation `qam16`: the grid decision, the detector `libm::atan2f(im(y conj d), re(y conj d))`, the lock metric with a second division; D1207, D1208) and of `equalize` (constellation `qam16`: the grid decision and the 16-QAM CMA radius; D1209) have the count entries `costas_qam16`, `costas_qam16_fallback`, `equalize_qam16` and `equalize_qam16_fallback` (D1210). Both kernels are scalar recursions over the symbols (no SIMD branch: the phase of a symbol, or the weights the next symbol is filtered with, depend on the decision of the symbol before); the facade entries are our own fallback as information, the fallbacks are compared with GNU Radio's own QAM receivers translated to C (`benches/refs/gr-constellation.c`).
+The QAM paths of `costas` (constellation `qam16`: the grid decision, the detector `libm::atan2f(im(y conj d), re(y conj d))`, the lock metric of the decision error without a division; D1207, D1400) and of `equalize` (constellation `qam16`: the grid decision and the 16-QAM CMA radius; D1209) have the count entries `costas_qam16`, `costas_qam16_fallback`, `equalize_qam16` and `equalize_qam16_fallback` (D1210). Both kernels are scalar recursions over the symbols (no SIMD branch: the phase of a symbol, or the weights the next symbol is filtered with, depend on the decision of the symbol before); the facade entries are our own fallback as information, the fallbacks are compared with GNU Radio's own QAM receivers translated to C (`benches/refs/gr-constellation.c`).
 
 Simulated cycles per symbol, ours / GNU Radio (the ratio), reference model then counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942, measured on main on 2026-11-09, D1221; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)):
 
 | Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
 | --- | --- | --- | --- | --- | --- |
-| `costas_qam16_fallback`, reference model | 173.21 / 206.53 (0.84) | 174.73 / 206.53 (0.85) | 141.04 / 166.48 (0.85) | 146.80 / 158.60 (0.93) | 187.82 / 194.17 (0.97) |
-| `costas_qam16_fallback`, counter-model | 148.76 / 181.45 (0.82) | 149.35 / 181.45 (0.82) | 163.07 / 172.91 (0.94) | 177.29 / 172.91 (1.03) | 178.73 / 175.12 (1.02) |
+| `costas_qam16_fallback`, reference model | 171.11 / 206.53 (0.83) | 172.62 / 206.53 (0.84) | 140.94 / 166.48 (0.85) | 147.70 / 158.60 (0.93) | 187.72 / 194.17 (0.97) |
+| `costas_qam16_fallback`, counter-model | 147.19 / 181.45 (0.81) | 147.78 / 181.45 (0.81) | 163.97 / 172.91 (0.95) | 177.21 / 172.91 (1.02) | 174.75 / 175.12 (1.00) |
 | `equalize_qam16_fallback`, reference model | 172.34 / 191.52 (0.90) | 170.35 / 191.52 (0.89) | 135.09 / 944.25 (0.14) | 131.57 / 938.01 (0.14) | 273.82 / 244.41 (1.12) |
 | `equalize_qam16_fallback`, counter-model | 178.76 / 213.78 (0.84) | 177.08 / 213.78 (0.83) | 131.78 / 277.26 (0.48) | 137.19 / 277.22 (0.49) | 196.27 / 243.20 (0.81) |
 
 Instructions per symbol where no core model exists (`simd128`): see the instruction tables above (`costas_qam16_fallback`, `equalize_qam16_fallback`).
+
+The `costas_qam16_fallback` rows are measured again on 2026-11-09 after the QAM lock metric of D1400 (the decision error instead of `cos(8 err)`, I44-2), with the corrected `llvm-mca` (D942) that reproduces the committed `costas` row at `neon` (86.13 / 54.09); before -> after, reference / counter model: `sse2` 173.21 / 148.76 -> 171.11 / 147.19, `sse4.2` 174.73 / 149.35 -> 172.62 / 147.78, `avx2` 141.04 / 163.07 -> 140.94 / 163.97, `avx512` 146.80 / 177.29 -> 147.70 / 177.21, `neon` 187.82 / 178.73 -> 187.72 / 174.75 (D1402). The metric is off the chain from symbol to symbol, so the cycles move by at most 2.2 %; the PSK `costas` rows are unchanged. Instructions per symbol drop by 8 to 22 (no division in the metric): 254.45 -> 244.45 (`sse2`, `sse4.2`), 239.47 -> 231.47 (`avx2`), 239.97 -> 229.97 (`avx512`), 222.90 -> 213.90 (`neon`, now below GNU Radio's 220.85), and at `simd128` (no core model) 445.38 -> 423.37 instructions.
 
 - **The carrier loop is latency-bound** (efficiency 0.27 to 0.46 on every model): one symbol's chain is the table interpolation at the phase, the derotation, the grid decision, `atan2f` (a division `y / x` and, for `|y / x|` above 7/16, a second one in the argument reduction of msun), the loop filter and the phase step. GNU Radio's chain has `sincosf`, the two divisions of the sector decision and glibc's `cargf`, and no lock detector. Since M44 is on main, the QAM loop shares the shorter chain of D1100 with the PSK loop (the phase step from the bits of the `f32`, the integrator inside its limit after one branch, the non-finite detector value out of line; D1221): ours is 3 to 16 % faster on the reference models and 6 to 18 % faster on the counter-models of `sse2`, `sse4.2` and `avx2`, 3 % slower on `sapphirerapids` and 2 % on `cortex-a76`. On the branch, with the `f64` phase step on the chain and simulated with the uncorrected `llvm-mca`, it was 3 to 17 % slower on the reference models and 49 % on `alderlake` (the gap the PSK loop had before D1100). The arctangent is fixed by the contract and the golden case (the exact phase of `decision_maker_pe`, D1207); a faster arctangent would be a contract change.
 - **The equalizer** is 10 to 86 % faster than GNU Radio's on x86 (whose VOLK generic dot products are scalar loops) and 12 % slower on `cortex-a72` (20 % faster on `cortex-a76`), the pattern of the PSK entry `equalize_fallback` (1.07 / 0.80 at `neon`). The QAM decision costs 13 to 21 % over the PSK equalizer on the reference models (`equalize` 152.52, 146.58, 115.08, 108.35 cycles at `sse2`, `sse4.2`, `avx2`, `avx512`).

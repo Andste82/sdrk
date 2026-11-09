@@ -1729,14 +1729,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 222.9,
+              "other_instr_per_sample": 213.9,
               "other_snr_db": null,
-              "ours_instr_per_sample": 222.9,
+              "ours_instr_per_sample": 213.9,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 222.9,
-          "ours_instr_per_sample": 222.9,
+          "other_instr_per_sample": 213.9,
+          "ours_instr_per_sample": 213.9,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -1747,20 +1747,20 @@
         },
         "costas_qam16_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
-          "goal": false,
+          "goal": true,
           "informational": [
             {
               "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 220.85,
               "other_snr_db": null,
-              "ours_instr_per_sample": 222.9,
-              "ratio": 1.01
+              "ours_instr_per_sample": 213.9,
+              "ratio": 0.97
             }
           ],
           "other_instr_per_sample": 220.85,
-          "ours_instr_per_sample": 222.9,
-          "ratio": 1.01,
+          "ours_instr_per_sample": 213.9,
+          "ratio": 0.97,
           "snr_db": {
             "other": 128.44,
             "ours": 999.0

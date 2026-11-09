@@ -1,8 +1,8 @@
 //! Tests of the M44 kernel paths of `sdrk-core`: the `costas` constellations `qam16` and `qam64`
 //! (the decision-directed detector `arg(y conj d)` against the grid decision, the lock metric
-//! `cos(8 err)` with the QAM decision; M44 §3) and the `equalize` constellations `qam16` and
+//! of the decision error, D1400; M44 §3) and the `equalize` constellations `qam16` and
 //! `qam64` (the grid decision and the CMA radius). Lock and frequency tracking on noisy QAM, the
-//! detector against `libm::atan2f`, the lock levels on QAM and on noise (D1208), block-size
+//! detector against `libm::atan2f`, the lock levels on QAM and on noise (D1400), block-size
 //! invariance, `reset`, silence, full scale and beyond, non-finite input, and the convergence of
 //! the equalizer on 16-QAM and 64-QAM through a channel. The comparison of `Fallback` with
 //! `Reference` runs only with the feature `reference`. Seeds 600 to 607 of M44 (this file: 605
@@ -192,52 +192,131 @@ fn qam_locks_onto_the_grid_and_follows_an_offset() {
     }
 }
 
-/// D1208: the lock metric `cos(8 err)` against the grid decision. On noisy 16-QAM it is well above
-/// the on level and on noise near 0, so the 16-QAM loop locks on the signal and never on noise;
-/// on 64-QAM the dense grid keeps every sample close to a point, so the metric stays near the on
-/// level on noise as well (open item I44-2). The measured levels are guarded.
+/// Gaussian noise of standard deviation `sigma` per component (Box-Muller on the generator).
+fn gaussian(rng: &mut Rng, n: usize, sigma: f64) -> Vec<C32> {
+    (0..n)
+        .map(|_| {
+            let u1 = f64::from(f32::midpoint(rng.next(), 1.0)).max(1e-12);
+            let u2 = f64::from(rng.next());
+            let r = sigma * (-2.0 * u1.ln()).sqrt();
+            let (s, c) = (core::f64::consts::PI * u2).sin_cos();
+            C32::new((r * c) as f32, (r * s) as f32)
+        })
+        .collect()
+}
+
+/// Feeds `x` symbol by symbol from a fresh loop; returns the levels after every symbol and the
+/// count of symbols with the flag on.
+fn levels_on(c: CostasConstellation, x: &[C32]) -> (Vec<f32>, usize) {
+    let mut st = CostasState::new(c, 0.02, DAMP, 0.05).unwrap();
+    let mut levels = Vec::with_capacity(x.len());
+    let mut on = 0usize;
+    let mut y = [C32::default(); 1];
+    for v in x {
+        Fallback
+            .costas(&mut st, core::slice::from_ref(v), &mut y)
+            .unwrap();
+        on += usize::from(st.locked());
+        levels.push(st.lock_level());
+    }
+    (levels, on)
+}
+
+/// Mean and maximum of the levels after the first 2000 symbols.
+fn tail_stats(levels: &[f32]) -> (f64, f32) {
+    let tail = &levels[2000..];
+    let mean = tail.iter().map(|&l| f64::from(l)).sum::<f64>() / tail.len() as f64;
+    let max = tail.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    (mean, max)
+}
+
+/// D1400 (I44-2): the QAM lock metric is the decision error `1 - 6 |y - d|^2 / delta^2`, 0 on
+/// samples uniform within a cell and near 1 at lock. Both QAM orders lock on the signal (also at
+/// the lowest SNR of the BER tests) and never on uniform noise in `[-1, 1)` or on Gaussian
+/// noise of unit power, from a fresh loop over 20000 symbols. The measured levels are guarded.
 #[test]
 #[allow(
     clippy::print_stdout,
-    reason = "the measured lock levels of the QAM metric (D1208)"
+    reason = "the measured lock levels of the QAM metric (D1400)"
 )]
 fn qam_lock_levels_on_the_signal_and_on_noise() {
     let mut noise_rng = Rng::new(41);
-    let noise: Vec<C32> = (0..20_000)
+    let uniform: Vec<C32> = (0..20_000)
         .map(|_| C32::new(noise_rng.next(), noise_rng.next()))
         .collect();
+    let mut gauss_rng = Rng::new(42);
+    let gauss = gaussian(&mut gauss_rng, 20_000, core::f64::consts::FRAC_1_SQRT_2);
     for (q, c) in QAMS {
         let (x, _) = qam_symbols(40, 4000, q, 0.4, 0.0, 0.02);
         let mut st = CostasState::new(c, 0.02, DAMP, 0.05).unwrap();
         run(&mut st, &x);
         let signal = st.lock_level();
-        assert!(st.locked() && signal > 0.8, "{q:?}: {signal}");
-        let mut st = CostasState::new(c, 0.02, DAMP, 0.05).unwrap();
-        let mut levels = Vec::new();
-        let mut on = 0usize;
-        let mut y = [C32::default(); 1];
-        for v in &noise {
-            Fallback
-                .costas(&mut st, core::slice::from_ref(v), &mut y)
-                .unwrap();
-            on += usize::from(st.locked());
-            levels.push(st.lock_level());
-        }
-        let tail = &levels[2000..];
-        let mean = tail.iter().map(|&l| f64::from(l)).sum::<f64>() / tail.len() as f64;
-        let max = tail.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        assert!(st.locked() && signal > 0.95, "{q:?}: {signal}");
+        let (levels, on) = levels_on(c, &uniform);
+        let (mean, max) = tail_stats(&levels);
+        let (glevels, gon) = levels_on(c, &gauss);
+        let (gmean, gmax) = tail_stats(&glevels);
         println!(
             "{q:?} lock level: signal {signal:.4}; uniform noise mean {mean:.4}, max {max:.4}, \
-             locked in {on} of {} symbols",
-            noise.len()
+             locked in {on} of {n} symbols; Gaussian noise mean {gmean:.4}, max {gmax:.4}, \
+             locked in {gon} of {n} symbols",
+            n = uniform.len()
         );
-        if q == Qam::Qam16 {
-            assert_eq!(on, 0, "16-QAM locked on noise");
-            assert!(mean.abs() < 0.3 && max < LOCK_ON_LEVEL, "{mean} {max}");
-        } else {
-            // the measured value of I44-2, guarded against regressions in both directions
-            assert!((0.3..0.8).contains(&mean), "{mean}");
-        }
+        assert_eq!(on, 0, "{q:?} locked on uniform noise");
+        assert_eq!(gon, 0, "{q:?} locked on Gaussian noise");
+        // Uniform within a cell gives 0; the outer cells end inside [-1, 1) or beyond it.
+        assert!(mean.abs() < 0.15 && max < 0.3, "{q:?}: {mean} {max}");
+        assert!(gmean < 0.0 && gmax < 0.3, "{q:?}: {gmean} {gmax}");
+    }
+}
+
+/// D1400: at the lowest Eb/N0 of the BER tests (16-QAM 12 dB, 64-QAM 18 dB, Gaussian noise) the
+/// loop locks within 1000 symbols and stays locked; the smoothed level is near the expected
+/// `1 - 1.5 E N0` of the metric.
+#[test]
+#[allow(
+    clippy::print_stdout,
+    reason = "the measured lock levels of the QAM metric (D1400)"
+)]
+fn qam_lock_holds_at_the_lowest_snr_of_the_ber_tests() {
+    for (stream, (q, c), ebn0_db) in [(43, QAMS[0], 12.0f64), (44, QAMS[1], 18.0)] {
+        let (x, _) = qam_symbols(stream, 6000, q, 0.7, 0.0, 0.0);
+        let bits = q.bits_per_symbol() as f64;
+        let n0 = 1.0 / (bits * 10f64.powf(ebn0_db / 10.0));
+        let mut rng = Rng::new(stream + 100);
+        let noise = gaussian(&mut rng, x.len(), (n0 / 2.0).sqrt());
+        let x: Vec<C32> = x.iter().zip(&noise).map(|(a, b)| *a + *b).collect();
+        let (levels, _) = levels_on(c, &x);
+        let first = levels.iter().position(|&l| l > LOCK_ON_LEVEL).unwrap();
+        assert!(first < 1000, "{q:?}: first locked at {first}");
+        let (mean, _) = tail_stats(&levels);
+        let want = 1.0 - 1.5 * q.energy() * n0;
+        println!(
+            "{q:?} at {ebn0_db} dB: first locked at {first}, mean level {mean:.4}, expected {want:.4}"
+        );
+        assert!((mean - want).abs() < 0.05, "{q:?}: {mean} against {want}");
+        assert!(levels[first..].iter().all(|&l| l > 0.3), "{q:?} lost lock");
+    }
+}
+
+/// D1400: the metric is at least -1, so one outlier moves the level by at most 0.02 (as a PSK
+/// metric), and the level comes back.
+#[test]
+fn an_outlier_moves_the_qam_level_by_at_most_a_bounded_step() {
+    for (q, c) in QAMS {
+        let (mut x, _) = qam_symbols(45, 3000, q, 0.2, 0.0, 0.01);
+        x[2500] = C32::new(1e15, -3e14);
+        let mut st = CostasState::new(c, 0.02, DAMP, 0.05).unwrap();
+        run(&mut st, &x[..2500]);
+        let before = st.lock_level();
+        run(&mut st, &x[2500..2501]);
+        let after = st.lock_level();
+        assert!(
+            before - after <= 0.01 * (before + 1.0) + 1e-6,
+            "{q:?}: {before} -> {after}"
+        );
+        run(&mut st, &x[2501..]);
+        assert!(st.locked(), "{q:?}");
     }
 }
 
@@ -278,7 +357,7 @@ fn silence_gives_zeros_and_a_resting_loop() {
         st.set_phase(0x1234_5678);
         let y = run(&mut st, &[C32::new(0.0, 0.0); 500]);
         assert!(y.iter().all(|v| v.re == 0.0 && v.im == 0.0));
-        // atan2f(0, 0) = 0 and the metric 0 / 0 is skipped: nothing moves.
+        // atan2f(0, 0) = 0 and y = 0 has no lock metric (D1400): nothing moves.
         assert_eq!(st.phase(), 0x1234_5678);
         assert_eq!(
             (st.frequency(), st.lock_level(), st.locked()),

@@ -150,18 +150,21 @@ fn metric(c: CostasConstellation, y: C32) -> f32 {
     let power = re2 + im2;
     let diff = re2 - im2;
     if let Some(q) = c.qam() {
-        let ((dr, di), (r, _)) = qam_conj(q, y);
-        let d2 = dr * dr + di * di;
-        let r2 = r * r;
-        let den = power * d2;
-        let ratio = r2 / den;
-        let twice = ratio * 2.0;
-        let u = twice - 1.0;
-        let w = u * u;
-        let eight_w = 8.0 * w;
-        let w_less_one = w - 1.0;
-        let prod = eight_w * w_less_one;
-        return prod + 1.0;
+        // The decision error `1 - g |y - d|^2` with `g = 6 / delta^2 = 1.5 E` (D1400), at least
+        // -1; silence has no metric (NaN, which the caller skips).
+        if y.re == 0.0 && y.im == 0.0 {
+            return f32::NAN;
+        }
+        let ((dr, di), _) = qam_conj(q, y);
+        let ex = y.re - dr;
+        let ey = y.im - di;
+        let ex2 = ex * ex;
+        let ey2 = ey * ey;
+        let e2 = ex2 + ey2;
+        let g = (1.5 * q.energy()) as f32;
+        let scaled = g * e2;
+        let m = 1.0 - scaled;
+        return if m.is_finite() { m.max(-1.0) } else { m };
     }
     match c.psk_order().unwrap_or(2) {
         2 => diff / power,

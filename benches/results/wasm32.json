@@ -1555,14 +1555,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 222.05,
+              "other_instr_per_sample": 222.04,
               "other_snr_db": null,
-              "ours_instr_per_sample": 222.05,
+              "ours_instr_per_sample": 222.04,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 222.05,
-          "ours_instr_per_sample": 222.05,
+          "other_instr_per_sample": 222.04,
+          "ours_instr_per_sample": 222.04,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -1580,12 +1580,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 255.33,
               "other_snr_db": null,
-              "ours_instr_per_sample": 222.05,
+              "ours_instr_per_sample": 222.04,
               "ratio": 0.87
             }
           ],
           "other_instr_per_sample": 255.33,
-          "ours_instr_per_sample": 222.05,
+          "ours_instr_per_sample": 222.04,
           "ratio": 0.87,
           "snr_db": {
             "other": 129.23,
@@ -1601,14 +1601,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 453.31,
+              "other_instr_per_sample": 445.38,
               "other_snr_db": null,
-              "ours_instr_per_sample": 453.31,
+              "ours_instr_per_sample": 445.38,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 453.31,
-          "ours_instr_per_sample": 453.31,
+          "other_instr_per_sample": 445.38,
+          "ours_instr_per_sample": 445.38,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -1624,17 +1624,17 @@
             {
               "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 471.2,
+              "other_instr_per_sample": 471.28,
               "other_snr_db": null,
-              "ours_instr_per_sample": 453.31,
-              "ratio": 0.96
+              "ours_instr_per_sample": 445.38,
+              "ratio": 0.95
             }
           ],
-          "other_instr_per_sample": 471.2,
-          "ours_instr_per_sample": 453.31,
-          "ratio": 0.96,
+          "other_instr_per_sample": 471.28,
+          "ours_instr_per_sample": 445.38,
+          "ratio": 0.95,
           "snr_db": {
-            "other": 126.96,
+            "other": 128.3,
             "ours": 999.0
           },
           "status": "release",
@@ -2427,7 +2427,7 @@
           "ours_instr_per_sample": 1090.47,
           "ratio": 0.56,
           "snr_db": {
-            "other": 133.54,
+            "other": 130.6,
             "ours": 999.0
           },
           "status": "release",
@@ -4224,8 +4224,8 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 572.72,
-          "ours_instr_per_sample": 572.72,
+          "other_instr_per_sample": 571.7,
+          "ours_instr_per_sample": 571.7,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4241,8 +4241,8 @@
           "ours_instr_per_sample": 108.55,
           "ratio": 1.0,
           "snr_db": {
-            "other": 143.6,
-            "ours": 143.6
+            "other": 143.27,
+            "ours": 143.27
           },
           "status": "info",
           "verdict": "info"
@@ -4956,8 +4956,8 @@
           "ours_instr_per_sample": 51.02,
           "ratio": 1.0,
           "snr_db": {
-            "other": 145.89,
-            "ours": 145.89
+            "other": 145.98,
+            "ours": 145.98
           },
           "status": "info",
           "verdict": "info"

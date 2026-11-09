@@ -2968,7 +2968,7 @@ impl Kind for FrameDecodeKind {
             memory_bytes: FrameDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // A shift, a compare and a population count per input sample; the rotations
             // `four` test four shift registers after the inverse rotations of every symbol
-            // (D993).
+            // (D1213).
             cost: if cfg.rotations == FrameRotations::Four {
                 4.0
             } else {
@@ -3097,7 +3097,7 @@ impl Kind for SliceKind {
             // One multiplication per soft bit; 8psk: eight squared distances, six minimum
             // searches over four points and three products per symbol (D644); qam16: two
             // products by sqrt(E), two magnitudes, two differences and four products; qam64:
-            // two products, four magnitudes, four differences and six products (D980).
+            // two products, four magnitudes, four differences and six products (D1200).
             cost: match cfg.constellation {
                 SliceConstellation::Psk8 => 16.0,
                 SliceConstellation::Qam16 => 10.0,
@@ -3306,7 +3306,7 @@ impl Kind for CostasKind {
             memory_bytes: CostasBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // Two table interpolations, the derotation, the detector, the loop filter and the
             // lock detector per symbol (D615); the QAM detector adds the grid decision, an
-            // arctangent and a second division (D986).
+            // arctangent and a second division (D1206).
             cost: if cfg.constellation.qam().is_some() {
                 45.0
             } else {
@@ -3552,7 +3552,7 @@ impl Kind for QamModKind {
             rate_out: QamModBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: QamModBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // The pulse shaping of `psk_mod`, 4 span per input sample (D651); the table lookup
-            // of the point is part of it (D992).
+            // of the point is part of it (D1212).
             cost: 4.0 * cfg.span as f64,
             taps: block.num_taps(),
             delay: block.timing().delay,
@@ -3615,8 +3615,8 @@ impl Kind for QamDemodKind {
             rate_out: QamDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: QamDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // The matched filter 4 span per input sample; per symbol the timing loop 10 (the
-            // 40 of `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D986), the
-            // soft bits of `slice` 10 or 18 (D980) and the equalizer 8 per weight (D830; D992).
+            // 40 of `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D1206), the
+            // soft bits of `slice` 10 or 18 (D1200) and the equalizer 8 per weight (D830; D1212).
             cost: 4.0 * cfg.span as f64
                 + (55.0 + if cfg.order == 64 { 18.0 } else { 10.0 }) / sps
                 + 8.0 * cfg.equalizer_taps as f64 / sps,

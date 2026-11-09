@@ -18,7 +18,7 @@
 //! and forms the piecewise-linear max-log soft bits of M44 §2 (`v`, `2 - |v|`, and for 64-QAM
 //! `4 - |v|`, `2 - ||v| - 4|`), branch-free arithmetic that the compiler vectorizes where it
 //! can. No library computes the same soft bits: liquid-dsp's `modemcf_demodulate_soft` and GNU
-//! Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value (D981), so
+//! Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value (D1201), so
 //! both entries are our own code as information (`Family::Own`), and `ours` and `fallback` run
 //! the same code.
 //!
@@ -27,7 +27,7 @@
 //! `equalize_qam16_fallback` and `costas_qam16_fallback` against GNU Radio, the slicer above); no
 //! library has the same block (liquid-dsp's `modemcf` maps and slices but has no pulse shaping,
 //! timing, equalizer or carrier loop in the same object, GNU Radio's receiver is a flowgraph of
-//! blocks), so the block entries are our own code as information (D996), as `channelize_block`
+//! blocks), so the block entries are our own code as information (D1216), as `channelize_block`
 //! (D928). `qam_mod_block` is 16-QAM at 8 samples per symbol (the flows of M44 §5) writing 4096
 //! output samples (512 symbols) per call; `qam_demod_block` reads 4096 input samples of that
 //! signal per call with the block defaults after a warm-up of 3072 symbols (the equalizer in
@@ -42,7 +42,7 @@
 //! every backend, as the PSK loop (the phase of every symbol depends on the detector output of
 //! the one before). Its fallback is counted against the loop of GNU Radio's
 //! `constellation_receiver_cb` with GNU Radio's 16-QAM `constellation_rect`
-//! (`benches/refs/gr-constellation.c`, D990): the same decision-directed loop with the same
+//! (`benches/refs/gr-constellation.c`, D1210): the same decision-directed loop with the same
 //! detector `arg(y conj d)` (`cargf`) against the grid decision, `sincosf` instead of the table
 //! lookup, the sector decision with two divisions instead of the product by `sqrt(E) / 2`, and no
 //! lock detector. GNU Radio runs the loop bandwidth `theta = loop_bw / (damping + 1 / (4
@@ -55,7 +55,7 @@
 //! The equalizer `equalize` with the constellation `qam16` runs the fallback's loop on every
 //! backend (D841). Its fallback is counted against GNU Radio's `linear_equalizer` with
 //! `adaptive_algorithm_nlms` deciding on the same `constellation_rect` (gr-constellation.c, the
-//! loop of gr-equalizer.c of `equalize_fallback`, D838, D990). The workload: the block default (11
+//! loop of gr-equalizer.c of `equalize_fallback`, D838, D1210). The workload: the block default (11
 //! taps, no feedback, `mu_cma` 0.05, `mu_dd` 0.02, `cma_symbols` 1000, `phase_bw` 0.02) with the
 //! constellation `qam16` on 16-QAM through the channel `1 + 0.2 e^(j0.6) z^-1 + 0.05 e^(-j2)
 //! z^-2` with a constant carrier phase of 0.2 rad and uniform noise of ±0.02 per component. The

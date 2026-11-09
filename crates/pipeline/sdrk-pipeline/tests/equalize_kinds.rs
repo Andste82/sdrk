@@ -171,7 +171,7 @@ fn equalize_costs_8_taps_and_keeps_the_rate() {
         json!({ "cma_symbols": 4_294_967_295u64 }),
     ));
     assert!(report.is_ok(), "{}", report.to_json());
-    // M44: the QAM constellations, at the cost of the taps (D989)
+    // M44: the QAM constellations, at the cost of the taps (D1209)
     for c in ["qam16", "qam64"] {
         let report = validate(&single(
             "equalize",

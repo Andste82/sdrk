@@ -321,6 +321,9 @@ fn the_runtime_parameter_reaches_the_block() {
     assert!(p.set_param("det", "max_gap_ms", json!(5.0)).is_err());
 }
 
+/// The no-allocation test of the lanes-in/packets-out wrapper `PacketOutNode` (spec test 1,
+/// D1022): pieces of changing length, the runtime parameter changed now and then, and the
+/// scene pushed three times, so trains are emitted, split into packets and read in every pass.
 #[test]
 fn nothing_allocates_after_build() {
     let x = scene_samples();
@@ -331,16 +334,25 @@ fn nothing_allocates_after_build() {
     p.read_packets("pulses", &mut buf).unwrap();
     let (produced, allocations) = count_allocations(|| {
         let mut produced = 0usize;
-        for (i, piece) in x[1000..].chunks(1000 + 37).enumerate() {
-            p.push("iq", InputData::C32(piece)).unwrap();
-            produced += p.read_packets("pulses", &mut buf).unwrap();
-            if i % 20 == 0 {
-                p.set_param("det", "min_snr_db", Value::from(9.0)).unwrap();
+        let mut i = 0usize;
+        for pass in 0..3 {
+            let mut at = if pass == 0 { 1000 } else { 0 };
+            while at < x.len() {
+                let n = (1000 + (i * 37) % 997).min(x.len() - at);
+                p.push("iq", InputData::C32(&x[at..at + n])).unwrap();
+                at += n;
+                produced += p.read_packets("pulses", &mut buf).unwrap();
+                if i.is_multiple_of(20) {
+                    let snr = if i.is_multiple_of(40) { 9.0 } else { 10.0 };
+                    p.set_param("det", "min_snr_db", Value::from(snr)).unwrap();
+                }
+                i += 1;
             }
         }
         produced
     });
-    assert!(produced > 0, "the pipeline did work");
+    // Every pass emits the trains of the scene (four per pass, some in several packets).
+    assert!(produced >= 12, "the pipeline did work: {produced}");
     assert_eq!(allocations, 0, "allocations after build");
 }
 

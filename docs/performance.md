@@ -767,12 +767,12 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_select_block` (our code, per output sample) | 3.02 / 3.02 | 3.02 / 3.02 | 2.30 / 2.30 | 3.02 | 1.68 / 1.68 | 2.27 / 2.27 | 10.54 / 10.54 |
 | `channel_bank_channelize` (our code, per input sample) | 193.80 / 193.80 | 193.79 / 193.79 | 83.51 / 83.51 | 83.64 | 104.25 / 104.25 | 81.92 / 81.92 | 534.31 / 534.31 |
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
-| `band_pulse_detect_block` (our code, per lane value) | 121.60 / 121.60 | 120.29 / 120.29 | 113.14 / 113.14 | 120.22 | 112.52 / 112.52 | 109.90 / 109.90 | 267.85 / 267.85 |
+| `band_pulse_detect_block` (our code, per lane value) | 133.60 / 133.60 | 132.59 / 132.59 | 124.53 / 124.53 | 132.22 | 123.49 / 123.49 | 118.94 / 118.94 | 290.59 / 290.59 |
+| `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
+| `qam_demod_block` (our code, per input sample) | 304.24 / 304.24 | 301.88 / 301.88 | 177.18 / 177.18 | 179.88 | 161.44 / 161.44 | 192.32 / 192.32 | 571.70 / 571.70 |
+| `qam_mod_block` (our code, per output sample) | 56.57 / 56.57 | 56.57 / 56.57 | 33.62 / 33.62 | 32.06 | 27.23 / 27.23 | 37.44 / 37.44 | 108.55 / 108.55 |
 | `slice_qam16_block` (our code, per input symbol) | 8.01 / 8.01 | 11.51 / 11.51 | 2.95 / 2.95 | 8.01 | 1.95 / 1.95 | 4.51 / 4.51 | 18.02 / 18.02 |
 | `slice_qam64_block` (our code, per input symbol) | 16.01 / 16.01 | 15.51 / 15.51 | 7.76 / 7.76 | 16.01 | 4.76 / 4.76 | 6.51 / 6.51 | 51.02 / 51.02 |
-| `qam_mod_block` (our code, per output sample) | 56.57 / 56.57 | 56.57 / 56.57 | 33.62 / 33.62 | 32.06 | 27.23 / 27.23 | 37.44 / 37.44 | 108.55 / 108.55 |
-| `qam_demod_block` (our code, per input sample) | 304.24 / 304.24 | 301.88 / 301.88 | 177.18 / 177.18 | 179.88 | 161.44 / 161.44 | 192.32 / 192.32 | 571.70 / 571.70 |
-| `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -2361,7 +2361,7 @@ Remarks:
 
 ## Band pulse detector (M45.1)
 
-The block `band_pulse_detect` is our own code, information only (`Family::Own`, `info` on every level, ours and fallback the same block code; D962): the natural like-for-like reference, `rtl_433`'s `pulse_detect_package`, is GPL and is not used or linked, and no other library has a pulse detector on the lanes of a channelizer, so the entry is judged by its own cycles. Counted on all four platforms on 2026-11-08 (`cargo xtask count --platform <p> --kernel band_pulse_detect_block --merge`, the levels of `x86_64` one at a time), with its cycles simulated by `cargo measure band_pulse_detect_block --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above).
+The block `band_pulse_detect` is our own code, information only (`Family::Own`, `info` on every level, ours and fallback the same block code; D962): the natural like-for-like reference, `rtl_433`'s `pulse_detect_package`, is GPL and is not used or linked, and no other library has a pulse detector on the lanes of a channelizer, so the entry is judged by its own cycles. Counted on all four platforms on 2026-11-09 after D1023 (`cargo xtask count --platform <p> --kernel band_pulse_detect_block --merge`, the levels of `x86_64` one at a time), with its cycles simulated by `cargo measure band_pulse_detect_block --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above).
 
 **Workload.** `band_pulse_detect_block`: the defaults (`auto`, 9 dB) on 16 lanes at 250 kHz, the lanes of the flow `ism433_pulses` prepared once with `ChannelizeBlock` (16 channels, the defaults) from a 2 MHz band of uniform noise with, in every 40 ms period, two PWM transmissions (24 bits, 200 / 400 us pulses, 200 us gaps) at -310 kHz and +190 kHz and one FSK transmission (24 bits of 100 us, 30 kHz deviation) at +560 kHz, all at about 34 dB above the noise in a channel spacing. 256 steps (4096 lane values) per call, read cyclically; per lane value. On average 4.1 of the 16 lanes are busy per step (the three transmissions, their neighbours that see them in the transition band of the channel filter, and the waits after each burst).
 
@@ -2369,18 +2369,19 @@ Simulated cycles per lane value, whole-loop:
 
 | Model | `sse2` | `sse4.2` | `avx2` | `avx512` | `neon` |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| reference model | 57.16 (`skylake`) | 57.54 (`skylake`) | 46.96 (`znver3`) | 52.43 (`znver4`) | 88.55 (`cortex-a72`) |
-| counter-model | 56.49 (`znver2`) | 56.66 (`znver2`) | 42.86 (`alderlake`) | 48.06 (`sapphirerapids`) | 70.36 (`cortex-a76`) |
+| reference model | 59.56 (`skylake`) | 60.03 (`skylake`) | 44.22 (`znver3`) | 55.22 (`znver4`) | 92.99 (`cortex-a72`) |
+| counter-model | 61.05 (`znver2`) | 61.33 (`znver2`) | 40.53 (`alderlake`) | 50.84 (`sapphirerapids`) | 74.86 (`cortex-a76`) |
 
 Instructions per lane value (`simd128`: wasmtime fuel, no core model, so no cycles):
 
 | `sse2` | `sse4.2` | `avx2` | `avx2-runtime` | `avx512` | `neon` | `simd128` |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 121.60 | 120.29 | 113.14 | 120.22 | 112.52 | 109.90 | 267.85 |
+| 133.60 | 132.59 | 124.53 | 132.22 | 123.49 | 118.94 | 290.59 |
 
 Remarks:
 - **Where the instructions go.** Profiled with callgrind at `avx2` (200 calls, before the two changes of D963): of the instructions of the calls, about 73 % are the detectors of the busy lanes (the run machines of the envelope and of the presence, the frequency slicer with one `atan2` per sample of a frame and the merge decisions; about 300 instructions per busy lane value), about 26 % the loop over the lanes of each step (the envelope low-pass, the noise level, the trigger and the choice of the lanes to run) and about 1 % `mag`. The efficiency of 0.50 to 0.75 and the bottleneck class `latency` on every model come from the chain of one sample of a lane to the next in the detectors.
 - **The report cost** of the kind is 12 per lane value (spec §3); the instructions are about 9 times that, almost all of it in the busy lanes, so a quieter band costs less: with no busy lane a step is the vector loop over the lanes and `mag` only.
+- **Two-stage edges (D1023).** Every envelope edge of a confirmed run is refined on the raw magnitudes (a ring of 32 magnitudes per busy lane, written by the lane step; 8 steps of magnitudes kept before every piece). Counted again on all four platforms and simulated again on 2026-11-09 (the tables above): simulated cycles per lane value before -> after (reference / counter model) 57.16 / 56.49 -> 59.56 / 61.05 at `sse2`, 57.54 / 56.66 -> 60.03 / 61.33 at `sse4.2`, 46.96 / 42.86 -> 44.22 / 40.53 at `avx2`, 52.43 / 48.06 -> 55.22 / 50.84 at `avx512`, 88.55 / 70.36 -> 92.99 / 74.86 at `neon`; instructions only where no core model exists: `simd128` 267.85 -> 290.59. The extra work is the magnitude of the busy lane read and stored per sample and the refinement once per confirmed edge; kept for the widths of spec test 3 (accuracy first, D34).
 - **Recount after the review (D978).** The trigger factor copied per lane (D972) and the shorter lead-in at low step rates (D971) were counted again on all four platforms and simulated again on 2026-11-08 (the tables above): simulated cycles per lane value before -> after (reference / counter model) 56.90 / 56.38 -> 57.16 / 56.49 (`sse2`), 57.28 / 56.56 -> 57.54 / 56.66 (`sse4.2`), 46.83 / 42.65 -> 46.96 / 42.86 (`avx2`), 52.29 / 47.86 -> 52.43 / 48.06 (`avx512`), 88.06 / 70.36 -> 88.55 / 70.36 (`neon`); `simd128` (no core model) 266.49 -> 267.85 instructions per lane value.
 - **D970.** The merge decision (`decide`, run once per burst) is kept out of line (`#[inline(never)]`): inlined into the step loop it took registers from the per-sample detectors; simulated cycles per lane value before -> after (reference / counter model, with the merging rules of D964 to D966 in both): no figure before, the instructions were 160.00 -> 121.36 (`sse2`), 149.75 -> 112.86 (`avx2`); against the entry of D963 (before D964 to D966) the cycles fell from 63.49 / 62.76 to 56.90 / 56.38 (`sse2`), 53.91 / 48.75 to 46.83 / 42.65 (`avx2`), 59.64 / 54.07 to 52.29 / 47.86 (`avx512`) and 105.23 / 86.11 to 88.06 / 70.36 (`neon`).
 - **D963.** The frequency of every sample of a frame uses a polynomial `atan2` (within 2e-5 rad of `libm::atan2f`), and each step runs only the lanes of a bitmask of busy lanes (plus the lanes that trigger); simulated cycles per lane value after these two changes (reference / counter model): 63.49 / 62.76 at `sse2`, 64.19 / 63.18 at `sse4.2`, 53.91 / 48.75 at `avx2`, 59.64 / 54.07 at `avx512`, 105.23 / 86.11 at `neon` (`simd128` 301.18 instructions, no core model); no cycles were simulated before the changes, so the step is known in instructions only: 145.15 -> 138.17 per lane value at `avx2`.

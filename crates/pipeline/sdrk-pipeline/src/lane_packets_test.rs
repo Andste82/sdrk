@@ -8,11 +8,10 @@
 //! (a runtime parameter); the packet index is the step, the payload the loudest lane and the
 //! width of the input. The seed 451 is local to these tests.
 //!
-//! The counting global allocator of the no-allocation test is the only `unsafe` of the crate;
-//! it exists only in the unit-test build (`#![cfg_attr(not(test), forbid(unsafe_code))]` in
-//! `lib.rs`, D955).
+//! The no-allocation test of the wrapper runs with the real kind `band_pulse_detect` in the
+//! integration test `tests/ism_kinds.rs`, which has its own counting global allocator, so the
+//! crate forbids `unsafe` in every build (D1022).
 #![allow(
-    unsafe_code,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::indexing_slicing,
@@ -22,9 +21,6 @@
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation
 )]
-
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::cell::Cell;
 
 use sdrk::{C32, Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_blocks::{
@@ -50,63 +46,6 @@ const HOLDOFF: u32 = 2;
 
 /// The default of `min_power`.
 const MIN_POWER: f64 = 10.0;
-
-// ------------------------------------------------------------------ counting allocator
-
-thread_local! {
-    /// Allocations made by the current thread while counting is on.
-    static COUNT: Cell<usize> = const { Cell::new(0) };
-    static ON: Cell<bool> = const { Cell::new(false) };
-}
-
-struct Counting;
-
-fn note() {
-    // `try_with`: the thread-local may already be gone during thread teardown.
-    let _ = ON.try_with(|on| {
-        if on.get() {
-            let _ = COUNT.try_with(|c| c.set(c.get() + 1));
-        }
-    });
-}
-
-// SAFETY: every call is forwarded unchanged to the system allocator; the bookkeeping only
-// touches thread-local `Cell`s and never allocates.
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        note();
-        // SAFETY: same contract as the caller's.
-        unsafe { System.alloc(layout) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // SAFETY: same contract as the caller's.
-        unsafe { System.dealloc(ptr, layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        note();
-        // SAFETY: same contract as the caller's.
-        unsafe { System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        note();
-        // SAFETY: same contract as the caller's.
-        unsafe { System.realloc(ptr, layout, new_size) }
-    }
-}
-
-#[global_allocator]
-static ALLOCATOR: Counting = Counting;
-
-fn count_allocations<R>(f: impl FnOnce() -> R) -> (R, usize) {
-    COUNT.with(|c| c.set(0));
-    ON.with(|on| on.set(true));
-    let r = f();
-    ON.with(|on| on.set(false));
-    (r, COUNT.with(Cell::get))
-}
 
 // ------------------------------------------------------------------ test kinds
 
@@ -755,40 +694,4 @@ fn the_packets_of_a_lane_decoder_go_to_packet_outputs_only() {
             .any(|d| d.code == DiagCode::TypeMismatch && d.path == "edges[2].to"),
         "{errors:?}"
     );
-}
-
-#[test]
-fn nothing_allocates_after_build() {
-    let mut p = build(&flow(16));
-    let x = signal(4096);
-    let mut buf = vec![Packet::default(); 4096];
-    // Warm up once outside the measurement.
-    p.push("iq", InputData::C32(&x[..1000])).unwrap();
-    p.read_packets("pkts", &mut buf).unwrap();
-    let (produced, allocations) = count_allocations(|| {
-        let mut produced = 0usize;
-        for i in 0..1000usize {
-            let start = (i * 997) % (x.len() - 1100);
-            p.push("iq", InputData::C32(&x[start..start + 1000 + i % 97]))
-                .unwrap();
-            produced += p.read_packets("pkts", &mut buf).unwrap();
-            if i % 100 == 0 {
-                let power = if i % 200 == 0 { 20.0 } else { MIN_POWER };
-                p.set_param("det", "min_power", Value::from(power)).unwrap();
-            }
-        }
-        produced
-    });
-    assert!(produced > 50_000, "the pipeline did work: {produced}");
-    assert_eq!(
-        allocations, 0,
-        "allocations between 1000 iterations after build"
-    );
-}
-
-#[test]
-fn the_counter_notices_allocations() {
-    // Guards the test above against a counter that never counts.
-    let (_, n) = count_allocations(|| std::hint::black_box(vec![1u8; 100]));
-    assert!(n >= 1);
 }

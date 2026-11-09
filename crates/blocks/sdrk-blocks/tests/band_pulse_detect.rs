@@ -6,8 +6,10 @@
 //!   (2 MHz around 433.92 MHz, 16 channels), 20 on the 14 channel boundaries inside the band and
 //!   20 at the band edges,
 //!   levels 10 to 40 dB above the noise in a channel spacing: every one emitted once with the
-//!   frequency within 10 kHz; every width within one step from `WIDTH_SNR` on, a guard on the
-//!   share of the widths within one step from 12 dB (open item I45.1-1).
+//!   frequency within 10 kHz; the statistical width criterion of D1020 per 2 dB (rms width
+//!   error at most 0.5 steps, 99 % of the widths within 1.5 steps) from `STAT_SNR` on, guards
+//!   from 12 dB to `STAT_SNR` (open item I45.1-1), every width within one step from
+//!   `WIDTH_SNR` on.
 //! - Spec test 4 (seed 630): 100 scenes of 2 or 3 overlapping OOK and FSK transmissions at least
 //!   250 kHz apart: every OOK transmission emitted with its own train (the spec), guards on the
 //!   FSK shares and the widths (I45.1-3).
@@ -219,13 +221,26 @@ const NOISE_DB: f64 = -30.0;
 /// channel spacing).
 const MIN_SNR: f64 = 12.0;
 
-/// The level from which every width of test 3 is within one step (measured: from 28 dB; the
-/// spec asks for it from 12 dB, open item I45.1-1).
-const WIDTH_SNR: f64 = 28.0;
+/// The level from which every width of test 3 is within one step (D1020: the level the
+/// measurement reaches, at most 28 dB; measured from 22 dB with the edges of D1023, from 26 dB
+/// before).
+const WIDTH_SNR: f64 = 22.0;
 
-/// Regression guard of the widths between `MIN_SNR` and `WIDTH_SNR`: the share of single
-/// widths within one step (measured 0.966, I45.1-1).
-const MIN_WIDTH_SHARE: f64 = 0.95;
+/// The level from which the statistical criterion of D1020 is met per 2 dB (measured: from
+/// 14 dB; open item I45.1-1 for 12 to 14 dB).
+const STAT_SNR: f64 = 14.0;
+
+/// Regression guards between `MIN_SNR` and `STAT_SNR` (measured with D1023: rms 0.584 steps,
+/// 0.9892 within 1.5 steps).
+const GUARD_RMS_WIDTH: f64 = 0.62;
+const GUARD_P99_SHARE: f64 = 0.985;
+
+/// The largest rms width error in steps per 2 dB of level from `MIN_SNR` on (D1020).
+const MAX_RMS_WIDTH: f64 = 0.5;
+
+/// The share of the widths within `P99_TOLERANCE` steps per 2 dB from `MIN_SNR` on (D1020).
+const MIN_P99_SHARE: f64 = 0.99;
+const P99_TOLERANCE: f64 = 1.5;
 
 /// Transmissions of spec test 3 and the scenes they are split into (a scene holds at most 64).
 const TEST3_COUNT: usize = 300;
@@ -252,9 +267,9 @@ struct Test3Result {
     trains: usize,
     /// The largest width error in steps of its first train (`inf` for a wrong pair count).
     width_err: f64,
-    /// Widths of its first train compared, and those within one step.
-    widths: usize,
-    widths_ok: usize,
+    /// The signed errors in steps of the widths of its first train (empty for a wrong pair
+    /// count).
+    errors: Vec<f64>,
     /// The frequency error of its first train in Hz.
     freq_err: f64,
 }
@@ -342,12 +357,10 @@ fn test3_scene(txs: &[Test3Tx], seed: u64) -> Vec<Test3Result> {
         r.width_err = width_error(&tr.pairs, &want, us_per_step);
         if tr.pairs.len() == want.len() {
             for (k, (g, w)) in tr.pairs.iter().zip(&want).enumerate() {
-                let mut e = vec![(f64::from(g.pulse) - w.0 / us_per_step).abs()];
+                r.errors.push(f64::from(g.pulse) - w.0 / us_per_step);
                 if k + 1 < want.len() {
-                    e.push((f64::from(g.gap) - w.1 / us_per_step).abs());
+                    r.errors.push(f64::from(g.gap) - w.1 / us_per_step);
                 }
-                r.widths += e.len();
-                r.widths_ok += e.iter().filter(|e| **e <= 1.0).count();
             }
         }
         r.freq_err = f64::from(tr.header.freq_offset_hz) - txs[i].freq;
@@ -377,14 +390,6 @@ fn width_error(got: &[Pair], want: &[(f64, f64)], us_per_step: f64) -> f64 {
     worst
 }
 
-/// Spec test 3 (seed 629): 300 PWM transmissions of 40 bits one at a time over the 433 MHz band
-/// (2 MHz around 433.92 MHz, 16 channels), 20 on the 14 channel boundaries inside the band
-/// (-812.5 to +812.5 kHz) and 20 at the band edges,
-/// levels 10 to 40 dB above the noise in a channel spacing. Every one at 12 dB or more is
-/// emitted once with the right number of pairs and the frequency within 10 kHz, below 12 dB at
-/// most one train each; every pulse and gap within 1 step of the generator's widths from
-/// `WIDTH_SNR` on (the spec: from 12 dB, I45.1-1) and the share `MIN_WIDTH_SHARE` of the
-/// widths within 1 step from 12 dB to `WIDTH_SNR`.
 /// Runs `f` on every item, in parallel threads where the target has them and one after the
 /// other on wasm32 (WASI has no threads); the order of the results is the order of the items,
 /// and every scene has its own seed, so the results do not depend on the schedule.
@@ -403,6 +408,24 @@ fn par_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R>
     }
 }
 
+/// The statistics of the width errors `e` (steps): rms, the share within one step and the
+/// share within `P99_TOLERANCE` steps.
+fn width_stats(e: &[f64]) -> (f64, f64, f64) {
+    let n = e.len().max(1) as f64;
+    let rms = (e.iter().map(|v| v * v).sum::<f64>() / n).sqrt();
+    let within = |t: f64| e.iter().filter(|v| v.abs() <= t).count() as f64 / n;
+    (rms, within(1.0), within(P99_TOLERANCE))
+}
+
+/// Spec test 3 (seed 629, D1020): 300 PWM transmissions of 40 bits one at a time over the
+/// 433 MHz band (2 MHz around 433.92 MHz, 16 channels), 20 on the 14 channel boundaries inside
+/// the band (-812.5 to +812.5 kHz) and 20 at the band edges, levels 10 to 40 dB above the noise
+/// in a channel spacing. Every one at 12 dB or more is emitted once with the right number of
+/// pairs and the frequency within 10 kHz, below 12 dB at most one train each; per 2 dB of level
+/// from `STAT_SNR` the rms width error is at most `MAX_RMS_WIDTH` steps and `MIN_P99_SHARE` of
+/// the widths are within `P99_TOLERANCE` steps (from 12 dB to `STAT_SNR` the guards
+/// `GUARD_RMS_WIDTH` and `GUARD_P99_SHARE`, I45.1-1); from `WIDTH_SNR` on every width is within
+/// 1 step.
 #[test]
 #[cfg_attr(
     target_family = "wasm",
@@ -419,8 +442,9 @@ fn every_frequency_is_received() {
     .collect();
     // The measured numbers per 2 dB of level.
     println!(
-        "level dB | transmissions | emitted once | all widths within 1 | share of widths within 1 | worst width | worst freq Hz"
+        "level dB | transmissions | emitted once | all widths within 1 | widths | rms width error | share within 1 | share within 1.5 | worst width | worst freq Hz"
     );
+    let mut failures = Vec::new();
     for lo in (10..40).step_by(2) {
         let bin: Vec<(&Test3Tx, &Test3Result)> = txs
             .iter()
@@ -428,7 +452,7 @@ fn every_frequency_is_received() {
             .filter(|(t, _)| t.snr >= f64::from(lo) && t.snr < f64::from(lo + 2))
             .collect();
         let once = bin.iter().filter(|(_, r)| r.trains == 1).count();
-        let widths = bin
+        let all = bin
             .iter()
             .filter(|(_, r)| r.trains == 1 && r.width_err <= 1.0)
             .count();
@@ -442,25 +466,29 @@ fn every_frequency_is_received() {
             .filter(|(_, r)| r.trains >= 1)
             .map(|(_, r)| r.freq_err.abs())
             .fold(0f64, f64::max);
-        let (n, ok) = bin
+        let errors: Vec<f64> = bin
             .iter()
-            .fold((0, 0), |(n, ok), (_, r)| (n + r.widths, ok + r.widths_ok));
+            .flat_map(|(_, r)| r.errors.iter().copied())
+            .collect();
+        let (rms, within_one, p99) = width_stats(&errors);
         println!(
-            "{lo}-{} | {} | {once} | {widths} | {:.4} | {worst:.2} | {freq:.0}",
+            "{lo}-{} | {} | {once} | {all} | {} | {rms:.3} | {within_one:.4} | {p99:.4} | {worst:.2} | {freq:.0}",
             lo + 2,
             bin.len(),
-            ok as f64 / n.max(1) as f64
+            errors.len()
         );
+        let (max_rms, min_p99) = if f64::from(lo) >= STAT_SNR {
+            (MAX_RMS_WIDTH, MIN_P99_SHARE)
+        } else {
+            (GUARD_RMS_WIDTH, GUARD_P99_SHARE)
+        };
+        if f64::from(lo) >= MIN_SNR && (rms > max_rms || p99 < min_p99) {
+            failures.push(format!(
+                "{lo} to {} dB: rms width error {rms:.3} steps, {p99:.4} within {P99_TOLERANCE}",
+                lo + 2
+            ));
+        }
     }
-    let (n, ok) = txs
-        .iter()
-        .zip(&results)
-        .filter(|(t, _)| t.snr >= MIN_SNR && t.snr < WIDTH_SNR)
-        .fold((0, 0), |(n, ok), (_, r)| (n + r.widths, ok + r.widths_ok));
-    let share = ok as f64 / n as f64;
-    println!("{MIN_SNR} to {WIDTH_SNR} dB: {ok} of {n} widths within 1 step ({share:.4})");
-    assert!(share >= MIN_WIDTH_SHARE, "share {share:.4}");
-    let mut failures = Vec::new();
     for (i, (t, r)) in txs.iter().zip(&results).enumerate() {
         if r.trains > 1 {
             failures.push(format!(
@@ -589,10 +617,12 @@ const TEST4_TOL: f64 = 1.0;
 /// train, and of those with every width (OOK) or transition (FSK) within 1 and 3 steps: the
 /// spec for the OOK trains (measured 128 of 128), regression guards on the measured shares
 /// elsewhere (I45.1-3: OOK widths 0.992 and 0.992; FSK 0.962, 0.568 and 0.674); the trains of no
-/// transmission (measured 2, I45.1-3).
+/// transmission (measured 3 with the edges of D1023, I45.1-3: single pulses in the lane of
+/// -1 MHz next to strong OOK transmissions, and one pulse 11 steps long and 19 dB below a
+/// Manchester transmission in the neighbour lane).
 const TEST4_MIN_OOK: [f64; 3] = [1.0, 0.97, 0.97];
 const TEST4_MIN_FSK: [f64; 3] = [0.93, 0.53, 0.64];
-const TEST4_MAX_STRAYS: usize = 2;
+const TEST4_MAX_STRAYS: usize = 3;
 
 /// One transmission of test 4.
 struct Test4Tx {

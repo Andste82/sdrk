@@ -102,6 +102,25 @@ const EDGE_WINDOW: f64 = 4.0;
 /// of the first transition).
 const FSK_CAND: usize = 8;
 
+/// Raw magnitudes kept per busy lane for the second stage of the envelope edges (a power of 2,
+/// at least `BAND_PULSE_LEAD + HIST`; D1023).
+const RING: usize = 32;
+
+/// Steps of raw magnitudes before the current one that the block keeps for every lane (the
+/// rows before a piece in the magnitude buffer), so a lane that triggers knows the samples
+/// before its lead-in (D1023).
+const HIST: usize = 8;
+
+/// The level of the second stage of an edge is the magnitude of half the signal amplitude
+/// over the noise: `sqrt(high^2 / 4 + (3/4) (4/pi) noise^2)`, with `high^2` the power of the
+/// plateau (signal and noise) and `(4/pi) noise^2` the noise power (`noise` is the mean
+/// magnitude of the noise, Rayleigh); so the midpoint of a pulse edge is not biased towards
+/// the plateau at low levels (D1023).
+const NOISE_POWER: f32 = 0.75 * 4.0 / core::f32::consts::PI;
+
+/// Samples before the envelope crossing of an edge in which the raw edge is searched (D1023).
+const REFINE_BACK: u64 = 6;
+
 /// The fewest lanes with bursts at the same time that make a wideband event (D965, D975): more
 /// than 3 overlapping narrowband transmissions (spec test 4) of 3 lanes each can lift, so that
 /// transmissions two spacings apart stay apart (spec §3); with fewer lanes than this there are
@@ -134,7 +153,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         above the noise. A lead-in of 16 steps sets the signal level (their largest \
         envelope); then the threshold t lies midway between the noise and the signal level, a \
         pulse starts above t (1 + 1/8) and ends below t (1 - 1/8), and the signal level \
-        follows the pulses with the step 1/64; edges are interpolated between samples. Pulses \
+        follows the pulses with the step 1/64. Every edge is then refined on the raw magnitudes \
+        around it: the change point of a step at half the signal amplitude over the noise, \
+        interpolated between two samples; widths are rounded to whole steps. Pulses \
         and gaps shorter than min_pulse_us are glitches and are merged into their neighbours. \
         A burst ends after a gap longer than max_gap_ms or gap_ratio times its longest pulse; \
         a pulse longer than 100 ms is a carrier (the lane takes its level as the noise). For \
@@ -536,6 +557,8 @@ struct Lane {
     out: [Out; 2],
     /// Step of the first lead-in sample.
     lead_at: u64,
+    /// Step of the envelope crossing of the edge that waits for its refinement.
+    ref_idx: u64,
     /// Step of the first pulse of the OOK train.
     start: u64,
     /// One past the last committed pulse (rounded edge).
@@ -547,6 +570,12 @@ struct Lane {
     /// run, of the previous run and of the current pulse.
     t_run: f64,
     t_prev: f64,
+    /// The envelope crossings (first stage) of the current and of the previous run: the
+    /// positions of the bursts (the packet index, the spans of the merging) and the FSK frames
+    /// keep these, delayed by the low-pass as much as the frequency runs; only the widths come
+    /// from the refined edges (D1023).
+    c_run: f64,
+    c_prev: f64,
     /// Times of the start of the current and of the previous presence run.
     p_t_run: f64,
     p_t_prev: f64,
@@ -567,7 +596,8 @@ struct Lane {
     /// The trigger factor of the presence machine, copied when the lane triggered (a runtime
     /// change of `min_snr_db` applies to the next burst, D972).
     p_factor: f32,
-    _pad: u32,
+    /// Whether the edge of the current envelope run waits for its refinement.
+    ref_pending: u32,
     /// Envelope run: level (0 off, 1 on), length in samples, confirmed (at least
     /// `min_steps`), length of the previous run.
     level: u32,
@@ -616,6 +646,9 @@ struct Lane {
     sum_fsk: u32,
     /// Frequencies of the candidate samples of the first transition.
     cand_f: [f32; FSK_CAND],
+    /// The raw magnitudes of the last `RING` samples of a burst and of the `HIST - 1` before
+    /// its lead-in (`ring[idx % RING]`), for the refinement of the envelope edges (D1023).
+    ring: [f32; RING],
     /// The envelope of the lead-in and its samples (`lead_x[0]` the sample before).
     lead_e: [f32; BAND_PULSE_LEAD],
     lead_x: [C32; BAND_PULSE_LEAD + 1],
@@ -748,6 +781,8 @@ impl Lane {
         self.prev_len = 0;
         self.t_run = t;
         self.t_prev = t;
+        self.c_run = t;
+        self.c_prev = t;
         self.e_prev = e;
         self.p_level = 0;
         self.p_run = 0;
@@ -1214,8 +1249,8 @@ impl Lane {
             if !on && self.p_prev >= p.min_steps {
                 let (start, mut end) = (self.p_t_prev, self.p_t_run);
                 // The midpoint edge of the envelope just before is the better end.
-                if self.level == 0 && (0.0..=EDGE_WINDOW).contains(&(end - self.t_run)) {
-                    end = self.t_run;
+                if self.level == 0 && (0.0..=EDGE_WINDOW).contains(&(end - self.c_run)) {
+                    end = self.c_run;
                 }
                 self.frame_done(p, pairs, start, end);
             }
@@ -1241,7 +1276,8 @@ impl Lane {
         }
     }
 
-    /// One sample of a burst at step `idx`: envelope `e`, sample `x`, the one before `xp`.
+    /// One sample of a burst at step `idx`: envelope `e`, sample `x`, the one before `xp`
+    /// (its raw magnitude is in the ring already).
     #[allow(clippy::too_many_arguments)]
     fn sample(
         &mut self,
@@ -1268,33 +1304,20 @@ impl Lane {
             self.level = level;
             self.run_len = self.prev_len.saturating_add(n).saturating_add(1);
             self.t_run = self.t_prev;
+            self.c_run = self.c_prev;
             self.confirmed = 1;
+            self.ref_pending = 0;
             if !on {
                 // A short pulse: nothing of it stays.
                 self.pac = [0.0; 2];
             }
         } else {
-            let tc = edge(idx, cross(ep, e, thr));
-            self.prev_len = self.run_len;
-            self.t_prev = self.t_run;
-            self.t_run = tc;
-            self.level = level;
-            self.run_len = 1;
-            self.confirmed = 0;
-            if on {
-                self.pac = [0.0; 2];
-                // The midpoint edge of the envelope is the better start of a frame that the
-                // presence (a lower threshold) began just before.
-                let lead = tc - self.p_t_run;
-                if self.p_level == 1
-                    && self.fsk_phase == 0
-                    && self.fsk_runs == 0
-                    && (0.0..=EDGE_WINDOW).contains(&lead)
-                {
-                    self.p_t_run = tc;
-                    self.ft_run = tc;
-                }
-            }
+            self.begin_run(edge(idx, cross(ep, e, thr)), idx, on);
+        }
+        // Only the edge of a run that is no glitch is refined, when the run is confirmed.
+        if self.ref_pending == 1 && self.run_len >= p.min_steps {
+            self.ref_pending = 0;
+            self.t_run = self.refine(p, noise, on, idx);
         }
         let d = cmul_conj(x, xp);
         if on {
@@ -1318,12 +1341,12 @@ impl Lane {
                     }
                 } else {
                     self.started = 1;
-                    self.start = step_of(self.t_run);
+                    self.start = step_of(self.c_run);
                     self.acc = [0.0; 2];
                 }
             } else if self.started == 1 {
                 let len = width(self.t_prev, self.t_run);
-                let next = self.pulse_done(p, pairs, len, self.t_run);
+                let next = self.pulse_done(p, pairs, len, self.c_run);
                 if next != Next::Stay {
                     return next;
                 }
@@ -1361,6 +1384,79 @@ impl Lane {
             }
         }
         Next::Stay
+    }
+
+    /// A new envelope run (`on` a pulse) after a confirmed one, its edge (first stage) at `tc`
+    /// detected at sample `idx`; the edge waits for its refinement (D1023).
+    #[inline]
+    fn begin_run(&mut self, tc: f64, idx: u64, on: bool) {
+        self.prev_len = self.run_len;
+        self.t_prev = self.t_run;
+        self.t_run = tc;
+        self.c_prev = self.c_run;
+        self.c_run = tc;
+        self.ref_idx = idx;
+        self.ref_pending = 1;
+        self.level = u32::from(on);
+        self.run_len = 1;
+        self.confirmed = 0;
+        if on {
+            self.pac = [0.0; 2];
+            // The midpoint edge of the envelope is the better start of a frame that the
+            // presence (a lower threshold) began just before.
+            let lead = tc - self.p_t_run;
+            if self.p_level == 1
+                && self.fsk_phase == 0
+                && self.fsk_runs == 0
+                && (0.0..=EDGE_WINDOW).contains(&lead)
+            {
+                self.p_t_run = tc;
+                self.ft_run = tc;
+            }
+        }
+    }
+
+    /// The second stage of an envelope edge (D1023): the edge whose envelope crossing (at
+    /// `t_run`, detected at sample `ref_idx`) is delayed by the low-pass is found again in the
+    /// raw magnitudes of the ring, from `REFINE_BACK` samples before that sample to the current
+    /// one `idx`, at the level `t` of half the signal amplitude over the noise (`NOISE_POWER`):
+    /// the split of the window that maximises the sum of `m - t` after it (a rise, `on`) or of
+    /// `t - m` (a fall), the change point of a step at the level `t`, and there the crossing of
+    /// `t` interpolated between the two samples. The window holds samples of this burst only
+    /// (from `HIST - 1` before its lead-in on) and no earlier edge (at most `min_steps - 1`
+    /// samples before the crossing).
+    fn refine(&self, p: &Params, noise: f32, on: bool, idx: u64) -> f64 {
+        let t = libm::sqrtf(0.25 * self.high * self.high + NOISE_POWER * noise * noise);
+        let back = REFINE_BACK.min(u64::from(p.min_steps.saturating_sub(1)));
+        let lo = self
+            .ref_idx
+            .saturating_sub(back)
+            .max(self.lead_at.saturating_sub(HIST as u64 - 1))
+            .max(idx.saturating_sub(RING as u64 - 1));
+        if idx <= lo {
+            return self.t_run;
+        }
+        let at = |j: u64| {
+            self.ring
+                .get(j as usize & (RING - 1))
+                .copied()
+                .unwrap_or(0.0)
+        };
+        // Splits s in lo + 1 ..= idx: the samples from s on are after the edge.
+        let mut sum = 0.0f32;
+        let mut best = f32::NEG_INFINITY;
+        let mut split = idx;
+        let mut j = idx;
+        while j > lo {
+            let v = at(j) - t;
+            sum += if on { v } else { -v };
+            if sum > best {
+                best = sum;
+                split = j;
+            }
+            j -= 1;
+        }
+        edge(split, cross(at(split - 1), at(split), t))
     }
 
     fn gap_ratio_exceeded(&self, p: &Params) -> bool {
@@ -1424,8 +1520,11 @@ pub struct BandPulseDetectBlock<S: Storage> {
     trigger: S::Buf<f32>,
     /// The last step of the previous call.
     last: S::Buf<C32>,
-    /// Magnitudes of a piece.
+    /// Magnitudes of a piece (from row `HIST` on) and of the `HIST` steps before it.
     env: S::Buf<f32>,
+    /// Rows of `env` that hold steps (the last `HIST` of them are the history of the next
+    /// piece).
+    env_rows: usize,
     lanes: S::Buf<Lane>,
     /// One bit per lane that is not idle (`ceil(M / 64)` words).
     busy: S::Buf<u64>,
@@ -1487,7 +1586,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         let mut trigger = storage.alloc::<f32>(width)?;
         trigger.as_mut().fill(factor);
         let last = storage.alloc::<C32>(width)?;
-        let env = storage.alloc::<f32>(width * BAND_PULSE_CHUNK)?;
+        let env = storage.alloc::<f32>(width * (HIST + BAND_PULSE_CHUNK))?;
         let lanes = storage.alloc::<Lane>(width)?;
         let busy = storage.alloc::<u64>(width.div_ceil(64))?;
         let ook = storage.alloc::<u32>(width * 2 * config.max_pulses)?;
@@ -1511,6 +1610,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             fsk,
             pending: false,
             wide: (0, 0),
+            env_rows: HIST,
         })
     }
 
@@ -1527,7 +1627,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             plan.add::<f32>(width)?;
         }
         plan.add::<C32>(width)?;
-        plan.add::<f32>(width * BAND_PULSE_CHUNK)?;
+        plan.add::<f32>(width * (HIST + BAND_PULSE_CHUNK))?;
         plan.add::<Lane>(width)?;
         plan.add::<u64>(width.div_ceil(64))?;
         plan.add::<u32>(width * 2 * config.max_pulses)?;
@@ -1655,7 +1755,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             let end = if n.level == 1 {
                 self.pos + 1
             } else {
-                step_of(n.t_run)
+                step_of(n.c_run)
             };
             out[0] = Some((n.start, end.max(n.start)));
         }
@@ -1877,6 +1977,29 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         Ok((produced, false))
     }
 
+    /// The magnitudes of the `n` steps of `data` into the rows from `HIST` on of `env`, after
+    /// the last `HIST` steps before them moved to the front (the history of a lane that
+    /// triggers, D1023; a forward copy, so overlapping rows are fine).
+    #[inline(never)]
+    fn magnitudes(&mut self, data: &[C32], n: usize) -> Result<()>
+    where
+        Sdrk: Mag<C32>,
+    {
+        let w = self.width;
+        let from = self.env_rows.saturating_sub(HIST) * w;
+        let env = self.env.as_mut();
+        for j in 0..HIST * w {
+            let v = env.get(from + j).copied().unwrap_or(0.0);
+            if let Some(d) = env.get_mut(j) {
+                *d = v;
+            }
+        }
+        let out = env.get_mut(HIST * w..(HIST + n) * w).ok_or_else(internal)?;
+        <Sdrk as Mag<C32>>::mag(&Sdrk, data, out)?;
+        self.env_rows = HIST + n;
+        Ok(())
+    }
+
     /// The detectors of the lanes that are not idle or trigger at step `i` of `data` (one
     /// piece of whole steps; `self.last` is the step before its first).
     fn detect(&mut self, data: &[C32], i: usize, hit: bool) -> Result<()> {
@@ -1900,7 +2023,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
                 let k = word * 64 + rest.trailing_zeros() as usize;
                 rest &= rest - 1;
                 let mode = self.lanes.as_ref().get(k).map_or(IDLE, |l| l.mode);
-                self.lane_at(k, mode, step, before)?;
+                self.lane_at(k, mode, i, step, before)?;
             }
         }
         if hit {
@@ -1912,7 +2035,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
                 let e = self.lp.as_ref().get(k).copied().unwrap_or(0.0);
                 let noise = self.noise.as_ref().get(k).copied().unwrap_or(NOISE_FLOOR);
                 if e > noise * self.factor {
-                    self.lane_at(k, IDLE, step, before)?;
+                    self.lane_at(k, IDLE, i, step, before)?;
                 }
             }
         }
@@ -1921,7 +2044,14 @@ impl<S: Storage> BandPulseDetectBlock<S> {
 
     /// Runs lane `k` in mode `mode` on its value of `step` (`before` the step before, or
     /// `self.last`).
-    fn lane_at(&mut self, k: usize, mode: u32, step: &[C32], before: Option<&[C32]>) -> Result<()> {
+    fn lane_at(
+        &mut self,
+        k: usize,
+        mode: u32,
+        i: usize,
+        step: &[C32],
+        before: Option<&[C32]>,
+    ) -> Result<()> {
         let e = self.lp.as_ref().get(k).copied().unwrap_or(0.0);
         let noise = self.noise.as_ref().get(k).copied().unwrap_or(NOISE_FLOOR);
         let x = step.get(k).copied().unwrap_or_default();
@@ -1930,15 +2060,17 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             None => self.last.as_ref().get(k).copied(),
         }
         .unwrap_or_default();
-        self.lane_step(k, mode, e, noise, x, xp)
+        self.lane_step(k, mode, i, e, noise, x, xp)
     }
 
     /// The detector of lane `k` for one step.
     #[inline(never)]
+    #[allow(clippy::too_many_arguments)]
     fn lane_step(
         &mut self,
         k: usize,
         mode: u32,
+        i: usize,
         e: f32,
         noise: f32,
         x: C32,
@@ -1952,6 +2084,11 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         };
         let p = self.p;
         let idx = self.pos;
+        let w = self.width;
+        // Row `HIST + i` of the magnitudes is this step, the `HIST` rows before it the steps
+        // before (D1023).
+        let env = self.env.as_ref();
+        let m = env.get((HIST + i) * w + k).copied().unwrap_or(0.0);
         let mut pairs = LanePairs {
             ook: self
                 .ook
@@ -1965,9 +2102,13 @@ impl<S: Storage> BandPulseDetectBlock<S> {
                 .ok_or_else(internal)?,
         };
         let lane = self.lanes.as_mut().get_mut(k).ok_or_else(internal)?;
+        if let Some(r) = lane.ring.get_mut(idx as usize & (RING - 1)) {
+            *r = m;
+        }
         let next = match mode {
             IDLE => {
                 lane.begin_lead(idx, p.factor, e, x, xp);
+                history(lane, env, (HIST + i) * w + k, w, idx);
                 self.active += 1;
                 if let Some(b) = self.busy.as_mut().get_mut(k / 64) {
                     *b |= 1 << (k % 64);
@@ -2011,6 +2152,21 @@ impl<S: Storage> BandPulseDetectBlock<S> {
             }
         }
         Ok(())
+    }
+}
+
+/// Copies the raw magnitudes of the `HIST - 1` steps before `idx` of a lane that triggers
+/// into its ring (`at` the index of step `idx` in `env`, `w` the stride of a step; D1023).
+#[inline(never)]
+fn history(lane: &mut Lane, env: &[f32], at: usize, w: usize, idx: u64) {
+    for back in 1..HIST {
+        let v = env.get(at - back * w).copied().unwrap_or(0.0);
+        if let Some(r) = lane
+            .ring
+            .get_mut(idx.wrapping_sub(back as u64) as usize & (RING - 1))
+        {
+            *r = v;
+        }
     }
 }
 
@@ -2116,8 +2272,7 @@ where
                 .data()
                 .get(consumed * w..(consumed + n) * w)
                 .ok_or_else(internal)?;
-            let env = self.env.as_mut().get_mut(..n * w).ok_or_else(internal)?;
-            <Sdrk as Mag<C32>>::mag(&Sdrk, data, env)?;
+            self.magnitudes(data, n)?;
             for i in 0..n {
                 let warm = (self.pos < BAND_PULSE_WARMUP).then(|| 1.0 / (self.pos + 1) as f32);
                 let hit = envelope(
@@ -2127,7 +2282,7 @@ where
                     self.trigger.as_ref(),
                     self.env
                         .as_ref()
-                        .get(i * w..(i + 1) * w)
+                        .get((HIST + i) * w..)
                         .ok_or_else(internal)?,
                     self.p.alpha,
                     warm,
@@ -2139,6 +2294,7 @@ where
                 if self.pending {
                     produced += self.flush(output.get_mut(produced..).ok_or_else(internal)?)?;
                     if self.pending {
+                        self.env_rows = HIST + i + 1;
                         let step = data.get(i * w..(i + 1) * w).ok_or_else(internal)?;
                         self.last.as_mut().copy_from_slice(step);
                         return Ok(Progress {
@@ -2169,6 +2325,8 @@ where
         self.active = 0;
         self.pending = false;
         self.wide = (0, 0);
+        self.env.as_mut().fill(0.0);
+        self.env_rows = HIST;
         self.lp.as_mut().fill(0.0);
         self.noise.as_mut().fill(0.0);
         self.gain.as_mut().fill(NOISE_RATIO);

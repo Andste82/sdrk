@@ -162,11 +162,17 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         FSK (modulation fsk or auto) a second run machine marks the presence of a carrier \
         (the envelope min_snr_db above the noise), and during a presence the instantaneous \
         frequency (the angle of the low-passed product of a sample and the conjugate of the \
-        one before) is sliced between two tracked levels (step 1/16, hysteresis 1/16 of their \
-        distance) into upper and lower runs (runs shorter than half of min_pulse_us, 2 to 8 \
-        steps, are merged); each presence is one FSK frame, and with auto it is an FSK frame \
-        when it has at least 4 runs and the two levels are at least 0.06 of the step rate \
-        apart (its OOK pulses are then dropped). Every burst is one train of \
+        one before, the product scaled by a power of two near the inverse square of the \
+        envelope, at most 12 dB \
+        below the signal level) is sliced between two tracked levels (step 1/16, hysteresis \
+        1/16 of their distance) into upper and lower runs (runs shorter than half of \
+        min_pulse_us, 2 to 8 steps, are merged); each presence is one FSK frame, and with \
+        auto it is an FSK frame when it has at least 4 runs and the two levels are at least \
+        0.06 of the step rate apart (its OOK pulses are then dropped). The transitions of a \
+        frame with at least 5 of them are fitted with the grid of its symbol clock (least \
+        squares), its start and end moved to whole symbols before the first and after the \
+        last transition, and its widths rounded as times after its start. Every burst is \
+        one train of \
         sdrk_proto::pulses (widths in steps of the input, a train of more than 30 pairs is \
         split over packets flagged CONTINUED; the last gap is 0); the packet index is the \
         step of the first pulse since construction or reset. A transmission seen in the \
@@ -549,12 +555,28 @@ struct Out {
     _pad: u32,
 }
 
+/// A burst that a lane emitted: its span, its frequency (Hz), whether it was an FSK frame.
+#[derive(Clone, Copy, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+struct Emitted {
+    start: u64,
+    end: u64,
+    freq: f32,
+    fsk: u32,
+    valid: u32,
+    _pad: u32,
+}
+
 /// The state of one lane.
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 struct Lane {
     /// The two output records (0 the OOK train, 1 the FSK frame).
     out: [Out; 2],
+    /// The last FSK frame this lane emitted: an OOK train of a neighbour that shows one tone
+    /// of it is decided when its burst ends, which may be after the next transmission
+    /// (D1026).
+    frame: Emitted,
     /// Step of the first lead-in sample.
     lead_at: u64,
     /// Step of the envelope crossing of the edge that waits for its refinement.
@@ -582,6 +604,12 @@ struct Lane {
     /// Times of the start of the current and of the previous frequency run.
     ft_run: f64,
     ft_prev: f64,
+    /// The start of the first committed frequency run of the frame (the origin of the run
+    /// ends kept in the FSK pairs until the frame ends) and the end of the last one (D1025).
+    f_origin: f64,
+    f_last: f64,
+    /// The time of the last restart of the first level of a frame (D1025).
+    t_early: f64,
     /// The last burst decided in this lane: level, frequency (Hz).
     sum_level: f32,
     sum_freq: f32,
@@ -629,6 +657,10 @@ struct Lane {
     f_lo: f32,
     f_prev: f32,
     cand_before: f32,
+    /// The mean frequency before the last restart of the first level, and whether there was
+    /// one: a first run too short to set the first level (D1025).
+    f_early: f32,
+    early: u32,
     /// 0 before the first transition, 1 after.
     fsk_phase: u32,
     fsk_level: u32,
@@ -752,6 +784,245 @@ fn fsk_width(a: f64, b: f64) -> u32 {
     whole(libm::round(b) - libm::round(a))
 }
 
+/// The AGC of the frequency slicer equalises envelopes down to this fraction of the signal
+/// level (12 dB): a tone that the channel filter attenuates up to that much weighs as much as
+/// the other, while the edges of an OOK pulse, far below the signal level, do not outweigh
+/// its plateau (D1025).
+const AGC_FLOOR: f32 = 0.25;
+
+/// The gain of the AGC of the frequency slicer for the envelope `e`: `1 / e^2` rounded up to
+/// a power of two (`e^2 g` lies in `[1, 2)`; the exponent bits only, no division in the
+/// per-sample path), 0 for an envelope of 0 (D1025).
+fn a_gain(e: f32) -> f32 {
+    let q = e * e;
+    if q > FLUSH {
+        let exp = (q.to_bits() >> 23) & 0xff;
+        f32::from_bits(254u32.saturating_sub(exp) << 23)
+    } else {
+        0.0
+    }
+}
+
+/// A short first run of a frame (D1025): its mean frequency lies within this fraction of the
+/// distance of the two levels from the other level than the run after it, and it lasts at
+/// least `EARLY_MIN` steps (the frequency of the first samples of a frame, while the channel
+/// filter rises, lies anywhere).
+const EARLY_TOL: f32 = 0.3;
+const EARLY_MIN: f64 = 2.0;
+
+/// The resolution of the run ends kept during an FSK frame: `1 / RUN_FIX` steps (D1025).
+const RUN_FIX: f64 = 64.0;
+
+/// A time after the origin of a frame in `1 / RUN_FIX` steps (saturating, at least 0).
+fn run_fix(t: f64) -> u32 {
+    let v = libm::round(t * RUN_FIX);
+    if v <= 0.0 {
+        0
+    } else if v >= f64::from(u32::MAX) {
+        u32::MAX
+    } else {
+        v as u32
+    }
+}
+
+/// The largest distance of a transition from the grid of the symbol clock of a frame, and of
+/// the length of a run from its whole number of symbols, as fractions of the symbol (D1025;
+/// the slicer delays the two kinds of transition in opposite directions, so a run is off by
+/// up to twice as much as a transition).
+const GRID_TOL: f64 = 0.25;
+const RUN_TOL: f64 = 0.4;
+
+/// The fewest transitions of a frame for its symbol grid (D1025): with fewer, a grid fits
+/// almost any runs.
+const GRID_MIN: u32 = 5;
+
+/// The runs of one symbol whose lengths are tried as the symbol of the grid, besides their
+/// mean (D1025).
+const GRID_CAND: usize = 8;
+
+/// The transitions of a frame whose slots hold the ends of its runs (`fix` steps after the
+/// origin, `fsk_commit`): the ends of every run with a length except the last, in order.
+fn transitions(slots: &[u32], mut f: impl FnMut(f64)) {
+    let last = slots
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|&(i, &v)| {
+            v > i
+                .checked_sub(1)
+                .and_then(|j| slots.get(j))
+                .copied()
+                .unwrap_or(0)
+        })
+        .map_or(0, |(i, _)| i);
+    let mut before = 0u32;
+    for &v in slots.iter().take(last) {
+        if v > before {
+            f(f64::from(v) / RUN_FIX);
+        }
+        before = v;
+    }
+}
+
+/// The symbols of a run of `d` steps for the symbol `t` steps long (at least 1).
+fn symbols(d: f64, t: f64) -> f64 {
+    libm::round(d / t).max(1.0)
+}
+
+/// The least-squares grid `a + k t` of the transitions of a frame for the symbol length
+/// `guess` (every run between two transitions a whole number of symbols, rounded with
+/// `guess`, then once more with the fitted symbol): `(a, t, cost)` when every transition lies
+/// within `GRID_TOL` symbols of it and every run within `RUN_TOL` symbols of its whole number,
+/// `cost` the sum of the squared distances of the transitions in symbols.
+fn grid_fit(slots: &[u32], guess: f64) -> Option<(f64, f64, f64)> {
+    let fit = |t_sym: f64| {
+        let (mut n, mut sk, mut skk, mut st, mut skt) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        let (mut k, mut prev) = (0.0f64, None::<f64>);
+        transitions(slots, |t| {
+            if let Some(tp) = prev {
+                k += symbols(t - tp, t_sym);
+            }
+            prev = Some(t);
+            n += 1.0;
+            sk += k;
+            skk += k * k;
+            st += t;
+            skt += k * t;
+        });
+        let det = n * skk - sk * sk;
+        if det <= 0.0 {
+            return None;
+        }
+        let t = (n * skt - sk * st) / det;
+        let a = (st - t * sk) / n;
+        (t > 0.0).then_some((a, t))
+    };
+    let (_, t1) = fit(guess)?;
+    let (a, t) = fit(t1)?;
+    // Every transition near its grid point and every run near its whole number of symbols
+    // (rounded with `t`).
+    let (mut k, mut prev, mut ok, mut cost) = (0.0f64, None::<f64>, true, 0.0f64);
+    transitions(slots, |x| {
+        if let Some(tp) = prev {
+            let n = symbols(x - tp, t);
+            ok &= (x - tp - n * t).abs() <= RUN_TOL * t;
+            k += n;
+        }
+        prev = Some(x);
+        let r = (x - (a + k * t)) / t;
+        ok &= r.abs() <= GRID_TOL;
+        cost += r * r;
+    });
+    ok.then_some((a, t, cost))
+}
+
+/// Turns the run ends of a finished frame (`slots`, times after the start of its first run,
+/// `fsk_commit`) into widths in whole steps (D1025). The bit clock of a transmitter is steady,
+/// so the transitions are fitted with the grid `a + k t` of their symbol clock (least squares;
+/// the guesses of the symbol `t` are the runs between two transitions shorter than 1.5 times
+/// the shortest, the runs of one symbol, and their mean; the grid of the smallest distances
+/// wins); the start and the end of the frame, whose envelope edges are less precise, are
+/// moved to the nearest whole number of symbols (at least one) before the first and after the
+/// last transition; every boundary is
+/// rounded as a time after the start, so every transition is within half a step of its time
+/// on the grid after the start, and every width is the difference of two rounded boundaries.
+/// A frame with fewer than `GRID_MIN` transitions, or whose transitions do not lie on one
+/// grid, keeps its measured times (rounded after the start).
+fn fsk_widths(slots: &mut [u32]) {
+    let (mut count, mut shortest, mut prev) = (0u32, f64::INFINITY, None::<f64>);
+    transitions(slots, |t| {
+        if let Some(tp) = prev {
+            shortest = shortest.min(t - tp);
+        }
+        prev = Some(t);
+        count += 1;
+    });
+    // The first guess of the symbol: the mean of the runs shorter than 1.5 times the shortest
+    // (the runs of one symbol, whose upper and lower runs the slicer biases in opposite
+    // directions).
+    let (mut sum, mut n, mut prev) = (0.0f64, 0.0f64, None::<f64>);
+    transitions(slots, |t| {
+        if let Some(tp) = prev
+            && t - tp < 1.5 * shortest
+        {
+            sum += t - tp;
+            n += 1.0;
+        }
+        prev = Some(t);
+    });
+    // The grid of the smallest cost from the guesses: the mean of the runs of one symbol and
+    // each of the first `GRID_CAND` of them.
+    let mut grid: Option<(f64, f64, f64)> = None;
+    if count >= GRID_MIN && n > 0.0 {
+        let mut better = |g: Option<(f64, f64, f64)>| {
+            if let Some(g) = g
+                && grid.is_none_or(|b| g.2 < b.2)
+            {
+                grid = Some(g);
+            }
+        };
+        better(grid_fit(slots, sum / n));
+        let (mut tried, mut prev) = (0usize, None::<f64>);
+        transitions(slots, |t| {
+            if let Some(tp) = prev
+                && t - tp < 1.5 * shortest
+                && tried < GRID_CAND
+            {
+                tried += 1;
+                better(grid_fit(slots, t - tp));
+            }
+            prev = Some(t);
+        });
+    }
+    let Some((a, t, _)) = grid else {
+        // The measured times: widths of the rounded times after the start.
+        let mut before = 0.0;
+        for v in slots.iter_mut() {
+            let r = libm::round(f64::from(*v) / RUN_FIX);
+            *v = whole(r - before);
+            before = r;
+        }
+        return;
+    };
+    // The symbols from the first transition to the last one.
+    let (mut k_last, mut prev) = (0.0f64, None::<f64>);
+    transitions(slots, |x| {
+        if let Some(tp) = prev {
+            k_last += symbols(x - tp, t);
+        }
+        prev = Some(x);
+    });
+    let end = slots.last().map_or(0.0, |&v| f64::from(v) / RUN_FIX);
+    // The symbols before the first transition and after the last one.
+    let lead = symbols(a, t);
+    let stop = lead + k_last + symbols(end - (a + k_last * t), t);
+    // The boundaries in order after the start: the transitions on the grid, the end.
+    let n_tr = count as usize;
+    let mut before_raw = 0u32;
+    let mut before = 0.0;
+    let (mut seen, mut k, mut prev) = (0usize, 0.0f64, None::<f64>);
+    for v in slots.iter_mut() {
+        let raw = *v;
+        // An empty slot (a frame that starts at the lower level, the last gap 0) has no width.
+        let r = if raw <= before_raw {
+            before
+        } else if seen < n_tr {
+            let x = f64::from(raw) / RUN_FIX;
+            if let Some(tp) = prev {
+                k += symbols(x - tp, t);
+            }
+            prev = Some(x);
+            seen += 1;
+            libm::round((lead + k) * t)
+        } else {
+            libm::round(stop * t)
+        };
+        *v = whole(r - before);
+        before = r;
+        before_raw = raw;
+    }
+}
+
 impl Lane {
     /// Starts the lead-in at step `idx` with the sample `x` (`xp` the one before).
     fn begin_lead(&mut self, idx: u64, factor: f32, e: f32, x: C32, xp: C32) {
@@ -808,6 +1079,9 @@ impl Lane {
         self.f_lo = 0.0;
         self.f_prev = 0.0;
         self.cand_before = 0.0;
+        self.f_early = 0.0;
+        self.early = 0;
+        self.t_early = t;
         self.ft_run = t;
         self.ft_prev = t;
         self.fsk_phase = 0;
@@ -911,18 +1185,25 @@ impl Lane {
         self.acc = [0.0; 2];
     }
 
-    /// Commits a frequency run of `len` steps.
-    fn fsk_commit(&mut self, p: &Params, pairs: &mut LanePairs<'_>, upper: bool, len: u32) {
-        if self.fsk_full == 1 || len == 0 {
+    /// Commits a frequency run from the time `a` to `b`. Until the frame ends, its slot of the
+    /// FSK pairs holds the end of the run (`b`) after the origin of the frame in `1 / RUN_FIX`
+    /// steps (an empty slot the end of the run before); `end_frame` turns them into widths
+    /// (D1025).
+    fn fsk_commit(&mut self, p: &Params, pairs: &mut LanePairs<'_>, upper: bool, a: f64, b: f64) {
+        if self.fsk_full == 1 || fsk_width(a, b) == 0 {
             return;
         }
+        if self.fsk_runs == 0 {
+            self.f_origin = a;
+        }
         self.fsk_runs += 1;
+        let at = |t: f64| run_fix(t - self.f_origin);
         if upper {
             if self.fsk_n >= p.max_pulses {
                 self.fsk_full = 1;
                 return;
             }
-            put(pairs.fsk, 2 * self.fsk_n as usize, len);
+            put(pairs.fsk, 2 * self.fsk_n as usize, at(b));
             self.fsk_open = 1;
         } else {
             if self.fsk_open == 0 {
@@ -930,20 +1211,25 @@ impl Lane {
                     self.fsk_full = 1;
                     return;
                 }
-                put(pairs.fsk, 2 * self.fsk_n as usize, 0);
+                put(pairs.fsk, 2 * self.fsk_n as usize, at(a));
             }
-            put(pairs.fsk, 2 * self.fsk_n as usize + 1, len);
+            put(pairs.fsk, 2 * self.fsk_n as usize + 1, at(b));
             self.fsk_n += 1;
             self.fsk_open = 0;
         }
+        self.f_last = b;
     }
 
     /// One sample of the frequency slicer at step `idx` (`d` the product of the sample and the
     /// conjugate of the one before).
-    fn fsk_sample(&mut self, p: &Params, pairs: &mut LanePairs<'_>, d: [f32; 2], idx: u64) {
+    fn fsk_sample(&mut self, p: &Params, pairs: &mut LanePairs<'_>, d: [f32; 2], e: f32, idx: u64) {
+        // The product scaled by the envelope squared (an AGC before the low-pass): a tone that
+        // the channel filter attenuates weighs as much as the other one, so the low-passed
+        // frequency leaves the stronger tone as fast as the weaker (D1025).
+        let g = a_gain(e.max(AGC_FLOOR * self.high));
         let a = p.alpha;
-        self.fm[0] = flush_denormal(self.fm[0] + a * (d[0] - self.fm[0]));
-        self.fm[1] = flush_denormal(self.fm[1] + a * (d[1] - self.fm[1]));
+        self.fm[0] = flush_denormal(self.fm[0] + a * (g * d[0] - self.fm[0]));
+        self.fm[1] = flush_denormal(self.fm[1] + a * (g * d[1] - self.fm[1]));
         let f = atan2_fast(self.fm[1], self.fm[0]);
         let fp = self.f_prev;
         self.f_prev = f;
@@ -969,7 +1255,17 @@ impl Lane {
                 if self.fsk_cand >= p.fsk_min {
                     if self.fsk_cnt < p.fsk_min {
                         // Too few samples before the candidates to know the first level (the
-                        // start of the pulse): the mean starts over from here.
+                        // start of the pulse): the mean starts over from here. The samples
+                        // before may be a short first run: their mean and the time of the
+                        // change are kept for the first transition (D1025).
+                        if self.fsk_cnt > 0 {
+                            let first = (idx + 1).saturating_sub(u64::from(self.fsk_cand));
+                            let at = self.cand_f.first().copied().unwrap_or(f);
+                            let thr = self.f_ref.midpoint(f);
+                            self.f_early = self.f_ref;
+                            self.t_early = edge(first, cross(self.cand_before, at, thr));
+                            self.early = 1;
+                        }
                         self.f_ref = f;
                         self.fsk_cnt = 1;
                         self.fsk_cand = 0;
@@ -1037,6 +1333,14 @@ impl Lane {
         let second = (cand - j) as u32;
         self.fsk_phase = 1;
         self.fsk_level = u32::from(!first_upper);
+        // A short first run before the last restart at the other level is the first run of
+        // the frame (D1025).
+        let rel = (self.f_early - lo) / (hi - lo);
+        let other = if first_upper { rel } else { 1.0 - rel };
+        if self.early == 1 && other.abs() <= EARLY_TOL && self.t_early - self.ft_run >= EARLY_MIN {
+            self.fsk_commit(p, pairs, !first_upper, self.ft_run, self.t_early);
+            self.ft_run = self.t_early;
+        }
         self.fsk_prev = self.fsk_run.saturating_sub(second);
         self.fsk_has_prev = 1;
         self.ft_prev = self.ft_run;
@@ -1045,7 +1349,7 @@ impl Lane {
         self.fsk_confirmed = 0;
         if second >= p.fsk_min {
             self.fsk_confirmed = 1;
-            self.fsk_commit(p, pairs, first_upper, fsk_width(self.ft_prev, self.ft_run));
+            self.fsk_commit(p, pairs, first_upper, self.ft_prev, self.ft_run);
             self.fsk_has_prev = 0;
         }
     }
@@ -1075,7 +1379,7 @@ impl Lane {
         if self.fsk_confirmed == 0 && self.fsk_run >= p.fsk_min {
             self.fsk_confirmed = 1;
             if self.fsk_has_prev == 1 {
-                self.fsk_commit(p, pairs, !upper, fsk_width(self.ft_prev, self.ft_run));
+                self.fsk_commit(p, pairs, !upper, self.ft_prev, self.ft_run);
                 self.fsk_has_prev = 0;
             }
         }
@@ -1096,21 +1400,30 @@ impl Lane {
             return false;
         }
         if self.fsk_phase == 0 {
-            self.fsk_commit(p, pairs, true, fsk_width(self.ft_run, end));
+            self.fsk_commit(p, pairs, true, self.ft_run, end);
         } else {
             let upper = self.fsk_level == 1;
             if self.fsk_has_prev == 1 {
                 // The last run is too short: it belongs to the run before.
-                self.fsk_commit(p, pairs, !upper, fsk_width(self.ft_prev, end));
+                self.fsk_commit(p, pairs, !upper, self.ft_prev, end);
             } else {
-                self.fsk_commit(p, pairs, upper, fsk_width(self.ft_run, end));
+                self.fsk_commit(p, pairs, upper, self.ft_run, end);
             }
         }
         if self.fsk_open == 1 {
-            put(pairs.fsk, 2 * self.fsk_n as usize + 1, 0);
+            put(
+                pairs.fsk,
+                2 * self.fsk_n as usize + 1,
+                run_fix(self.f_last - self.f_origin),
+            );
             self.fsk_n += 1;
             self.fsk_open = 0;
         }
+        let slots = pairs
+            .fsk
+            .get_mut(..2 * self.fsk_n as usize)
+            .unwrap_or_default();
+        fsk_widths(slots);
         let freq = if self.fsk_phase == 1 {
             self.f_hi.midpoint(self.f_lo)
         } else {
@@ -1242,7 +1555,7 @@ impl Lane {
             }
         }
         if on {
-            self.fsk_sample(p, pairs, d, idx);
+            self.fsk_sample(p, pairs, d, e, idx);
         }
         if self.p_confirmed == 0 && self.p_run >= p.min_steps {
             self.p_confirmed = 1;
@@ -1845,6 +2158,14 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         let fsk = o.fsk == 1;
         let wide = self.wideband(k, (mine.0, mine.1), o.level)?;
         let mut emit = wide != Some(true);
+        // The end of the last frame this lane emitted on the same frequency: the part of a
+        // neighbour's train before it belongs to that frame (an earlier copy, D1026).
+        let own = lanes.get(k).map(|l| l.frame).unwrap_or_default();
+        let before = if own.valid == 1 && (f64::from(own.freq) - mine.2).abs() < self.spacing() {
+            own.end
+        } else {
+            0
+        };
         for j in self.neighbours(k).into_iter().flatten() {
             let n = lanes.get(j).ok_or_else(internal)?;
             // An FSK frame that spans the transmission describes it completely, an OOK train
@@ -1862,10 +2183,19 @@ impl<S: Storage> BandPulseDetectBlock<S> {
                     emit = false;
                 }
             }
+            // The last frame the neighbour emitted (D1026).
+            let e = n.frame;
+            if !fsk && e.valid == 1 && self.same(mine, (e.start, e.end, f64::from(e.freq))) {
+                emit = false;
+            }
             for (r, b) in self.in_progress(j, n).into_iter().enumerate() {
                 let Some(b) = b else { continue };
                 let frame = r == 1;
-                let other = span(b.0, b.1);
+                let other = if fsk && !frame {
+                    span(b.0.max(before), b.1)
+                } else {
+                    span(b.0, b.1)
+                };
                 let louder = b.3 > o.level || (b.3 == o.level && j < k);
                 let wins = match (fsk, frame) {
                     (true, false) if covers(me, other) => false,
@@ -1888,6 +2218,16 @@ impl<S: Storage> BandPulseDetectBlock<S> {
         lane.sum_end = mine.1;
         lane.sum_level = o.level;
         lane.sum_freq = mine.2 as f32;
+        if emit && fsk {
+            lane.frame = Emitted {
+                start: mine.0,
+                end: mine.1,
+                freq: mine.2 as f32,
+                fsk: 1,
+                valid: 1,
+                _pad: 0,
+            };
+        }
         let rec = lane.out.get_mut(r).ok_or_else(internal)?;
         rec.state = if emit { OUT_EMIT } else { OUT_NONE };
         if emit {
@@ -2374,7 +2714,10 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::float_cmp)]
 mod tests {
+    extern crate std;
+
     use super::*;
+    use std::vec::Vec;
 
     #[test]
     fn the_fast_atan2_is_within_2e_5_rad() {
@@ -2392,5 +2735,67 @@ mod tests {
         assert!(worst < 2e-5, "{worst}");
         assert_eq!(atan2_fast(0.0, 0.0), 0.0);
         assert!(atan2_fast(f32::NAN, 1.0).is_nan());
+    }
+
+    /// The slots of a frame (`fsk_commit`): the end of every run after the start, from the
+    /// widths in steps (pulse, gap, ...).
+    fn slots_of(widths: &[f64]) -> Vec<u32> {
+        let mut t = 0.0;
+        widths
+            .iter()
+            .map(|w| {
+                t += w;
+                run_fix(t)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_transitions_of_a_frame_are_fitted_with_its_symbol_grid() {
+        // Symbols of 17.3 steps: runs of 2, 1, 3, 1, 1, 2, 1, 4 and 2 symbols (the frame starts
+        // with the upper level, the last gap 0), the transitions measured with errors of up to
+        // 2 steps, the start 4 steps late and the end 3 steps early.
+        let t = 17.3;
+        let runs = [2.0, 1.0, 3.0, 1.0, 1.0, 2.0, 1.0, 4.0, 2.0];
+        let jitter = [1.5, -2.0, 0.7, 1.9, -1.2, 0.4, -1.8, 1.1];
+        let mut ends: Vec<f64> = runs
+            .iter()
+            .scan(0.0, |a, n| {
+                *a += n * t;
+                Some(*a)
+            })
+            .collect();
+        for (e, j) in ends.iter_mut().zip(jitter) {
+            *e += j - 4.0;
+        }
+        let last = ends.len() - 1;
+        ends[last] -= 3.0 + 4.0;
+        let mut widths: Vec<f64> = Vec::new();
+        let mut before = 0.0;
+        for e in &ends {
+            widths.push(e - before);
+            before = *e;
+        }
+        widths.push(0.0);
+        let mut slots = slots_of(&widths);
+        fsk_widths(&mut slots);
+        // Every boundary is the rounded time of its symbol after the start.
+        let mut k = 0.0;
+        let mut before = 0.0;
+        for (v, n) in slots.iter().zip(runs) {
+            k += n;
+            let r = libm::round(k * t);
+            assert_eq!(f64::from(*v), r - before, "{slots:?}");
+            before = r;
+        }
+        assert_eq!(slots[runs.len()], 0);
+        // A frame whose transitions lie on no grid keeps its measured widths.
+        let mut odd = slots_of(&[20.0, 31.0, 26.0, 23.0, 40.0, 29.0, 35.0, 37.0, 0.0]);
+        fsk_widths(&mut odd);
+        assert_eq!(odd, [20, 31, 26, 23, 40, 29, 35, 37, 0]);
+        // Fewer than `GRID_MIN` transitions: the measured times, rounded after the start.
+        let mut short = slots_of(&[0.0, 18.4, 35.2, 0.0]);
+        fsk_widths(&mut short);
+        assert_eq!(short, [0, 18, 36, 0]);
     }
 }

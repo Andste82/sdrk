@@ -906,7 +906,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 224] = [
+pub static KERNELS: [KernelSpec; 227] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -950,6 +950,7 @@ pub static KERNELS: [KernelSpec; 224] = [
     spec("fir", Family::Volk, false),
     spec("fir_decimate", Family::Volk, false),
     spec("fir_interpolate", Family::Volk, false),
+    spec("fir_interpolate_short", Family::Volk, false),
     spec("resample", Family::Volk, false),
     spec("fir_interpolate_real", Family::Volk, false),
     spec("resample_real", Family::Volk, false),
@@ -1010,6 +1011,11 @@ pub static KERNELS: [KernelSpec; 224] = [
     spec("fir_decimate_fallback", Family::FallbackVsCmsis, false),
     spec("fir_decimate_cq15_fallback", Family::FallbackVsCmsis, false),
     spec("fir_interpolate_fallback", Family::FallbackVsCmsis, false),
+    spec(
+        "fir_interpolate_short_fallback",
+        Family::FallbackVsCmsis,
+        false,
+    ),
     spec(
         "fir_interpolate_cq15_fallback",
         Family::FallbackVsCmsis,
@@ -1153,6 +1159,7 @@ pub static KERNELS: [KernelSpec; 224] = [
     proto("slice_qam64_block", Family::Own),
     proto("qam_mod_block", Family::Own),
     proto("qam_demod_block", Family::Own),
+    proto("qam_demod_search_block", Family::Own),
     proto("frame_decode_four_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
@@ -4643,6 +4650,7 @@ mod tests {
             "slice_qam64_block",
             "qam_mod_block",
             "qam_demod_block",
+            "qam_demod_search_block",
             "frame_decode_four_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();

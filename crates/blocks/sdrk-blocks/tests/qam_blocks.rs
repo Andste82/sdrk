@@ -30,9 +30,9 @@ use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, CostasConstellation, EqConstellation, EqMode, EqualizeBlock,
     EqualizeConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet,
-    PacketFlags, ParamValue, PortType, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS,
-    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock, SliceConfig,
-    SliceConstellation,
+    PacketFlags, ParamValue, PortType, QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP,
+    QAM_ACQUISITION_SYMBOLS, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock,
+    SliceConfig, SliceConstellation,
 };
 use sdrk_core::kernels::constellation::{Qam, rotate_symbol};
 use sdrk_core::kernels::costas::{Costas, CostasState};
@@ -688,6 +688,10 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
     let mut st = CostasState::new(c, cfg.carrier_bw, 0.7071, 0.05).unwrap();
     let acquired = acquire_kernels(&syms);
     let split = acquired.map_or(syms.len(), |(n, _)| n);
+    // The input ends before the first check of the lock detector after the estimate, so the
+    // restart of the block at a check without lock (D1421) is not part of this definition;
+    // `qam_demod_searches_again_when_the_loop_does_not_lock` tests it.
+    assert!(acquired.is_none_or(|(n, _)| syms.len() < n + QAM_ACQUISITION_CHECK));
     let mut y = vec![C32::default(); syms.len()];
     for (from, to) in [(0, split), (split, syms.len())] {
         let mut e = syms[from..to].to_vec();
@@ -1011,6 +1015,85 @@ fn qam_demod_acquires_once_after_its_window_and_again_after_reset() {
         }
         let f = block.acquired_frequency().unwrap();
         assert!((f - 0.001).abs() < 1e-4, "taps {taps}: late {f}");
+    }
+}
+
+/// Runs `input` through `block` in calls of 4096 samples; the soft bits.
+fn demod_all(block: &mut QamDemodBlock<VecStorage>, input: &[C32]) -> Vec<f32> {
+    let mut soft = Vec::new();
+    let mut out = vec![0.0f32; 8192];
+    for piece in input.chunks(4096) {
+        let mut rest = piece;
+        while !rest.is_empty() {
+            let p = block.process(rest, &mut out).unwrap();
+            soft.extend_from_slice(&out[..p.produced]);
+            rest = &rest[p.consumed..];
+        }
+    }
+    soft
+}
+
+#[test]
+fn qam_demod_searches_again_when_the_loop_does_not_lock() {
+    // R1 of the review of the QAM round (D1421): an estimate taken before the signal (here
+    // from a carrier at 0.06 cycles per symbol, whose fourth power is a clear peak, and from
+    // Gaussian noise for 40 windows) is held only while the carrier loop locks; at the checks
+    // every `QAM_ACQUISITION_CHECK` symbols without lock the acquisition searches again and finds
+    // the signal (16-QAM at 4 samples per symbol, offset 0.001 cycles per symbol, the block
+    // defaults with `carrier_bw` 0.005).
+    assert_eq!(QAM_ACQUISITION_CHECK, 4096);
+    let fs = rate(38_400);
+    let n_sig = 12_000;
+    let mut rng = Pcg32::new(SEED, 70);
+    let tone: Vec<C32> = (0..4 * 6000)
+        .map(|j| {
+            let ph = core::f64::consts::TAU * 0.06 * j as f64 / 4.0;
+            C32::new((0.7 * ph.cos()) as f32, (0.7 * ph.sin()) as f32)
+        })
+        .collect();
+    let noise: Vec<C32> = (0..4 * 40 * QAM_ACQUISITION_SYMBOLS)
+        .map(|_| C32::new(rng.normal() as f32, rng.normal() as f32) * 0.7)
+        .collect();
+    for (lead_name, lead) in [("carrier", &tone), ("noise", &noise)] {
+        for taps in [11usize, 0] {
+            let cfg = QamDemodConfig {
+                order: 16,
+                symbol_rate_hz: 9600.0,
+                equalizer_taps: taps,
+                ..QamDemodConfig::default()
+            };
+            let mut input = lead.clone();
+            input.extend_from_slice(&received(16, 4, n_sig, 0.01, 71));
+            let mut block = QamDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+            let soft = demod_all(&mut block, &input);
+            let what = format!("{lead_name}, taps {taps}");
+            let f = block.acquired_frequency().unwrap();
+            assert!((f - 0.001).abs() < 1e-4, "{what}: acquired {f}");
+            assert!(block.locked(), "{what}");
+            // the last 2000 symbols against the sent ones at the best rotation and offset (the
+            // timing loop gives about one symbol per 4 samples of the lead-in, not exactly)
+            let sym = |b: &[f32]| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0));
+            let tx: Vec<u32> = random_bits(n_sig * 4, 71)
+                .chunks_exact(4)
+                .map(sym)
+                .collect();
+            let rx: Vec<u32> = soft.chunks_exact(4).map(sym).collect();
+            let lead_syms = lead.len() / 4;
+            let errs = (0..4u32)
+                .flat_map(|r| (lead_syms - 300..lead_syms + 300).map(move |o| (r, o)))
+                .map(|(r, o)| {
+                    (rx.len() - 2000..rx.len())
+                        .map(|i| {
+                            let back = rotate_symbol(rx[i], 2, (4 - r) % 4);
+                            tx.get(i.wrapping_sub(o))
+                                .map_or(4, |t| (back ^ t).count_ones())
+                        })
+                        .sum::<u32>()
+                })
+                .min()
+                .unwrap();
+            assert_eq!(errs, 0, "{what}");
+        }
     }
 }
 

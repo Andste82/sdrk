@@ -39,9 +39,10 @@ use sdrk_core::Reference;
 use sdrk_core::kernels::decim::{Resample, ResampleReal};
 
 use super::{
-    Aligned, DECIM, DECIM_TAPS, FIR_TAPS, INTERP, INTERP_TAPS, Impl, Kernel, Layout, Pcg32,
-    RESAMPLE_DOWN, RESAMPLE_TAPS, RESAMPLE_UP, RealNoise, SquelchSample, describe_cmsis, fir,
-    fir_decimate, fir_interpolate, fir_interpolate_real, resample, resample_real, snr_db, taps,
+    Aligned, DECIM, DECIM_TAPS, FIR_TAPS, INTERP, INTERP_SHORT, INTERP_SHORT_TAPS, INTERP_TAPS,
+    Impl, Kernel, Layout, Pcg32, RESAMPLE_DOWN, RESAMPLE_TAPS, RESAMPLE_UP, RealNoise,
+    SquelchSample, describe_cmsis, fir, fir_decimate, fir_interpolate, fir_interpolate_real,
+    resample, resample_real, snr_db, taps,
 };
 
 /// The filter of a measurement.
@@ -53,6 +54,8 @@ pub(crate) enum Mode {
     Decimate,
     /// `fir_interpolate` by 2, 128 taps (64 per branch).
     Interpolate,
+    /// `fir_interpolate` by 8, 80 taps (10 per branch): the short-branch form (D1420).
+    InterpolateShort,
     /// `resample` by 3/2, 192 taps (64 per branch).
     Resample,
 }
@@ -63,6 +66,7 @@ impl Mode {
             Mode::Fir => FIR_TAPS,
             Mode::Decimate => DECIM_TAPS,
             Mode::Interpolate => INTERP_TAPS,
+            Mode::InterpolateShort => INTERP_SHORT_TAPS,
             Mode::Resample => RESAMPLE_TAPS,
         }
     }
@@ -73,6 +77,7 @@ impl Mode {
             Mode::Fir => (1, 1),
             Mode::Decimate => (1, DECIM),
             Mode::Interpolate => (INTERP, 1),
+            Mode::InterpolateShort => (INTERP_SHORT, 1),
             Mode::Resample => (RESAMPLE_UP, RESAMPLE_DOWN),
         }
     }
@@ -89,7 +94,7 @@ impl Mode {
             Mode::Fir => (n, n),
             Mode::Decimate => (n, n.div_ceil(DECIM)),
             // Enough input for `n` outputs from any phase counter.
-            Mode::Interpolate | Mode::Resample => {
+            Mode::Interpolate | Mode::InterpolateShort | Mode::Resample => {
                 let (up, down) = self.ratio();
                 (n * down / up + 2, n)
             }
@@ -101,7 +106,7 @@ impl Mode {
         match self {
             Mode::Fir => (n, n),
             Mode::Decimate => (n - n % DECIM, n / DECIM),
-            Mode::Interpolate | Mode::Resample => {
+            Mode::Interpolate | Mode::InterpolateShort | Mode::Resample => {
                 let (up, _) = self.ratio();
                 (n / up, n / up * up)
             }
@@ -125,6 +130,8 @@ impl Mode {
             (Mode::Decimate, true) => "arm_fir_decimate_q15 (block 4090 of 4096)",
             (Mode::Interpolate, false) => "arm_fir_interpolate_f32 by 2",
             (Mode::Interpolate, true) => "arm_fir_interpolate_q15 by 2",
+            (Mode::InterpolateShort, false) => "arm_fir_interpolate_f32 by 8 (80 taps)",
+            (Mode::InterpolateShort, true) => "arm_fir_interpolate_q15 by 8 (80 taps)",
             (Mode::Resample, false) => {
                 "arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler)"
             }
@@ -156,7 +163,7 @@ impl CmsisRaw for f32 {
                 let mut f = CmsisFirDecimateF32::new(taps, DECIM, max_block)?;
                 Box::new(move |i: &[f32], o: &mut [f32]| f.run(i, o))
             }
-            Mode::Interpolate | Mode::Resample => {
+            Mode::Interpolate | Mode::InterpolateShort | Mode::Resample => {
                 let mut f = CmsisFirInterpolateF32::new(taps, up, max_block)?;
                 Box::new(move |i: &[f32], o: &mut [f32]| f.run(i, o))
             }
@@ -176,7 +183,7 @@ impl CmsisRaw for i16 {
                 let mut f = CmsisFirDecimateQ15::new(taps, DECIM, max_block)?;
                 Box::new(move |i: &[i16], o: &mut [i16]| f.run(i, o))
             }
-            Mode::Interpolate | Mode::Resample => {
+            Mode::Interpolate | Mode::InterpolateShort | Mode::Resample => {
                 let mut f = CmsisFirInterpolateQ15::new(taps, up, max_block)?;
                 Box::new(move |i: &[i16], o: &mut [i16]| f.run(i, o))
             }
@@ -265,7 +272,7 @@ macro_rules! complex_sample {
                     Mode::Decimate => CxState::Decimate(
                         FirDecimState::new(t, vec![z; n - 1], down).expect("taps"),
                     ),
-                    Mode::Interpolate => CxState::Interpolate(
+                    Mode::Interpolate | Mode::InterpolateShort => CxState::Interpolate(
                         FirInterpState::new(t, vec![z; n.div_ceil(up)], up).expect("taps"),
                     ),
                     Mode::Resample => CxState::Resample(
@@ -384,7 +391,7 @@ macro_rules! real_sample {
             fn state(mode: Mode, taps: &[$t], up: usize, down: usize) -> RealState<$t> {
                 let hist = vec![<$t>::default(); taps.len().div_ceil(up)];
                 match mode {
-                    Mode::Interpolate => RealState::Interpolate(
+                    Mode::Interpolate | Mode::InterpolateShort => RealState::Interpolate(
                         FirInterpRealState::new(taps.to_vec(), hist, up).expect("taps"),
                     ),
                     Mode::Resample => RealState::Resample(

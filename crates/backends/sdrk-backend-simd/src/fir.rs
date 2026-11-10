@@ -45,7 +45,8 @@ use sdrk_core::kernels::decim::{
 };
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::interp::{
-    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
+    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal, SHORT_MAX_BRANCH,
+    short_branches,
 };
 use sdrk_core::num::Acc64;
 use sdrk_core::{C32, CQ15, Fallback, Progress, Q15, Result};
@@ -2569,13 +2570,540 @@ macro_rules! interpolate_impl {
     };
 }
 
-interpolate_impl!(
-    FirInterpolate,
-    fir_interpolate,
-    FirInterpState,
-    resample,
-    C32
-);
+impl FirInterpolate<C32> for Simd {
+    fn fir_interpolate<Tp, Hist>(
+        &self,
+        state: &mut FirInterpState<C32, Tp, Hist>,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> Result<Progress>
+    where
+        Tp: AsRef<[f32]>,
+        Hist: AsRef<[C32]> + AsMut<[C32]>,
+    {
+        let (n, l) = (state.taps().len(), state.factor());
+        if !short_branches(n, l) || !short_fits(l) {
+            return self.resample(state.inner_mut(), input, output);
+        }
+        // The short-branch form (D1420), also for the outputs still pending of a sample and a
+        // last sample with room for only some of its outputs, so that every output has the
+        // same bits whichever way the input was split into calls.
+        let p = state.inner_mut().parts_mut();
+        let (consumed, produced, q) = {
+            let h: &[f32] = bytemuck::cast_slice(&*p.hist);
+            let x: &[f32] = bytemuck::cast_slice(input);
+            let y: &mut [f32] = bytemuck::cast_slice_mut(output);
+            short_call(p.taps, l, h, *p.q, x, y)
+        };
+        *p.q = q;
+        commit(p.hist, input, consumed, produced, "interpolator window")
+    }
+}
+
+/// [`short_c32`] at the current level. Not generic and not inlined, so that it is compiled
+/// with the optimisation of this crate even when the generic `fir_interpolate` is instantiated in
+/// an unoptimised crate (the inlined forms of every width would give a frame beyond the 1 MiB
+/// stack of `wasm32` there).
+#[inline(never)]
+fn short_call(
+    taps: &[f32],
+    l: usize,
+    hist: &[f32],
+    q: i64,
+    xs: &[f32],
+    out: &mut [f32],
+) -> (usize, usize, i64) {
+    dispatch!(simd => short_c32(simd, taps, l, hist, q, xs, out))
+}
+
+/// The most vectors of outputs per sample (columns) of the short-branch form.
+const SHORT_COLS: usize = 4;
+/// Floats of the outputs of one sample in the short-branch form (`2 L`, at most [`SHORT_COLS`]
+/// vectors of 16 outputs).
+const SHORT_ONE: usize = 128;
+
+/// The columns of the short-branch form: vectors of `lanes` outputs for the `l` outputs of a
+/// sample.
+#[inline(always)]
+fn short_cols(l: usize, lanes: usize) -> usize {
+    l.div_ceil(lanes)
+}
+
+/// Whether the `l` outputs of a sample fit [`SHORT_COLS`] vectors of the current level (else
+/// the polyphase form runs).
+fn short_fits(l: usize) -> bool {
+    let lanes = dispatch!(simd => short_lanes(simd));
+    short_cols(l, short_width(lanes, l)) <= SHORT_COLS
+}
+
+/// The floats of the native vector of the level.
+#[inline(always)]
+fn short_lanes<S: SimdToken>(_simd: S) -> usize {
+    S::f32s::LEN
+}
+
+/// The short-branch form of `fir_interpolate` `C32` (D1420) on the native vectors of the level:
+/// for every input sample its `L` outputs together, the real and the imaginary parts in
+/// vectors of their own (one lane per output). Tap row `r` (`taps[r L .. r L + L]`,
+/// contiguous, loaded as it is) multiplies the sample `r` back, its real and imaginary part
+/// broadcast, for all `L` outputs; the outputs of two samples run together (independent
+/// chains), and the parts are interleaved when they are stored. Rows ascending, fused on the
+/// levels with FMA (D5); the last row of `rem < L` taps adds only to the lanes of its taps (a
+/// select), so no output takes a sample that is not in its window. `hist` (`ceil(N / L)`
+/// samples) and `xs` are interleaved `C32`. The plan of the polyphase state with `down = 1`:
+/// first the outputs still pending of the newest sample of the history (`q < 0`), then whole
+/// samples, then the first outputs of one more sample if the output has room for some but not
+/// all of its outputs. Returns `(consumed, produced, q)` in samples; the caller has checked
+/// [`short_fits`] and updates the history.
+#[inline(always)]
+fn short_c32<S: SimdToken>(
+    simd: S,
+    taps: &[f32],
+    l: usize,
+    hist: &[f32],
+    q: i64,
+    xs: &[f32],
+    out: &mut [f32],
+) -> (usize, usize, i64) {
+    let fma = has_fma(simd);
+    match (short_width(S::f32s::LEN, l), fma) {
+        (16, _) => short_lv::<S, f32x16<S>, true>(simd, taps, l, hist, q, xs, out),
+        (8, _) => short_lv::<S, f32x8<S>, true>(simd, taps, l, hist, q, xs, out),
+        (_, true) => short_lv::<S, f32x4<S>, true>(simd, taps, l, hist, q, xs, out),
+        _ => short_lv::<S, f32x4<S>, false>(simd, taps, l, hist, q, xs, out),
+    }
+}
+
+/// `count` samples of the short-branch form with vectors `V`: the window of sample `j` ends at
+/// the complex sample `end + j` of `src`, its `L` outputs go to `out[2 L j ..]`. A factor of
+/// whole vectors runs [`short_whole`], any other [`short_run`].
+#[inline(always)]
+fn short_any<S: SimdToken, V: Lanes<S>, const FMA: bool>(
+    simd: S,
+    taps: &[f32],
+    l: usize,
+    src: &[f32],
+    end: usize,
+    count: usize,
+    out: &mut [f32],
+) {
+    if l.is_multiple_of(V::LEN) {
+        match l / V::LEN {
+            1 => short_whole::<S, V, 1, FMA>(simd, taps, l, src, end, count, out),
+            2 => short_whole::<S, V, 2, FMA>(simd, taps, l, src, end, count, out),
+            3 => short_whole::<S, V, 3, FMA>(simd, taps, l, src, end, count, out),
+            _ => short_whole::<S, V, SHORT_COLS, FMA>(simd, taps, l, src, end, count, out),
+        }
+        return;
+    }
+    match short_cols(l, V::LEN) {
+        1 => short_run::<S, V, 1, FMA>(simd, taps, l, src, end, count, out),
+        2 => short_run::<S, V, 2, FMA>(simd, taps, l, src, end, count, out),
+        3 => short_run::<S, V, 3, FMA>(simd, taps, l, src, end, count, out),
+        _ => short_run::<S, V, SHORT_COLS, FMA>(simd, taps, l, src, end, count, out),
+    }
+}
+
+/// The vectors of the short-branch form for the factor `l` on a level of `native` lanes: the
+/// widest of 16, 8 and 4 lanes (at most `native`) that divides `l` into at most [`SHORT_COLS`]
+/// vectors (whole rows, no partial loads), else `native`.
+#[inline(always)]
+fn short_width(native: usize, l: usize) -> usize {
+    [16, 8, 4]
+        .into_iter()
+        .find(|&w| w <= native && l.is_multiple_of(w) && l / w <= SHORT_COLS)
+        .unwrap_or(native)
+}
+
+/// [`short_run`] for `L = COLS V::LEN`: the full tap rows load whole vectors in place and the
+/// outputs store whole vectors, without the checks of the general form; `4 / COLS` samples
+/// per pass (independent chains that hide the latency of the multiply-add), each output with
+/// two sums (the first half of the rows and the rest, added at the end: shorter chains of
+/// rounded additions than one sum over all rows).
+#[inline(always)]
+fn short_whole<S: SimdToken, V: Lanes<S>, const COLS: usize, const FMA: bool>(
+    simd: S,
+    taps: &[f32],
+    l: usize,
+    src: &[f32],
+    end: usize,
+    count: usize,
+    out: &mut [f32],
+) {
+    match COLS {
+        1 => short_pass::<S, V, COLS, 4, FMA>(simd, taps, l, src, end, count, out),
+        2 => short_pass::<S, V, COLS, 2, FMA>(simd, taps, l, src, end, count, out),
+        _ => short_pass::<S, V, COLS, 1, FMA>(simd, taps, l, src, end, count, out),
+    }
+}
+
+/// [`short_whole`] with `P` samples per pass.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the generic vectors of every instance as 64-byte values; the sums \
+              of an instance are at most 16 vectors of the level, kept in registers"
+)]
+#[inline(always)]
+fn short_pass<S: SimdToken, V: Lanes<S>, const COLS: usize, const P: usize, const FMA: bool>(
+    simd: S,
+    taps: &[f32],
+    l: usize,
+    src: &[f32],
+    end: usize,
+    count: usize,
+    out: &mut [f32],
+) {
+    if count == 0 || l != COLS * V::LEN {
+        return;
+    }
+    let n = taps.len();
+    let k = n.div_ceil(l);
+    let rows = taps.chunks_exact(l);
+    let last = rows.remainder();
+    let rem = last.len();
+    let zero = V::splat(simd, 0.0);
+    let iota = V::from_slice(simd, IOTA.get(..V::LEN).unwrap_or_default());
+    // The last row's taps (zero beyond them) and the lanes they add to, per column. No
+    // closures here: they would be compiled without the target features of the level in a
+    // build with run-time detection.
+    let mut tail = [(zero, zero.simd_lt(zero)); COLS];
+    for (c, slot) in tail.iter_mut().enumerate() {
+        *slot = short_tail(simd, last, c, rem, iota);
+    }
+    let mut outs = out.chunks_exact_mut(2 * l);
+    let mut j = 0;
+    while j < count {
+        // Samples `j .. j + P` (the last pass repeats its first sample where fewer are left).
+        let live = P.min(count - j);
+        // (A closure without vector operations: the slices of the windows.)
+        let mut pairs: [core::slice::RChunksExact<'_, f32>; P] = core::array::from_fn(|p| {
+            let s = j + p.min(live - 1);
+            src.get(2 * (end + s + 1 - k)..2 * (end + s + 1))
+                .unwrap_or_default()
+                .rchunks_exact(2)
+        });
+        // Two sums per output: the first half of the rows (`re0`, `im0`) and the rest (`re1`,
+        // `im1`), each in the loop of one sum, added at the end.
+        let (mut re0, mut im0) = ([[zero; COLS]; P], [[zero; COLS]; P]);
+        let (mut re1, mut im1) = ([[zero; COLS]; P], [[zero; COLS]; P]);
+        let mut it = rows.clone();
+        for row in it.by_ref().take((n / l).div_ceil(2)) {
+            short_row::<S, V, COLS, P, FMA>(simd, row, &mut pairs, &mut re0, &mut im0);
+        }
+        for row in it {
+            short_row::<S, V, COLS, P, FMA>(simd, row, &mut pairs, &mut re1, &mut im1);
+        }
+        if rem > 0 {
+            // The last row belongs to the second half.
+            let xs = short_parts::<S, V, P>(simd, &mut pairs);
+            for (c, &(t, m)) in tail.iter().enumerate() {
+                for ((r, i), (xr, xi)) in re1.iter_mut().zip(im1.iter_mut()).zip(xs) {
+                    if let (Some(r), Some(i)) = (r.get_mut(c), i.get_mut(c)) {
+                        *r = m.select(madd::<S, V, FMA>(xr, t, *r), *r);
+                        *i = m.select(madd::<S, V, FMA>(xi, t, *i), *i);
+                    }
+                }
+            }
+        }
+        let (mut re, mut im) = (re0, im0);
+        for ((r, i), (r1, i1)) in re
+            .iter_mut()
+            .zip(im.iter_mut())
+            .zip(re1.iter().zip(im1.iter()))
+        {
+            for ((a, b), (c, d)) in r.iter_mut().zip(i.iter_mut()).zip(r1.iter().zip(i1.iter())) {
+                *a += *c;
+                *b += *d;
+            }
+        }
+        for (r, i) in re.iter().zip(&im).take(live) {
+            if let Some(o) = outs.next() {
+                for ((o, r), i) in o.chunks_exact_mut(2 * V::LEN).zip(r).zip(i) {
+                    let (lo, hi) = o.split_at_mut(V::LEN);
+                    r.zip_low(*i).store_slice(lo);
+                    r.zip_high(*i).store_slice(hi);
+                }
+            }
+        }
+        j += live;
+    }
+}
+
+/// One full tap row for `P` samples: the next sample of each window times the row, added to
+/// the sums `re`, `im` (one vector per column).
+#[inline(always)]
+fn short_row<S: SimdToken, V: Lanes<S>, const COLS: usize, const P: usize, const FMA: bool>(
+    simd: S,
+    row: &[f32],
+    pairs: &mut [core::slice::RChunksExact<'_, f32>; P],
+    re: &mut [[V; COLS]; P],
+    im: &mut [[V; COLS]; P],
+) {
+    let xs = short_parts::<S, V, P>(simd, pairs);
+    for (c, t) in row.chunks_exact(V::LEN).enumerate() {
+        let t = V::from_slice(simd, t);
+        for ((r, i), (xr, xi)) in re.iter_mut().zip(im.iter_mut()).zip(xs) {
+            if let (Some(r), Some(i)) = (r.get_mut(c), i.get_mut(c)) {
+                *r = madd::<S, V, FMA>(xr, t, *r);
+                *i = madd::<S, V, FMA>(xi, t, *i);
+            }
+        }
+    }
+}
+
+/// The parts of the next sample of each of the `P` windows, broadcast (zero past a window).
+#[inline(always)]
+fn short_parts<S: SimdToken, V: Lanes<S>, const P: usize>(
+    simd: S,
+    pairs: &mut [core::slice::RChunksExact<'_, f32>; P],
+) -> [(V, V); P] {
+    let zero = V::splat(simd, 0.0);
+    let mut xs = [(zero, zero); P];
+    for (x, w) in xs.iter_mut().zip(pairs.iter_mut()) {
+        if let Some([xr, xi]) = w.next() {
+            *x = (V::splat(simd, *xr), V::splat(simd, *xi));
+        }
+    }
+    xs
+}
+
+/// The taps of the last row `last` in column `c` (zero beyond them) and the lanes of its `rem`
+/// taps.
+#[inline(always)]
+fn short_tail<S: SimdToken, V: Lanes<S>>(
+    simd: S,
+    last: &[f32],
+    c: usize,
+    rem: usize,
+    iota: V,
+) -> (V, V::Mask) {
+    let mut t = [0.0f32; 16];
+    for (d, s) in t.iter_mut().zip(last.get(c * V::LEN..).unwrap_or_default()) {
+        *d = *s;
+    }
+    let m = (iota + V::splat(simd, (c * V::LEN) as f32)).simd_lt(V::splat(simd, rem as f32));
+    (V::from_slice(simd, t.get(..V::LEN).unwrap_or_default()), m)
+}
+
+/// [`short_c32`] on the vectors `V`.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy adds the buffers of both branches and every temporary; the frame holds the \
+              256-byte window and one 512-byte buffer of outputs"
+)]
+#[inline(always)]
+fn short_lv<S: SimdToken, V: Lanes<S>, const FMA: bool>(
+    simd: S,
+    taps: &[f32],
+    l: usize,
+    hist: &[f32],
+    q: i64,
+    xs: &[f32],
+    out: &mut [f32],
+) -> (usize, usize, i64) {
+    let k = taps.len().div_ceil(l);
+    let samples = xs.len() / 2;
+    let room = out.len() / 2;
+    let mut produced = 0;
+    // The outputs still pending of the newest sample of the history (its window is the whole
+    // history).
+    if q < 0 {
+        let pending = usize::try_from(-q).unwrap_or(0).min(l);
+        let first = l - pending;
+        let take = pending.min(room);
+        let mut one = [0.0f32; SHORT_ONE];
+        short_any::<S, V, FMA>(
+            simd,
+            taps,
+            l,
+            hist,
+            k - 1,
+            1,
+            one.get_mut(..2 * l).unwrap_or_default(),
+        );
+        if let (Some(d), Some(s)) = (
+            out.get_mut(..2 * take),
+            one.get(2 * first..2 * (first + take)),
+        ) {
+            d.copy_from_slice(s);
+        }
+        produced = take;
+        if take < pending {
+            return (0, produced, q + take as i64);
+        }
+    }
+    // The history and the first samples of the call as one window (oldest first).
+    let mut stitched = [0.0f32; 4 * SHORT_MAX_BRANCH];
+    let lead = xs.len().min(2 * k);
+    let (a, b) = stitched.split_at_mut(2 * k);
+    a.copy_from_slice(hist.get(..2 * k).unwrap_or_default());
+    if let Some(b) = b.get_mut(..lead) {
+        b.copy_from_slice(xs.get(..lead).unwrap_or_default());
+    }
+    // Whole samples: those whose windows reach into the history from `stitched` (the window of
+    // sample `j` ends at its sample `k + j`), the others from `xs` (ends at sample `j`).
+    let whole = samples.min((room - produced) / l);
+    let head = whole.min(k - 1);
+    let dst = out
+        .get_mut(2 * produced..2 * (produced + whole * l))
+        .unwrap_or_default();
+    let (o_head, o_rest) = dst.split_at_mut(2 * head * l);
+    let src_head = stitched.get(..2 * (k + head)).unwrap_or_default();
+    short_any::<S, V, FMA>(simd, taps, l, src_head, k, head, o_head);
+    short_any::<S, V, FMA>(simd, taps, l, xs, head, whole - head, o_rest);
+    produced += whole * l;
+    // One more sample with room for only some of its outputs.
+    let part = room - produced;
+    if whole < samples && part > 0 {
+        let src = if whole + 1 >= k {
+            xs
+        } else {
+            stitched.as_slice()
+        };
+        let end = if whole + 1 >= k { whole } else { k + whole };
+        let mut one = [0.0f32; SHORT_ONE];
+        short_any::<S, V, FMA>(
+            simd,
+            taps,
+            l,
+            src,
+            end,
+            1,
+            one.get_mut(..2 * l).unwrap_or_default(),
+        );
+        if let (Some(d), Some(s)) = (out.get_mut(2 * produced..2 * room), one.get(..2 * part)) {
+            d.copy_from_slice(s);
+        }
+        return (whole + 1, room, part as i64 - l as i64);
+    }
+    (whole, produced, 0)
+}
+
+/// The `C32` short-branch form for `count` samples, `COLS` vectors of `V::LEN` outputs each
+/// (see [`short_c32`]).
+#[inline(always)]
+fn short_run<S: SimdToken, V: Lanes<S>, const COLS: usize, const FMA: bool>(
+    simd: S,
+    taps: &[f32],
+    l: usize,
+    src: &[f32],
+    end: usize,
+    count: usize,
+    out: &mut [f32],
+) {
+    if count == 0 {
+        return;
+    }
+    let n = taps.len();
+    let k = n.div_ceil(l);
+    let full = n / l;
+    let rem = n - full * l;
+    let zero = V::splat(simd, 0.0);
+    // The lanes of the last row's taps per column (no closures with vector operations, see
+    // `short_pass`).
+    let iota = V::from_slice(simd, IOTA.get(..V::LEN).unwrap_or_default());
+    let mut masks = [zero.simd_lt(zero); COLS];
+    for (c, m) in masks.iter_mut().enumerate() {
+        *m = (iota + V::splat(simd, (c * V::LEN) as f32)).simd_lt(V::splat(simd, rem as f32));
+    }
+    let mut outs = out.chunks_exact_mut(2 * l);
+    let mut j = 0;
+    while j < count {
+        let two = j + 1 < count;
+        let (mut ar, mut ai, mut br, mut bi) =
+            ([zero; COLS], [zero; COLS], [zero; COLS], [zero; COLS]);
+        // The windows: `k` complex samples ending at `end + j` (the oldest first).
+        let wa = src
+            .get(2 * (end + j + 1 - k)..2 * (end + j + 1))
+            .unwrap_or_default();
+        let wb = if two {
+            src.get(2 * (end + j + 2 - k)..2 * (end + j + 2))
+                .unwrap_or_default()
+        } else {
+            wa
+        };
+        let mut pa = wa.chunks_exact(2).rev();
+        let mut pb = wb.chunks_exact(2).rev();
+        for (r, (x, y)) in (0..full).zip(pa.by_ref().zip(pb.by_ref())) {
+            let (xr, xi) = short_pair::<S, V>(simd, x);
+            let (yr, yi) = short_pair::<S, V>(simd, y);
+            for c in 0..COLS {
+                let t = short_load::<S, V>(simd, taps, r * l + c * V::LEN);
+                if let (Some(a0), Some(a1), Some(b0), Some(b1)) =
+                    (ar.get_mut(c), ai.get_mut(c), br.get_mut(c), bi.get_mut(c))
+                {
+                    *a0 = madd::<S, V, FMA>(xr, t, *a0);
+                    *a1 = madd::<S, V, FMA>(xi, t, *a1);
+                    *b0 = madd::<S, V, FMA>(yr, t, *b0);
+                    *b1 = madd::<S, V, FMA>(yi, t, *b1);
+                }
+            }
+        }
+        if let (true, Some(x), Some(y)) = (rem > 0, pa.next(), pb.next()) {
+            let (xr, xi) = short_pair::<S, V>(simd, x);
+            let (yr, yi) = short_pair::<S, V>(simd, y);
+            for (c, m) in masks.iter().enumerate() {
+                let t = short_load::<S, V>(simd, taps, full * l + c * V::LEN);
+                if let (Some(a0), Some(a1), Some(b0), Some(b1)) =
+                    (ar.get_mut(c), ai.get_mut(c), br.get_mut(c), bi.get_mut(c))
+                {
+                    *a0 = m.select(madd::<S, V, FMA>(xr, t, *a0), *a0);
+                    *a1 = m.select(madd::<S, V, FMA>(xi, t, *a1), *a1);
+                    *b0 = m.select(madd::<S, V, FMA>(yr, t, *b0), *b0);
+                    *b1 = m.select(madd::<S, V, FMA>(yi, t, *b1), *b1);
+                }
+            }
+        }
+        short_store(outs.next(), &ar, &ai);
+        if two {
+            short_store(outs.next(), &br, &bi);
+        }
+        j += 2;
+    }
+}
+
+/// The parts of the complex sample `x` (two floats), broadcast.
+#[inline(always)]
+fn short_pair<S: SimdToken, V: Lanes<S>>(simd: S, x: &[f32]) -> (V, V) {
+    (
+        V::splat(simd, x.first().copied().unwrap_or(0.0)),
+        V::splat(simd, x.get(1).copied().unwrap_or(0.0)),
+    )
+}
+
+/// The taps `taps[at .. at + V::LEN]`, zero beyond the taps (the lanes beyond `L` are not
+/// stored, those beyond the last row's taps not added).
+#[inline(always)]
+fn short_load<S: SimdToken, V: Lanes<S>>(simd: S, taps: &[f32], at: usize) -> V {
+    if let Some(t) = taps.get(at..at + V::LEN) {
+        V::from_slice(simd, t)
+    } else {
+        let mut t = [0.0f32; 16];
+        let avail = taps.get(at..).unwrap_or_default();
+        for (d, s) in t.iter_mut().zip(avail) {
+            *d = *s;
+        }
+        V::from_slice(simd, t.get(..V::LEN).unwrap_or_default())
+    }
+}
+
+/// Stores the `L` outputs of the parts `re`, `im` interleaved to `out` (`2 L` floats).
+#[inline(always)]
+fn short_store<S: SimdToken, V: Lanes<S>, const COLS: usize>(
+    out: Option<&mut [f32]>,
+    re: &[V; COLS],
+    im: &[V; COLS],
+) {
+    if let Some(o) = out {
+        for (c, (r, i)) in re.iter().zip(im).enumerate() {
+            let o = o.get_mut(2 * c * V::LEN..).unwrap_or_default();
+            let (lo, hi) = o.split_at_mut(o.len().min(V::LEN));
+            put(r.zip_low(*i), lo, false);
+            put(r.zip_high(*i), hi, false);
+        }
+    }
+}
+
 interpolate_impl!(
     FirInterpolateReal,
     fir_interpolate_real,

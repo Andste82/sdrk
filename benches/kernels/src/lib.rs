@@ -357,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 224] = [
+pub const KERNELS: [&str; 227] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -582,6 +582,9 @@ pub const KERNELS: [&str; 224] = [
     "frame_decode_four_block",
     "qam_soft_bits_qam16",
     "qam_soft_bits_qam64",
+    "fir_interpolate_short",
+    "fir_interpolate_short_fallback",
+    "qam_demod_search_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -647,6 +650,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "fir" => Box::new(FirK::new(rng, layout)),
         "fir_decimate" => Box::new(DecimateK::new(rng, layout)),
         "fir_interpolate" => Box::new(PolyK::new(rng, layout, INTERP_TAPS, INTERP, 1)),
+        "fir_interpolate_short" => {
+            Box::new(PolyK::new(rng, layout, INTERP_SHORT_TAPS, INTERP_SHORT, 1))
+        }
         "resample" => Box::new(PolyK::new(
             rng,
             layout,
@@ -813,6 +819,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "equalize_qam16_fallback" => Box::new(qam_family::EqualizeQamK::new(rng, layout, true)),
         "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
+        "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),
         "channel_select_block" => {
             Box::new(channelize_family::ChannelSelectBlockK::new(rng, layout))
@@ -923,6 +930,12 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             rng,
             layout,
             Mode::Interpolate,
+            Entry::Fallback,
+        )),
+        "fir_interpolate_short_fallback" => Box::new(FirFamK::<C32>::new(
+            rng,
+            layout,
+            Mode::InterpolateShort,
             Entry::Fallback,
         )),
         "fir_interpolate_cq15_fallback" => Box::new(FirFamK::<CQ15>::new(
@@ -2263,6 +2276,11 @@ impl Kernel for DecimateK {
 /// Taps of the `fir_interpolate` measurement (64 per branch).
 const INTERP_TAPS: usize = 128;
 const INTERP: usize = 2;
+/// Taps of the `fir_interpolate_short` measurements: a pulse shaper by 8 with 10 taps per
+/// branch, the short-branch form of D1420 (`qam_mod` and `psk_mod` at 8 samples per symbol
+/// with span 10 have 81 taps; CMSIS-DSP's interpolator needs a multiple of the factor).
+const INTERP_SHORT_TAPS: usize = 80;
+const INTERP_SHORT: usize = 8;
 /// Taps of the `resample` measurement (64 per branch).
 const RESAMPLE_TAPS: usize = 192;
 const RESAMPLE_UP: usize = 3;

@@ -3071,6 +3071,14 @@ impl Kind for SliceKind {
     fn kernels() -> &'static [&'static str] {
         &[]
     }
+    /// `qam16` and `qam64` call the kernel `qam_soft_bits` (I44-1, D1412); the other
+    /// constellations call no kernel.
+    fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
+        match params.get("constellation").and_then(Value::as_str) {
+            Some("qam16" | "qam64") => &["qam_soft_bits"],
+            _ => Self::kernels(),
+        }
+    }
     fn default_cfg() -> SliceConfig {
         SliceConfig::default()
     }
@@ -3580,16 +3588,25 @@ impl Kind for QamDemodKind {
 
     const KIND: &'static str = "qam_demod";
     fn kernels() -> &'static [&'static str] {
-        &["fir", "symbol_sync", "equalize", "costas"]
+        &[
+            "fir",
+            "symbol_sync",
+            "fft",
+            "equalize",
+            "costas",
+            "qam_soft_bits",
+        ]
     }
     /// `equalizer_taps` 0 leaves out `equalize`; the default (11) and every other count keep it.
+    /// The frequency acquisition (`fft`, D1403) and the soft bits (`qam_soft_bits`, D1412) run
+    /// in every configuration.
     fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
         let off = params
             .get("equalizer_taps")
             .and_then(Value::as_i64)
             .is_some_and(|t| t == 0);
         if off {
-            &["fir", "symbol_sync", "costas"]
+            &["fir", "symbol_sync", "fft", "costas", "qam_soft_bits"]
         } else {
             Self::kernels()
         }

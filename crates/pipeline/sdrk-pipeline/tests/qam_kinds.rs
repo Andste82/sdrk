@@ -67,7 +67,14 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
         ("qam_mod", &["fir_interpolate"][..]),
         (
             "qam_demod",
-            &["fir", "symbol_sync", "equalize", "costas"][..],
+            &[
+                "fir",
+                "symbol_sync",
+                "fft",
+                "equalize",
+                "costas",
+                "qam_soft_bits",
+            ][..],
         ),
     ] {
         let f = registry.factory(kind).unwrap();
@@ -80,7 +87,7 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
         f.kernels_for(&raw(
             json!({ "symbol_rate_hz": 25_000, "equalizer_taps": 0 })
         )),
-        ["fir", "symbol_sync", "costas"]
+        ["fir", "symbol_sync", "fft", "costas", "qam_soft_bits"]
     );
     for params in [
         json!({ "symbol_rate_hz": 25_000 }),
@@ -89,10 +96,33 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
     ] {
         assert_eq!(
             f.kernels_for(&raw(params.clone())),
-            ["fir", "symbol_sync", "equalize", "costas"],
+            [
+                "fir",
+                "symbol_sync",
+                "fft",
+                "equalize",
+                "costas",
+                "qam_soft_bits"
+            ],
             "{params}"
         );
     }
+    // `slice` names `qam_soft_bits` for the QAM constellations only (I44-1, D1412).
+    let f = registry.factory("slice").unwrap();
+    assert_eq!(f.kernels(), [""; 0]);
+    for (constellation, kernels) in [
+        ("qam16", &["qam_soft_bits"][..]),
+        ("qam64", &["qam_soft_bits"][..]),
+        ("qpsk", &[][..]),
+        ("8psk", &[][..]),
+    ] {
+        assert_eq!(
+            f.kernels_for(&raw(json!({ "constellation": constellation }))),
+            kernels,
+            "{constellation}"
+        );
+    }
+    assert_eq!(f.kernels_for(&raw(json!({}))), [""; 0]);
     assert_eq!(registry.descriptions().count(), 68);
 }
 

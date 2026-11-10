@@ -2484,6 +2484,17 @@ The speed round (D1416 to D1419; before -> after per symbol, reference / counter
 | `equalize_qam16_fallback` | 172.34 / 178.76 -> 164.64 / 166.89 | 170.35 / 177.08 -> 161.91 / 155.93 | 135.09 / 131.78 -> 129.06 / 122.79 | 131.57 / 137.19 -> 115.98 / 124.93 | 273.82 / 196.27 -> 229.24 / 189.99 |
 | `equalize_fallback` (PSK, QPSK) | 152.52 / 165.43 -> 138.54 / 145.19 | 146.58 / 157.00 -> 133.42 / 133.79 | 115.08 / 114.73 -> 107.88 / 112.97 | 108.35 / 113.61 -> 102.03 / 114.41 | 245.68 / 188.16 -> 216.23 / 184.01 |
 
+The 64-QAM loops (D1425; measured once on a temporary 64-QAM form of the two entries, the GNU Radio side on the 64-QAM `constellation_rect`, `costas` from a start phase of 0.05 rad; no committed count entry; before -> after per symbol, reference / counter model):
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
+| --- | --- | --- | --- | --- | --- |
+| `costas` `qam64` (fallback) | 137.49 / 115.79 -> 167.88 / 144.31 | 134.26 / 113.52 -> 167.87 / 144.31 | 108.48 / 133.61 -> 103.37 / 145.61 | 120.27 / 146.92 -> 73.53 / 84.81 | 159.83 / 162.42 -> 146.32 / 110.24 |
+| GNU Radio `constellation_receiver_cb` (64-QAM) | 206.43 / 181.41 | 206.43 / 181.41 | 166.70 / 173.28 | 159.06 / 173.33 | 194.87 / 175.73 |
+| `equalize` `qam64` (fallback) | 172.34 / 178.76 -> 164.64 / 166.89 | 170.35 / 177.08 -> 161.91 / 155.93 | 135.09 / 131.78 -> 128.04 / 123.29 | 131.57 / 137.19 -> 122.41 / 135.10 | 273.81 / 196.26 -> 239.18 / 204.98 |
+| GNU Radio `linear_equalizer` (64-QAM) | 191.52 / 213.78 | 191.52 / 213.78 | 943.86 / 277.23 | 938.01 / 277.22 | 244.41 / 243.20 |
+
+Four 64-QAM rows are slower after the speed round: `costas` at `sse2` and `sse4.2` on both models (+22 to +27 %), at `avx2` on the counter model (+9.0 %), `equalize` at `neon` on the counter model (+4.4 %); open item I44-11. Every 64-QAM row stays faster than GNU Radio's. At `simd128` (instructions, no core model) `costas` `qam64` 427.37 -> 346.46, `equalize` `qam64` 1089.47 -> 1081.47.
+
 - **Equalizer (D1417, the same bits).** The tracker takes the forms of the carrier loop of D1100 (the integrator after one well-predicted branch, the phase step from the bits of the `f32`, the 0 of a non-finite detector value out of line); the finite test of the weight update is one unsigned maximum per lane and component on AArch64 and from SSE4.1, the or of compare masks at SSE2; the QAM grid decision selects its level by comparisons on AArch64 and AVX2 instead of the conversion and the table load. On `cortex-a72` the QAM equalizer is now 6 % faster than GNU Radio's (before 12 % slower, I44-7 closed), the PSK equalizer too (0.94, before 1.07). The PSK rows at `avx512` move by -5.8 % on the reference model and +0.7 % on the counter-model (accepted). At `simd128` (instructions, no core model) `equalize` 1024.47 -> 1014.47 and `equalize_qam16` 1090.47 -> 1081.47.
 - **Carrier loop (D1418, the same bits).** The QAM detector takes `libm::atan2f` inline for the quotients of a loop near lock (`|y| / x` in `[2^-12, 7/16)` with `x > 0`, where msun's `atanf` has no argument reduction), the call for every other input; the decision of D1417 applies too. Ours is now 19 to 27 % faster than GNU Radio's `constellation_receiver_cb` on the reference models and 14 to 42 % on the counter-models (before up to 2 % slower on `sapphirerapids`). At `simd128` 423.37 -> 346.36 instructions.
 

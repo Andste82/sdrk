@@ -260,7 +260,8 @@ What each kernel is compared with:
 | `channelize_fallback` C32 (the measured side is our fallback) | the same `firpfbch2_crcf` with liquid's portable dot product and its own FFT (portable C) |
 | `channelize_block`, `channel_select_block` (the blocks `channelize` and `channel_select`, M45); `channel_bank_channelize`, `channel_bank_ddc` (M45 test 9: one channelizer with eight readers against eight `ddc` blocks) | our own code as information (`info`, `Family::Own`; the library comparison of the channelizer is the kernel entry `channelize`, D928, D930; [Channelizer blocks](#channelizer-blocks-and-channel-banks-m45)) |
 | `band_pulse_detect_block` (the block `band_pulse_detect`, M45.1: 16 lanes at 250 kHz, per lane value) | our own code as information (`info`, `Family::Own`; the natural like-for-like reference, `rtl_433`'s `pulse_detect_package`, is GPL and is not used or linked, and no other library has a pulse detector on the lanes of a channelizer, D962; [Band pulse detector](#band-pulse-detector-m451)) |
-| `slice_qam16_block`, `slice_qam64_block` (the block `slice` with the constellations `qam16` and `qam64`, M44 §2), 4096 symbols per call, per input symbol | our own code as information (`info`, `Family::Own`, D1201): no library computes the piecewise-linear soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value); [QAM slicer](#qam-slicer-m44) |
+| `qam_soft_bits_qam16`, `qam_soft_bits_qam64` (the kernel `qam_soft_bits`, M44 §2, I44-1), 4096 symbols per call, scale 1, per input symbol | our fallback as information (`info`, `Family::Own`, D1201, D1412): no library computes the piecewise-linear soft bits; the SIMD paths are judged by their efficiency and must not be slower than the fallback; [QAM slicer](#qam-slicer-m44) |
+| `slice_qam16_block`, `slice_qam64_block` (the block `slice` with the constellations `qam16` and `qam64`, M44 §2, around the kernel `qam_soft_bits`), 4096 symbols per call, per input symbol | our own code as information (`info`, `Family::Own`, D1201): no library computes the piecewise-linear soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value); [QAM slicer](#qam-slicer-m44) |
 | `qam_mod_block`, `qam_demod_block` (the blocks `qam_mod` and `qam_demod`, M44 §4, 16-QAM at 8 samples per symbol), 4096 output samples (`qam_mod`) or 4096 input samples (`qam_demod`) per call, per sample; `frame_decode_four_block` (`frame_decode` with `rotations` `four`, 4 bits per symbol), per soft bit | our own code as information (`info`, `Family::Own`, D1216): the blocks are chains of kernels whose library comparisons are their own entries (`fir_interpolate`, `fir`, `symbol_sync`, `costas_qam16_fallback`, `equalize_qam16_fallback`); no library has the same blocks or the test framing; [QAM blocks](#qam-blocks-m44) |
 | `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
 | `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
@@ -312,7 +313,7 @@ The halfband references (M23, maintainer decisions of 2026-10-31) get SDRk's tap
 - `noise_blank` (`C32`), `noise_blank_cq15` and `auto_notch` (`f32`) (M33) are per-sample recursions that stay with the fallback on every backend: the facade entry is `info` against our own fallback at every level, `avx2-runtime` included, without an efficiency gate (D420). The workloads: `noise_blank` at 192 kHz with a hold of 0.2 ms and a lookahead of 50 us (the spec's defaults before D425) on noise with an impulse of 3 samples in every 512, `auto_notch` with 32 taps on 12 kHz audio with a 1.5 kHz whistle. The `noise_blank` fallback runs a call in sections of 128 samples (D424): one `memcpy` of the whole call is `rep movsb` in glibc, which the simulated cycles cost per byte (811.18 cycles per sample on `znver3` at `avx2` before, 11.58 after). `auto_notch` is bound by the latency of its sums, which run in a fixed ascending order shared bit for bit with the reference.
 - `preemph_limit_stereo` (`C32`) and `stereo_encode` (`C32` to `f32`) (M36) stay with the fallback on every backend (the limiter is a per-sample recursion with one envelope for both channels, the encoder reads the pilot and the subcarrier from the interpolated tables of `rotate` at the running phase): the facade entry is `info` against our own fallback at every level, `avx2-runtime` included, without an efficiency gate and without a `_fallback` entry (D484). No library has a stereo limiter with a linked gain or a stereo multiplex encoder. The workloads (D485): `preemph_limit_stereo` as `preemph_limit` (48 kHz, 50 us, limit 0.5) with a burst on the left channel and a later one on the right, `stereo_encode` with the block defaults at 192 kHz on left 1 kHz 0.6 and right 3 kHz 0.4 plus noise.
 - The protocol entries of `sdrk-proto` (M37) have no SIMD branch (D496). The CRCs (`crc16_ccitt_false`, `crc16_x25`, `crc32`, `crc24_adsb`) are gated against GNU Radio's generic CRC `gr::digital::crc` of gr-digital with the same parameters and messages (`Family::GnuRadio`, D527), our code beside it as information; `frame_decode` and the blocks `frame_encode_block` and `frame_decode_block` have no reference (no C library has this framing): `info` against our own code at every level, `avx2-runtime` included; figures in [Protocol code](#protocol-code-sdrk-proto-m37).
-- `symbol_sync` (`C32`) and `symbol_sync_real` (`f32`) (M38) stay with the fallback on every backend (every strobe position depends on the timing error of the strobe before it): the facade entry is `info` against our own fallback at every level, `avx2-runtime` included, without an efficiency gate and without a `_fallback` entry (D562). No library runs the same loop: GNU Radio's `symbol_sync_cc`/`_ff` interpolate with an 8-tap MMSE filter bank or a polyphase filter bank (and keep the detector history and the stream tags in C++ containers), liquid-dsp's `symsync` filters with a polyphase matched filter bank and its derivative; `symbol_sync` uses a 4-point cubic Lagrange interpolator, so either library would count a different amount of work. The workloads (D563) are the golden-case shapes with the block defaults (Gardner): BPSK with a raised cosine 0.35 at 4.1 samples per symbol, and boxcar-filtered real levels at 8 samples per symbol, both with noise; a sample is an input sample (cycles per symbol = cycles per sample times the samples per symbol). The block `slice` has no kernel; only its QAM constellations have entries of the block (`slice_qam16_block`, `slice_qam64_block`, M44, D1201).
+- `symbol_sync` (`C32`) and `symbol_sync_real` (`f32`) (M38) stay with the fallback on every backend (every strobe position depends on the timing error of the strobe before it): the facade entry is `info` against our own fallback at every level, `avx2-runtime` included, without an efficiency gate and without a `_fallback` entry (D562). No library runs the same loop: GNU Radio's `symbol_sync_cc`/`_ff` interpolate with an 8-tap MMSE filter bank or a polyphase filter bank (and keep the detector history and the stream tags in C++ containers), liquid-dsp's `symsync` filters with a polyphase matched filter bank and its derivative; `symbol_sync` uses a 4-point cubic Lagrange interpolator, so either library would count a different amount of work. The workloads (D563) are the golden-case shapes with the block defaults (Gardner): BPSK with a raised cosine 0.35 at 4.1 samples per symbol, and boxcar-filtered real levels at 8 samples per symbol, both with noise; a sample is an input sample (cycles per symbol = cycles per sample times the samples per symbol). The block `slice` has entries only for its QAM constellations (`slice_qam16_block`, `slice_qam64_block`, M44, D1201), which run the kernel `qam_soft_bits` (entries `qam_soft_bits_qam16`, `qam_soft_bits_qam64`, D1412).
 - `costas` (`C32`) (M40) stays with the fallback on every backend (the phase of every symbol depends on the detector output of the symbol before it): the facade entry is `info` against our own fallback at every level, `avx2-runtime` included, without an efficiency gate (D608); the fallback is gated against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607). The workload: QPSK with one sample per symbol, a start phase of 0.7 rad, 0.002 cycles per symbol and uniform noise of 0.15 per component, with the constellation `qpsk` and the defaults `loop_bw` 0.02, `damping` 0.7071, `max_offset` 0.05; a sample is a symbol. `design::rrc` has no entry (a filter design, D606).
 - `costas_qam16` and `equalize_qam16` (`C32`) (M44, D1210): the QAM paths of the carrier loop and of the equalizer. `costas` stays with the fallback (the recursion of D608), `equalize` runs the fallback's loop on every backend (D841); the facade entries are `info` against our own fallback at every level, `avx2-runtime` included. The fallbacks are gated against the C translations of GNU Radio's `constellation_receiver_cb` and of `linear_equalizer` deciding on a `constellation_rect` (`benches/refs/gr-constellation.c`); see [QAM carrier loop and equalizer](#qam-carrier-loop-and-equalizer-m44).
 - `dot_complex` (`C32`) and `equalize` (`C32`) (M43): `dot_complex` is gated against VOLK's `volk_32fc_x2_dot_prod_32fc`, at the levels where VOLK's dispatch fuses against its protokernel without FMA (D821), and its fallback against CMSIS-DSP's `arm_cmplx_dot_prod_f32` (D822); the judged levels are `release` since the count of 2026-11-07. `equalize` has no SIMD library reference: the facade entry is `info` against our own fallback at every level, `avx2-runtime` included (D823), and since D841 every backend runs the fallback, and `equalize_fallback` is gated against the C translation of GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` (D838, `release` since the count of 2026-11-07). The workload is the block default (11 taps, no feedback, QPSK, `mu_cma` 0.05, `mu_dd` 0.02, `cma_symbols` 1000, `phase_bw` 0.02; GNU Radio with the same normalized step 0.02) on QPSK through `1 + 0.3 e^(j0.6) z^-1 + 0.1 e^(-j2) z^-2` with a carrier phase of 0.7 rad and uniform noise of 0.05; the state carries over between the calls, so the counted calls run in decision mode.
@@ -545,6 +546,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `channel_bank_channelize` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `channel_bank_ddc` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `band_pulse_detect_block` (our code, per lane value) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 0.62 info | 0.62 info | 1.00 info | 0.66 info | 1.00 info | 0.95 info |
+| `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 0.79 info | 0.82 info | 0.74 info | 0.54 info | 0.90 info | 0.50 info |
 | `slice_qam16_block` (our code, per input symbol) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `slice_qam64_block` (our code, per input symbol) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_mod_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
@@ -769,10 +772,12 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
 | `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
-| `qam_demod_block` (our code, per input sample) | 303.15 / 303.15 | 300.79 / 300.79 | 175.70 / 175.70 | 178.81 | 160.56 / 160.56 | 191.31 / 191.31 | 569.18 / 569.18 |
+| `qam_demod_block` (our code, per input sample) | 303.00 / 303.00 | 300.65 / 300.66 | 175.98 / 175.98 | 178.30 | 160.43 / 160.43 | 191.40 / 191.40 | 569.30 / 569.30 |
 | `qam_mod_block` (our code, per output sample) | 56.57 / 56.57 | 56.57 / 56.57 | 33.62 / 33.62 | 32.06 | 27.23 / 27.23 | 37.44 / 37.44 | 108.55 / 108.55 |
-| `slice_qam16_block` (our code, per input symbol) | 8.01 / 8.01 | 11.51 / 11.51 | 2.95 / 2.95 | 8.01 | 1.95 / 1.95 | 4.51 / 4.51 | 18.02 / 18.02 |
-| `slice_qam64_block` (our code, per input symbol) | 16.01 / 16.01 | 15.51 / 15.51 | 7.76 / 7.76 | 16.01 | 4.76 / 4.76 | 6.51 / 6.51 | 51.02 / 51.02 |
+| `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.79 / 15.54 |
+| `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 11.54 / 14.52 | 11.54 / 14.02 | 5.22 / 7.02 | 5.23 | 2.16 / 4.02 | 4.52 / 5.02 | 23.79 / 47.54 |
+| `slice_qam16_block` (our code, per input symbol) | 5.91 / 5.91 | 5.91 / 5.91 | 2.47 / 2.47 | 2.47 | 1.13 / 1.13 | 3.52 / 3.52 | 14.79 / 14.79 |
+| `slice_qam64_block` (our code, per input symbol) | 11.54 / 11.54 | 11.54 / 11.54 | 5.22 / 5.22 | 5.23 | 2.16 / 2.16 | 4.52 / 4.52 | 23.79 / 23.79 |
 
 Accuracy (SNR in dB against the f64 reference), ours / comparison:
 
@@ -991,6 +996,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `channel_bank_channelize` (our code, per input sample) | 138.8 / 138.8 | 138.8 / 138.8 | 139.2 / 139.2 | 139.2 / 139.2 | 139.2 / 139.2 | 138.8 / 138.8 |
 | `channel_bank_ddc` (our code, per input sample) | 139.0 / 139.0 | 139.0 / 139.0 | 140.5 / 140.5 | 140.3 / 140.3 | 139.4 / 139.4 | 139.0 / 139.0 |
 | `band_pulse_detect_block` (our code, per lane value) | exact | exact | exact | exact | exact | exact |
+| `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 | 149.0 / 149.0 |
+| `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 145.9 / 145.9 | 145.9 / 145.9 | 145.9 / 145.9 | 145.9 / 145.9 | 145.9 / 145.9 | 145.9 / 145.9 |
 | `slice_qam16_block` (our code, per input symbol) | 149.2 / 149.2 | 149.2 / 149.2 | 149.2 / 149.2 | 149.2 / 149.2 | 149.2 / 149.2 | 149.2 / 149.2 |
 | `slice_qam64_block` (our code, per input symbol) | 146.0 / 146.0 | 146.0 / 146.0 | 146.0 / 146.0 | 146.0 / 146.0 | 146.0 / 146.0 | 146.0 / 146.0 |
 | `qam_mod_block` (our code, per output sample) | 143.3 / 143.3 | 143.3 / 143.3 | 143.4 / 143.4 | 143.4 / 143.4 | 143.4 / 143.4 | 143.3 / 143.3 |
@@ -1223,8 +1230,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 116.74 | 116.74 | 1.00 | 106.71 | 106.71 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 116.81 | 116.81 | 1.00 | 106.61 | 106.61 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 16.36 | 16.36 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
+| `qam_soft_bits_qam64` | 3.03 | 4.57 | 0.66 | 3.33 | 4.31 | 0.77 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 44.03 | 44.03 | 1.00 | 39.34 | 39.33 | 1.00 | sdrk fallback |
 | `rds_shape` | 83.94 | 83.94 | 1.00 | 75.83 | 75.83 | 1.00 | sdrk fallback |
@@ -1233,8 +1242,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `real_to_complex_cq15` | 8.98 | 15.69 | 0.57 | 8.96 | 17.83 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_cq15_fallback` | 29.09 | 15.69 | 1.85 | 34.91 | 17.83 | 1.96 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_fallback` | 17.76 | 70.40 | 0.25 | 20.65 | 57.25 | 0.36 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
-| `slice_qam16_block` | 1.73 | 1.73 | 1.00 | 2.05 | 2.05 | 1.00 | sdrk fallback |
-| `slice_qam64_block` | 4.57 | 4.57 | 1.00 | 4.64 | 4.64 | 1.00 | sdrk fallback |
+| `slice_qam16_block` | 1.35 | 1.35 | 1.00 | 1.49 | 1.49 | 1.00 | sdrk fallback |
+| `slice_qam64_block` | 3.03 | 3.03 | 1.00 | 3.33 | 3.33 | 1.00 | sdrk fallback |
 | `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 18.68 | 18.68 | 1.00 | 17.96 | 17.96 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.49 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -1452,8 +1461,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 117.00 | 117.00 | 1.00 | 105.92 | 105.92 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 117.14 | 117.14 | 1.00 | 106.00 | 106.00 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 16.36 | 16.36 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
+| `qam_soft_bits_qam64` | 3.03 | 4.06 | 0.74 | 3.33 | 3.92 | 0.85 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 44.01 | 44.00 | 1.00 | 39.25 | 39.24 | 1.00 | sdrk fallback |
 | `rds_shape` | 78.95 | 78.95 | 1.00 | 71.83 | 71.83 | 1.00 | sdrk fallback |
@@ -1461,8 +1472,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.90 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15_fallback` | 22.69 | 10.87 | 2.09 | 23.68 | 13.90 | 1.70 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_fallback` | 17.36 | 70.45 | 0.25 | 19.91 | 57.08 | 0.35 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
-| `slice_qam16_block` | 2.71 | 2.71 | 1.00 | 2.92 | 2.92 | 1.00 | sdrk fallback |
-| `slice_qam64_block` | 4.07 | 4.07 | 1.00 | 4.31 | 4.31 | 1.00 | sdrk fallback |
+| `slice_qam16_block` | 1.35 | 1.35 | 1.00 | 1.49 | 1.49 | 1.00 | sdrk fallback |
+| `slice_qam64_block` | 3.03 | 3.03 | 1.00 | 3.33 | 3.33 | 1.00 | sdrk fallback |
 | `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 14.16 | 14.16 | 1.00 | 15.14 | 15.14 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.48 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -1682,8 +1693,10 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 67.53 | 67.53 | 1.00 | 73.83 | 73.83 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 67.50 | 67.50 | 1.00 | 73.92 | 73.92 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 7.99 | 7.99 | 1.00 | 7.38 | 7.38 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 0.52 | 0.54 | 0.95 | 1.02 | 1.02 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam64` | 1.55 | 1.79 | 0.86 | 1.42 | 1.80 | 0.79 | sdrk fallback |
 | `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 16.69 | 16.69 | 1.00 | 14.89 | 14.89 | 1.00 | sdrk fallback |
 | `rds_shape` | 50.41 | 50.41 | 1.00 | 78.60 | 78.60 | 1.00 | sdrk fallback |
@@ -1691,8 +1704,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `real_to_complex_cq15` | 3.60 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15_fallback` | 14.91 | 7.27 | 2.05 | 14.50 | 8.83 | 1.64 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_fallback` | 12.67 | 106.72 | 0.12 | 12.75 | 53.64 | 0.24 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
-| `slice_qam16_block` | 0.75 | 0.75 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
-| `slice_qam64_block` | 2.70 | 2.70 | 1.00 | 2.19 | 2.19 | 1.00 | sdrk fallback |
+| `slice_qam16_block` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
+| `slice_qam64_block` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | sdrk fallback |
 | `stereo_encode` | 4.47 | 4.47 | 1.00 | 5.92 | 5.92 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 7.17 | 7.17 | 1.00 | 8.91 | 8.91 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.32 | 1.26 | 0.26 | 0.45 | 1.45 | 0.31 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -1912,8 +1925,10 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 66.95 | 66.95 | 1.00 | 71.77 | 71.77 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 66.82 | 66.82 | 1.00 | 71.75 | 71.75 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 6.63 | 6.63 | 1.00 | 6.10 | 6.10 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 0.36 | 0.43 | 0.84 | 0.33 | 0.52 | 0.63 | sdrk fallback |
+| `qam_soft_bits_qam64` | 0.77 | 0.79 | 0.97 | 0.77 | 0.80 | 0.95 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 480.81 | 481.29 | 1.00 | 51.09 | 51.11 | 1.00 | sdrk fallback |
 | `rds_shape` | 42.06 | 42.06 | 1.00 | 39.42 | 39.42 | 1.00 | sdrk fallback |
@@ -1921,8 +1936,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `real_to_complex_cq15` | 4.28 | 220.09 | 0.02 | 5.03 | 25.92 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15_fallback` | 14.45 | 220.92 | 0.07 | 15.62 | 25.98 | 0.60 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_fallback` | 12.02 | 105.23 | 0.11 | 12.12 | 55.01 | 0.22 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
-| `slice_qam16_block` | 0.53 | 0.53 | 1.00 | 0.51 | 0.51 | 1.00 | sdrk fallback |
-| `slice_qam64_block` | 1.07 | 1.07 | 1.00 | 1.10 | 1.10 | 1.00 | sdrk fallback |
+| `slice_qam16_block` | 0.36 | 0.36 | 1.00 | 0.33 | 0.33 | 1.00 | sdrk fallback |
+| `slice_qam64_block` | 0.76 | 0.76 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
 | `stereo_encode` | 1.15 | 1.15 | 1.00 | 5.53 | 5.53 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 1.59 | 1.59 | 1.00 | 5.54 | 5.54 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.35 | 0.85 | 0.42 | 0.32 | 1.07 | 0.30 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -2142,8 +2157,10 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 136.40 | 136.40 | 1.00 | 100.05 | 100.05 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 136.45 | 136.45 | 1.00 | 100.62 | 100.62 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 17.40 | 17.40 | 1.00 | 16.67 | 16.67 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 3.03 | 3.03 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam64` | 4.54 | 4.54 | 1.00 | 3.03 | 3.03 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 54.78 | 54.78 | 1.00 | 49.56 | 49.56 | 1.00 | sdrk fallback |
 | `rds_shape` | 53.93 | 53.93 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
@@ -2151,8 +2168,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `real_to_complex_cq15` | 10.69 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15_fallback` | 33.36 | 17.90 | 1.86 | 31.07 | 17.14 | 1.81 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_fallback` | 31.17 | 80.68 | 0.39 | 30.71 | 60.25 | 0.51 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
-| `slice_qam16_block` | 3.78 | 3.78 | 1.00 | 2.53 | 2.53 | 1.00 | sdrk fallback |
-| `slice_qam64_block` | 6.06 | 6.06 | 1.00 | 3.56 | 3.56 | 1.00 | sdrk fallback |
+| `slice_qam16_block` | 3.03 | 3.03 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
+| `slice_qam64_block` | 4.54 | 4.54 | 1.00 | 3.03 | 3.03 | 1.00 | sdrk fallback |
 | `stereo_encode` | 15.13 | 15.13 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 21.13 | 21.13 | 1.00 | 22.07 | 22.07 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.90 | 5.74 | 0.33 | 1.39 | 5.23 | 0.27 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -2391,24 +2408,35 @@ Remarks:
 
 ## QAM slicer (M44)
 
-The block `slice` with the constellations `qam16` and `qam64` (M44 §2) has no kernel: per input symbol it puts both components on the integer grid (`v = component * sqrt E`) and forms 4 or 6 piecewise-linear max-log soft bits. Its entries `slice_qam16_block` and `slice_qam64_block` are our own code, information only (`Family::Own`, `info` on every level, ours and fallback the same block code): no library computes these soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work; D1201). Counted on all four platforms on 2026-11-09 (`cargo xtask count --platform <p> --kernel slice_qam16_block --kernel slice_qam64_block --merge`, the levels of x86_64 one at a time), with their cycles simulated by `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above). Workload: 4096 symbols per call, random points with uniform noise of ±0.05 per component, scale 1; a sample is one input symbol. Accuracy against the definition in `f64`: 149.2 dB (`qam16`) and 146.0 dB (`qam64`) on every level (the same bits everywhere: the loop has no FMA and no reassociation). Counted and simulated again on main on 2026-11-09 (D1221; the corrected `llvm-mca` of D942): the input of an entry is seeded with `1000 + index` of `benches/kernels`, and the entry `band_pulse_detect_block` of M45.1 before M44's entries moved their inputs by one seed, so the accuracies and some counts differ in the last digits from the branch.
+The soft bits of `slice` `qam16` and `qam64` (M44 §2) are the kernel `qam_soft_bits` since the round of the open items (I44-1, maintainer's decision D1412): per input symbol both components on the integer grid (`v = component * sqrt E`) and 4 or 6 piecewise-linear max-log soft bits, with a fallback (the component loop that the compiler vectorizes), the `f64` reference and a hand-written path per level in `sdrk-backend-simd` (D1414), all bit-exact with the fallback. The entries `qam_soft_bits_qam16` and `qam_soft_bits_qam64` measure the kernel through the facade against our own fallback, information only (`Family::Own`, `info` on every level): no library computes these soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work; D1201). The entries `slice_qam16_block` and `slice_qam64_block` measure the block around the kernel (ours and fallback the same block code). Workload: 4096 symbols per call, random points with uniform noise of ±0.05 per component, scale 1 (hidden from the optimizer by `black_box` in the kernel entries, so that the fallback runs as with a run-time scale); a sample is one input symbol. Counted on all four platforms on 2026-11-10 (`cargo xtask count --platform <p> --kernel qam_soft_bits_qam16 --kernel qam_soft_bits_qam64 --kernel slice_qam16_block --kernel slice_qam64_block --kernel qam_demod_block --merge`, the levels of x86_64 one at a time) and simulated with `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the corrected `llvm-mca` of D942, the rows of the cycle tables above). Accuracy against the definition in `f64`: 149.0 dB (`qam16`) and 145.9 dB (`qam64`) on every level for the kernel entries, 149.2 and 146.0 dB for the block entries (other seeds; the same bits everywhere); the optimum of an `f32` output is about 151.5 dB (golden cases, D1413).
 
-Simulated cycles per input symbol, reference model / counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)):
+Simulated cycles per input symbol, reference model / counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)); the fallback is the comparison of the kernel entries:
 
 | Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
 | --- | --- | --- | --- | --- | --- |
-| `slice_qam16_block` | 1.73 / 2.05 | 2.71 / 2.92 | 0.75 / 1.02 | 0.53 / 0.51 | 3.78 / 2.53 |
-| `slice_qam64_block` | 4.57 / 4.64 | 4.07 / 4.31 | 2.70 / 2.19 | 1.07 / 1.10 | 6.06 / 3.56 |
+| `qam_soft_bits_qam16` (SIMD path) | 1.35 / 1.49 | 1.35 / 1.49 | 0.52 / 1.02 | 0.36 / 0.33 | 3.03 / 2.03 |
+| `qam_soft_bits_qam16` fallback | 2.04 / 2.42 | 2.04 / 2.42 | 0.54 / 1.02 | 0.43 / 0.52 | 3.03 / 2.03 |
+| `qam_soft_bits_qam64` (SIMD path) | 3.03 / 3.33 | 3.03 / 3.33 | 1.55 / 1.42 | 0.77 / 0.77 | 4.54 / 3.03 |
+| `qam_soft_bits_qam64` fallback | 4.57 / 4.31 | 4.06 / 3.92 | 1.79 / 1.80 | 0.79 / 0.80 | 4.54 / 3.03 |
+| `slice_qam16_block` before (block code, D1204) | 1.73 / 2.05 | 2.71 / 2.92 | 0.75 / 1.02 | 0.53 / 0.51 | 3.78 / 2.53 |
+| `slice_qam16_block` after (the kernel) | 1.35 / 1.49 | 1.35 / 1.49 | 0.52 / 1.02 | 0.36 / 0.33 | 3.03 / 2.03 |
+| `slice_qam64_block` before (block code, D1204) | 4.57 / 4.64 | 4.07 / 4.31 | 2.70 / 2.19 | 1.07 / 1.10 | 6.06 / 3.56 |
+| `slice_qam64_block` after (the kernel) | 3.03 / 3.33 | 3.03 / 3.33 | 1.55 / 1.42 | 0.76 / 0.77 | 4.54 / 3.03 |
 
-Instructions per input symbol (`simd128` has no core model):
+Efficiency of the SIMD paths (port bound / cycles, reference / counter model): `qam16` 0.86 / 1.00 (`sse2`, `sse4.2`), 0.98 / 0.99 (`avx2`), 0.71 / 0.78 (`avx512`), 0.83 / 0.90 (`neon`); `qam64` 0.72 / 0.86, 0.64 / 0.77, 0.99 / 0.99, 0.87 / 0.85.
+
+Instructions per input symbol (`simd128` has no core model, so instructions only), ours / fallback:
 
 | Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `slice_qam16_block` | 8.01 | 11.51 | 2.95 | 8.01 | 1.95 | 4.51 | 18.02 |
-| `slice_qam64_block` | 16.01 | 15.51 | 7.76 | 16.01 | 4.76 | 6.51 | 51.02 |
+| `qam_soft_bits_qam16` | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.79 / 15.54 |
+| `qam_soft_bits_qam64` | 11.54 / 14.52 | 11.54 / 14.02 | 5.22 / 7.02 | 5.23 | 2.16 / 4.02 | 4.52 / 5.02 | 23.79 / 47.54 |
+| `slice_qam16_block` before -> after | 8.01 -> 5.91 | 11.51 -> 5.91 | 2.95 -> 2.47 | 8.01 -> 2.47 | 1.95 -> 1.13 | 4.51 -> 3.52 | 18.02 -> 14.79 |
+| `slice_qam64_block` before -> after | 16.01 -> 11.54 | 15.51 -> 11.54 | 7.76 -> 5.22 | 16.01 -> 5.23 | 4.76 -> 2.16 | 6.51 -> 4.52 | 51.02 -> 23.79 |
 
-- **The loop (D1204).** The soft bits are computed over the components in memory order (`re`, `im` of every symbol, as `f32` through `bytemuck`), two (`qam16`) or three (`qam64`) soft bits per component; the in-phase-first bit order of M44 §1 is exactly that order. The compiler vectorizes this loop with interleaving stores at every level. The first form, one symbol per iteration (four or six soft bits from `re` and `im`), simulated on 2026-11-09 with the same workload, took 4.24 / 3.28 (`qam16`) and 6.28 / 6.02 (`qam64`) cycles per symbol at `sse2` and 2.08 / 2.56 and 4.40 / 4.03 at `avx2`; the component loop takes 1.73 / 2.05, 4.57 / 4.64, 0.75 / 1.02 and 2.70 / 2.19 (the same bits).
-- **No SIMD branch.** At `sse4.2` LLVM vectorizes the 16-QAM loop at half width (64-bit loads, two lanes per operation) where it takes full vectors at `sse2`, so the same source costs 2.71 instead of 1.73 cycles per symbol there; forms that ask for four lanes (explicit blocks of four components and eight soft bits) compiled to element-by-element loads and long shuffle sequences at `sse2`, `sse4.2` and `avx2` (inspected in the assembly, not counted). A SIMD path of its own would need a kernel trait for the slicer, its fallback, reference, facade delegation and backend; whether that is wanted is open item I44-1.
+- **Where the paths win** (D1414). At `sse2` and `sse4.2` LLVM vectorizes the fallback's 16-QAM loop at half width (64-bit loads) and its 64-QAM loop with a long shuffle network; the paths use full vectors, the in-lane unpacks for 16-QAM and for 64-QAM the output layout (three `pshufd` copies of `v` and a uniform per-lane sequence with constants, exact). At `avx2` 64-QAM takes three `vpermps` against the fallback's 15 shuffles and blends; at `avx512` two `vpermt2ps` per pair or output vector. With run-time detection (`avx2-runtime`, the `std` builds) the block runs the `avx2` path while its own code is compiled for the baseline: 8.01 -> 2.47 and 16.01 -> 5.23 instructions per symbol.
+- **Where they match the fallback.** 16-QAM at `avx2` is bound by the two 256-bit stores per four symbols on `znver3` (2 cycles) and by port 5 on `alderlake`; the form LLVM gives the fallback (in-lane unpacks, `vinsertf128`, `vperm2f128`) is the only one that is not slower on `znver3` (D1414), so the path uses it, unrolled by four (0.52 against 0.54). NEON is bound by the stores of `st2`/`st3` on `cortex-a72` (the `cortex-a57` model), and the path is the fallback's loop (equal cycles; `zip1`/`zip2` with `stp` simulated slower).
+- **The scale 1.** The fallback and every path have a loop without the products for the scale 1 (`1 v = v` exactly), the scale of `qam_demod` and of the default `slice`; another scale costs one product per output vector more (the output layout puts the products on whole output vectors).
 
 ## QAM carrier loop and equalizer (M44)
 
@@ -2433,14 +2461,14 @@ The `costas_qam16_fallback` rows are measured again on 2026-11-09 after the QAM 
 
 ## QAM blocks (M44)
 
-The blocks `qam_mod` and `qam_demod` (M44 §4) and `frame_decode` with `rotations` `four` have the count entries `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`, our own code as information (`Family::Own`, `info` on every level, ours and fallback the same block code; D1216): the blocks are chains of kernels whose library comparisons are their own entries (`fir_interpolate`, `fir`, `symbol_sync`, and against GNU Radio `costas_qam16_fallback` and `equalize_qam16_fallback` above), and no library has the same blocks or the test framing. Counted on all four platforms on 2026-11-09 (`cargo xtask count --platform <p> --kernel qam_mod_block --kernel qam_demod_block --kernel frame_decode_four_block --merge`), cycles simulated by `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above). Workloads: `qam_mod_block` 16-QAM at 8 samples per symbol (roll-off 0.35, span 10, the flows of M44 §5), 4096 output samples (512 random symbols) per call, a sample is an output sample; `qam_demod_block` the output of `qam_mod` for 512 random symbols, turned by 0.3 rad with uniform noise of ±0.02 per component, 4096 input samples per call into `qam_demod` at 25 kBd and 200 kHz with the block defaults (11 equalizer taps, `carrier_bw` 0.005, `sync_bw` 0.005), the state kept across the calls after a warm-up of 3072 symbols (equalizer in decision mode, loops locked), a sample is an input sample; `frame_decode_four_block` the frames of `frame_decode_block` (4-byte preamble, 32-byte payload) with every symbol of 4 bits turned by a quarter turn, `rotations` `four` with 4 bits per symbol, a sample is one soft bit. Accuracy: `qam_mod_block` 143.4 dB against the `f64` model at `avx2`, `avx512` and `neon`, 143.3 dB at `sse2`, `sse4.2` and `simd128`; `qam_demod_block` decides every symbol of a call right at one rotation and `frame_decode_four_block` returns every frame with `CRC_OK` and rotation 1 (both reported as exact). Counted and simulated again on main on 2026-11-09 (D1221; the corrected `llvm-mca` of D942): the input of an entry is seeded with `1000 + index` of `benches/kernels`, and the entry `band_pulse_detect_block` of M45.1 before M44's entries moved their inputs by one seed, so the accuracies and some counts differ in the last digits from the branch.
+The blocks `qam_mod` and `qam_demod` (M44 §4) and `frame_decode` with `rotations` `four` have the count entries `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`, our own code as information (`Family::Own`, `info` on every level, ours and fallback the same block code; D1216): the blocks are chains of kernels whose library comparisons are their own entries (`fir_interpolate`, `fir`, `symbol_sync`, and against GNU Radio `costas_qam16_fallback` and `equalize_qam16_fallback` above), and no library has the same blocks or the test framing. Counted on all four platforms on 2026-11-09 (`cargo xtask count --platform <p> --kernel qam_mod_block --kernel qam_demod_block --kernel frame_decode_four_block --merge`), cycles simulated by `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above). Workloads: `qam_mod_block` 16-QAM at 8 samples per symbol (roll-off 0.35, span 10, the flows of M44 §5), 4096 output samples (512 random symbols) per call, a sample is an output sample; `qam_demod_block` the output of `qam_mod` for 512 random symbols, turned by 0.3 rad with uniform noise of ±0.02 per component, 4096 input samples per call into `qam_demod` at 25 kBd and 200 kHz with the block defaults (11 equalizer taps, `carrier_bw` 0.005, `sync_bw` 0.005), the state kept across the calls after a warm-up of 3072 symbols (equalizer in decision mode, loops locked), a sample is an input sample; `frame_decode_four_block` the frames of `frame_decode_block` (4-byte preamble, 32-byte payload) with every symbol of 4 bits turned by a quarter turn, `rotations` `four` with 4 bits per symbol, a sample is one soft bit. Accuracy: `qam_mod_block` 143.4 dB against the `f64` model at `avx2`, `avx512` and `neon`, 143.3 dB at `sse2`, `sse4.2` and `simd128`; `qam_demod_block` decides every symbol of a call right at one rotation and `frame_decode_four_block` returns every frame with `CRC_OK` and rotation 1 (both reported as exact). Counted and simulated again on main on 2026-11-09 (D1221; the corrected `llvm-mca` of D942): the input of an entry is seeded with `1000 + index` of `benches/kernels`, and the entry `band_pulse_detect_block` of M45.1 before M44's entries moved their inputs by one seed, so the accuracies and some counts differ in the last digits from the branch. The `qam_demod_block` row was counted and simulated again on 2026-11-10 with the kernel `qam_soft_bits` (D1415; before, D1407: 116.74 / 106.71, 117.00 / 105.92, 67.53 / 73.83, 66.95 / 71.77, 136.40 / 100.05 cycles and 303.15, 300.79, 175.70, 178.81, 160.56, 191.31, 569.18 instructions).
 
 Simulated cycles per sample, reference model / counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)):
 
 | Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
 | --- | --- | --- | --- | --- | --- |
 | `qam_mod_block` (per output sample) | 14.04 / 16.36 | 14.04 / 16.36 | 7.99 / 7.38 | 6.63 / 6.10 | 17.40 / 16.67 |
-| `qam_demod_block` (per input sample) | 116.74 / 106.71 | 117.00 / 105.92 | 67.53 / 73.83 | 66.95 / 71.77 | 136.40 / 100.05 |
+| `qam_demod_block` (per input sample) | 116.81 / 106.61 | 117.14 / 106.00 | 67.50 / 73.92 | 66.82 / 71.75 | 136.45 / 100.62 |
 | `frame_decode_four_block` (per soft bit) | 34.77 / 33.53 | 34.82 / 33.27 | 23.43 / 20.77 | 22.08 / 21.17 | 47.75 / 45.47 |
 
 Instructions per sample (`simd128` has no core model):
@@ -2448,7 +2476,7 @@ Instructions per sample (`simd128` has no core model):
 | Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `qam_mod_block` | 56.57 | 56.57 | 33.62 | 32.06 | 27.23 | 37.44 | 108.55 |
-| `qam_demod_block` | 303.15 | 300.79 | 175.70 | 178.81 | 160.56 | 191.31 | 569.18 |
+| `qam_demod_block` | 303.00 | 300.65 | 175.98 | 178.30 | 160.43 | 191.40 | 569.30 |
 | `frame_decode_four_block` | 87.06 | 86.07 | 83.82 | 86.76 | 83.19 | 77.21 | 166.41 |
 
 - **Where the cycles go.** `qam_mod_block` is the 81-tap interpolation of `fir_interpolate` (about 10 taps per output sample) and one table lookup per symbol; throughput-bound (efficiency 0.80 to 0.95). `qam_demod_block` at 8 samples per symbol is about 544 cycles per symbol at `avx2` (`znver3`): the 81-tap matched filter per sample and, per symbol, the timing loop, the 11-tap equalizer (`equalize_qam16_fallback` 135 cycles per symbol), the carrier loop (`costas_qam16_fallback` 141) and the soft bits; latency-bound (efficiency 0.47 to 0.76), the recursions of the equalizer and the carrier loop. The frequency acquisition of D1404 (I44-3, I44-4) is a one-off computation until it has found the offset (in the warm-up of the entry): in the counted steady state it costs one branch per piece, and the equalizer and the carrier loop run in one call per piece as before; simulated cycles per input sample before -> after (D1407), reference / counter model: `sse2` 116.69 / 106.64 -> 116.74 / 106.71, `sse4.2` 116.92 / 105.85 -> 117.00 / 105.92, `avx2` 67.93 / 74.17 -> 67.53 / 73.83, `avx512` 66.82 / 71.75 -> 66.95 / 71.77, `neon` 136.38 / 100.49 -> 136.40 / 100.05; `simd128` 568.95 -> 569.18 instructions.

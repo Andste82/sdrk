@@ -1,5 +1,6 @@
 //! Square QAM constellations (M44 §1): the mapping of `qam16` and `qam64` shared by the
-//! modulator, the slicer, the equalizer and the carrier loop.
+//! modulator, the slicer, the equalizer and the carrier loop, and the kernel [`QamSoftBits`] of
+//! the slicer (M44 §2).
 //!
 //! A symbol of `M = 16` or `64` points carries `k = log2 M` bits, most significant first. The
 //! first `k / 2` bits select the in-phase level, the last `k / 2` the quadrature level, each by
@@ -21,7 +22,8 @@
 //! assert!((q.cma_r2() - 1.32).abs() < 1e-12);
 //! ```
 
-use crate::types::C32;
+use crate::error::Result;
+use crate::types::{C32, ComplexSample};
 
 /// The level values of 16-QAM in level-index order, `(2 i - 3) / √10`, each the `f32` of the
 /// `f64` value.
@@ -316,6 +318,66 @@ impl Qam {
         let l = self.levels();
         let at = |i: u32| l.get(i as usize).copied().unwrap_or(0.0);
         C32::new(at(self.decide_level(y.re)), at(self.decide_level(y.im)))
+    }
+}
+
+/// The piecewise-linear max-log soft bits of a square QAM (M44 §2): the kernel of `slice`
+/// `qam16` / `qam64` and of `qam_demod`.
+///
+/// Per axis, in-phase first (the components in memory order, `re` then `im` of every symbol),
+/// with `v = component * √E` (one `f32` product, `√E` = [`Qam::sqrt_energy`], rounded once) and
+/// `a = |v|`, every soft bit is one `f32` product with `scale`, without FMA:
+///
+/// - 16-QAM, two bits per axis: `scale * v`, `scale * (2 - a)`;
+/// - 64-QAM, three bits per axis: `scale * v`, `scale * (4 - a)`, `scale * (2 - |a - 4|)`.
+///
+/// A soft bit above 0 means bit 1 (the Gray mapping of [`Qam`]: the first bit of an axis is 1
+/// on the positive side, the second for the inner levels, the third of 64-QAM for the levels
+/// ±3 and ±5). NaN and infinite components give NaN and infinite soft bits. The output holds
+/// `bits_per_symbol` soft bits per input symbol, so its length must be `input.len() *
+/// qam.bits_per_symbol()`.
+///
+/// Every implementation gives the bits of the fallback (the class is bit-exact against this
+/// `f32` form); the `Reference` evaluates the same definition in `f64` with the exact `√E`
+/// and rounds once, the achievable optimum (D1413).
+///
+/// ```
+/// use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
+/// use sdrk_core::{Fallback, C32};
+/// let q = Qam::Qam16;
+/// let mut bits = [0.0f32; 4];
+/// // The point of symbol 0b1110: in-phase level +1 (bits 11), quadrature level +3 (bits 10).
+/// Fallback.qam_soft_bits(q, &[q.point(0b1110)], &mut bits, 1.0)?;
+/// assert_eq!(bits.map(|b| b > 0.0), [true, true, true, false]);
+/// assert!(Fallback.qam_soft_bits(q, &[q.point(0)], &mut [0.0; 3], 1.0).is_err());
+/// # Ok::<(), sdrk_core::Error>(())
+/// ```
+pub trait QamSoftBits<T: ComplexSample> {
+    /// The soft bits of every symbol of `input` (see the trait). `output.len()` must be
+    /// `input.len() * qam.bits_per_symbol()`, otherwise `LengthMismatch` with that length as
+    /// `expected`.
+    fn qam_soft_bits(
+        &self,
+        qam: Qam,
+        input: &[T],
+        output: &mut [T::Real],
+        scale: f32,
+    ) -> Result<()>;
+}
+
+/// `Ok` when `output_len` is `input_len * qam.bits_per_symbol()`, else `LengthMismatch` with
+/// that product as `expected` (shared by the implementations of [`QamSoftBits`]).
+///
+/// # Errors
+/// `LengthMismatch` (also when the product overflows).
+#[inline]
+pub fn check_soft_bits_len(qam: Qam, input_len: usize, output_len: usize) -> Result<()> {
+    match input_len.checked_mul(qam.bits_per_symbol()) {
+        Some(expected) if expected == output_len => Ok(()),
+        expected => Err(crate::error::Error::LengthMismatch {
+            expected: expected.unwrap_or(usize::MAX),
+            got: output_len,
+        }),
     }
 }
 

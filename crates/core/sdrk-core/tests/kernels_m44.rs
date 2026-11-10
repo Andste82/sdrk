@@ -4,9 +4,11 @@
 //! `qam64` (the grid decision and the CMA radius). Lock and frequency tracking on noisy QAM, the
 //! detector against `libm::atan2f`, the lock levels on QAM and on noise (D1400), block-size
 //! invariance, `reset`, silence, full scale and beyond, non-finite input, and the convergence of
-//! the equalizer on 16-QAM and 64-QAM through a channel. The comparison of `Fallback` with
-//! `Reference` runs only with the feature `reference`. Seeds 600 to 607 of M44 (this file: 605
-//! for the loops, 604 for the channels).
+//! the equalizer on 16-QAM and 64-QAM through a channel; the kernel `qam_soft_bits` (I44-1,
+//! D1412, D1413): the signs of every point, the `f32` form bit for bit, the extremes and the
+//! length check. The comparison of `Fallback` with `Reference` runs only with the feature
+//! `reference`. Seeds 600 to 607 of M44 (this file: 605 for the loops, 604 for the channels;
+//! the soft-bit signals take the streams 120 and up of 605).
 
 #![allow(
     clippy::unwrap_used,
@@ -18,7 +20,7 @@
     clippy::many_single_char_names
 )]
 
-use sdrk_core::kernels::constellation::Qam;
+use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
 use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
 use sdrk_core::{C32, Fallback};
@@ -496,6 +498,109 @@ fn the_equalizer_converges_on_qam_through_a_channel() {
     }
 }
 
+// --------------------------------------------------------------------------------------------
+// qam_soft_bits (I44-1)
+// --------------------------------------------------------------------------------------------
+
+/// The `f32` form of M44 §2 written out per component: `v = x √E`, then `s v`, `s (2 - |v|)`
+/// or `s v`, `s (4 - |v|)`, `s (2 - ||v| - 4|)`.
+fn soft_bits_f32(q: Qam, x: &[C32], s: f32) -> Vec<f32> {
+    let c = q.sqrt_energy();
+    let mut out = Vec::new();
+    for x in x.iter().flat_map(|x| [x.re, x.im]) {
+        let v = x * c;
+        let a = v.abs();
+        out.push(s * v);
+        if q == Qam::Qam16 {
+            out.push(s * (2.0 - a));
+        } else {
+            out.push(s * (4.0 - a));
+            out.push(s * (2.0 - (a - 4.0).abs()));
+        }
+    }
+    out
+}
+
+fn soft_bits<K: QamSoftBits<C32>>(k: &K, q: Qam, x: &[C32], s: f32) -> Vec<f32> {
+    let mut out = vec![0.0f32; x.len() * q.bits_per_symbol()];
+    k.qam_soft_bits(q, x, &mut out, s).unwrap();
+    out
+}
+
+/// The bits of a soft bit, every NaN folded to one value (sign and payload are not part of the
+/// contract).
+fn f32_bits(x: &[f32]) -> Vec<u32> {
+    x.iter()
+        .map(|&v| if v.is_nan() { u32::MAX } else { v.to_bits() })
+        .collect()
+}
+
+#[test]
+fn qam_soft_bits_give_the_bits_of_every_point() {
+    for (q, _) in QAMS {
+        let k = q.bits_per_symbol();
+        let points = q.point_table();
+        let out = soft_bits(&Fallback, q, points, 1.0);
+        for (s, b) in out.chunks_exact(k).enumerate() {
+            for (i, &v) in b.iter().enumerate() {
+                let bit = (s >> (k - 1 - i)) & 1 == 1;
+                assert_eq!(v > 0.0, bit, "{q:?} symbol {s} bit {i}: {v}");
+                // On the grid every soft bit is an odd integer: 1, 3, 5 or 7 in magnitude.
+                let m = v.abs();
+                assert!(
+                    (m - m.round()).abs() < 1e-5 && m.round() % 2.0 == 1.0,
+                    "{q:?} {s} {v}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn qam_soft_bits_are_the_f32_form() {
+    for (stream, (q, _)) in QAMS.into_iter().enumerate() {
+        let (x, _) = qam_symbols(120 + stream as u64, 3001, q, 0.2, 0.0, 0.3);
+        for s in [1.0, 0.25, 5.3, 1e-9, 1e9] {
+            assert_eq!(
+                f32_bits(&soft_bits(&Fallback, q, &x, s)),
+                f32_bits(&soft_bits_f32(q, &x, s)),
+                "{q:?} scale {s}"
+            );
+        }
+    }
+}
+
+#[test]
+fn qam_soft_bits_handle_the_extremes_and_check_the_length() {
+    for (q, _) in QAMS {
+        let k = q.bits_per_symbol();
+        let x = [
+            C32::new(0.0, -0.0),
+            C32::new(f32::NAN, f32::INFINITY),
+            C32::new(f32::NEG_INFINITY, f32::MAX),
+        ];
+        let out = soft_bits(&Fallback, q, &x, 1.0);
+        assert_eq!(f32_bits(&out), f32_bits(&soft_bits_f32(q, &x, 1.0)));
+        // Zero: the first soft bit keeps the sign of the zero, the others are finite.
+        assert_eq!(out[0].to_bits(), 0.0f32.to_bits());
+        assert_eq!(out[k / 2].to_bits(), (-0.0f32).to_bits());
+        assert!(out[..k].iter().all(|b| b.is_finite()));
+        // NaN gives NaN soft bits; an infinite component infinite or NaN ones.
+        assert!(out[k..k + k / 2].iter().all(|b| b.is_nan()));
+        assert_eq!(out[k + k / 2], f32::INFINITY);
+        assert_eq!(out[2 * k], f32::NEG_INFINITY);
+        for got in [0, 3 * k - 1, 3 * k + 1] {
+            assert_eq!(
+                Fallback.qam_soft_bits(q, &x, &mut vec![0.0; got], 1.0),
+                Err(sdrk_core::Error::LengthMismatch {
+                    expected: 3 * k,
+                    got
+                })
+            );
+        }
+    }
+}
+
 #[cfg(feature = "reference")]
 mod against_the_reference {
     use super::*;
@@ -517,6 +622,64 @@ mod against_the_reference {
             (p.re.to_bits() == q.re.to_bits() || (p.re.is_nan() && q.re.is_nan()))
                 && (p.im.to_bits() == q.im.to_bits() || (p.im.is_nan() && q.im.is_nan()))
         })
+    }
+
+    /// The reference is the `f64` definition rounded once; the fallback is within the contract
+    /// floor of 140 dB and close to that optimum (D1413).
+    #[test]
+    fn qam_soft_bits_fallback_against_the_reference() {
+        for (stream, (q, _)) in QAMS.into_iter().enumerate() {
+            let (x, _) = qam_symbols(122 + stream as u64, 4096, q, 0.2, 0.0, 0.3);
+            for s in [1.0f32, 0.25, 5.3, 0.7] {
+                let r = soft_bits(&Reference, q, &x, s);
+                let c = libm::sqrt(q.energy());
+                let want: Vec<f64> = x
+                    .iter()
+                    .flat_map(|x| [x.re, x.im])
+                    .flat_map(|x| {
+                        let v = f64::from(x) * c;
+                        let a = v.abs();
+                        let b = if q == Qam::Qam16 {
+                            vec![v, 2.0 - a]
+                        } else {
+                            vec![v, 4.0 - a, 2.0 - (a - 4.0).abs()]
+                        };
+                        b.into_iter().map(|b| f64::from(s) * b).collect::<Vec<_>>()
+                    })
+                    .collect();
+                for (r, w) in r.iter().zip(&want) {
+                    assert_eq!(r.to_bits(), (*w as f32).to_bits());
+                }
+                let f = soft_bits(&Fallback, q, &x, s);
+                let snr = |got: &[f32]| {
+                    let (mut num, mut den) = (0.0, 0.0);
+                    for (g, w) in got.iter().zip(&want) {
+                        num += w * w;
+                        den += (w - f64::from(*g)) * (w - f64::from(*g));
+                    }
+                    10.0 * libm::log10(num / den)
+                };
+                let (fs, opt) = (snr(&f), snr(&r));
+                assert!(
+                    fs >= 140.0 && opt - fs < 8.0,
+                    "{q:?} scale {s}: {fs:.1} dB, optimum {opt:.1}"
+                );
+            }
+            let specials: Vec<C32> = SPECIALS
+                .iter()
+                .flat_map(|&a| SPECIALS.iter().map(move |&b| C32::new(a, b)))
+                .collect();
+            let (r, f) = (
+                soft_bits(&Reference, q, &specials, 1.0),
+                soft_bits(&Fallback, q, &specials, 1.0),
+            );
+            for (a, b) in r.iter().zip(&f) {
+                assert!(
+                    a.is_nan() == b.is_nan() && (a.is_nan() || a.is_infinite() == b.is_infinite()),
+                    "{q:?} {a} {b}"
+                );
+            }
+        }
     }
 
     #[test]

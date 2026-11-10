@@ -81,9 +81,15 @@ fn axis_bits(q: Qam, s: f32, x: f32) -> Vec<f32> {
     }
 }
 
-/// `a` and `b` bit for bit (NaN included).
+/// `a` and `b` bit for bit, every NaN folded to one value: NaN must be NaN where the
+/// definition gives NaN, its sign and payload are not part of the contract (D296; the SIMD paths
+/// of the kernel `qam_soft_bits` may set the sign of a NaN, D1414).
 fn same_f32_bits(a: &[f32], b: &[f32], what: &str) {
-    let bits = |x: &[f32]| x.iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+    let bits = |x: &[f32]| {
+        x.iter()
+            .map(|v| if v.is_nan() { u32::MAX } else { v.to_bits() })
+            .collect::<Vec<_>>()
+    };
     same_bits(&bits(a), &bits(b), what);
 }
 

@@ -357,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 222] = [
+pub const KERNELS: [&str; 224] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -580,6 +580,8 @@ pub const KERNELS: [&str; 222] = [
     "qam_mod_block",
     "qam_demod_block",
     "frame_decode_four_block",
+    "qam_soft_bits_qam16",
+    "qam_soft_bits_qam64",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -791,6 +793,16 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             sdrk_core::kernels::constellation::Qam::Qam16,
         )),
         "slice_qam64_block" => Box::new(qam_family::SliceQamBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam64,
+        )),
+        "qam_soft_bits_qam16" => Box::new(qam_family::QamSoftBitsK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam16,
+        )),
+        "qam_soft_bits_qam64" => Box::new(qam_family::QamSoftBitsK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam64,

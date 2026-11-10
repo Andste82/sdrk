@@ -879,8 +879,8 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// channels, one input sample each; the comparison is between the two banks, D930) and the band
 /// pulse detector of M45.1 (`band_pulse_detect_block`, one lane value; no non-GPL library has
 /// it, D962). The QAM slicer of M44 (`slice_qam16_block`, `slice_qam64_block`, one input
-/// symbol each) is a block without a kernel whose soft bits no library computes the same way
-/// (D1201): information too, as are the QAM blocks `qam_mod_block` (one output sample) and `qam_demod_block` (one input
+/// symbol each) is the block around the kernel `qam_soft_bits`, whose soft bits no library
+/// computes the same way (D1201, D1412): information too, as are the QAM blocks `qam_mod_block` (one output sample) and `qam_demod_block` (one input
 /// sample), chains of kernels with entries of their own (D1216), and `frame_decode_four_block`
 /// (one soft bit, `frame_decode` with `rotations` `four`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
@@ -906,7 +906,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 222] = [
+pub static KERNELS: [KernelSpec; 224] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1147,6 +1147,8 @@ pub static KERNELS: [KernelSpec; 222] = [
     proto("channel_bank_channelize", Family::Own),
     proto("channel_bank_ddc", Family::Own),
     proto("band_pulse_detect_block", Family::Own),
+    spec("qam_soft_bits_qam16", Family::Own, false),
+    spec("qam_soft_bits_qam64", Family::Own, false),
     proto("slice_qam16_block", Family::Own),
     proto("slice_qam64_block", Family::Own),
     proto("qam_mod_block", Family::Own),
@@ -4704,8 +4706,25 @@ mod tests {
             let fallback = format!("{k}_fallback");
             assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
         }
-        // The block `slice` has no kernel; only its QAM constellations have entries of the
-        // block (M44, D1201).
+        // `qam_soft_bits` (I44-1, D1412): the SIMD paths against our own fallback (no library
+        // computes the same soft bits, D1201), misaligned as the other kernels.
+        for k in ["qam_soft_bits_qam16", "qam_soft_bits_qam64"] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Fallback, Vec::new()),
+                    "{k} at {level}"
+                );
+            }
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(k)).0,
+                Reference::OwnLevel("avx2"),
+                "{k}"
+            );
+            assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
+        }
+        // The block `slice` has entries only for its QAM constellations, which run the kernel
+        // `qam_soft_bits` with the block around it (M44, D1201, D1412).
         assert!(
             KERNELS
                 .iter()

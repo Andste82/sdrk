@@ -1,9 +1,11 @@
-//! The QAM entries of M44: `slice_qam16_block`, `slice_qam64_block`, `costas_qam16`,
-//! `costas_qam16_fallback`, `equalize_qam16`, `equalize_qam16_fallback`, `qam_mod_block`,
-//! `qam_demod_block` and `frame_decode_four_block`.
+//! The QAM entries of M44: `qam_soft_bits_qam16`, `qam_soft_bits_qam64`, `slice_qam16_block`,
+//! `slice_qam64_block`, `costas_qam16`, `costas_qam16_fallback`, `equalize_qam16`,
+//! `equalize_qam16_fallback`, `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`.
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
+//! | `qam_soft_bits_qam16` | the kernel `qam_soft_bits` with `Qam16` through the facade | our fallback (`info`) | one input symbol (four soft bits) |
+//! | `qam_soft_bits_qam64` | the kernel `qam_soft_bits` with `Qam64` through the facade | our fallback (`info`) | one input symbol (six soft bits) |
 //! | `slice_qam16_block` | `sdrk_blocks::SliceBlock` with `qam16` | none (`info`) | one input symbol (four soft bits) |
 //! | `slice_qam64_block` | `sdrk_blocks::SliceBlock` with `qam64` | none (`info`) | one input symbol (six soft bits) |
 //! | `costas_qam16` | facade (= the fallback) | none (`info`) | one symbol |
@@ -14,13 +16,16 @@
 //! | `qam_demod_block` | `sdrk_blocks::QamDemodBlock`, 16-QAM | none (`info`) | one input sample |
 //! | `frame_decode_four_block` | `sdrk_blocks::FrameDecodeBlock` with `rotations` `four` | none (`info`) | one input sample (one soft bit) |
 //!
-//! The slicer has no kernel: per symbol it puts both components on the integer grid (`v = x √E`)
-//! and forms the piecewise-linear max-log soft bits of M44 §2 (`v`, `2 - |v|`, and for 64-QAM
-//! `4 - |v|`, `2 - ||v| - 4|`), branch-free arithmetic that the compiler vectorizes where it
-//! can. No library computes the same soft bits: liquid-dsp's `modemcf_demodulate_soft` and GNU
-//! Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value (D1201), so
-//! both entries are our own code as information (`Family::Own`), and `ours` and `fallback` run
-//! the same code.
+//! The kernel `qam_soft_bits` (I44-1, D1412) puts both components of every symbol on the
+//! integer grid (`v = x √E`) and forms the piecewise-linear max-log soft bits of M44 §2 (`v`,
+//! `2 - |v|`, and for 64-QAM `4 - |v|`, `2 - ||v| - 4|`); the SIMD backend has a hand-written
+//! path per level (D1414), the fallback is the component loop that the compiler vectorizes
+//! where it can. No library computes the same soft bits: liquid-dsp's `modemcf_demodulate_soft`
+//! and GNU Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value
+//! (D1201), so the kernel entries are our own code, judged against our fallback as information
+//! (`Family::Own`). The block `slice` calls the kernel through the facade; its entries
+//! (`Family::Own` as well, `ours` and `fallback` the same block code) measure the kernel with
+//! the block around it.
 //!
 //! The blocks `qam_mod` and `qam_demod` (M44 §4) are chains of kernels that have their own
 //! entries with their library references (`fir_interpolate`, `fir`, `symbol_sync`,
@@ -76,9 +81,81 @@ use sdrk_blocks::{
 };
 use sdrk_proto::frame::{self, Whitening};
 use sdrk_core::Reference;
-use sdrk_core::kernels::constellation::Qam;
+use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
 
 use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32_pairs, c32_pairs_ref, c32s, snr_db};
+
+/// The kernel `qam_soft_bits` over `n` symbols per call: `ours` through the facade, `fallback`
+/// the fallback.
+pub(crate) struct QamSoftBitsK {
+    qam: Qam,
+    input: Aligned<C32>,
+    out: Aligned<f32>,
+}
+
+impl QamSoftBitsK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
+        let mut input = Aligned::<C32>::skewed(layout.n, layout.skew(8));
+        for x in input.iter_mut() {
+            let p = qam.point(rng.next_u32());
+            *x = C32::new(p.re + 0.05 * rng.unit(), p.im + 0.05 * rng.unit());
+        }
+        QamSoftBitsK {
+            qam,
+            input,
+            out: Aligned::skewed(layout.n * qam.bits_per_symbol(), layout.skew(4)),
+        }
+    }
+}
+
+/// One call with the scale 1 hidden from the optimizer (`black_box`), so that the fallback,
+/// inlined here, keeps its products with the scale as every caller with a run-time scale does
+/// (the block `slice` and `qam_demod`).
+#[inline(never)]
+fn soft_bits_call<K: QamSoftBits<C32>>(k: &K, qam: Qam, x: &[C32], out: &mut [f32]) {
+    let _ = black_box(k.qam_soft_bits(qam, black_box(x), out, black_box(1.0)));
+}
+
+impl Kernel for QamSoftBitsK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours => soft_bits_call(&Sdrk, self.qam, &self.input, &mut self.out),
+                Impl::Fallback => {
+                    soft_bits_call(&Fallback, self.qam, &self.input, &mut self.out);
+                }
+                other => unreachable!("qam_soft_bits has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// The soft bits against the definition of M44 §2 computed in `f64`.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.run(which, 1);
+        let mut want = Vec::with_capacity(self.out.len());
+        for y in self.input.iter() {
+            axis_f64(self.qam, y.re, &mut want);
+            axis_f64(self.qam, y.im, &mut want);
+        }
+        let got: Vec<f64> = self.out.iter().map(|&v| f64::from(v)).collect();
+        snr_db(&want, &got)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
 
 /// The block `slice` with a QAM constellation over `n` symbols per call.
 pub(crate) struct SliceQamBlockK {

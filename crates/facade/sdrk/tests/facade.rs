@@ -1096,3 +1096,32 @@ fn m45_channelize_agrees_with_the_fallback() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn m44_qam_soft_bits_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::constellation::{Qam, QamSoftBits};
+
+    assert_eq!(backend_for("qam_soft_bits", SampleType::C32), ACCEL);
+    assert_eq!(backend_for("qam_soft_bits", SampleType::CQ15), "none");
+
+    let mut seed = 775u64;
+    let mut draw = || lcg(&mut seed) as f32 / 4_294_967_296.0 * 2.4 - 1.2;
+    let input: Vec<C32> = (0..300).map(|_| C32::new(draw(), draw())).collect();
+    for qam in [Qam::Qam16, Qam::Qam64] {
+        let k = qam.bits_per_symbol();
+        for n in [0usize, 1, 3, 4, 17, 64, 299] {
+            for scale in [1.0f32, 5.3] {
+                let (mut a, mut b) = (vec![0.0f32; n * k], vec![0.0f32; n * k]);
+                Sdrk.qam_soft_bits(qam, &input[..n], &mut a, scale)?;
+                Fallback.qam_soft_bits(qam, &input[..n], &mut b, scale)?;
+                let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+                assert_eq!(bits(&a), bits(&b), "{qam:?} {n} {scale}");
+            }
+        }
+        assert!(
+            Sdrk.qam_soft_bits(qam, &input[..2], &mut [0.0; 3], 1.0)
+                .is_err()
+        );
+    }
+    Ok(())
+}

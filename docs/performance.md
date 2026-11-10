@@ -534,11 +534,11 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `dot_complex` C32 (VOLK `volk_32fc_x2_dot_prod_32fc`) | 0.62 info | 0.88 | 0.78 | 0.78 | 0.88 | 0.33 info |
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 0.96 | 0.58 | 0.65 | 0.49 | 0.78 | 0.37 |
 | `equalize` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
-| `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 0.69 | 0.69 | 0.73 | 0.68 | 0.87 | 0.54 |
+| `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 0.70 | 0.68 | 0.72 | 0.67 | 0.85 | 0.53 |
 | `costas_qam16` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
-| `costas_qam16_fallback` C32 (GNU Radio `constellation_receiver_cb`) | 0.89 | 0.89 | 0.88 | 0.88 | 1.01 | 0.95 |
+| `costas_qam16_fallback` C32 (GNU Radio `constellation_receiver_cb`) | 0.61 | 0.62 | 0.53 | 0.51 | 0.63 | 0.73 |
 | `equalize_qam16` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
-| `equalize_qam16_fallback` C32 (GNU Radio `linear_equalizer` on `constellation_rect`) | 0.70 | 0.69 | 0.74 | 0.70 | 0.88 | 0.56 |
+| `equalize_qam16_fallback` C32 (GNU Radio `linear_equalizer` on `constellation_rect`) | 0.71 | 0.70 | 0.74 | 0.67 | 0.86 | 0.55 |
 | `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 0.28 | 0.28 | 0.15 | 0.17 | 0.12 | 0.29 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 0.45 | 0.44 | 0.35 | 0.36 | 0.51 | 0.46 |
 | `channelize_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
@@ -758,12 +758,12 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `morse_decode_block` (our code, per input sample) | 73.68 / 73.68 | 72.93 / 72.93 | 69.08 / 69.08 | 73.68 | 68.17 / 68.17 | 62.86 / 62.86 | 149.15 / 149.15 |
 | `dot_complex` C32 (VOLK `volk_32fc_x2_dot_prod_32fc`) | 5.29 / 8.53 | 5.29 / 6.03 | 2.35 / 3.02 | 2.36 | 2.35 / 3.02 | 3.53 / 4.03 | 13.20 / 40.55 |
 | `dot_complex_fallback` C32 (CMSIS-DSP `arm_cmplx_dot_prod_f32`) | 14.41 / 15.02 | 8.66 / 15.02 | 8.41 / 13.02 | - | 6.41 / 13.02 | 9.03 / 11.52 | 13.20 / 35.30 |
-| `equalize` C32 (our fallback) | 500.36 / 500.36 | 495.82 / 495.82 | 532.85 / 532.85 | 499.59 | 492.57 / 492.57 | 430.16 / 430.16 | 1024.47 / 1024.47 |
-| `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 500.36 / 722.54 | 495.82 / 722.54 | 532.85 / 729.04 | - | 492.57 / 729.03 | 430.16 / 493.03 | 1024.47 / 1900.06 |
-| `costas_qam16` C32 (our fallback) | 244.45 / 244.45 | 244.45 / 244.45 | 231.47 / 231.47 | 244.45 | 229.97 / 229.97 | 213.90 / 213.90 | 423.37 / 423.37 |
-| `costas_qam16_fallback` C32 (GNU Radio `constellation_receiver_cb`) | 244.45 / 286.46 | 244.45 / 286.46 | 231.47 / 272.30 | - | 229.97 / 272.30 | 213.90 / 220.85 | 423.37 / 471.28 |
-| `equalize_qam16` C32 (our fallback) | 519.41 / 519.41 | 514.66 / 514.66 | 555.60 / 555.60 | 518.65 | 519.91 / 519.91 | 447.30 / 447.30 | 1090.47 / 1090.47 |
-| `equalize_qam16_fallback` C32 (GNU Radio `linear_equalizer` on `constellation_rect`) | 519.41 / 740.55 | 514.66 / 740.55 | 555.60 / 747.05 | - | 519.91 / 747.04 | 447.30 / 508.03 | 1090.47 / 1952.06 |
+| `equalize` C32 (our fallback) | 509.33 / 509.33 | 494.84 / 494.84 | 527.77 / 527.77 | 508.56 | 487.23 / 487.23 | 419.19 / 419.19 | 1014.47 / 1014.47 |
+| `equalize_fallback` C32 (GNU Radio `linear_equalizer`) | 509.33 / 722.54 | 494.84 / 722.54 | 527.77 / 729.03 | - | 487.23 / 729.03 | 419.19 / 493.03 | 1014.47 / 1900.06 |
+| `costas_qam16` C32 (our fallback) | 175.34 / 175.34 | 177.33 / 177.33 | 144.32 / 144.32 | 175.34 | 138.36 / 138.36 | 138.29 / 138.29 | 346.36 / 346.36 |
+| `costas_qam16_fallback` C32 (GNU Radio `constellation_receiver_cb`) | 175.34 / 286.46 | 177.33 / 286.46 | 144.32 / 272.30 | - | 138.36 / 272.30 | 138.29 / 220.85 | 346.36 / 471.28 |
+| `equalize_qam16` C32 (our fallback) | 528.64 / 528.64 | 517.88 / 517.88 | 552.19 / 552.19 | 527.88 | 499.91 / 499.91 | 437.13 / 437.13 | 1081.47 / 1081.47 |
+| `equalize_qam16_fallback` C32 (GNU Radio `linear_equalizer` on `constellation_rect`) | 528.64 / 740.55 | 517.88 / 740.55 | 552.19 / 747.04 | - | 499.91 / 747.04 | 437.13 / 508.03 | 1081.47 / 1952.06 |
 | `channelize` C32 (liquid-dsp `firpfbch2_crcf`, SIMD dot products and FFTW) | 93.20 / 337.96 | 94.69 / 339.96 | 50.42 / 326.64 | 50.03 | 56.63 / 334.08 | 43.43 / 361.58 | 270.93 / 949.71 |
 | `channelize_fallback` C32 (liquid-dsp `firpfbch2_crcf`, portable) | 192.43 / 431.21 | 189.18 / 429.58 | 145.84 / 412.39 | - | 143.76 / 398.71 | 151.01 / 297.08 | 436.07 / 949.71 |
 | `channelize_block` (our code, per input sample) | 94.70 / 94.70 | 94.67 / 94.67 | 51.04 / 51.04 | 50.65 | 57.12 / 57.12 | 43.68 / 43.68 | 270.93 / 270.93 |
@@ -772,7 +772,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
 | `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
-| `qam_demod_block` (our code, per input sample) | 303.00 / 303.00 | 300.65 / 300.66 | 175.98 / 175.98 | 178.30 | 160.43 / 160.43 | 191.40 / 191.40 | 569.30 / 569.30 |
+| `qam_demod_block` (our code, per input sample) | 295.77 / 295.77 | 292.92 / 292.92 | 164.85 / 164.85 | 171.07 | 146.70 / 146.70 | 180.99 / 180.99 | 558.91 / 558.91 |
 | `qam_mod_block` (our code, per output sample) | 56.57 / 56.57 | 56.57 / 56.57 | 33.62 / 33.62 | 32.06 | 27.23 / 27.23 | 37.44 / 37.44 | 108.55 / 108.55 |
 | `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.79 / 15.54 |
 | `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 11.54 / 14.52 | 11.54 / 14.02 | 5.22 / 7.02 | 5.23 | 2.16 / 4.02 | 4.52 / 5.02 | 23.79 / 47.54 |
@@ -1197,16 +1197,16 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.24 | 182.49 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 75.14 | 75.14 | 1.00 | 63.16 | 63.16 | 1.00 | sdrk fallback |
 | `costas_fallback` | 75.14 | 86.69 | 0.87 | 63.16 | 80.45 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 171.11 | 171.11 | 1.00 | 147.19 | 147.19 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 171.11 | 206.53 | 0.83 | 147.19 | 181.45 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 167.85 | 167.85 | 1.00 | 144.31 | 144.31 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 167.85 | 206.53 | 0.81 | 144.31 | 181.45 | 0.80 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 152.52 | 152.52 | 1.00 | 165.43 | 165.43 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 152.52 | 168.47 | 0.91 | 165.43 | 201.30 | 0.82 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 172.34 | 172.34 | 1.00 | 178.76 | 178.76 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 172.34 | 191.52 | 0.90 | 178.76 | 213.78 | 0.84 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 138.54 | 138.54 | 1.00 | 145.19 | 145.19 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 138.54 | 168.47 | 0.82 | 145.19 | 201.30 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 164.64 | 164.64 | 1.00 | 166.89 | 166.89 | 1.00 | sdrk fallback |
+| `equalize_qam16_fallback` | 164.64 | 191.52 | 0.86 | 166.89 | 213.78 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 6.20 | 6.20 | 1.00 | 8.43 | 8.43 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.03 | 6.03 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 34.77 | 34.77 | 1.00 | 33.53 | 33.53 | 1.00 | sdrk fallback |
@@ -1230,7 +1230,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 116.81 | 116.81 | 1.00 | 106.61 | 106.61 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 115.43 | 115.43 | 1.00 | 104.77 | 104.77 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 16.36 | 16.36 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
 | `qam_soft_bits_qam64` | 3.03 | 4.57 | 0.66 | 3.33 | 4.31 | 0.77 | sdrk fallback |
@@ -1428,16 +1428,16 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_fallback` | 53.83 | 166.73 | 0.32 | 57.87 | 182.23 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 73.14 | 73.14 | 1.00 | 62.15 | 62.15 | 1.00 | sdrk fallback |
 | `costas_fallback` | 73.14 | 86.69 | 0.84 | 62.15 | 80.45 | 0.77 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 172.62 | 172.62 | 1.00 | 147.78 | 147.78 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 172.62 | 206.53 | 0.84 | 147.78 | 181.45 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 167.84 | 167.84 | 1.00 | 144.31 | 144.31 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 167.84 | 206.53 | 0.81 | 144.31 | 181.45 | 0.80 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 146.58 | 146.58 | 1.00 | 157.00 | 157.00 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 146.58 | 168.47 | 0.87 | 157.00 | 201.30 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 170.35 | 170.35 | 1.00 | 177.08 | 177.08 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 170.35 | 191.52 | 0.89 | 177.08 | 213.78 | 0.83 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 133.42 | 133.42 | 1.00 | 133.79 | 133.79 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 133.42 | 168.47 | 0.79 | 133.79 | 201.30 | 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 161.91 | 161.91 | 1.00 | 155.93 | 155.93 | 1.00 | sdrk fallback |
+| `equalize_qam16_fallback` | 161.91 | 191.52 | 0.85 | 155.93 | 213.78 | 0.73 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 6.27 | 6.27 | 1.00 | 8.52 | 8.52 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.06 | 6.06 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 34.82 | 34.82 | 1.00 | 33.27 | 33.27 | 1.00 | sdrk fallback |
@@ -1461,7 +1461,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 117.14 | 117.14 | 1.00 | 106.00 | 106.00 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 115.48 | 115.48 | 1.00 | 102.93 | 102.93 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 16.36 | 16.36 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
 | `qam_soft_bits_qam64` | 3.03 | 4.06 | 0.74 | 3.33 | 3.92 | 0.85 | sdrk fallback |
@@ -1660,16 +1660,16 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize_fallback` | 34.38 | 147.96 | 0.23 | 32.18 | 133.26 | 0.24 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 56.17 | 56.17 | 1.00 | 68.16 | 68.16 | 1.00 | sdrk fallback |
 | `costas_fallback` | 56.17 | 76.48 | 0.73 | 68.16 | 66.29 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 140.94 | 140.94 | 1.00 | 163.97 | 163.97 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 140.94 | 166.48 | 0.85 | 163.97 | 172.91 | 0.95 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 121.81 | 121.81 | 1.00 | 147.84 | 147.84 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 121.81 | 166.48 | 0.73 | 147.84 | 172.91 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 115.08 | 115.08 | 1.00 | 114.73 | 114.73 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 115.08 | 931.83 | 0.12 | 114.73 | 220.22 | 0.52 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 135.09 | 135.09 | 1.00 | 131.78 | 131.78 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 135.09 | 944.25 | 0.14 | 131.78 | 277.26 | 0.48 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 107.88 | 107.88 | 1.00 | 112.97 | 112.97 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 107.88 | 930.66 | 0.12 | 112.97 | 220.13 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 129.06 | 129.06 | 1.00 | 122.79 | 122.79 | 1.00 | sdrk fallback |
+| `equalize_qam16_fallback` | 129.06 | 943.86 | 0.14 | 122.79 | 277.23 | 0.44 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.57 | 5.57 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.91 | 6.91 | 1.00 | 5.80 | 5.80 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 23.43 | 23.43 | 1.00 | 20.77 | 20.77 | 1.00 | sdrk fallback |
@@ -1693,7 +1693,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 67.50 | 67.50 | 1.00 | 73.92 | 73.92 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 64.38 | 64.38 | 1.00 | 70.81 | 70.81 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 7.99 | 7.99 | 1.00 | 7.38 | 7.38 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 0.52 | 0.54 | 0.95 | 1.02 | 1.02 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam64` | 1.55 | 1.79 | 0.86 | 1.42 | 1.80 | 0.79 | sdrk fallback |
@@ -1892,16 +1892,16 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `channelize_fallback` | 37.41 | 105.93 | 0.35 | 32.12 | 118.74 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 55.09 | 55.09 | 1.00 | 68.07 | 68.07 | 1.00 | sdrk fallback |
 | `costas_fallback` | 55.09 | 68.92 | 0.80 | 68.07 | 66.44 | 1.02 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 147.70 | 147.70 | 1.00 | 177.21 | 177.21 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 147.70 | 158.60 | 0.93 | 177.21 | 172.91 | 1.02 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 124.35 | 124.35 | 1.00 | 143.39 | 143.39 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 124.35 | 158.60 | 0.78 | 143.39 | 172.91 | 0.83 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 108.35 | 108.35 | 1.00 | 113.61 | 113.61 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 108.35 | 929.60 | 0.12 | 113.61 | 220.19 | 0.52 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 131.57 | 131.57 | 1.00 | 137.19 | 137.19 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 131.57 | 938.01 | 0.14 | 137.19 | 277.22 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 102.03 | 102.03 | 1.00 | 114.41 | 114.41 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 102.03 | 929.60 | 0.11 | 114.41 | 220.19 | 0.52 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 115.98 | 115.98 | 1.00 | 124.93 | 124.93 | 1.00 | sdrk fallback |
+| `equalize_qam16_fallback` | 115.98 | 938.01 | 0.12 | 124.93 | 277.22 | 0.45 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.69 | 5.69 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.90 | 6.90 | 1.00 | 5.79 | 5.79 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 22.08 | 22.08 | 1.00 | 21.17 | 21.17 | 1.00 | sdrk fallback |
@@ -1925,7 +1925,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 66.82 | 66.82 | 1.00 | 71.75 | 71.75 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 61.95 | 61.95 | 1.00 | 65.99 | 65.99 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 6.63 | 6.63 | 1.00 | 6.10 | 6.10 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 0.36 | 0.43 | 0.84 | 0.33 | 0.52 | 0.63 | sdrk fallback |
 | `qam_soft_bits_qam64` | 0.77 | 0.79 | 0.97 | 0.77 | 0.80 | 0.95 | sdrk fallback |
@@ -2124,16 +2124,16 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `channelize_fallback` | 97.44 | 221.93 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `costas` | 86.13 | 86.13 | 1.00 | 54.09 | 54.09 | 1.00 | sdrk fallback |
 | `costas_fallback` | 86.13 | 82.40 | 1.05 | 54.09 | 75.07 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 187.72 | 187.72 | 1.00 | 174.75 | 174.75 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 187.72 | 194.17 | 0.97 | 174.75 | 175.12 | 1.00 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 153.34 | 153.34 | 1.00 | 102.23 | 102.23 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 153.34 | 194.17 | 0.79 | 102.23 | 175.12 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.11 | 8.17 | 0.99 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.11 | 8.17 | 0.99 | 7.10 | 7.16 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 245.68 | 245.68 | 1.00 | 188.16 | 188.16 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 245.68 | 228.84 | 1.07 | 188.16 | 236.11 | 0.80 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 273.82 | 273.82 | 1.00 | 196.27 | 196.27 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 273.82 | 244.41 | 1.12 | 196.27 | 243.20 | 0.81 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 216.23 | 216.23 | 1.00 | 184.01 | 184.01 | 1.00 | sdrk fallback |
+| `equalize_fallback` | 216.23 | 228.84 | 0.94 | 184.01 | 236.11 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 229.24 | 229.24 | 1.00 | 189.99 | 189.99 | 1.00 | sdrk fallback |
+| `equalize_qam16_fallback` | 229.24 | 244.41 | 0.94 | 189.99 | 243.20 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 8.84 | 8.84 | 1.00 | 10.38 | 10.38 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 8.81 | 8.81 | 1.00 | 9.48 | 9.48 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 47.75 | 47.75 | 1.00 | 45.47 | 45.47 | 1.00 | sdrk fallback |
@@ -2157,7 +2157,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 136.45 | 136.45 | 1.00 | 100.62 | 100.62 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 126.63 | 126.63 | 1.00 | 91.00 | 91.00 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 17.40 | 17.40 | 1.00 | 16.67 | 16.67 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 3.03 | 3.03 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam64` | 4.54 | 4.54 | 1.00 | 3.03 | 3.03 | 1.00 | sdrk fallback |
@@ -2442,33 +2442,44 @@ Instructions per input symbol (`simd128` has no core model, so instructions only
 
 The QAM paths of `costas` (constellation `qam16`: the grid decision, the detector `libm::atan2f(im(y conj d), re(y conj d))`, the lock metric of the decision error without a division; D1207, D1400) and of `equalize` (constellation `qam16`: the grid decision and the 16-QAM CMA radius; D1209) have the count entries `costas_qam16`, `costas_qam16_fallback`, `equalize_qam16` and `equalize_qam16_fallback` (D1210). Both kernels are scalar recursions over the symbols (no SIMD branch: the phase of a symbol, or the weights the next symbol is filtered with, depend on the decision of the symbol before); the facade entries are our own fallback as information, the fallbacks are compared with GNU Radio's own QAM receivers translated to C (`benches/refs/gr-constellation.c`).
 
-Simulated cycles per symbol, ours / GNU Radio (the ratio), reference model then counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942, measured on main on 2026-11-09, D1221; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)):
+Simulated cycles per symbol, ours / GNU Radio (the ratio), reference model then counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942, measured on 2026-11-10 after the speed round of D1416 to D1419; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)):
 
 | Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
 | --- | --- | --- | --- | --- | --- |
-| `costas_qam16_fallback`, reference model | 171.11 / 206.53 (0.83) | 172.62 / 206.53 (0.84) | 140.94 / 166.48 (0.85) | 147.70 / 158.60 (0.93) | 187.72 / 194.17 (0.97) |
-| `costas_qam16_fallback`, counter-model | 147.19 / 181.45 (0.81) | 147.78 / 181.45 (0.81) | 163.97 / 172.91 (0.95) | 177.21 / 172.91 (1.02) | 174.75 / 175.12 (1.00) |
-| `equalize_qam16_fallback`, reference model | 172.34 / 191.52 (0.90) | 170.35 / 191.52 (0.89) | 135.09 / 944.25 (0.14) | 131.57 / 938.01 (0.14) | 273.82 / 244.41 (1.12) |
-| `equalize_qam16_fallback`, counter-model | 178.76 / 213.78 (0.84) | 177.08 / 213.78 (0.83) | 131.78 / 277.26 (0.48) | 137.19 / 277.22 (0.49) | 196.27 / 243.20 (0.81) |
+| `costas_qam16_fallback`, reference model | 167.85 / 206.53 (0.81) | 167.84 / 206.53 (0.81) | 121.81 / 166.48 (0.73) | 124.35 / 158.60 (0.78) | 153.34 / 194.17 (0.79) |
+| `costas_qam16_fallback`, counter-model | 144.31 / 181.45 (0.80) | 144.31 / 181.45 (0.80) | 147.84 / 172.91 (0.86) | 143.39 / 172.91 (0.83) | 102.23 / 175.12 (0.58) |
+| `equalize_qam16_fallback`, reference model | 164.64 / 191.52 (0.86) | 161.91 / 191.52 (0.85) | 129.06 / 943.86 (0.14) | 115.98 / 938.01 (0.12) | 229.24 / 244.41 (0.94) |
+| `equalize_qam16_fallback`, counter-model | 166.89 / 213.78 (0.78) | 155.93 / 213.78 (0.73) | 122.79 / 277.23 (0.44) | 124.93 / 277.22 (0.45) | 189.99 / 243.20 (0.78) |
+
+The speed round (D1416 to D1419; before -> after per symbol, reference / counter model):
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
+| --- | --- | --- | --- | --- | --- |
+| `costas_qam16_fallback` | 171.11 / 147.19 -> 167.85 / 144.31 | 172.62 / 147.78 -> 167.84 / 144.31 | 140.94 / 163.97 -> 121.81 / 147.84 | 147.70 / 177.21 -> 124.35 / 143.39 | 187.72 / 174.75 -> 153.34 / 102.23 |
+| `equalize_qam16_fallback` | 172.34 / 178.76 -> 164.64 / 166.89 | 170.35 / 177.08 -> 161.91 / 155.93 | 135.09 / 131.78 -> 129.06 / 122.79 | 131.57 / 137.19 -> 115.98 / 124.93 | 273.82 / 196.27 -> 229.24 / 189.99 |
+| `equalize_fallback` (PSK, QPSK) | 152.52 / 165.43 -> 138.54 / 145.19 | 146.58 / 157.00 -> 133.42 / 133.79 | 115.08 / 114.73 -> 107.88 / 112.97 | 108.35 / 113.61 -> 102.03 / 114.41 | 245.68 / 188.16 -> 216.23 / 184.01 |
+
+- **Equalizer (D1417, the same bits).** The tracker takes the forms of the carrier loop of D1100 (the integrator after one well-predicted branch, the phase step from the bits of the `f32`, the 0 of a non-finite detector value out of line); the finite test of the weight update is one unsigned maximum per lane and component on AArch64 and from SSE4.1, the or of compare masks at SSE2; the QAM grid decision selects its level by comparisons on AArch64 and AVX2 instead of the conversion and the table load. On `cortex-a72` the QAM equalizer is now 6 % faster than GNU Radio's (before 12 % slower, I44-7 closed), the PSK equalizer too (0.94, before 1.07). The PSK rows at `avx512` move by -5.8 % on the reference model and +0.7 % on the counter-model (accepted). At `simd128` (instructions, no core model) `equalize` 1024.47 -> 1014.47 and `equalize_qam16` 1090.47 -> 1081.47.
+- **Carrier loop (D1418, the same bits).** The QAM detector takes `libm::atan2f` inline for the quotients of a loop near lock (`|y| / x` in `[2^-12, 7/16)` with `x > 0`, where msun's `atanf` has no argument reduction), the call for every other input; the decision of D1417 applies too. Ours is now 19 to 27 % faster than GNU Radio's `constellation_receiver_cb` on the reference models and 14 to 42 % on the counter-models (before up to 2 % slower on `sapphirerapids`). At `simd128` 423.37 -> 346.36 instructions.
 
 Instructions per symbol where no core model exists (`simd128`): see the instruction tables above (`costas_qam16_fallback`, `equalize_qam16_fallback`).
 
 The `costas_qam16_fallback` rows are measured again on 2026-11-09 after the QAM lock metric of D1400 (the decision error instead of `cos(8 err)`, I44-2), with the corrected `llvm-mca` (D942) that reproduces the committed `costas` row at `neon` (86.13 / 54.09); before -> after, reference / counter model: `sse2` 173.21 / 148.76 -> 171.11 / 147.19, `sse4.2` 174.73 / 149.35 -> 172.62 / 147.78, `avx2` 141.04 / 163.07 -> 140.94 / 163.97, `avx512` 146.80 / 177.29 -> 147.70 / 177.21, `neon` 187.82 / 178.73 -> 187.72 / 174.75 (D1402). The metric is off the chain from symbol to symbol, so the cycles move by at most 2.2 %; the PSK `costas` rows are unchanged. Instructions per symbol drop by 8 to 22 (no division in the metric): 254.45 -> 244.45 (`sse2`, `sse4.2`), 239.47 -> 231.47 (`avx2`), 239.97 -> 229.97 (`avx512`), 222.90 -> 213.90 (`neon`, now below GNU Radio's 220.85), and at `simd128` (no core model) 445.38 -> 423.37 instructions.
 
-- **The carrier loop is latency-bound** (efficiency 0.27 to 0.46 on every model): one symbol's chain is the table interpolation at the phase, the derotation, the grid decision, `atan2f` (a division `y / x` and, for `|y / x|` above 7/16, a second one in the argument reduction of msun), the loop filter and the phase step. GNU Radio's chain has `sincosf`, the two divisions of the sector decision and glibc's `cargf`, and no lock detector. Since M44 is on main, the QAM loop shares the shorter chain of D1100 with the PSK loop (the phase step from the bits of the `f32`, the integrator inside its limit after one branch, the non-finite detector value out of line; D1221): ours is 3 to 16 % faster on the reference models and 6 to 18 % faster on the counter-models of `sse2`, `sse4.2` and `avx2`, 3 % slower on `sapphirerapids` and 2 % on `cortex-a76`. On the branch, with the `f64` phase step on the chain and simulated with the uncorrected `llvm-mca`, it was 3 to 17 % slower on the reference models and 49 % on `alderlake` (the gap the PSK loop had before D1100). The arctangent is fixed by the contract and the golden case (the exact phase of `decision_maker_pe`, D1207); a faster arctangent would be a contract change.
-- **The equalizer** is 10 to 86 % faster than GNU Radio's on x86 (whose VOLK generic dot products are scalar loops) and 12 % slower on `cortex-a72` (20 % faster on `cortex-a76`), the pattern of the PSK entry `equalize_fallback` (1.07 / 0.80 at `neon`). The QAM decision costs 13 to 21 % over the PSK equalizer on the reference models (`equalize` 152.52, 146.58, 115.08, 108.35 cycles at `sse2`, `sse4.2`, `avx2`, `avx512`).
+- **The carrier loop is latency-bound** (efficiency 0.17 to 0.49 on every model after the speed round, 0.27 to 0.46 before): one symbol's chain is the table interpolation at the phase, the derotation, the grid decision, `atan2f` (a division `y / x` and, for `|y / x|` above 7/16, a second one in the argument reduction of msun), the loop filter and the phase step. GNU Radio's chain has `sincosf`, the two divisions of the sector decision and glibc's `cargf`, and no lock detector. Since M44 is on main, the QAM loop shares the shorter chain of D1100 with the PSK loop (the phase step from the bits of the `f32`, the integrator inside its limit after one branch, the non-finite detector value out of line; D1221): ours was 3 to 16 % faster on the reference models and 6 to 18 % faster on the counter-models of `sse2`, `sse4.2` and `avx2`, 3 % slower on `sapphirerapids` and 2 % on `cortex-a76` (before the speed round; since, see above). On the branch, with the `f64` phase step on the chain and simulated with the uncorrected `llvm-mca`, it was 3 to 17 % slower on the reference models and 49 % on `alderlake` (the gap the PSK loop had before D1100). The arctangent is fixed by the contract and the golden case (the exact phase of `decision_maker_pe`, D1207); a faster arctangent would be a contract change, so the speed round takes msun's own steps inline where no argument reduction runs (D1418).
+- **The equalizer** is 14 to 88 % faster than GNU Radio's on x86 (whose VOLK generic dot products are scalar loops) and 6 % faster on `cortex-a72` (22 % on `cortex-a76`) since the speed round (D1417; before 12 % slower on `cortex-a72`, as the PSK entry `equalize_fallback`, 1.07 / 0.80 at `neon` then). The QAM decision costs 13 to 21 % over the PSK equalizer on the reference models (`equalize` 152.52, 146.58, 115.08, 108.35 cycles at `sse2`, `sse4.2`, `avx2`, `avx512`).
 - **`costas` PSK unchanged, the PSK equalizer within +1.0 % (an accepted regression).** On main (D1221; the corrected `llvm-mca` of D942, every row of the five levels measured again on 2026-11-09), ours / the committed rows of main, reference model / counter-model: `costas` (and `costas_fallback`) `sse2` 75.14 / 63.16 (75.14 / 63.16), `sse4.2` 73.14 / 62.15 (73.15 / 62.15), `avx2` 56.17 / 68.16 (56.17 / 68.16), `avx512` 55.09 / 68.07 (55.09 / 68.07), `neon` 86.13 / 54.09 (86.13 / 54.10), so the `constellation` dispatch of M44 leaves the PSK loops of D1100 as they were; `equalize` `sse2` 152.52 / 165.43 (157.42 / 164.22), `sse4.2` 146.58 / 157.00 (146.43 / 157.82), `avx2` 115.08 / 114.73 (114.56 / 115.63), `avx512` 108.35 / 113.61 (107.26 / 113.93), `neon` 245.68 / 188.16 (247.72 / 191.23): between 3.1 % faster and 1.0 % slower. On the branch: Adding the QAM arms to the equalizer's decision first made the PSK loop 14 to 41 % slower (a helper with two callers is kept out of line by LLVM); the loops are now compiled per decision type (a three-variant PSK decision as in M43, the QAM decision in a function of its own), with the helpers of the symbol loop inlined (D1211). Measured against the committed rows: `equalize` `sse2` 160.19 / 167.23 (before 157.42 / 164.22), `sse4.2` 146.57 / 158.01 (146.43 / 157.82), `avx2` 115.02 / 115.46 (114.56 / 115.63), `avx512` 107.33 / 118.05 (107.26 / 113.93); `costas` unchanged at every x86 level. The PSK equalizer is thus slower in simulated cycles by +1.8 % / +1.8 % at `sse2`, +0.1 % / +0.1 % at `sse4.2`, +0.4 % on the reference model at `avx2` (the counter-model is 0.1 % faster) and +0.1 % / +3.6 % at `avx512`; this regression is accepted (D1211): the loop body of every PSK type is the M43 code, the remaining differences are LLVM's register allocation and block layout of the per-type instance, and the alternative measured, the QAM arms in the shared decision (the helpers then out of line), costs 14 to 41 %. The branch measured with the `llvm-mca` of the development container, which lacked the corrections of D942; its `neon` and counter-model rows are replaced by the measurement on main.
 
 ## QAM blocks (M44)
 
-The blocks `qam_mod` and `qam_demod` (M44 §4) and `frame_decode` with `rotations` `four` have the count entries `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`, our own code as information (`Family::Own`, `info` on every level, ours and fallback the same block code; D1216): the blocks are chains of kernels whose library comparisons are their own entries (`fir_interpolate`, `fir`, `symbol_sync`, and against GNU Radio `costas_qam16_fallback` and `equalize_qam16_fallback` above), and no library has the same blocks or the test framing. Counted on all four platforms on 2026-11-09 (`cargo xtask count --platform <p> --kernel qam_mod_block --kernel qam_demod_block --kernel frame_decode_four_block --merge`), cycles simulated by `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above). Workloads: `qam_mod_block` 16-QAM at 8 samples per symbol (roll-off 0.35, span 10, the flows of M44 §5), 4096 output samples (512 random symbols) per call, a sample is an output sample; `qam_demod_block` the output of `qam_mod` for 512 random symbols, turned by 0.3 rad with uniform noise of ±0.02 per component, 4096 input samples per call into `qam_demod` at 25 kBd and 200 kHz with the block defaults (11 equalizer taps, `carrier_bw` 0.005, `sync_bw` 0.005), the state kept across the calls after a warm-up of 3072 symbols (equalizer in decision mode, loops locked), a sample is an input sample; `frame_decode_four_block` the frames of `frame_decode_block` (4-byte preamble, 32-byte payload) with every symbol of 4 bits turned by a quarter turn, `rotations` `four` with 4 bits per symbol, a sample is one soft bit. Accuracy: `qam_mod_block` 143.4 dB against the `f64` model at `avx2`, `avx512` and `neon`, 143.3 dB at `sse2`, `sse4.2` and `simd128`; `qam_demod_block` decides every symbol of a call right at one rotation and `frame_decode_four_block` returns every frame with `CRC_OK` and rotation 1 (both reported as exact). Counted and simulated again on main on 2026-11-09 (D1221; the corrected `llvm-mca` of D942): the input of an entry is seeded with `1000 + index` of `benches/kernels`, and the entry `band_pulse_detect_block` of M45.1 before M44's entries moved their inputs by one seed, so the accuracies and some counts differ in the last digits from the branch. The `qam_demod_block` row was counted and simulated again on 2026-11-10 with the kernel `qam_soft_bits` (D1415; before, D1407: 116.74 / 106.71, 117.00 / 105.92, 67.53 / 73.83, 66.95 / 71.77, 136.40 / 100.05 cycles and 303.15, 300.79, 175.70, 178.81, 160.56, 191.31, 569.18 instructions).
+The blocks `qam_mod` and `qam_demod` (M44 §4) and `frame_decode` with `rotations` `four` have the count entries `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`, our own code as information (`Family::Own`, `info` on every level, ours and fallback the same block code; D1216): the blocks are chains of kernels whose library comparisons are their own entries (`fir_interpolate`, `fir`, `symbol_sync`, and against GNU Radio `costas_qam16_fallback` and `equalize_qam16_fallback` above), and no library has the same blocks or the test framing. Counted on all four platforms on 2026-11-09 (`cargo xtask count --platform <p> --kernel qam_mod_block --kernel qam_demod_block --kernel frame_decode_four_block --merge`), cycles simulated by `cargo measure <entry> --no-count --no-golden --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the rows of the cycle tables above). Workloads: `qam_mod_block` 16-QAM at 8 samples per symbol (roll-off 0.35, span 10, the flows of M44 §5), 4096 output samples (512 random symbols) per call, a sample is an output sample; `qam_demod_block` the output of `qam_mod` for 512 random symbols, turned by 0.3 rad with uniform noise of ±0.02 per component, 4096 input samples per call into `qam_demod` at 25 kBd and 200 kHz with the block defaults (11 equalizer taps, `carrier_bw` 0.005, `sync_bw` 0.005), the state kept across the calls after a warm-up of 3072 symbols (equalizer in decision mode, loops locked), a sample is an input sample; `frame_decode_four_block` the frames of `frame_decode_block` (4-byte preamble, 32-byte payload) with every symbol of 4 bits turned by a quarter turn, `rotations` `four` with 4 bits per symbol, a sample is one soft bit. Accuracy: `qam_mod_block` 143.4 dB against the `f64` model at `avx2`, `avx512` and `neon`, 143.3 dB at `sse2`, `sse4.2` and `simd128`; `qam_demod_block` decides every symbol of a call right at one rotation and `frame_decode_four_block` returns every frame with `CRC_OK` and rotation 1 (both reported as exact). Counted and simulated again on main on 2026-11-09 (D1221; the corrected `llvm-mca` of D942): the input of an entry is seeded with `1000 + index` of `benches/kernels`, and the entry `band_pulse_detect_block` of M45.1 before M44's entries moved their inputs by one seed, so the accuracies and some counts differ in the last digits from the branch. The `qam_demod_block` row was counted and simulated again on 2026-11-10 after the speed round of the QAM chain (D1416 to D1419; before: 116.81 / 106.61, 117.14 / 106.00, 67.50 / 73.92, 66.82 / 71.75, 136.45 / 100.62 cycles and 303.00, 300.65, 175.98, 178.30, 160.43, 191.40, 569.30 instructions; the equalizer and the carrier loop of the chain are faster, the matched filter, the timing loop and the soft bits are unchanged), and before that with the kernel `qam_soft_bits` (D1415; before, D1407: 116.74 / 106.71, 117.00 / 105.92, 67.53 / 73.83, 66.95 / 71.77, 136.40 / 100.05 cycles and 303.15, 300.79, 175.70, 178.81, 160.56, 191.31, 569.18 instructions).
 
 Simulated cycles per sample, reference model / counter-model, mode `whole-loop` (llvm-mca 23.1.1 with the corrections of D942; models as in the [core-model table](#speed-simulated-cycles-per-sample-level-2)):
 
 | Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
 | --- | --- | --- | --- | --- | --- |
 | `qam_mod_block` (per output sample) | 14.04 / 16.36 | 14.04 / 16.36 | 7.99 / 7.38 | 6.63 / 6.10 | 17.40 / 16.67 |
-| `qam_demod_block` (per input sample) | 116.81 / 106.61 | 117.14 / 106.00 | 67.50 / 73.92 | 66.82 / 71.75 | 136.45 / 100.62 |
+| `qam_demod_block` (per input sample) | 115.43 / 104.77 | 115.48 / 102.93 | 64.38 / 70.81 | 61.95 / 65.99 | 126.63 / 91.00 |
 | `frame_decode_four_block` (per soft bit) | 34.77 / 33.53 | 34.82 / 33.27 | 23.43 / 20.77 | 22.08 / 21.17 | 47.75 / 45.47 |
 
 Instructions per sample (`simd128` has no core model):
@@ -2476,10 +2487,10 @@ Instructions per sample (`simd128` has no core model):
 | Entry | sse2 | sse4.2 | avx2 | avx2-runtime | avx512 | neon | simd128 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `qam_mod_block` | 56.57 | 56.57 | 33.62 | 32.06 | 27.23 | 37.44 | 108.55 |
-| `qam_demod_block` | 303.00 | 300.65 | 175.98 | 178.30 | 160.43 | 191.40 | 569.30 |
+| `qam_demod_block` | 295.77 | 292.92 | 164.85 | 171.07 | 146.70 | 180.99 | 558.91 |
 | `frame_decode_four_block` | 87.06 | 86.07 | 83.82 | 86.76 | 83.19 | 77.21 | 166.41 |
 
-- **Where the cycles go.** `qam_mod_block` is the 81-tap interpolation of `fir_interpolate` (about 10 taps per output sample) and one table lookup per symbol; throughput-bound (efficiency 0.80 to 0.95). `qam_demod_block` at 8 samples per symbol is about 544 cycles per symbol at `avx2` (`znver3`): the 81-tap matched filter per sample and, per symbol, the timing loop, the 11-tap equalizer (`equalize_qam16_fallback` 135 cycles per symbol), the carrier loop (`costas_qam16_fallback` 141) and the soft bits; latency-bound (efficiency 0.47 to 0.76), the recursions of the equalizer and the carrier loop. The frequency acquisition of D1404 (I44-3, I44-4) is a one-off computation until it has found the offset (in the warm-up of the entry): in the counted steady state it costs one branch per piece, and the equalizer and the carrier loop run in one call per piece as before; simulated cycles per input sample before -> after (D1407), reference / counter model: `sse2` 116.69 / 106.64 -> 116.74 / 106.71, `sse4.2` 116.92 / 105.85 -> 117.00 / 105.92, `avx2` 67.93 / 74.17 -> 67.53 / 73.83, `avx512` 66.82 / 71.75 -> 66.95 / 71.77, `neon` 136.38 / 100.49 -> 136.40 / 100.05; `simd128` 568.95 -> 569.18 instructions.
+- **Where the cycles go.** `qam_mod_block` is the 81-tap interpolation of `fir_interpolate` (about 10 taps per output sample) and one table lookup per symbol; throughput-bound (efficiency 0.80 to 0.95). The speed round (D1416) left it unchanged: the cost is the setup and the horizontal sum of each output of the kernel's polyphase engine over branches of 10 or 11 taps, a kernel change on every level (open item I44-8). `qam_demod_block` at 8 samples per symbol is about 515 cycles per symbol at `avx2` (`znver3`): the 81-tap matched filter per sample and, per symbol, the timing loop, the 11-tap equalizer (`equalize_qam16_fallback` 129 cycles per symbol), the carrier loop (`costas_qam16_fallback` 122) and the soft bits; latency-bound (efficiency 0.47 to 0.76), the recursions of the equalizer and the carrier loop. The frequency acquisition of D1404 (I44-3, I44-4) is a one-off computation until it has found the offset (in the warm-up of the entry): in the counted steady state it costs one branch per piece, and the equalizer and the carrier loop run in one call per piece as before; simulated cycles per input sample before -> after (D1407), reference / counter model: `sse2` 116.69 / 106.64 -> 116.74 / 106.71, `sse4.2` 116.92 / 105.85 -> 117.00 / 105.92, `avx2` 67.93 / 74.17 -> 67.53 / 73.83, `avx512` 66.82 / 71.75 -> 66.95 / 71.77, `neon` 136.38 / 100.49 -> 136.40 / 100.05; `simd128` 568.95 -> 569.18 instructions.
 - **`frame_decode` `four`** costs 3.4 / 3.6 times the simulated cycles of the plain block per bit at `avx2` (23.43 / 20.77 against 6.91 / 5.80, reference model / counter-model; 3.5 times its instructions; four hunting registers, the inverse rotations of every symbol); it runs in its own type, `sdrk_proto::frame::RotatingDecoder`, with its own bit loop in the block, so `normal` and `both` keep their cycles: simulated cycles per bit, reference model / counter-model, after M44 on main against the committed rows of main (D1221, the corrected `llvm-mca`) `frame_decode` `sse2` 6.20 / 8.43 (6.18 / 8.41), `sse4.2` 6.27 / 8.52 (6.24 / 8.50), `avx2` 5.57 / 6.18 (5.56 / 6.17), `avx512` 5.69 / 6.18 (5.68 / 6.17), `neon` 8.84 / 10.38 (8.83 / 10.38); `frame_decode_block` 6.03 / 7.98 (6.01 / 7.96), 6.06 / 7.98 (6.06 / 7.96), 6.91 / 5.80 (6.89 / 5.78), 6.90 / 5.79 (6.88 / 5.78), 8.81 / 9.48 (8.83 / 9.55), at most +0.03 cycles (on the branch against its base commit 596ec8a at most +0.02, D1220; the rows of the cycle tables and of the protocol section). Instructions per bit at `avx2` 26.15 and 24.15 against 26.12 and 24.12 (with the rule tested inside `Decoder::push_bit` they had become 28.7, D1213). At `simd128` (instructions, no core model) `frame_decode_block` costs 60.51 against 56.49 on the base commit, +7.1 %, an open item (I44-6); `frame_decode` there is 61.50 against 61.48.
 
 ## Pipeline benchmark

@@ -106,7 +106,7 @@ mod channelize;
 mod constellation;
 mod convert;
 mod convert_out;
-mod costas;
+pub(crate) mod costas;
 mod decim;
 mod demod;
 pub(crate) mod dot;

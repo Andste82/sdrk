@@ -315,9 +315,62 @@ impl Qam {
     /// ```
     #[inline]
     pub fn decide(self, y: C32) -> C32 {
-        let l = self.levels();
-        let at = |i: u32| l.get(i as usize).copied().unwrap_or(0.0);
-        C32::new(at(self.decide_level(y.re)), at(self.decide_level(y.im)))
+        C32::new(self.decide_value(y.re), self.decide_value(y.im))
+    }
+
+    /// The level value of one axis: [`Qam::decide_by_select`] on AArch64 and AVX2,
+    /// [`Qam::decide_by_table`] elsewhere (the same bits, D1417).
+    #[inline]
+    fn decide_value(self, v: f32) -> f32 {
+        if cfg!(any(target_arch = "aarch64", target_feature = "avx2")) {
+            self.decide_by_select(v)
+        } else {
+            self.decide_by_table(v)
+        }
+    }
+
+    /// The level value of [`Qam::decide_level`] for one axis value `v`, from the level table:
+    /// the form of every target but AArch64 and AVX2. At SSE2 LLVM turns the comparisons of the
+    /// other form into branches on the data, at SSE4.2 its blends made `costas` `qam16` slower
+    /// on `znver2`, and Cortex-M4 and `wasm32` are counted in instructions, where the table takes
+    /// fewer (D1417).
+    #[inline]
+    fn decide_by_table(self, v: f32) -> f32 {
+        self.levels()
+            .get(self.decide_level(v) as usize)
+            .copied()
+            .unwrap_or(0.0)
+    }
+
+    /// The level value of [`Qam::decide_level`] for one axis value `v`, the same bits as
+    /// `levels()[decide_level(v)]`: from the same `t = v (√E / 2) + m / 2` a tree of comparisons
+    /// `t >= k` selects the level (`floor` of the clamped `t` is the largest `k` with
+    /// `t >= k`; NaN fails every comparison and takes level index 0), so the decision has no
+    /// conversion to an integer and no table load on the chain of the loops (D1417). On AArch64
+    /// and AVX2 every select is one instruction (`fcsel`, `vblendvps`).
+    #[inline]
+    fn decide_by_select(self, v: f32) -> f32 {
+        let pick = |c: bool, a: f32, b: f32| if c { a } else { b };
+        match self {
+            Self::Qam16 => {
+                let [l0, l1, l2, l3] = QAM16_LEVELS;
+                let t = v * QAM16_HALF_SQRT_E + 2.0;
+                let lo = pick(t >= 1.0, l1, l0);
+                let hi = pick(t >= 3.0, l3, l2);
+                pick(t >= 2.0, hi, lo)
+            }
+            Self::Qam64 => {
+                let [l0, l1, l2, l3, l4, l5, l6, l7] = QAM64_LEVELS;
+                let t = v * QAM64_HALF_SQRT_E + 4.0;
+                let q0 = pick(t >= 1.0, l1, l0);
+                let q1 = pick(t >= 3.0, l3, l2);
+                let q2 = pick(t >= 5.0, l5, l4);
+                let q3 = pick(t >= 7.0, l7, l6);
+                let lo = pick(t >= 2.0, q1, q0);
+                let hi = pick(t >= 6.0, q3, q2);
+                pick(t >= 4.0, hi, lo)
+            }
+        }
     }
 }
 
@@ -490,6 +543,66 @@ mod tests {
         }
         assert_eq!(Qam::Qam16.cma_r2(), 33.0 / 25.0);
         assert_eq!(Qam::Qam64.cma_r2(), 29.0 / 21.0);
+    }
+
+    #[test]
+    fn the_decision_by_comparisons_equals_the_level_table() {
+        // Every exponent and both signs with low, high and random significands, and the
+        // specials: the selected level has the bits of the table entry of `decide_level`.
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        let mut values = std::vec![
+            f32::NAN,
+            -f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            0.0,
+            -0.0
+        ];
+        for exp in 0u32..=255 {
+            for sign in [0u32, 1] {
+                let top = (sign << 31) | (exp << 23);
+                for low in 0u32..512 {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 7;
+                    seed ^= seed << 17;
+                    values.extend([
+                        f32::from_bits(top | low),
+                        f32::from_bits(top | (0x7F_FFFF - low)),
+                        f32::from_bits(top | (seed as u32 & 0x7F_FFFF)),
+                    ]);
+                }
+            }
+        }
+        for q in BOTH {
+            let m = q.levels_per_axis() as u32;
+            let sqrt_e = libm::sqrt(q.energy());
+            // The boundaries `y √E = 2 i - m` and their neighbours in `f32`.
+            for i in 0..=2 * m {
+                let b = ((f64::from(i) - f64::from(m)) / sqrt_e) as f32;
+                for k in 0..64u32 {
+                    values.extend([
+                        f32::from_bits(b.to_bits() + k),
+                        f32::from_bits(b.to_bits().wrapping_sub(k)),
+                    ]);
+                }
+            }
+            for &v in &values {
+                let want = q.levels()[q.decide_level(v) as usize];
+                assert_eq!(
+                    q.decide_by_select(v).to_bits(),
+                    want.to_bits(),
+                    "{q:?} {v:e}"
+                );
+                assert_eq!(
+                    q.decide_by_table(v).to_bits(),
+                    want.to_bits(),
+                    "{q:?} {v:e}"
+                );
+                let got = q.decide(C32::new(v, v));
+                assert_eq!(got.re.to_bits(), want.to_bits(), "{q:?} {v:e}");
+                assert_eq!(got.im.to_bits(), want.to_bits(), "{q:?} {v:e}");
+            }
+        }
     }
 
     #[test]

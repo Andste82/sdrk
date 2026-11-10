@@ -103,6 +103,7 @@ mod agc;
 mod auto_notch;
 mod biquad;
 mod channelize;
+mod constellation;
 mod convert;
 mod convert_out;
 mod costas;

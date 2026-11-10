@@ -36,6 +36,7 @@ from . import (  # noqa: F401
     proto,
     preemph_limit,
     psk,
+    qam_soft_bits,
     q15_ops,
     quad_demod,
     rds,

@@ -66,6 +66,7 @@ mod level;
 mod math;
 mod mix;
 mod modulate;
+mod qam;
 mod recursion;
 mod scale;
 mod spectrum;

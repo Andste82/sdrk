@@ -20,7 +20,7 @@ use super::psk_demod::{
     to_u32, work_len,
 };
 use super::qam_mod::{ORDER_PARAM, order_of_value, qam_of_order};
-use super::slice::{qam16_soft_bits, qam64_soft_bits};
+use super::slice::qam_soft_bits;
 use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -799,11 +799,8 @@ fn apply<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState, f: f
 
 /// The soft bits of the symbols in `input` (scale 1); takes `min(input.len(), output.len() /
 /// bits)` symbols and returns that count.
-fn demod_bits(qam: Qam, input: &[C32], output: &mut [f32]) -> usize {
-    match qam {
-        Qam::Qam64 => qam64_soft_bits(1.0, input, output),
-        _ => qam16_soft_bits(1.0, input, output),
-    }
+fn demod_bits(qam: Qam, input: &[C32], output: &mut [f32]) -> Result<usize> {
+    qam_soft_bits(qam, 1.0, input, output)
 }
 
 impl<S: Storage> Block for QamDemodBlock<S> {
@@ -828,11 +825,11 @@ impl<S: Storage> Block for QamDemodBlock<S> {
             let bps = self.bps as usize;
             let (_, b, pending) = split_work(self.work.as_mut())?;
             let syms = head(b, ns)?;
-            let direct = demod_bits(qam, syms, tail_mut(output, produced)?);
+            let direct = demod_bits(qam, syms, tail_mut(output, produced)?)?;
             produced += direct * bps;
             let rest = tail(syms, direct)?;
             if !rest.is_empty() {
-                let n = demod_bits(qam, rest, pending);
+                let n = demod_bits(qam, rest, pending)?;
                 self.at = 0;
                 self.len = to_u32(n * bps)?;
                 produced += self.flush(tail_mut(output, produced)?)?;

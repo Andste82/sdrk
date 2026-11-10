@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f32",
+      "file": "qam64_c32_4096.expected.bin",
+      "len": 24576
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "qam64_c32_4096.input.bin",
+      "len": 4096
+    }
+  },
+  "case": "qam64_c32_4096",
+  "format_version": 1,
+  "kernel": "qam_soft_bits",
+  "model": "float32",
+  "notes": "qam64 soft bits of 4096 symbols, 6 per symbol in output order (the components in memory order, re then im); the scale is the float32 of 0.7 (scale_bits); the first 20 components are 0, -0, the levels, the soft-bit boundaries +-k / sqrt(E) for even k, +-3 and +-1e-30, the rest random levels plus uniform noise in [-0.2, 0.2); snr_db_guard compares with the float64 definition with the exact sqrt(E) (D111), snr_db_optimum is that definition rounded once to float32",
+  "params": {
+    "constellation": "qam64",
+    "listed_components": 20,
+    "scale_bits": 1060320051,
+    "snr_db_guard": 143.8,
+    "snr_db_optimum": 151.5
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 776,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

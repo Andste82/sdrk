@@ -1,12 +1,12 @@
 //! `slice`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
 //! QPSK, 4-FSK levels, 8PSK (max-log soft bits) and 16-/64-QAM (piecewise-linear max-log soft
-//! bits). A stateless per-symbol map without a kernel.
+//! bits, the kernel `qam_soft_bits`). A stateless per-symbol map.
 
 use core::marker::PhantomData;
 
-use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
+use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
-use sdrk_core::kernels::constellation::{QAM16_SQRT_E, QAM64_SQRT_E};
+use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
 
 use super::{multiply_rate, unknown};
 use crate::block::{Block, BlockTiming, ParamValue, runtime_param};
@@ -475,8 +475,8 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
                 }
                 input.len().min(output.len() / 3)
             }
-            SliceConstellation::Qam16 => qam16_soft_bits(s, input, output),
-            SliceConstellation::Qam64 => qam64_soft_bits(s, input, output),
+            SliceConstellation::Qam16 => qam_soft_bits(Qam::Qam16, s, input, output)?,
+            SliceConstellation::Qam64 => qam_soft_bits(Qam::Qam64, s, input, output)?,
             _ => soft_bits(false, s, input, output),
         };
         Ok(Progress {
@@ -562,54 +562,33 @@ pub(crate) fn psk8_bits(s: f32, re: f32, im: f32) -> [f32; 3] {
     out
 }
 
-/// The components of the first `n` symbols of `input` as `f32`, in memory order (`re`, `im` for
-/// `C32`; the value for `f32`), or none if `input` is shorter.
+/// The QAM soft bits (M44 §2) of the symbols in `input` with the factor `s`, by the kernel
+/// `qam_soft_bits` of the facade (the SIMD backend where the build has it): takes
+/// `min(input.len(), output.len() / bits)` symbols and returns that count (shared by `slice` and
+/// `qam_demod`).
+///
+/// # Errors
+/// `Core(Internal)` if `T` is not `C32` (the constructors allow the QAM constellations only for `C32`).
 #[inline]
-fn components<T: SliceElem>(input: &[T], n: usize) -> &[f32] {
-    let per = core::mem::size_of::<T>() / core::mem::size_of::<f32>();
-    bytemuck::try_cast_slice::<T, f32>(input)
+pub(crate) fn qam_soft_bits<T: SliceElem>(
+    qam: Qam,
+    s: f32,
+    input: &[T],
+    output: &mut [f32],
+) -> Result<usize> {
+    let bits = qam.bits_per_symbol();
+    let n = input.len().min(output.len() / bits);
+    let symbols = bytemuck::try_cast_slice::<T, C32>(input)
         .ok()
-        .and_then(|c| c.get(..n * per))
-        .unwrap_or(&[])
-}
-
-/// The four soft bits of 16-QAM (M44 §2) for every symbol of `input` with the factor `s`: per
-/// axis (in-phase first) with `v = component * √10`, `s v` (the first bit of the Gray code, 1
-/// on the positive side) and `s (2 - |v|)` (the second bit, 1 for the inner levels). Takes
-/// `min(input.len(), output.len() / 4)` symbols and returns that count (shared by `slice` and
-/// `qam_demod`). The loop runs over the components in memory order, two soft bits each, which
-/// the compiler vectorizes.
-#[inline]
-pub(crate) fn qam16_soft_bits<T: SliceElem>(s: f32, input: &[T], output: &mut [f32]) -> usize {
-    let n = input.len().min(output.len() / 4);
-    for (o, &x) in output.chunks_exact_mut(2).zip(components(input, n)) {
-        let v = x * QAM16_SQRT_E;
-        if let [b0, b1] = o {
-            *b0 = s * v;
-            *b1 = s * (2.0 - libm::fabsf(v));
+        .filter(|_| T::PORT_TYPE == PortType::C32)
+        .and_then(|x| x.get(..n));
+    match (symbols, output.get_mut(..n * bits)) {
+        (Some(x), Some(o)) => Sdrk.qam_soft_bits(qam, x, o, s)?,
+        _ => {
+            return Err(sdrk_core::Error::Internal("slice: QAM soft bits need C32 symbols").into());
         }
     }
-    n
-}
-
-/// The six soft bits of 64-QAM (M44 §2) for every symbol of `input` with the factor `s`: per
-/// axis (in-phase first) with `v = component * √42` and `a = |v|`, `s v` (1 on the positive
-/// side), `s (4 - a)` (1 for the levels ±1, ±3) and `s (2 - |a - 4|)` (1 for ±3, ±5). Takes
-/// `min(input.len(), output.len() / 6)` symbols and returns that count (shared by `slice` and
-/// `qam_demod`). The loop runs over the components in memory order, three soft bits each.
-#[inline]
-pub(crate) fn qam64_soft_bits<T: SliceElem>(s: f32, input: &[T], output: &mut [f32]) -> usize {
-    let n = input.len().min(output.len() / 6);
-    for (o, &x) in output.chunks_exact_mut(3).zip(components(input, n)) {
-        let v = x * QAM64_SQRT_E;
-        let a = libm::fabsf(v);
-        if let [b0, b1, b2] = o {
-            *b0 = s * v;
-            *b1 = s * (4.0 - a);
-            *b2 = s * (2.0 - libm::fabsf(a - 4.0));
-        }
-    }
-    n
+    Ok(n)
 }
 
 #[cfg(test)]

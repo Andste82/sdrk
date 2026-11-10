@@ -79,9 +79,9 @@ use sdrk_blocks::{
     QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock, SliceConfig,
     SliceConstellation,
 };
-use sdrk_proto::frame::{self, Whitening};
 use sdrk_core::Reference;
 use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
+use sdrk_proto::frame::{self, Whitening};
 
 use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32_pairs, c32_pairs_ref, c32s, snr_db};
 
@@ -766,7 +766,9 @@ impl Kernel for QamModBlockK {
     fn run(&mut self, which: Impl, k: usize) {
         for _ in 0..k {
             match which {
-                Impl::Ours | Impl::Fallback => qam_mod_call(&mut self.block, &self.bits, &mut self.out),
+                Impl::Ours | Impl::Fallback => {
+                    qam_mod_call(&mut self.block, &self.bits, &mut self.out)
+                }
                 other => unreachable!("qam_mod_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -806,8 +808,7 @@ fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
         ..QamDemodConfig::default()
     };
     let rate = block_rate(200_000);
-    let bytes =
-        QamDemodBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
+    let bytes = QamDemodBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
     QamDemodBlock::new(&cfg, rate, &mut leaked_arena(bytes)).expect("qam_demod block")
 }
 
@@ -834,7 +835,9 @@ fn qam_demod_call(
     input: &[C32],
     out: &mut [f32],
 ) -> usize {
-    block.process(black_box(input), out).map_or(0, |p| p.produced)
+    block
+        .process(black_box(input), out)
+        .map_or(0, |p| p.produced)
 }
 
 impl QamDemodBlockK {
@@ -926,6 +929,76 @@ impl Kernel for QamDemodBlockK {
     }
 }
 
+/// The block `qam_demod` while its frequency acquisition searches (review of the QAM round,
+/// D1422): the configuration of `qam_demod_block`, reading `n` input samples per call of
+/// uniform noise of unit power (±1.2247 per component, no signal), repeated every call, after
+/// the warm-up of `qam_demod_block`. No window of the fourth powers has a clear peak, so every
+/// symbol goes through the acquisition's normalized fourth power and every 512 symbols through
+/// its 1024-point `fft` and peak search, besides the matched filter, the timing loop, the
+/// equalizer and the carrier loop of the steady state.
+pub(crate) struct QamDemodSearchK {
+    block: QamDemodBlock<ArenaStorage<'static>>,
+    input: Vec<C32>,
+    out: Vec<f32>,
+}
+
+impl QamDemodSearchK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let n = layout.n;
+        let input = (0..n)
+            .map(|_| C32::new(1.2247 * rng.unit(), 1.2247 * rng.unit()))
+            .collect();
+        let mut k = QamDemodSearchK {
+            block: qam_demod_block(),
+            input,
+            out: vec![0.0; n / BLOCK_SPS * 4 + 64],
+        };
+        for _ in 0..DEMOD_WARMUP {
+            qam_demod_call(&mut k.block, &k.input, &mut k.out);
+        }
+        k
+    }
+}
+
+impl Kernel for QamDemodSearchK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    qam_demod_call(&mut self.block, &self.input, &mut self.out);
+                }
+                other => unreachable!("qam_demod_search_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// 999 when the acquisition is still searching after a call (no estimate taken from the
+    /// noise), 0 otherwise.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.run(which, 1);
+        if self.block.acquired_frequency().is_none() {
+            999.0
+        } else {
+            0.0
+        }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
 /// The block `frame_decode` with `rotations` `four` and 4 bits per symbol over `n` soft bits:
 /// frames of a 4-byte preamble and a random 32-byte payload back to back (the workload of
 /// `frame_decode_block`), every symbol of 4 bits turned by one quarter turn.
@@ -961,7 +1034,9 @@ impl FrameDecodeFourBlockK {
             .flat_map(|c| {
                 let g = c.iter().fold(0u32, |g, &b| (g << 1) | u32::from(b));
                 let t = frame::rotate_group(g, 2, 1);
-                (0..4).rev().map(move |j| if (t >> j) & 1 == 1 { 1.0f32 } else { -1.0 })
+                (0..4)
+                    .rev()
+                    .map(move |j| if (t >> j) & 1 == 1 { 1.0f32 } else { -1.0 })
             })
             .collect();
         let cfg = FrameDecodeConfig {
@@ -969,8 +1044,9 @@ impl FrameDecodeFourBlockK {
             bits_per_symbol: 4,
             ..FrameDecodeConfig::default()
         };
-        let block = FrameDecodeBlock::new(&cfg, block_rate(100_000), &mut ArenaStorage::new(&mut []))
-            .expect("frame_decode");
+        let block =
+            FrameDecodeBlock::new(&cfg, block_rate(100_000), &mut ArenaStorage::new(&mut []))
+                .expect("frame_decode");
         FrameDecodeFourBlockK {
             block,
             soft,
@@ -987,7 +1063,9 @@ fn decode_four(
     soft: &[f32],
     got: &mut [Packet],
 ) -> usize {
-    block.process(black_box(soft), got).map_or(0, |p| p.produced)
+    block
+        .process(black_box(soft), got)
+        .map_or(0, |p| p.produced)
 }
 
 impl Kernel for FrameDecodeFourBlockK {

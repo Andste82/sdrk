@@ -455,6 +455,28 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
     }
   },
+  "fir_interpolate_short": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    }
+ ,
+    "simd128": {
+      "status": "info",
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+    }
+  },
   "fir_interpolate_cq15": {
     "sse2": {
       "status": "info",
@@ -1841,6 +1863,27 @@
     },
     "simd128": {
       "status": "release"
+    }
+  },
+  "fir_interpolate_short_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "dev",
+      "waiver": "open item I44-10: the short-branch form of `fir_interpolate` in the fallback (D1420, bit-exact with the one-at-a-time sum) counts 176.00 against 127.10 instructions per output sample of CMSIS-DSP's `arm_fir_interpolate_f32` by 8 compiled for `simd128` (1.38); the SIMD backend runs its own form at `simd128` (`fir_interpolate_short` 74.26 instructions), so the fallback runs there only without the SIMD backend. The maintainer decides on a form of the fallback that the compiler vectorizes better (I44-10)"
     }
   },
   "fir_interpolate_cq15_fallback": {
@@ -5183,6 +5226,36 @@
     "avx2-runtime": {
       "status": "info",
       "waiver": "`qam_demod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "qam_demod_search_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`qam_demod_search_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
   },
   "frame_decode_four_block": {

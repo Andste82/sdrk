@@ -226,11 +226,24 @@ impl QamModConfig {
     }
 }
 
-/// The symbol of `k` soft bits (the first the most significant, above 0 is a 1).
+/// The symbol of `K` soft bits (the first the most significant, above 0 is a 1).
 #[inline]
-pub(crate) fn symbol_of(bits: &[f32]) -> u32 {
+fn symbol_of<const K: usize>(bits: &[f32; K]) -> u32 {
     bits.iter()
         .fold(0u32, |s, &b| (s << 1) | u32::from(b > 0.0))
+}
+
+/// The points of the symbols of `K` bits each in `bits` (whole symbols) to `buf`.
+#[inline]
+fn map_points<const K: usize>(points: &[C32], bits: &[f32], buf: &mut [C32]) {
+    for (s, b) in buf.iter_mut().zip(bits.chunks_exact(K)) {
+        // The symbol has `K` bits, below the table length.
+        *s = <&[f32; K]>::try_from(b)
+            .ok()
+            .and_then(|b| points.get(symbol_of(b) as usize))
+            .copied()
+            .unwrap_or_default();
+    }
 }
 
 /// 16-QAM and 64-QAM modulator: `f32` soft bits in (one per sample), `C32` out at
@@ -359,12 +372,10 @@ impl<S: Storage> Block for QamModBlock<S> {
             }
             let bits = head(tail(input, consumed)?, syms * bps)?;
             let buf = head_mut(self.buf.as_mut(), syms)?;
-            for (s, b) in buf.iter_mut().zip(bits.chunks_exact(bps)) {
-                // The symbol has `bps` bits, below the table length.
-                *s = points
-                    .get(symbol_of(b) as usize)
-                    .copied()
-                    .unwrap_or_default();
+            // The bits of a symbol are a constant of the order, so the compiler unrolls them.
+            match self.qam {
+                Qam::Qam64 => map_points::<6>(points, bits, buf),
+                _ => map_points::<4>(points, bits, buf),
             }
             let out = head_mut(tail_mut(output, produced)?, syms * sps)?;
             let p = <Sdrk as FirInterpolate<C32>>::fir_interpolate(

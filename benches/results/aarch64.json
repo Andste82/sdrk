@@ -3041,7 +3041,7 @@
               "label": "goal: cheapest VOLK implementation",
               "other_instr_per_sample": 169.51,
               "other_snr_db": 142.23,
-              "ours_instr_per_sample": 65.59,
+              "ours_instr_per_sample": 65.81,
               "ratio": 0.39
             },
             {
@@ -3049,12 +3049,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 172.51,
               "other_snr_db": null,
-              "ours_instr_per_sample": 65.59,
+              "ours_instr_per_sample": 65.81,
               "ratio": 0.38
             }
           ],
           "other_instr_per_sample": 172.51,
-          "ours_instr_per_sample": 65.59,
+          "ours_instr_per_sample": 65.81,
           "ratio": 0.38,
           "snr_db": {
             "other": 141.22,
@@ -3118,12 +3118,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 361.16,
               "other_snr_db": null,
-              "ours_instr_per_sample": 187.97,
+              "ours_instr_per_sample": 187.73,
               "ratio": 0.52
             }
           ],
           "other_instr_per_sample": 361.16,
-          "ours_instr_per_sample": 187.97,
+          "ours_instr_per_sample": 187.73,
           "ratio": 0.52,
           "snr_db": {
             "other": 136.48,
@@ -3228,6 +3228,60 @@
           "snr_db": {
             "other": 80.35,
             "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fir_interpolate_short": {
+          "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_32f_dot_prod_32fc: generic",
+              "label": "goal: cheapest VOLK implementation",
+              "other_instr_per_sample": 95.64,
+              "other_snr_db": 144.52,
+              "ours_instr_per_sample": 24.11,
+              "ratio": 0.25
+            },
+            {
+              "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 108.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 24.11,
+              "ratio": 0.22
+            }
+          ],
+          "other_instr_per_sample": 108.64,
+          "ours_instr_per_sample": 24.11,
+          "ratio": 0.22,
+          "snr_db": {
+            "other": 143.63,
+            "ours": 145.33
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "fir_interpolate_short_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 71.74,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 59.92,
+              "ratio": 0.84
+            }
+          ],
+          "other_instr_per_sample": 71.74,
+          "ours_instr_per_sample": 59.92,
+          "ratio": 0.84,
+          "snr_db": {
+            "other": 142.65,
+            "ours": 143.37
           },
           "status": "release",
           "verdict": "pass"
@@ -4556,8 +4610,21 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 180.99,
-          "ours_instr_per_sample": 180.99,
+          "other_instr_per_sample": 181.1,
+          "ours_instr_per_sample": 181.1,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_search_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 198.46,
+          "ours_instr_per_sample": 198.46,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4569,12 +4636,12 @@
         "qam_mod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 37.44,
-          "ours_instr_per_sample": 37.44,
+          "other_instr_per_sample": 28.79,
+          "ours_instr_per_sample": 28.79,
           "ratio": 1.0,
           "snr_db": {
-            "other": 143.44,
-            "ours": 143.44
+            "other": 143.89,
+            "ours": 143.89
           },
           "status": "info",
           "verdict": "info"

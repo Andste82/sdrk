@@ -10,16 +10,19 @@
 
 use crate::Fallback;
 use crate::error::{Error, Result};
-use crate::kernels::decim::{Resample, ResampleReal};
+#[cfg(target_feature = "avx2")]
+use crate::kernels::decim::Resample;
+use crate::kernels::decim::ResampleReal;
 use crate::kernels::filter::update_history;
 use crate::kernels::interp::{
-    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
+    FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal, SHORT_MAX_BRANCH,
+    short_branches,
 };
 use crate::num::sat16;
 use crate::timing::Progress;
 use crate::types::{C32, CQ15, Q15};
 
-use super::decim::{FbMac, Out, branch_len, single};
+use super::decim::{FbMac, Out, branch_len, polyphase, single};
 
 macro_rules! interpolate_impl {
     ($tr:ident, $method:ident, $inner:ident, $resample:ident, $state:ident, $t:ty, $tap:ty) => {
@@ -40,15 +43,203 @@ macro_rules! interpolate_impl {
     };
 }
 
-interpolate_impl!(
-    FirInterpolate,
-    fir_interpolate,
-    Resample,
-    resample,
-    FirInterpState,
-    C32,
-    f32
-);
+impl FirInterpolate<C32> for Fallback {
+    fn fir_interpolate<Taps, Hist>(
+        &self,
+        state: &mut FirInterpState<C32, Taps, Hist>,
+        input: &[C32],
+        output: &mut [C32],
+    ) -> Result<Progress>
+    where
+        Taps: AsRef<[f32]>,
+        Hist: AsRef<[C32]> + AsMut<[C32]>,
+    {
+        let p = state.inner_mut().parts_mut();
+        if !short_branches(p.taps.len(), p.up) {
+            return polyphase::<C32>(p.taps, p.hist, p.up, 1, p.q, input, output);
+        }
+        let internal = || Error::Internal("interpolator window");
+        let l = p.up;
+        let mut done = Progress {
+            consumed: 0,
+            produced: 0,
+        };
+        // Outputs of the last sample still pending: the engine writes them first.
+        if *p.q < 0 {
+            let pending = usize::try_from(-*p.q).map_err(|_| internal())?;
+            let room = output.len().min(pending);
+            let out = output.get_mut(..room).ok_or_else(internal)?;
+            done = polyphase::<C32>(p.taps, p.hist, l, 1, p.q, &[], out)?;
+            if *p.q != 0 {
+                return Ok(done);
+            }
+        }
+        let rest = output.get_mut(done.produced..).ok_or_else(internal)?;
+        let s = input.len().min(rest.len() / l);
+        let xs = input.get(..s).ok_or_else(internal)?;
+        let out = rest.get_mut(..s * l).ok_or_else(internal)?;
+        short_interpolate(p.taps, l, p.hist, xs, out)?;
+        update_history(p.hist, xs)?;
+        done.consumed += s;
+        done.produced += s * l;
+        // A last sample with room for only some of its outputs: the engine.
+        let (more_in, more_out) = (
+            input.get(s..).ok_or_else(internal)?,
+            output.get_mut(done.produced..).ok_or_else(internal)?,
+        );
+        if !more_in.is_empty() && !more_out.is_empty() {
+            let p2 = polyphase::<C32>(p.taps, p.hist, l, 1, p.q, more_in, more_out)?;
+            done.consumed += p2.consumed;
+            done.produced += p2.produced;
+        }
+        Ok(done)
+    }
+}
+
+/// Outputs that the short-branch form sums together (one column of the tap rows).
+const SHORT_LANES: usize = 4;
+
+/// The short-branch form of `fir_interpolate` `C32`: for every input sample its `L` outputs
+/// together, `SHORT_LANES` at a time, each with its own accumulator, two samples per pass (four
+/// independent sums per output column, so that the additions of a row do not wait for those of
+/// the row before). Tap row `k`
+/// (`taps[k L .. k L + L]`, contiguous) multiplies the sample `k` back for all `L` outputs, so
+/// the outputs of a column take their taps from one row with one load and need no horizontal
+/// sum. Every output adds its products in the order of the engine (rows ascending, the newest
+/// sample first, no fused multiply-add), so it has the bits of the one-at-a-time sum. `out`
+/// holds `xs.len() L` outputs; `hist` is the history before `xs` (`ceil(N / L)` samples).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the letters of the definition: N taps, L, k rows, the window w of sample j"
+)]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the temporary of every `?` separately; the real frame is the 256 \
+              bytes of the window and the two columns"
+)]
+fn short_interpolate(
+    taps: &[f32],
+    l: usize,
+    hist: &[C32],
+    xs: &[C32],
+    out: &mut [C32],
+) -> Result<()> {
+    let internal = || Error::Internal("interpolator window");
+    let n = taps.len();
+    let k = n.div_ceil(l);
+    if k > SHORT_MAX_BRANCH || hist.len() != k {
+        return Err(internal());
+    }
+    // The rows with all `L` taps, then the last row with `rem` taps (`rem = L`: none).
+    let full = n / l;
+    let rem = n - full * l;
+    // The history and the first samples of the call as one window (oldest first): the window of
+    // the sample `j` of the call ends at `stitched[k + j]`.
+    let mut stitched = [C32::default(); 2 * SHORT_MAX_BRANCH];
+    let lead = xs.len().min(k);
+    stitched
+        .get_mut(..k)
+        .ok_or_else(internal)?
+        .copy_from_slice(hist);
+    stitched
+        .get_mut(k..k + lead)
+        .ok_or_else(internal)?
+        .copy_from_slice(xs.get(..lead).ok_or_else(internal)?);
+    // `window(j)[i]` is the sample `k - 1 - i` back from sample `j`: row `r` takes
+    // `window(j)[k - 1 - r]`.
+    let window = |j: usize| {
+        if j + 1 >= k {
+            xs.get(j + 1 - k..=j).ok_or_else(internal)
+        } else {
+            stitched.get(j + 1..=j + k).ok_or_else(internal)
+        }
+    };
+    let samples = out.len() / l;
+    let mut outs = out.chunks_exact_mut(l);
+    let mut j = 0;
+    // Two samples per pass: four independent sums per output column.
+    while j < samples {
+        let two = j + 1 < samples;
+        let (wa, wb) = (window(j)?, window(if two { j + 1 } else { j })?);
+        let ya = outs.next().ok_or_else(internal)?;
+        let mut yb = if two { outs.next() } else { None };
+        let (la, lb) = (
+            wa.first().copied().unwrap_or_default(),
+            wb.first().copied().unwrap_or_default(),
+        );
+        let mut c = 0;
+        while c + SHORT_LANES <= l {
+            let mut sums = [[0.0f32; SHORT_LANES]; 4];
+            let [ra, ia, rb, ib] = &mut sums;
+            for ((r, x), y) in (0..full).zip(wa.iter().rev()).zip(wb.iter().rev()) {
+                let t: &[f32; SHORT_LANES] = taps
+                    .get(r * l + c..r * l + c + SHORT_LANES)
+                    .and_then(|t| t.try_into().ok())
+                    .ok_or_else(internal)?;
+                for (((a, b), (d, e)), t) in ra
+                    .iter_mut()
+                    .zip(ia.iter_mut())
+                    .zip(rb.iter_mut().zip(ib.iter_mut()))
+                    .zip(t)
+                {
+                    *a += t * x.re;
+                    *b += t * x.im;
+                    *d += t * y.re;
+                    *e += t * y.im;
+                }
+            }
+            let tail = taps
+                .get(full * l + c..)
+                .unwrap_or_default()
+                .iter()
+                .take(rem.saturating_sub(c).min(SHORT_LANES));
+            for (((a, b), (d, e)), t) in ra
+                .iter_mut()
+                .zip(ia.iter_mut())
+                .zip(rb.iter_mut().zip(ib.iter_mut()))
+                .zip(tail)
+            {
+                *a += t * la.re;
+                *b += t * la.im;
+                *d += t * lb.re;
+                *e += t * lb.im;
+            }
+            let col = ya.get_mut(c..c + SHORT_LANES).ok_or_else(internal)?;
+            for (o, (a, b)) in col.iter_mut().zip(ra.iter().zip(ia.iter())) {
+                *o = C32::new(*a, *b);
+            }
+            if let Some(yb) = yb.as_deref_mut() {
+                let col = yb.get_mut(c..c + SHORT_LANES).ok_or_else(internal)?;
+                for (o, (a, b)) in col.iter_mut().zip(rb.iter().zip(ib.iter())) {
+                    *o = C32::new(*a, *b);
+                }
+            }
+            c += SHORT_LANES;
+        }
+        // The outputs beyond the last whole column (`L` not a multiple of `SHORT_LANES`).
+        short_rest(taps, l, wa, ya, c);
+        if let Some(yb) = yb {
+            short_rest(taps, l, wb, yb, c);
+        }
+        j += if two { 2 } else { 1 };
+    }
+    Ok(())
+}
+/// The outputs `y[c..]` of the short-branch form one at a time, the window `w` (oldest
+/// first), rows ascending.
+fn short_rest(taps: &[f32], l: usize, w: &[C32], y: &mut [C32], c: usize) {
+    for (p, o) in y.iter_mut().enumerate().skip(c) {
+        let (mut re, mut im) = (0.0f32, 0.0f32);
+        for (r, x) in w.iter().rev().enumerate() {
+            if let Some(&t) = taps.get(r * l + p) {
+                re += t * x.re;
+                im += t * x.im;
+            }
+        }
+        *o = C32::new(re, im);
+    }
+}
+
 interpolate_impl!(
     FirInterpolateReal,
     fir_interpolate_real,
@@ -569,7 +760,7 @@ mod tests {
     use std::vec;
     use std::vec::Vec;
 
-    use super::{CQ15, Fallback, FirInterpolate, FirInterpolateReal, Q15};
+    use super::{C32, CQ15, Fallback, FirInterpolate, FirInterpolateReal, Q15};
     use crate::kernels::interp::{FirInterpRealState, FirInterpState};
     use crate::num::Acc64;
 
@@ -685,6 +876,85 @@ mod tests {
         ] {
             for extreme in [false, true] {
                 check(n_taps as u32 + l as u32, n_taps, l, extreme);
+            }
+        }
+    }
+
+    /// `upfirdn(h, x, l, 1)` in `f32` for the outputs of the received input, one output at a
+    /// time (taps ascending, the newest sample first, no fused multiply-add).
+    fn model_c32(taps: &[f32], l: usize, x: &[C32]) -> Vec<C32> {
+        (0..x.len() * l)
+            .map(|j| {
+                let (p, b) = (j % l, j / l);
+                let (mut re, mut im) = (0.0f32, 0.0f32);
+                for (i, h) in taps.iter().skip(p).step_by(l).enumerate() {
+                    if i <= b {
+                        re += h * x[b - i].re;
+                        im += h * x[b - i].im;
+                    }
+                }
+                C32::new(re, im)
+            })
+            .collect()
+    }
+
+    fn f(s: &mut u32) -> f32 {
+        (next(s) as f32 / 8_388_608.0) - 1.0
+    }
+
+    #[test]
+    fn c32_short_branches_equal_the_definition_bit_for_bit() {
+        // The short-branch form (`L >= 4`, at most 16 taps per branch) against the definition
+        // for every split into calls and output buffer size, factors that are and are not a
+        // multiple of the column of 4 outputs, full and partial last tap rows; the longer
+        // branches (17 per branch) and `L < 4` run the engine and must agree as well.
+        for (l, n_taps) in [
+            (4usize, 4usize),
+            (4, 5),
+            (4, 41),
+            (4, 64),
+            (5, 13),
+            (6, 61),
+            (7, 70),
+            (8, 81),
+            (8, 80),
+            (8, 128),
+            (8, 129),
+            (9, 3),
+            (13, 200),
+            (16, 161),
+            (3, 31),
+        ] {
+            let s = &mut (n_taps as u32 * 31 + l as u32);
+            let taps: Vec<f32> = (0..n_taps).map(|_| f(s)).collect();
+            let x: Vec<C32> = (0..300).map(|_| C32::new(f(s), f(s))).collect();
+            let want = model_c32(&taps, l, &x);
+            let mut st =
+                FirInterpState::new(taps, vec![C32::default(); n_taps.div_ceil(l)], l).unwrap();
+            let (mut got, mut at, mut stalls) = (Vec::new(), 0, 0);
+            while at < x.len() {
+                let take =
+                    (next(s) as usize % if next(s) & 1 == 0 { 20 } else { 120 }).min(x.len() - at);
+                let room = next(s) as usize % if next(s) & 1 == 0 { 3 * l } else { 900 };
+                let mut o = vec![C32::default(); room];
+                let p = Fallback
+                    .fir_interpolate(&mut st, &x[at..at + take], &mut o)
+                    .unwrap();
+                got.extend_from_slice(&o[..p.produced]);
+                at += p.consumed;
+                stalls = if p.consumed == 0 { stalls + 1 } else { 0 };
+                assert!(stalls < 1000, "no progress");
+            }
+            let mut o = vec![C32::default(); l];
+            let p = Fallback.fir_interpolate(&mut st, &[], &mut o).unwrap();
+            got.extend_from_slice(&o[..p.produced]);
+            assert_eq!(got.len(), want.len(), "outputs, {n_taps} taps, L = {l}");
+            for (j, (g, w)) in got.iter().zip(&want).enumerate() {
+                assert_eq!(
+                    (g.re.to_bits(), g.im.to_bits()),
+                    (w.re.to_bits(), w.im.to_bits()),
+                    "C32 output {j}, {n_taps} taps, L = {l}"
+                );
             }
         }
     }

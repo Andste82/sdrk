@@ -571,7 +571,7 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn polyphase<T: FbMac>(
+pub(super) fn polyphase<T: FbMac>(
     taps: &[T::Tap],
     hist: &mut [T],
     up: usize,

@@ -95,6 +95,23 @@ impl<T: ComplexSample, Taps: AsRef<[T::Real]>, Hist: AsRef<[T]> + AsMut<[T]>> Ti
     }
 }
 
+/// The longest branch (`ceil(N / L)` taps) of the short-branch form of `fir_interpolate` `C32`.
+pub const SHORT_MAX_BRANCH: usize = 16;
+/// The smallest factor `L` of the short-branch form of `fir_interpolate` `C32`.
+pub const SHORT_MIN_FACTOR: usize = 4;
+
+/// Whether `fir_interpolate` `C32` with `n_taps` taps and the factor `factor` runs its
+/// short-branch form (decision D1420): `factor >= SHORT_MIN_FACTOR` and at most
+/// `SHORT_MAX_BRANCH` taps per branch, the pulse shapers of `psk_mod` and `qam_mod` (81 taps at 8
+/// samples per symbol: 11 per branch). The form computes the `L` outputs of every input sample
+/// together, so that a tap row `taps[k L .. k L + L]` (contiguous) multiplies one sample for
+/// all of them; the polyphase engine computes one branch at a time, whose setup and horizontal
+/// sums dominate such short branches. The output is the same definition in both forms.
+#[inline]
+pub fn short_branches(n_taps: usize, factor: usize) -> bool {
+    factor >= SHORT_MIN_FACTOR && n_taps.div_ceil(factor) <= SHORT_MAX_BRANCH
+}
+
 /// Interpolating FIR for complex signals with real taps.
 ///
 /// Like [`Resample`](crate::kernels::decim::Resample) it consumes an input sample only

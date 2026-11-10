@@ -2964,6 +2964,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "fir_interpolate_short": {
+          "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 426.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 81.43,
+              "ratio": 0.19
+            }
+          ],
+          "other_instr_per_sample": 426.53,
+          "ours_instr_per_sample": 81.43,
+          "ratio": 0.19,
+          "snr_db": {
+            "other": 142.64,
+            "ours": 144.25
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "fir_interpolate_short_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 127.09,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 176.0,
+              "ratio": 1.38
+            }
+          ],
+          "other_instr_per_sample": 127.1,
+          "ours_instr_per_sample": 176.0,
+          "ratio": 1.38,
+          "snr_db": {
+            "other": 142.65,
+            "ours": 143.37
+          },
+          "status": "dev",
+          "verdict": "warn"
+        },
         "fm_mod": {
           "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
           "goal": true,
@@ -4224,8 +4270,21 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 558.91,
-          "ours_instr_per_sample": 558.91,
+          "other_instr_per_sample": 558.95,
+          "ours_instr_per_sample": 558.95,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_search_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 607.57,
+          "ours_instr_per_sample": 607.57,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4237,12 +4296,12 @@
         "qam_mod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 108.55,
-          "ours_instr_per_sample": 108.55,
+          "other_instr_per_sample": 93.49,
+          "ours_instr_per_sample": 93.49,
           "ratio": 1.0,
           "snr_db": {
-            "other": 143.27,
-            "ours": 143.27
+            "other": 143.7,
+            "ours": 143.7
           },
           "status": "info",
           "verdict": "info"

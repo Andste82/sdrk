@@ -302,6 +302,70 @@ fn resample_and_interpolate_match_the_fallback() {
 }
 
 #[test]
+fn fir_interpolate_c32_short_branches_match_the_fallback_and_any_split() {
+    // The short-branch form (D1420: `L >= 4`, at most 16 taps per branch), with full and
+    // partial last tap rows, factors that fill whole vectors and others, and the pulse shaper
+    // of `qam_mod` (81 taps by 8); the filters whose rows do not fit run the polyphase form.
+    // Against the fallback within the contract; bit for bit between one call and calls of
+    // random lengths with random room (pending outputs, a sample with room for some of its
+    // outputs).
+    let mut rng = Rng::new(31);
+    for &(up, n) in &[
+        (4usize, 4usize),
+        (4, 41),
+        (4, 64),
+        (5, 13),
+        (6, 61),
+        (7, 70),
+        (8, 81),
+        (8, 80),
+        (8, 128),
+        (12, 97),
+        (16, 161),
+        (16, 256),
+        (32, 321),
+        (64, 641),
+    ] {
+        let len = 400;
+        let taps = resampler_taps(&mut rng, n);
+        let x = c32_noise(&mut rng, len, 1.0);
+        let hist = vec![C32::default(); n.div_ceil(up)];
+        let mut a = FirInterpState::<C32, _, _>::new(taps.clone(), hist.clone(), up).unwrap();
+        let mut b = a.clone();
+        let mut c = a.clone();
+        let (mut want, mut whole) = (
+            vec![C32::default(); len * up],
+            vec![C32::default(); len * up],
+        );
+        let pw = Fallback.fir_interpolate(&mut a, &x, &mut want).unwrap();
+        let pg = Simd.fir_interpolate(&mut b, &x, &mut whole).unwrap();
+        assert_eq!(pw, pg, "L={up} taps={n}");
+        assert_eq!(a.history(), b.history());
+        let snr = snr_db(&want, &whole);
+        assert!(snr > 120.0, "L={up} taps={n} snr={snr}");
+        let (mut parts, mut at, mut stalls) = (Vec::new(), 0, 0);
+        while at < len {
+            let take = (rng.next_u32() as usize % 40).min(len - at);
+            let room = rng.next_u32() as usize % (3 * up);
+            let mut o = vec![C32::default(); room];
+            let p = Simd
+                .fir_interpolate(&mut c, &x[at..at + take], &mut o)
+                .unwrap();
+            parts.extend_from_slice(&o[..p.produced]);
+            at += p.consumed;
+            stalls = if p.consumed == 0 { stalls + 1 } else { 0 };
+            assert!(stalls < 1000, "no progress");
+        }
+        let mut o = vec![C32::default(); up];
+        let p = Simd.fir_interpolate(&mut c, &[], &mut o).unwrap();
+        parts.extend_from_slice(&o[..p.produced]);
+        assert_eq!(bits(&whole), bits(&parts), "L={up} taps={n}");
+        assert_eq!(b.history(), c.history());
+        assert_eq!(c.phase(), 0);
+    }
+}
+
+#[test]
 fn resample_and_interpolate_cq15_are_bit_exact() {
     let mut rng = Rng::new(27);
     for &(up, down) in &[(1usize, 1usize), (3, 1), (10, 1), (3, 2), (5, 7)] {

@@ -414,7 +414,7 @@ impl CostasConstellation {
 
 /// The QAM of a code ([`QAM16`] or [`QAM64`]).
 #[inline]
-const fn qam_of(code: u8) -> Qam {
+pub(crate) const fn qam_of(code: u8) -> Qam {
     if code == QAM64 {
         Qam::Qam64
     } else {

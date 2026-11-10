@@ -13,7 +13,8 @@
 //! shift (the `phase_step` of `fm_mod` in `f64` on `wasm32` and for large values), `detector4`
 //! (QPSK) turns sign bits instead of multiplying, `integrate` takes the integrator inside its
 //! limit after one well-predicted branch, and a non-finite detector value is handled out of
-//! line.
+//! line. The QAM detector takes `libm::atan2f` inline for the quotients of a loop near lock,
+//! with the bits of the call (`atan2f_inline`, D1418).
 
 #![allow(clippy::many_single_char_names)]
 
@@ -24,7 +25,7 @@ use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::costas::{
     BPSK, Costas, CostasState, LOCK_ALPHA, LOCK_OFF, LOCK_ON, PSK8, QAM16, QAM64, QPSK, derotate,
-    detector, lock_metric,
+    detector, lock_metric, qam_of, qam_product,
 };
 use crate::num::flush_denormal;
 use crate::types::C32;
@@ -60,7 +61,7 @@ fn flush_clamp(t: f32, limit: f32) -> f32 {
 /// one well-predicted branch and the selects of [`flush_clamp`] leave the chain from symbol to
 /// symbol (D1100).
 #[inline]
-fn integrate(t: f32, limit: f32) -> f32 {
+pub(crate) fn integrate(t: f32, limit: f32) -> f32 {
     let a = libm::fabsf(t);
     if a <= limit && a >= 1e-30 {
         t
@@ -90,10 +91,58 @@ fn detector4(y: C32) -> f32 {
     if e.is_finite() { e } else { not_finite() }
 }
 
+/// The QAM detector `atan2f(im(y conj d), re(y conj d))` of `detector`, a non-finite value
+/// counting as 0 as there, with the 0 from the cold call of [`detector4`], so that the test
+/// leaves the chain from symbol to symbol (D1418).
+#[inline]
+fn detector_qam(code: u8, y: C32) -> f32 {
+    let (r, i) = qam_product(qam_of(code), y);
+    let e = atan2f_inline(i, r);
+    if e.is_finite() { e } else { not_finite() }
+}
+
+/// `libm::atan2f(y, x)` bit for bit, with the case of a loop near lock inline (D1418): for
+/// `x > 0` finite and `t = |y| / x` in `[2^-12, 7/16)` msun's `atan2f` is `±atanf(t)` (the sign
+/// of `y`; `|y / x|` and `|y| / x` are the same quotient), and its `atanf` takes no argument
+/// reduction there: `t - t (s1 + s2)` with the polynomial of `atanf` in the same order. Every
+/// other input (zeros, infinities, NaN, `x <= 0`, small and large quotients) takes the call.
+#[inline]
+pub(crate) fn atan2f_inline(y: f32, x: f32) -> f32 {
+    // `aT[0..5]` of msun's `s_atanf.c`, the literals of `libm::atanf`.
+    #[allow(
+        clippy::excessive_precision,
+        clippy::unreadable_literal,
+        reason = "the literals of msun's s_atanf.c as libm writes them"
+    )]
+    const A_T: [f32; 5] = [
+        3.3333328366e-01,
+        -1.9999158382e-01,
+        1.4253635705e-01,
+        -1.0648017377e-01,
+        6.1687607318e-02,
+    ];
+    let [a0, a1, a2, a3, a4] = A_T;
+    let t = libm::fabsf(y) / x;
+    let (xb, tb) = (x.to_bits(), t.to_bits());
+    // `0 < x < inf` and `2^-12 <= t < 0.4375` by the bits (`0x39800000`, `0x3ee00000` as in
+    // `atanf`); a NaN `x` or `t` fails both.
+    if xb.wrapping_sub(1) < 0x7f7f_ffff && tb.wrapping_sub(0x3980_0000) < 0x3ee0_0000 - 0x3980_0000
+    {
+        let z = t * t;
+        let w = z * z;
+        let s1 = z * (a0 + w * (a2 + w * a4));
+        let s2 = w * (a1 + w * a3);
+        let a = t - t * (s1 + s2);
+        if y.is_sign_negative() { -a } else { a }
+    } else {
+        libm::atan2f(y, x)
+    }
+}
+
 /// The detector value of a non-finite `e` (D603), out of line.
 #[cold]
 #[inline(never)]
-fn not_finite() -> f32 {
+pub(crate) fn not_finite() -> f32 {
     0.0
 }
 
@@ -109,7 +158,7 @@ fn not_finite() -> f32 {
 /// [`phase_step`].
 #[cfg(not(target_arch = "wasm32"))]
 #[inline]
-fn phase_step_f32(v: f32) -> u32 {
+pub(crate) fn phase_step_f32(v: f32) -> u32 {
     let bits = v.to_bits();
     let exp = (bits >> 23) & 0xFF;
     if exp > 140 {
@@ -126,7 +175,7 @@ fn phase_step_f32(v: f32) -> u32 {
 /// form, whose shortened chain only a core with out-of-order execution would turn into time.
 #[cfg(target_arch = "wasm32")]
 #[inline]
-fn phase_step_f32(v: f32) -> u32 {
+pub(crate) fn phase_step_f32(v: f32) -> u32 {
     phase_step(f64::from(v), TURN)
 }
 
@@ -148,6 +197,8 @@ fn run<const CODE: u8>(s: &mut CostasState, input: &[C32], output: &mut [C32]) -
         *o = y;
         let e = if CODE == QPSK {
             detector4(y)
+        } else if CODE == QAM16 || CODE == QAM64 {
+            detector_qam(CODE, y)
         } else {
             detector(CODE, y)
         };
@@ -195,9 +246,12 @@ mod tests {
 
     use std::vec::Vec;
 
-    use super::{TURN, clamp_f32, detector4, flush_clamp, integrate, phase_step_f32};
+    use super::{
+        TURN, atan2f_inline, clamp_f32, detector_qam, detector4, flush_clamp, integrate,
+        phase_step_f32,
+    };
     use crate::fallback::modulate::phase_step;
-    use crate::kernels::costas::{QPSK, detector};
+    use crate::kernels::costas::{QAM16, QAM64, QPSK, detector};
     use crate::num::flush_denormal;
     use crate::types::C32;
 
@@ -287,6 +341,72 @@ mod tests {
                     want.to_bits(),
                     "{t:e} {limit:e}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn inline_atan2f_equals_libm() {
+        let mut s = specials();
+        // The bounds of the inline case and their neighbours, as quotients and as operands.
+        for b in [2.0f32.powi(-12), 0.4375, 1.0, 1.1875, 2.4375] {
+            for k in 0..8u32 {
+                s.extend([
+                    f32::from_bits(b.to_bits() + k),
+                    f32::from_bits(b.to_bits() - k),
+                ]);
+            }
+        }
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..300 {
+            s.push(f32::from_bits(next() as u32));
+        }
+        let check = |y: f32, x: f32| {
+            let (got, want) = (atan2f_inline(y, x), libm::atan2f(y, x));
+            assert!(
+                got.to_bits() == want.to_bits() || (got.is_nan() && want.is_nan()),
+                "{y:e} {x:e}: {got:e} against {want:e}"
+            );
+        };
+        for &y in &s {
+            for &x in &s {
+                check(y, x);
+            }
+        }
+        // Angles of a loop near lock: random quotients of every size around the inline range.
+        for _ in 0..2_000_000 {
+            let r = next();
+            let x = f32::from_bits(0x3c00_0000 + (r as u32 % 0x0400_0000));
+            let q = f32::from_bits(0x3900_0000 + ((r >> 32) as u32 % 0x0680_0000));
+            let y = if r >> 63 == 0 { q * x } else { -(q * x) };
+            check(y, x);
+            check(y, -x);
+        }
+    }
+
+    #[test]
+    fn qam_detector_with_the_cold_zero_equals_the_contract() {
+        let mut s = specials();
+        let mut seed = 0x2545_F491_4F6C_DD1Du64;
+        for _ in 0..200 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            s.push(f32::from_bits(seed as u32));
+        }
+        for code in [QAM16, QAM64] {
+            for &re in &s {
+                for &im in &s {
+                    let y = C32::new(re, im);
+                    let (got, want) = (detector_qam(code, y), detector(code, y));
+                    assert_eq!(got.to_bits(), want.to_bits(), "{code} {re:e} {im:e}");
+                }
             }
         }
     }

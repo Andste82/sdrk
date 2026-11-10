@@ -19,9 +19,9 @@
 use sdrk_device::Ratio;
 
 use crate::error::{Error, Result};
+use crate::fallback::costas::{integrate, not_finite, phase_step_f32};
 use crate::fallback::dot::dot_complex_tree;
 use crate::fallback::mix::interp_f32_pair;
-use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::constellation::Qam;
 use crate::kernels::costas::{derotate, loop_gains, octant_point};
@@ -62,8 +62,6 @@ pub(crate) const QPSK_A: f32 = core::f32::consts::FRAC_1_SQRT_2;
 const QAM16_R2: f32 = Qam::Qam16.cma_r2() as f32;
 /// The CMA radius of 64-QAM, [`Qam::cma_r2`] rounded once to `f32`.
 const QAM64_R2: f32 = Qam::Qam64.cma_r2() as f32;
-/// A full turn of the tracker phase, `2^32`.
-pub(crate) const TURN: f64 = 4_294_967_296.0;
 
 /// The adaptation mode of the equalizer.
 ///
@@ -600,12 +598,16 @@ pub(crate) fn advance(mode: &mut EqMode, count: &mut u32, cma_symbols: u32) {
 /// The tracker after a symbol with the output `z` and the decision `d`: the detector
 /// `pd = z.im d.re - z.re d.im` (0 if not finite), `freq = clip(flush(freq + ki pd), 0.125)`,
 /// `phase += phase_step(freq + kp pd)`.
+///
+/// Computed with the forms of the carrier loop (D1100, D1417), the same bits: the integrator
+/// inside its limit after one well-predicted branch ([`integrate`]), the phase step from the
+/// bits of the `f32` ([`phase_step_f32`]) and the 0 of a non-finite detector value out of line.
 #[inline]
 pub(crate) fn track(phase: &mut u32, freq: &mut f32, kp: f32, ki: f32, z: C32, d: C32) {
     let pd = z.im * d.re - z.re * d.im;
-    let pd = if pd.is_finite() { pd } else { 0.0 };
-    *freq = clip(flush_denormal(*freq + ki * pd), PHASE_MAX_FREQ);
-    *phase = phase.wrapping_add(phase_step(f64::from(*freq + kp * pd), TURN));
+    let pd = if pd.is_finite() { pd } else { not_finite() };
+    *freq = integrate(*freq + ki * pd, PHASE_MAX_FREQ);
+    *phase = phase.wrapping_add(phase_step_f32(*freq + kp * pd));
 }
 
 /// One symbol after the filter output `y` (finite), with `Pf` (`forward`) and the step
@@ -938,11 +940,60 @@ fn dot_split(xr: &[f32], xi: &[f32], xn: &[f32], wr: &[f32], wi: &[f32]) -> C32 
     C32::new(dot_complex_tree(re), dot_complex_tree(im))
 }
 
+/// The bits of `f32::MAX`: a value is not finite when its magnitude bits are above.
+const MAX_BITS: u32 = 0x7f7f_ffff;
+
+/// The accumulators of the finite test of [`update_split`] after the weight bits `vr`, `vi`, one
+/// per component and lane: where an unsigned maximum of 32-bit lanes is one instruction (AArch64,
+/// SSE4.1 and up) the largest magnitude bits (`v << 1`, the sign shifted out); at SSE2 and on
+/// Cortex-M4 the or of the all-ones masks of a signed compare of the magnitude bits with those
+/// of `f32::MAX`; on `wasm32` (counted in instructions) the or of the compare as 0 or 1, the
+/// form of M43 with one accumulator, which takes the fewest instructions there (D1417).
+#[cfg(any(target_arch = "aarch64", target_feature = "sse4.1"))]
+#[inline]
+fn not_finite_acc(acc_r: u32, acc_i: u32, vr: u32, vi: u32) -> (u32, u32) {
+    (acc_r.max(vr << 1), acc_i.max(vi << 1))
+}
+
+/// See the first variant.
+#[cfg(not(any(
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    target_feature = "sse4.1"
+)))]
+#[inline]
+fn not_finite_acc(acc_r: u32, acc_i: u32, vr: u32, vi: u32) -> (u32, u32) {
+    let mask = |v: u32| (-i32::from((v & 0x7fff_ffff) as i32 > MAX_BITS as i32)) as u32;
+    (acc_r | mask(vr), acc_i | mask(vi))
+}
+
+/// See the first variant.
+#[cfg(target_arch = "wasm32")]
+#[inline]
+fn not_finite_acc(acc_r: u32, acc_i: u32, vr: u32, vi: u32) -> (u32, u32) {
+    let big = |v: u32| u32::from((v & 0x7fff_ffff) as i32 > MAX_BITS as i32);
+    (acc_r | big(vr) | big(vi), acc_i)
+}
+
+/// Whether the accumulators of [`not_finite_acc`] saw a value that is not finite.
+#[cfg(any(target_arch = "aarch64", target_feature = "sse4.1"))]
+#[inline]
+fn not_finite_any(a: u32, b: u32) -> bool {
+    a.max(b) > MAX_BITS << 1
+}
+
+/// See the first variant (both other forms).
+#[cfg(not(any(target_arch = "aarch64", target_feature = "sse4.1")))]
+#[inline]
+fn not_finite_any(a: u32, b: u32) -> bool {
+    a | b != 0
+}
+
 /// Step 5 on the split weights over whole blocks: `w[i] = flush_denormal(w[i] - g conj(x[i]))`
 /// for the `N` weights, over `lanes` (`N` rounded up to a multiple of [`QUAD`]); the padding is
 /// computed too and masked back to `+0`, so only the `N` weights take part in the finite test
-/// (an integer compare per weight and an `or`, no branch). One flat loop, which LLVM
-/// vectorizes.
+/// ([`not_finite_acc`] per weight and component into two accumulators, one test after the
+/// loop, no branch). One flat loop, which LLVM vectorizes.
 /// Returns whether a new weight is not finite.
 #[allow(
     clippy::inline_always,
@@ -950,15 +1001,11 @@ fn dot_split(xr: &[f32], xi: &[f32], xn: &[f32], wr: &[f32], wi: &[f32]) -> C32 
 )]
 #[inline(always)]
 fn update_split(l: &mut Linear<'_>, at: usize, lanes: usize, g: C32) -> Option<bool> {
-    /// The magnitude bits, and those of `f32::MAX`: a value is not finite when its magnitude
-    /// bits are above (a signed compare of non-negative values, one instruction on every level).
-    const ABS: u32 = 0x7fff_ffff;
-    const MAX: i32 = 0x7f7f_ffff;
     let xr = l.h.xr.get(at..at + lanes)?;
     let xi = l.h.xi.get(at..at + lanes)?;
     let wr = l.w.wr.get_mut(..lanes)?;
     let wi = l.w.wi.get_mut(..lanes)?;
-    let mut bad = 0u32;
+    let (mut big_r, mut big_i) = (0u32, 0u32);
     let each = wr
         .iter_mut()
         .zip(wi.iter_mut())
@@ -970,11 +1017,11 @@ fn update_split(l: &mut Linear<'_>, at: usize, lanes: usize, g: C32) -> Option<b
         let ci = g.im * a - g.re * b;
         let vr = flush_denormal(*wr - cr).to_bits() & m;
         let vi = flush_denormal(*wi - ci).to_bits() & m;
-        bad |= u32::from(((vr & ABS) as i32) > MAX) | u32::from(((vi & ABS) as i32) > MAX);
+        (big_r, big_i) = not_finite_acc(big_r, big_i, vr, vi);
         *wr = f32::from_bits(vr);
         *wi = f32::from_bits(vi);
     }
-    Some(bad != 0)
+    Some(not_finite_any(big_r, big_i))
 }
 
 /// The equalizer without feedback taps (`M = 0`), the arithmetic of [`Equalize::equalize`] in

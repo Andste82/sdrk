@@ -61,6 +61,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M42 | [M42-rds-tx.md](M42-rds-tx.md) | 10 | RDS transmit: group carousel, `rds_encode` (`Clocked`), `fm_stereo_rds_mod`, flow `fm_stereo_rds_transmitter` |
 | M43 | [M43-equalizer.md](M43-equalizer.md) | 10 | Adaptive equalizer `equalize` (CMA, decision-directed), testkit multipath |
 | M44 | [M44-qam.md](M44-qam.md) | 10 | **Delivered** (2026-11-09, branch `m44`). 16-QAM and 64-QAM RX+TX: shared Gray constellations `qam16`/`qam64`, `slice`, `equalize` and `costas` (parameter `constellation`, decision-directed QAM loop) extensions, kinds `qam_mod` and `qam_demod`, `frame_decode` `rotations` and `bits_per_symbol`, flows `qam16_transmitter` and `qam16_receiver` |
+| M44.1 | [M44.1-qam-any-order.md](M44.1-qam-any-order.md) | 10 | Draft. QAM of any square order (4, 16, 64, 256, 1024): general constellation tables, soft bits (`qam_soft_bits` with a general SIMD path), `costas`/`equalize` decisions and lock metric, frequency acquisition and `frame_decode` rotations per order; 16/64 fast paths kept; flows `qam256_transmitter`/`qam256_receiver` |
 | M45 | [M45-channelizer.md](M45-channelizer.md) | 10 | **Delivered** (2026-11-08, branch `m45-channelizer`). Channelizer: kernel `channelize` (polyphase filter bank, prototype with passband and stopband edges), port type `Lanes<T>` (M channels through one output), kinds `channelize` and `channel_select`, flow `pmr446_monitor` (eight PMR446 channels at once) |
 | M45.1 | [M45.1-ism-band-receiver.md](M45.1-ism-band-receiver.md) | 10 | **Delivered** (2026-11-08; open items I45.1-1 to I45.1-3 and I45.1-8 wait for maintainer decisions; I45.1-4 to I45.1-7 closed on 2026-11-09). ISM band receiver: `band_pulse_detect` on the lanes of `channelize` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
 | M46 | [M46-ism-sensors.md](M46-ism-sensors.md) | 10 | Sensor decoders: slicers (PWM, PPM, Manchester, NRZ), `sensor_decode` with readings as JSON, at least four 433 MHz and two 868 MHz devices (clean-room, no GPL code), flows `ism433_sensors`, `ism868_sensors` |
@@ -111,6 +112,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M42 RDS transmit | M41, M36, M37 | M43, M44 |
 | M43 Equalizer | M40.1 | M41, M42 |
 | M44 QAM | M43 | M41, M42 |
+| M44.1 QAM of any square order | M44 | M45.1, M46, M48–M56 |
 | M45 Channelizer, lane streams | M34 | M35–M44, M47 |
 | M45.1 ISM band receiver | M45, M39.1 | M42, M43, M44 |
 | M46 ISM sensor decoders | M45.1 | M42, M43, M44 |
@@ -200,7 +202,9 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 740–749 | M54 (`code_track`) |
 | 750–759 | M55 (`pilot_equalize`) |
 | 760–769 | M56 (`fwht`) |
-| 770–999 | free, for backlog milestones |
+| 770–789 | M44 (the QAM round of the open items I44-1 to I44-11) |
+| 790–809 | M44.1 |
+| 810–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

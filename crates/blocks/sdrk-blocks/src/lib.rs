@@ -111,8 +111,9 @@ pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLi
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
 pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
 pub use blocks::qam_demod::{
-    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QAM_DEMOD_CHUNK,
-    QamDemodBlock, QamDemodConfig,
+    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_LEVEL_STEP, QAM_ACQUISITION_RESTART_LEVEL,
+    QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QAM_ACQUISITION_VERIFY_TOLERANCE,
+    QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig,
 };
 pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};

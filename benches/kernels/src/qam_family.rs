@@ -1,6 +1,7 @@
 //! The QAM entries of M44: `qam_soft_bits_qam16`, `qam_soft_bits_qam64`, `slice_qam16_block`,
-//! `slice_qam64_block`, `costas_qam16`, `costas_qam16_fallback`, `equalize_qam16`,
-//! `equalize_qam16_fallback`, `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`.
+//! `slice_qam64_block`, `costas_qam16`, `costas_qam16_fallback`, `costas_qam64`,
+//! `costas_qam64_fallback`, `equalize_qam16`, `equalize_qam16_fallback`, `equalize_qam64`,
+//! `equalize_qam64_fallback`, `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`.
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -12,6 +13,10 @@
 //! | `costas_qam16_fallback` | our fallback | GNU Radio's `constellation_receiver_cb` | one symbol |
 //! | `equalize_qam16` | facade (= the fallback's loop, D841) | none (`info`) | one symbol |
 //! | `equalize_qam16_fallback` | our fallback | GNU Radio's `linear_equalizer` on a `constellation_rect` | one symbol |
+//! | `costas_qam64` | facade (= the fallback), 64-QAM | none (`info`) | one symbol |
+//! | `costas_qam64_fallback` | our fallback, 64-QAM | GNU Radio's `constellation_receiver_cb` on the 64-QAM `constellation_rect` | one symbol |
+//! | `equalize_qam64` | facade (= the fallback's loop, D841), 64-QAM | none (`info`) | one symbol |
+//! | `equalize_qam64_fallback` | our fallback, 64-QAM | GNU Radio's `linear_equalizer` on the 64-QAM `constellation_rect` | one symbol |
 //! | `qam_mod_block` | `sdrk_blocks::QamModBlock`, 16-QAM | none (`info`) | one output sample |
 //! | `qam_demod_block` | `sdrk_blocks::QamDemodBlock`, 16-QAM | none (`info`) | one input sample |
 //! | `frame_decode_four_block` | `sdrk_blocks::FrameDecodeBlock` with `rotations` `four` | none (`info`) | one input sample (one soft bit) |
@@ -67,6 +72,12 @@
 //! state lives across the runs: the warm-up call covers the 1000 symbols in CMA mode, so the
 //! counted calls run in decision mode, the steady state, as GNU Radio's decision-directed loop
 //! with the same normalized step 0.02 from the centre-spike taps.
+//!
+//! The 64-QAM entries `costas_qam64`, `costas_qam64_fallback`, `equalize_qam64` and
+//! `equalize_qam64_fallback` (I44-11, D1428) are the same workloads with the constellation
+//! `qam64` and 64-QAM points, against GNU Radio's `constellation_rect` with 8 by 8 sectors of the
+//! width `2 / sqrt(42)` (the same C translations); `costas` starts at the phase 0.05 rad instead
+//! of 0.3, at which the outer 64-QAM points are decided wrongly (D1425).
 
 use std::hint::black_box;
 
@@ -257,50 +268,54 @@ impl Kernel for SliceQamBlockK {
 }
 
 // ---------------------------------------------------------------------------------------------
-// GNU Radio's 16-QAM constellation_rect
+// GNU Radio's 16-QAM and 64-QAM constellation_rect
 
-/// The 16-QAM points of ours in symbol order, as pairs.
-fn qam16_points() -> Vec<[f32; 2]> {
-    Qam::Qam16
-        .point_table()
-        .iter()
-        .map(|p| [p.re, p.im])
-        .collect()
+/// The points of `qam` of ours in symbol order, as pairs.
+fn qam_points(qam: Qam) -> Vec<[f32; 2]> {
+    qam.point_table().iter().map(|p| [p.re, p.im]).collect()
 }
 
-/// GNU Radio's `constellation_rect` of our unit-power 16-QAM: 4 by 4 sectors of the width of
-/// the level spacing `2 / sqrt(10)`, no normalization.
-fn gr_rect(points: &[[f32; 2]]) -> GrRect<'_> {
+/// GNU Radio's `constellation_rect` of our unit-power `qam`: `m` by `m` sectors (`m` the levels
+/// per axis) of the width of the level spacing `2 / sqrt(E)` (16-QAM `2 / sqrt(10)`, 64-QAM
+/// `2 / sqrt(42)`), no normalization.
+fn gr_rect(qam: Qam, points: &[[f32; 2]]) -> GrRect<'_> {
     #[allow(clippy::cast_possible_truncation, reason = "the f32 width")]
-    let width = (2.0 / 10f64.sqrt()) as f32;
+    let width = (2.0 / qam.energy().sqrt()) as f32;
+    #[allow(clippy::cast_possible_truncation, reason = "4 or 8 levels")]
+    let m = qam.levels_per_axis() as u32;
     GrRect {
         points,
-        real_sectors: 4,
-        imag_sectors: 4,
+        real_sectors: m,
+        imag_sectors: m,
         width_real: width,
         width_imag: width,
     }
 }
 
-/// The sector decision of GNU Radio's `constellation_rect` in f64: the point nearest to the
-/// sector centre of `int(x / width + 2)` per axis, clamped to `0 ..= 3`; for our grid that is
-/// the level of the sector.
-fn gr_decide_f64(x: f64) -> f64 {
-    let width = 2.0 / 10f64.sqrt();
+/// The sector decision of GNU Radio's `constellation_rect` of `qam` in f64: the point nearest
+/// to the sector centre of `int(x / width + m / 2)` per axis, clamped to `0 ..= m - 1`; for our
+/// grid that is the level of the sector.
+fn gr_decide_f64(qam: Qam, x: f64) -> f64 {
+    let e = qam.energy().sqrt();
+    #[allow(clippy::cast_possible_wrap, reason = "4 or 8 levels")]
+    let m = qam.levels_per_axis() as i64;
+    #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+    let half = (m / 2) as f64;
     #[allow(
         clippy::cast_possible_truncation,
         reason = "the truncation of the C code"
     )]
-    let s = ((x / width + 2.0) as i64).clamp(0, 3);
+    let s = ((x / (2.0 / e) + half) as i64).clamp(0, m - 1);
     #[allow(clippy::cast_precision_loss, reason = "a small integer")]
-    let level = (2 * s - 3) as f64;
-    level / 10f64.sqrt()
+    let level = (2 * s - (m - 1)) as f64;
+    level / e
 }
 
-/// 16-QAM symbols (random points) through the symbol-spaced `channel` (`(delay, magnitude,
+/// Symbols of `qam` (random points) through the symbol-spaced `channel` (`(delay, magnitude,
 /// phase)`), turned by `phase0 + 2 pi offset k`, plus uniform noise of `noise` per component.
-fn qam16_input(
+fn qam_input(
     rng: &mut Pcg32,
+    qam: Qam,
     layout: Layout,
     channel: &[(usize, f64, f64)],
     phase0: f64,
@@ -309,7 +324,7 @@ fn qam16_input(
 ) -> Aligned<C32> {
     let n = layout.n;
     let skew = layout.skew(core::mem::size_of::<C32>());
-    let symbols: Vec<C32> = (0..n).map(|_| Qam::Qam16.point(rng.next_u32())).collect();
+    let symbols: Vec<C32> = (0..n).map(|_| qam.point(rng.next_u32())).collect();
     let mut input = Aligned::<C32>::skewed(n, skew);
     for (k, s) in input.iter_mut().enumerate() {
         let (mut re, mut im) = (0.0f64, 0.0f64);
@@ -338,25 +353,31 @@ fn qam16_input(
 }
 
 // ---------------------------------------------------------------------------------------------
-// costas qam16
+// costas qam16 and qam64
 
-/// The block defaults of `costas` (D604) with the constellation `qam16`.
+/// The block defaults of `costas` (D604) with the constellation `qam16` or `qam64`.
 const LOOP_BW: f64 = 0.02;
 #[allow(clippy::approx_constant)]
 const DAMPING: f64 = 0.7071;
 const MAX_OFFSET: f64 = 0.05;
-/// The start phase (rad), the carrier offset (cycles per symbol) and the noise per component.
-const CR_PHASE0: f64 = 0.3;
+/// The start phase (rad) of 16-QAM and of 64-QAM (at 0.3 rad the outer 64-QAM points are
+/// decided wrongly, D1425), the carrier offset (cycles per symbol) and the noise per component.
+const CR_PHASE0_QAM16: f64 = 0.3;
+const CR_PHASE0_QAM64: f64 = 0.05;
 const CR_OFFSET: f64 = 0.0005;
 const CR_NOISE: f64 = 0.05;
 
-fn costas_state() -> CostasState {
-    CostasState::new(CostasConstellation::Qam16, LOOP_BW, DAMPING, MAX_OFFSET).expect("costas")
+fn costas_state(qam: Qam) -> CostasState {
+    let c = match qam {
+        Qam::Qam64 => CostasConstellation::Qam64,
+        _ => CostasConstellation::Qam16,
+    };
+    CostasState::new(c, LOOP_BW, DAMPING, MAX_OFFSET).expect("costas")
 }
 
 /// GNU Radio's `constellation_receiver_cb` with the loop bandwidth of our loop constants and the
 /// frequency limits of our `max_offset`.
-fn gr_receiver(points: &[[f32; 2]]) -> Option<GrConstellationReceiverCb> {
+fn gr_receiver(qam: Qam, points: &[[f32; 2]]) -> Option<GrConstellationReceiverCb> {
     #[allow(
         clippy::cast_possible_truncation,
         reason = "the f32 parameters of the block"
@@ -365,12 +386,12 @@ fn gr_receiver(points: &[[f32; 2]]) -> Option<GrConstellationReceiverCb> {
         (LOOP_BW / (DAMPING + 1.0 / (4.0 * DAMPING))) as f32,
         (core::f64::consts::TAU * MAX_OFFSET) as f32,
     );
-    GrConstellationReceiverCb::new(gr_rect(points), bw, -f, f)
+    GrConstellationReceiverCb::new(gr_rect(qam, points), bw, -f, f)
 }
 
 /// The f64 model of the `constellation_receiver_cb` loop (exact sine and cosine, the sector
 /// decision, `-arg(sample conj(d))`), the accuracy reference of [`Impl::GnuRadio`].
-fn gr_receiver_model(input: &[C32], alpha: f64, beta: f64) -> Vec<C32> {
+fn gr_receiver_model(qam: Qam, input: &[C32], alpha: f64, beta: f64) -> Vec<C32> {
     let fmax = core::f64::consts::TAU * MAX_OFFSET;
     let (mut phase, mut freq) = (0.0f64, 0.0f64);
     let mut out = Vec::with_capacity(input.len());
@@ -383,7 +404,7 @@ fn gr_receiver_model(input: &[C32], alpha: f64, beta: f64) -> Vec<C32> {
             reason = "a model value rounded to f32"
         )]
         out.push(C32::new(yr as f32, yi as f32));
-        let (dr, di) = (gr_decide_f64(yr), gr_decide_f64(yi));
+        let (dr, di) = (gr_decide_f64(qam, yr), gr_decide_f64(qam, yi));
         let e = -(yi * dr - yr * di).atan2(yr * dr + yi * di);
         freq += beta * e;
         phase += freq + alpha * e;
@@ -399,29 +420,36 @@ fn gr_receiver_model(input: &[C32], alpha: f64, beta: f64) -> Vec<C32> {
     out
 }
 
-/// `costas` with the constellation `qam16` over `n` symbols.
+/// `costas` with the constellation `qam16` or `qam64` over `n` symbols.
 pub(crate) struct CostasQamK {
+    qam: Qam,
     input: Aligned<C32>,
     out: Aligned<C32>,
     points: Vec<[f32; 2]>,
-    /// The entry: `costas_qam16_fallback`.
+    /// The entry: `costas_qam16_fallback` or `costas_qam64_fallback`.
     fallback_entry: bool,
 }
 
 impl CostasQamK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, fallback_entry: bool) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, fallback_entry: bool) -> Self {
         let skew = layout.skew(core::mem::size_of::<C32>());
+        let phase0 = match qam {
+            Qam::Qam64 => CR_PHASE0_QAM64,
+            _ => CR_PHASE0_QAM16,
+        };
         CostasQamK {
-            input: qam16_input(
+            qam,
+            input: qam_input(
                 rng,
+                qam,
                 layout,
                 &[(0, 1.0, 0.0)],
-                CR_PHASE0,
+                phase0,
                 CR_OFFSET,
                 CR_NOISE,
             ),
             out: Aligned::skewed(layout.n, skew),
-            points: qam16_points(),
+            points: qam_points(qam),
             fallback_entry,
         }
     }
@@ -434,9 +462,9 @@ fn costas<B: Costas>(backend: &B, state: &mut CostasState, input: &[C32], out: &
 
 impl Kernel for CostasQamK {
     fn run(&mut self, which: Impl, k: usize) {
-        let mut state = costas_state();
+        let mut state = costas_state(self.qam);
         let mut gr = if which == Impl::GnuRadio {
-            gr_receiver(&self.points)
+            gr_receiver(self.qam, &self.points)
         } else {
             None
         };
@@ -448,7 +476,7 @@ impl Kernel for CostasQamK {
                     .as_mut()
                     .expect("gnuradio")
                     .work(c32_pairs_ref(&self.input), c32_pairs(&mut self.out)),
-                other => unreachable!("costas_qam16 has no {other:?}"),
+                other => unreachable!("costas_qam has no {other:?}"),
             }
             black_box(&self.out);
         }
@@ -457,11 +485,12 @@ impl Kernel for CostasQamK {
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
         let want = if which == Impl::GnuRadio {
-            let (alpha, beta) = gr_receiver(&self.points).map_or((0.0, 0.0), |g| g.gains());
-            gr_receiver_model(&self.input, f64::from(alpha), f64::from(beta))
+            let (alpha, beta) =
+                gr_receiver(self.qam, &self.points).map_or((0.0, 0.0), |g| g.gains());
+            gr_receiver_model(self.qam, &self.input, f64::from(alpha), f64::from(beta))
         } else {
             let mut want = vec![C32::default(); self.input.len()];
-            let _ = Reference.costas(&mut costas_state(), &self.input, &mut want);
+            let _ = Reference.costas(&mut costas_state(self.qam), &self.input, &mut want);
             want
         };
         snr_db(&c32s(&want), &c32s(&self.out))
@@ -471,7 +500,7 @@ impl Kernel for CostasQamK {
         match which {
             Impl::Ours => !self.fallback_entry,
             Impl::Fallback => true,
-            Impl::GnuRadio => self.fallback_entry && gr_receiver(&self.points).is_some(),
+            Impl::GnuRadio => self.fallback_entry && gr_receiver(self.qam, &self.points).is_some(),
             _ => false,
         }
     }
@@ -479,16 +508,21 @@ impl Kernel for CostasQamK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
-            Impl::GnuRadio => {
-                "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
-            }
+            Impl::GnuRadio => match self.qam {
+                Qam::Qam64 => {
+                    "GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
+                }
+                _ => {
+                    "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
+                }
+            },
             _ => "sdrk",
         }
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// equalize qam16
+// equalize qam16 and qam64
 
 /// The taps of the block default.
 const EQ_TAPS: usize = 11;
@@ -500,18 +534,21 @@ const EQ_CHANNEL: [(usize, f64, f64); 3] = [(0, 1.0, 0.0), (1, 0.2, 0.6), (2, 0.
 
 type EqState = EqualizeState<[C32; EQ_TAPS], [C32; EQ_TAPS]>;
 
-fn eq_params() -> EqParams {
+fn eq_params(qam: Qam) -> EqParams {
     EqParams {
-        constellation: EqConstellation::Qam16,
+        constellation: match qam {
+            Qam::Qam64 => EqConstellation::Qam64,
+            _ => EqConstellation::Qam16,
+        },
         ..EqParams::default()
     }
 }
 
-fn eq_state() -> EqState {
+fn eq_state(qam: Qam) -> EqState {
     EqualizeState::new(
         [C32::default(); EQ_TAPS],
         [C32::default(); EQ_TAPS],
-        eq_params(),
+        eq_params(qam),
     )
     .expect("equalize")
 }
@@ -523,18 +560,18 @@ fn gr_taps() -> [[f32; 2]; EQ_TAPS] {
     t
 }
 
-/// GNU Radio's `linear_equalizer` on the 16-QAM `constellation_rect` for `n` symbols per call
+/// GNU Radio's `linear_equalizer` on the `constellation_rect` of `qam` for `n` symbols per call
 /// with the normalized decision-mode step of ours.
-fn gr_equalizer(n: usize, points: &[[f32; 2]]) -> Option<GrLinearEqualizerRect> {
-    GrLinearEqualizerRect::new(&gr_taps(), eq_params().mu_dd, n, gr_rect(points))
+fn gr_equalizer(qam: Qam, n: usize, points: &[[f32; 2]]) -> Option<GrLinearEqualizerRect> {
+    GrLinearEqualizerRect::new(&gr_taps(), eq_params(qam).mu_dd, n, gr_rect(qam, points))
 }
 
 /// The f64 model of GNU Radio's loop (the accuracy reference of [`Impl::GnuRadio`]): the FIR of
 /// the window (oldest first) with the reversed taps, the sector decision, `e = d - y`,
 /// `taps[i] += (mu / sum |x|^2) conj(x[i]) e`.
-fn gr_equalizer_model(input: &[C32]) -> Vec<C32> {
+fn gr_equalizer_model(qam: Qam, input: &[C32]) -> Vec<C32> {
     let n = EQ_TAPS;
-    let mu = f64::from(eq_params().mu_dd);
+    let mu = f64::from(eq_params(qam).mu_dd);
     let mut taps: Vec<(f64, f64)> = gr_taps()
         .iter()
         .rev()
@@ -555,7 +592,7 @@ fn gr_equalizer_model(input: &[C32]) -> Vec<C32> {
             reason = "a model value rounded to f32"
         )]
         out.push(C32::new(yr as f32, yi as f32));
-        let (dr, di) = (gr_decide_f64(yr), gr_decide_f64(yi));
+        let (dr, di) = (gr_decide_f64(qam, yr), gr_decide_f64(qam, yi));
         let (er, ei) = (dr - yr, di - yi);
         let p: f64 = window.iter().map(|&(xr, xi)| xr * xr + xi * xi).sum();
         let m = mu / p;
@@ -572,8 +609,10 @@ fn equalize<B: Equalize>(backend: &B, state: &mut EqState, input: &[C32], out: &
     let _ = black_box(backend.equalize(state, black_box(input), out));
 }
 
-/// `equalize` with the constellation `qam16` over `n` symbols (see the module documentation).
+/// `equalize` with the constellation `qam16` or `qam64` over `n` symbols (see the module
+/// documentation).
 pub(crate) struct EqualizeQamK {
+    qam: Qam,
     input: Aligned<C32>,
     out: Aligned<C32>,
     points: Vec<[f32; 2]>,
@@ -581,24 +620,25 @@ pub(crate) struct EqualizeQamK {
     state: EqState,
     /// GNU Radio's equalizer of the counted calls (the fallback entry), carried across the runs.
     gr: Option<GrLinearEqualizerRect>,
-    /// The entry: `equalize_qam16_fallback`.
+    /// The entry: `equalize_qam16_fallback` or `equalize_qam64_fallback`.
     fallback_entry: bool,
 }
 
 impl EqualizeQamK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, fallback_entry: bool) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, fallback_entry: bool) -> Self {
         let skew = layout.skew(core::mem::size_of::<C32>());
-        let points = qam16_points();
+        let points = qam_points(qam);
         let gr = if fallback_entry {
-            gr_equalizer(layout.n, &points)
+            gr_equalizer(qam, layout.n, &points)
         } else {
             None
         };
         EqualizeQamK {
-            input: qam16_input(rng, layout, &EQ_CHANNEL, EQ_PHASE, 0.0, EQ_NOISE),
+            qam,
+            input: qam_input(rng, qam, layout, &EQ_CHANNEL, EQ_PHASE, 0.0, EQ_NOISE),
             out: Aligned::skewed(layout.n, skew),
             points,
-            state: eq_state(),
+            state: eq_state(qam),
             gr,
             fallback_entry,
         }
@@ -618,7 +658,7 @@ impl Kernel for EqualizeQamK {
                     .as_mut()
                     .expect("gnuradio")
                     .work(c32_pairs_ref(&self.input), c32_pairs(&mut self.out)),
-                other => unreachable!("equalize_qam16 has no {other:?}"),
+                other => unreachable!("equalize_qam has no {other:?}"),
             }
             black_box(&self.out);
         }
@@ -629,20 +669,21 @@ impl Kernel for EqualizeQamK {
     /// loop against its f64 model.
     fn accuracy(&mut self, which: Impl) -> f64 {
         let mut got = vec![C32::default(); self.input.len()];
-        let mut state = eq_state();
+        let mut state = eq_state(self.qam);
         match which {
             Impl::Ours => equalize(&Sdrk, &mut state, &self.input, &mut got),
             Impl::Fallback => equalize(&Fallback, &mut state, &self.input, &mut got),
             Impl::GnuRadio => {
-                if let Some(mut gr) = gr_equalizer(self.input.len(), &self.points) {
+                if let Some(mut gr) = gr_equalizer(self.qam, self.input.len(), &self.points) {
                     gr.work(c32_pairs_ref(&self.input), c32_pairs(&mut got));
                 }
-                return snr_db(&c32s(&gr_equalizer_model(&self.input)), &c32s(&got));
+                let want = gr_equalizer_model(self.qam, &self.input);
+                return snr_db(&c32s(&want), &c32s(&got));
             }
-            other => unreachable!("equalize_qam16 has no {other:?}"),
+            other => unreachable!("equalize_qam has no {other:?}"),
         }
         let mut want = vec![C32::default(); self.input.len()];
-        let _ = Reference.equalize(&mut eq_state(), &self.input, &mut want);
+        let _ = Reference.equalize(&mut eq_state(self.qam), &self.input, &mut want);
         snr_db(&c32s(&want), &c32s(&got))
     }
 
@@ -658,9 +699,14 @@ impl Kernel for EqualizeQamK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
-            Impl::GnuRadio => {
-                "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
-            }
+            Impl::GnuRadio => match self.qam {
+                Qam::Qam64 => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
+                }
+                _ => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
+                }
+            },
             _ => "sdrk",
         }
     }

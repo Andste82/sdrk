@@ -906,7 +906,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 227] = [
+pub static KERNELS: [KernelSpec; 231] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1142,6 +1142,10 @@ pub static KERNELS: [KernelSpec; 227] = [
     spec("costas_qam16_fallback", Family::FallbackVsGnuRadio, false),
     spec("equalize_qam16", Family::Own, false),
     spec("equalize_qam16_fallback", Family::FallbackVsGnuRadio, false),
+    spec("costas_qam64", Family::Own, false),
+    spec("costas_qam64_fallback", Family::FallbackVsGnuRadio, false),
+    spec("equalize_qam64", Family::Own, false),
+    spec("equalize_qam64_fallback", Family::FallbackVsGnuRadio, false),
     spec("rds_shape", Family::Own, false),
     spec("stereo_encode_rds", Family::Own, false),
     proto("morse_encode_block", Family::Own),
@@ -2414,6 +2418,58 @@ impl Session {
         Ok(crate::mca::difference(&full, &empty))
     }
 
+    /// The branch counts of the counted calls of `which` on `kernel` from Valgrind's
+    /// `cachegrind --branch-sim=yes` (D1438): a run with the calls minus a run without them, in
+    /// the environment of the count of the level ([`Session::command`]). The binary runs on
+    /// the host CPU; only the build fixes the level of our code, and the pinned `volk_config`
+    /// that of VOLK.
+    fn branch_sim(
+        &self,
+        kernel: &str,
+        which: &str,
+        variant: &Variant,
+    ) -> anyhow::Result<crate::branches::Branches> {
+        let calls = K * (N / variant.samples).max(1);
+        let mut runs = Vec::new();
+        for k in [0, calls] {
+            let file = self
+                .scratch
+                .join(format!("branches-{kernel}-{which}-{k}.cachegrind"));
+            let run = Run {
+                args: run_args(kernel, which, k, calls, variant),
+                volk_config: &self.volk_config,
+            };
+            let out = self
+                .command("valgrind", &run)
+                .args([
+                    "-q",
+                    "--tool=cachegrind",
+                    "--cache-sim=no",
+                    "--branch-sim=yes",
+                ])
+                .arg(format!("--cachegrind-out-file={}", file.display()))
+                .arg(&self.binary)
+                .args(&run.args)
+                .stdout(Stdio::null())
+                .output()
+                .context("cannot run valgrind")?;
+            if !out.status.success() {
+                bail!(
+                    "cachegrind failed for {:?}: {}",
+                    run.args,
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
+            let text = std::fs::read_to_string(&file)
+                .with_context(|| format!("cannot read {}", file.display()))?;
+            let _ = std::fs::remove_file(&file);
+            runs.push(crate::branches::parse_cachegrind(&text)?);
+        }
+        let [empty, full] = <[crate::branches::Branches; 2]>::try_from(runs)
+            .map_err(|_| anyhow!("two cachegrind runs expected"))?;
+        full.minus(&empty)
+    }
+
     /// A JSON line of the measurement binary (`info`, `volk-info`, `volk-impls`).
     fn query(&self, args: &[&str]) -> anyhow::Result<Value> {
         let out = self.plain(&Run {
@@ -3355,6 +3411,102 @@ pub struct EntryProfiles {
     pub ours: crate::mca::Counts,
     /// The judged comparison.
     pub other: crate::mca::Counts,
+}
+
+/// The branch counts of one count entry (D1438): ours and the judged comparison.
+#[derive(Clone, Debug)]
+pub struct EntryBranches {
+    /// The comparison (as in the results file).
+    pub compared_with: String,
+    /// Samples processed by the counted calls (the divisor of the per-sample figures).
+    pub samples: u64,
+    /// Our side (the fallback for a fallback entry).
+    pub ours: crate::branches::Branches,
+    /// The judged comparison.
+    pub other: crate::branches::Branches,
+}
+
+/// The branch counts of `kernels` at `level` of `platform` from `cachegrind --branch-sim=yes`
+/// on the benchmark workload of each entry (D1438): per entry, the branches and mispredictions
+/// of the counted calls of our side and of the judged comparison. Only the x86-64 levels that
+/// Valgrind runs ([`crate::branches::simulated_level`]); the FFTs have the restore of their
+/// input subtracted. An entry that cannot be counted is returned with its error.
+///
+/// # Errors
+/// An unknown platform or level, a level without branch simulation, or a tool that is missing
+/// or fails before the first entry.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "std::process::Command and the plan table are large; xtask is a host tool"
+)]
+pub fn branch_profiles(
+    root: &Path,
+    platform: &str,
+    level: &str,
+    kernels: &[String],
+) -> anyhow::Result<Vec<(String, anyhow::Result<EntryBranches>)>> {
+    let plan = PLANS
+        .iter()
+        .find(|p| p.platform == platform && p.level == level)
+        .ok_or_else(|| anyhow!("the platform `{platform}` has no level `{level}`"))?;
+    if plan.baseline.is_some() {
+        bail!("the level {level} is judged against our own numbers, not against a reference");
+    }
+    if !matches!(plan.counter, Counter::Callgrind | Counter::Sde(_))
+        || !crate::branches::simulated_level(level)
+    {
+        bail!("the level {level} has no branch simulation (D1438: x86-64 builds under Valgrind)");
+    }
+    let refs = references(root, plan.refs)?;
+    let session = session(root, plan, &refs)?;
+    let mut out = Vec::new();
+    for spec in KERNELS
+        .iter()
+        .filter(|s| kernels.iter().any(|k| k == s.name))
+    {
+        if !spec.family.measured_at(plan) {
+            out.push((
+                spec.name.to_string(),
+                Err(anyhow!("not measured at the level {level}")),
+            ));
+            continue;
+        }
+        let entry = || -> anyhow::Result<EntryBranches> {
+            let (gate, _) = comparisons(plan, spec);
+            let info = session.query(&["info", spec.name])?;
+            let compared_with = info
+                .get("impls")
+                .and_then(|i| i.get(gate.implementation()))
+                .and_then(Value::as_str)
+                .unwrap_or(gate.implementation())
+                .to_string();
+            println!(
+                "==> {level} {} (branch simulation of cachegrind, ours vs {compared_with})",
+                spec.name
+            );
+            let standard = Variant::standard(spec);
+            let restore = if spec.family.is_fft() {
+                Some(session.branch_sim(spec.name, "restore", &standard)?)
+            } else {
+                None
+            };
+            let side = |which: &str| -> anyhow::Result<crate::branches::Branches> {
+                let b = session.branch_sim(spec.name, which, &standard)?;
+                match &restore {
+                    Some(r) => b.minus(r),
+                    None => Ok(b),
+                }
+            };
+            Ok(EntryBranches {
+                compared_with,
+                samples: K * (N / standard.samples).max(1) * standard.samples,
+                ours: side(spec.family.measured())?,
+                other: side(gate.implementation())?,
+            })
+        };
+        out.push((spec.name.to_string(), entry()));
+    }
+    Ok(out)
 }
 
 /// The instruction profiles of `kernels` at `level` of `platform` (level 2 of the measurement
@@ -4780,6 +4932,8 @@ mod tests {
         for (simd, fallback) in [
             ("costas_qam16", "costas_qam16_fallback"),
             ("equalize_qam16", "equalize_qam16_fallback"),
+            ("costas_qam64", "costas_qam64_fallback"),
+            ("equalize_qam64", "equalize_qam64_fallback"),
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -4803,6 +4957,10 @@ mod tests {
             "costas_qam16_fallback",
             "equalize_qam16",
             "equalize_qam16_fallback",
+            "costas_qam64",
+            "costas_qam64_fallback",
+            "equalize_qam64",
+            "equalize_qam64_fallback",
         ] {
             for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
                 let Some(limit) = limits.get(name, p.level) else {

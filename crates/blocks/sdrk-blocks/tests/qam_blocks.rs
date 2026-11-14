@@ -1033,6 +1033,168 @@ fn demod_all(block: &mut QamDemodBlock<VecStorage>, input: &[C32]) -> Vec<f32> {
     soft
 }
 
+/// The noise per component of [`received`] for `Es/N0` in dB (the power of the signal measured
+/// on its noiseless form after the ramp of the filter).
+fn sigma_for(order: u32, sps: usize, n_sym: usize, stream: u64, esn0_db: f64) -> f64 {
+    let clean = received(order, sps, n_sym, 0.0, stream);
+    let body = &clean[100 * sps..];
+    let power = body
+        .iter()
+        .map(|c| f64::from(c.re).powi(2) + f64::from(c.im).powi(2))
+        .sum::<f64>()
+        / body.len() as f64;
+    (power * sps as f64 / (2.0 * 10f64.powf(esn0_db / 10.0))).sqrt()
+}
+
+#[test]
+fn qam_demod_acquisition_phases_are_independent_of_the_cut_plan() {
+    // F5 of the review of I44-9 (D1435): the phases of the acquisition (the first interval, the
+    // checks without lock, the verify window, the sampled intervals and the restart) act at the
+    // same symbols whatever the split into calls. A weak 16-QAM signal below the lock level
+    // (Es/N0 12 dB, three checks without lock: verify, sampled intervals) from the start, and
+    // the same signal after a carrier at 0.06 cycles per symbol (its estimate, then the restart
+    // by the verify window); whole, in the twenty cut plans (one-sample pieces among them) and
+    // after a reset.
+    let fs = rate(38_400);
+    let n_sig = QAM_ACQUISITION_SKIP + QAM_ACQUISITION_SYMBOLS + 3 * QAM_ACQUISITION_CHECK + 200;
+    let sigma = sigma_for(16, 4, n_sig, 90, 12.0);
+    let sig = received(16, 4, n_sig, sigma, 90);
+    let amp = 0.7f64;
+    let mut lead: Vec<C32> = (0..4 * 1000)
+        .map(|j| {
+            let ph = core::f64::consts::TAU * 0.06 * j as f64 / 4.0;
+            C32::new((amp * ph.cos()) as f32, (amp * ph.sin()) as f32)
+        })
+        .collect();
+    lead.extend_from_slice(&sig);
+    for (name, input, restarted) in [("weak", &sig, false), ("carrier, weak", &lead, true)] {
+        for taps in [11usize, 0] {
+            let cfg = QamDemodConfig {
+                order: 16,
+                symbol_rate_hz: 9600.0,
+                equalizer_taps: taps,
+                ..QamDemodConfig::default()
+            };
+            let what = format!("{name}, taps {taps}");
+            let make = || QamDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+            let mut block = make();
+            let want = run_block(&mut block, input, None);
+            let state = (block.restarts(), block.acquired_frequency(), block.locked());
+            assert!(!state.2, "{what}: the weak signal is below the lock level");
+            assert_eq!(state.0 > 0, restarted, "{what}");
+            let f = state.1.unwrap();
+            assert!((f - 0.001).abs() < 1e-4, "{what}: acquired {f}");
+            for plan in twenty_plans(SEED) {
+                let mut block = make();
+                let got = run_block(&mut block, input, Some(plan));
+                same_bits(&want, &got, &format!("{what} {plan:?}"));
+                assert_eq!(
+                    (block.restarts(), block.acquired_frequency(), block.locked()),
+                    state,
+                    "{what} {plan:?}"
+                );
+            }
+            block.reset();
+            same_bits(
+                &want,
+                &run_block(&mut block, input, None),
+                &format!("{what} reset"),
+            );
+            assert_eq!(block.restarts(), state.0, "{what} reset");
+        }
+    }
+}
+
+#[test]
+fn qam_demod_lock_and_restart_on_the_level_are_independent_of_the_cut_plan() {
+    // N1 of the review of I44-9 and I44-11: the phases that the test above does not reach act
+    // at the same symbols whatever the split into calls. A strong 16-QAM signal for 6000
+    // symbols, then noise: the estimate, lock at the first check (the interval after it takes
+    // no samples), the lock lost in that interval and so a check without lock and without
+    // samples (the verify window, on noise no clear peak), then the 16 samples of noise and the
+    // restart on their mean. And a carrier at 0.06 cycles per symbol, then noise: its estimate,
+    // the first check without lock (in the noise), the verify window and the restart on the
+    // mean. Whole, in the twenty cut plans (one-sample pieces among them) and after a reset.
+    let fs = rate(38_400);
+    let mut rng = Pcg32::new(SEED, 92);
+    let noise: Vec<C32> = (0..4 * 9000)
+        .map(|_| C32::new(rng.normal() as f32, rng.normal() as f32) * 0.7)
+        .collect();
+    let strong = received(16, 4, 6000, 0.01, 91);
+    let mut strong_noise = strong.clone();
+    strong_noise.extend_from_slice(&noise);
+    let mut carrier_noise: Vec<C32> = (0..4 * 1000)
+        .map(|j| {
+            let ph = core::f64::consts::TAU * 0.06 * j as f64 / 4.0;
+            C32::new((0.7 * ph.cos()) as f32, (0.7 * ph.sin()) as f32)
+        })
+        .collect();
+    carrier_noise.extend_from_slice(&noise);
+    // the checks at about symbol 768 + 4096 k; `before` some 300 symbols before the one that
+    // restarts (the third for the strong signal, the second for the carrier)
+    for (name, input, lead, before, f_want) in [
+        (
+            "strong, noise",
+            &strong_noise,
+            strong.len(),
+            4 * 12_750,
+            0.001,
+        ),
+        ("carrier, noise", &carrier_noise, 4 * 1000, 4 * 8650, 0.06),
+    ] {
+        for taps in [11usize, 0] {
+            let cfg = QamDemodConfig {
+                order: 16,
+                symbol_rate_hz: 9600.0,
+                equalizer_taps: taps,
+                ..QamDemodConfig::default()
+            };
+            let what = format!("{name}, taps {taps}");
+            let make = || QamDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
+            // the path: the estimate (and lock on the strong signal) in the lead, then exactly
+            // one restart
+            let mut block = make();
+            run_block(&mut block, &input[..lead], None);
+            let f = block.acquired_frequency().unwrap();
+            assert!(
+                (f - f_want).abs() < 1e-4,
+                "{what}: acquired {f} in the lead"
+            );
+            if lead == strong.len() {
+                assert!(block.locked(), "{what}: lock after the lead");
+            }
+            assert_eq!(block.restarts(), 0, "{what}: after the lead");
+            // no restart before the check that takes the mean (the verify window kept it)
+            run_block(&mut block, &input[lead..before], None);
+            assert_eq!(block.restarts(), 0, "{what}: before the check on the mean");
+            let mut block = make();
+            let want = run_block(&mut block, input, None);
+            let state = (block.restarts(), block.acquired_frequency(), block.locked());
+            assert_eq!(state.0, 1, "{what}: one restart, on the mean of the noise");
+            assert!(!state.2, "{what}");
+            let f = state.1.unwrap();
+            assert!((f - f_want).abs() < 1e-4, "{what}: acquired {f}");
+            for plan in twenty_plans(SEED) {
+                let mut block = make();
+                let got = run_block(&mut block, input, Some(plan));
+                same_bits(&want, &got, &format!("{what} {plan:?}"));
+                assert_eq!(
+                    (block.restarts(), block.acquired_frequency(), block.locked()),
+                    state,
+                    "{what} {plan:?}"
+                );
+            }
+            block.reset();
+            same_bits(
+                &want,
+                &run_block(&mut block, input, None),
+                &format!("{what} reset"),
+            );
+            assert_eq!(block.restarts(), state.0, "{what} reset");
+        }
+    }
+}
+
 #[test]
 fn qam_demod_searches_again_when_the_loop_does_not_lock() {
     // R1 of the review of the QAM round (D1421): an estimate taken before the signal (here

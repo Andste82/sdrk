@@ -699,6 +699,9 @@ where
     let mut p = s.parts_mut();
     match p.constellation {
         EqConstellation::Qam16 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam16), input, output),
+        EqConstellation::Qam64 if cfg!(target_arch = "aarch64") => {
+            equalize_qam(dot, &mut p, Qam64Table, input, output)
+        }
         EqConstellation::Qam64 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam64), input, output),
         EqConstellation::Bpsk => equalize_paths(dot, &mut p, PskDecide::Bpsk, input, output),
         EqConstellation::Psk8 => equalize_paths(dot, &mut p, PskDecide::Psk8, input, output),
@@ -765,12 +768,32 @@ impl Decide for QamDecide {
     }
 }
 
-/// The paths of [`equalize_with`] for the QAM constellations, a function of their own.
+/// 64-QAM with the decision from the level table (the bits of [`Qam::decide`]), the loop of the
+/// 64-QAM equalizer on AArch64: there the selects of the 64-QAM decision (14 per symbol) made
+/// the equalizer slower on `cortex-a76` than the table before the speed round (204.98 against
+/// 196.26 cycles per symbol). A type of its own, so that the 16-QAM loop keeps its code (D1429).
+#[derive(Clone, Copy)]
+struct Qam64Table;
+
+impl Decide for Qam64Table {
+    #[inline]
+    fn decide(self, y: C32) -> C32 {
+        Qam::Qam64.decide_table(y)
+    }
+
+    #[inline]
+    fn cma_r2(self) -> f32 {
+        QAM64_R2
+    }
+}
+
+/// The paths of [`equalize_with`] for the QAM constellations, a function of their own (one per
+/// decision type).
 #[inline(never)]
-fn equalize_qam<D: DotComplex<C32>>(
+fn equalize_qam<D: DotComplex<C32>, K: Decide>(
     dot: &D,
     p: &mut EqualizeParts<'_>,
-    k: QamDecide,
+    k: K,
     input: &[C32],
     output: &mut [C32],
 ) -> Result<()> {

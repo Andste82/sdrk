@@ -38,7 +38,7 @@ use serde_json::{Value, json};
 
 use crate::count::{KERNELS, PLANS};
 
-const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-count] [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--json]";
+const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-count] [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--json]";
 
 /// The command line of `cargo xtask measure`.
 #[allow(
@@ -65,6 +65,9 @@ pub struct Options {
     /// `--cycle-counter`: take the execution counts of the cycles from this counter instead of
     /// the counter of the level (`sde` on `avx2` validates the SDE path against callgrind).
     pub cycle_counter: Option<crate::count::Profiler>,
+    /// `--branches`: count the branch mispredictions per sample with cachegrind on the x86-64
+    /// levels (D1438) and, with the cycles, the cost `cycles + mispredictions × penalty`.
+    pub branches: bool,
     /// `--json`: print the JSON document instead of the tables.
     pub json: bool,
 }
@@ -106,6 +109,7 @@ impl Options {
                             anyhow::anyhow!("unknown cycle counter `{v}`; {USAGE}")
                         })?);
                 }
+                "--branches" => o.branches = true,
                 "--json" => o.json = true,
                 other if other.starts_with("--") => bail!("unknown option `{other}`; {USAGE}"),
                 name if o.kernel.is_empty() => o.kernel = name.to_string(),
@@ -741,6 +745,204 @@ fn entry_cycles(
     Ok(Value::Object(entry))
 }
 
+/// The mispredictions per sample of the selected entries (D1438) on every x86-64 level that
+/// Valgrind runs, and with `cycles` (the document of [`measure_cycles`]) the cost of both sides
+/// on both models of the level: `cycles + mispredictions × penalty`, in the judged cycle mode.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the plan tables and std::process::Command are large; xtask is a host tool"
+)]
+fn measure_branches(root: &Path, o: &Options, entries: &[String], cycles: Option<&Value>) -> Part {
+    let mut part = Part {
+        table: String::new(),
+        doc: Value::Null,
+        ok: true,
+    };
+    let mut doc = serde_json::Map::new();
+    let platforms = if o.platforms.is_empty() {
+        default_platforms(std::env::consts::ARCH)
+    } else {
+        o.platforms.clone()
+    };
+    for platform in &platforms {
+        let mut levels_doc = serde_json::Map::new();
+        for level in selected_levels(o, platform) {
+            let Some(plan) = PLANS
+                .iter()
+                .find(|p| p.platform == platform && p.level == level)
+            else {
+                continue;
+            };
+            if plan.baseline.is_some() {
+                continue;
+            }
+            if !crate::branches::simulated_level(level) {
+                let why = match level {
+                    "neon" => {
+                        "no branch simulation (D1438: no penalty if the AArch64 assembly is branch-free on the data path, else the rate of `sse2`)"
+                    }
+                    "avx512" => "no branch simulation (Valgrind runs no AVX-512; open item I44-16)",
+                    _ => "no branch simulation (D1438: instructions only)",
+                };
+                let _ = writeln!(part.table, "\nbranches, {platform} {level}: {why}");
+                continue;
+            }
+            let models = crate::mca::models(level);
+            let level_cycles = cycles
+                .and_then(|c| c.get(platform.as_str()))
+                .and_then(|c| c.get(level));
+            match crate::count::branch_profiles(root, platform, level, entries) {
+                Ok(list) => {
+                    let _ = writeln!(
+                        part.table,
+                        "\nbranches, {platform} {level} (valgrind cachegrind --branch-sim=yes, per sample; cost = cycles + mispredictions x penalty, D1438):"
+                    );
+                    let _ = writeln!(
+                        part.table,
+                        "{:<26} {:>10} {:>10} {:>10} {:>10}  {:<16} {:>7} {:>9} {:>9} {:>9} {:>9}  comparison",
+                        "entry",
+                        "branches",
+                        "mispred.",
+                        "other br.",
+                        "other mis.",
+                        "model",
+                        "penalty",
+                        "cycles",
+                        "cost",
+                        "other cyc.",
+                        "other cost"
+                    );
+                    let mut value = serde_json::Map::new();
+                    for (kernel, e) in list {
+                        match e {
+                            Ok(e) => {
+                                let v = entry_branches(
+                                    &kernel,
+                                    &e,
+                                    models,
+                                    level_cycles.and_then(|c| c.get(&kernel)),
+                                    &mut part.table,
+                                );
+                                value.insert(kernel, v);
+                            }
+                            Err(err) => {
+                                part.ok = false;
+                                let note = format!("not counted: {err:#}");
+                                let _ = writeln!(part.table, "{kernel:<26} {note}");
+                                value.insert(kernel, json!({ "note": note }));
+                            }
+                        }
+                    }
+                    levels_doc.insert(level.to_string(), Value::Object(value));
+                }
+                Err(e) => {
+                    part.ok = false;
+                    let _ = writeln!(
+                        part.table,
+                        "\nbranches, {platform} {level}: not counted: {e:#}"
+                    );
+                    levels_doc.insert(level.to_string(), json!({ "error": format!("{e:#}") }));
+                }
+            }
+        }
+        doc.insert(platform.clone(), Value::Object(levels_doc));
+    }
+    part.doc = Value::Object(doc);
+    part
+}
+
+/// The rows and JSON of one entry of [`measure_branches`]; `cycles` is the entry of the cycles
+/// document of the level, if the cycles were simulated.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "branch counts are far below 2^52"
+)]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "serde_json values are large; xtask is a host tool"
+)]
+fn entry_branches(
+    kernel: &str,
+    e: &crate::count::EntryBranches,
+    models: Option<&crate::mca::Models>,
+    cycles: Option<&Value>,
+    table: &mut String,
+) -> Value {
+    let per = |n: u64| n as f64 / e.samples as f64;
+    let side = |b: &crate::branches::Branches| {
+        json!({
+            "conditional": b.conditional,
+            "conditional_mispredicted": b.conditional_mispredicted,
+            "indirect": b.indirect,
+            "indirect_mispredicted": b.indirect_mispredicted,
+            "branches_per_sample": per(b.conditional + b.indirect),
+            "mispredictions_per_sample": per(b.mispredicted()),
+        })
+    };
+    let ours_m = per(e.ours.mispredicted());
+    let other_m = per(e.other.mispredicted());
+    let num = |x: Option<f64>| x.map_or_else(|| "-".to_string(), |v| format!("{v:.2}"));
+    let mut costs = serde_json::Map::new();
+    let mut rows: Vec<String> = Vec::new();
+    if let Some(models) = models {
+        for (key, cpu) in [
+            ("reference_model", models.reference),
+            ("counter_model", models.counter),
+        ] {
+            let Some(p) = crate::branches::penalty(cpu) else {
+                continue;
+            };
+            let side_cycles = |s: &str| {
+                cycles
+                    .and_then(|c| c.get(key))
+                    .and_then(|m| m.get(s))
+                    .and_then(|m| m.get("cycles_per_sample"))
+                    .and_then(Value::as_f64)
+            };
+            let (ours_c, other_c) = (side_cycles("ours"), side_cycles("other"));
+            let ours_cost = ours_c.map(|c| crate::branches::cost(c, ours_m, p));
+            let other_cost = other_c.map(|c| crate::branches::cost(c, other_m, p));
+            costs.insert(
+                key.to_string(),
+                json!({
+                    "cpu": cpu,
+                    "penalty": p,
+                    "ours": { "cycles_per_sample": ours_c, "cost_per_sample": ours_cost },
+                    "other": { "cycles_per_sample": other_c, "cost_per_sample": other_cost },
+                }),
+            );
+            rows.push(format!(
+                "{cpu:<16} {p:>7.0} {:>9} {:>9} {:>9} {:>9}",
+                num(ours_c),
+                num(ours_cost),
+                num(other_c),
+                num(other_cost)
+            ));
+        }
+    }
+    let _ = writeln!(
+        table,
+        "{kernel:<26} {:>10.4} {:>10.4} {:>10.4} {:>10.4}  {}  {}",
+        per(e.ours.conditional + e.ours.indirect),
+        ours_m,
+        per(e.other.conditional + e.other.indirect),
+        other_m,
+        rows.first().map_or("", String::as_str),
+        e.compared_with
+    );
+    for r in rows.iter().skip(1) {
+        let _ = writeln!(table, "{:<26} {:>43}  {r}", "", "");
+    }
+    json!({
+        "compared_with": e.compared_with,
+        "samples": e.samples,
+        "counter": "valgrind cachegrind --branch-sim=yes (Bcm + Bim)",
+        "ours": side(&e.ours),
+        "other": side(&e.other),
+        "cost": costs,
+    })
+}
+
 /// The golden cases of the selected golden kernels.
 fn measure_golden(root: &Path, report: &Path, golden: &[String]) -> anyhow::Result<Part> {
     let report = run_golden(root, report)?;
@@ -800,6 +1002,8 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     std::fs::create_dir_all(&out_dir)?;
     let count = (o.count && !entries.is_empty()).then(|| measure_counts(root, &o, &entries));
     let cycles = (o.cycles && !entries.is_empty()).then(|| measure_cycles(root, &o, &entries));
+    let branches = (o.branches && !entries.is_empty())
+        .then(|| measure_branches(root, &o, &entries, cycles.as_ref().map(|p| &p.doc)));
     let golden_part = if o.golden && !golden.is_empty() {
         Some(measure_golden(
             root,
@@ -815,6 +1019,7 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         "count": count.as_ref().map(|p| &p.doc),
         "golden": golden_part.as_ref().map(|p| &p.doc),
         "cycles": cycles.as_ref().map(|p| &p.doc),
+        "branches": branches.as_ref().map(|p| &p.doc),
     });
     let path: PathBuf = out_dir.join(format!("{}.json", o.kernel));
     let mut text = serde_json::to_string_pretty(&doc)?;
@@ -824,7 +1029,12 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         print!("{text}");
     } else {
         println!("\nmeasure {}", o.kernel);
-        for part in count.iter().chain(&cycles).chain(&golden_part) {
+        for part in count
+            .iter()
+            .chain(&cycles)
+            .chain(&branches)
+            .chain(&golden_part)
+        {
             print!("{}", part.table);
         }
         println!("\nwritten to {}", path.display());
@@ -832,6 +1042,7 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     Ok(count
         .iter()
         .chain(&cycles)
+        .chain(&branches)
         .chain(&golden_part)
         .all(|p| p.ok))
 }
@@ -884,6 +1095,8 @@ mod tests {
         let o = Options::parse(&["fir", "--cycle-counter", "sde"]).unwrap();
         assert_eq!(o.cycle_counter, Some(crate::count::Profiler::Sde));
         assert!(Options::parse(&["fir", "--cycle-counter", "pin"]).is_err());
+        assert!(!o.branches);
+        assert!(Options::parse(&["fir", "--branches"]).unwrap().branches);
     }
 
     #[test]

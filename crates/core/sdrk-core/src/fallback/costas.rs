@@ -133,9 +133,27 @@ pub(crate) fn atan2f_inline(y: f32, x: f32) -> f32 {
         let s1 = z * (a0 + w * (a2 + w * a4));
         let s2 = w * (a1 + w * a3);
         let a = t - t * (s1 + s2);
-        if y.is_sign_negative() { -a } else { a }
+        with_sign_of(a, y)
     } else {
         libm::atan2f(y, x)
+    }
+}
+
+/// `-a` for a `y` with the sign bit set, else `a`, for the arctangent `a > 0` of
+/// [`atan2f_inline`] (`t >= 2^-12` and `t (s1 + s2) < t`, so `a` is positive with the sign bit
+/// clear and `-a` is `a` with it set). On x86 the sign bit of `y` is or-ed into `a`, without a
+/// jump: as a select LLVM compiled it at SSE2 to AVX2 as a jump on the sign of the phase error,
+/// which a core mispredicts on about half of the symbols, and the branch-free form costs less
+/// in cycles plus mispredictions (D1438, D1441). AArch64 (`fcsel`) and `wasm32`
+/// (`f32.select`) compile the select without a jump and keep it.
+#[inline]
+fn with_sign_of(a: f32, y: f32) -> f32 {
+    if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+        f32::from_bits(a.to_bits() | (y.to_bits() & 0x8000_0000))
+    } else if y.is_sign_negative() {
+        -a
+    } else {
+        a
     }
 }
 

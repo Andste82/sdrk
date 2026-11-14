@@ -377,11 +377,22 @@ impl Qam {
     /// `t >= k` selects the level (`floor` of the clamped `t` is the largest `k` with
     /// `t >= k`; NaN fails every comparison and takes level index 0), so the decision has no
     /// conversion to an integer and no table load on the chain of the loops (D1417). On AArch64
-    /// and AVX2 every select is one instruction (`fcsel`, `vblendvps`); at AVX2 and AVX-512
-    /// LLVM turns some of them into branches on the data (open item I44-12).
+    /// and AVX2 every select is one instruction (`fcsel`, `vblendvps`). On x86 every select is
+    /// [`core::hint::select_unpredictable`]: as plain selects LLVM compiled some of them at AVX2
+    /// and AVX-512 as jumps on the decided symbol, which a core mispredicts on about half of
+    /// the random symbols, and the branch-free tree costs less in cycles plus mispredictions
+    /// (D1438, D1441). AArch64 compiles the plain selects without a jump.
     #[inline]
     fn decide_by_select(self, v: f32) -> f32 {
-        let pick = |c: bool, a: f32, b: f32| if c { a } else { b };
+        let pick = |c: bool, a: f32, b: f32| {
+            if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+                core::hint::select_unpredictable(c, a, b)
+            } else if c {
+                a
+            } else {
+                b
+            }
+        };
         match self {
             Self::Qam16 => {
                 let [l0, l1, l2, l3] = QAM16_LEVELS;

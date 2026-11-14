@@ -376,15 +376,16 @@ const ACQUISITION_MIN_PEAK: f32 = 12.0;
 pub const QAM_ACQUISITION_CHECK: usize = 4096;
 /// The spacing in symbols of the samples of the smoothed lock level of the carrier loop
 /// (`CostasState::lock_level`) whose mean over a check interval the check takes: the 16
-/// samples of the interval, or in the first interval after an estimate, in which the loops
-/// converge, the 8 of its second half.
+/// samples of the interval. The first interval after an estimate, in which the loops converge,
+/// takes none: its check without lock verifies the estimate in the next interval (D1435).
 pub const QAM_ACQUISITION_LEVEL_STEP: usize = 256;
-/// The mean lock level over a check interval below which a check without lock restarts the
-/// receiver (D1432): Gaussian noise gives means of -0.062 to 0.058 over 16 samples and -0.068
-/// to 0.079 over 8 (2916 intervals of 4096 symbols, both orders, with and without the
-/// equalizer, noise power 0.5 to 2 times the signal's); a correctly derotated 16-QAM signal at
-/// Es/N0 11.5 dB at least 0.134 (8 samples) and 0.148 (16), 64-QAM at 18 dB at least 0.063 and
-/// 0.114.
+/// The mean lock level over a check interval of 16 samples below which a check without lock
+/// restarts the receiver (D1432): Gaussian noise gives means of -0.062 to 0.058 (2916
+/// intervals of 4096 symbols, both orders, with and without the equalizer, noise power 0.5 to
+/// 2 times the signal's), a correctly derotated 16-QAM signal at Es/N0 11.5 dB at least 0.148
+/// and 64-QAM at 18 dB at least 0.114. Over the 8 samples of the second half of the first
+/// interval the two overlap (noise up to 0.079, 64-QAM at 18 dB with the equalizer down to
+/// 0.063), so the first interval does not restart on the level (D1435).
 pub const QAM_ACQUISITION_RESTART_LEVEL: f32 = 0.08;
 /// The largest distance in cycles per symbol between a clear estimate of the window taken at a
 /// check without lock and the frequency of the loops for which the estimate is kept (four bins of
@@ -412,23 +413,23 @@ const ACQUISITION_POWER_ALPHA: f32 = 1.0 / 64.0;
 /// estimate is used when the peak stands clear of the noise (`|X_k|^2 >= ACQUISITION_MIN_PEAK
 /// sum |q_n|^2`); otherwise the next window follows. After a used estimate the acquisition
 /// counts symbols; every [`QAM_ACQUISITION_CHECK`] symbols it checks the loop, and in an
-/// interval that does not follow a check with lock (the first after an estimate, or one after
-/// a check without lock) it samples the smoothed lock level of the carrier loop every
-/// [`QAM_ACQUISITION_LEVEL_STEP`] symbols. A locked loop keeps the estimate. Without lock, a
-/// mean of the samples (the 16 of the interval, the 8 of the second half in the first interval
-/// after an estimate) below
+/// interval after a check without lock it samples the smoothed lock level of the carrier loop
+/// every [`QAM_ACQUISITION_LEVEL_STEP`] symbols (the first interval after an estimate, in which
+/// the loops converge, and one after a check with lock take no samples). A locked loop keeps
+/// the estimate. Without lock, a mean of the 16 samples below
 /// [`QAM_ACQUISITION_RESTART_LEVEL`] (no signal: noise, or a loop that lost the signal) restarts
 /// the receiver (the equalizer from its start weights and blind symbols, the frequencies 0) and
 /// the acquisition searches again (the power `p` kept, the window again after
 /// [`QAM_ACQUISITION_SKIP`] symbols); a mean at or above it (a weak signal below the lock level,
-/// or a strong one at a wrong frequency), or a loop that lost its lock in an interval without
-/// samples, keeps the estimate and verifies it in the next
-/// interval with the window of the search (symbols 256 to 767 of the interval, the power `p`
-/// running from symbol 0): a clear estimate more than [`QAM_ACQUISITION_VERIFY_TOLERANCE`] away
-/// from the frequency of the loops restarts the receiver at once, anything else keeps it. So an
-/// estimate from noise or from an interferer, or an equalizer adapted to them, before the signal
-/// does not hold the receiver off the signal (D1421), and a correct estimate of a weak signal is
-/// kept (D1432).
+/// or a strong one at a wrong frequency), or a check without lock after an interval without
+/// samples (the first after an estimate, or the lock lost after a check with lock), keeps the
+/// estimate and verifies it in the next interval with the window of the search (symbols 256 to
+/// 767 of the interval, the power `p` running from symbol 0): a clear estimate more than
+/// [`QAM_ACQUISITION_VERIFY_TOLERANCE`] away from the frequency of the loops, modulo the
+/// quarter cycle per symbol the fourth power cannot resolve, restarts the receiver at once,
+/// anything else keeps it. So an estimate from noise or from an interferer, or an equalizer
+/// adapted to them, before the signal does not hold the receiver off the signal (D1421), and a
+/// correct estimate of a weak signal is kept (D1432, D1435).
 struct Acquisition<S: Storage> {
     /// The twiddles of the FFT (the plan is made from them for each estimate, so that the block
     /// stays small).
@@ -532,9 +533,8 @@ impl<S: Storage> Acquisition<S> {
     /// At the end of a window the estimate in cycles per symbol when its peak is clear (then
     /// the acquisition holds it until a check), else nothing and the next window follows. While
     /// an estimate is held, the smoothed lock level of `costas` is sampled every
-    /// [`QAM_ACQUISITION_LEVEL_STEP`] symbols in an interval that does not follow a check with
-    /// lock (in the first interval after an estimate from its second half on); at a check the
-    /// lock detector of `costas` keeps the estimate, a mean level below
+    /// [`QAM_ACQUISITION_LEVEL_STEP`] symbols in an interval after a check without lock; at a
+    /// check the lock detector of `costas` keeps the estimate, a mean level below
     /// [`QAM_ACQUISITION_RESTART_LEVEL`] starts the search again ([`Step::Restart`]), and
     /// otherwise the next interval verifies the estimate against `frequency()`, the frequency of
     /// the loops in cycles per symbol. Nothing happens between these points.
@@ -554,9 +554,9 @@ impl<S: Storage> Acquisition<S> {
         let seen = self.seen as usize;
         let sampled = match self.phase {
             Phase::Search => return self.window_end(),
-            // `First` acts only in the second half of its interval.
-            Phase::First | Phase::Sampling | Phase::Verify => true,
-            Phase::Locked => false,
+            // `First` acts only at its check.
+            Phase::Sampling | Phase::Verify => true,
+            Phase::First | Phase::Locked => false,
         };
         if sampled {
             self.level_sum += costas.lock_level();
@@ -565,7 +565,7 @@ impl<S: Storage> Acquisition<S> {
         if self.phase == Phase::Verify && self.seen == WINDOW_END {
             self.phase = Phase::Sampling;
             if let Some(f) = self.estimate_now()?
-                && (f - frequency()).abs() > QAM_ACQUISITION_VERIFY_TOLERANCE
+                && fourth_power_distance(f, frequency()) > QAM_ACQUISITION_VERIFY_TOLERANCE
             {
                 return Ok(self.restart());
             }
@@ -574,7 +574,7 @@ impl<S: Storage> Acquisition<S> {
             self.next += QAM_ACQUISITION_LEVEL_STEP as u32;
             return Ok(Step::Nothing);
         }
-        // `samples` is 8 or 16 when the interval sampled the level, else 0.
+        // `samples` is 16 when the interval sampled the level, else 0.
         let absent = self.samples > 0
             && self.level_sum / (self.samples as f32) < QAM_ACQUISITION_RESTART_LEVEL;
         self.seen = 0;
@@ -588,7 +588,8 @@ impl<S: Storage> Acquisition<S> {
         if absent {
             return Ok(self.restart());
         }
-        // A mean at or above the level, or the lock lost in an interval without samples.
+        // A mean at or above the level, the first interval after an estimate, or the lock lost
+        // in an interval without samples.
         self.phase = Phase::Verify;
         self.next = QAM_ACQUISITION_LEVEL_STEP as u32;
         Ok(Step::Nothing)
@@ -601,8 +602,8 @@ impl<S: Storage> Acquisition<S> {
             self.estimate = Some(f);
             self.phase = Phase::First;
             self.seen = 0;
-            // The first half of the first interval takes no samples.
-            self.next = (QAM_ACQUISITION_CHECK / 2 + QAM_ACQUISITION_LEVEL_STEP) as u32;
+            // The first interval takes no samples.
+            self.next = QAM_ACQUISITION_CHECK as u32;
             self.level_sum = 0.0;
             self.samples = 0;
             Ok(Step::Estimate(f))
@@ -674,6 +675,15 @@ impl<S: Storage> Acquisition<S> {
     }
 }
 
+/// The distance in cycles per symbol of two carrier frequencies modulo the quarter cycle per
+/// symbol that the fourth power of square QAM, and so the estimate, cannot resolve (D1435): an
+/// estimate wrapped into `[-0.125, 0.125)` and loops just across the edge are 0.25 apart, the
+/// same carrier for the window. In `[0, 0.125]`.
+fn fourth_power_distance(a: f64, b: f64) -> f64 {
+    let d = a - b;
+    libm::fabs(d - 0.25 * libm::round(4.0 * d))
+}
+
 /// What the frequency acquisition of `qam_demod` does with the symbols.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
@@ -682,8 +692,8 @@ enum Phase {
     /// An estimate in use after a check without lock (as `Sampling`), and the window of the
     /// search (symbols 256 to 767 of the interval) verifies the estimate.
     Verify,
-    /// An estimate in use, the first interval after it: the loops converge, the lock level is
-    /// sampled in its second half.
+    /// An estimate in use, the first interval after it: the loops converge, no samples (a
+    /// check without lock verifies the estimate in the next interval, D1435).
     First,
     /// An estimate in use after a check with lock: no samples until the next check (the
     /// steady state of a locked receiver runs in calls split only at the checks).
@@ -1109,5 +1119,31 @@ impl<S: Storage> Block for QamDemodBlock<S> {
 
     fn min_input(&self) -> usize {
         sync_min_input(self.sync.sps(), SYNC_MAX_DEVIATION)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fourth_power_distance;
+
+    /// The verify step of the acquisition compares the frequencies modulo a quarter cycle per
+    /// symbol (D1435): the two sides of the edge of the estimate's range are one carrier.
+    #[test]
+    fn the_verify_distance_wraps_at_a_quarter_cycle() {
+        let close = |a: f64, b: f64, want: f64| {
+            let d = fourth_power_distance(a, b);
+            assert!((d - want).abs() < 1e-12, "{a} {b}: {d} against {want}");
+        };
+        close(0.001, 0.001, 0.0);
+        close(0.0012, 0.001, 2e-4);
+        close(-0.12495, 0.12495, 1e-4);
+        close(0.12495, -0.12495, 1e-4);
+        close(-0.125, 0.125, 0.0);
+        // loops that drifted past the edge of the range
+        close(-0.1249, 0.1253, 2e-4);
+        close(0.06, 0.001, 0.059);
+        close(0.1, -0.1, 0.05);
+        close(0.125, 0.0, 0.125);
+        assert!(fourth_power_distance(0.0, f64::NAN).is_nan());
     }
 }

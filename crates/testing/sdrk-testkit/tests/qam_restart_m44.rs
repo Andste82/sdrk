@@ -19,6 +19,10 @@
 //!   power for 20480 symbols (the noise-first start, the loops on noise), then the weak signal:
 //!   the receiver restarts at least once, ends with the estimate within 1e-4 of the offset, and
 //!   the last 20000 symbols keep one alignment within the BER bound above.
+//! - **An estimate at the edge of the range is kept** (seeds 782 and 783, D1435): 16-QAM at
+//!   Es/N0 12 dB with the equalizer at +-0.12497 cycles per symbol, where the estimate of a
+//!   verify window can wrap to the other edge of `[-0.125, 0.125)`: no restart over 40000
+//!   symbols, the estimate within 1e-4 modulo a quarter cycle per symbol.
 //!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
@@ -94,10 +98,16 @@ fn symbols(soft: &[f32], k: usize) -> Vec<u32> {
         .collect()
 }
 
-/// `n` random symbols of the seed through `qam_mod`, turned by the offset, with Gaussian noise
+/// `n` random symbols of the seed through `qam_mod`, turned by `offset` (cycles per symbol), with Gaussian noise
 /// at `esn0_db` (the measured mean power of the signal after the ramp of the filter); the
 /// samples, the sent symbols and the power of the signal.
-fn weak_signal(order: u32, n: usize, esn0_db: f64, seed: u64) -> (Vec<C32>, Vec<u32>, f64) {
+fn weak_signal(
+    order: u32,
+    n: usize,
+    esn0_db: f64,
+    offset: f64,
+    seed: u64,
+) -> (Vec<C32>, Vec<u32>, f64) {
     let k = bps(order);
     let mut rng = Pcg32::new(seed, 1);
     let bits: Vec<f32> = (0..(n + 64) * k)
@@ -118,7 +128,7 @@ fn weak_signal(order: u32, n: usize, esn0_db: f64, seed: u64) -> (Vec<C32>, Vec<
         .collect();
     let fs = (SYMBOL_RATE as usize * SPS) as f64;
     let mut turned = Vec::with_capacity(wide.len());
-    FrequencyOffset::new(OFFSET * SYMBOL_RATE as f64, fs)
+    FrequencyOffset::new(offset * SYMBOL_RATE as f64, fs)
         .unwrap()
         .process(&wide, &mut turned);
     let body = &turned[100 * SPS..];
@@ -210,7 +220,7 @@ fn a_correct_estimate_below_the_lock_level_is_kept() {
             .iter()
             .map(|&(order, taps, esn0)| {
                 s.spawn(move || {
-                    let (input, sent, _) = weak_signal(order, n, esn0, 780);
+                    let (input, sent, _) = weak_signal(order, n, esn0, OFFSET, 780);
                     let mut block = demod(order, taps);
                     let soft = demod_all(&mut block, &input);
                     let rx = symbols(&soft, bps(order));
@@ -253,7 +263,7 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
             .iter()
             .map(|&(order, taps, esn0, noise_first)| {
                 s.spawn(move || {
-                    let (sig, sent, power) = weak_signal(order, n, esn0, 781);
+                    let (sig, sent, power) = weak_signal(order, n, esn0, OFFSET, 781);
                     // a carrier for 1000 symbols at the signal's amplitude (the first window
                     // takes its estimate), then the noise of the noise-first start
                     let amp = power.sqrt();
@@ -301,5 +311,31 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
         assert!((f - OFFSET).abs() < 1e-4, "{what}: acquired {f}");
         assert_eq!(slips, 0, "{what}");
         assert!(ber <= edge, "{what}: BER {ber:.4e} above {edge:.4e}");
+    }
+}
+
+#[test]
+fn an_estimate_at_the_edge_of_the_range_is_kept() {
+    // F3 of the review of I44-9 (D1435): the fourth power cannot tell offsets 0.25 cycles per
+    // symbol apart, so the estimate wraps into [-0.125, 0.125). For an offset just inside the
+    // edge the estimate of a verify window can fall on either side while the loops hold the
+    // first one; the verify step compares modulo a quarter cycle and keeps the estimate. A weak
+    // 16-QAM signal (Es/N0 12 dB, below the lock level, so every check verifies) with the
+    // equalizer, whose tracker holds the offset (`max_offset` of the carrier loop is 0.05).
+    let n = 40_000;
+    for (i, offset) in [0.124_97f64, -0.124_97].into_iter().enumerate() {
+        let (input, _, _) = weak_signal(16, n, 12.0, offset, 782 + i as u64);
+        let mut block = demod(16, 11);
+        demod_all(&mut block, &input);
+        let f = block.acquired_frequency().unwrap();
+        let d = f - offset;
+        let d = (d - 0.25 * (4.0 * d).round()).abs();
+        eprintln!(
+            "offset {offset}: restarts {}, acquired {f}, locked {}",
+            block.restarts(),
+            block.locked()
+        );
+        assert_eq!(block.restarts(), 0, "offset {offset}");
+        assert!(d < 1e-4, "offset {offset}: acquired {f}");
     }
 }

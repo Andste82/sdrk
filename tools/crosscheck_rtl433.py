@@ -60,6 +60,7 @@ OTHER_TOL = {
     "wind_dir_deg": 0.5,
     "rain_mm": 0.15,
     "pressure_hPa": 0.15,
+    "supercap_V": 0.05,
 }
 # rtl_433 prints the raw channel nibble of the Oregon sensors (1, 2 and 4 for the switch
 # positions 1 to 3); our readings carry the position. The mapping is applied to rtl_433's value.
@@ -81,6 +82,7 @@ FIELDS = [
     "wind_avg_m_s", "wind_max_m_s", "light_lux", "uvi", "battery_mV", "battery_V",
     "moisture", "boost", "ad_raw", "raw_value", "sensitivity", "alarm",
     "pm2_5_ug_m3", "pm10_ug_m3", "co2_ppm", "ext_power",
+    "battery_pct", "rain_start", "supercap_V", "firmware",
 ]
 
 
@@ -95,7 +97,10 @@ def canon(rec, out):
         # rtl_433 prints the id of the WH51 as a hexadecimal string
         out["id"] = int(rec["id"], 16) if isinstance(rec["id"], str) else int(rec["id"])
     b = rec.get("battery_ok")
-    if isinstance(b, float) and not isinstance(b, bool):
+    if rec.get("model") == "Fineoffset-WS85" and b is not None:
+        # the WS85 has an integer 0/1 battery_ok (ours prints 0.000 or 1.000)
+        out["battery_ok"] = bool(int(b))
+    elif isinstance(b, float) and not isinstance(b, bool):
         out["battery_level"] = b
     elif b is not None:
         out["battery_ok"] = b if isinstance(b, bool) else bool(int(b))
@@ -294,6 +299,10 @@ def check_device(side_path, ours_bin, directory):
                 om += 1
         if rr is not None and oo is not None:
             d = diff(device, oo, rr, "ours", "rtl_433")
+            if device == "ws90":
+                # the JSON of a WS90 with every value does not fit the 256 bytes of a packet:
+                # sensor_decode leaves out firmware and supercap_V (decision D1161)
+                d = [x for x in d if not re.match(r"(firmware|supercap_V): only in rtl_433", x)]
             if oo["_model"] != rr["_model"]:
                 d.append("model: ours=%s rtl_433=%s" % (oo["_model"], rr["_model"]))
             if d:

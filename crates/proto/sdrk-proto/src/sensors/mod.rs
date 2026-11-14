@@ -57,6 +57,8 @@ mod wh51;
 mod wh55;
 mod wn34;
 mod ws80;
+mod ws85;
+mod ws90;
 
 pub use bresser_3ch::Bresser3ch;
 pub use ecowitt::Ecowitt;
@@ -75,6 +77,8 @@ pub use wh55::Wh55;
 pub use wh1080::Wh1080;
 pub use wn34::Wn34;
 pub use ws80::Ws80;
+pub use ws85::Ws85;
+pub use ws90::Ws90;
 
 use crate::pulses::{Modulation, PulseTrain};
 
@@ -224,6 +228,8 @@ pub static DECODERS: &[&dyn SensorDecoder] = &[
     &Wh31e,
     &Wh45,
     &Ws80,
+    &Ws90,
+    &Ws85,
 ];
 
 /// The decoder of that name.
@@ -248,6 +254,8 @@ pub static ENCODERS: &[&dyn SensorEncoder] = &[
     &Wh31e,
     &Wh45,
     &Ws80,
+    &Ws90,
+    &Ws85,
 ];
 
 /// The encoder of that name (the name of its decoder).

@@ -91,7 +91,9 @@ fn the_registry_lists_the_decoders() {
             "wn34",
             "wh31e",
             "wh45",
-            "ws80"
+            "ws80",
+            "ws90",
+            "ws85"
         ]
     );
     for n in names {

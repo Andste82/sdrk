@@ -4,7 +4,11 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::indexing_slicing,
-    clippy::panic
+    clippy::panic,
+    clippy::unreadable_literal,
+    clippy::format_collect,
+    clippy::cast_possible_truncation,
+    clippy::precedence
 )]
 
 use sdrk_blocks::{
@@ -116,7 +120,7 @@ fn other_packets_give_no_line() {
     // Surface position (type code 5) with a correct parity.
     let mut surface = [0u8; 14];
     surface[0] = 0x8D;
-    surface[4] = 5 << 3;
+    surface[4] = 27 << 3;
     let p = crc24_adsb(&surface[..11]);
     surface[11..].copy_from_slice(&p.to_be_bytes()[1..]);
     let input = [
@@ -176,5 +180,128 @@ fn output_room_and_reset() {
             &mut VecStorage
         )
         .is_err()
+    );
+}
+
+const SURF_EVEN: &str = "8C4841753AAB238733C8CD4020B1";
+const SURF_ODD: &str = "8C4841753A8A35323FAEBDAC702D";
+
+fn mkframe(first: u8, icao: u32, me: u64) -> String {
+    let mut f = [0u8; 14];
+    f[0] = first;
+    f[1..4].copy_from_slice(&icao.to_be_bytes()[1..]);
+    f[4..11].copy_from_slice(&me.to_be_bytes()[1..]);
+    let p = crc24_adsb(&f[..11]);
+    f[11..].copy_from_slice(&p.to_be_bytes()[1..]);
+    f.iter().map(|b| format!("{b:02X}")).collect()
+}
+
+#[test]
+fn surface_positions_need_the_reference() {
+    let none = run(
+        &AdsbParseConfig::default(),
+        &[pkt(SURF_EVEN, 0), pkt(SURF_ODD, 1000)],
+    );
+    assert_eq!(none.len(), 2);
+    assert!(
+        none[1].contains(r#""ground":true,"gs":16,"track":98.4"#),
+        "{}",
+        none[1]
+    );
+    assert!(!none[1].contains("lat"), "{}", none[1]);
+    let cfg = AdsbParseConfig {
+        ref_lat: 51.99,
+        ref_lon: 4.375,
+        ..AdsbParseConfig::default()
+    };
+    let lines = run(&cfg, &[pkt(SURF_EVEN, 0), pkt(SURF_ODD, 1000)]);
+    // The pair (the odd frame latest) gives the book's 52.320607, 4.734735.
+    assert!(
+        lines[1].contains(r#""lat":52.32061,"lon":4.7347"#),
+        "{}",
+        lines[1]
+    );
+    // The first frame alone is decoded locally; a surface frame does not pair with an airborne
+    // one of the same aircraft.
+    assert!(lines[0].contains("\"lat\":52.3"), "{}", lines[0]);
+    let mixed = run(&cfg, &[pkt(EVEN, 0), pkt(SURF_ODD, 10)]);
+    assert!(mixed[1].contains("ground"), "{}", mixed[1]);
+}
+
+#[test]
+fn other_messages_and_non_icao_addresses() {
+    let cfg = AdsbParseConfig::default();
+    // DF 18 with the control field 1: a non-ICAO address; the same number as an ICAO address
+    // is another aircraft in the table.
+    let id = (4u64 << 51) | 0x0820_C30C_30C3;
+    let lines = run(
+        &cfg,
+        &[
+            pkt(&mkframe(0x91, 0x123456, id), 0),
+            pkt(&mkframe(0x8D, 0x123456, id), 1),
+            pkt(&mkframe(0x92, 0x123456, id), 2),
+        ],
+    );
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines[0].contains(r#""df":18,"tc":4,"non_icao":true,"#),
+        "{}",
+        lines[0]
+    );
+    assert!(!lines[1].contains("non_icao"));
+    // The aircraft status of the general emergency: squawk 7700 (A 7, B 7, C 0, D 0).
+    let a = 7u64;
+    let b = 7u64;
+    let id13 = ((a & 1) << 11)
+        | ((a >> 1 & 1) << 9)
+        | ((a >> 2 & 1) << 7)
+        | ((b & 1) << 5)
+        | ((b >> 1 & 1) << 3)
+        | ((b >> 2 & 1) << 1);
+    let me = (28u64 << 51) | (1 << 48) | (1 << 45) | (id13 << 32);
+    let lines = run(&cfg, &[pkt(&mkframe(0x8D, 0xABCDEF, me), 0)]);
+    assert!(
+        lines[0].ends_with(r#""emergency":"general","squawk":"7700"}"#),
+        "{}",
+        lines[0]
+    );
+    // Target state with every field and the longest list of modes stays under 256 bytes and
+    // closes the object.
+    let me = (29u64 << 51)
+        | (1 << 49)
+        | (1 << 47)
+        | (1400 << 36)
+        | (500 << 27)
+        | (1 << 26)
+        | (1 << 25)
+        | (255 << 17)
+        | (15 << 13)
+        | (1 << 12)
+        | (3 << 10)
+        | (1 << 9 | 1 << 8 | 1 << 7 | 1 << 6 | 1 << 4 | 1 << 3 | 1 << 2);
+    let lines = run(
+        &cfg,
+        &[pkt(&mkframe(0x95, 0xFFFFFF, me), 4_000_000_000_000)],
+    );
+    let l = &lines[0];
+    assert!(l.len() < 256 && l.ends_with('}'), "{} {l}", l.len());
+    assert!(
+        l.contains(r#""nav_modes":["autopilot","vnav","althold","approach","lnav","tcas"]"#),
+        "{l}"
+    );
+    // The operational status and the not decoded type codes.
+    let me = (31u64 << 51) | (2 << 13) | (9 << 8) | (3 << 4);
+    let lines = run(
+        &cfg,
+        &[
+            pkt(&mkframe(0x8D, 1, me), 0),
+            pkt(&mkframe(0x8D, 1, 27 << 51), 1),
+        ],
+    );
+    assert_eq!(lines.len(), 1);
+    assert!(
+        lines[0].ends_with(r#""version":2,"nac_p":9,"sil":3,"nic_a":0,"gva":0}"#),
+        "{}",
+        lines[0]
     );
 }

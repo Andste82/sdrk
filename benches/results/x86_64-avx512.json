@@ -4379,7 +4379,7 @@
           "compared_with": "sdrk fallback",
           "goal": true,
           "other_instr_per_sample": 147.14,
-          "ours_instr_per_sample": 147.14,
+          "ours_instr_per_sample": 147.13,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

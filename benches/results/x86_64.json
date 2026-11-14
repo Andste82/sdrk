@@ -6893,7 +6893,7 @@
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 164.9,
-          "ours_instr_per_sample": 170.28,
+          "ours_instr_per_sample": 170.27,
           "ratio": 1.03,
           "snr_db": {
             "other": 999.0,
@@ -6906,7 +6906,7 @@
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 181.82,
-          "ours_instr_per_sample": 189.22,
+          "ours_instr_per_sample": 189.23,
           "ratio": 1.04,
           "snr_db": {
             "other": 999.0,
@@ -17357,7 +17357,7 @@
         },
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
-          "goal": false,
+          "goal": true,
           "other_instr_per_sample": 291.49,
           "ours_instr_per_sample": 291.49,
           "ratio": 1.0,

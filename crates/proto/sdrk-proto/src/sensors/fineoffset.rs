@@ -59,9 +59,7 @@ pub(super) fn decode(
     let mut rows = Rows::new();
     slicer.slice(train, &mut rows);
     let header = train.header();
-    super::util::collect(&rows, out, |row| {
-        decode_row(row, &header, frames, build)
-    })
+    super::util::collect(&rows, out, |row| decode_row(row, &header, frames, build))
 }
 
 fn decode_row(

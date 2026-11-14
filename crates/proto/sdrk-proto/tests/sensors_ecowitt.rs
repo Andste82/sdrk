@@ -440,7 +440,10 @@ fn the_temperature_range_of_the_wh53() {
     assert_eq!(encode(&r, 1), Err(EncodeError::OutOfRange("channel")));
     r.channel = Some(1);
     r.humidity = Some(5.0);
-    assert_eq!(encode(&r, 1), Err(EncodeError::UnsupportedField("humidity")));
+    assert_eq!(
+        encode(&r, 1),
+        Err(EncodeError::UnsupportedField("humidity"))
+    );
 }
 
 /// The receiver chain works at 250 kHz: the widths are rounded to quarter microseconds of the
@@ -479,7 +482,9 @@ fn trains_at_the_sample_rate_of_the_receiver_decode() {
             let n = pulses::encode_joined(&header, &coarse, &mut buf).unwrap();
             let train = pulses::decode(&buf[..n]).unwrap();
             let mut sink = ReadingSink::new();
-            let res = sensors::by_name(enc.name()).unwrap().decode(&train, &mut sink);
+            let res = sensors::by_name(enc.name())
+                .unwrap()
+                .decode(&train, &mut sink);
             assert!(
                 matches!(res, DecodeResult::Decoded(_)),
                 "{}: {}: {res:?}",
@@ -512,6 +517,11 @@ fn the_longest_reading_fits_a_packet_in_the_short_form() {
     r.to_json(&mut full).unwrap();
     let mut short = String::new();
     r.to_json_short(&mut short).unwrap();
-    assert!(full.len() > 256 && short.len() <= 256, "{} {}", full.len(), short.len());
+    assert!(
+        full.len() > 256 && short.len() <= 256,
+        "{} {}",
+        full.len(),
+        short.len()
+    );
     assert!(Reading::from_json(&short).is_ok());
 }

@@ -203,7 +203,9 @@ fn random_reading_json(rng: &mut Pcg32, model: &str) -> String {
     let low = rng.below(2) == 0;
     match model {
         "Fineoffset-WH2" => {
-            format!(r#"{{"model":"Fineoffset-WH2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#)
+            format!(
+                r#"{{"model":"Fineoffset-WH2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+            )
         }
         "Nexus-TH" => format!(
             r#"{{"model":"Nexus-TH","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
@@ -431,7 +433,7 @@ fn an_encoder_still_cannot_read_the_packets_of_a_decoder() {
 fn a_bad_decoder_mask_is_reported_at_its_parameter() {
     for (key, value) in [
         ("decoders", json!(0)),
-        ("decoders", json!(128)),
+        ("decoders", json!(16384)),
         ("merge_s", json!(-1.0)),
     ] {
         let mut spec = packet_flow();

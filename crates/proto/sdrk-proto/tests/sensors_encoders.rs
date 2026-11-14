@@ -514,10 +514,18 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
     cases.push(("Bresser-3CH", r, oor("channel")));
     let mut r = base("Fineoffset-WH2");
     r.channel = Some(1);
-    cases.push(("Fineoffset-WH2", r, EncodeError::UnsupportedField("channel")));
+    cases.push((
+        "Fineoffset-WH2",
+        r,
+        EncodeError::UnsupportedField("channel"),
+    ));
     let mut r = base("Fineoffset-WH2");
     r.rain_mm = Some(1.0);
-    cases.push(("Fineoffset-WH2", r, EncodeError::UnsupportedField("rain_mm")));
+    cases.push((
+        "Fineoffset-WH2",
+        r,
+        EncodeError::UnsupportedField("rain_mm"),
+    ));
     let mut r = base("Oregon-THN132N");
     r.humidity = Some(50.0);
     cases.push((
@@ -870,8 +878,14 @@ fn from_json_rejects_everything_else_with_an_error() {
         (r#"{"model":"Fineoffset-WH2","id":1} x"#, JsonError::Syntax),
         (r#"{"model":"Fineoffset-WH2" "id":1}"#, JsonError::Syntax),
         (r#"{"model":"Fineoffset-WH2","id":1,}"#, JsonError::Syntax),
-        (r#"{"model":"Fineoffset-WH2","id":1,"a":"\q"}"#, JsonError::Syntax),
-        (r#"{"model":"Fineoffset-WH2","id":1,"a":"\u12"}"#, JsonError::Syntax),
+        (
+            r#"{"model":"Fineoffset-WH2","id":1,"a":"\q"}"#,
+            JsonError::Syntax,
+        ),
+        (
+            r#"{"model":"Fineoffset-WH2","id":1,"a":"\u12"}"#,
+            JsonError::Syntax,
+        ),
         (
             r#"{"model":"Fineoffset-WH2","id":1,"a":[[[[[[[[[[1]]]]]]]]]]}"#,
             JsonError::Syntax,
@@ -882,9 +896,18 @@ fn from_json_rejects_everything_else_with_an_error() {
             r#"{"model":"wh2wh2wh2wh2wh2wh2wh2wh2wh2wh2wh2wh2","id":1}"#,
             JsonError::UnknownModel,
         ),
-        (r#"{"model":"Fineoffset-WH2","id":-1}"#, JsonError::BadValue("id")),
-        (r#"{"model":"Fineoffset-WH2","id":1.5}"#, JsonError::BadValue("id")),
-        (r#"{"model":"Fineoffset-WH2","id":"1"}"#, JsonError::BadValue("id")),
+        (
+            r#"{"model":"Fineoffset-WH2","id":-1}"#,
+            JsonError::BadValue("id"),
+        ),
+        (
+            r#"{"model":"Fineoffset-WH2","id":1.5}"#,
+            JsonError::BadValue("id"),
+        ),
+        (
+            r#"{"model":"Fineoffset-WH2","id":"1"}"#,
+            JsonError::BadValue("id"),
+        ),
         (
             r#"{"model":"Fineoffset-WH2","id":1,"channel":300}"#,
             JsonError::BadValue("channel"),

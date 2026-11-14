@@ -46,7 +46,10 @@ fn build(b: &[u8], header: &Header) -> Result<Reading, DecodeResult> {
     r.set_extra(Extra::BatteryMv, mv as f32);
     r.set_extra(Extra::Moisture, f32::from(*moisture));
     r.set_extra(Extra::Boost, f32::from(bb >> 5));
-    r.set_extra(Extra::AdRaw, f32::from(u16::from(a1 & 1) << 8 | u16::from(*a0)));
+    r.set_extra(
+        Extra::AdRaw,
+        f32::from(u16::from(a1 & 1) << 8 | u16::from(*a0)),
+    );
     Ok(r)
 }
 

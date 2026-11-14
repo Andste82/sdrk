@@ -38,10 +38,18 @@ fn build(b: &[u8], header: &Header) -> Result<Reading, DecodeResult> {
     if ch >> 4 > 3 || *bat > 5 {
         return Err(DecodeResult::OutOfRange);
     }
-    let mut r = Reading::new(MODEL, u32::from(*i1) << 8 | u32::from(*i0), Mic::Crc, header);
+    let mut r = Reading::new(
+        MODEL,
+        u32::from(*i1) << 8 | u32::from(*i0),
+        Mic::Crc,
+        header,
+    );
     r.channel = Some((ch >> 4) + 1);
     r.set_extra(Extra::BatteryOk, f32::from(*bat) / 5.0);
-    r.set_extra(Extra::RawValue, (u32::from(*v1) << 8 | u32::from(*v0)) as f32);
+    r.set_extra(
+        Extra::RawValue,
+        (u32::from(*v1) << 8 | u32::from(*v0)) as f32,
+    );
     r.set_extra(Extra::Sensitivity, f32::from(flags >> 7));
     r.set_extra(Extra::Alarm, f32::from(flags >> 6 & 1));
     Ok(r)
@@ -58,7 +66,12 @@ fn encode_reading(
     encoder::model(r, models)?;
     Carries(CHANNEL).check_extras(
         r,
-        &[Extra::BatteryOk, Extra::RawValue, Extra::Sensitivity, Extra::Alarm],
+        &[
+            Extra::BatteryOk,
+            Extra::RawValue,
+            Extra::Sensitivity,
+            Extra::Alarm,
+        ],
     )?;
     let id = encoder::id(r, 1 << 16)?;
     let ch = encoder::channel(r, 4)? - 1;

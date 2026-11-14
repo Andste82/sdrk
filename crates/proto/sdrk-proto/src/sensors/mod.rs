@@ -40,8 +40,8 @@
 
 mod bresser_3ch;
 mod ecowitt;
-mod fineoffset;
 mod encoder;
+mod fineoffset;
 mod json;
 mod lacrosse_tx29;
 mod lacrosse_tx35;

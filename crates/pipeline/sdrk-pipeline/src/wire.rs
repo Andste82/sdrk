@@ -352,6 +352,26 @@ impl Message {
         wire.into_event(output)
     }
 
+    /// The event of an event message as it is on the wire, without turning it into a pipeline
+    /// event: a receiver that wants to skip the kinds it does not know (`WireEventKind::Other`)
+    /// reads events with this instead of [`Message::to_event`].
+    ///
+    /// ```
+    /// use sdrk_device::BlockFlags;
+    /// use sdrk_pipeline::wire::{Message, MessageType, PayloadType, WireEventKind};
+    /// let payload = br#"{"index":7,"kind":{"type":"paused","reason":"tx"}}"#.to_vec();
+    /// let m = Message { kind: MessageType::Event, flags: BlockFlags::empty(), stream: 1,
+    ///                   payload_type: PayloadType::Json, start: 7, count: 0, averaged: 0, payload };
+    /// assert_eq!(m.to_wire_event()?.kind, WireEventKind::Other);
+    /// # Ok::<(), sdrk_pipeline::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    /// `Wire` for another message type or a malformed payload.
+    pub fn to_wire_event(&self) -> Result<WireEvent> {
+        self.parse_json(MessageType::Event)
+    }
+
     /// The change of a parameter-set message.
     ///
     /// # Errors
@@ -809,6 +829,10 @@ pub enum WireEventKind {
         /// Number of events lost.
         count: u64,
     },
+    /// A kind this version does not know (forward compatibility, for example `paused` of
+    /// sdrk-remote); its fields are dropped. It has no pipeline event.
+    #[serde(other)]
+    Other,
 }
 
 impl From<&Event> for WireEvent {
@@ -846,8 +870,8 @@ impl WireEvent {
     /// The event on `output` of the receiving pipeline.
     ///
     /// # Errors
-    /// `Wire` for an anchor with an unknown source or a parameter value that cannot be
-    /// converted.
+    /// `Wire` for an anchor with an unknown source, a parameter value that cannot be
+    /// converted, or a kind this version does not know (`WireEventKind::Other`).
     pub fn into_event(self, output: OutputId) -> Result<Event> {
         let kind = match self.kind {
             WireEventKind::Gap { missing } => EventKind::Gap { missing },
@@ -870,6 +894,9 @@ impl WireEvent {
                 late,
             },
             WireEventKind::EventsLost { count } => EventKind::EventsLost { count },
+            WireEventKind::Other => {
+                return Err(Error::Wire("event of an unknown kind".into()));
+            }
         };
         Ok(Event {
             output,

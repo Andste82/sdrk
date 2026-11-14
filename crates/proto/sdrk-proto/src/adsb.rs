@@ -265,7 +265,10 @@ pub fn parse(frame: &[u8]) -> Option<Message> {
 fn identification(me: u64, tc: u8) -> Identification {
     let mut callsign = [b' '; 8];
     for (i, c) in callsign.iter_mut().enumerate() {
-        *c = CHARSET[bits(me, 9 + 6 * i as u32, 6) as usize];
+        *c = CHARSET
+            .get(bits(me, 9 + 6 * i as u32, 6) as usize)
+            .copied()
+            .unwrap_or(b'#');
     }
     Identification {
         category: (b'A' + (4 - tc), bits(me, 6, 3) as u8),

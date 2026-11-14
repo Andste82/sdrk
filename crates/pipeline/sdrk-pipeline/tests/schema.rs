@@ -30,7 +30,7 @@ use serde_json::{Value, json};
 
 use common::{flow, workspace_file};
 
-const FLOWS: [&str; 35] = [
+const FLOWS: [&str; 36] = [
     "fm_receiver",
     "spectrum_only",
     "resample_audio",

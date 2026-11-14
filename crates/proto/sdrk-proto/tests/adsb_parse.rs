@@ -8,7 +8,16 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::indexing_slicing,
-    clippy::panic
+    clippy::panic,
+    clippy::unreadable_literal,
+    clippy::float_cmp,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_lines
 )]
 
 use sdrk_proto::adsb::{self, Body, Horizontal};
@@ -196,12 +205,12 @@ fn altitude_q_bit_gillham_and_gnss() {
     assert_eq!(alt(11, 0b1100_0011_1000), Some(38000));
     assert_eq!(alt(11, 0), None);
     // Gillham: every step of 100 ft from -1200 to 126700 ft, and one bit changes per step.
-    let mut last = None;
+    let mut last: Option<u32> = None;
     for a in (-1200..=126_700).step_by(100) {
         let f = gillham_field(a);
         assert_eq!(alt(12, f), Some(a), "alt {a} field {f:012b}");
         if let Some(l) = last {
-            assert_eq!((f ^ l as u32).count_ones(), 1, "alt {a}");
+            assert_eq!((f ^ l).count_ones(), 1, "alt {a}");
         }
         last = Some(f);
     }
@@ -261,7 +270,7 @@ fn random_frames_never_panic() {
         }
         // Mostly with a correct parity, so that the fields are reached.
         if next() % 4 != 0 {
-            f[0] = 0x88 | (next() % 2) as u8 * 8 | (next() % 8) as u8;
+            f[0] = 0x88 | ((next() % 2) as u8 * 8) | (next() % 8) as u8;
             let p = crc24_adsb(&f[..11]);
             f[11..].copy_from_slice(&p.to_be_bytes()[1..]);
         }

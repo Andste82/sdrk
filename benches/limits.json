@@ -5387,5 +5387,105 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "costas_qam64": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`costas_qam64` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+    }
+  },
+  "costas_qam64_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "equalize_qam64": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam64_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam64_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam64_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam64_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam64_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam64_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`equalize_qam64`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+    }
+  },
+  "equalize_qam64_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
   }
 }

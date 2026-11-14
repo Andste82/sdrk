@@ -5,6 +5,7 @@
 //! the checks can be tested against small fake workspaces.
 
 pub mod blockcount;
+pub mod branches;
 pub mod commands;
 pub mod count;
 pub mod count_embedded;

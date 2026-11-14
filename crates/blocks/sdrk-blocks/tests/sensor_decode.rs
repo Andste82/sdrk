@@ -1,4 +1,4 @@
-//! `SensorDecodeBlock` (M46 §4): the block equals the decoders on whole buffers (the golden trains
+//! `SensorDecodeBlock` (M46 §4): the block equals the decoders on whole buffers (trains made by the encoders
 //! of the Python encoders), is chunk invariant with 20 plans (test 6, seed 643), merges the copies
 //! of a reading (same radio channel within `merge_s`, another channel within 0.5 s), writes the
 //! unknown trains with `emit_unknown` (test 5, seed 642), joins trains of several packets, and
@@ -23,13 +23,14 @@ use sdrk_blocks::{
 use sdrk_proto::PacketFlags;
 use sdrk_proto::pulses::{self, Header, Modulation, Pair};
 use sdrk_proto::sensors::{self, DECODERS, ReadingSink};
-use sdrk_testkit::golden::{self, Array};
 use sdrk_testkit::rng::Pcg32;
 use sdrk_testkit::{ChunkPlan, VecStorage};
 
 const RATE: u32 = 250_000;
 const SEED_UNKNOWN: u64 = 642;
 const SEED_CHUNKS: u64 = 643;
+/// The seed of the trains that the encoders make (not golden vectors).
+const SEED_TRAINS: u64 = 637;
 const CASES: [&str; 7] = [
     "wh2",
     "nexus",
@@ -55,31 +56,81 @@ fn block(cfg: &SensorDecodeConfig) -> SensorDecodeBlock<VecStorage> {
     SensorDecodeBlock::new(cfg, &mut VecStorage).unwrap()
 }
 
-/// The pairs of every train of a golden case.
-fn golden_trains(name: &str) -> Vec<Vec<Pair>> {
-    let c = golden::load("sensors", name).unwrap();
-    let Array::I32(counts) = c.array("pair_counts").unwrap() else {
-        panic!("pair_counts");
+/// Twenty trains of random readings of the device `name`, made by its encoder (the seed is the
+/// same on every run). Several models share a decoder (`oregon_v21`).
+fn encoded_trains(name: &str) -> Vec<Vec<Pair>> {
+    let models: &[&str] = match name {
+        "oregon_v21" => &["oregon_thn132n", "oregon_thgr122nx"],
+        "bresser_3ch" => &["Bresser-3CH"],
+        n => &[match n {
+            "wh2" => "wh2",
+            "nexus" => "nexus",
+            "wh1080" => "wh1080",
+            "lacrosse_tx29" => "lacrosse_tx29",
+            "lacrosse_tx35" => "lacrosse_tx35",
+            other => panic!("unknown case {other}"),
+        }],
     };
-    let Array::I32(flat) = c.array("pairs").unwrap() else {
-        panic!("pairs");
-    };
-    let mut at = 0;
+    let mut rng = Pcg32::new(SEED_TRAINS, 17);
     let mut out = Vec::new();
-    for &n in counts {
-        let n = n as usize;
+    for k in 0..20u32 {
+        let model = models[k as usize % models.len()];
+        let text = random_reading_json(&mut rng, model);
+        let r = sdrk_proto::sensors::Reading::from_json(&text).unwrap();
+        let enc = sensors::encoder_by_model(r.model).unwrap();
+        let mut storage = vec![Pair::default(); sensors::MAX_TRAIN_PAIRS];
+        let mut sink = sensors::TrainSink::new(&mut storage);
+        enc.encode(&r, enc.default_repeats(), &mut sink)
+            .unwrap_or_else(|e| panic!("{model}: {e:?}: {text}"));
+        // The encoder counts in samples of 1 MHz; the tests use 250 kHz.
+        let to_test = |w: u32| (w + 2) / 4;
         out.push(
-            flat[at..at + 2 * n]
-                .chunks_exact(2)
-                .map(|w| Pair {
-                    pulse: w[0] as u32,
-                    gap: w[1] as u32,
+            sink.pairs()
+                .iter()
+                .map(|p| Pair {
+                    pulse: to_test(p.pulse),
+                    gap: to_test(p.gap),
                 })
                 .collect(),
         );
-        at += 2 * n;
     }
     out
+}
+
+/// The JSON of a random reading of `model` with the fields that the device carries.
+fn random_reading_json(rng: &mut Pcg32, model: &str) -> String {
+    let temp = f64::from(rng.below(700)) / 10.0 - 10.0;
+    let hum = 5 + rng.below(90);
+    let id = rng.below(64);
+    let ch = 1 + rng.below(3);
+    let low = rng.below(2) == 0;
+    match model {
+        "wh2" => {
+            format!(r#"{{"model":"wh2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#)
+        }
+        "nexus" => format!(
+            r#"{{"model":"nexus","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+        ),
+        "oregon_thn132n" => format!(
+            r#"{{"model":"oregon_thn132n","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1}}}"#
+        ),
+        "oregon_thgr122nx" => format!(
+            r#"{{"model":"oregon_thgr122nx","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+        ),
+        "wh1080" => format!(
+            r#"{{"model":"wh1080","id":{id},"temperature_C":{temp:.1},"humidity":{hum},"battery_ok":{low},"wind_avg_km_h":{:.1},"wind_max_km_h":{:.1},"wind_dir_deg":90,"rain_mm":{:.1}}}"#,
+            f64::from(rng.below(100)) * 1.224,
+            f64::from(rng.below(100)) * 1.224,
+            f64::from(rng.below(1000)) * 0.3
+        ),
+        "lacrosse_tx29" | "lacrosse_tx35" => format!(
+            r#"{{"model":"{model}","id":{id},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+        ),
+        "Bresser-3CH" => format!(
+            r#"{{"model":"Bresser-3CH","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.2},"humidity":{hum}}}"#
+        ),
+        other => panic!("unknown model {other}"),
+    }
 }
 
 fn modulation_of(name: &str) -> Modulation {
@@ -168,9 +219,9 @@ fn the_block_equals_the_decoders_on_whole_buffers() {
     let mut index = 0u64;
     let mut stream = Vec::new();
     for name in CASES {
-        let n = golden_trains(name).len();
+        let n = encoded_trains(name).len();
         assert_eq!(n, 20, "{name}");
-        for pairs in golden_trains(name) {
+        for pairs in encoded_trains(name) {
             let h = header(modulation_of(name), 0);
             want.extend(expected_json(index, &h, &pairs, cfg.center_hz));
             stream.extend(packets_of(index, &h, &pairs));
@@ -202,7 +253,7 @@ fn busy_stream() -> Vec<Packet> {
     let mut out = Vec::new();
     let mut index = 0u64;
     for name in CASES {
-        let trains = golden_trains(name);
+        let trains = encoded_trains(name);
         for pairs in trains.iter().take(8) {
             let m = modulation_of(name);
             out.extend(packets_of(index, &header(m, 3), pairs));
@@ -258,7 +309,7 @@ fn the_block_is_chunk_invariant_with_20_plans() {
 
 /// A Nexus train of a fixed reading (PPM, 12 equal frames of 36 bits with 4 ms sync gaps).
 fn nexus_train() -> Vec<Pair> {
-    let c = golden_trains("nexus");
+    let c = encoded_trains("nexus");
     c[0].clone()
 }
 
@@ -349,7 +400,7 @@ fn a_reading_carries_the_radio_fields_and_the_index() {
     assert!(s.ends_with('}'));
     assert!(!out[0].flags.contains(PacketFlags::CRC_OK));
     // A CRC device sets the flag.
-    let wh2 = golden_trains("wh2")[0].clone();
+    let wh2 = encoded_trains("wh2")[0].clone();
     let p = b
         .process(&packets_of(0, &header(Modulation::Ook, 0), &wh2), &mut out)
         .unwrap();
@@ -379,7 +430,7 @@ fn the_decoder_mask_selects_decoders() {
         );
     }
     // An FSK train is not offered to an OOK decoder.
-    let fsk = golden_trains("lacrosse_tx29")[0].clone();
+    let fsk = encoded_trains("lacrosse_tx29")[0].clone();
     let mut b = block(&only(&["wh2", "nexus", "oregon_v21", "wh1080"]));
     let mut out = [Packet::default(); 4];
     let train = packets_of(0, &header(Modulation::Fsk, 0), &fsk);
@@ -469,7 +520,7 @@ fn emit_unknown_writes_the_trains_no_decoder_accepts() {
         ..SensorDecodeConfig::default()
     });
     let mut out = [Packet::default(); 4];
-    let wh2 = packets_of(0, &header(Modulation::Ook, 0), &golden_trains("wh2")[0]);
+    let wh2 = packets_of(0, &header(Modulation::Ook, 0), &encoded_trains("wh2")[0]);
     b.process(&wh2, &mut out).unwrap();
     assert!(!String::from_utf8_lossy(out[0].data()).contains("unknown"));
     assert_eq!(b.unknown(), 0);

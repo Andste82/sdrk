@@ -138,7 +138,7 @@ fn the_table_replaces_the_oldest_aircraft() {
     let mut input = vec![pkt(EVEN, 0)];
     for k in 0..ADSB_PARSE_AIRCRAFT as u32 {
         let mut f = hex(EVEN);
-        f[1..4].copy_from_slice(&(0x100000 + k).to_be_bytes()[1..]);
+        f[1..4].copy_from_slice(&(0x0010_0000 + k).to_be_bytes()[1..]);
         let p = crc24_adsb(&f[..11]);
         f[11..].copy_from_slice(&p.to_be_bytes()[1..]);
         input.push(Packet::new(10 + u64::from(k), PacketFlags::CRC_OK, &f).unwrap());

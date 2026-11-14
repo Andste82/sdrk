@@ -27,6 +27,9 @@ const RATE_HZ: f64 = 2_000_000.0;
 /// Words of one table entry: address and flags, even position, even index, odd position, odd
 /// index, index of the last frame.
 const WORDS: usize = 6;
+/// One aircraft: address and flags, even position, even index, odd position, odd index, index
+/// of the last frame.
+type Entry = [u64; WORDS];
 const USED: u64 = 1 << 32;
 const HAS_EVEN: u64 = 1 << 33;
 const HAS_ODD: u64 = 1 << 34;
@@ -216,7 +219,7 @@ impl AdsbParseConfig {
 pub struct AdsbParseBlock<S: Storage> {
     config: AdsbParseConfig,
     /// The aircraft table, `WORDS` words per entry.
-    table: S::Buf<u64>,
+    table: S::Buf<Entry>,
     max_age: u64,
     local: bool,
     parsed: u64,
@@ -244,7 +247,7 @@ impl<S: Storage> AdsbParseBlock<S> {
         config.validate()?;
         Ok(Self {
             config: *config,
-            table: storage.alloc::<u64>(ADSB_PARSE_AIRCRAFT * WORDS)?,
+            table: storage.alloc::<Entry>(ADSB_PARSE_AIRCRAFT)?,
             max_age: (config.max_age_s * RATE_HZ) as u64,
             local: config.ref_lat != 0.0 || config.ref_lon != 0.0,
             parsed: 0,
@@ -262,7 +265,7 @@ impl<S: Storage> AdsbParseBlock<S> {
     pub fn storage_bytes(config: &AdsbParseConfig) -> Result<usize> {
         config.validate()?;
         let mut plan = Plan::default();
-        plan.add::<u64>(ADSB_PARSE_AIRCRAFT * WORDS)?;
+        plan.add::<Entry>(ADSB_PARSE_AIRCRAFT)?;
         Ok(plan.bytes())
     }
 
@@ -292,25 +295,24 @@ impl<S: Storage> AdsbParseBlock<S> {
     }
 
     /// The table entry of `icao` (the one seen longest ago when it is new).
-    fn entry(&mut self, icao: u32, index: u64) -> &mut [u64] {
+    fn entry(&mut self, icao: u32, index: u64) -> Option<&mut Entry> {
         let t = self.table.as_mut();
         let slot = t
-            .chunks_exact(WORDS)
+            .iter()
             .position(|e| e[0] & USED != 0 && e[0] as u32 == icao)
-            .or_else(|| t.chunks_exact(WORDS).position(|e| e[0] & USED == 0))
+            .or_else(|| t.iter().position(|e| e[0] & USED == 0))
             .or_else(|| {
-                t.chunks_exact(WORDS)
+                t.iter()
                     .enumerate()
                     .min_by_key(|(_, e)| e[5])
                     .map(|(i, _)| i)
-            })
-            .unwrap_or(0);
-        let e = &mut t[slot * WORDS..(slot + 1) * WORDS];
+            })?;
+        let e = t.get_mut(slot)?;
         if e[0] & USED == 0 || e[0] as u32 != icao {
-            e.copy_from_slice(&[USED | u64::from(icao), 0, 0, 0, 0, index]);
+            *e = [USED | u64::from(icao), 0, 0, 0, 0, index];
         }
         e[5] = index;
-        e
+        Some(e)
     }
 
     /// Stores the position frame and returns the latitude and longitude when they can be
@@ -318,18 +320,20 @@ impl<S: Storage> AdsbParseBlock<S> {
     fn locate(&mut self, icao: u32, index: u64, p: &Position) -> Option<(f64, f64)> {
         let (max_age, local) = (self.max_age, self.local);
         let (rlat, rlon) = (self.config.ref_lat, self.config.ref_lon);
-        let e = self.entry(icao, index);
-        let me = u64::from(p.cpr_lat) | u64::from(p.cpr_lon) << 17;
-        let (mine, other) = if p.odd { (3, 1) } else { (1, 3) };
-        let flag = if p.odd { HAS_ODD } else { HAS_EVEN };
-        let other_flag = if p.odd { HAS_EVEN } else { HAS_ODD };
-        e[mine] = me;
-        e[mine + 1] = index;
-        e[0] |= flag;
+        let e = self.entry(icao, index)?;
+        let [head, even_pos, even_at, odd_pos, odd_at, _] = e;
+        let (mine, mine_at, other, other_at, flag, other_flag) = if p.odd {
+            (odd_pos, odd_at, even_pos, even_at, HAS_ODD, HAS_EVEN)
+        } else {
+            (even_pos, even_at, odd_pos, odd_at, HAS_EVEN, HAS_ODD)
+        };
+        *mine = u64::from(p.cpr_lat) | u64::from(p.cpr_lon) << 17;
+        *mine_at = index;
+        *head |= flag;
         let split = |w: u64| ((w & 0x1FFFF) as u32, (w >> 17) as u32);
         let mut pos = None;
-        if e[0] & other_flag != 0 && e[other + 1].abs_diff(index) <= max_age {
-            let (mine, theirs) = (split(e[mine]), split(e[other]));
+        if *head & other_flag != 0 && other_at.abs_diff(index) <= max_age {
+            let (mine, theirs) = (split(*mine), split(*other));
             pos = if p.odd {
                 adsb::cpr_global(theirs, mine, true)
             } else {
@@ -415,7 +419,6 @@ impl<S: Storage> AdsbParseBlock<S> {
                     let _ = write!(j, ",\"geom_delta\":{d}");
                 }
             }
-            Body::NotDecoded(_) => return None,
             _ => return None,
         }
         j.write_str("}").ok()?;
@@ -450,7 +453,9 @@ impl<S: Storage> Block for AdsbParseBlock<S> {
             match self.json(&m, packet.index) {
                 Some(j) => match Packet::new(packet.index, PacketFlags::CRC_OK, j.as_bytes()) {
                     Ok(p) => {
-                        output[produced] = p;
+                        if let Some(slot) = output.get_mut(produced) {
+                            *slot = p;
+                        }
                         produced += 1;
                         self.parsed += 1;
                     }
@@ -473,7 +478,7 @@ impl<S: Storage> Block for AdsbParseBlock<S> {
     }
 
     fn reset(&mut self) {
-        self.table.as_mut().fill(0);
+        self.table.as_mut().fill([0; WORDS]);
         self.parsed = 0;
         self.undecoded = 0;
         self.ignored = 0;

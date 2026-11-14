@@ -63,7 +63,7 @@ use crate::error::{Error, Result};
 use crate::pulses::PulseTrain;
 
 /// Bytes of the bit storage of one [`Row`].
-pub const ROW_BYTES: usize = 32;
+pub const ROW_BYTES: usize = 64;
 
 /// The most bits one [`Row`] holds; a longer row ends with [`RowEnd::Full`].
 pub const MAX_ROW_BITS: usize = ROW_BYTES * 8;

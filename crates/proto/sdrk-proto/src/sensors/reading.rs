@@ -69,11 +69,19 @@ pub enum Extra {
     Co2,
     /// 1 when the air quality sensor is externally powered, `ext_power`.
     ExtPower,
+    /// Battery level in percent, `battery_pct`.
+    BatteryPct,
+    /// 1 when it rains (the rain-start flag of the station), `rain_start`.
+    RainStart,
+    /// Voltage of the supercapacitor in volt, `supercap_V`.
+    SupercapV,
+    /// Firmware version byte, `firmware`.
+    Firmware,
 }
 
 impl Extra {
     /// Every extra value in the order of the JSON form.
-    pub const ALL: [Extra; 17] = [
+    pub const ALL: [Extra; 21] = [
         Self::WindAvgMs,
         Self::WindMaxMs,
         Self::LightLux,
@@ -91,6 +99,10 @@ impl Extra {
         Self::Pm10,
         Self::Co2,
         Self::ExtPower,
+        Self::BatteryPct,
+        Self::RainStart,
+        Self::SupercapV,
+        Self::Firmware,
     ];
 
     /// The JSON name (the one `rtl_433` prints).
@@ -113,6 +125,10 @@ impl Extra {
             Self::Pm10 => "pm10_ug_m3",
             Self::Co2 => "co2_ppm",
             Self::ExtPower => "ext_power",
+            Self::BatteryPct => "battery_pct",
+            Self::RainStart => "rain_start",
+            Self::SupercapV => "supercap_V",
+            Self::Firmware => "firmware",
         }
     }
 
@@ -124,7 +140,8 @@ impl Extra {
             | Self::Uvi
             | Self::BatteryV
             | Self::Pm25
-            | Self::Pm10 => 1,
+            | Self::Pm10
+            | Self::SupercapV => 1,
             Self::BatteryOk => 3,
             _ => 0,
         }
@@ -325,7 +342,7 @@ impl Reading {
     /// # Errors
     /// `fmt::Error` when the writer fails or a value is not finite.
     pub fn to_json<W: fmt::Write>(&self, w: &mut W) -> fmt::Result {
-        self.write_json(w, false)
+        self.write_json(w, 0)
     }
 
     /// The same as [`to_json`](Self::to_json) without the fields `rssi_dB` and `repeats`: the form
@@ -335,10 +352,30 @@ impl Reading {
     /// # Errors
     /// `fmt::Error` when the writer fails or a value is not finite.
     pub fn to_json_short<W: fmt::Write>(&self, w: &mut W) -> fmt::Result {
-        self.write_json(w, true)
+        self.write_json(w, 1)
     }
 
-    fn write_json<W: fmt::Write>(&self, w: &mut W, short: bool) -> fmt::Result {
+    /// The same as [`to_json_short`](Self::to_json_short) without `freq_MHz` and `mic` as well:
+    /// the form that `sensor_decode` falls back to when even the short form does not fit (a
+    /// `Fineoffset-WS85` with every value).
+    ///
+    /// # Errors
+    /// `fmt::Error` when the writer fails or a value is not finite.
+    pub fn to_json_compact<W: fmt::Write>(&self, w: &mut W) -> fmt::Result {
+        self.write_json(w, 2)
+    }
+
+    /// The same as [`to_json_compact`](Self::to_json_compact) without `firmware` and
+    /// `supercap_V` as well: the last form that `sensor_decode` tries (a `Fineoffset-WS90` with
+    /// every value).
+    ///
+    /// # Errors
+    /// `fmt::Error` when the writer fails or a value is not finite.
+    pub fn to_json_min<W: fmt::Write>(&self, w: &mut W) -> fmt::Result {
+        self.write_json(w, 3)
+    }
+
+    fn write_json<W: fmt::Write>(&self, w: &mut W, level: u8) -> fmt::Result {
         w.write_char('{')?;
         if let Some(t) = self.time_s {
             check(t)?;
@@ -372,19 +409,26 @@ impl Reading {
         value(w, "wind_dir_deg", self.wind_dir_deg, 1)?;
         value(w, "rain_mm", self.rain_mm, 1)?;
         value(w, "pressure_hPa", self.pressure_hpa, 1)?;
-        for e in Extra::ALL.into_iter().filter(|&e| e != Extra::BatteryOk) {
+        for e in Extra::ALL.into_iter().filter(|&e| {
+            e != Extra::BatteryOk
+                && !(level == 3 && matches!(e, Extra::Firmware | Extra::SupercapV))
+        }) {
             value(w, e.json_name(), self.extra(e), e.decimals())?;
         }
-        write!(w, ",\"mic\":\"{}\"", self.mic.as_str())?;
+        if level < 2 {
+            write!(w, ",\"mic\":\"{}\"", self.mic.as_str())?;
+        }
         let f = (f64::from(self.center_hz) + f64::from(self.freq_offset_hz)) / 1.0e6;
-        write!(w, ",\"freq_MHz\":{f:.4}")?;
+        if level < 2 {
+            write!(w, ",\"freq_MHz\":{f:.4}")?;
+        }
         let rssi = self.rssi_db;
         check(f64::from(rssi))?;
         // adding 0.0 turns -0.0 into 0.0
-        if !short {
+        if level == 0 {
             write!(w, ",\"rssi_dB\":{:.1}", rssi + 0.0)?;
         }
-        if !short {
+        if level == 0 {
             write!(w, ",\"repeats\":{}", self.repeats)?;
         }
         w.write_char('}')

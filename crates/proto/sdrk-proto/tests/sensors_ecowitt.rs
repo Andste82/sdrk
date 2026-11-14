@@ -1,7 +1,7 @@
-//! The Ecowitt / Fine Offset devices (M46, decisions D1150 to D1160): for every device
+//! The Ecowitt / Fine Offset devices (M46, decisions D1150 to D1163): for every device
 //! `decode(encode(x)) == x` over its whole range (also through the JSON form), a flipped bit gives
 //! no reading, a truncated train gives none, and the encoder rejects what the device cannot
-//! carry. Seed 780. The reference for the frames is `rtl_433` (decision D1149, see
+//! carry. Seeds 780 to 789. The reference for the frames is `rtl_433` (decision D1149, see
 //! `tools/crosscheck_rtl433.py`); these tests need no `rtl_433`.
 
 #![allow(
@@ -189,6 +189,78 @@ const DEVICES: &[Dev] = &[
         },
         head_bits: 6 * 8 + 16,
     },
+    Dev {
+        model: "Fineoffset-WS90",
+        bit_us: Some(58),
+        make: |rng, r| {
+            r.id = rng.range(0, 0xFF_FFFF) as u32;
+            let mv = rng.range(0, 255) as i32 * 20;
+            r.set_extra(Extra::BatteryMv, mv as f32);
+            let level = if mv < 1400 {
+                0
+            } else {
+                ((mv - 1400) / 16).min(100)
+            };
+            r.set_extra(Extra::BatteryOk, milli(level, 100));
+            // every value of the WS80 part may be "not available"
+            if rng.below(6) != 0 {
+                r.temperature_c = Some(temp_raw(rng.range(0, 1022)));
+            }
+            if rng.below(6) != 0 {
+                r.humidity = Some(rng.range(0, 100) as f32);
+            }
+            if rng.below(6) != 0 {
+                r.wind_dir_deg = Some(rng.range(0, 359) as f32);
+            }
+            if rng.below(6) != 0 {
+                r.set_extra(Extra::WindAvgMs, tenths(rng.range(0, 510)));
+            }
+            if rng.below(6) != 0 {
+                r.set_extra(Extra::WindMaxMs, tenths(rng.range(0, 510)));
+            }
+            if rng.below(6) != 0 {
+                r.set_extra(Extra::Uvi, tenths(rng.range(0, 254)));
+            }
+            if rng.below(6) != 0 {
+                r.set_extra(Extra::LightLux, (rng.range(0, 65534) * 10) as f32);
+            }
+            r.rain_mm = Some(tenths(rng.range(0, 65535)));
+            r.set_extra(Extra::RainStart, rng.range(0, 1) as f32);
+            r.set_extra(Extra::SupercapV, tenths(rng.range(0, 63)));
+            r.set_extra(Extra::Firmware, rng.range(0, 255) as f32);
+        },
+        head_bits: 6 * 8 + 16,
+    },
+    Dev {
+        model: "Fineoffset-WS85",
+        bit_us: Some(58),
+        make: |rng, r| {
+            r.id = rng.range(0, 0xFF_FFFF) as u32;
+            let mv = rng.range(0, 255) as i32 * 20;
+            r.set_extra(Extra::BatteryMv, mv as f32);
+            let level = if mv < 1400 {
+                0
+            } else {
+                ((mv - 1400) / 16).min(100)
+            };
+            r.set_extra(Extra::BatteryOk, f32::from(u8::from(mv > 2400)));
+            r.set_extra(Extra::BatteryPct, level as f32);
+            if rng.below(6) != 0 {
+                r.wind_dir_deg = Some(rng.range(0, 359) as f32);
+            }
+            if rng.below(6) != 0 {
+                r.set_extra(Extra::WindAvgMs, tenths(rng.range(0, 510)));
+            }
+            if rng.below(6) != 0 {
+                r.set_extra(Extra::WindMaxMs, tenths(rng.range(0, 510)));
+            }
+            r.rain_mm = Some(tenths(rng.range(0, 65535)));
+            r.set_extra(Extra::RainStart, rng.range(0, 1) as f32);
+            r.set_extra(Extra::SupercapV, tenths(rng.range(0, 63)));
+            r.set_extra(Extra::Firmware, rng.range(0, 255) as f32);
+        },
+        head_bits: 6 * 8 + 16,
+    },
 ];
 
 fn wn34_values(rng: &mut Rng, r: &mut Reading, lo: i64, hi: i64, off: i64) {
@@ -353,7 +425,13 @@ fn a_flipped_bit_gives_no_reading_and_a_truncated_train_none() {
         };
         let mut seen = 0;
         // every bit of the message (not the preamble): the check bytes catch every single flip
-        for k in dev.head_bits..nbits {
+        // the bytes after the sum byte are not checked (WS85: 4 bytes, WS90: 1 byte)
+        let tail = match dev.model {
+            "Fineoffset-WS85" => 32,
+            "Fineoffset-WS90" => 8,
+            _ => 0,
+        };
+        for k in dev.head_bits..nbits - tail {
             let bad = flipped(dev, &pairs, k);
             let (res, got) = decode(dev.model, &bad);
             assert!(
@@ -524,4 +602,334 @@ fn the_longest_reading_fits_a_packet_in_the_short_form() {
         short.len()
     );
     assert!(Reading::from_json(&short).is_ok());
+}
+
+/// A WS90 and a WS85 with every optional value missing: the keys are absent in the JSON and the
+/// reading comes back equal (seed 784).
+#[test]
+fn ws90_and_ws85_without_optional_values() {
+    let mut rng = Rng::new(784);
+    for model in ["Fineoffset-WS90", "Fineoffset-WS85"] {
+        let dev = DEVICES.iter().find(|d| d.model == model).unwrap();
+        for _ in 0..40 {
+            let mut x = reading(model);
+            (dev.make)(&mut rng, &mut x);
+            x.temperature_c = None;
+            x.humidity = None;
+            x.wind_dir_deg = None;
+            for e in [
+                Extra::WindAvgMs,
+                Extra::WindMaxMs,
+                Extra::Uvi,
+                Extra::LightLux,
+            ] {
+                x.extras[e as usize] = None;
+            }
+            let (res, got) = decode(model, &encode(&x, 1).unwrap());
+            assert_eq!(res, DecodeResult::Decoded(1), "{}", json(&x));
+            assert!(got[0].same_content(&x), "{}", json(&x));
+            let text = json(&got[0]);
+            for key in [
+                "temperature_C",
+                "humidity",
+                "wind_dir_deg",
+                "wind_avg_m_s",
+                "uvi",
+            ] {
+                assert!(!text.contains(key), "{text}");
+            }
+            assert!(
+                text.contains("rain_mm") && text.contains("supercap_V"),
+                "{text}"
+            );
+        }
+    }
+}
+
+/// What the WS90 and WS85 encoders reject (seed 785).
+#[test]
+fn ws90_and_ws85_encoders_reject_bad_readings() {
+    let mut rng = Rng::new(785);
+    for model in ["Fineoffset-WS90", "Fineoffset-WS85"] {
+        let dev = DEVICES.iter().find(|d| d.model == model).unwrap();
+        let mut good = reading(model);
+        (dev.make)(&mut rng, &mut good);
+        assert!(encode(&good, 1).is_ok());
+        let with = |f: &dyn Fn(&mut Reading)| {
+            let mut r = good;
+            f(&mut r);
+            encode(&r, 1)
+        };
+        assert_eq!(
+            with(&|r| r.rain_mm = None),
+            Err(EncodeError::MissingField("rain_mm"))
+        );
+        assert_eq!(
+            with(&|r| r.rain_mm = Some(6553.6)),
+            Err(EncodeError::OutOfRange("rain_mm"))
+        );
+        assert_eq!(
+            with(&|r| r.set_extra(Extra::SupercapV, 6.4)),
+            Err(EncodeError::OutOfRange("supercap_V"))
+        );
+        assert_eq!(
+            with(&|r| r.set_extra(Extra::RainStart, 2.0)),
+            Err(EncodeError::OutOfRange("rain_start"))
+        );
+        assert_eq!(
+            with(&|r| r.set_extra(Extra::Firmware, 256.0)),
+            Err(EncodeError::OutOfRange("firmware"))
+        );
+        assert_eq!(
+            with(&|r| r.wind_dir_deg = Some(360.0)),
+            Err(EncodeError::OutOfRange("wind_dir_deg"))
+        );
+        assert_eq!(
+            with(&|r| r.set_extra(Extra::BatteryMv, 5120.0)),
+            Err(EncodeError::OutOfRange("battery_mV"))
+        );
+        assert_eq!(
+            with(&|r| r.wind_avg_km_h = Some(1.0)),
+            Err(EncodeError::UnsupportedField("wind_avg_km_h"))
+        );
+        assert_eq!(
+            with(&|r| r.set_extra(Extra::Pm25, 1.0)),
+            Err(EncodeError::UnsupportedField("pm2_5_ug_m3"))
+        );
+    }
+    // the battery level must follow the voltage
+    let mut r = reading("Fineoffset-WS90");
+    r.set_extra(Extra::BatteryMv, 2000.0);
+    r.set_extra(Extra::BatteryOk, 0.99);
+    r.rain_mm = Some(0.0);
+    for (e, v) in [
+        (Extra::RainStart, 0.0),
+        (Extra::SupercapV, 0.0),
+        (Extra::Firmware, 0.0),
+    ] {
+        r.set_extra(e, v);
+    }
+    assert_eq!(encode(&r, 1), Err(EncodeError::OutOfRange("battery_ok")));
+}
+
+fn crc8(bytes: &[u8]) -> u8 {
+    let mut c = 0u8;
+    for &b in bytes {
+        c ^= b;
+        for _ in 0..8 {
+            c = if c & 0x80 != 0 { c << 1 ^ 0x31 } else { c << 1 };
+        }
+    }
+    c
+}
+
+fn bytes_of(bits: &[bool]) -> Vec<u8> {
+    bits.chunks(8)
+        .map(|c| c.iter().fold(0u8, |a, &b| a << 1 | u8::from(b)))
+        .collect()
+}
+
+/// The frame as `rtl_433` needs it: the row of 168 to 500 bits holds the sync `AA AA 2D D4`
+/// with at least 256 bits after it, the family byte, the CRC and the sum at their places
+/// (seed 786).
+#[test]
+fn ws90_and_ws85_frames_have_the_layout_rtl_433_needs() {
+    let mut rng = Rng::new(786);
+    for (model, family, crc_at) in [
+        ("Fineoffset-WS90", 0x90u8, 30usize),
+        ("Fineoffset-WS85", 0x85, 26),
+    ] {
+        let dev = DEVICES.iter().find(|d| d.model == model).unwrap();
+        for _ in 0..20 {
+            let mut x = reading(model);
+            (dev.make)(&mut rng, &mut x);
+            let pairs = encode(&x, 1).unwrap();
+            let bits = nrz_bits(&pairs, 58);
+            assert!((168..=500).contains(&bits.len()), "{}", bits.len());
+            let b = bytes_of(&bits);
+            assert_eq!(&b[..2], &[0xAA, 0xAA]);
+            let s = b.iter().position(|&v| v == 0x2D).unwrap();
+            assert_eq!(b[s + 1], 0xD4);
+            assert!(s >= 2);
+            let m = &b[s + 2..];
+            assert!(m.len() * 8 >= 256, "{}", m.len());
+            assert_eq!(m[0], family);
+            assert_eq!(m[crc_at], crc8(&m[..crc_at]));
+            let sum = m[..=crc_at].iter().fold(0u8, |a, &v| a.wrapping_add(v));
+            assert_eq!(m[crc_at + 1], sum);
+        }
+    }
+}
+
+/// A WS85 frame of 28 bytes (`rtl_433` wants 32 after the sync) gives no reading, and the
+/// decoders of the family do not take each other's frames (seed 787).
+#[test]
+fn ws90_and_ws85_do_not_take_other_frames() {
+    let mut rng = Rng::new(787);
+    let models = ["Fineoffset-WS90", "Fineoffset-WS85", "Fineoffset-WS80"];
+    let mut frames = Vec::new();
+    for model in models {
+        let dev = DEVICES.iter().find(|d| d.model == model).unwrap();
+        let mut x = reading(model);
+        (dev.make)(&mut rng, &mut x);
+        frames.push(encode(&x, 1).unwrap());
+    }
+    for (i, pairs) in frames.iter().enumerate() {
+        for (k, other) in models.iter().enumerate() {
+            let enc = sensors::encoder_by_model(other).unwrap();
+            let dec = sensors::by_name(enc.name()).unwrap();
+            let mut buf = vec![0u8; 16 + 8 * pairs.len()];
+            let n = pulses::encode_joined(&enc.header(), pairs, &mut buf).unwrap();
+            let train = pulses::decode(&buf[..n]).unwrap();
+            let mut sink = ReadingSink::new();
+            let res = dec.decode(&train, &mut sink);
+            assert_eq!(
+                matches!(res, DecodeResult::Decoded(_)),
+                i == k,
+                "{} {other}",
+                models[i]
+            );
+        }
+    }
+    // the WS85 without its four padding bytes
+    let bits = nrz_bits(&frames[1], 58);
+    let cut = bits.len() - 32;
+    let (res, got) = decode("Fineoffset-WS85", &nrz_pairs(&bits[..cut], 58));
+    assert!(
+        !matches!(res, DecodeResult::Decoded(_)) && got.is_empty(),
+        "{res:?}"
+    );
+}
+
+/// The battery rules at their steps: the level of the WS90 and WS85 and the integer
+/// `battery_ok` of the WS85 above 2400 mV (seed 788).
+#[test]
+fn ws90_and_ws85_battery_steps() {
+    let mut rng = Rng::new(788);
+    for (mv, level) in [
+        (0, 0),
+        (1380, 0),
+        (1400, 0),
+        (1420, 1),
+        (2220, 51),
+        (3000, 100),
+        (3020, 100),
+        (5100, 100),
+    ] {
+        for model in ["Fineoffset-WS90", "Fineoffset-WS85"] {
+            let dev = DEVICES.iter().find(|d| d.model == model).unwrap();
+            let mut x = reading(model);
+            (dev.make)(&mut rng, &mut x);
+            x.set_extra(Extra::BatteryMv, mv as f32);
+            if model.ends_with("90") {
+                x.set_extra(Extra::BatteryOk, milli(level, 100));
+            } else {
+                x.set_extra(Extra::BatteryPct, level as f32);
+                x.set_extra(Extra::BatteryOk, f32::from(u8::from(mv > 2400)));
+            }
+            let (res, got) = decode(model, &encode(&x, 1).unwrap());
+            assert_eq!(res, DecodeResult::Decoded(1), "{model} {mv}");
+            assert!(got[0].same_content(&x), "{model} {mv}");
+        }
+    }
+    for (mv, ok) in [(2400, 0.0), (2420, 1.0)] {
+        let mut x = reading("Fineoffset-WS85");
+        x.set_extra(Extra::BatteryMv, mv as f32);
+        x.set_extra(Extra::BatteryOk, ok);
+        x.set_extra(Extra::BatteryPct, ((mv - 1400) / 16) as f32);
+        x.rain_mm = Some(1.0);
+        for (e, v) in [
+            (Extra::RainStart, 1.0),
+            (Extra::SupercapV, 1.0),
+            (Extra::Firmware, 130.0),
+        ] {
+            x.set_extra(e, v);
+        }
+        let (_, got) = decode("Fineoffset-WS85", &encode(&x, 1).unwrap());
+        assert_eq!(got[0].extra(Extra::BatteryOk), Some(ok));
+    }
+}
+
+/// A WS90 with every value of a typical size does not fit a packet in the short or the compact
+/// form but in the minimal one (without `freq_MHz`, `mic`, `firmware` and `supercap_V`), and a
+/// WS85 fits in the compact one (seed 789).
+#[test]
+fn the_ws90_with_every_value_in_json() {
+    let mut rng = Rng::new(789);
+    let dev = DEVICES
+        .iter()
+        .find(|d| d.model == "Fineoffset-WS90")
+        .unwrap();
+    let mut x = reading("Fineoffset-WS90");
+    (dev.make)(&mut rng, &mut x);
+    x.id = 0xA1_B2C3;
+    x.time_s = Some(1234.567);
+    x.center_hz = 433_920_000;
+    x.temperature_c = Some(-4.5);
+    x.humidity = Some(81.0);
+    x.wind_dir_deg = Some(245.0);
+    x.rain_mm = Some(123.4);
+    for (e, v) in [
+        (Extra::WindAvgMs, 3.2),
+        (Extra::WindMaxMs, 7.9),
+        (Extra::Uvi, 2.5),
+        (Extra::LightLux, 52_000.0),
+        (Extra::SupercapV, 5.1),
+        (Extra::Firmware, 130.0),
+        (Extra::BatteryMv, 2800.0),
+        (Extra::BatteryOk, 0.87),
+        (Extra::RainStart, 1.0),
+    ] {
+        x.set_extra(e, v);
+    }
+    let mut short = String::new();
+    x.to_json_short(&mut short).unwrap();
+    assert!(short.len() > 256, "{short}");
+    let mut compact = String::new();
+    x.to_json_compact(&mut compact).unwrap();
+    assert!(compact.len() > 256, "{compact}");
+    let mut min = String::new();
+    x.to_json_min(&mut min).unwrap();
+    assert!(min.len() <= 256 && !min.contains("freq_MHz"), "{min}");
+    let y = Reading::from_json(&min).unwrap();
+    assert!(y.extra(Extra::WindMaxMs) == x.extra(Extra::WindMaxMs) && y.id == x.id);
+    let mut widest = x;
+    widest.id = 0xFF_FFFF;
+    widest.temperature_c = Some(-40.0);
+    widest.humidity = Some(100.0);
+    widest.rain_mm = Some(6553.5);
+    widest.set_extra(Extra::LightLux, 655_340.0);
+    let mut text = String::new();
+    widest.to_json_min(&mut text).unwrap();
+    assert!(text.len() <= 256, "{text}");
+}
+
+#[test]
+fn the_ws85_with_every_value_fits_the_compact_form() {
+    let mut rng = Rng::new(789);
+    let dev = DEVICES
+        .iter()
+        .find(|d| d.model == "Fineoffset-WS85")
+        .unwrap();
+    let mut x = reading("Fineoffset-WS85");
+    (dev.make)(&mut rng, &mut x);
+    x.id = 0xFF_FFFF;
+    x.time_s = Some(1234.567);
+    x.center_hz = 433_920_000;
+    x.wind_dir_deg = Some(359.0);
+    x.rain_mm = Some(6553.5);
+    for (e, v) in [
+        (Extra::WindAvgMs, 51.0),
+        (Extra::WindMaxMs, 51.0),
+        (Extra::SupercapV, 6.3),
+        (Extra::Firmware, 255.0),
+        (Extra::BatteryMv, 5100.0),
+        (Extra::BatteryPct, 100.0),
+    ] {
+        x.set_extra(e, v);
+    }
+    let mut compact = String::new();
+    x.to_json_compact(&mut compact).unwrap();
+    assert!(compact.len() <= 256, "{}", compact.len());
+    assert!(compact.contains("firmware") && !compact.contains("freq_MHz"));
 }

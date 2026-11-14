@@ -208,6 +208,33 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.set_extra(Extra::Uvi, rng.range(0, 254) as f32 / 10.0);
             r.set_extra(Extra::LightLux, (rng.range(0, 65534) * 10) as f32);
         }
+        "Fineoffset-WS90" | "Fineoffset-WS85" => {
+            r.id = rng.range(0x10000, 0x00FF_FFFF) as u32;
+            let mv = rng.range(70, 150) * 20;
+            r.set_extra(Extra::BatteryMv, mv as f32);
+            let lvl = if mv < 1400 {
+                0
+            } else {
+                ((mv - 1400) / 16).min(100)
+            };
+            if model.ends_with("90") {
+                r.set_extra(Extra::BatteryOk, milli(lvl as i32, 100));
+                r.temperature_c = Some((rng.range(0, 1022) as f32 - 400.0) / 10.0);
+                r.humidity = Some(rng.range(0, 100) as f32);
+                r.set_extra(Extra::Uvi, rng.range(0, 254) as f32 / 10.0);
+                r.set_extra(Extra::LightLux, (rng.range(0, 65534) * 10) as f32);
+            } else {
+                r.set_extra(Extra::BatteryOk, f32::from(u8::from(mv > 2400)));
+                r.set_extra(Extra::BatteryPct, lvl as f32);
+            }
+            r.wind_dir_deg = Some(rng.range(0, 359) as f32);
+            r.set_extra(Extra::WindAvgMs, rng.range(0, 510) as f32 / 10.0);
+            r.set_extra(Extra::WindMaxMs, rng.range(0, 510) as f32 / 10.0);
+            r.rain_mm = Some(rng.range(0, 65535) as f32 / 10.0);
+            r.set_extra(Extra::RainStart, rng.range(0, 1) as f32);
+            r.set_extra(Extra::SupercapV, rng.range(0, 63) as f32 / 10.0);
+            r.set_extra(Extra::Firmware, rng.range(0, 255) as f32);
+        }
         "Bresser-3CH" => {
             r.id = rng.range(0, 255) as u32;
             r.channel = Some(rng.range(1, 3) as u8);

@@ -61,6 +61,7 @@ const FLOWS: [&str; 39] = [
     "ism868_pulses",
     "ism433_sensors",
     "ism868_sensors",
+    "adsb_aircraft",
 ];
 
 fn text(name: &str, ext: &str) -> String {

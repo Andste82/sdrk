@@ -66,6 +66,7 @@ const FLOWS: [&str; 35] = [
     "ism868_pulses",
     "ism433_sensors",
     "ism868_sensors",
+    "adsb_aircraft",
 ];
 
 fn schema() -> Value {

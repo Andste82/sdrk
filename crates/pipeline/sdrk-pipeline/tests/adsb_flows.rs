@@ -305,3 +305,84 @@ fn test5_short_frames_come_out_with_flag_bit_16() {
         assert!([4, 5, 11].contains(&df_icao(p.data()).0));
     }
 }
+
+// ------------------------------------------------------------------ the flow adsb_aircraft
+
+/// 2 MS/s `cu8` samples of the frames, 20 000 samples of low-level noise before each: a
+/// preamble of four pulses (samples 0, 2, 7, 9), then bit `k` as a pulse in sample `16 + 2k`
+/// (1) or `17 + 2k` (0). The pulse is 100 above the mean, the noise is 0 to 3.
+fn scene(frames: &[&str]) -> Vec<u8> {
+    let mut rng = 0x1234_5678u32;
+    let mut noise = move || {
+        rng = rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (rng >> 29) as i32 / 2
+    };
+    let mut mag = Vec::new();
+    for f in frames {
+        mag.extend((0..20_000).map(|_| noise()));
+        let mut m = vec![0i32; 16 + 224 + 8];
+        for s in [0, 2, 7, 9] {
+            m[s] = 100;
+        }
+        let bits = unhex(f)
+            .into_iter()
+            .flat_map(|b| (0..8).map(move |i| b >> (7 - i) & 1));
+        for (k, bit) in bits.enumerate() {
+            m[16 + 2 * k + usize::from(bit == 0)] = 100;
+        }
+        mag.extend(m);
+    }
+    mag.extend((0..20_000).map(|_| noise()));
+    // I carries the magnitude, Q is the mean value.
+    mag.iter().flat_map(|&v| [(128 + v) as u8, 128u8]).collect()
+}
+
+#[test]
+fn the_aircraft_flow_validates_and_builds() {
+    let report =
+        Registry::standard().validate_json(&flow("adsb_aircraft"), &BuildOptions::default());
+    assert!(report.is_ok(), "{}", report.to_json());
+    assert!(report.warnings.is_empty(), "{}", report.to_json());
+    build(&flow("adsb_aircraft"));
+}
+
+#[test]
+fn the_aircraft_flow_gives_the_messages_of_a_generated_scene() {
+    const FRAMES: [&str; 4] = [
+        "8D4840D6202CC371C32CE0576098",
+        "8D40621D58C382D690C8AC2863A7",
+        "8D40621D58C386435CC412692AD6",
+        "8D485020994409940838175B284F",
+    ];
+    let rf = scene(&FRAMES);
+    let mut p = build(&flow("adsb_aircraft"));
+    let mut lines = Vec::new();
+    let mut buf = [Packet::default(); 16];
+    for piece in rf.chunks(2 * CHUNK) {
+        p.push("rf", InputData::Raw(piece)).unwrap();
+        loop {
+            let n = p.read_packets("messages", &mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+            lines.extend(
+                buf[..n]
+                    .iter()
+                    .map(|x| String::from_utf8(x.data().to_vec()).unwrap()),
+            );
+        }
+    }
+    assert_eq!(lines.len(), 4, "{lines:#?}");
+    assert!(lines[0].contains(r#""hex":"4840d6""#) && lines[0].contains(r#""flight":"KLM1023""#));
+    assert!(lines[1].contains(r#""alt_baro":38000"#) && !lines[1].contains("lat"));
+    assert!(
+        lines[2].contains(r#""lat":52.26578,"lon":3.9"#),
+        "{}",
+        lines[2]
+    );
+    assert!(lines[3].contains(r#""gs":159.2,"track":182.9,"geom_rate":-832"#));
+    // The times are the frame starts in seconds: 20 000 noise samples (10 ms) before the
+    // first frame, 20 256 samples between two frames.
+    assert!(lines[0].starts_with(r#"{"time":0.010,"#), "{}", lines[0]);
+    assert!(lines[1].starts_with(r#"{"time":0.020,"#), "{}", lines[1]);
+}

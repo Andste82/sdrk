@@ -1,0 +1,48 @@
+{
+  "sdrk": 1,
+  "name": "adsb-aircraft",
+  "description": "Decode the ADS-B messages of aircraft at 1090 MHz from a 2 MS/s unsigned 8-bit baseband (RTL-SDR): identification, position and velocity as one JSON text packet per message.",
+  "settings": {
+    "precision": "f32",
+    "max_chunk": 4096
+  },
+  "inputs": {
+    "rf": {
+      "format": "cu8",
+      "rate_hz": 2000000,
+      "description": "IQ at exactly 2 MS/s tuned to 1090 MHz"
+    }
+  },
+  "nodes": {
+    "dec": {
+      "kind": "adsb_decode"
+    },
+    "msg": {
+      "kind": "adsb_parse",
+      "params": {
+        "max_age_s": 10
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "rf",
+      "to": "dec"
+    },
+    {
+      "from": "dec",
+      "to": "msg"
+    },
+    {
+      "from": "msg",
+      "to": "messages"
+    }
+  ],
+  "outputs": {
+    "messages": {
+      "type": "packets",
+      "queue": 256,
+      "description": "One packet per decoded message: the JSON text (time, hex, icao, df, tc, flight, category, alt_baro, lat, lon, gs, track, baro_rate or geom_rate), indexed like the frame it came from"
+    }
+  }
+}

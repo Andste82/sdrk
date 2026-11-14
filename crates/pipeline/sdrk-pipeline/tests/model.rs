@@ -69,6 +69,7 @@ const FLOWS: [&str; 34] = [
     "ism868_pulses",
     "ism433_sensors",
     "ism868_sensors",
+    "adsb_aircraft",
 ];
 
 #[test]

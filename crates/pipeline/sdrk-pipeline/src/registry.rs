@@ -10,8 +10,8 @@ use serde_json::{Map, Value};
 use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
-    AddKind, AdsbDecodeKind, AfcKind, AgcKind, AmDemodKind, AmModKind, AutoNotchKind,
-    BandPulseDetectKind, BiquadKind, ChannelSelectKind, ChannelizeKind, ConvertKind,
+    AddKind, AdsbDecodeKind, AdsbParseKind, AfcKind, AgcKind, AmDemodKind, AmModKind,
+    AutoNotchKind, BandPulseDetectKind, BiquadKind, ChannelSelectKind, ChannelizeKind, ConvertKind,
     ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind,
     DucKind, EqualizeKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
     FmStereoModKind, FmStereoRdsModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind,
@@ -350,6 +350,7 @@ impl Registry {
         register::<ChannelizeKind>(&mut factories);
         register::<ChannelSelectKind>(&mut factories);
         register::<BandPulseDetectKind>(&mut factories);
+        register::<AdsbParseKind>(&mut factories);
         register::<SensorDecodeKind>(&mut factories);
         register::<SensorEncodeKind>(&mut factories);
         register::<PulseKeyKind>(&mut factories);

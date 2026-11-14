@@ -11,16 +11,16 @@ use std::marker::PhantomData;
 use sdrk::{C32, CQ15, Delay, Q15, Rate, Ratio};
 use sdrk_blocks::design::kaiserord;
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
-    AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
-    AutoNotchRealBlock, BandPulseDetectBlock, BandPulseDetectConfig, BiquadBlock, BiquadConfig,
-    BiquadRealBlock, Block, BlockDescription, BlockSample, ChannelSelectBlock, ChannelSelectConfig,
-    ChannelizeBlock, ChannelizeConfig, ConvertBlock, ConvertConfig, ConvertOutBlock,
-    ConvertOutConfig, ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig,
-    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock,
-    DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig,
-    DelayRealBlock, DesignSpec, DucBlock, DucConfig, EqualizeBlock, EqualizeConfig, FirBlock,
-    FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AdsbParseBlock, AdsbParseConfig,
+    AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig,
+    AutoNotchConfig, AutoNotchRealBlock, BandPulseDetectBlock, BandPulseDetectConfig, BiquadBlock,
+    BiquadConfig, BiquadRealBlock, Block, BlockDescription, BlockSample, ChannelSelectBlock,
+    ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, ConvertBlock, ConvertConfig,
+    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock,
+    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
+    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
+    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, EqualizeBlock, EqualizeConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
     FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
     FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
     FrameRotations, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
@@ -4487,6 +4487,56 @@ impl Kind for BandPulseDetectKind {
             cfg.width,
             st,
         )?)))
+    }
+}
+
+// ------------------------------------------------------------------ adsb_parse
+
+pub(crate) struct AdsbParseKind;
+
+impl Kind for AdsbParseKind {
+    type Cfg = AdsbParseConfig;
+
+    const KIND: &'static str = "adsb_parse";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> AdsbParseConfig {
+        AdsbParseConfig::default()
+    }
+    fn set(cfg: &mut AdsbParseConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &AdsbParseConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch("adsb_parse needs the frames of adsb_decode"));
+        }
+        let block = AdsbParseBlock::<VecStorage>::new(cfg, &mut VecStorage)?;
+        Ok(Figures {
+            // At most one message per frame: the nominal packet rate stays the same.
+            rate_out: rate.scale(block.timing().ratio)?,
+            memory_bytes: AdsbParseBlock::<VecStorage>::storage_bytes(cfg)?,
+            // The parse and the JSON text per frame, counted at the nominal packet rate (D1432).
+            cost: 60.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn build(
+        cfg: &AdsbParseConfig,
+        _input: PortType,
+        _rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(AdsbParseBlock::new(cfg, st)?)))
     }
 }
 

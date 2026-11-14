@@ -2,6 +2,7 @@
 
 pub mod add;
 pub mod adsb_decode;
+pub mod adsb_parse;
 pub mod afc;
 pub mod agc;
 pub mod am_demod;

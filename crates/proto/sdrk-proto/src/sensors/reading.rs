@@ -321,6 +321,20 @@ impl Reading {
     /// # Errors
     /// `fmt::Error` when the writer fails or a value is not finite.
     pub fn to_json<W: fmt::Write>(&self, w: &mut W) -> fmt::Result {
+        self.write_json(w, false)
+    }
+
+    /// The same as [`to_json`](Self::to_json) without the fields `rssi_dB` and `repeats`: the form
+    /// that `sensor_decode` writes when a reading with many values does not fit the 256 bytes of
+    /// a packet (the `Fineoffset-WS80` with every value).
+    ///
+    /// # Errors
+    /// `fmt::Error` when the writer fails or a value is not finite.
+    pub fn to_json_short<W: fmt::Write>(&self, w: &mut W) -> fmt::Result {
+        self.write_json(w, true)
+    }
+
+    fn write_json<W: fmt::Write>(&self, w: &mut W, short: bool) -> fmt::Result {
         w.write_char('{')?;
         if let Some(t) = self.time_s {
             check(t)?;
@@ -363,8 +377,12 @@ impl Reading {
         let rssi = self.rssi_db;
         check(f64::from(rssi))?;
         // adding 0.0 turns -0.0 into 0.0
-        write!(w, ",\"rssi_dB\":{:.1}", rssi + 0.0)?;
-        write!(w, ",\"repeats\":{}", self.repeats)?;
+        if !short {
+            write!(w, ",\"rssi_dB\":{:.1}", rssi + 0.0)?;
+        }
+        if !short {
+            write!(w, ",\"repeats\":{}", self.repeats)?;
+        }
         w.write_char('}')
     }
 }

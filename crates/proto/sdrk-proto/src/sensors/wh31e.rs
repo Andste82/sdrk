@@ -7,8 +7,8 @@
 //! and ends with a CRC-8 and the sum byte. The `WH31E` (type 0x30) and the `WH31B` (0x37) have
 //! seven bytes: the id, a byte with the channel minus one (bits 6 to 4), the low battery flag
 //! (bit 2) and the high two bits of a ten bit temperature (`(raw - 400) / 10` degrees), the low
-//! temperature byte and the humidity. The `WH40` (0x40) has nine bytes: a 20 bit id (the low
-//! nibble of the first byte and two bytes), the battery voltage in 0.1 V in the low five bits
+//! temperature byte and the humidity. The `WH40` (0x40) has nine bytes: a 16 bit id (the two bytes after
+//! the first; the document names 20 bits with the low nibble of the first, `rtl_433` prints 16), the battery voltage in 0.1 V in the low five bits
 //! of a byte (0: not reported), the rain in 0.1 mm as 16 bit and the check bytes; its battery
 //! level is `(v - 9) / 6` limited to 0 to 1. The wake-up carrier that precedes the preamble on
 //! the air is not sent or needed. The types 0x20 (`WN20`) and 0x68 (`WS68`) of the document are
@@ -67,8 +67,8 @@ fn build(b: &[u8], header: &Header) -> Result<Reading, DecodeResult> {
             r.humidity = Some(f32::from(*hum));
             Ok(r)
         }
-        [0x40, i2, i1, i0, fv, r1, r0, _, _] => {
-            let id = u32::from(i2 & 0x0F) << 16 | u32::from(*i1) << 8 | u32::from(*i0);
+        [0x40, _, i1, i0, fv, r1, r0, _, _] => {
+            let id = u32::from(*i1) << 8 | u32::from(*i0);
             let mut r = Reading::new(RAIN_MODEL, id, Mic::Crc, header);
             let v = i32::from(fv & 0x1F);
             if v > 0 {
@@ -100,7 +100,7 @@ fn encode_reading(
     encoder::model(r, models)?;
     if r.model == RAIN_MODEL {
         Carries(RAIN).check_extras(r, &[Extra::BatteryOk, Extra::BatteryV])?;
-        let id = encoder::id(r, 1 << 20)?;
+        let id = encoder::id(r, 1 << 16)?;
         let rain = encoder::scaled_in(
             r.rain_mm.ok_or(EncodeError::MissingField("rain_mm"))?,
             10.0,
@@ -118,7 +118,7 @@ fn encode_reading(
         }
         let mut msg = [
             0x40,
-            (id >> 16) as u8,
+            0,
             (id >> 8) as u8,
             id as u8,
             v as u8,

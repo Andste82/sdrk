@@ -72,7 +72,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         packets before it reads a train. center_hz makes freq_MHz absolute: it is the RF \
         centre of the band, 0 writes the offset from the centre. Pitfall: the decoders of a \
         device without a check byte (nexus) report only what three equal frames confirm. \
-        Pitfall: a reading is not held back to count its repeats, so repeats says how many \
+        Pitfall: a reading whose JSON text does not fit the 256 bytes of a packet (a WS80 with every value) is written without rssi_dB and repeats. Pitfall: a reading is not held back to count its repeats, so repeats says how many \
         equal frames one train held, not how many trains the sender needed. Cost: 50 per \
         pulse train.",
     inputs: &[PortDesc {
@@ -522,7 +522,12 @@ fn reading_packet(r: &Reading, index: u64) -> Option<Packet> {
     } else {
         PacketFlags::CRC_OK
     };
-    r.to_json(&mut json).ok()?;
+    if r.to_json(&mut json).is_err() {
+        // too long for a packet (a reading with every value of a weather station): without
+        // `rssi_dB` and `repeats`
+        json.clear();
+        r.to_json_short(&mut json).ok()?;
+    }
     Packet::new(index, flags, json.as_bytes()).ok()
 }
 

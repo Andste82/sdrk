@@ -1049,9 +1049,10 @@ fn sigma_for(order: u32, sps: usize, n_sym: usize, stream: u64, esn0_db: f64) ->
 #[test]
 fn qam_demod_acquisition_phases_are_independent_of_the_cut_plan() {
     // F5 of the review of I44-9 (D1435): the phases of the acquisition (the first interval, the
-    // checks without lock, the verify window, the sampled intervals and the restart) act at the
-    // same symbols whatever the split into calls. A weak 16-QAM signal below the lock level
-    // (Es/N0 12 dB, three checks without lock: verify, sampled intervals) from the start, and
+    // checks without lock, the verify windows and the restart) act at the same symbols whatever
+    // the split into calls. A weak 16-QAM signal below the lock level (Es/N0 12 dB, three
+    // checks without lock, each followed by a verify window that keeps the estimate) from the
+    // start, and
     // the same signal after a carrier at 0.06 cycles per symbol (its estimate, then the restart
     // by the verify window); whole, in the twenty cut plans (one-sample pieces among them) and
     // after a reset.
@@ -1106,15 +1107,16 @@ fn qam_demod_acquisition_phases_are_independent_of_the_cut_plan() {
 }
 
 #[test]
-fn qam_demod_lock_and_restart_on_the_level_are_independent_of_the_cut_plan() {
-    // N1 of the review of I44-9 and I44-11: the phases that the test above does not reach act
-    // at the same symbols whatever the split into calls. A strong 16-QAM signal for 6000
-    // symbols, then noise: the estimate, lock at the first check (the interval after it takes
-    // no samples), the lock lost in that interval and so a check without lock and without
-    // samples (the verify window, on noise no clear peak), then the 16 samples of noise and the
-    // restart on their mean. And a carrier at 0.06 cycles per symbol, then noise: its estimate,
-    // the first check without lock (in the noise), the verify window and the restart on the
-    // mean. Whole, in the twenty cut plans (one-sample pieces among them) and after a reset.
+fn qam_demod_lock_and_verify_are_independent_of_the_cut_plan() {
+    // N1 of the review of I44-9 and I44-11, with the check by frequency of D1445: the phases
+    // that the test above does not reach act at the same symbols whatever the split into calls.
+    // A strong 16-QAM signal for 6000 symbols, then noise: the estimate, lock at the first
+    // check, the lock lost in the noise and so checks without lock, whose verify windows on
+    // noise show no clear peak and keep the estimate (no restart). And a carrier at 0.06 cycles
+    // per symbol, then noise, then the strong signal: the carrier's estimate, kept over the
+    // noise, and exactly one restart by the first verify window on the signal (a clear carrier
+    // away from the loops), then the signal's estimate and lock. Whole, in the twenty cut plans
+    // (one-sample pieces among them) and after a reset.
     let fs = rate(38_400);
     let mut rng = Pcg32::new(SEED, 92);
     let noise: Vec<C32> = (0..4 * 9000)
@@ -1130,17 +1132,28 @@ fn qam_demod_lock_and_restart_on_the_level_are_independent_of_the_cut_plan() {
         })
         .collect();
     carrier_noise.extend_from_slice(&noise);
-    // the checks at about symbol 768 + 4096 k; `before` some 300 symbols before the one that
-    // restarts (the third for the strong signal, the second for the carrier)
-    for (name, input, lead, before, f_want) in [
+    let lead_carrier = carrier_noise.len();
+    carrier_noise.extend_from_slice(&strong);
+    // (name, input, the samples of the lead, its estimate, restarts, estimate and lock at the end)
+    for (name, input, lead, f_lead, restarts, f_end, locked) in [
         (
             "strong, noise",
             &strong_noise,
             strong.len(),
-            4 * 12_750,
             0.001,
+            0,
+            0.001,
+            false,
         ),
-        ("carrier, noise", &carrier_noise, 4 * 1000, 4 * 8650, 0.06),
+        (
+            "carrier, noise, strong",
+            &carrier_noise,
+            lead_carrier,
+            0.06,
+            1,
+            0.001,
+            true,
+        ),
     ] {
         for taps in [11usize, 0] {
             let cfg = QamDemodConfig {
@@ -1151,29 +1164,25 @@ fn qam_demod_lock_and_restart_on_the_level_are_independent_of_the_cut_plan() {
             };
             let what = format!("{name}, taps {taps}");
             let make = || QamDemodBlock::<VecStorage>::new(&cfg, fs, &mut VecStorage).unwrap();
-            // the path: the estimate (and lock on the strong signal) in the lead, then exactly
-            // one restart
+            // the path: the estimate of the lead (and lock on the strong signal), no restart
             let mut block = make();
             run_block(&mut block, &input[..lead], None);
             let f = block.acquired_frequency().unwrap();
             assert!(
-                (f - f_want).abs() < 1e-4,
+                (f - f_lead).abs() < 1e-4,
                 "{what}: acquired {f} in the lead"
             );
             if lead == strong.len() {
                 assert!(block.locked(), "{what}: lock after the lead");
             }
             assert_eq!(block.restarts(), 0, "{what}: after the lead");
-            // no restart before the check that takes the mean (the verify window kept it)
-            run_block(&mut block, &input[lead..before], None);
-            assert_eq!(block.restarts(), 0, "{what}: before the check on the mean");
             let mut block = make();
             let want = run_block(&mut block, input, None);
             let state = (block.restarts(), block.acquired_frequency(), block.locked());
-            assert_eq!(state.0, 1, "{what}: one restart, on the mean of the noise");
-            assert!(!state.2, "{what}");
+            assert_eq!(state.0, restarts, "{what}: restarts");
+            assert_eq!(state.2, locked, "{what}: lock at the end");
             let f = state.1.unwrap();
-            assert!((f - f_want).abs() < 1e-4, "{what}: acquired {f}");
+            assert!((f - f_end).abs() < 1e-4, "{what}: acquired {f}");
             for plan in twenty_plans(SEED) {
                 let mut block = make();
                 let got = run_block(&mut block, input, Some(plan));
@@ -1199,9 +1208,11 @@ fn qam_demod_lock_and_restart_on_the_level_are_independent_of_the_cut_plan() {
 fn qam_demod_searches_again_when_the_loop_does_not_lock() {
     // R1 of the review of the QAM round (D1421): an estimate taken before the signal (here
     // from a carrier at 0.06 cycles per symbol, whose fourth power is a clear peak, and from
-    // Gaussian noise for 40 windows) is held only while the carrier loop locks; at the checks
-    // every `QAM_ACQUISITION_CHECK` symbols without lock the acquisition searches again and finds
-    // the signal (16-QAM at 4 samples per symbol, offset 0.001 cycles per symbol, the block
+    // Gaussian noise for 40 windows) does not hold the receiver off the signal: after each check
+    // without lock (every `QAM_ACQUISITION_CHECK` symbols) a verify window is taken, the first
+    // on the signal shows it away from the loops (D1445), and the acquisition searches again and
+    // finds the signal; after the noise lead without an estimate the equalizer, adapted to the
+    // noise, starts again at the estimate (D1446) (16-QAM at 4 samples per symbol, offset 0.001 cycles per symbol, the block
     // defaults with `carrier_bw` 0.005).
     assert_eq!(QAM_ACQUISITION_CHECK, 4096);
     let fs = rate(38_400);

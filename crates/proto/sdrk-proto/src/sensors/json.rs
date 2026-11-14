@@ -3,7 +3,7 @@
 
 use core::fmt;
 
-use super::{Mic, Reading, encoder_by_model};
+use super::{Extra, Mic, Reading, encoder_by_model};
 use crate::pulses::{Header, Modulation};
 
 /// Why a text is not a reading.
@@ -380,7 +380,24 @@ impl Parser<'_> {
                     None => None,
                 }
             }
-            Some("battery_ok") => r.battery_ok = self.boolean("battery_ok")?,
+            Some("battery_ok") => {
+                // a boolean, or the level of the Fine Offset family
+                let t = self.scalar("battery_ok")?;
+                match t {
+                    "true" => r.battery_ok = Some(true),
+                    "false" => r.battery_ok = Some(false),
+                    "null" => {}
+                    // a level has a decimal point (an integer is not a level)
+                    _ if t.contains('.') => {
+                        let v: f32 = t.parse().map_err(|_| JsonError::BadValue("battery_ok"))?;
+                        if !v.is_finite() {
+                            return Err(JsonError::BadValue("battery_ok"));
+                        }
+                        r.set_extra(Extra::BatteryOk, v);
+                    }
+                    _ => return Err(JsonError::BadValue("battery_ok")),
+                }
+            }
             Some("temperature_C") => r.temperature_c = self.float("temperature_C")?,
             Some("humidity") => r.humidity = self.float("humidity")?,
             Some("wind_avg_km_h") => r.wind_avg_km_h = self.float("wind_avg_km_h")?,
@@ -388,6 +405,13 @@ impl Parser<'_> {
             Some("wind_dir_deg") => r.wind_dir_deg = self.float("wind_dir_deg")?,
             Some("rain_mm") => r.rain_mm = self.float("rain_mm")?,
             Some("pressure_hPa") => r.pressure_hpa = self.float("pressure_hPa")?,
+            Some(k) if Extra::from_json_name(k).is_some() => {
+                if let Some(e) = Extra::from_json_name(k) {
+                    if let Some(v) = self.float(e.json_name())? {
+                        r.set_extra(e, v);
+                    }
+                }
+            }
             _ => self.skip(0)?,
         }
         Ok(())

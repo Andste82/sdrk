@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use sdrk_device::{BlockMeta, SampleIndex};
 use sdrk_pipeline::{BuildOptions, InputData, Packet, PacketFlags, Pipeline, Registry};
 use sdrk_proto::pulses::{Modulation, Pair};
-use sdrk_proto::sensors::{ENCODERS, MAX_TRAIN_PAIRS, Reading, SensorEncoder, TrainSink};
+use sdrk_proto::sensors::{ENCODERS, Extra, MAX_TRAIN_PAIRS, Reading, SensorEncoder, TrainSink};
 use serde_json::{Value, json};
 
 type Res<T> = Result<T, Box<dyn Error>>;
@@ -70,6 +70,12 @@ impl Rng {
     }
 }
 
+/// `num / den` as the f32 of its three-decimal text (the rule of the decoders).
+fn milli(num: i32, den: i32) -> f32 {
+    let k = (f64::from(num) * 1000.0 / f64::from(den)).round();
+    (k as i32) as f32 / 1000.0
+}
+
 fn reading(enc: &dyn SensorEncoder, model: &'static str, id: u32) -> Reading {
     let mut r = Reading::new(model, id, enc.mic(), &enc.header());
     r.temp_decimals = enc.temp_decimals();
@@ -90,28 +96,28 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
     let tenths = |t: i64| Some(t as f32 / 10.0);
     let mut r = reading(enc, model, 0);
     match model {
-        "wh2" => {
+        "Fineoffset-WH2" => {
             r.id = rng.range(0, 0x7FF) as u32;
             r.temperature_c = tenths(rng.range(-800, 800));
             r.humidity = Some(rng.range(0, 100) as f32);
         }
-        "nexus" => {
+        "Nexus-TH" => {
             r.id = rng.range(0, 255) as u32;
             r.channel = Some(rng.range(1, 4) as u8);
             r.battery_ok = Some(rng.below(2) == 1);
             r.temperature_c = tenths(rng.range(-400, 800));
             r.humidity = Some(rng.range(0, 100) as f32);
         }
-        "oregon_thn132n" | "oregon_thgr122nx" => {
+        "Oregon-THN132N" | "Oregon-THGR122N" => {
             r.id = rng.range(0, 255) as u32;
             r.channel = Some(rng.range(1, 3) as u8);
             r.battery_ok = Some(rng.below(2) == 1);
             r.temperature_c = tenths(rng.range(-700, 700));
-            if model == "oregon_thgr122nx" {
+            if model == "Oregon-THGR122N" {
                 r.humidity = Some(rng.range(0, 99) as f32);
             }
         }
-        "wh1080" => {
+        "Fineoffset-WHx080" => {
             r.id = rng.range(0, 0xFFF) as u32;
             r.temperature_c = tenths(rng.range(-400, 600));
             r.humidity = Some(rng.range(0, 100) as f32);
@@ -120,7 +126,7 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.wind_dir_deg = Some(rng.range(0, 15) as f32 * 22.5);
             r.rain_mm = Some(rng.range(0, 4095) as f32 * 0.3);
         }
-        "lacrosse_tx29" => {
+        "LaCrosse-TX29IT" => {
             r.id = rng.range(0, 255) as u32;
             // the expression of the decoder
             r.temperature_c = Some((rng.range(0, 999) as f32) / 10.0 - 40.0);
@@ -128,6 +134,79 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
                 r.humidity = Some(rng.range(0, 100) as f32);
             }
             r.battery_ok = Some(rng.below(2) == 1);
+        }
+        "Ecowitt-WH53" => {
+            r.id = rng.range(0, 255) as u32;
+            r.channel = Some(rng.range(1, 3) as u8);
+            r.temperature_c = Some((rng.range(0, 1023) as f32 - 400.0) / 10.0);
+        }
+        "Fineoffset-WH55" => {
+            r.id = rng.range(256, 65535) as u32;
+            r.channel = Some(rng.range(1, 4) as u8);
+            r.set_extra(Extra::BatteryOk, rng.range(0, 5) as f32 / 5.0);
+            r.set_extra(Extra::RawValue, rng.range(1, 65535) as f32);
+            r.set_extra(Extra::Sensitivity, rng.range(0, 1) as f32);
+            r.set_extra(Extra::Alarm, rng.range(0, 1) as f32);
+        }
+        "Fineoffset-WH51" => {
+            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            let mv = rng.range(10, 20) * 100;
+            r.set_extra(Extra::BatteryMv, mv as f32);
+            r.set_extra(Extra::BatteryOk, milli(mv as i32 - 700, 900));
+            r.set_extra(Extra::Moisture, rng.range(0, 100) as f32);
+            r.set_extra(Extra::Boost, rng.range(0, 7) as f32);
+            r.set_extra(Extra::AdRaw, rng.range(1, 511) as f32);
+        }
+        "Fineoffset-WN34" | "Fineoffset-WN34D" => {
+            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            let (lo, hi, off) = if model.ends_with('D') {
+                (-550, 1250, 0)
+            } else {
+                (0, 1000, 400)
+            };
+            r.temperature_c = Some((rng.range(lo, hi) - off) as f32 / 10.0);
+            let mv = rng.range(30, 90) * 20;
+            let bars = [1200, 1300, 1380, 1440].iter().filter(|&&t| mv > t).count() as f32;
+            r.set_extra(Extra::BatteryMv, mv as f32);
+            r.set_extra(Extra::BatteryOk, bars / 4.0);
+        }
+        "AmbientWeather-WH31E" | "AmbientWeather-WH31B" => {
+            r.id = rng.range(0, 255) as u32;
+            r.channel = Some(rng.range(1, 8) as u8);
+            r.battery_ok = Some(rng.below(2) == 1);
+            r.temperature_c = Some((rng.range(0, 1023) as f32 - 400.0) / 10.0);
+            r.humidity = Some(rng.range(0, 100) as f32);
+        }
+        "EcoWitt-WH40" => {
+            r.id = rng.range(0x1000, 0xFFFFF) as u32;
+            let v = rng.range(10, 31);
+            r.set_extra(Extra::BatteryV, v as f32 / 10.0);
+            r.set_extra(Extra::BatteryOk, milli((v as i32 - 9).clamp(0, 6), 6));
+            r.rain_mm = Some(rng.range(0, 65535) as f32 / 10.0);
+        }
+        "Fineoffset-WH45" => {
+            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            r.temperature_c = Some((rng.range(0, 2047) as f32 - 400.0) / 10.0);
+            r.humidity = Some(rng.range(0, 100) as f32);
+            let bars = rng.range(0, 6);
+            r.set_extra(Extra::BatteryOk, bars.min(5) as f32 / 5.0);
+            r.set_extra(Extra::ExtPower, f32::from(u8::from(bars == 6)));
+            r.set_extra(Extra::Pm25, rng.range(0, 16383) as f32 / 10.0);
+            r.set_extra(Extra::Pm10, rng.range(0, 16383) as f32 / 10.0);
+            r.set_extra(Extra::Co2, rng.range(0, 65535) as f32);
+        }
+        "Fineoffset-WS80" => {
+            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            let mv = rng.range(70, 150) * 20;
+            r.set_extra(Extra::BatteryMv, mv as f32);
+            r.set_extra(Extra::BatteryOk, milli((mv as i32 - 1400).max(0), 1600));
+            r.temperature_c = Some((rng.range(0, 1022) as f32 - 400.0) / 10.0);
+            r.humidity = Some(rng.range(0, 100) as f32);
+            r.wind_dir_deg = Some(rng.range(0, 359) as f32);
+            r.set_extra(Extra::WindAvgMs, rng.range(0, 510) as f32 / 10.0);
+            r.set_extra(Extra::WindMaxMs, rng.range(0, 510) as f32 / 10.0);
+            r.set_extra(Extra::Uvi, rng.range(0, 254) as f32 / 10.0);
+            r.set_extra(Extra::LightLux, (rng.range(0, 65534) * 10) as f32);
         }
         "Bresser-3CH" => {
             r.id = rng.range(0, 255) as u32;
@@ -277,8 +356,7 @@ fn transmit(enc: &dyn SensorEncoder, readings: &[Reading]) -> Res<(Vec<u8>, Vec<
 /// `pulse_key` -> `fsk_mod` -> `duc` keeps the carrier on between bursts (an idle FSK carrier
 /// at the lower frequency), which no sensor does, so the burst is written here and the
 /// samples between bursts are zero.
-fn synth_fsk(pairs: &[Pair], phase: &mut f64, cu8: &mut Vec<u8>) {
-    let carrier = CARRIER_868 as f64 - CENTER_868 as f64;
+fn synth_fsk(pairs: &[Pair], phase: &mut f64, cu8: &mut Vec<u8>, carrier: f64) {
     let rate = f64::from(RF_RATE);
     let mut edge_us = 0u64;
     let mut done = 0u64;
@@ -341,7 +419,7 @@ fn play(trains: &Path, out: &Path) -> Res<()> {
             pairs.push(Pair { pulse, gap });
         }
         if fsk {
-            synth_fsk(&pairs, &mut phase, &mut cu8);
+            synth_fsk(&pairs, &mut phase, &mut cu8, carrier_offset(868));
         } else {
             synth_ook(&pairs, &mut phase, &mut cu8);
         }
@@ -352,6 +430,26 @@ fn play(trains: &Path, out: &Path) -> Res<()> {
     }
     std::fs::write(out, &cu8)?;
     Ok(())
+}
+
+/// The band of a device: the LaCrosse sensors are 868 MHz devices, the Fine Offset and Ecowitt
+/// FSK devices and every OOK device are at 433 MHz in these files (the fact document names more
+/// bands for some devices; the decoders do not depend on the carrier).
+fn band_of(enc: &dyn SensorEncoder) -> u32 {
+    if enc.name().starts_with("lacrosse") {
+        868
+    } else {
+        433
+    }
+}
+
+/// The carrier of the FSK files of a band relative to the centre of the file.
+fn carrier_offset(band: u32) -> f64 {
+    if band == 868 {
+        CARRIER_868 as f64 - CENTER_868 as f64
+    } else {
+        80_000.0
+    }
 }
 
 /// The FSK variant of `transmit`: silence, then every burst synthesised, then silence.
@@ -369,7 +467,7 @@ fn transmit_fsk(enc: &dyn SensorEncoder, readings: &[Reading]) -> Res<(Vec<u8>, 
         let mut sink = TrainSink::new(&mut storage);
         enc.encode(r, enc.default_repeats(), &mut sink)
             .map_err(|e| format!("{}: {e}", r.model))?;
-        synth_fsk(sink.pairs(), &mut phase, &mut cu8);
+        synth_fsk(sink.pairs(), &mut phase, &mut cu8, carrier_offset(band_of(enc)));
         silence(SILENCE_S, &mut cu8);
     }
     silence(0.05, &mut cu8);
@@ -435,8 +533,8 @@ fn generate(dir: &Path, count: usize, seed: u64, noise: f64, only: Option<&str>)
             "modulation": if fsk { "fsk" } else { "ook" },
             "file": file,
             "rate_hz": RF_RATE,
-            "center_hz": if fsk { CENTER_868 } else { CENTER_433 },
-            "carrier_hz": if fsk { CARRIER_868 } else { CENTER_433 + 80_000 },
+            "center_hz": if band_of(*enc) == 868 { CENTER_868 } else { CENTER_433 },
+            "carrier_hz": if band_of(*enc) == 868 { CARRIER_868 } else { CENTER_433 + 80_000 },
             "seed": seed,
             "noise_lsb": noise,
             "repeats": enc.default_repeats(),

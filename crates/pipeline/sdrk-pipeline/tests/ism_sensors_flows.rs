@@ -82,8 +82,8 @@ fn sent(r: &Reading) -> Sent {
     let (pairs, repeats, repeat_gap_us) = encoded(r);
     let copy = first_copy(&pairs);
     let (coding, bits) = match r.model {
-        "wh2" | "wh1080" => {
-            let (short_us, long_us) = if r.model == "wh2" {
+        "Fineoffset-WH2" | "Fineoffset-WHx080" => {
+            let (short_us, long_us) = if r.model == "Fineoffset-WH2" {
                 (500.0, 1500.0)
             } else {
                 (544.0, 1524.0)
@@ -98,7 +98,7 @@ fn sent(r: &Reading) -> Sent {
                 copy.iter().map(|p| p.pulse < mid).collect(),
             )
         }
-        "nexus" => (
+        "Nexus-TH" => (
             Coding::Ppm {
                 pulse_us: 500.0,
                 short_gap_us: 1000.0,
@@ -110,7 +110,7 @@ fn sent(r: &Reading) -> Sent {
                 .map(|p| p.gap > 1500)
                 .collect(),
         ),
-        "oregon_thn132n" | "oregon_thgr122nx" => {
+        "Oregon-THN132N" | "Oregon-THGR122N" => {
             // the half bits as levels (the first pulse of the train is not at the start of a
             // bit: one unit of silence in front), a bit is the level of its first half
             let mut levels = vec![false];
@@ -128,8 +128,8 @@ fn sent(r: &Reading) -> Sent {
                 levels.chunks(2).map(|c| c[0]).collect(),
             )
         }
-        "lacrosse_tx29" | "lacrosse_tx35" => {
-            let bit_us = if r.model == "lacrosse_tx29" {
+        "LaCrosse-TX29IT" | "LaCrosse-TX35DTHIT" => {
+            let bit_us = if r.model == "LaCrosse-TX29IT" {
                 58.0
             } else {
                 105.0
@@ -147,7 +147,7 @@ fn sent(r: &Reading) -> Sent {
                     ));
                 }
             }
-            let deviation_hz = if r.model == "lacrosse_tx29" {
+            let deviation_hz = if r.model == "LaCrosse-TX29IT" {
                 35e3
             } else {
                 25e3
@@ -342,7 +342,7 @@ fn rounds(items: &[(Reading, f64)], per_round: usize, stream: u64, level_db: f64
 fn the_433_flow_reports_the_devices_of_the_band_once_each() {
     let items = vec![
         (
-            reading("nexus", 0x5C, |r| {
+            reading("Nexus-TH", 0x5C, |r| {
                 r.channel = Some(2);
                 r.battery_ok = Some(true);
                 r.temperature_c = Some(27.1);
@@ -351,14 +351,14 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             -500e3,
         ),
         (
-            reading("wh2", 0x4A, |r| {
+            reading("Fineoffset-WH2", 0x4A, |r| {
                 r.temperature_c = Some(21.3);
                 r.humidity = Some(55.0);
             }),
             -250e3,
         ),
         (
-            reading("wh1080", 0xA5, |r| {
+            reading("Fineoffset-WHx080", 0xA5, |r| {
                 r.temperature_c = Some(18.7);
                 r.humidity = Some(62.0);
                 r.battery_ok = Some(true);
@@ -370,7 +370,7 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             0.0,
         ),
         (
-            reading("oregon_thn132n", 0xAB, |r| {
+            reading("Oregon-THN132N", 0xAB, |r| {
                 r.channel = Some(1);
                 r.battery_ok = Some(true);
                 r.temperature_c = Some(21.6);
@@ -378,7 +378,7 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             250e3,
         ),
         (
-            reading("oregon_thgr122nx", 0x58, |r| {
+            reading("Oregon-THGR122N", 0x58, |r| {
                 r.channel = Some(2);
                 r.battery_ok = Some(false);
                 r.temperature_c = Some(-3.5);
@@ -387,7 +387,7 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             500e3,
         ),
         (
-            reading("nexus", 0x21, |r| {
+            reading("Nexus-TH", 0x21, |r| {
                 r.channel = Some(1);
                 r.battery_ok = Some(false);
                 r.temperature_c = Some(-3.4);
@@ -396,14 +396,14 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             -400e3,
         ),
         (
-            reading("wh2", 0x07, |r| {
+            reading("Fineoffset-WH2", 0x07, |r| {
                 r.temperature_c = Some(-4.5);
                 r.humidity = Some(91.0);
             }),
             -150e3,
         ),
         (
-            reading("wh1080", 0x19, |r| {
+            reading("Fineoffset-WHx080", 0x19, |r| {
                 r.temperature_c = Some(30.2);
                 r.humidity = Some(40.0);
                 r.battery_ok = Some(false);
@@ -415,7 +415,7 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             100e3,
         ),
         (
-            reading("oregon_thn132n", 0x3C, |r| {
+            reading("Oregon-THN132N", 0x3C, |r| {
                 r.channel = Some(2);
                 r.battery_ok = Some(true);
                 r.temperature_c = Some(-12.0);
@@ -423,7 +423,7 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
             350e3,
         ),
         (
-            reading("oregon_thgr122nx", 0xE1, |r| {
+            reading("Oregon-THGR122N", 0xE1, |r| {
                 r.channel = Some(1);
                 r.battery_ok = Some(true);
                 r.temperature_c = Some(24.9);
@@ -438,14 +438,14 @@ fn the_433_flow_reports_the_devices_of_the_band_once_each() {
 #[test]
 fn the_868_flow_reports_the_lacrosse_sensors_once_each() {
     let tx29 = |id: u32, t: f32, h: Option<f32>, ok: bool| {
-        reading("lacrosse_tx29", id, |r| {
+        reading("LaCrosse-TX29IT", id, |r| {
             r.temperature_c = Some(t);
             r.humidity = h;
             r.battery_ok = Some(ok);
         })
     };
     let tx35 = |id: u32, t: f32, h: Option<f32>, ok: bool| {
-        reading("lacrosse_tx35", id, |r| {
+        reading("LaCrosse-TX35DTHIT", id, |r| {
             r.temperature_c = Some(t);
             r.humidity = h;
             r.battery_ok = Some(ok);

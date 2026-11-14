@@ -40,7 +40,7 @@ use serde_json::{Value, json};
 const SEED_CHUNKS: u64 = 774;
 
 const NEXUS: &str =
-    r#"{"model":"nexus","id":92,"channel":2,"battery_ok":true,"temperature_C":-3.5,"humidity":71}"#;
+    r#"{"model":"Nexus-TH","id":92,"channel":2,"battery_ok":true,"temperature_C":-3.5,"humidity":71}"#;
 const BRESSER: &str = r#"{"model":"Bresser-3CH","id":66,"channel":1,"battery_ok":true,"temperature_C":22.56,"humidity":66}"#;
 
 thread_local! {
@@ -433,7 +433,7 @@ fn fsk_flow() -> Value {
 }
 
 const TX35: &str =
-    r#"{"model":"lacrosse_tx35","id":17,"battery_ok":true,"temperature_C":-3.7,"humidity":81}"#;
+    r#"{"model":"LaCrosse-TX35DTHIT","id":17,"battery_ok":true,"temperature_C":-3.7,"humidity":81}"#;
 
 #[test]
 fn the_fsk_chain_validates_and_gates_the_burst_exactly() {

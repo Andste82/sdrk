@@ -202,7 +202,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 760–769 | M56 (`fwht`) |
 | 770–774 | M46 extension: the sensor encoders (D1127) |
 | 775–779 | M46 extension: the fact document (D1143; 775 `lacrosse_tx35`, 776 and 777 the corrected protocols, 778 the chunk plans of `pulse_key` in the FSK mode D1146, 779 the flow tests D1145) |
-| 780–999 | free, for backlog milestones |
+| 780–789 | M46 extension: the Ecowitt and Fine Offset devices (D1150 to D1160; 780 round trip, 781 flipped bits and truncated trains, 782 rejected readings) |
+| 790–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

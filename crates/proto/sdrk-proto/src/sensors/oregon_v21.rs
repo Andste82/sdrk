@@ -104,8 +104,8 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
         id |= u32::from(nibble(i)?) << (4 * (3 - i));
     }
     let (n, model, has_humidity, bits) = match id {
-        0xEC40 => (14, "oregon_thn132n", false, EC40_BITS),
-        0x1D20 => (17, "oregon_thgr122nx", true, THGR_BITS),
+        0xEC40 => (14, "Oregon-THN132N", false, EC40_BITS),
+        0x1D20 => (17, "Oregon-THGR122N", true, THGR_BITS),
         _ => return Err(DecodeResult::NoMatch),
     };
     // the data bits after the sync nibble: a pair of raw bits each (a trailing half bit that
@@ -245,7 +245,7 @@ impl SensorEncoder for OregonV21 {
     }
 
     fn models(&self) -> &'static [&'static str] {
-        &["oregon_thn132n", "oregon_thgr122nx"]
+        &["Oregon-THN132N", "Oregon-THGR122N"]
     }
 
     fn modulation(&self) -> Modulation {
@@ -278,7 +278,7 @@ impl SensorEncoder for OregonV21 {
         out: &mut TrainSink<'_>,
     ) -> Result<(), EncodeError> {
         encoder::model(r, self.models())?;
-        let thgr = r.model == "oregon_thgr122nx";
+        let thgr = r.model == "Oregon-THGR122N";
         Carries(CHANNEL | BATTERY | (if thgr { HUMIDITY } else { 0 })).check(r)?;
         let rolling = encoder::id(r, 256)?;
         let ch = encoder::channel(r, 3)?;

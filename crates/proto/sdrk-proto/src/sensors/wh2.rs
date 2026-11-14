@@ -77,7 +77,7 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
     }
     let t = mag as f32 / 10.0;
     let id = (u32::from(b0 & 0x0F) << 4) | u32::from(b1 >> 4);
-    let mut r = Reading::new("wh2", id, Mic::Crc, header);
+    let mut r = Reading::new("Fineoffset-WH2", id, Mic::Crc, header);
     r.temperature_c = Some(if raw & 0x800 != 0 { -t } else { t });
     if b3 != NO_HUMIDITY {
         r.humidity = Some(f32::from(b3));
@@ -94,7 +94,7 @@ impl SensorEncoder for Wh2 {
     }
 
     fn models(&self) -> &'static [&'static str] {
-        &["wh2"]
+        &["Fineoffset-WH2"]
     }
 
     fn modulation(&self) -> Modulation {

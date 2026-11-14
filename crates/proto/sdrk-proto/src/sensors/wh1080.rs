@@ -102,7 +102,7 @@ fn decode_row(row: &Row, header: &Header) -> Result<Reading, DecodeResult> {
     }
     let id = (u32::from(b[1] & 0x0F) << 4) | u32::from(b[2] >> 4);
     let rain = (u32::from(b[7] & 0x0F) << 8) | u32::from(b[8]);
-    let mut r = Reading::new("wh1080", id, Mic::Crc, header);
+    let mut r = Reading::new("Fineoffset-WHx080", id, Mic::Crc, header);
     r.temperature_c = Some((temp_raw as f32 - 400.0) / 10.0);
     r.humidity = Some(f32::from(b[4]));
     r.wind_avg_km_h = Some(f32::from(b[5]) * KMH_PER_COUNT);
@@ -126,7 +126,7 @@ impl SensorEncoder for Wh1080 {
     }
 
     fn models(&self) -> &'static [&'static str] {
-        &["wh1080"]
+        &["Fineoffset-WHx080"]
     }
 
     fn modulation(&self) -> Modulation {

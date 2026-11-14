@@ -39,6 +39,8 @@
 //! ```
 
 mod bresser_3ch;
+mod ecowitt;
+mod fineoffset;
 mod encoder;
 mod json;
 mod lacrosse_tx29;
@@ -49,17 +51,30 @@ mod reading;
 mod util;
 mod wh1080;
 mod wh2;
+mod wh31e;
+mod wh45;
+mod wh51;
+mod wh55;
+mod wn34;
+mod ws80;
 
 pub use bresser_3ch::Bresser3ch;
+pub use ecowitt::Ecowitt;
 pub use encoder::{EncodeError, MAX_TRAIN_PAIRS, SensorEncoder, TRAIN_RATE_HZ, TrainSink};
 pub use json::JsonError;
 pub use lacrosse_tx29::LacrosseTx29;
 pub use lacrosse_tx35::LacrosseTx35;
 pub use nexus::Nexus;
 pub use oregon_v21::OregonV21;
-pub use reading::{JsonBuf, Mic, Reading};
+pub use reading::{EXTRA_COUNT, Extra, JsonBuf, Mic, Reading};
 pub use wh2::Wh2;
+pub use wh31e::Wh31e;
+pub use wh45::Wh45;
+pub use wh51::Wh51;
+pub use wh55::Wh55;
 pub use wh1080::Wh1080;
+pub use wn34::Wn34;
+pub use ws80::Ws80;
 
 use crate::pulses::{Modulation, PulseTrain};
 
@@ -202,6 +217,13 @@ pub static DECODERS: &[&dyn SensorDecoder] = &[
     &LacrosseTx29,
     &Bresser3ch,
     &LacrosseTx35,
+    &Ecowitt,
+    &Wh55,
+    &Wh51,
+    &Wn34,
+    &Wh31e,
+    &Wh45,
+    &Ws80,
 ];
 
 /// The decoder of that name.
@@ -219,6 +241,13 @@ pub static ENCODERS: &[&dyn SensorEncoder] = &[
     &LacrosseTx29,
     &Bresser3ch,
     &LacrosseTx35,
+    &Ecowitt,
+    &Wh55,
+    &Wh51,
+    &Wn34,
+    &Wh31e,
+    &Wh45,
+    &Ws80,
 ];
 
 /// The encoder of that name (the name of its decoder).

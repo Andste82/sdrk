@@ -157,14 +157,14 @@ fn chain_flow(rate: u64) -> Value {
 /// same on every run). Several models share a decoder (`oregon_v21`).
 fn encoded_trains(name: &str) -> Vec<Vec<Pair>> {
     let models: &[&str] = match name {
-        "oregon_v21" => &["oregon_thn132n", "oregon_thgr122nx"],
+        "oregon_v21" => &["Oregon-THN132N", "Oregon-THGR122N"],
         "bresser_3ch" => &["Bresser-3CH"],
         n => &[match n {
-            "wh2" => "wh2",
-            "nexus" => "nexus",
-            "wh1080" => "wh1080",
-            "lacrosse_tx29" => "lacrosse_tx29",
-            "lacrosse_tx35" => "lacrosse_tx35",
+            "wh2" => "Fineoffset-WH2",
+            "nexus" => "Nexus-TH",
+            "wh1080" => "Fineoffset-WHx080",
+            "lacrosse_tx29" => "LaCrosse-TX29IT",
+            "lacrosse_tx35" => "LaCrosse-TX35DTHIT",
             other => panic!("unknown case {other}"),
         }],
     };
@@ -202,25 +202,25 @@ fn random_reading_json(rng: &mut Pcg32, model: &str) -> String {
     let ch = 1 + rng.below(3);
     let low = rng.below(2) == 0;
     match model {
-        "wh2" => {
-            format!(r#"{{"model":"wh2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#)
+        "Fineoffset-WH2" => {
+            format!(r#"{{"model":"Fineoffset-WH2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#)
         }
-        "nexus" => format!(
-            r#"{{"model":"nexus","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+        "Nexus-TH" => format!(
+            r#"{{"model":"Nexus-TH","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
         ),
-        "oregon_thn132n" => format!(
-            r#"{{"model":"oregon_thn132n","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1}}}"#
+        "Oregon-THN132N" => format!(
+            r#"{{"model":"Oregon-THN132N","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1}}}"#
         ),
-        "oregon_thgr122nx" => format!(
-            r#"{{"model":"oregon_thgr122nx","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+        "Oregon-THGR122N" => format!(
+            r#"{{"model":"Oregon-THGR122N","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
         ),
-        "wh1080" => format!(
-            r#"{{"model":"wh1080","id":{id},"temperature_C":{temp:.1},"humidity":{hum},"battery_ok":{low},"wind_avg_km_h":{:.1},"wind_max_km_h":{:.1},"wind_dir_deg":90,"rain_mm":{:.1}}}"#,
+        "Fineoffset-WHx080" => format!(
+            r#"{{"model":"Fineoffset-WHx080","id":{id},"temperature_C":{temp:.1},"humidity":{hum},"battery_ok":{low},"wind_avg_km_h":{:.1},"wind_max_km_h":{:.1},"wind_dir_deg":90,"rain_mm":{:.1}}}"#,
             f64::from(rng.below(100)) * 1.224,
             f64::from(rng.below(100)) * 1.224,
             f64::from(rng.below(1000)) * 0.3
         ),
-        "lacrosse_tx29" | "lacrosse_tx35" => format!(
+        "LaCrosse-TX29IT" | "LaCrosse-TX35DTHIT" => format!(
             r#"{{"model":"{model}","id":{id},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
         ),
         "Bresser-3CH" => format!(
@@ -580,7 +580,7 @@ fn the_chain_gives_the_readings_of_the_blocks_wired_by_hand() {
     let want = block_output(&want_trains);
     assert!(!want.is_empty(), "the Nexus transmissions are decoded");
     let text = String::from_utf8(want[0].data().to_vec()).unwrap();
-    assert!(text.contains("\"model\":\"nexus\""), "{text}");
+    assert!(text.contains("\"model\":\"Nexus-TH\""), "{text}");
     assert!(text.contains("\"temperature_C\":27.1"), "{text}");
     assert!(text.contains("\"humidity\":56"), "{text}");
     for size in [4000, 777] {

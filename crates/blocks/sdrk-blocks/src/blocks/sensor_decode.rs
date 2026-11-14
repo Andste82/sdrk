@@ -35,7 +35,7 @@ pub const SENSOR_CROSS_CHANNEL_S: f64 = 0.5;
 
 /// The bit mask of all built-in decoders: bit `i` selects the decoder `i` of
 /// [`sdrk_proto::sensors::DECODERS`].
-pub const SENSOR_ALL_DECODERS: i64 = 0b111_1111;
+pub const SENSOR_ALL_DECODERS: i64 = 0b11_1111_1111_1111;
 
 const TRAIN_BYTES: usize = HEADER_BYTES + SENSOR_TRAIN_PAIRS * PAIR_BYTES;
 const CROSS_US: u64 = 500_000;
@@ -50,9 +50,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     details: "Reads the pulse train packets of band_pulse_detect (a train longer than one packet \
         arrives as several packets with the continued flag and is joined first; up to 1200 pairs, \
         the rest is dropped) and offers every train to the enabled device decoders of the \
-        matching modulation: wh2, nexus, oregon_v21, wh1080 and bresser_3ch at 433 MHz (on-off \
-        keying; one burst of bresser_3ch is about 1100 pairs) and lacrosse_tx29 and lacrosse_tx35 at 868 MHz \
-        (FSK). A decoder checks its sync pattern, the length and the \
+        matching modulation: wh2, nexus, oregon_v21, wh1080, bresser_3ch and ecowitt at 433 MHz \
+        (on-off keying; one burst of bresser_3ch is about 1100 pairs), lacrosse_tx29 and \
+        lacrosse_tx35 at 868 MHz (FSK) and the Fine Offset and Ecowitt FSK devices wh55, wh51, \
+        wn34, wh31e (WH31E, WH31B, WH40), wh45 and ws80 (433 MHz, FSK). The model strings of the \
+        readings are the ones rtl_433 prints (for example Fineoffset-WH2, Nexus-TH, \
+        LaCrosse-TX29IT, Ecowitt-WH53). A decoder checks its sync pattern, the length and the \
         checksum or CRC (a device without one needs three equal frames in the train) and the \
         range of every value; a train that fails is dropped. Every reading becomes one packet \
         whose payload is one JSON object (fields time, model, id, channel, battery_ok, the \
@@ -93,11 +96,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 max: SENSOR_ALL_DECODERS,
                 default: Some(SENSOR_ALL_DECODERS),
             },
-            typical: "127 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35",
+            typical: "16383 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35, 7 ecowitt, 8 wh55, 9 wh51, 10 wn34, 11 wh31e, 12 wh45, 13 ws80",
             mutability: Mutability::Build,
             description: "The enabled decoders as a bit mask in the order of \
                 sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 \
-                lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35.",
+                lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35, 7 ecowitt, 8 wh55, 9 wh51, 10 wn34, \
+                11 wh31e, 12 wh45, 13 ws80.",
         },
         ParamDesc {
             name: "merge_s",
@@ -143,7 +147,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 /// use sdrk_blocks::{SensorDecodeConfig, ParamValue};
 /// let mut cfg = SensorDecodeConfig::default();
-/// assert_eq!((cfg.decoders, cfg.merge_s, cfg.emit_unknown), (127, 2.0, false));
+/// assert_eq!((cfg.decoders, cfg.merge_s, cfg.emit_unknown), (16383, 2.0, false));
 /// cfg.set("decoders", ParamValue::I64(SensorDecodeConfig::mask_of(&["nexus", "wh2"])?))?;
 /// assert_eq!(cfg.decoders, 3);
 /// assert!(cfg.set("decoders", ParamValue::I64(0)).is_err());
@@ -166,7 +170,7 @@ pub struct SensorDecodeConfig {
 impl Default for SensorDecodeConfig {
     fn default() -> Self {
         Self {
-            decoders: 0b111_1111,
+            decoders: SENSOR_ALL_DECODERS as u32,
             merge_s: 2.0,
             emit_unknown: false,
             center_hz: 0,

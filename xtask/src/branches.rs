@@ -141,7 +141,7 @@ pub fn cost(cycles: f64, mispredictions: f64, penalty: f64) -> f64 {
 }
 
 /// Whether the x86-64 build of `level` runs under Valgrind on this host: Valgrind 3.26 has no
-/// AVX-512, so `avx512` cannot be branch-simulated (open item I44-15); `neon` takes no branch
+/// AVX-512, so `avx512` cannot be branch-simulated (open item I44-16); `neon` takes no branch
 /// simulation (D1438).
 #[must_use]
 pub fn simulated_level(level: &str) -> bool {

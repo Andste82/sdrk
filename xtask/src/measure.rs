@@ -781,7 +781,7 @@ fn measure_branches(root: &Path, o: &Options, entries: &[String], cycles: Option
                     "neon" => {
                         "no branch simulation (D1438: no penalty if the AArch64 assembly is branch-free on the data path, else the rate of `sse2`)"
                     }
-                    "avx512" => "no branch simulation (Valgrind runs no AVX-512; open item I44-15)",
+                    "avx512" => "no branch simulation (Valgrind runs no AVX-512; open item I44-16)",
                     _ => "no branch simulation (D1438: instructions only)",
                 };
                 let _ = writeln!(part.table, "\nbranches, {platform} {level}: {why}");

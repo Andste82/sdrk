@@ -115,6 +115,16 @@ CET markers, in both modes (D64): code built with `-fcf-protection` (the default
 
 Limits of `whole-loop`: a path is simulated as if every iteration took it (branch alternation, mispredictions and the switch between paths are not modelled); the shares assume independent branches (correlated branches can move weight between paths with the same blocks); a loop body that calls a function is cut at the call (the callee is simulated apart); edges between objects or between code clusters more than 4 KiB apart are not followed; the code before and after a loop is simulated as in the per-block mode (each run of blocks as a loop of its own), not as one path per call. `SDRK_MCA_DEBUG=1` prints every simulated unit (mode, addresses, the loop header, path number, share and blocks, instructions, executions, cycles and port bound per iteration), `SDRK_MCA_DEBUG=2` also its instructions. Every unit is simulated as if it repeated back to back with itself. That is the steady state of a loop body; for a block that runs once per call it is an approximation, which is small when loop bodies cover most of the instructions.
 
+### Branches (D1438)
+
+`llvm-mca` does not model branch prediction: every branch is taken as predicted. For a data-dependent branch on the hot path the cost of a form is `cycles + mispredictions × penalty` (D1438), with the mispredictions per sample from `valgrind --tool=cachegrind --branch-sim=yes` on the entry's benchmark workload and a fixed penalty per core model (table below, to be confirmed with the sources). `neon` takes no penalty when its assembly is branch-free on the data path, otherwise the rate measured at `sse2`; `simd128` prefers the branch-free form within 10 % of instructions. The lower cost decides, a tie (within 2 %) goes to the branch-free form. Tables of such entries show the mispredictions per sample next to the cycles, for ours and for the reference.
+
+| Core model | Misprediction penalty (cycles) |
+| --- | --- |
+| skylake, alderlake, sapphirerapids | to be confirmed (about 17 to 20) |
+| znver2, znver3, znver4 | to be confirmed (about 17 to 20) |
+| cortex-a72, cortex-a76 | to be confirmed (about 15) |
+
 ### Efficiency: a measure without a reference
 
 `llvm-mca` also gives the port bound of a block (its `Block RThroughput`): the cycles per iteration that the pressure on the execution ports alone would allow, without dependencies. The efficiency of a branch is

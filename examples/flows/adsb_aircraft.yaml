@@ -1,0 +1,47 @@
+# SDRk pipeline: the ADS-B messages of aircraft at 1090 MHz as JSON text: the flow adsb_receiver
+# followed by the block adsb_parse (YAML twin of adsb_aircraft.json). YAML is accepted as input;
+# JSON stays the canonical format.
+#
+# adsb_decode outputs the extended squitters (DF 17 and 18) whose CRC-24 is correct. adsb_parse
+# reads their 56-bit message field: the identification (flight and category), the airborne
+# position (barometric altitude, latitude and longitude), and the airborne velocity (ground
+# speed and track, vertical rate). A position is sent as two alternating frames (even and odd);
+# the block keeps the last of each for the 64 most recently seen aircraft and decodes them
+# together (global CPR decoding) when they are at most max_age_s apart, so the first frame of an
+# aircraft has an altitude only and the next one latitude and longitude. A receiver position
+# (ref_lat, ref_lon; build parameters, 0 and 0 is off) also gives lat and lon for a single frame
+# of an aircraft within 180 NM. Surface positions, status and the other type codes give no packet.
+sdrk: 1
+name: adsb-aircraft
+description: "Decode the ADS-B messages of aircraft at 1090 MHz from a 2 MS/s unsigned 8-bit baseband (RTL-SDR): identification, position and velocity as one JSON text packet per message."
+# f32 pipeline (adsb_decode has no Q15 variant); at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  # Unsigned 8-bit IQ at exactly 2 MS/s, tuned to 1090 MHz.
+  rf:
+    format: cu8
+    rate_hz: 2000000
+    description: "IQ at exactly 2 MS/s tuned to 1090 MHz"
+nodes:
+  dec:
+    kind: adsb_decode
+  # The message parser: max_age_s is the longest time between the even and the odd frame of a
+  # position pair. Add `ref_lat: 52.2` and `ref_lon: 3.9` (the receiver position) to decode
+  # single frames too.
+  msg:
+    kind: adsb_parse
+    params:
+      max_age_s: 10
+edges:
+  - { from: rf, to: dec }
+  - { from: dec, to: msg }
+  - { from: msg, to: messages }
+outputs:
+  # One JSON object per message, a line of JSON Lines when a tool writes the payloads one per
+  # line; the index is the input sample index of the preamble of the frame.
+  messages:
+    type: packets
+    queue: 256
+    description: "One packet per decoded message: the JSON text (time, hex, icao, df, tc, flight, category, alt_baro, lat, lon, gs, track, baro_rate or geom_rate), indexed like the frame it came from"

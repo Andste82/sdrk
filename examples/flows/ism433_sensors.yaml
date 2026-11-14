@@ -12,7 +12,7 @@
 # HackRF variant: the same flow with `format: cs8` (signed 8-bit IQ) at the same rate.
 sdrk: 1
 name: ism433-sensors
-description: "Decode the sensor readings of every short-range weather and temperature sensor of the 433 MHz ISM band at once (wh2, nexus, oregon_v21, wh1080, bresser_3ch, ecowitt and the FSK devices wh55, wh51, wn34, wh31e, wh45, ws80): the chain of ism433_pulses followed by sensor_decode, one JSON text packet per reading."
+description: "Decode the sensor readings of every short-range weather and temperature sensor of the 433 MHz ISM band at once (wh2, nexus, oregon_v21, wh1080, bresser_3ch, ecowitt and the FSK devices wh55, wh51, wn34, wh31e, wh45, ws80, ws90, ws85): the chain of ism433_pulses followed by sensor_decode, one JSON text packet per reading."
 # f32 pipeline; at most 4096 samples per push.
 settings:
   precision: f32

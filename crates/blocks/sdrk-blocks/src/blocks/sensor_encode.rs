@@ -41,7 +41,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         LaCrosse-TX29IT, lacrosse_tx35 LaCrosse-TX35DTHIT, bresser_3ch Bresser-3CH, ecowitt \
         Ecowitt-WH53, wh55 Fineoffset-WH55, wh51 Fineoffset-WH51, wn34 Fineoffset-WN34 and \
         Fineoffset-WN34D, wh31e AmbientWeather-WH31E, AmbientWeather-WH31B and EcoWitt-WH40, \
-        wh45 Fineoffset-WH45, ws80 Fineoffset-WS80) and writes the pulse train of \
+        wh45 Fineoffset-WH45, ws80 Fineoffset-WS80, ws90 Fineoffset-WS90, ws85 Fineoffset-WS85) and writes the pulse train of \
         the device with the timings of its decoder: one packet per 30 pairs, the first ones \
         with the continued flag, all carrying the index of the reading packet, at the sample \
         rate 1 MHz (one sample per microsecond, so that every nominal timing is an integer). \
@@ -58,7 +58,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         written whole or not at all. Feed the output to port b of pulse_key to key a \
         transmitter. The encoders inherit what the decoders assume (wh1080 band and pulse gap, \
         the repeat gaps); a nexus frame that passes the check of the Rubicson protocol is \
-        refused. Pitfall: lacrosse_tx29, lacrosse_tx35, wh55, wh51, wn34, wh31e, wh45 and ws80 \
+        refused. Pitfall: lacrosse_tx29, lacrosse_tx35, wh55, wh51, wn34, wh31e, wh45, ws80, ws90 and ws85 \
         are FSK trains (header Fsk) and need pulse_key in mode fsk, then fsk_mod and a gate; \
         the others are on-off trains for pulse_key in mode ook; wh1080 is not confirmed on \
         air. Pitfall: a \

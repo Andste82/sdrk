@@ -35,7 +35,7 @@ pub const SENSOR_CROSS_CHANNEL_S: f64 = 0.5;
 
 /// The bit mask of all built-in decoders: bit `i` selects the decoder `i` of
 /// [`sdrk_proto::sensors::DECODERS`].
-pub const SENSOR_ALL_DECODERS: i64 = 0b11_1111_1111_1111;
+pub const SENSOR_ALL_DECODERS: i64 = 0b1111_1111_1111_1111;
 
 const TRAIN_BYTES: usize = HEADER_BYTES + SENSOR_TRAIN_PAIRS * PAIR_BYTES;
 const CROSS_US: u64 = 500_000;
@@ -53,7 +53,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         matching modulation: wh2, nexus, oregon_v21, wh1080, bresser_3ch and ecowitt at 433 MHz \
         (on-off keying; one burst of bresser_3ch is about 1100 pairs), lacrosse_tx29 and \
         lacrosse_tx35 at 868 MHz (FSK) and the Fine Offset and Ecowitt FSK devices wh55, wh51, \
-        wn34, wh31e (WH31E, WH31B, WH40), wh45 and ws80 (433 MHz, FSK). The model strings of the \
+        wn34, wh31e (WH31E, WH31B, WH40), wh45, ws80, ws90 and ws85 (433 MHz, FSK). The model strings of the \
         readings are the ones rtl_433 prints (for example Fineoffset-WH2, Nexus-TH, \
         LaCrosse-TX29IT, Ecowitt-WH53). A decoder checks its sync pattern, the length and the \
         checksum or CRC (a device without one needs three equal frames in the train) and the \
@@ -72,7 +72,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         packets before it reads a train. center_hz makes freq_MHz absolute: it is the RF \
         centre of the band, 0 writes the offset from the centre. Pitfall: the decoders of a \
         device without a check byte (nexus) report only what three equal frames confirm. \
-        Pitfall: a reading whose JSON text does not fit the 256 bytes of a packet (a WS80 with every value) is written without rssi_dB and repeats. Pitfall: a reading is not held back to count its repeats, so repeats says how many \
+        Pitfall: a reading whose JSON text does not fit the 256 bytes of a packet (a WS80 with every value) is written without rssi_dB and repeats, and when that is still too long (a WS90 with every value) also without freq_MHz and mic, and for a WS90 with every value also without firmware and supercap_V. Pitfall: a reading is not held back to count its repeats, so repeats says how many \
         equal frames one train held, not how many trains the sender needed. Cost: 50 per \
         pulse train.",
     inputs: &[PortDesc {
@@ -96,12 +96,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 max: SENSOR_ALL_DECODERS,
                 default: Some(SENSOR_ALL_DECODERS),
             },
-            typical: "16383 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35, 7 ecowitt, 8 wh55, 9 wh51, 10 wn34, 11 wh31e, 12 wh45, 13 ws80",
+            typical: "65535 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35, 7 ecowitt, 8 wh55, 9 wh51, 10 wn34, 11 wh31e, 12 wh45, 13 ws80, 14 ws90, 15 ws85",
             mutability: Mutability::Build,
             description: "The enabled decoders as a bit mask in the order of \
                 sdrk_proto::sensors::DECODERS: bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 \
                 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35, 7 ecowitt, 8 wh55, 9 wh51, 10 wn34, \
-                11 wh31e, 12 wh45, 13 ws80.",
+                11 wh31e, 12 wh45, 13 ws80, 14 ws90, 15 ws85.",
         },
         ParamDesc {
             name: "merge_s",
@@ -147,7 +147,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 /// use sdrk_blocks::{SensorDecodeConfig, ParamValue};
 /// let mut cfg = SensorDecodeConfig::default();
-/// assert_eq!((cfg.decoders, cfg.merge_s, cfg.emit_unknown), (16383, 2.0, false));
+/// assert_eq!((cfg.decoders, cfg.merge_s, cfg.emit_unknown), (65535, 2.0, false));
 /// cfg.set("decoders", ParamValue::I64(SensorDecodeConfig::mask_of(&["nexus", "wh2"])?))?;
 /// assert_eq!(cfg.decoders, 3);
 /// assert!(cfg.set("decoders", ParamValue::I64(0)).is_err());
@@ -526,7 +526,15 @@ fn reading_packet(r: &Reading, index: u64) -> Option<Packet> {
         // too long for a packet (a reading with every value of a weather station): without
         // `rssi_dB` and `repeats`
         json.clear();
-        r.to_json_short(&mut json).ok()?;
+        if r.to_json_short(&mut json).is_err() {
+            // and without `freq_MHz` and `mic` (a WS85 with every value), and last without
+            // `firmware` and `supercap_V` (a WS90 with every value)
+            json.clear();
+            if r.to_json_compact(&mut json).is_err() {
+                json.clear();
+                r.to_json_min(&mut json).ok()?;
+            }
+        }
     }
     Packet::new(index, flags, json.as_bytes()).ok()
 }

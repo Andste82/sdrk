@@ -85,8 +85,17 @@ fn decode(r: &Reading, pairs: &[Pair]) -> (DecodeResult, Vec<Reading>) {
     let mut buf = vec![0u8; 16 + 8 * joined.len()];
     let n = pulses::encode_joined(&enc.header(), &joined, &mut buf).unwrap();
     let train = pulses::decode(&buf[..n]).unwrap();
+    run_decoder(dec, &train)
+}
+
+/// Runs a decoder on a train (a frame of its own: the sink is large).
+#[inline(never)]
+fn run_decoder(
+    dec: &dyn sensors::SensorDecoder,
+    train: &pulses::PulseTrain<'_>,
+) -> (DecodeResult, Vec<Reading>) {
     let mut sink = ReadingSink::new();
-    let res = dec.decode(&train, &mut sink);
+    let res = dec.decode(train, &mut sink);
     (res, sink.iter().copied().collect())
 }
 

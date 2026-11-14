@@ -12,11 +12,11 @@ A message is a **32-byte header** followed by the payload.
 | 6 | 2 | flags (`BlockFlags` bits) |
 | 8 | 2 | stream id |
 | 10 | 1 | payload type: 0 raw (format in hello), 1 c32, 2 cq15, 3 f32, 4 q15, 5 UTF-8 JSON |
-| 11 | 1 | reserved = 0 |
+| 11 | 1 | reserved = 0 (sdrk-remote: stream epoch, see below) |
 | 12 | 8 | start index (samples: first sample; frame: `first_sample`) |
 | 20 | 4 | count (elements) |
 | 24 | 4 | payload length in bytes |
-| 28 | 4 | frames: `averaged`; otherwise reserved = 0 |
+| 28 | 4 | frames: `averaged`; otherwise reserved = 0 (sdrk-remote: sequence number, see below) |
 
 `BlockFlags` bits: `GAP_BEFORE` 0x01, `OVERFLOW` 0x02, `UNDERRUN` 0x04, `BURST_START` 0x08, `BURST_END` 0x10, `LATE` 0x20, `RETUNED` 0x40; unknown bits are dropped on decode.
 
@@ -49,6 +49,8 @@ A message is a **32-byte header** followed by the payload.
 | `param_applied` | `node` (index), `param` (index in the description), `value` (`{"type":"f64"\|"i64"\|"bool"\|"choice"\|"format","value":..}`), `late` |
 | `events_lost` | `count` |
 
+An event of a kind this version does not know decodes as `WireEventKind::Other` (its fields are dropped); `Message::to_wire_event` returns it, `Message::to_event` and `WireEvent::into_event` refuse it with a `Wire` error because it has no pipeline event. A receiver that must accept a newer sender reads events with `to_wire_event` and skips `Other`.
+
 **Param set (5).** A timed parameter change, JSON: `{"node":"tune","name":"frequency_hz","value":610000.0,"at":{"type":"input_index","input":"rf","index":100}}`. `at` is `{"type":"immediate"}`, `{"type":"input_index","input":..,"index":..}` or `{"type":"unix_ns","ns":..}`.
 
 **Param ack (6).** `{"node":"tune","name":"frequency_hz","index":100,"late":false}`; the header `start` repeats `index`.
@@ -72,6 +74,15 @@ pub enum Decoded { Message(Message, usize), NeedMore(usize), Skipped(usize) }
 - `decode` reads the message at the start of the buffer. `NeedMore(n)` says that at least `n` more bytes are needed (the whole message once the header is complete); an empty buffer needs the 32 bytes of a header.
 - A wrong magic (also a partial one), a version other than 1, a payload above 64 MiB, an unknown payload type of a known message type, or a payload length that does not fit the element count is a `Wire` error (kind `Parse`).
 - **Forward compatibility.** A message of an unknown type is skipped (`Skipped(n)`); `decode_stream` skips them and returns the messages and the number of bytes it consumed. The bytes of an incomplete last message are not consumed, so the caller keeps them and appends the next piece. A later version may add message types, flags and payload types for new messages without breaking a receiver of version 1; a change of the header or of the meaning of existing fields is a new version number.
+
+## Use by sdrk-remote
+
+The network protocol of [sdrk-remote](https://github.com/Andste82/sdrk-remote) (`docs/protocol.md`, section 13) sends its binary frames in this format, version 1, with additions this version allows or ignores. They are recorded here so that sdrk does not give these codes and fields another meaning:
+
+- Header byte 11: the low 8 bits of the stream epoch (0 if unused). Bytes 28 to 31 of every message type except frame (2): a sequence number per stream and direction (0 if unused). The decoder of this module ignores both, so a sdrk-remote frame decodes here and a message of this module decodes in sdrk-remote.
+- Message types 7 credit, 8 tx_status, 9 packets (reserved), 10 attach and 11 samples_zstd, and payload type 6 (a fixed binary layout defined by the message type, used only by types 7 to 10). This module skips these message types.
+- The hello carries the keys above first and further keys after them (`epoch`, `dir`, `channel`, `sample_format`, ...), which `Hello` ignores.
+- The event kind `paused` (`reason`), which decodes as `WireEventKind::Other`.
 
 ## Streams and events across a cut
 

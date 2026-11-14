@@ -427,6 +427,12 @@ fn events_round_trip_through_the_mirror_types() {
     );
     broken.payload = b"{\"index\":0,\"kind\":{\"type\":\"nope\"}}".to_vec();
     assert!(matches!(broken.to_event(output), Err(Error::Wire(_))));
+    // An unknown kind decodes as `Other` on the wire level and has no pipeline event.
+    assert_eq!(broken.to_wire_event().unwrap().kind, WireEventKind::Other);
+    broken.payload = br#"{"index":8192,"kind":{"type":"paused","reason":"tx"}}"#.to_vec();
+    let paused = broken.to_wire_event().unwrap();
+    assert_eq!((paused.index, paused.kind), (8192, WireEventKind::Other));
+    assert!(matches!(broken.to_event(output), Err(Error::Wire(_))));
     let anchor = WireEvent {
         index: 0,
         kind: WireEventKind::Anchor {

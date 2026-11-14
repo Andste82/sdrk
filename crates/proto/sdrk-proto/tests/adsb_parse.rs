@@ -241,16 +241,44 @@ fn rejected_and_undecoded_frames() {
         f[bit / 8] ^= 0x80 >> (bit % 8);
         assert!(adsb::parse(&f).is_none(), "bit {bit}");
     }
-    // Other formats with a valid parity, DF 18 with control field 0 and 6 and not 1.
+    // Other formats with a valid parity.
     assert!(adsb::parse(&frame(0x80, 1, 0)).is_none());
-    assert!(adsb::parse(&frame(0x90, 1, 4u64 << 51)).is_some());
-    assert!(adsb::parse(&frame(0x91, 1, 4u64 << 51)).is_none());
-    assert!(adsb::parse(&frame(0x96, 1, 4u64 << 51)).is_some());
-    // Surface position and status: valid, not decoded.
-    for tc in [0u64, 5, 8, 23, 28, 31] {
-        let m = adsb::parse(&frame(0x8D, 1, tc << 51)).unwrap();
-        assert_eq!(m.body, Body::NotDecoded(tc as u8));
+    for cf in [2u8, 3, 4, 7] {
+        assert!(
+            adsb::parse(&frame(0x90 | cf, 1, 4u64 << 51)).is_none(),
+            "cf {cf}"
+        );
     }
+    // DF 18: the control fields 1 and 5 carry a non-ICAO address, 0 and 6 an ICAO address.
+    for (cf, non_icao) in [(0u8, false), (1, true), (5, true), (6, false)] {
+        let m = adsb::parse(&frame(0x90 | cf, 0x123456, 4u64 << 51)).unwrap();
+        assert_eq!(
+            (m.df, m.non_icao, m.icao),
+            (18, non_icao, 0x123456),
+            "cf {cf}"
+        );
+    }
+    assert!(!adsb::parse(&frame(0x8D, 1, 4u64 << 51)).unwrap().non_icao);
+    // Type codes and subtypes that are not decoded keep their type code.
+    for me in [
+        23u64 << 51,
+        24 << 51,
+        27 << 51,
+        30 << 51,
+        (28 << 51) | (2 << 48),
+        (29 << 51) | (2 << 49),
+        (31 << 51) | (2 << 48),
+    ] {
+        let m = adsb::parse(&frame(0x8D, 1, me)).unwrap();
+        assert_eq!(m.body, Body::NotDecoded((me >> 51) as u8), "{me:x}");
+    }
+    // Type code 0: the altitude field without a position.
+    let m = adsb::parse(&frame(0x8D, 1, 0xC38u64 << 36)).unwrap();
+    assert_eq!(m.body, Body::AltitudeOnly(Some(38000)));
+    assert_eq!(
+        adsb::parse(&frame(0x8D, 1, 0)).unwrap().body,
+        Body::AltitudeOnly(None)
+    );
 }
 
 #[test]
@@ -397,4 +425,288 @@ fn cpr_over_a_grid_of_positions() {
     }
     // Only the pairs that straddle a zone border (different NL) are refused.
     assert!(global_none * 20 < total, "{global_none} of {total}");
+}
+
+const SURF_EVEN: &str = "8C4841753AAB238733C8CD4020B1";
+const SURF_ODD: &str = "8C4841753A8A35323FAEBDAC702D";
+const SURF_LOCAL: &str = "8C4841753A9A153237AEF0F275BE";
+
+#[test]
+fn surface_position_of_the_book() {
+    let m = adsb::parse(&hex(SURF_LOCAL)).unwrap();
+    let Body::Surface(s) = m.body else { panic!() };
+    // The book: MOV 41 = 17 kt, S = 1, TRK 33 = 92.8125 deg, F = 1.
+    assert_eq!(s.speed_kt, Some(17.0));
+    assert_eq!(s.track_deg, Some(92.8125));
+    assert!(s.odd);
+    let (lat, lon) = adsb::cpr_surface_local(s.cpr_lat, s.cpr_lon, s.odd, 51.99, 4.375).unwrap();
+    assert!(
+        // The hand calculation of the book for the single odd frame: 52.320561, 4.735735.
+        (lat - 52.320561).abs() < 1e-5 && (lon - 4.735735).abs() < 1e-5,
+        "{lat} {lon}"
+    );
+
+    let (Body::Surface(e), Body::Surface(o)) = (
+        adsb::parse(&hex(SURF_EVEN)).unwrap().body,
+        adsb::parse(&hex(SURF_ODD)).unwrap().body,
+    ) else {
+        panic!()
+    };
+    assert_eq!((e.cpr_lat, e.cpr_lon, e.odd), (115609, 116941, false));
+    assert_eq!((o.cpr_lat, o.cpr_lon, o.odd), (39199, 110269, true));
+    // The book: reference 51.990, 4.375 gives 52.320607, 4.734735 (the odd frame is the latest).
+    let (lat, lon) = adsb::cpr_surface_global(
+        (e.cpr_lat, e.cpr_lon),
+        (o.cpr_lat, o.cpr_lon),
+        true,
+        51.99,
+        4.375,
+    )
+    .unwrap();
+    assert!(
+        (lat - 52.320607).abs() < 1e-5 && (lon - 4.734735).abs() < 1e-5,
+        "{lat} {lon}"
+    );
+    // Another quadrant of the reference selects the other solution: the longitude repeats every
+    // 90 degrees and the latitude has a southern twin 90 degrees away.
+    let (lat2, lon2) = adsb::cpr_surface_global(
+        (e.cpr_lat, e.cpr_lon),
+        (o.cpr_lat, o.cpr_lon),
+        true,
+        -38.0,
+        94.4,
+    )
+    .unwrap();
+    assert!((lat2 - (lat - 90.0)).abs() < 1e-9, "{lat2}");
+    assert!(dlon(lon2, 94.4).abs() < 45.0, "{lon2}");
+}
+
+#[test]
+fn surface_movement_and_track_fields() {
+    let speed = |mov: u64, status: u64, trk: u64| {
+        let me = (5u64 << 51) | (mov << 44) | (status << 43) | (trk << 36);
+        let Body::Surface(s) = adsb::parse(&frame(0x8D, 1, me)).unwrap().body else {
+            panic!()
+        };
+        (s.speed_kt, s.track_deg)
+    };
+    // The ends of every range of the table of the book.
+    for (mov, kt) in [
+        (1, 0.0),
+        (2, 0.125),
+        (8, 0.875),
+        (9, 1.0),
+        (12, 1.75),
+        (13, 2.0),
+        (38, 14.5),
+        (39, 15.0),
+        (93, 69.0),
+        (94, 70.0),
+        (108, 98.0),
+        (109, 100.0),
+        (123, 170.0),
+        (124, 175.0),
+    ] {
+        assert_eq!(speed(mov, 0, 0).0, Some(kt), "mov {mov}");
+    }
+    for mov in [0, 125, 127] {
+        assert_eq!(speed(mov, 0, 0).0, None);
+    }
+    assert_eq!(speed(10, 0, 64).1, None);
+    assert_eq!(speed(10, 1, 64).1, Some(180.0));
+    assert_eq!(speed(10, 1, 127).1, Some(127.0 * 2.8125));
+}
+
+/// The CPR coordinates of the surface coding (zone of 90 degrees).
+fn surface_encode(lat: f64, lon: f64, odd: bool) -> (u32, u32) {
+    let scale = 131_072.0;
+    let i = if odd { 1.0 } else { 0.0 };
+    let dlat = 90.0 / (60.0 - i);
+    let m = |x: f64, y: f64| x - y * (x / y).floor();
+    let yz = (scale * m(lat, dlat) / dlat + 0.5).floor();
+    let rlat = dlat * (yz / scale + (lat / dlat).floor());
+    let dlon = 90.0 / (f64::from(adsb::nl(rlat)) - i).max(1.0);
+    let xz = (scale * m(lon, dlon) / dlon + 0.5).floor();
+    (yz as u32 & 0x1FFFF, xz as u32 & 0x1FFFF)
+}
+
+#[test]
+fn surface_cpr_over_a_grid_of_positions() {
+    let mut lats = vec![
+        0.0, 1e-4, -1e-4, 86.9, 87.0, 87.0001, -86.9, -87.0, -87.0001, 89.5,
+    ];
+    for b in [10.47047130, 25.82924707, 52.0, 86.5] {
+        lats.extend([b - 1e-3, b, b + 1e-3, -b, -b - 1e-3]);
+    }
+    let mut a = -85.0;
+    while a <= 85.0 {
+        lats.push(a);
+        a += 2.9;
+    }
+    let lons = [
+        -179.9, -90.2, -45.0, -1e-3, 0.0, 1e-3, 4.7, 89.99, 90.01, 133.3, 179.9,
+    ];
+    let (mut none, mut total) = (0, 0);
+    for &lat in &lats {
+        for &lon in &lons {
+            let (e, o) = (
+                surface_encode(lat, lon, false),
+                surface_encode(lat, lon, true),
+            );
+            for odd_latest in [false, true] {
+                total += 1;
+                let ni = (f64::from(adsb::nl(lat)) - f64::from(u8::from(odd_latest))).max(1.0);
+                let (tol_lat, tol_lon) =
+                    (90.0 / 59.0 / 131_072.0 * 1.01, 90.0 / ni / 131_072.0 * 1.01);
+                // A reference 0.1 degrees away, within 45 NM.
+                let (rlat, rlon) = (lat + 0.1, lon - 0.1);
+                match adsb::cpr_surface_global(e, o, odd_latest, rlat, rlon) {
+                    Some((la, lo)) => {
+                        assert!((la - lat).abs() < tol_lat, "{lat} {lon}: {la}");
+                        assert!(dlon(lo, lon).abs() <= tol_lon + 1e-9, "{lat} {lon}: {lo}");
+                    }
+                    None => none += 1,
+                }
+                let f = if odd_latest { o } else { e };
+                let (la, lo) = adsb::cpr_surface_local(f.0, f.1, odd_latest, rlat, rlon).unwrap();
+                assert!((la - lat).abs() < tol_lat, "local {lat} {lon}: {la}");
+                assert!(
+                    dlon(lo, lon).abs() <= tol_lon + 1e-9,
+                    "local {lat} {lon}: {lo}"
+                );
+            }
+        }
+    }
+    assert!(none * 10 < total, "{none} of {total}");
+}
+
+/// The 13 Mode A identity bits of a squawk written as four octal digits (C1 A1 C2 A2 C4 A4 X B1
+/// D1 B2 D2 B4 D4, the order of the identity field).
+fn mode_a_bits(squawk: u16) -> u64 {
+    let (a, b, c, d) = (
+        squawk / 1000,
+        squawk / 100 % 10,
+        squawk / 10 % 10,
+        squawk % 10,
+    );
+    let bit = |v: u16, k: u16| u64::from(v >> k & 1);
+    bit(c, 0) << 12
+        | bit(a, 0) << 11
+        | bit(c, 1) << 10
+        | bit(a, 1) << 9
+        | bit(c, 2) << 8
+        | bit(a, 2) << 7
+        | bit(b, 0) << 5
+        | bit(d, 0) << 4
+        | bit(b, 1) << 3
+        | bit(d, 1) << 2
+        | bit(b, 2) << 1
+        | bit(d, 2)
+}
+
+#[test]
+fn aircraft_status_emergency_and_squawk() {
+    for (state, squawk, name) in [
+        (0u64, 1200u16, "none"),
+        (1, 7700, "general"),
+        (4, 7600, "nordo"),
+        (5, 7500, "unlawful"),
+        (2, 0o0, "medical"),
+        (7, 7777, "reserved"),
+    ] {
+        let squawk_dec = squawk;
+        let me = (28u64 << 51) | (1 << 48) | (state << 45) | (mode_a_bits(squawk_dec) << 32);
+        let Body::Status(s) = adsb::parse(&frame(0x8D, 1, me)).unwrap().body else {
+            panic!()
+        };
+        assert_eq!(
+            (s.emergency, s.squawk, s.emergency_name()),
+            (state as u8, squawk, name)
+        );
+    }
+}
+
+#[test]
+fn target_state_fields() {
+    // Selected altitude 35008 ft from the FMS, raw baro code 267, heading 90 and 270 degrees,
+    // NACp 9, NICbaro 1, SIL 3, autopilot, LNAV and TCAS (ME bit n is bit 56 - n of the word).
+    let word = |alt: u64, qnh: u64, hs: u64, hsign: u64, hdg: u64, modes: u64| {
+        (29u64 << 51)
+            | (1 << 49)
+            | (1 << 47) // selected altitude from the FMS
+            | (alt << 36)
+            | (qnh << 27)
+            | (hs << 26)
+            | (hsign << 25)
+            | (hdg << 17)
+            | (9 << 13) // NACp
+            | (1 << 12) // NICbaro
+            | (3 << 10) // SIL
+            | modes
+    };
+    // modes: ME bits 47 (valid) 48 autopilot, 49 VNAV, 50 alt hold, 52 approach, 53 TCAS, 54 LNAV
+    let modes = (1 << 9) | (1 << 8) | (1 << 3) | (1 << 2);
+    let me = word(35008 / 32 + 1, 267, 1, 0, 128, modes);
+    let Body::Target(t) = adsb::parse(&frame(0x8D, 1, me)).unwrap().body else {
+        panic!("{me:x}")
+    };
+    assert!(t.altitude_fms);
+    assert_eq!(t.selected_altitude, Some(35008));
+    assert_eq!(t.baro_setting, Some(f64::from(267 - 1) * 0.8 + 800.0));
+    assert_eq!(t.selected_heading, Some(90.0));
+    assert_eq!((t.nac_p, t.nic_baro, t.sil), (9, true, 3));
+    let m = t.modes.unwrap();
+    assert!(m.autopilot && m.lnav && m.tcas && !m.vnav && !m.alt_hold && !m.approach);
+    // A heading with the sign bit, absent values and invalid modes.
+    let me = word(0, 0, 1, 1, 128, 0);
+    let Body::Target(t) = adsb::parse(&frame(0x8D, 1, me)).unwrap().body else {
+        panic!()
+    };
+    assert_eq!(t.selected_heading, Some(270.0));
+    assert_eq!(
+        (t.selected_altitude, t.baro_setting, t.modes),
+        (None, None, None)
+    );
+    let me = word(1, 1, 0, 0, 200, 0);
+    let Body::Target(t) = adsb::parse(&frame(0x8D, 1, me)).unwrap().body else {
+        panic!()
+    };
+    assert_eq!(
+        (t.selected_altitude, t.baro_setting, t.selected_heading),
+        (Some(0), Some(800.0), None)
+    );
+}
+
+#[test]
+fn operational_status_fields() {
+    // Version 2, NACp 10, SIL 3, GVA 2, NICa 1, HRD 1, SILs 1; capability and mode are raw bits.
+    let me = |st: u64| {
+        (31u64 << 51)
+            | (st << 48)
+            | (0xA5C3 << 32)
+            | (0x1234 << 16)
+            | (2 << 13)
+            | (1 << 12)
+            | (10 << 8)
+            | (2 << 6)
+            | (3 << 4)
+            | (1 << 3)
+            | (1 << 2)
+            | (1 << 1)
+    };
+    let Body::Operational(o) = adsb::parse(&frame(0x8D, 1, me(0))).unwrap().body else {
+        panic!()
+    };
+    assert!(o.airborne);
+    assert_eq!((o.capability, o.mode, o.version), (0xA5C3, 0x1234, 2));
+    assert_eq!(
+        (o.nic_supplement, o.nac_p, o.gva, o.sil),
+        (true, 10, Some(2), 3)
+    );
+    assert!(o.baro_or_track_bit && o.hrd && o.sil_supplement);
+    let Body::Operational(o) = adsb::parse(&frame(0x8D, 1, me(1))).unwrap().body else {
+        panic!()
+    };
+    assert!(!o.airborne);
+    assert_eq!(o.gva, None);
 }

@@ -31,13 +31,13 @@
 //!
 //! let header = Header { modulation: Modulation::Ook, channel: 0, freq_offset_hz: 0,
 //!     level_db10: 0, noise_db10: 0, rate_hz: 1_000_000 };
-//! let mut r = Reading::new("nexus", 0x5C, Mic::Repeat, &header);
+//! let mut r = Reading::new("Nexus-TH", 0x5C, Mic::Repeat, &header);
 //! r.channel = Some(2);
 //! r.battery_ok = Some(true);
 //! r.temperature_c = Some(-3.5);
 //! r.humidity = Some(71.0);
 //!
-//! let enc = sensors::encoder_by_model("nexus").ok_or("no encoder")?;
+//! let enc = sensors::encoder_by_model("Nexus-TH").ok_or("no encoder")?;
 //! let mut storage = [pulses::Pair::default(); sensors::MAX_TRAIN_PAIRS];
 //! let mut sink = TrainSink::new(&mut storage);
 //! enc.encode(&r, 3, &mut sink)?; // three frames in one train
@@ -58,7 +58,7 @@
 
 use core::fmt;
 
-use super::{Mic, Reading};
+use super::{Extra, Mic, Reading};
 use crate::pulses::{Header, Modulation, Pair};
 
 /// The sample rate of the pulse trains of the encoders: 1 MHz, one sample per microsecond.
@@ -296,8 +296,18 @@ pub(crate) const RAIN: u8 = 16;
 pub(crate) struct Carries(pub u8);
 
 impl Carries {
-    /// Checks that `r` has no field outside the set.
+    /// Checks that `r` has no field outside the set (and no extra value).
     pub(crate) fn check(self, r: &Reading) -> Result<(), EncodeError> {
+        self.check_extras(r, &[])
+    }
+
+    /// Checks that `r` has no field outside the set and no extra value outside `extras`.
+    pub(crate) fn check_extras(self, r: &Reading, extras: &[Extra]) -> Result<(), EncodeError> {
+        for e in Extra::ALL {
+            if r.extra(e).is_some() && !extras.contains(&e) {
+                return Err(EncodeError::UnsupportedField(e.json_name()));
+            }
+        }
         let bad = |bit: u8, set: bool, name: &'static str| {
             if set && self.0 & bit == 0 {
                 Err(EncodeError::UnsupportedField(name))
@@ -353,6 +363,20 @@ pub(crate) fn temperature(r: &Reading, scale: f32, lo: i32, hi: i32) -> Result<i
         .temperature_c
         .ok_or(EncodeError::MissingField("temperature_C"))?;
     scaled_in(t, scale, lo, hi, "temperature_C")
+}
+
+/// The required extra value `e` in units of `1 / scale` within `lo..=hi`.
+pub(crate) fn extra(
+    r: &Reading,
+    e: Extra,
+    scale: f32,
+    lo: i32,
+    hi: i32,
+) -> Result<i32, EncodeError> {
+    let v = r
+        .extra(e)
+        .ok_or(EncodeError::MissingField(e.json_name()))?;
+    scaled_in(v, scale, lo, hi, e.json_name())
 }
 
 /// The required humidity, a whole percent within 0 to 100.

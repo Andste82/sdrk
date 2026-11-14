@@ -32,7 +32,7 @@ impl SensorDecoder for LacrosseTx35 {
     }
 
     fn decode(&self, train: &PulseTrain<'_>, out: &mut ReadingSink) -> DecodeResult {
-        decode_frames(train, out, "lacrosse_tx35", &[105.0], RESET_US)
+        decode_frames(train, out, "LaCrosse-TX35DTHIT", &[105.0], RESET_US)
     }
 }
 
@@ -42,7 +42,7 @@ impl SensorEncoder for LacrosseTx35 {
     }
 
     fn models(&self) -> &'static [&'static str] {
-        &["lacrosse_tx35"]
+        &["LaCrosse-TX35DTHIT"]
     }
 
     fn modulation(&self) -> Modulation {

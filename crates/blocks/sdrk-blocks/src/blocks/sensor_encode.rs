@@ -32,16 +32,22 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         devices.",
     details: "Reads one JSON object per packet, the form that sensor_decode writes (fields \
         model, id, channel, battery_ok and the values of the device such as temperature_C, \
-        humidity, wind_avg_km_h, wind_max_km_h, wind_dir_deg, rain_mm; time, freq_MHz, rssi_dB, \
+        humidity, wind_avg_km_h, wind_max_km_h, wind_dir_deg, rain_mm and, for the Fine Offset and \
+        Ecowitt devices, the extra values named as rtl_433 names them (battery_mV, moisture, \
+        pm2_5_ug_m3, co2_ppm, wind_avg_m_s, light_lux and more); time, freq_MHz, rssi_dB, \
         mic and repeats are read and ignored), maps the model to the encoder of the device \
-        (wh2, nexus, oregon_v21 with its models Oregon-THN132N and Oregon-THGR122NX, wh1080, \
-        lacrosse_tx29, lacrosse_tx35, bresser_3ch with the model Bresser-3CH) and writes the pulse train of \
+        (the model strings are the ones rtl_433 prints: wh2 Fineoffset-WH2, nexus Nexus-TH, \
+        oregon_v21 Oregon-THN132N and Oregon-THGR122N, wh1080 Fineoffset-WHx080, lacrosse_tx29 \
+        LaCrosse-TX29IT, lacrosse_tx35 LaCrosse-TX35DTHIT, bresser_3ch Bresser-3CH, ecowitt \
+        Ecowitt-WH53, wh55 Fineoffset-WH55, wh51 Fineoffset-WH51, wn34 Fineoffset-WN34 and \
+        Fineoffset-WN34D, wh31e AmbientWeather-WH31E, AmbientWeather-WH31B and EcoWitt-WH40, \
+        wh45 Fineoffset-WH45, ws80 Fineoffset-WS80) and writes the pulse train of \
         the device with the timings of its decoder: one packet per 30 pairs, the first ones \
         with the continued flag, all carrying the index of the reading packet, at the sample \
         rate 1 MHz (one sample per microsecond, so that every nominal timing is an integer). \
         One train holds all repeats of the message with the repeat gap of the device between \
         them and ends with a gap of 0; the repeats default to the figure of the device (wh2 3, \
-        nexus 4, oregon_v21 2, wh1080 2, lacrosse_tx29 2, lacrosse_tx35 2, bresser_3ch 22) when repeats is 0. \
+        nexus 4, oregon_v21 2, wh1080 2, lacrosse_tx29 2, lacrosse_tx35 2, bresser_3ch 22, ecowitt 3, the others 2) when repeats is 0. \
         A train has at most 1200 pairs (the capacity of sensor_decode), so a device takes at \
         most 27 repeats (bresser_3ch) and more is counted in too_long. A value is rounded to \
         the resolution of the device; a value outside its range, a field the device does not \
@@ -52,8 +58,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         written whole or not at all. Feed the output to port b of pulse_key to key a \
         transmitter. The encoders inherit what the decoders assume (wh1080 band and pulse gap, \
         the repeat gaps); a nexus frame that passes the check of the Rubicson protocol is \
-        refused. Pitfall: lacrosse_tx29 and lacrosse_tx35 are \
-        FSK trains (header Fsk) and need pulse_key in mode fsk, then fsk_mod and a gate; \
+        refused. Pitfall: lacrosse_tx29, lacrosse_tx35, wh55, wh51, wn34, wh31e, wh45 and ws80 \
+        are FSK trains (header Fsk) and need pulse_key in mode fsk, then fsk_mod and a gate; \
         the others are on-off trains for pulse_key in mode ook; wh1080 is not confirmed on \
         air. Pitfall: a \
         bresser_3ch message is about 1100 pairs, so a reading is about 37 packets. Cost: 200 \

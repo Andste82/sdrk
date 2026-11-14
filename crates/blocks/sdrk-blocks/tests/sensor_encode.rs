@@ -31,12 +31,12 @@ const SEED_CHUNKS: u64 = 774;
 
 /// One reading per model of the registry, as the JSON text of `sensor_decode`.
 const READINGS: [&str; 7] = [
-    r#"{"model":"wh2","id":93,"temperature_C":-3.5,"humidity":71}"#,
-    r#"{"model":"nexus","id":92,"channel":2,"battery_ok":true,"temperature_C":-3.5,"humidity":71}"#,
-    r#"{"model":"oregon_thn132n","id":123,"channel":1,"battery_ok":true,"temperature_C":21.3}"#,
-    r#"{"model":"oregon_thgr122nx","id":45,"channel":2,"battery_ok":false,"temperature_C":-7.4,"humidity":55}"#,
-    r#"{"model":"wh1080","id":123,"battery_ok":true,"temperature_C":18.5,"humidity":40,"wind_avg_km_h":12.2,"wind_max_km_h":24.5,"wind_dir_deg":90.0,"rain_mm":15.0}"#,
-    r#"{"model":"lacrosse_tx29","id":45,"battery_ok":true,"temperature_C":12.3,"humidity":48}"#,
+    r#"{"model":"Fineoffset-WH2","id":93,"temperature_C":-3.5,"humidity":71}"#,
+    r#"{"model":"Nexus-TH","id":92,"channel":2,"battery_ok":true,"temperature_C":-3.5,"humidity":71}"#,
+    r#"{"model":"Oregon-THN132N","id":123,"channel":1,"battery_ok":true,"temperature_C":21.3}"#,
+    r#"{"model":"Oregon-THGR122N","id":45,"channel":2,"battery_ok":false,"temperature_C":-7.4,"humidity":55}"#,
+    r#"{"model":"Fineoffset-WHx080","id":123,"battery_ok":true,"temperature_C":18.5,"humidity":40,"wind_avg_km_h":12.2,"wind_max_km_h":24.5,"wind_dir_deg":90.0,"rain_mm":15.0}"#,
+    r#"{"model":"LaCrosse-TX29IT","id":45,"battery_ok":true,"temperature_C":12.3,"humidity":48}"#,
     r#"{"model":"Bresser-3CH","id":66,"channel":1,"battery_ok":true,"temperature_C":22.56,"humidity":66}"#,
 ];
 
@@ -159,13 +159,13 @@ fn what_cannot_be_sent_is_counted_and_consumed() {
         text_packet(1, r#"{"model":"nobody","id":1}"#),
         text_packet(
             2,
-            r#"{"model":"wh2","id":1,"temperature_C":99.0,"humidity":10}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"temperature_C":99.0,"humidity":10}"#,
         ),
         text_packet(
             3,
-            r#"{"model":"wh2","id":1,"temperature_C":1.0,"humidity":10,"rain_mm":1}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"temperature_C":1.0,"humidity":10,"rain_mm":1}"#,
         ),
-        text_packet(4, r#"{"model":"wh2","id":1,"humidity":10}"#),
+        text_packet(4, r#"{"model":"Fineoffset-WH2","id":1,"humidity":10}"#),
         text_packet(5, READINGS[0]),
     ];
     let mut out = vec![Packet::default(); 64];

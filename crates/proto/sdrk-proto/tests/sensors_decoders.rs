@@ -73,7 +73,7 @@ fn every_decoder_survives_random_trains() {
 }
 
 #[test]
-fn the_registry_lists_the_seven_decoders() {
+fn the_registry_lists_the_decoders() {
     let names: Vec<_> = sensors::DECODERS.iter().map(|d| d.name()).collect();
     assert_eq!(
         names,
@@ -84,7 +84,14 @@ fn the_registry_lists_the_seven_decoders() {
             "wh1080",
             "lacrosse_tx29",
             "bresser_3ch",
-            "lacrosse_tx35"
+            "lacrosse_tx35",
+            "ecowitt",
+            "wh55",
+            "wh51",
+            "wn34",
+            "wh31e",
+            "wh45",
+            "ws80"
         ]
     );
     for n in names {
@@ -95,8 +102,8 @@ fn the_registry_lists_the_seven_decoders() {
         .iter()
         .filter(|d| d.modulation() == Modulation::Ook)
         .count();
-    assert_eq!(ook, 5);
-    assert_eq!(sensors::DECODERS.len() - ook, 2);
+    assert_eq!(ook, 6);
+    assert_eq!(sensors::DECODERS.len() - ook, 8);
 }
 
 /// The pairs (pulse, gap) of the bits `bits` as NRZ with 58 samples per bit (rate 1 MHz); the

@@ -27,6 +27,114 @@ impl Mic {
     }
 }
 
+/// The values that only some devices report, with the JSON names and decimals of `rtl_433`
+/// (decision D1150). They live in [`Reading::extras`] and are written after `pressure_hPa` in
+/// the order of this enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Extra {
+    /// Average wind speed in m/s, `wind_avg_m_s`.
+    WindAvgMs,
+    /// Gust speed in m/s, `wind_max_m_s`.
+    WindMaxMs,
+    /// Illuminance in lux, `light_lux`.
+    LightLux,
+    /// UV index, `uvi`.
+    Uvi,
+    /// Battery level from 0 to 1 as the Fine Offset family reports it. It is written as
+    /// `battery_ok` in place of the boolean [`Reading::battery_ok`] (a reading has one of the
+    /// two), as `rtl_433` prints it.
+    BatteryOk,
+    /// Battery voltage in millivolt, `battery_mV`.
+    BatteryMv,
+    /// Battery voltage in volt, `battery_V`.
+    BatteryV,
+    /// Soil moisture in percent, `moisture`.
+    Moisture,
+    /// The send counter bits of the soil sensor, `boost`.
+    Boost,
+    /// The raw value of the soil sensor, `ad_raw`.
+    AdRaw,
+    /// The raw sensor value of the leak sensor, `raw_value`.
+    RawValue,
+    /// The high sensitivity flag of the leak sensor, `sensitivity`.
+    Sensitivity,
+    /// The alarm flag of the leak sensor, `alarm`.
+    Alarm,
+    /// Particulate matter PM2.5 in micrograms per cubic metre, `pm2_5_ug_m3`.
+    Pm25,
+    /// Particulate matter PM10 in micrograms per cubic metre, `pm10_ug_m3`.
+    Pm10,
+    /// Carbon dioxide in ppm, `co2_ppm`.
+    Co2,
+    /// 1 when the air quality sensor is externally powered, `ext_power`.
+    ExtPower,
+}
+
+impl Extra {
+    /// Every extra value in the order of the JSON form.
+    pub const ALL: [Extra; 17] = [
+        Self::WindAvgMs,
+        Self::WindMaxMs,
+        Self::LightLux,
+        Self::Uvi,
+        Self::BatteryOk,
+        Self::BatteryMv,
+        Self::BatteryV,
+        Self::Moisture,
+        Self::Boost,
+        Self::AdRaw,
+        Self::RawValue,
+        Self::Sensitivity,
+        Self::Alarm,
+        Self::Pm25,
+        Self::Pm10,
+        Self::Co2,
+        Self::ExtPower,
+    ];
+
+    /// The JSON name (the one `rtl_433` prints).
+    pub const fn json_name(self) -> &'static str {
+        match self {
+            Self::WindAvgMs => "wind_avg_m_s",
+            Self::WindMaxMs => "wind_max_m_s",
+            Self::LightLux => "light_lux",
+            Self::Uvi => "uvi",
+            Self::BatteryOk => "battery_ok",
+            Self::BatteryMv => "battery_mV",
+            Self::BatteryV => "battery_V",
+            Self::Moisture => "moisture",
+            Self::Boost => "boost",
+            Self::AdRaw => "ad_raw",
+            Self::RawValue => "raw_value",
+            Self::Sensitivity => "sensitivity",
+            Self::Alarm => "alarm",
+            Self::Pm25 => "pm2_5_ug_m3",
+            Self::Pm10 => "pm10_ug_m3",
+            Self::Co2 => "co2_ppm",
+            Self::ExtPower => "ext_power",
+        }
+    }
+
+    /// The decimals in the JSON form.
+    pub const fn decimals(self) -> usize {
+        match self {
+            Self::WindAvgMs | Self::WindMaxMs | Self::Uvi | Self::BatteryV => 1,
+            Self::Pm25 | Self::Pm10 => 1,
+            Self::BatteryOk => 3,
+            _ => 0,
+        }
+    }
+
+    /// The extra value with this JSON name.
+    pub fn from_json_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|e| e.json_name() == name)
+    }
+}
+
+/// The number of extra values of a [`Reading`].
+pub const EXTRA_COUNT: usize = Extra::ALL.len();
+
 /// One decoded reading. The values are `None` for what the device does not report. Units are
 /// metric: degrees Celsius, percent, km/h, degrees, millimetres, hectopascal.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,7 +142,7 @@ pub struct Reading {
     /// Time of the reading in seconds since the start of the stream (set by the block; written
     /// first when present).
     pub time_s: Option<f64>,
-    /// The decoder's model name, for example `"nexus"`.
+    /// The decoder's model name, for example `"Nexus-TH"`.
     pub model: &'static str,
     /// The device id as the device sends it.
     pub id: u32,
@@ -61,6 +169,9 @@ pub struct Reading {
     pub rain_mm: Option<f32>,
     /// Air pressure in hectopascal (one decimal).
     pub pressure_hpa: Option<f32>,
+    /// The values of [`Extra`], indexed by the enum (use [`Reading::extra`] and
+    /// [`Reading::set_extra`]).
+    pub extras: [Option<f32>; EXTRA_COUNT],
     /// How the message was checked.
     pub mic: Mic,
     /// The frequency offset of the burst from the band centre in Hz (from the pulse train).
@@ -104,11 +215,24 @@ impl Reading {
             wind_dir_deg: None,
             rain_mm: None,
             pressure_hpa: None,
+            extras: [None; EXTRA_COUNT],
             mic,
             freq_offset_hz: header.freq_offset_hz,
             center_hz: 0,
             rssi_db: f32::from(header.level_db10) / 10.0,
             repeats: 1,
+        }
+    }
+
+    /// The extra value `e`.
+    pub fn extra(&self, e: Extra) -> Option<f32> {
+        self.extras.get(e as usize).copied().flatten()
+    }
+
+    /// Sets the extra value `e`.
+    pub fn set_extra(&mut self, e: Extra, v: f32) {
+        if let Some(slot) = self.extras.get_mut(e as usize) {
+            *slot = Some(v);
         }
     }
 
@@ -126,6 +250,7 @@ impl Reading {
             && self.wind_dir_deg == other.wind_dir_deg
             && self.rain_mm == other.rain_mm
             && self.pressure_hpa == other.pressure_hpa
+            && self.extras == other.extras
     }
 
     /// A 64-bit FNV-1a hash of the fields [`same_content`](Self::same_content) compares: equal
@@ -178,7 +303,10 @@ impl Reading {
             self.wind_dir_deg,
             self.rain_mm,
             self.pressure_hpa,
-        ] {
+        ]
+        .into_iter()
+        .chain(self.extras)
+        {
             opt(&mut h, v);
         }
         h
@@ -187,7 +315,7 @@ impl Reading {
     /// Writes the reading as one JSON object without a trailing newline. The fields come in
     /// a fixed order and only when present: `time`, `model`, `id`, `channel`, `battery_ok`,
     /// `temperature_C` (one decimal, two for `Bresser-3CH`), `humidity`, `wind_avg_km_h`,
-    /// `wind_max_km_h`, `wind_dir_deg`, `rain_mm`, `pressure_hPa`, `mic`, `freq_MHz` (four decimals), `rssi_dB` (one decimal),
+    /// `wind_max_km_h`, `wind_dir_deg`, `rain_mm`, `pressure_hPa`, the [`Extra`] values, `mic`, `freq_MHz` (four decimals), `rssi_dB` (one decimal),
     /// `repeats`.
     ///
     /// # Errors
@@ -206,6 +334,13 @@ impl Reading {
         }
         if let Some(b) = self.battery_ok {
             write!(w, ",\"battery_ok\":{}", if b { "true" } else { "false" })?;
+        } else {
+            value(
+                w,
+                "battery_ok",
+                self.extra(Extra::BatteryOk),
+                Extra::BatteryOk.decimals(),
+            )?;
         }
         value(
             w,
@@ -219,6 +354,9 @@ impl Reading {
         value(w, "wind_dir_deg", self.wind_dir_deg, 1)?;
         value(w, "rain_mm", self.rain_mm, 1)?;
         value(w, "pressure_hPa", self.pressure_hpa, 1)?;
+        for e in Extra::ALL.into_iter().filter(|&e| e != Extra::BatteryOk) {
+            value(w, e.json_name(), self.extra(e), e.decimals())?;
+        }
         write!(w, ",\"mic\":\"{}\"", self.mic.as_str())?;
         let f = (f64::from(self.center_hz) + f64::from(self.freq_offset_hz)) / 1.0e6;
         write!(w, ",\"freq_MHz\":{f:.4}")?;

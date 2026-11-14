@@ -136,7 +136,7 @@ impl SensorDecoder for Nexus {
                 res = res.best(DecodeResult::BadIntegrity);
                 continue;
             }
-            let mut r = Reading::new("nexus", u32::from(f.id), Mic::Repeat, &header);
+            let mut r = Reading::new("Nexus-TH", u32::from(f.id), Mic::Repeat, &header);
             r.channel = Some(f.channel);
             r.battery_ok = Some(f.battery_ok);
             r.temperature_c = Some(f.temp_tenths as f32 / 10.0);
@@ -161,7 +161,7 @@ impl SensorEncoder for Nexus {
     }
 
     fn models(&self) -> &'static [&'static str] {
-        &["nexus"]
+        &["Nexus-TH"]
     }
 
     fn modulation(&self) -> Modulation {

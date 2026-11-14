@@ -46,6 +46,14 @@ TEMP_TOL = {"bresser_3ch": 0.06}
 DEFAULT_TEMP_TOL = 0.1
 # Tolerances of the other numeric fields (printed resolution of the JSON form: one decimal).
 OTHER_TOL = {
+    "battery_level": 0.011,  # rtl_433 truncates some levels to two decimals
+    "battery_V": 0.05,
+    "wind_avg_m_s": 0.05,
+    "wind_max_m_s": 0.05,
+    "uvi": 0.05,
+    "pm2_5_ug_m3": 0.05,
+    "pm10_ug_m3": 0.05,
+    "light_lux": 0.5,
     "wind_avg_km_h": 0.15,
     "wind_max_km_h": 0.15,
     # rtl_433 prints the 16 wind directions as whole degrees (68 for 67.5)
@@ -56,15 +64,6 @@ OTHER_TOL = {
 # rtl_433 prints the raw channel nibble of the Oregon sensors (1, 2 and 4 for the switch
 # positions 1 to 3); our readings carry the position. The mapping is applied to rtl_433's value.
 RTL_CHANNEL_MAP = {"oregon_v21": {4: 3}}
-# rtl_433 model names (lower case regular expressions) of the models of our devices.
-RTL_MODELS = {
-    "wh2": r"wh2|ws2",
-    "nexus": r"nexus|prego|crx",
-    "oregon_v21": r"oregon",
-    "wh1080": r"wh1080|whx080|wh3080|wh\d+",
-    "lacrosse_tx29": r"tx29|tx35|lacrosse",
-    "bresser_3ch": r"bresser-3ch",
-}
 # Words of the -R help line that identify the protocol of a device.
 RTL_HELP_WORDS = {
     "wh2": ["WH2,"],
@@ -74,10 +73,35 @@ RTL_HELP_WORDS = {
     "lacrosse_tx29": ["TX29IT", "TX35DTH-IT"],
     "bresser_3ch": ["Sensor 3CH"],
 }
+# battery_ok is a boolean for most devices; the Fine Offset family has a level (a float, the
+# canonical field battery_level).
 FIELDS = [
-    "id", "channel", "battery_ok", "temperature_C", "humidity",
+    "id", "channel", "battery_ok", "battery_level", "temperature_C", "humidity",
     "wind_avg_km_h", "wind_max_km_h", "wind_dir_deg", "rain_mm", "pressure_hPa",
+    "wind_avg_m_s", "wind_max_m_s", "light_lux", "uvi", "battery_mV", "battery_V",
+    "moisture", "boost", "ad_raw", "raw_value", "sensitivity", "alarm",
+    "pm2_5_ug_m3", "pm10_ug_m3", "co2_ppm", "ext_power",
 ]
+
+
+def canon(rec, out):
+    """The fields of one record (rtl_433, ours or sent) in canonical form."""
+    for f in FIELDS:
+        if f in ("id", "battery_ok", "battery_level", "temperature_C"):
+            continue
+        if f in rec:
+            out[f] = rec[f]
+    if "id" in rec:
+        # rtl_433 prints the id of the WH51 as a hexadecimal string
+        out["id"] = int(rec["id"], 16) if isinstance(rec["id"], str) else int(rec["id"])
+    b = rec.get("battery_ok")
+    if isinstance(b, float) and not isinstance(b, bool):
+        out["battery_level"] = b
+    elif b is not None:
+        out["battery_ok"] = b if isinstance(b, bool) else bool(int(b))
+    elif str(rec.get("battery", "")).upper() in ("OK", "LOW"):
+        out["battery_ok"] = str(rec["battery"]).upper() == "OK"
+    return out
 
 
 def tol_for(device, field):
@@ -92,49 +116,27 @@ def normalize_rtl(rec):
     t = rec.get("time", "")
     m = re.match(r"@([0-9.]+)s", str(t))
     out["_t"] = float(m.group(1)) if m else None
-    if "id" in rec:
-        out["id"] = int(rec["id"])
-    if "channel" in rec:
-        out["channel"] = int(rec["channel"])
-    if "battery_ok" in rec:
-        out["battery_ok"] = bool(int(rec["battery_ok"]))
-    elif "battery" in rec:
-        out["battery_ok"] = str(rec["battery"]).upper() == "OK"
+    canon(rec, out)
     if "temperature_C" in rec:
         out["temperature_C"] = float(rec["temperature_C"])
     elif "temperature_F" in rec:
         out["temperature_C"] = (float(rec["temperature_F"]) - 32.0) / 1.8
-    if "humidity" in rec:
-        out["humidity"] = float(rec["humidity"])
-    for ours, keys in (
-        ("wind_avg_km_h", [("wind_avg_km_h", 1.0), ("wind_avg_m_s", 3.6)]),
-        ("wind_max_km_h", [("wind_max_km_h", 1.0), ("wind_max_m_s", 3.6)]),
-        ("wind_dir_deg", [("wind_dir_deg", 1.0)]),
-        ("rain_mm", [("rain_mm", 1.0)]),
-        ("pressure_hPa", [("pressure_hPa", 1.0)]),
-    ):
-        for key, k in keys:
-            if key in rec:
-                out[ours] = float(rec[key]) * k
-                break
     return out
 
 
 def normalize_ours(rec):
     out = {"_model": rec.get("model", ""), "_t": rec.get("time")}
-    for f in FIELDS:
-        if f in rec:
-            out[f] = rec[f]
-    if "battery_ok" in out:
-        out["battery_ok"] = bool(out["battery_ok"])
+    canon(rec, out)
+    if "temperature_C" in rec:
+        out["temperature_C"] = rec["temperature_C"]
     return out
 
 
 def normalize_sent(rec):
     out = {"_model": rec.get("model", "")}
-    for f in FIELDS:
-        if f in rec:
-            out[f] = rec[f]
+    canon(rec, out)
+    if "temperature_C" in rec:
+        out["temperature_C"] = rec["temperature_C"]
     return out
 
 
@@ -239,8 +241,9 @@ def check_device(side_path, ours_bin, directory):
     side = json.load(open(side_path))
     device = side["device"]
     path = os.path.join(directory, side["file"])
-    band = 868 if side["modulation"] == "fsk" else 433
-    freq = "868.3M" if band == 868 else "433.92M"
+    band = 868 if side["center_hz"] > 600_000_000 else 433
+    # rtl_433 decodes FSK only when it is told a frequency above 800 MHz, whatever the file holds
+    freq = "868.3M" if side["modulation"] == "fsk" else "433.92M"
     sent = [normalize_sent(r["reading"]) for r in side["readings"]]
     times = [r["t_s"] for r in side["readings"]]
     res = {"device": device, "file": path, "sent": len(sent), "mismatches": []}
@@ -266,6 +269,9 @@ def check_device(side_path, ours_bin, directory):
             res["mismatches"].append(dict(item, what="rtl_433 decoded nothing"))
         else:
             d = diff(device, s, rr, "sent", "rtl_433", strict_sides=False)
+            # our model strings are the ones rtl_433 prints (decision D1150)
+            if rr["_model"] != s["_model"]:
+                d.append("model: sent=%s rtl_433=%s" % (s["_model"], rr["_model"]))
             extra = [f for f in FIELDS if f in rr and f not in s]
             item["rtl_433"] = {k: v for k, v in rr.items() if not k.startswith("_")}
             item["rtl_model"] = rr["_model"]
@@ -286,6 +292,8 @@ def check_device(side_path, ours_bin, directory):
                 om += 1
         if rr is not None and oo is not None:
             d = diff(device, oo, rr, "ours", "rtl_433")
+            if oo["_model"] != rr["_model"]:
+                d.append("model: ours=%s rtl_433=%s" % (oo["_model"], rr["_model"]))
             if d:
                 res["mismatches"].append(dict(item, what="our decoder differs from rtl_433", diffs=d))
             else:

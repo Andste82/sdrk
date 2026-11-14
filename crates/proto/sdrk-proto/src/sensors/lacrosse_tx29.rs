@@ -44,7 +44,7 @@ impl SensorDecoder for LacrosseTx29 {
     fn decode(&self, train: &PulseTrain<'_>, out: &mut ReadingSink) -> DecodeResult {
         // the bit time is 58 us (17.241 kbit/s) or 55 us (the figure of the fact document): the
         // tolerance of a run is 20 % of a bit, so a long run needs the right one of the two
-        decode_frames(train, out, "lacrosse_tx29", &BIT_TIMES_US, RESET_US)
+        decode_frames(train, out, "LaCrosse-TX29IT", &BIT_TIMES_US, RESET_US)
     }
 }
 
@@ -140,7 +140,7 @@ impl SensorEncoder for LacrosseTx29 {
     }
 
     fn models(&self) -> &'static [&'static str] {
-        &["lacrosse_tx29"]
+        &["LaCrosse-TX29IT"]
     }
 
     fn modulation(&self) -> Modulation {

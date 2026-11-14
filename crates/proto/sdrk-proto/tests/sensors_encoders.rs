@@ -113,7 +113,7 @@ fn random_reading(rng: &mut Rng, model: &'static str) -> Reading {
     let hum = |rng: &mut Rng| Some(rng.range(0, 100) as f32);
     let hum99 = |rng: &mut Rng| Some(rng.range(0, 99) as f32);
     match model {
-        "wh2" => {
+        "Fineoffset-WH2" => {
             r.id = rng.range(0, 0xFF) as u32;
             r.temperature_c = t(rng.range(-800, 800));
             // humidity 0xFF is a sensor without humidity
@@ -121,7 +121,7 @@ fn random_reading(rng: &mut Rng, model: &'static str) -> Reading {
                 r.humidity = hum(rng);
             }
         }
-        "nexus" => {
+        "Nexus-TH" => {
             r.id = rng.range(0, 255) as u32;
             r.channel = Some(rng.range(1, 3) as u8);
             r.battery_ok = Some(rng.below(2) == 1);
@@ -131,21 +131,21 @@ fn random_reading(rng: &mut Rng, model: &'static str) -> Reading {
                 r.humidity = Some(rng.range(1, 100) as f32);
             }
         }
-        "oregon_thn132n" | "oregon_thgr122nx" => {
+        "Oregon-THN132N" | "Oregon-THGR122N" => {
             r.id = rng.range(0, 255) as u32;
             r.channel = Some(rng.range(1, 3) as u8);
             r.battery_ok = Some(rng.below(2) == 1);
-            let lo = if model == "oregon_thn132n" {
+            let lo = if model == "Oregon-THN132N" {
                 -500
             } else {
                 -700
             };
             r.temperature_c = t(rng.range(lo, 700));
-            if model == "oregon_thgr122nx" {
+            if model == "Oregon-THGR122N" {
                 r.humidity = hum99(rng);
             }
         }
-        "wh1080" => {
+        "Fineoffset-WHx080" => {
             r.id = rng.range(0, 0xFF) as u32;
             r.temperature_c = t(rng.range(-400, 623));
             r.humidity = hum(rng);
@@ -155,7 +155,7 @@ fn random_reading(rng: &mut Rng, model: &'static str) -> Reading {
             r.wind_dir_deg = Some(f32::from(WH1080_DIRECTIONS[rng.below(16) as usize]));
             r.rain_mm = Some(rng.range(0, 4095) as f32 * 0.3);
         }
-        "lacrosse_tx29" | "lacrosse_tx35" => {
+        "LaCrosse-TX29IT" | "LaCrosse-TX35DTHIT" => {
             r.id = rng.range(0, 63) as u32;
             // the expression of the decoder: it is not the nearest float of the tenths
             r.temperature_c = Some((rng.range(0, 999) as f32) / 10.0 - 40.0);
@@ -189,14 +189,14 @@ const WH1080_DIRECTIONS: [u16; 16] = [
 ];
 
 const MODELS: [&str; 8] = [
-    "wh2",
-    "nexus",
-    "oregon_thn132n",
-    "oregon_thgr122nx",
-    "wh1080",
-    "lacrosse_tx29",
+    "Fineoffset-WH2",
+    "Nexus-TH",
+    "Oregon-THN132N",
+    "Oregon-THGR122N",
+    "Fineoffset-WHx080",
+    "LaCrosse-TX29IT",
     "Bresser-3CH",
-    "lacrosse_tx35",
+    "LaCrosse-TX35DTHIT",
 ];
 
 #[test]
@@ -215,7 +215,7 @@ fn the_registry_mirrors_the_decoders() {
         assert!(sensors::encoder_by_model(m).is_some(), "{m}");
     }
     assert_eq!(
-        sensors::encoder_by_model("oregon_thn132n").unwrap().name(),
+        sensors::encoder_by_model("Oregon-THN132N").unwrap().name(),
         "oregon_v21"
     );
     assert_eq!(
@@ -248,7 +248,7 @@ fn random_readings_round_trip_through_json_packets_and_the_decoder() {
                 Ok(p) => p,
                 Err(EncodeError::Unrepresentable) => {
                     assert!(
-                        matches!(model, "lacrosse_tx29" | "lacrosse_tx35" | "nexus"),
+                        matches!(model, "LaCrosse-TX29IT" | "LaCrosse-TX35DTHIT" | "Nexus-TH"),
                         "{model}"
                     );
                     unrepresentable += 1;
@@ -430,7 +430,7 @@ fn base(model: &'static str) -> Reading {
     let mut r = reading(model, 5);
     r.temperature_c = Some(20.0);
     match model {
-        "wh2" | "wh1080" | "nexus" | "oregon_thgr122nx" | "Bresser-3CH" => {
+        "Fineoffset-WH2" | "Fineoffset-WHx080" | "Nexus-TH" | "Oregon-THGR122N" | "Bresser-3CH" => {
             r.humidity = Some(50.0);
         }
         _ => {}
@@ -470,13 +470,13 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
     }
     // the limits of every device, one step beyond
     for (model, lo, hi) in [
-        ("wh2", -80.1, 80.1),
-        ("nexus", -40.1, 80.1),
-        ("oregon_thn132n", -50.1, 70.1),
-        ("oregon_thgr122nx", -70.1, 70.1),
-        ("wh1080", -40.1, 62.4),
-        ("lacrosse_tx29", -40.1, 60.0),
-        ("lacrosse_tx35", -40.1, 60.0),
+        ("Fineoffset-WH2", -80.1, 80.1),
+        ("Nexus-TH", -40.1, 80.1),
+        ("Oregon-THN132N", -50.1, 70.1),
+        ("Oregon-THGR122N", -70.1, 70.1),
+        ("Fineoffset-WHx080", -40.1, 62.4),
+        ("LaCrosse-TX29IT", -40.1, 60.0),
+        ("LaCrosse-TX35DTHIT", -40.1, 60.0),
         ("Bresser-3CH", -28.95, 71.17),
     ] {
         for t in [lo, hi] {
@@ -485,58 +485,58 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
             cases.push((model, r, oor("temperature_C")));
         }
     }
-    let mut r = base("nexus");
+    let mut r = base("Nexus-TH");
     r.channel = Some(0);
-    cases.push(("nexus", r, oor("channel")));
+    cases.push(("Nexus-TH", r, oor("channel")));
     for ch in [4, 5] {
         // the channel value 3 of the device (shown as 4) is invalid
-        let mut r = base("nexus");
+        let mut r = base("Nexus-TH");
         r.channel = Some(ch);
-        cases.push(("nexus", r, oor("channel")));
+        cases.push(("Nexus-TH", r, oor("channel")));
     }
-    let mut r = base("nexus");
+    let mut r = base("Nexus-TH");
     r.humidity = Some(0.0); // 0 means "no humidity sensor": say it with no humidity
-    cases.push(("nexus", r, oor("humidity")));
-    let mut r = base("wh2");
+    cases.push(("Nexus-TH", r, oor("humidity")));
+    let mut r = base("Fineoffset-WH2");
     r.id = 256;
-    cases.push(("wh2", r, oor("id")));
-    let mut r = base("wh1080");
+    cases.push(("Fineoffset-WH2", r, oor("id")));
+    let mut r = base("Fineoffset-WHx080");
     r.id = 256;
-    cases.push(("wh1080", r, oor("id")));
-    let mut r = base("lacrosse_tx29");
+    cases.push(("Fineoffset-WHx080", r, oor("id")));
+    let mut r = base("LaCrosse-TX29IT");
     r.id = 64;
-    cases.push(("lacrosse_tx29", r, oor("id")));
-    let mut r = base("lacrosse_tx35");
+    cases.push(("LaCrosse-TX29IT", r, oor("id")));
+    let mut r = base("LaCrosse-TX35DTHIT");
     r.id = 64;
-    cases.push(("lacrosse_tx35", r, oor("id")));
+    cases.push(("LaCrosse-TX35DTHIT", r, oor("id")));
     let mut r = base("Bresser-3CH");
     r.channel = Some(4);
     cases.push(("Bresser-3CH", r, oor("channel")));
-    let mut r = base("wh2");
+    let mut r = base("Fineoffset-WH2");
     r.channel = Some(1);
-    cases.push(("wh2", r, EncodeError::UnsupportedField("channel")));
-    let mut r = base("wh2");
+    cases.push(("Fineoffset-WH2", r, EncodeError::UnsupportedField("channel")));
+    let mut r = base("Fineoffset-WH2");
     r.rain_mm = Some(1.0);
-    cases.push(("wh2", r, EncodeError::UnsupportedField("rain_mm")));
-    let mut r = base("oregon_thn132n");
+    cases.push(("Fineoffset-WH2", r, EncodeError::UnsupportedField("rain_mm")));
+    let mut r = base("Oregon-THN132N");
     r.humidity = Some(50.0);
     cases.push((
-        "oregon_thn132n",
+        "Oregon-THN132N",
         r,
         EncodeError::UnsupportedField("humidity"),
     ));
-    let mut r = base("oregon_thgr122nx");
+    let mut r = base("Oregon-THGR122N");
     r.humidity = None;
-    cases.push(("oregon_thgr122nx", r, EncodeError::MissingField("humidity")));
-    let mut r = base("wh1080");
+    cases.push(("Oregon-THGR122N", r, EncodeError::MissingField("humidity")));
+    let mut r = base("Fineoffset-WHx080");
     r.rain_mm = Some(2000.0);
-    cases.push(("wh1080", r, oor("rain_mm")));
-    let mut r = base("wh1080");
+    cases.push(("Fineoffset-WHx080", r, oor("rain_mm")));
+    let mut r = base("Fineoffset-WHx080");
     r.wind_avg_km_h = Some(-1.0);
-    cases.push(("wh1080", r, oor("wind_avg_km_h")));
-    let mut r = base("wh1080");
+    cases.push(("Fineoffset-WHx080", r, oor("wind_avg_km_h")));
+    let mut r = base("Fineoffset-WHx080");
     r.wind_dir_deg = Some(400.0);
-    cases.push(("wh1080", r, oor("wind_dir_deg")));
+    cases.push(("Fineoffset-WHx080", r, oor("wind_dir_deg")));
     for (model, r, want) in cases {
         let enc = sensors::encoder_by_model(model).unwrap();
         let mut sink = TrainSink::new(&mut storage);
@@ -545,28 +545,28 @@ fn readings_out_of_range_are_rejected_and_nothing_is_written() {
         assert_eq!(sink.len(), 1, "{model}: nothing is written");
     }
     // repeats of 0
-    let enc = sensors::encoder_by_model("nexus").unwrap();
+    let enc = sensors::encoder_by_model("Nexus-TH").unwrap();
     let mut sink = TrainSink::new(&mut storage);
     assert_eq!(
-        enc.encode(&base("nexus"), 0, &mut sink),
+        enc.encode(&base("Nexus-TH"), 0, &mut sink),
         Err(EncodeError::InvalidRepeats)
     );
     assert!(sink.is_empty());
     // the limits themselves are readings
     for (model, t) in [
-        ("wh2", -80.0),
-        ("wh2", 80.0),
-        ("nexus", -40.0),
-        ("nexus", 80.0),
-        ("oregon_thn132n", -50.0),
-        ("oregon_thgr122nx", -70.0),
-        ("oregon_thgr122nx", 70.0),
-        ("wh1080", -40.0),
-        ("wh1080", 62.3),
-        ("lacrosse_tx29", -40.0),
-        ("lacrosse_tx29", 59.9),
-        ("lacrosse_tx35", -40.0),
-        ("lacrosse_tx35", 59.9),
+        ("Fineoffset-WH2", -80.0),
+        ("Fineoffset-WH2", 80.0),
+        ("Nexus-TH", -40.0),
+        ("Nexus-TH", 80.0),
+        ("Oregon-THN132N", -50.0),
+        ("Oregon-THGR122N", -70.0),
+        ("Oregon-THGR122N", 70.0),
+        ("Fineoffset-WHx080", -40.0),
+        ("Fineoffset-WHx080", 62.3),
+        ("LaCrosse-TX29IT", -40.0),
+        ("LaCrosse-TX29IT", 59.9),
+        ("LaCrosse-TX35DTHIT", -40.0),
+        ("LaCrosse-TX35DTHIT", 59.9),
         ("Bresser-3CH", -28.89),
         ("Bresser-3CH", 71.11),
     ] {
@@ -620,7 +620,7 @@ fn a_train_that_does_not_fit_is_buffer_too_small_and_leaves_the_sink_alone() {
 fn the_pair_counts_and_timings_follow_the_decoders() {
     let one = |model: &'static str| encode(&base(model), 1).unwrap();
     // wh2: 48 pulses of 500 or 1500 us, gaps of 1000 us, the last one 0
-    let p = one("wh2");
+    let p = one("Fineoffset-WH2");
     assert_eq!(p.len(), 48);
     assert!(p.iter().all(|p| p.pulse == 500 || p.pulse == 1500));
     assert!(p[..47].iter().all(|p| p.gap == 1000));
@@ -629,45 +629,45 @@ fn the_pair_counts_and_timings_follow_the_decoders() {
         "the preamble is eight 1 bits"
     );
     // the repeat gap is 8000 us
-    let p = encode(&base("wh2"), 3).unwrap();
+    let p = encode(&base("Fineoffset-WH2"), 3).unwrap();
     assert_eq!(p.len(), 144);
     assert_eq!((p[47].gap, p[95].gap, p[143].gap), (8000, 8000, 0));
     // nexus: 36 bits and the end pulse, gaps of 1000 and 2000 us, 4000 us between frames
-    let p = encode(&base("nexus"), 2).unwrap();
+    let p = encode(&base("Nexus-TH"), 2).unwrap();
     assert_eq!(p.len(), 74);
     assert!(p.iter().all(|p| p.pulse == 500));
     assert_eq!((p[36].gap, p[73].gap), (4000, 0));
     assert!(p[..36].iter().all(|p| p.gap == 1000 || p.gap == 2000));
     // wh1080: 88 bits of 544 or 1524 us pulses with gaps of 1000 us
-    let p = one("wh1080");
+    let p = one("Fineoffset-WHx080");
     assert_eq!(p.len(), 88);
     assert!(p.iter().all(|p| p.pulse == 544 || p.pulse == 1524));
     assert!(p[..87].iter().all(|p| p.gap == 1000));
     // oregon: runs of one or two half bits of 488 us
-    for m in ["oregon_thn132n", "oregon_thgr122nx"] {
+    for m in ["Oregon-THN132N", "Oregon-THGR122N"] {
         for p in one(m) {
             assert!(matches!(p.pulse, 488 | 976), "{m}");
             assert!(matches!(p.gap, 0 | 488 | 976), "{m}");
         }
     }
     // lacrosse: NRZ runs of 58 us
-    for p in one("lacrosse_tx29") {
+    for p in one("LaCrosse-TX29IT") {
         assert_eq!(p.pulse % 58, 0);
         assert_eq!(p.gap % 58, 0);
     }
     assert_eq!(
-        sensors::encoder_by_model("lacrosse_tx29")
+        sensors::encoder_by_model("LaCrosse-TX29IT")
             .unwrap()
             .modulation(),
         Modulation::Fsk
     );
     // lacrosse TX35: NRZ runs of 105 us, FSK
-    for p in one("lacrosse_tx35") {
+    for p in one("LaCrosse-TX35DTHIT") {
         assert_eq!(p.pulse % 105, 0);
         assert_eq!(p.gap % 105, 0);
     }
     assert_eq!(
-        sensors::encoder_by_model("lacrosse_tx35")
+        sensors::encoder_by_model("LaCrosse-TX35DTHIT")
             .unwrap()
             .modulation(),
         Modulation::Fsk
@@ -678,7 +678,7 @@ fn the_pair_counts_and_timings_follow_the_decoders() {
 
 #[test]
 fn a_frame_with_a_crc_of_zero_is_unrepresentable_for_the_fsk_device() {
-    for model in ["lacrosse_tx29", "lacrosse_tx35"] {
+    for model in ["LaCrosse-TX29IT", "LaCrosse-TX35DTHIT"] {
         crc_zero_is_unrepresentable(model);
     }
 }
@@ -714,7 +714,7 @@ fn nexus_frames_that_pass_the_rubicson_check_are_unrepresentable() {
     let mut refused = 0;
     let mut sent = 0;
     for _ in 0..4000 {
-        let mut r = reading("nexus", rng.range(0, 255) as u32);
+        let mut r = reading("Nexus-TH", rng.range(0, 255) as u32);
         r.channel = Some(rng.range(1, 3) as u8);
         r.battery_ok = Some(rng.below(2) == 1);
         r.temperature_c = Some(rng.range(-400, 800) as f32 / 10.0);
@@ -734,7 +734,7 @@ fn nexus_frames_that_pass_the_rubicson_check_are_unrepresentable() {
     assert!(refused > 5 && refused < 40, "{refused} of 4000");
     assert_eq!(refused + sent, 4000);
     // two equal frames are no reading: the device needs three (the fact document)
-    let mut r = reading("nexus", 0x5C);
+    let mut r = reading("Nexus-TH", 0x5C);
     r.channel = Some(2);
     r.battery_ok = Some(true);
     r.temperature_c = Some(27.1);
@@ -747,10 +747,10 @@ fn nexus_frames_that_pass_the_rubicson_check_are_unrepresentable() {
 #[test]
 fn the_fields_a_device_may_leave_out_round_trip_as_absent() {
     // wh2 and nexus: no humidity sensor (0xFF and 0), the reading has no humidity
-    for model in ["wh2", "nexus"] {
+    for model in ["Fineoffset-WH2", "Nexus-TH"] {
         let mut r = base(model);
         r.humidity = None;
-        if model == "nexus" {
+        if model == "Nexus-TH" {
             (r.channel, r.battery_ok) = (Some(1), Some(true));
         }
         let (res, got) = decode(&r, &encode(&r, 3).unwrap());
@@ -760,7 +760,7 @@ fn the_fields_a_device_may_leave_out_round_trip_as_absent() {
     }
     // wh1080: a low battery is the status nibble 1, a good one 0 (both round trip)
     for ok in [true, false] {
-        let mut r = base("wh1080");
+        let mut r = base("Fineoffset-WHx080");
         r.battery_ok = Some(ok);
         let (_, got) = decode(&r, &encode(&r, 2).unwrap());
         assert_eq!(got[0].battery_ok, Some(ok));
@@ -773,7 +773,7 @@ fn the_fields_a_device_may_leave_out_round_trip_as_absent() {
         (11.0, 0.0),
         (12.0, 23.0),
     ] {
-        let mut r = base("wh1080");
+        let mut r = base("Fineoffset-WHx080");
         r.wind_dir_deg = Some(deg);
         let (_, got) = decode(&r, &encode(&r, 2).unwrap());
         assert_eq!(got[0].wind_dir_deg, Some(want), "{deg}");
@@ -817,12 +817,12 @@ fn from_json_reads_what_to_json_writes_for_every_model() {
 #[test]
 fn from_json_ignores_unknown_fields_and_accepts_whitespace_and_escapes() {
     let r = Reading::from_json(
-        " { \"extra\" : { \"a\" : [ 1 , 2 , { \"b\" : null } ] , \"s\" : \"x\\\"y\" } ,\n\"model\" : \"nexus\" , \"id\" : 12 ,\n \"channel\":3,\"battery_ok\":false, \"temperature_C\" : -3.5 , \"humidity\":null, \"mic\":\"repeat\",\"freq_MHz\":433.9200,\"rssi_dB\":-9.0,\"repeats\":4,\"time\":1.5 } ",
+        " { \"extra\" : { \"a\" : [ 1 , 2 , { \"b\" : null } ] , \"s\" : \"x\\\"y\" } ,\n\"model\" : \"Nexus-TH\" , \"id\" : 12 ,\n \"channel\":3,\"battery_ok\":false, \"temperature_C\" : -3.5 , \"humidity\":null, \"mic\":\"repeat\",\"freq_MHz\":433.9200,\"rssi_dB\":-9.0,\"repeats\":4,\"time\":1.5 } ",
     )
     .unwrap();
     assert_eq!(
         (r.model, r.id, r.channel, r.battery_ok),
-        ("nexus", 12, Some(3), Some(false))
+        ("Nexus-TH", 12, Some(3), Some(false))
     );
     assert_eq!(
         (r.temperature_c, r.humidity, r.time_s),
@@ -832,12 +832,12 @@ fn from_json_ignores_unknown_fields_and_accepts_whitespace_and_escapes() {
     // an escaped model string
     let r = Reading::from_json(r#"{"model":"Bresser-3CH","id":1}"#).unwrap();
     assert_eq!(r.model, "Bresser-3CH");
-    let r = Reading::from_json(r#"{"id":1,"model":"wh2"}"#).unwrap();
-    assert_eq!(r.model, "wh2");
+    let r = Reading::from_json(r#"{"id":1,"model":"Fineoffset-WH2"}"#).unwrap();
+    assert_eq!(r.model, "Fineoffset-WH2");
     // an empty object has no model
     assert_eq!(Reading::from_json("{}"), Err(JsonError::Missing("model")));
     assert_eq!(
-        Reading::from_json(r#"{"model":"wh2"}"#),
+        Reading::from_json(r#"{"model":"Fineoffset-WH2"}"#),
         Err(JsonError::Missing("id"))
     );
 }
@@ -848,14 +848,14 @@ fn from_json_accepts_surrogate_escapes_in_skipped_fields_and_keys() {
     let j = |s: &str| Reading::from_json(&s.replace('@', "\\u"));
     // A pair, a lone high and a lone low surrogate (U+FFFD), also in a key.
     let r = j(
-        r#"{"note":"@d83d@de00x","@d83d@de00":1,"lo":"@dc00","hi":"@d83d","model":"nexus","id":5}"#,
+        r#"{"note":"@d83d@de00x","@d83d@de00":1,"lo":"@dc00","hi":"@d83d","model":"Nexus-TH","id":5}"#,
     )
     .unwrap();
-    assert_eq!((r.model, r.id), ("nexus", 5));
+    assert_eq!((r.model, r.id), ("Nexus-TH", 5));
     // A high surrogate followed by another escape that is no low surrogate.
-    assert!(j(r#"{"a":"@d83d@0041","model":"nexus","id":5}"#).is_ok());
+    assert!(j(r#"{"a":"@d83d@0041","model":"Nexus-TH","id":5}"#).is_ok());
     // Still rejected: a truncated escape.
-    assert!(j(r#"{"a":"@d83d@d8","model":"nexus","id":5}"#).is_err());
+    assert!(j(r#"{"a":"@d83d@d8","model":"Nexus-TH","id":5}"#).is_err());
     assert!(j(r#"{"a":"@d83"}"#).is_err());
 }
 
@@ -866,14 +866,14 @@ fn from_json_rejects_everything_else_with_an_error() {
         ("[]", JsonError::Syntax),
         ("{", JsonError::Syntax),
         ("}", JsonError::Syntax),
-        (r#"{"model":"wh2","id":1"#, JsonError::Syntax),
-        (r#"{"model":"wh2","id":1} x"#, JsonError::Syntax),
-        (r#"{"model":"wh2" "id":1}"#, JsonError::Syntax),
-        (r#"{"model":"wh2","id":1,}"#, JsonError::Syntax),
-        (r#"{"model":"wh2","id":1,"a":"\q"}"#, JsonError::Syntax),
-        (r#"{"model":"wh2","id":1,"a":"\u12"}"#, JsonError::Syntax),
+        (r#"{"model":"Fineoffset-WH2","id":1"#, JsonError::Syntax),
+        (r#"{"model":"Fineoffset-WH2","id":1} x"#, JsonError::Syntax),
+        (r#"{"model":"Fineoffset-WH2" "id":1}"#, JsonError::Syntax),
+        (r#"{"model":"Fineoffset-WH2","id":1,}"#, JsonError::Syntax),
+        (r#"{"model":"Fineoffset-WH2","id":1,"a":"\q"}"#, JsonError::Syntax),
+        (r#"{"model":"Fineoffset-WH2","id":1,"a":"\u12"}"#, JsonError::Syntax),
         (
-            r#"{"model":"wh2","id":1,"a":[[[[[[[[[[1]]]]]]]]]]}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"a":[[[[[[[[[[1]]]]]]]]]]}"#,
             JsonError::Syntax,
         ),
         (r#"{"model":"nobody","id":1}"#, JsonError::UnknownModel),
@@ -882,23 +882,23 @@ fn from_json_rejects_everything_else_with_an_error() {
             r#"{"model":"wh2wh2wh2wh2wh2wh2wh2wh2wh2wh2wh2wh2","id":1}"#,
             JsonError::UnknownModel,
         ),
-        (r#"{"model":"wh2","id":-1}"#, JsonError::BadValue("id")),
-        (r#"{"model":"wh2","id":1.5}"#, JsonError::BadValue("id")),
-        (r#"{"model":"wh2","id":"1"}"#, JsonError::BadValue("id")),
+        (r#"{"model":"Fineoffset-WH2","id":-1}"#, JsonError::BadValue("id")),
+        (r#"{"model":"Fineoffset-WH2","id":1.5}"#, JsonError::BadValue("id")),
+        (r#"{"model":"Fineoffset-WH2","id":"1"}"#, JsonError::BadValue("id")),
         (
-            r#"{"model":"wh2","id":1,"channel":300}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"channel":300}"#,
             JsonError::BadValue("channel"),
         ),
         (
-            r#"{"model":"wh2","id":1,"temperature_C":"hot"}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"temperature_C":"hot"}"#,
             JsonError::BadValue("temperature_C"),
         ),
         (
-            r#"{"model":"wh2","id":1,"temperature_C":1e999}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"temperature_C":1e999}"#,
             JsonError::BadValue("temperature_C"),
         ),
         (
-            r#"{"model":"wh2","id":1,"battery_ok":1}"#,
+            r#"{"model":"Fineoffset-WH2","id":1,"battery_ok":1}"#,
             JsonError::BadValue("battery_ok"),
         ),
     ] {

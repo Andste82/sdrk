@@ -54,6 +54,7 @@ pub use blocks::adsb_decode::{
     ADSB_ADDRESS_PARITY, ADSB_CHUNK, ADSB_ICAO_CAPACITY, ADSB_ICAO_SLOTS, ADSB_ICAO_TTL,
     AdsbDecodeBlock, AdsbDecodeConfig,
 };
+pub use blocks::adsb_parse::{ADSB_PARSE_AIRCRAFT, AdsbParseBlock, AdsbParseConfig};
 pub use blocks::afc::{AFC_PIECE, AfcBlock, AfcConfig};
 pub use blocks::agc::{AgcBlock, AgcConfig};
 pub use blocks::am_demod::{AM_DEMOD_CHUNK, AmDemodBlock, AmDemodConfig};

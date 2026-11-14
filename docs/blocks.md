@@ -346,6 +346,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `channelize` | Polyphase channelizer: splits a complex band into channels lanes of a lane stream at twice the channel spacing. | `in`: c32 | `out`: lanes<c32> | - |
 | `channel_select` | Copies one channel of a lane stream into an ordinary complex stream. | `in`: lanes<c32> | `out`: c32 | `channel` |
 | `band_pulse_detect` | Detects short-range transmissions in every lane of a channelizer and emits their pulse trains as packets. | `in`: lanes<c32> | `out`: packets | - |
+| `adsb_parse` | Parses the frames of adsb_decode into aircraft messages as JSON text packets. | `in`: packets | `out`: packets | - |
 | `sensor_decode` | Decodes the pulse trains of band_pulse_detect into sensor readings as JSON text packets. | `in`: packets | `out`: packets | - |
 | `sensor_encode` | Encodes sensor readings (JSON text packets) into the pulse trains of the sensor devices. | `in`: packets | `out`: packets | - |
 | `pulse_key` | Keys a transmitter: pulse train packets to an on-off envelope or FSK soft bits at the clock rate. | `clock`: f32; `trains`: packets | `out`: f32 | - |
@@ -577,6 +578,9 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `band_pulse_detect` | `gap_ratio` | - | build | f64, 1 to 1000, default 10 | 10 |
 | `band_pulse_detect` | `max_pulses` | - | build | integer, 1 to 65536, default 1200 | 1200 |
 | `band_pulse_detect` | `center_hz` | Hz | build | f64, -1000000000000 to 1000000000000, default 0 | 433920000 |
+| `adsb_parse` | `ref_lat` | - | build | f64, -90 to 90, default 0 | 0 (off); the receiver latitude in degrees, north positive |
+| `adsb_parse` | `ref_lon` | - | build | f64, -180 to 180, default 0 | 0 (off); the receiver longitude in degrees, east positive |
+| `adsb_parse` | `max_age_s` | s | build | f64, 0.001 to 3600, default 10 | 10; an aircraft moves little in that time |
 | `sensor_decode` | `decoders` | - | build | integer, 1 to 65535, default 65535 | 65535 (all); bit 0 wh2, 1 nexus, 2 oregon_v21, 3 wh1080, 4 lacrosse_tx29, 5 bresser_3ch, 6 lacrosse_tx35, 7 ecowitt, 8 wh55, 9 wh51, 10 wn34, 11 wh31e, 12 wh45, 13 ws80, 14 ws90, 15 ws85 |
 | `sensor_decode` | `merge_s` | s | build | f64, 0 to 3600, default 2 | 2; the time a sender needs for its repeats |
 | `sensor_decode` | `emit_unknown` | - | build | flag, default false | false; true to analyse a new device |

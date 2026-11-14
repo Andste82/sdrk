@@ -31,15 +31,15 @@ use std::path::PathBuf;
 use common::rate;
 use sdrk::{C32, CQ15};
 use sdrk_blocks::{
-    AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AfcBlock, AfcConfig, AgcBlock,
-    AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig, AutoNotchConfig,
-    AutoNotchRealBlock, BandPulseDetectBlock, BandPulseDetectConfig, BiquadBlock, BiquadConfig,
-    BiquadRealBlock, Block, BlockDescription, ChannelSelectBlock, ChannelSelectConfig,
-    ChannelizeBlock, ChannelizeConfig, ConvertBlock, ConvertConfig, ConvertOutBlock,
-    ConvertOutConfig, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock,
-    DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock, DucConfig,
-    EqConstellation, EqualizeBlock, EqualizeConfig, Error, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AdsbParseBlock, AdsbParseConfig,
+    AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig,
+    AutoNotchConfig, AutoNotchRealBlock, BandPulseDetectBlock, BandPulseDetectConfig, BiquadBlock,
+    BiquadConfig, BiquadRealBlock, Block, BlockDescription, ChannelSelectBlock,
+    ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, ConvertBlock, ConvertConfig,
+    ConvertOutBlock, ConvertOutConfig, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig,
+    DcBlockRealBlock, DdcBlock, DdcConfig, DecimateConfig, DeemphasisConfig, DelayConfig, DucBlock,
+    DucConfig, EqConstellation, EqualizeBlock, EqualizeConfig, Error, FirBlock, FirConfig,
+    FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
     FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock, FmStereoRdsModConfig,
     FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FrameRotations,
     FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig,
@@ -77,8 +77,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 71);
-    assert_eq!(all_descriptions().len(), 71);
+    assert_eq!(kinds.len(), 72);
+    assert_eq!(all_descriptions().len(), 72);
     for kind in [
         "convert",
         "convert_out",
@@ -146,6 +146,7 @@ fn there_are_sixty_one_unique_kinds() {
         "channelize",
         "channel_select",
         "band_pulse_detect",
+        "adsb_parse",
         "sensor_decode",
         "sensor_encode",
         "pulse_key",
@@ -377,6 +378,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("ook_mod", |n| OokModConfig::default().get(n), &[]);
     defaults_match("ook_demod", |n| OokDemodConfig::default().get(n), &[]);
     defaults_match("adsb_decode", |n| AdsbDecodeConfig::default().get(n), &[]);
+    defaults_match("adsb_parse", |n| AdsbParseConfig::default().get(n), &[]);
     defaults_match("equalize", |n| EqualizeConfig::default().get(n), &[]);
     defaults_match("rds_encode", |n| RdsEncodeConfig::default().get(n), &[]);
     defaults_match(
@@ -530,6 +532,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("channelize", ChannelizeConfig);
     round_trip!("channel_select", ChannelSelectConfig);
     round_trip!("band_pulse_detect", BandPulseDetectConfig);
+    round_trip!("adsb_parse", AdsbParseConfig);
     round_trip!("sensor_decode", SensorDecodeConfig);
     round_trip!("sensor_encode", SensorEncodeConfig);
     round_trip!("pulse_key", PulseKeyConfig);
@@ -900,6 +903,10 @@ fn blocks_accept_and_report_every_described_parameter() {
             &mut s,
         )
         .unwrap(),
+    );
+    check_block_params(
+        "adsb_parse",
+        &mut AdsbParseBlock::new(&AdsbParseConfig::default(), &mut s).unwrap(),
     );
     check_block_params(
         "sensor_decode",

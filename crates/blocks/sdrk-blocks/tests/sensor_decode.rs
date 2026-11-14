@@ -641,6 +641,8 @@ fn parameters_are_validated_and_read_only() {
             "wh31e",
             "wh45",
             "ws80",
+            "ws90",
+            "ws85",
         ])
         .unwrap(),
         SENSOR_ALL_DECODERS
@@ -653,7 +655,7 @@ fn parameters_are_validated_and_read_only() {
         })
     ));
     assert!(matches!(
-        cfg.set("decoders", ParamValue::I64(1 << 14)),
+        cfg.set("decoders", ParamValue::I64(1 << 16)),
         Err(Error::OutOfRange {
             name: "decoders",
             ..

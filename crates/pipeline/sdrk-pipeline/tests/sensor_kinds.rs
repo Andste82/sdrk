@@ -433,7 +433,7 @@ fn an_encoder_still_cannot_read_the_packets_of_a_decoder() {
 fn a_bad_decoder_mask_is_reported_at_its_parameter() {
     for (key, value) in [
         ("decoders", json!(0)),
-        ("decoders", json!(16384)),
+        ("decoders", json!(65536)),
         ("merge_s", json!(-1.0)),
     ] {
         let mut spec = packet_flow();

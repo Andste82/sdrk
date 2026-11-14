@@ -105,7 +105,7 @@ fn the_registry_lists_the_decoders() {
         .filter(|d| d.modulation() == Modulation::Ook)
         .count();
     assert_eq!(ook, 6);
-    assert_eq!(sensors::DECODERS.len() - ook, 8);
+    assert_eq!(sensors::DECODERS.len() - ook, 10);
 }
 
 /// The pairs (pulse, gap) of the bits `bits` as NRZ with 58 samples per bit (rate 1 MHz); the

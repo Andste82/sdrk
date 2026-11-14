@@ -447,11 +447,12 @@ struct Acquisition<S: Storage> {
     phase: Phase,
     /// The sum of the lock levels sampled in this interval, and their number.
     level_sum: f32,
-    samples: u32,
+    samples: u8,
     /// Restarts since the start or `reset` (saturating).
     restarts: u32,
-    /// The last used estimate.
-    estimate: Option<f64>,
+    /// The last used estimate, NaN while there is none (an `f64` instead of an `Option` keeps
+    /// the block within its size budget).
+    estimate: f64,
     /// The smoothed symbol power.
     power: f32,
 }
@@ -469,7 +470,7 @@ impl<S: Storage> Acquisition<S> {
             level_sum: 0.0,
             samples: 0,
             restarts: 0,
-            estimate: None,
+            estimate: f64::NAN,
             power: 0.0,
         })
     }
@@ -487,7 +488,7 @@ impl<S: Storage> Acquisition<S> {
         self.level_sum = 0.0;
         self.samples = 0;
         self.restarts = 0;
-        self.estimate = None;
+        self.estimate = f64::NAN;
         self.power = 0.0;
     }
 
@@ -560,7 +561,7 @@ impl<S: Storage> Acquisition<S> {
         };
         if sampled {
             self.level_sum += costas.lock_level();
-            self.samples += 1;
+            self.samples = self.samples.saturating_add(1);
         }
         if self.phase == Phase::Verify && self.seen == WINDOW_END {
             self.phase = Phase::Sampling;
@@ -576,7 +577,7 @@ impl<S: Storage> Acquisition<S> {
         }
         // `samples` is 16 when the interval sampled the level, else 0.
         let absent = self.samples > 0
-            && self.level_sum / (self.samples as f32) < QAM_ACQUISITION_RESTART_LEVEL;
+            && self.level_sum / f32::from(self.samples) < QAM_ACQUISITION_RESTART_LEVEL;
         self.seen = 0;
         self.level_sum = 0.0;
         self.samples = 0;
@@ -599,7 +600,7 @@ impl<S: Storage> Acquisition<S> {
     /// follows.
     fn window_end(&mut self) -> Result<Step> {
         if let Some(f) = self.estimate_now()? {
-            self.estimate = Some(f);
+            self.estimate = f;
             self.phase = Phase::First;
             self.seen = 0;
             // The first interval takes no samples.
@@ -671,7 +672,7 @@ impl<S: Storage> Acquisition<S> {
 
     /// The estimate, if one was made and used.
     fn frequency(&self) -> Option<f64> {
-        self.estimate
+        (!self.estimate.is_nan()).then_some(self.estimate)
     }
 }
 

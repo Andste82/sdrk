@@ -129,7 +129,7 @@ const DEVICES: &[Dev] = &[
         model: "EcoWitt-WH40",
         bit_us: Some(56),
         make: |rng, r| {
-            r.id = rng.range(0, 0xF_FFFF) as u32;
+            r.id = rng.range(0, 0xFFFF) as u32;
             // 0: no battery value
             let v = rng.range(0, 31) as i32;
             if v > 0 {
@@ -441,4 +441,77 @@ fn the_temperature_range_of_the_wh53() {
     r.channel = Some(1);
     r.humidity = Some(5.0);
     assert_eq!(encode(&r, 1), Err(EncodeError::UnsupportedField("humidity")));
+}
+
+/// The receiver chain works at 250 kHz: the widths are rounded to quarter microseconds of the
+/// 1 MHz train, as the pulse detector measures them, and every device still decodes.
+#[test]
+fn trains_at_the_sample_rate_of_the_receiver_decode() {
+    let mut rng = Rng::new(783);
+    for dev in DEVICES {
+        for _ in 0..40 {
+            let mut x = reading(dev.model);
+            (dev.make)(&mut rng, &mut x);
+            let Ok(pairs) = encode(&x, 2) else { continue };
+            // the edges rounded to samples of 250 kHz (a bit of 58 us is 14.5 samples: the
+            // widths alternate between 14 and 15)
+            let phase = rng.range(0, 3) as u64;
+            let mut edge = phase;
+            let mut last = (edge + 2) / 4;
+            let mut coarse: Vec<Pair> = Vec::new();
+            for p in &pairs {
+                let mut w = [0u32; 2];
+                for (k, width) in [p.pulse, p.gap].into_iter().enumerate() {
+                    edge += u64::from(width);
+                    let at = (edge + 2) / 4;
+                    w[k] = (at - last) as u32;
+                    last = at;
+                }
+                coarse.push(Pair {
+                    pulse: w[0],
+                    gap: w[1],
+                });
+            }
+            let enc = sensors::encoder_by_model(dev.model).unwrap();
+            let mut header = enc.header();
+            header.rate_hz = 250_000;
+            let mut buf = vec![0u8; 16 + 8 * coarse.len()];
+            let n = pulses::encode_joined(&header, &coarse, &mut buf).unwrap();
+            let train = pulses::decode(&buf[..n]).unwrap();
+            let mut sink = ReadingSink::new();
+            let res = sensors::by_name(enc.name()).unwrap().decode(&train, &mut sink);
+            assert!(
+                matches!(res, DecodeResult::Decoded(_)),
+                "{}: {}: {res:?}",
+                dev.model,
+                json(&x)
+            );
+            assert!(sink.iter().all(|g| g.same_content(&x)), "{}", dev.model);
+        }
+    }
+}
+
+/// A WS80 with every value (the longest JSON of the devices) fits the 256 bytes of a packet
+/// only in the short form that `sensor_decode` falls back to.
+#[test]
+fn the_longest_reading_fits_a_packet_in_the_short_form() {
+    let mut r = reading("Fineoffset-WS80");
+    r.id = 0xFF_FFFF;
+    r.time_s = Some(1234.567);
+    r.center_hz = 433_920_000;
+    r.temperature_c = Some(-40.0);
+    r.humidity = Some(100.0);
+    r.wind_dir_deg = Some(359.0);
+    r.set_extra(Extra::BatteryOk, -0.5);
+    r.set_extra(Extra::BatteryMv, 5100.0);
+    r.set_extra(Extra::WindAvgMs, 51.0);
+    r.set_extra(Extra::WindMaxMs, 51.0);
+    r.set_extra(Extra::Uvi, 25.4);
+    r.set_extra(Extra::LightLux, 655_340.0);
+    let mut full = String::new();
+    r.to_json(&mut full).unwrap();
+    let mut short = String::new();
+    r.to_json_short(&mut short).unwrap();
+    assert!(full.len() > 256 && short.len() <= 256, "{} {}", full.len(), short.len());
+    assert!(Reading::from_json(&short).is_ok());
 }

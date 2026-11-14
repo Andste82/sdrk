@@ -262,8 +262,10 @@ def check_device(side_path, ours_bin, directory):
     oslots, ostray = assign(times, ours)
     rm = om = eq = 0
     for i, s in enumerate(sent):
-        rr = rslots[i][0] if rslots[i] else None
-        oo = oslots[i][0] if oslots[i] else None
+        # rtl_433 may decode one frame as two models (TX29 and TX35): take the one we sent
+        pick = lambda xs: next((x for x in xs if x["_model"] == s["_model"]), xs[0] if xs else None)
+        rr = pick(rslots[i])
+        oo = pick(oslots[i])
         item = {"index": i, "sent": s}
         if rr is None:
             res["mismatches"].append(dict(item, what="rtl_433 decoded nothing"))

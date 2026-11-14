@@ -259,15 +259,6 @@ impl Parser<'_> {
             .map(Some)
             .map_err(|_| JsonError::BadValue(name))
     }
-
-    fn boolean(&mut self, name: &'static str) -> Result<Option<bool>, JsonError> {
-        match self.scalar(name)? {
-            "true" => Ok(Some(true)),
-            "false" => Ok(Some(false)),
-            "null" => Ok(None),
-            _ => Err(JsonError::BadValue(name)),
-        }
-    }
 }
 
 impl Reading {

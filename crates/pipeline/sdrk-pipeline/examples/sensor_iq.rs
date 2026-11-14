@@ -178,7 +178,7 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.humidity = Some(rng.range(0, 100) as f32);
         }
         "EcoWitt-WH40" => {
-            r.id = rng.range(0x1000, 0xFFFFF) as u32;
+            r.id = rng.range(0x1000, 0xFFFF) as u32;
             let v = rng.range(10, 31);
             r.set_extra(Extra::BatteryV, v as f32 / 10.0);
             r.set_extra(Extra::BatteryOk, milli((v as i32 - 9).clamp(0, 6), 6));
@@ -448,7 +448,9 @@ fn carrier_offset(band: u32) -> f64 {
     if band == 868 {
         CARRIER_868 as f64 - CENTER_868 as f64
     } else {
-        80_000.0
+        // the middle of a channel of the 433 MHz search grid (125 kHz spacing): the FSK burst
+        // (35 kHz deviation) must lie in the flat part of one channel
+        125_000.0
     }
 }
 
@@ -534,7 +536,7 @@ fn generate(dir: &Path, count: usize, seed: u64, noise: f64, only: Option<&str>)
             "file": file,
             "rate_hz": RF_RATE,
             "center_hz": if band_of(*enc) == 868 { CENTER_868 } else { CENTER_433 },
-            "carrier_hz": if band_of(*enc) == 868 { CARRIER_868 } else { CENTER_433 + 80_000 },
+            "carrier_hz": if band_of(*enc) == 868 { CARRIER_868 } else if fsk { CENTER_433 + 125_000 } else { CENTER_433 + 80_000 },
             "seed": seed,
             "noise_lsb": noise,
             "repeats": enc.default_repeats(),

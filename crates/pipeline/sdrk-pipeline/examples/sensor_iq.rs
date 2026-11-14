@@ -149,7 +149,7 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.set_extra(Extra::Alarm, rng.range(0, 1) as f32);
         }
         "Fineoffset-WH51" => {
-            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            r.id = rng.range(0x10000, 0x00FF_FFFF) as u32;
             let mv = rng.range(10, 20) * 100;
             r.set_extra(Extra::BatteryMv, mv as f32);
             r.set_extra(Extra::BatteryOk, milli(mv as i32 - 700, 900));
@@ -158,7 +158,7 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.set_extra(Extra::AdRaw, rng.range(1, 511) as f32);
         }
         "Fineoffset-WN34" | "Fineoffset-WN34D" => {
-            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            r.id = rng.range(0x10000, 0x00FF_FFFF) as u32;
             let (lo, hi, off) = if model.ends_with('D') {
                 (-550, 1250, 0)
             } else {
@@ -185,7 +185,7 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.rain_mm = Some(rng.range(0, 65535) as f32 / 10.0);
         }
         "Fineoffset-WH45" => {
-            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            r.id = rng.range(0x10000, 0x00FF_FFFF) as u32;
             r.temperature_c = Some((rng.range(0, 2047) as f32 - 400.0) / 10.0);
             r.humidity = Some(rng.range(0, 100) as f32);
             let bars = rng.range(0, 6);
@@ -196,7 +196,7 @@ fn random_reading(rng: &mut Rng, enc: &dyn SensorEncoder, model: &'static str) -
             r.set_extra(Extra::Co2, rng.range(0, 65535) as f32);
         }
         "Fineoffset-WS80" => {
-            r.id = rng.range(0x10000, 0xFFFFFF) as u32;
+            r.id = rng.range(0x10000, 0x00FF_FFFF) as u32;
             let mv = rng.range(70, 150) * 20;
             r.set_extra(Extra::BatteryMv, mv as f32);
             r.set_extra(Extra::BatteryOk, milli((mv as i32 - 1400).max(0), 1600));
@@ -432,7 +432,7 @@ fn play(trains: &Path, out: &Path) -> Res<()> {
     Ok(())
 }
 
-/// The band of a device: the LaCrosse sensors are 868 MHz devices, the Fine Offset and Ecowitt
+/// The band of a device: the `LaCrosse` sensors are 868 MHz devices, the Fine Offset and Ecowitt
 /// FSK devices and every OOK device are at 433 MHz in these files (the fact document names more
 /// bands for some devices; the decoders do not depend on the carrier).
 fn band_of(enc: &dyn SensorEncoder) -> u32 {

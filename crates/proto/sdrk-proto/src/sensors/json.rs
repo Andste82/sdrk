@@ -397,10 +397,10 @@ impl Parser<'_> {
             Some("rain_mm") => r.rain_mm = self.float("rain_mm")?,
             Some("pressure_hPa") => r.pressure_hpa = self.float("pressure_hPa")?,
             Some(k) if Extra::from_json_name(k).is_some() => {
-                if let Some(e) = Extra::from_json_name(k) {
-                    if let Some(v) = self.float(e.json_name())? {
-                        r.set_extra(e, v);
-                    }
+                if let Some(e) = Extra::from_json_name(k)
+                    && let Some(v) = self.float(e.json_name())?
+                {
+                    r.set_extra(e, v);
                 }
             }
             _ => self.skip(0)?,

@@ -143,7 +143,11 @@ impl SensorEncoder for Ecowitt {
         // the seven head bits and the six bytes: 55 bits
         let mut bits = [true; BITS];
         for (k, bit) in bits.iter_mut().enumerate().skip(7) {
-            let byte = if k < 47 { b[(k - 7) / 8] } else { crc };
+            let byte = if k < 47 {
+                b.get((k - 7) / 8).copied().unwrap_or(0)
+            } else {
+                crc
+            };
             let n = if k < 47 { (k - 7) % 8 } else { k - 47 };
             *bit = byte >> (7 - n) & 1 == 1;
         }

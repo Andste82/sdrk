@@ -119,8 +119,12 @@ impl Extra {
     /// The decimals in the JSON form.
     pub const fn decimals(self) -> usize {
         match self {
-            Self::WindAvgMs | Self::WindMaxMs | Self::Uvi | Self::BatteryV => 1,
-            Self::Pm25 | Self::Pm10 => 1,
+            Self::WindAvgMs
+            | Self::WindMaxMs
+            | Self::Uvi
+            | Self::BatteryV
+            | Self::Pm25
+            | Self::Pm10 => 1,
             Self::BatteryOk => 3,
             _ => 0,
         }

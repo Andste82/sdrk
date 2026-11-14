@@ -583,7 +583,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | `sensor_decode` | `center_hz` | Hz | build | integer, 0 to 4000000000, default 0 | 433920000; 0 writes the offset from the band centre |
 | `sensor_encode` | `repeats` | - | build | integer, 0 to 64, default 0 | 0 (the figure of the device); 22 for bresser_3ch, 3 for wh2 |
 | `pulse_key` | `guard_us` | us | build | integer, 0 to 1000000, default 20000 | 20000; longer than the repeat gap of the devices (8000) |
-| `pulse_key` | `mode` | - | build | choice ook / fsk, default ook | ook; fsk for the FSK sensors (lacrosse_tx29, lacrosse_tx35, wh55, wh51, wn34, wh31e, wh45, ws80) |
+| `pulse_key` | `mode` | - | build | choice ook / fsk, default ook | ook; fsk for the 868 MHz sensors (lacrosse_tx29, lacrosse_tx35) |
 
 <!-- blocks-table:end -->
 

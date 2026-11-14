@@ -35,7 +35,27 @@ fn decode_train(train: &PulseTrain<'_>, out: &mut ReadingSink) -> DecodeResult {
 }
 
 fn build(b: &[u8], header: &Header) -> Result<Reading, DecodeResult> {
-    let [_, i2, i1, i0, l1, l0, bat, fl, t0, hum, w0, d0, g0, uv, _, _, _, _] = b else {
+    let [
+        _,
+        i2,
+        i1,
+        i0,
+        l1,
+        l0,
+        bat,
+        fl,
+        t0,
+        hum,
+        w0,
+        d0,
+        g0,
+        uv,
+        _,
+        _,
+        _,
+        _,
+    ] = b
+    else {
         return Err(DecodeResult::NoMatch);
     };
     let nine = |bit: u8, low: u8| u32::from(fl >> bit & 1) << 8 | u32::from(low);

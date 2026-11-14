@@ -152,4 +152,10 @@ fn encode_reading(
     fineoffset::encode(&mut msg, frame, 6, BIT_US, repeats, out)
 }
 
-fineoffset::fsk_device!(Wh31e, "wh31e", [E, B, RAIN_MODEL], decode_train, encode_reading);
+fineoffset::fsk_device!(
+    Wh31e,
+    "wh31e",
+    [E, B, RAIN_MODEL],
+    decode_train,
+    encode_reading
+);

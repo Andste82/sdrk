@@ -158,7 +158,7 @@ impl SensorEncodeConfig {
 /// let mut mem = vec![0u8; SensorEncodeBlock::<ArenaStorage<'_>>::storage_bytes(&cfg)? + 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
 /// let mut enc = SensorEncodeBlock::new(&cfg, &mut arena)?;
-/// let text = br#"{"model":"nexus","id":92,"channel":2,"temperature_C":-3.5,"humidity":71}"#;
+/// let text = br#"{"model":"Nexus-TH","id":92,"channel":2,"temperature_C":-3.5,"humidity":71}"#;
 /// let reading = Packet::new(7, PacketFlags::NONE, text)?;
 /// let mut out = [Packet::default(); 40];
 /// let p = enc.process(&[reading], &mut out)?;

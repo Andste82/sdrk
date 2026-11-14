@@ -373,9 +373,7 @@ pub(crate) fn extra(
     lo: i32,
     hi: i32,
 ) -> Result<i32, EncodeError> {
-    let v = r
-        .extra(e)
-        .ok_or(EncodeError::MissingField(e.json_name()))?;
+    let v = r.extra(e).ok_or(EncodeError::MissingField(e.json_name()))?;
     scaled_in(v, scale, lo, hi, e.json_name())
 }
 

@@ -469,7 +469,12 @@ fn transmit_fsk(enc: &dyn SensorEncoder, readings: &[Reading]) -> Res<(Vec<u8>, 
         let mut sink = TrainSink::new(&mut storage);
         enc.encode(r, enc.default_repeats(), &mut sink)
             .map_err(|e| format!("{}: {e}", r.model))?;
-        synth_fsk(sink.pairs(), &mut phase, &mut cu8, carrier_offset(band_of(enc)));
+        synth_fsk(
+            sink.pairs(),
+            &mut phase,
+            &mut cu8,
+            carrier_offset(band_of(enc)),
+        );
         silence(SILENCE_S, &mut cu8);
     }
     silence(0.05, &mut cu8);

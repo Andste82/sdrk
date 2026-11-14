@@ -106,7 +106,9 @@ fn random_reading_json(rng: &mut Pcg32, model: &str) -> String {
     let low = rng.below(2) == 0;
     match model {
         "Fineoffset-WH2" => {
-            format!(r#"{{"model":"Fineoffset-WH2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#)
+            format!(
+                r#"{{"model":"Fineoffset-WH2","id":{id},"temperature_C":{temp:.1},"humidity":{hum}}}"#
+            )
         }
         "Nexus-TH" => format!(
             r#"{{"model":"Nexus-TH","id":{id},"channel":{ch},"battery_ok":{low},"temperature_C":{temp:.1},"humidity":{hum}}}"#
@@ -391,7 +393,10 @@ fn a_reading_carries_the_radio_fields_and_the_index() {
     assert_eq!((p.consumed, p.produced), (train_len, 1));
     assert_eq!(out[0].index, 123_456);
     let s = String::from_utf8(out[0].data().to_vec()).unwrap();
-    assert!(s.starts_with("{\"time\":0.494,\"model\":\"nexus\""), "{s}");
+    assert!(
+        s.starts_with("{\"time\":0.494,\"model\":\"Nexus-TH\""),
+        "{s}"
+    );
     assert!(s.contains("\"mic\":\"repeat\""), "{s}");
     assert!(
         s.contains("\"freq_MHz\":433.9000,\"rssi_dB\":-12.5,"),
@@ -629,6 +634,13 @@ fn parameters_are_validated_and_read_only() {
             "lacrosse_tx29",
             "bresser_3ch",
             "lacrosse_tx35",
+            "ecowitt",
+            "wh55",
+            "wh51",
+            "wn34",
+            "wh31e",
+            "wh45",
+            "ws80",
         ])
         .unwrap(),
         SENSOR_ALL_DECODERS
@@ -641,7 +653,7 @@ fn parameters_are_validated_and_read_only() {
         })
     ));
     assert!(matches!(
-        cfg.set("decoders", ParamValue::I64(1 << 7)),
+        cfg.set("decoders", ParamValue::I64(1 << 14)),
         Err(Error::OutOfRange {
             name: "decoders",
             ..

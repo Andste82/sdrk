@@ -178,6 +178,14 @@ for p in &packets[..n] {
 
 The packets can also be stored as JSON Lines with `sdrk_io::packets::write_jsonl` (hex payload) and read back with `read_jsonl`. `crates/pipeline/sdrk-pipeline/tests/ism_flows.rs` runs both flows on `cu8` scenes of `sdrk_testkit::ism`.
 
+`adsb_aircraft` (M39.1 extension) adds `adsb_parse` after the decoder of `adsb_receiver` and writes one JSON text packet per decoded message to the packets output `messages`: identification, position and velocity of the aircraft, with the key names of dump1090 where one exists. Latitude and longitude appear once an even and an odd position frame of the aircraft arrived within 10 s (`max_age_s`); set `ref_lat` and `ref_lon` (the receiver position, build parameters of `msg`) to also place single frames within 180 NM. A line, as printed by `println!("{}", String::from_utf8_lossy(p.data()))` for each packet read with `pipeline.read_packets("messages", ..)`:
+
+```json
+{"time":2.001,"hex":"40621d","icao":4219421,"df":17,"tc":11,"alt_baro":38000,"lat":52.26578,"lon":3.93891}
+```
+
+The other lines look like `{"time":0.010,"hex":"4840d6","icao":4735190,"df":17,"tc":4,"flight":"KLM1023","category":"A0"}` and `{"time":3.000,"hex":"485020","icao":4739104,"df":17,"tc":19,"gs":159.2,"track":182.9,"geom_rate":-832,"geom_delta":550}`. `time` is the sample index of the frame divided by 2 MS/s, counted from the start of the pipeline.
+
 `ism433_sensors` and `ism868_sensors` (M46) go one step further: the same two chains followed by `dec` (`sensor_decode`), which offers every pulse train to the device decoders and writes one packet per reading to the packets output `readings`. The payload of a packet is one JSON object, a line of JSON Lines when a tool prints the payloads one per line, for example `{"time":0.02,"model":"LaCrosse-TX35DTHIT","id":10,"battery_ok":true,"temperature_C":22.4,"humidity":40,"mic":"crc","freq_MHz":868.3019,"rssi_dB":-26.3,"repeats":1}`; the absolute frequency comes from `center_hz` of `dec`, which is the one of `det`. The decoders of the 433 MHz flow are `wh2`, `nexus`, `oregon_v21`, `wh1080` and `bresser_3ch` (on-off keying); the 868 MHz flow reads the FSK sensors `lacrosse_tx29` and `lacrosse_tx35`. A reading needs a valid CRC or checksum and plausible values (`nexus` has no check and needs three equal frames), so noise gives no reading; copies of a reading within 2 s are one reading.
 
 The readings carry the model strings that `rtl_433` prints (`Fineoffset-WH2`, `Nexus-TH`, `LaCrosse-TX29IT`, `Ecowitt-WH53`, ...). `ism433_sensors` also decodes the Fine Offset and Ecowitt FSK devices (`wh55`, `wh51`, `wn34`, `wh31e`, `wh45`, `ws80`, `ws90`, `ws85`): the pulse detector runs with `modulation` auto, a burst must lie in the flat middle of a 125 kHz channel (a deviation of 35 kHz at the edge of a channel is cut into pieces).

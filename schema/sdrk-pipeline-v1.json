@@ -745,6 +745,61 @@
           },
           {
             "additionalProperties": false,
+            "description": "Parses the frames of adsb_decode into aircraft messages as JSON text packets.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "adsb_parse"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "max_age_s": {
+                    "default": 10.0,
+                    "description": "The longest time between an even and an odd frame that are decoded together. Unit: s. Typical: 10; an aircraft moves little in that time. Build-time.",
+                    "maximum": 3600.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "ref_lat": {
+                    "default": 0.0,
+                    "description": "Latitude of the reference position for the local decoding of a position frame without a partner; the aircraft must be within 180 NM. Typical: 0 (off); the receiver latitude in degrees, north positive. Build-time.",
+                    "maximum": 90.0,
+                    "minimum": -90.0,
+                    "type": "number"
+                  },
+                  "ref_lon": {
+                    "default": 0.0,
+                    "description": "Longitude of the reference position (see ref_lat); both 0 switch the local decoding off. Typical: 0 (off); the receiver longitude in degrees, east positive. Build-time.",
+                    "maximum": 180.0,
+                    "minimum": -180.0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Automatic frequency control: measures the carrier offset of a signal and shifts it to 0 Hz.",
             "properties": {
               "align": {

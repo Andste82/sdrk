@@ -536,6 +536,7 @@ pub struct TargetState {
 
 /// The autopilot mode bits of [`TargetState`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)] // the mode bits of the message
 pub struct Modes {
     /// Autopilot engaged.
     pub autopilot: bool,
@@ -555,6 +556,7 @@ pub struct Modes {
 /// (subtype 1) message. The capability and the operational mode field are given as the bits
 /// of the message without interpretation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)] // the flag bits of the message
 pub struct Operational {
     /// True for the airborne subtype 0, false for the surface subtype 1.
     pub airborne: bool,
@@ -631,8 +633,11 @@ fn target_state(me: u64) -> TargetState {
         selected_altitude: (alt != 0).then(|| (alt - 1) * 32),
         baro_setting: (baro != 0).then(|| f64::from(baro - 1) * 0.8 + 800.0),
         // The sign bit and the 8 bits are a two's complement angle in steps of 180/256.
-        selected_heading: (bits(me, 30, 1) == 1)
-            .then(|| if negative { heading + 180.0 } else { heading }),
+        selected_heading: (bits(me, 30, 1) == 1).then_some(if negative {
+            heading + 180.0
+        } else {
+            heading
+        }),
         nac_p: bits(me, 40, 4) as u8,
         nic_baro: bits(me, 44, 1) == 1,
         sil: bits(me, 45, 2) as u8,

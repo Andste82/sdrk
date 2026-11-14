@@ -906,7 +906,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 227] = [
+pub static KERNELS: [KernelSpec; 231] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1142,6 +1142,10 @@ pub static KERNELS: [KernelSpec; 227] = [
     spec("costas_qam16_fallback", Family::FallbackVsGnuRadio, false),
     spec("equalize_qam16", Family::Own, false),
     spec("equalize_qam16_fallback", Family::FallbackVsGnuRadio, false),
+    spec("costas_qam64", Family::Own, false),
+    spec("costas_qam64_fallback", Family::FallbackVsGnuRadio, false),
+    spec("equalize_qam64", Family::Own, false),
+    spec("equalize_qam64_fallback", Family::FallbackVsGnuRadio, false),
     spec("rds_shape", Family::Own, false),
     spec("stereo_encode_rds", Family::Own, false),
     proto("morse_encode_block", Family::Own),
@@ -4780,6 +4784,8 @@ mod tests {
         for (simd, fallback) in [
             ("costas_qam16", "costas_qam16_fallback"),
             ("equalize_qam16", "equalize_qam16_fallback"),
+            ("costas_qam64", "costas_qam64_fallback"),
+            ("equalize_qam64", "equalize_qam64_fallback"),
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -4803,6 +4809,10 @@ mod tests {
             "costas_qam16_fallback",
             "equalize_qam16",
             "equalize_qam16_fallback",
+            "costas_qam64",
+            "costas_qam64_fallback",
+            "equalize_qam64",
+            "equalize_qam64_fallback",
         ] {
             for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
                 let Some(limit) = limits.get(name, p.level) else {

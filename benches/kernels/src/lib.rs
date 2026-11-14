@@ -357,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 227] = [
+pub const KERNELS: [&str; 231] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -585,6 +585,10 @@ pub const KERNELS: [&str; 227] = [
     "fir_interpolate_short",
     "fir_interpolate_short_fallback",
     "qam_demod_search_block",
+    "costas_qam64",
+    "costas_qam64_fallback",
+    "equalize_qam64",
+    "equalize_qam64_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -813,10 +817,23 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             layout,
             sdrk_core::kernels::constellation::Qam::Qam64,
         )),
-        "costas_qam16" => Box::new(qam_family::CostasQamK::new(rng, layout, false)),
-        "costas_qam16_fallback" => Box::new(qam_family::CostasQamK::new(rng, layout, true)),
-        "equalize_qam16" => Box::new(qam_family::EqualizeQamK::new(rng, layout, false)),
-        "equalize_qam16_fallback" => Box::new(qam_family::EqualizeQamK::new(rng, layout, true)),
+        "costas_qam16" | "costas_qam16_fallback" | "costas_qam64" | "costas_qam64_fallback" => {
+            Box::new(qam_family::CostasQamK::new(
+                rng,
+                layout,
+                qam_of(seed_of),
+                name.ends_with("_fallback"),
+            ))
+        }
+        "equalize_qam16"
+        | "equalize_qam16_fallback"
+        | "equalize_qam64"
+        | "equalize_qam64_fallback" => Box::new(qam_family::EqualizeQamK::new(
+            rng,
+            layout,
+            qam_of(seed_of),
+            name.ends_with("_fallback"),
+        )),
         "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
@@ -1069,6 +1086,16 @@ impl InFormat {
                 f64::from(i16::from_le_bytes([raw[2 * i], raw[2 * i + 1]])) / 32768.0
             }
         }
+    }
+}
+
+/// The constellation of a QAM entry of `costas` or `equalize` (its name without `_fallback`).
+fn qam_of(name: &str) -> sdrk_core::kernels::constellation::Qam {
+    use sdrk_core::kernels::constellation::Qam;
+    match name {
+        "costas_qam16" | "equalize_qam16" => Qam::Qam16,
+        "costas_qam64" | "equalize_qam64" => Qam::Qam64,
+        other => unreachable!("no QAM entry {other}"),
     }
 }
 

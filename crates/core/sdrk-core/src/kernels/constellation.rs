@@ -318,22 +318,52 @@ impl Qam {
         C32::new(self.decide_value(y.re), self.decide_value(y.im))
     }
 
-    /// The level value of one axis: [`Qam::decide_by_select`] on AArch64 and AVX2,
-    /// [`Qam::decide_by_table`] elsewhere (the same bits, D1417).
+    /// The point nearest to `y` by the level table on both axes ([`Qam::decide_by_table`]): the
+    /// bits of [`Qam::decide`], the form of the 64-QAM equalizer on AArch64 (D1429).
+    #[inline]
+    pub(crate) fn decide_table(self, y: C32) -> C32 {
+        C32::new(self.decide_by_table(y.re), self.decide_by_table(y.im))
+    }
+
+    /// The level value of one axis, the same bits in every form: [`Qam::decide_by_select`] on
+    /// AArch64 and AVX2 (D1417), [`Qam::decide_by_index`] on x86 without AVX2 (D1429),
+    /// [`Qam::decide_by_table`] elsewhere (Cortex-M4 and `wasm32` are counted in instructions).
     #[inline]
     fn decide_value(self, v: f32) -> f32 {
         if cfg!(any(target_arch = "aarch64", target_feature = "avx2")) {
             self.decide_by_select(v)
+        } else if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+            self.decide_by_index(v)
         } else {
             self.decide_by_table(v)
         }
     }
 
+    /// The level value of [`Qam::decide_level`] for one axis value `v`, from the level table at
+    /// the index `clamp(t as i32, 0, m - 1)` with `t = v (√E / 2) + m / 2`: the conversion
+    /// truncates toward zero, which is the floor for `t >= 0`, and every `t < 0` (and NaN, which
+    /// converts to 0) clamps to 0 as `floor(max(t, 0))` does, every `t >= m` to `m - 1`. The
+    /// clamp of [`Qam::decide_level`] in `f32` (a maximum and a minimum, 8 cycles on the chain of
+    /// the loops at SSE2 on `skylake`) becomes two integer selects after the conversion (D1429).
+    #[inline]
+    fn decide_by_index(self, v: f32) -> f32 {
+        let (h, half_m, top) = match self {
+            Self::Qam16 => (QAM16_HALF_SQRT_E, 2.0, 3),
+            Self::Qam64 => (QAM64_HALF_SQRT_E, 4.0, 7),
+        };
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "the saturating conversion is the floor of the clamped value"
+        )]
+        let i = ((v * h + half_m) as i32).clamp(0, top);
+        #[allow(clippy::cast_sign_loss, reason = "clamped to 0 ..= m - 1")]
+        self.levels().get(i as usize).copied().unwrap_or(0.0)
+    }
+
     /// The level value of [`Qam::decide_level`] for one axis value `v`, from the level table:
-    /// the form of every target but AArch64 and AVX2. At SSE2 LLVM turns the comparisons of the
-    /// other form into branches on the data, at SSE4.2 its blends made `costas` `qam16` slower
-    /// on `znver2`, and Cortex-M4 and `wasm32` are counted in instructions, where the table takes
-    /// fewer (D1417).
+    /// the form of every target but x86, AArch64 and AVX2 (Cortex-M4 and `wasm32` are counted in
+    /// instructions, where the table takes fewer, D1417) and of the 64-QAM equalizer on AArch64
+    /// (D1429).
     #[inline]
     fn decide_by_table(self, v: f32) -> f32 {
         self.levels()
@@ -347,7 +377,8 @@ impl Qam {
     /// `t >= k` selects the level (`floor` of the clamped `t` is the largest `k` with
     /// `t >= k`; NaN fails every comparison and takes level index 0), so the decision has no
     /// conversion to an integer and no table load on the chain of the loops (D1417). On AArch64
-    /// and AVX2 every select is one instruction (`fcsel`, `vblendvps`).
+    /// and AVX2 every select is one instruction (`fcsel`, `vblendvps`); at AVX2 and AVX-512
+    /// LLVM turns some of them into branches on the data (open item I44-12).
     #[inline]
     fn decide_by_select(self, v: f32) -> f32 {
         let pick = |c: bool, a: f32, b: f32| if c { a } else { b };
@@ -595,6 +626,11 @@ mod tests {
                 );
                 assert_eq!(
                     q.decide_by_table(v).to_bits(),
+                    want.to_bits(),
+                    "{q:?} {v:e}"
+                );
+                assert_eq!(
+                    q.decide_by_index(v).to_bits(),
                     want.to_bits(),
                     "{q:?} {v:e}"
                 );

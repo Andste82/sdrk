@@ -37,6 +37,7 @@ pub mod hdlc_decode;
 pub mod hdlc_encode;
 pub mod imag_part;
 pub mod interpolate;
+pub mod iq_offset;
 pub mod mag;
 pub mod make_complex;
 pub mod morse_decode;
@@ -70,6 +71,7 @@ pub mod ssb_mod;
 pub mod stereo_matrix;
 pub mod stereo_pll;
 pub mod symbol_demap;
+pub mod symbol_map;
 pub mod symbol_sync;
 pub mod to_complex;
 

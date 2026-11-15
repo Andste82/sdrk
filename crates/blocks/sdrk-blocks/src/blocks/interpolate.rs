@@ -298,10 +298,78 @@ impl<T: BlockSample, S: Storage> InterpolateBlock<T, S> {
         multiply_rate(rate_in, config.factor)
     }
 
+    /// Creates the block from given taps instead of a design (M44.1 §4, the pulse shaping of
+    /// the composite modulators): `taps` are the taps at the output rate, used as they are
+    /// (no gain of `factor`), each rounded once to the tap type of `T` (`f32` for `C32`, Q15
+    /// for `CQ15`); taps and history come from `storage`. The block reports `factor` and
+    /// `max_taps` (the number of taps); `cutoff_hz` and `transition_hz` are not set.
+    ///
+    /// # Errors
+    /// `OutOfRange` for `factor` outside 1 to 1024 or a number of taps outside 1 to 65536;
+    /// the error of the tap rounding; `Storage` when the storage is too small.
+    ///
+    /// ```
+    /// use sdrk::{Rate, C32};
+    /// use sdrk_blocks::{ArenaStorage, Block, InterpolateBlock};
+    /// let taps = [0.5, 1.0, 0.5];
+    /// let bytes = InterpolateBlock::<C32, ArenaStorage<'_>>::storage_bytes_with_taps(3, 2)?;
+    /// let mut mem = vec![0u8; bytes + 16];
+    /// let mut arena = ArenaStorage::new(&mut mem);
+    /// let mut block = InterpolateBlock::<C32, _>::with_taps(taps.iter().copied(), 2, &mut arena)?;
+    /// let mut out = [C32::default(); 4];
+    /// let p = block.process(&[C32::new(1.0, 0.0), C32::new(0.0, 0.0)], &mut out)?;
+    /// assert_eq!((p.consumed, p.produced), (2, 4));
+    /// assert_eq!(out.map(|y| y.re), [0.5, 1.0, 0.5, 0.0]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn with_taps<I>(taps: I, factor: usize, storage: &mut S) -> Result<Self>
+    where
+        I: IntoIterator<Item = f64>,
+        I::IntoIter: ExactSizeIterator,
+    {
+        let taps = taps.into_iter();
+        let n = taps.len();
+        check_with_taps(n, factor)?;
+        let mut buf = storage.alloc::<T::Real>(n)?;
+        for (t, v) in buf.as_mut().iter_mut().zip(taps) {
+            *t = <T as TunedElem>::tap(v)?;
+        }
+        let hist = storage.alloc::<T>(n.div_ceil(factor))?;
+        Ok(Self {
+            config: InterpolateConfig {
+                factor,
+                cutoff_hz: None,
+                transition_hz: None,
+                max_taps: n,
+                ..InterpolateConfig::default()
+            },
+            fir: FirInterpState::new(buf, hist, factor)?,
+        })
+    }
+
+    /// Exact bytes of storage [`InterpolateBlock::with_taps`] needs for `num_taps` taps and
+    /// `factor`, for an arena that starts at a 16-byte aligned address.
+    ///
+    /// # Errors
+    /// As [`InterpolateBlock::with_taps`] for the ranges.
+    pub fn storage_bytes_with_taps(num_taps: usize, factor: usize) -> Result<usize> {
+        check_with_taps(num_taps, factor)?;
+        let mut plan = Plan::default();
+        plan.add::<T::Real>(num_taps)?;
+        plan.add::<T>(num_taps.div_ceil(factor))?;
+        Ok(plan.bytes())
+    }
+
     /// Number of taps of the designed filter.
     pub fn num_taps(&self) -> usize {
         self.fir.taps().len()
     }
+}
+
+/// The ranges of [`InterpolateBlock::with_taps`]: `factor` 1 to 1024, 1 to 65536 taps.
+fn check_with_taps(num_taps: usize, factor: usize) -> Result<()> {
+    check_count("factor", factor, 1, 1024)?;
+    check_count("taps", num_taps, 1, MAX_TAPS_LIMIT as usize)
 }
 
 impl<T: BlockSample, S: Storage> Block for InterpolateBlock<T, S>

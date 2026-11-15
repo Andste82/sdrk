@@ -96,6 +96,7 @@ pub use blocks::hdlc_decode::{HdlcDecodeBlock, HdlcDecodeConfig};
 pub use blocks::hdlc_encode::{HdlcEncodeBlock, HdlcEncodeConfig};
 pub use blocks::imag_part::ImagPartBlock;
 pub use blocks::interpolate::{InterpolateBlock, InterpolateConfig, InterpolateRealBlock};
+pub use blocks::iq_offset::{IQ_OFFSET_MAX_SAMPLES, IqOffsetBlock, IqOffsetConfig, IqPart};
 pub use blocks::mag::{MagBlock, MagConfig};
 pub use blocks::make_complex::MakeComplexBlock;
 pub use blocks::morse_decode::{MorseDecodeBlock, MorseDecodeConfig};
@@ -151,6 +152,9 @@ pub use blocks::stereo_matrix::StereoMatrixBlock;
 pub use blocks::stereo_pll::{StereoPllBlock, StereoPllConfig};
 pub use blocks::symbol_demap::{
     PSK8_GRAY, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolDemapElem,
+};
+pub use blocks::symbol_map::{
+    SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
 };
 pub use blocks::symbol_sync::{SymbolSyncBlock, SymbolSyncConfig};
 pub use blocks::to_complex::ToComplexBlock;

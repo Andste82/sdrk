@@ -26,9 +26,9 @@ use sdrk_blocks::{
     FrameRotations, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
     HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
     HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, MagBlock, MagConfig, MakeComplexBlock,
-    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
-    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
+    InterpolateConfig, InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig,
+    MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
+    MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
     PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, QamDemodBlock, QamDemodConfig,
@@ -39,7 +39,8 @@ use sdrk_blocks::{
     SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
     SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
     StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
-    SymbolDemapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock, SymbolSyncConfig,
+    ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3582,6 +3583,107 @@ impl Kind for QamModKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(QamModBlock::new(cfg, rate, st)?)))
+    }
+}
+
+// ------------------------------------------------------------------- symbol_map
+
+pub(crate) struct SymbolMapKind;
+
+impl Kind for SymbolMapKind {
+    type Cfg = SymbolMapConfig;
+
+    const KIND: &'static str = "symbol_map";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> SymbolMapConfig {
+        SymbolMapConfig::default()
+    }
+    fn set(cfg: &mut SymbolMapConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SymbolMapConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("symbol_map needs real f32 soft bits"));
+        }
+        let bits = cfg.bits_per_symbol();
+        Ok(Figures {
+            rate_out: SymbolMapBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: SymbolMapBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // One table lookup per output sample (per symbol of `bits` input samples).
+            cost: 1.0 / bits as f64,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: bits,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &SymbolMapConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(SymbolMapBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// -------------------------------------------------------------------- iq_offset
+
+pub(crate) struct IqOffsetKind;
+
+impl Kind for IqOffsetKind {
+    type Cfg = IqOffsetConfig;
+
+    const KIND: &'static str = "iq_offset";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> IqOffsetConfig {
+        IqOffsetConfig::default()
+    }
+    fn set(cfg: &mut IqOffsetConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &IqOffsetConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("iq_offset needs c32 samples"));
+        }
+        Ok(Figures {
+            rate_out: IqOffsetBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: IqOffsetBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // One exchange with the ring per sample, as `delay`.
+            cost: 1.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &IqOffsetConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(IqOffsetBlock::new(
+            cfg, rate, st,
+        )?)))
     }
 }
 

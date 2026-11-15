@@ -43,19 +43,20 @@ use sdrk_blocks::{
     FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock, FmStereoRdsModConfig,
     FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FrameRotations,
     FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HdlcDecodeBlock, HdlcDecodeConfig,
-    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig, MakeComplexBlock,
-    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
-    MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
-    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamKind, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PulseKeyBlock, PulseKeyConfig, QamDemodConfig, QamModConfig, QuadDemodConfig,
-    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
-    RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
-    ScaleBlock, ScaleConfig, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
-    SensorEncodeConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolSyncBlock,
-    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig, IqOffsetBlock,
+    IqOffsetConfig, MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock,
+    MorseEncodeConfig, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock,
+    NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig,
+    ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
+    PskDemodConfig, PskModBlock, PskModConfig, PulseKeyBlock, PulseKeyConfig, QamDemodConfig,
+    QamModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
+    SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
+    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock, SymbolSyncConfig,
+    Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -77,8 +78,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 72);
-    assert_eq!(all_descriptions().len(), 72);
+    assert_eq!(kinds.len(), 74);
+    assert_eq!(all_descriptions().len(), 74);
     for kind in [
         "convert",
         "convert_out",
@@ -150,6 +151,8 @@ fn there_are_sixty_one_unique_kinds() {
         "sensor_decode",
         "sensor_encode",
         "pulse_key",
+        "symbol_map",
+        "iq_offset",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -410,6 +413,8 @@ fn config_defaults_match_the_descriptions() {
         &[],
     );
     defaults_match("pulse_key", |n| PulseKeyConfig::default().get(n), &[]);
+    defaults_match("symbol_map", |n| SymbolMapConfig::default().get(n), &[]);
+    defaults_match("iq_offset", |n| IqOffsetConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -536,6 +541,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("sensor_decode", SensorDecodeConfig);
     round_trip!("sensor_encode", SensorEncodeConfig);
     round_trip!("pulse_key", PulseKeyConfig);
+    round_trip!("symbol_map", SymbolMapConfig);
+    round_trip!("iq_offset", IqOffsetConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -919,6 +926,14 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "pulse_key",
         &mut PulseKeyBlock::new(&PulseKeyConfig::default(), rate(48_000), &mut s).unwrap(),
+    );
+    check_block_params(
+        "symbol_map",
+        &mut SymbolMapBlock::new(&SymbolMapConfig::default(), rate(9600), &mut s).unwrap(),
+    );
+    check_block_params(
+        "iq_offset",
+        &mut IqOffsetBlock::new(&IqOffsetConfig::default(), rate(9600), &mut s).unwrap(),
     );
     let pd = PskDemodConfig {
         order: 8,

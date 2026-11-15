@@ -1,7 +1,7 @@
 //! The restart of the frequency acquisition of `qam_demod` below the lock level (I44-9, the
 //! maintainer's decision D1431, implemented by D1432; decided by frequency since the maintainer's
 //! decision D1445): `qam_mod` -> carrier offset 0.001 cycles
-//! per symbol -> noise -> `qam_demod` with its defaults (`equalizer_taps` 11, `carrier_bw` 0.005)
+//! per symbol -> noise -> `qam_demod` with its defaults (`equalizer_taps` 11, `carrier_bw` 0.0025)
 //! and without the equalizer.
 //!
 //! - **A correct estimate is kept** (seed 780): 16-QAM at Es/N0 11.5 and 12 dB and 64-QAM at
@@ -19,15 +19,18 @@
 //!   signal directly (the loops on a wrong frequency) or first Gaussian noise of the signal's
 //!   power for 20480 symbols (the noise-first start, the loops on noise), then the weak signal:
 //!   the receiver restarts at least once, ends with the estimate within 1e-4 of the offset, and
-//!   the last 20000 symbols keep one alignment within the BER bound above.
+//!   the last 20000 symbols keep one alignment within the BER bound above (64-QAM with the
+//!   equalizer after the carrier alone needs a second restart: its loops do not converge on the
+//!   first estimate, and the verify window of D1450 finds them away from it).
 //! - **A weak signal the loops hold is not restarted** (seeds 810 to 815, D1445): 16-QAM at
 //!   Es/N0 9, 10 and 11 dB and 64-QAM at 15, 16 and 17 dB, with and without the equalizer, over
-//!   200000 symbols (48 checks): the receiver never restarts and its estimate is within 1e-4 of
-//!   the offset. At these levels the lock level of a correctly derotated signal is that of noise,
+//!   200000 symbols (48 checks): the estimate is within 1e-4 of the offset. At these levels the lock level of a correctly derotated signal is that of noise,
 //!   and the check of D1432 by the mean level restarted the receiver up to 34 times in 310000
 //!   symbols; the check by frequency of D1445 restarts only on a clear verify window away from
-//!   the loops. The alignment changes and the BER are printed, not checked (the slips of the
-//!   phase loops at these levels are the second point of D1445).
+//!   the loops. The receivers whose loops hold the signal with the loop constants of D1445 and
+//!   D1449 (all without the equalizer, and with it 16-QAM at 11 dB and 64-QAM at 17 dB) keep one
+//!   alignment over the run and never restart; the others (with the equalizer at 16-QAM 9 and
+//!   10 dB and 64-QAM 15 and 16 dB) slip and may be restarted, which is printed (I44-17).
 //! - **An estimate at the edge of the range is kept** (seeds 782 and 783, D1435): 16-QAM at
 //!   Es/N0 12 dB with the equalizer at +-0.12497 cycles per symbol, where the estimate of a
 //!   verify window can wrap to the other edge of `[-0.125, 0.125)`: no restart over 40000
@@ -259,16 +262,15 @@ fn a_correct_estimate_below_the_lock_level_is_kept() {
 #[test]
 fn a_weak_signal_the_loops_hold_is_not_restarted() {
     // (order, Es/N0 in dB, seed, the equalizer_taps whose loops hold the signal with the loop
-    // constants of D1215: one alignment over the run); the other receivers slip all the time at
-    // these levels and lose the carrier, and the verify window then restarts them (I44-17, the
-    // second point of D1445)
+    // constants of D1445 and D1449: one alignment over the run); the others, with the equalizer
+    // at the lower levels, slip, and the verify window may restart them (I44-17)
     let cases: [(u32, f64, u64, &[usize]); 6] = [
-        (16, 9.0, 810, &[]),
+        (16, 9.0, 810, &[0]),
         (16, 10.0, 811, &[0]),
         (16, 11.0, 812, &[11, 0]),
-        (64, 15.0, 813, &[]),
-        (64, 16.0, 814, &[]),
-        (64, 17.0, 815, &[0]),
+        (64, 15.0, 813, &[0]),
+        (64, 16.0, 814, &[0]),
+        (64, 17.0, 815, &[11, 0]),
     ];
     let n = 200_000;
     let results: Vec<_> = std::thread::scope(|s| {
@@ -370,15 +372,6 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
         assert!(restarts >= 1, "{what}");
         let f = acquired.unwrap();
         assert!((f - OFFSET).abs() < 1e-4, "{what}: acquired {f}");
-        if (order, taps) == (64, 11) {
-            // I44-17: the wrong estimate is dropped and the signal's estimate taken, but the
-            // loops of D1215 (the equalizer's tracker and the carrier loop) do not converge on
-            // it after that restart (7 windows of 2000 symbols off the alignment in the last
-            // 20000, BER 0.44); the check of D1432 restarted them on the mean level until they
-            // did. The second point of D1445 (one phase loop, retuned) is to bring these two
-            // cases back.
-            continue;
-        }
         assert_eq!(slips, 0, "{what}");
         assert!(ber <= edge, "{what}: BER {ber:.4e} above {edge:.4e}");
     }

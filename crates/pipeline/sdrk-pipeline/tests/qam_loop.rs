@@ -54,7 +54,8 @@ const PACKETS: usize = 1000;
 /// Packets that must arrive with `CRC_OK` and the payload unchanged: M44 test 7 asks for 990;
 /// the test guards 995, since the frequency acquisition of `qam_demod` lets the flow run the
 /// narrow default `carrier_bw` (I44-4); with the PN9 idle signal measured 1000 at every
-/// rotation on the seeds 606 and 770 to 774 (D1410).
+/// rotation on the seeds 606 and 770 to 774 (D1410), with the loops of D1449 (`carrier_bw`
+/// 0.0025, `mu_dd` 0.005, the narrow tracker of the equalizer) 1000, and 999 on seed 770.
 const REQUIRED: usize = 995;
 /// Sample rate of the transmitter output and of the receiver input in Hz.
 const FS: f64 = 1_000_000.0;
@@ -63,7 +64,7 @@ const SPS: usize = 40;
 /// Bits per 16-QAM symbol.
 const BITS_PER_SYMBOL: usize = 4;
 /// Carrier offset of the channel in Hz (0.04 cycles per symbol; the frequency acquisition of
-/// `qam_demod` finds it, and the loops run at the default `carrier_bw` 0.005).
+/// `qam_demod` finds it, and the loops run at the default `carrier_bw` 0.0025).
 const OFFSET_HZ: f64 = 1000.0;
 /// Eb/N0 of the channel in dB.
 const EBN0_DB: f64 = 16.0;

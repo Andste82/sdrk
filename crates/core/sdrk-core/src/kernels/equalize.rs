@@ -321,13 +321,8 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
         }
         check_mu(params.mu_cma, MU_CMA_MSG)?;
         check_mu(params.mu_dd, MU_DD_MSG)?;
-        let bw = params.phase_bw;
-        if !(bw == 0.0 || (bw.is_finite() && PHASE_BW.contains(&bw))) {
-            return Err(Error::InvalidParameter(
-                "equalizer phase tracker bandwidth must be 0 or between 0.0001 and 0.2",
-            ));
-        }
-        let (kp, ki) = loop_gains(bw, PHASE_DAMPING);
+        check_phase_bw(params.phase_bw)?;
+        let (kp, ki) = loop_gains(params.phase_bw, PHASE_DAMPING);
         start_weights(weights.as_mut(), taps);
         history.as_mut().fill(C32::new(0.0, 0.0));
         Ok(Self {
@@ -416,6 +411,29 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
     pub fn set_mu_dd(&mut self, mu: f32) -> Result<()> {
         check_mu(mu, MU_DD_MSG)?;
         self.params.mu_dd = mu;
+        Ok(())
+    }
+
+    /// Changes the bandwidth of the phase tracker (0 or 1e-4 to 0.2, `InvalidParameter`
+    /// otherwise and nothing changes): the gains of [`EqualizeState::new`] for it; the phase and
+    /// the frequency integrator are kept, so `phase_bw` 0 leaves the output turned back at the
+    /// rate of the integrator. Applies from the next symbol.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::equalize::{EqParams, EqualizeState}, C32};
+    /// let mut st = EqualizeState::new([C32::default(); 3], [C32::default(); 3], EqParams::default())?;
+    /// st.set_frequency(0.01);
+    /// st.set_phase_bw(0.0)?;
+    /// assert_eq!((st.phase_gains(), st.frequency(), st.params().phase_bw), ((0.0, 0.0), 0.01, 0.0));
+    /// st.set_phase_bw(0.02)?;
+    /// assert_eq!(st.phase_gains(), EqualizeState::new([C32::default(); 3], [C32::default(); 3], EqParams::default())?.phase_gains());
+    /// assert!(st.set_phase_bw(0.00005).is_err());
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_phase_bw(&mut self, bw: f64) -> Result<()> {
+        check_phase_bw(bw)?;
+        (self.kp, self.ki) = loop_gains(bw, PHASE_DAMPING);
+        self.params.phase_bw = bw;
         Ok(())
     }
 
@@ -592,6 +610,17 @@ pub(crate) fn advance(mode: &mut EqMode, count: &mut u32, cma_symbols: u32) {
         if *count >= cma_symbols {
             *mode = EqMode::Decision;
         }
+    }
+}
+
+/// `phase_bw` 0 or within [`PHASE_BW`], `InvalidParameter` otherwise (NaN included).
+fn check_phase_bw(bw: f64) -> Result<()> {
+    if bw == 0.0 || (bw.is_finite() && PHASE_BW.contains(&bw)) {
+        Ok(())
+    } else {
+        Err(Error::InvalidParameter(
+            "equalizer phase tracker bandwidth must be 0 or between 0.0001 and 0.2",
+        ))
     }
 }
 

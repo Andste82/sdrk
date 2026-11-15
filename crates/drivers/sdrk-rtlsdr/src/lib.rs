@@ -24,9 +24,10 @@
 //!   [`UsbDriver`] is the real bus, [`fake::FakeDriver`] a simulated one for
 //!   tests without hardware.
 //!
-//! On Linux the user needs access to the dongle (a udev rule) and the kernel
-//! DVB driver `dvb_usb_rtl28xxu` must not hold it (blacklist the module); on
-//! Windows the dongle needs the `WinUSB` driver (installed with Zadig).
+//! On Linux the user needs access to the dongle (a udev rule); opening a
+//! dongle detaches the kernel DVB driver `dvb_usb_rtl28xxu` from it and
+//! closing binds it again, as librtlsdr does (blacklisting the module is no longer needed, but keeps
+//! the DVB driver from taking the dongle back after a replug); on Windows the dongle needs the `WinUSB` driver (installed with Zadig).
 
 #![forbid(unsafe_code)]
 #![deny(

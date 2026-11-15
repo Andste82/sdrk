@@ -29,7 +29,7 @@ fn map_error(e: &RtlsdrError) -> DriverError {
     let mut message = e.to_string();
     match kind {
         DriverErrorKind::Busy => message.push_str(
-            " (another program or the kernel DVB driver dvb_usb_rtl28xxu holds the dongle; blacklist the module)",
+            " (another program holds the dongle, or the kernel DVB driver dvb_usb_rtl28xxu could not be detached; blacklist the module)",
         ),
         DriverErrorKind::PermissionDenied => {
             message.push_str(" (install a udev rule that gives the user access to the dongle)");
@@ -51,6 +51,62 @@ fn bus_location(d: &nusb::DeviceInfo) -> (String, Vec<u8>) {
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn bus_location(_d: &nusb::DeviceInfo) -> (String, Vec<u8>) {
     ("0".to_owned(), Vec::new())
+}
+
+/// A kernel driver that [`detach_kernel_driver`] took off a dongle: it is
+/// bound again when this is dropped, after the dongle was released.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+struct Reattach(nusb::DeviceInfo);
+
+impl Drop for Reattach {
+    fn drop(&mut self) {
+        if let Ok(device) = self.0.open().wait() {
+            let _ = device.attach_kernel_driver(0);
+        }
+    }
+}
+
+/// Detaches the kernel DVB-T driver (`dvb_usb_rtl28xxu`, or any other kernel
+/// driver except `usbfs`, which is another program) from interface 0 of the
+/// dongle, as librtlsdr does, so that the dongle can be claimed without
+/// blacklisting the module; it needs the same access to the device node as
+/// the claim, no root. The returned guard binds the driver again when the
+/// dongle is closed. Failures are left to the claim that follows, which
+/// reports the busy interface. Linux only; elsewhere nothing happens.
+#[cfg(target_os = "linux")]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the futures of nusb are waited on in place; this runs once per open, on a thread with the default stack"
+)]
+fn detach_kernel_driver(info: &UsbInfo) -> Option<Reattach> {
+    let target = nusb::list_devices()
+        .wait()
+        .ok()?
+        .filter(|d| d.vendor_id() == info.vendor_id && d.product_id() == info.product_id)
+        .find(|d| {
+            let (bus, ports) = bus_location(d);
+            bus == info.bus && ports == info.ports
+        })?;
+    let (bus, ports) = bus_location(&target);
+    let chain = ports
+        .iter()
+        .map(u8::to_string)
+        .collect::<Vec<_>>()
+        .join(".");
+    // The driver bound to interface 0 (configuration 1), as sysfs names it.
+    let link = format!("/sys/bus/usb/devices/{bus}-{chain}:1.0/driver");
+    let driver = std::fs::read_link(&link).ok()?;
+    if driver.file_name().is_none_or(|n| n == "usbfs") {
+        return None;
+    }
+    // The detach lasts after this handle is dropped.
+    target.open().wait().ok()?.detach_kernel_driver(0).ok()?;
+    Some(Reattach(target))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn detach_kernel_driver(_info: &UsbInfo) -> Option<Reattach> {
+    None
 }
 
 impl Driver for UsbDriver {
@@ -93,6 +149,7 @@ impl Driver for UsbDriver {
     }
 
     fn open(&self, info: &UsbInfo, by_serial: bool) -> Result<Box<dyn Radio>, DriverError> {
+        let reattach = detach_kernel_driver(info);
         let serial = info.serial.clone().filter(|_| by_serial);
         let index = info.index;
         // The driver panics when it finds no tuner it supports; that must not
@@ -121,15 +178,19 @@ impl Driver for UsbDriver {
             sdr,
             tuner,
             upconverter,
+            _reattach: reattach,
         }))
     }
 }
 
 /// An open dongle.
 struct UsbRadio {
+    // Dropped first: the dongle is released before the kernel driver is
+    // bound again.
     sdr: RtlSdr,
     tuner: TunerKind,
     upconverter: bool,
+    _reattach: Option<Reattach>,
 }
 
 impl Radio for UsbRadio {

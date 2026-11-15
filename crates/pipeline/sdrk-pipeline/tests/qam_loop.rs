@@ -23,6 +23,11 @@
 //! reported in the packet flags are printed (they step with the rotation of the input; the
 //! test does not assert it, because a decision exactly on a boundary takes the upper level,
 //! D1202, which breaks the symmetry in rare cases).
+//!
+//! The baseline of M44.1 (spec §5, test 5; `sdrk_testkit::baseline`, table `qam_loop` of
+//! `tests/baseline/m44_1`): the `cs16` bytes of the transmitter and the soft bits of the
+//! `qam_demod` node of the receiver flow (the flow up to `demod`, its output read as a stream) at
+//! the four rotations keep their bits, per SIMD level.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -43,6 +48,7 @@ use sdrk_pipeline::{
 };
 use sdrk_proto::frame::rotation_of;
 use sdrk_testkit::Pcg32;
+use sdrk_testkit::baseline::{self, Baseline, Digest};
 use sdrk_testkit::channel::{Awgn, ChannelChain, FrequencyOffset, Impairment, Multipath};
 
 use common::{build, flow};
@@ -261,21 +267,12 @@ fn the_qam16_flows_validate_without_warnings() {
     }
 }
 
-#[test]
-fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset() {
-    let packets = random_packets();
-    let tx = transmit(&packets);
-    let power = tx.iter().map(Complex64::norm_sqr).sum::<f64>() / tx.len() as f64;
-    let peak = tx
-        .iter()
-        .map(|v| v.re.abs().max(v.im.abs()))
-        .fold(0.0, f64::max);
-    // The level of the transmitter keeps the peaks inside the cs16 range.
-    assert!(peak < 32767.0 / 32768.0, "peak {peak}");
-
+/// The channel of the test: `Multipath::mild`, the carrier offset and the noise, scaled and
+/// rounded to `cs16` pairs.
+fn channel(tx: &[Complex64]) -> Vec<[i16; 2]> {
     let mut multipath = Multipath::mild(SPS as f64).unwrap();
     let mut faded = Vec::new();
-    multipath.process(&tx, &mut faded);
+    multipath.process(tx, &mut faded);
     let faded_power = faded.iter().map(Complex64::norm_sqr).sum::<f64>() / faded.len() as f64;
     let mut channel = ChannelChain::new()
         .with(FrequencyOffset::new(OFFSET_HZ, FS).unwrap())
@@ -295,7 +292,21 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
     let scale = RX_RMS / rms * 32768.0;
     // A symmetric range, so that the rotations by 90 degrees are exact.
     let to_i16 = |x: f64| (x * scale).round().clamp(-32767.0, 32767.0) as i16;
-    let iq: Vec<[i16; 2]> = rx.iter().map(|v| [to_i16(v.re), to_i16(v.im)]).collect();
+    rx.iter().map(|v| [to_i16(v.re), to_i16(v.im)]).collect()
+}
+
+#[test]
+fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset() {
+    let packets = random_packets();
+    let tx = transmit(&packets);
+    let power = tx.iter().map(Complex64::norm_sqr).sum::<f64>() / tx.len() as f64;
+    let peak = tx
+        .iter()
+        .map(|v| v.re.abs().max(v.im.abs()))
+        .fold(0.0, f64::max);
+    // The level of the transmitter keeps the peaks inside the cs16 range.
+    assert!(peak < 32767.0 / 32768.0, "peak {peak}");
+    let iq = channel(&tx);
 
     let results: Vec<Received> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..4)
@@ -326,5 +337,72 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
             r.ok.len(),
             90 * q
         );
+    }
+}
+
+/// The receiver flow up to its `qam_demod` node, whose soft bits go to the stream output `soft`.
+fn soft_receiver() -> String {
+    let mut spec: serde_json::Value = serde_json::from_str(&flow("qam16_receiver")).unwrap();
+    spec["nodes"].as_object_mut().unwrap().remove("dec");
+    spec["edges"] = serde_json::json!([
+        { "from": "rf", "to": "tune" },
+        { "from": "tune", "to": "agc" },
+        { "from": "agc", "to": "demod" },
+        { "from": "demod", "to": "soft" }
+    ]);
+    spec["outputs"] = serde_json::json!({ "soft": { "type": "stream", "capacity": 65536 } });
+    spec.to_string()
+}
+
+/// The digest of the soft bits of [`soft_receiver`] on `bytes`, pushed as in [`receive`].
+fn soft_digest(bytes: &[u8]) -> Digest {
+    let mut p = build(&soft_receiver());
+    let mut digest = Digest::new();
+    let mut buf = vec![0.0f32; 65536];
+    for chunk in bytes.chunks(PUSH_SAMPLES * 4) {
+        p.push("rf", InputData::Raw(chunk)).unwrap();
+        loop {
+            let n = p.read_stream("soft", &mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+            digest.f32s(&buf[..n]);
+        }
+    }
+    assert_eq!(p.dropped("soft").unwrap(), 0);
+    digest
+}
+
+#[test]
+fn the_qam16_flows_keep_the_baseline_of_m44_1() {
+    let table = Baseline::load(
+        "m44_1",
+        "qam_loop",
+        baseline::level(sdrk_backend_simd::level_name()),
+    )
+    .unwrap();
+    let packets = random_packets();
+    let tx = transmit(&packets);
+    // the `cs16` bytes of the transmitter (the samples of `transmit` are exactly the `cs16`
+    // values over 32768)
+    let mut digest = Digest::new();
+    for v in &tx {
+        for x in [v.re, v.im] {
+            digest.bytes(&((x * 32768.0) as i16).to_le_bytes());
+        }
+    }
+    table.check("tx_cs16", &digest).unwrap();
+    let iq = channel(&tx);
+    let digests: Vec<Digest> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..4)
+            .map(|q| {
+                let iq = &iq;
+                s.spawn(move || soft_digest(&rotate(iq, q)))
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for (q, d) in digests.iter().enumerate() {
+        table.check(&format!("soft_turn{q}"), d).unwrap();
     }
 }

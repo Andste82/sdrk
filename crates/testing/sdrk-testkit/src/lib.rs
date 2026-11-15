@@ -8,6 +8,7 @@
 //!
 //! - `storage` (feature `std`): `VecStorage`, the `Vec`-backed block storage for host tests,
 //! - `golden` (feature `std`): loader and comparison for the golden vectors,
+//! - `baseline` (feature `std`): digests of block outputs recorded before a refactoring, for its bit-identity tests (M44.1),
 //! - [`e2e`]: the streaming FM receive and transmit chains of the end-to-end tests,
 //! - [`e2e_nfm`]: the end-to-end narrowband FM receive with squelch (M19),
 //! - [`e2e_ssb`]: the end-to-end SSB receive with squelch and AGC (M21),
@@ -55,6 +56,8 @@
 extern crate std;
 
 pub mod arena;
+#[cfg(feature = "std")]
+pub mod baseline;
 pub mod ber;
 #[cfg(feature = "std")]
 pub mod channel;

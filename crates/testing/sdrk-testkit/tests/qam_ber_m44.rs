@@ -38,6 +38,10 @@
 //! solution on them (64-QAM at 18 dB: `mse` 0.016 instead of 0.003). The 90 degree ambiguity is
 //! resolved by the alignment here and by `frame_decode` `four` in a flow.
 //!
+//! The soft bits of every receiver keep the bits of the baseline of M44.1 (spec §5, test 5;
+//! `sdrk_testkit::baseline`, table `qam_ber` of `tests/baseline/m44_1`): a digest of all its soft
+//! bits up to the last counted symbol, per SIMD level.
+//!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
 #![allow(
@@ -58,8 +62,19 @@ use sdrk::Rate;
 use sdrk_blocks::{Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::rotate_symbol;
+use sdrk_testkit::baseline::{self, Baseline, Digest};
 use sdrk_testkit::channel::{Awgn, ClockDrift, FrequencyOffset, Impairment, Multipath};
 use sdrk_testkit::{Pcg32, VecStorage};
+
+/// The table of the baseline of M44.1 at the SIMD level of this build.
+fn baseline_table() -> Baseline {
+    Baseline::load(
+        "m44_1",
+        "qam_ber",
+        baseline::level(sdrk_backend_simd::level_name()),
+    )
+    .unwrap()
+}
 
 /// Bits counted per receiver.
 const BER_BITS: u64 = 1_000_000;
@@ -135,6 +150,15 @@ enum Channel {
     Mild,
     /// A carrier offset in cycles per symbol and the clock drift of test 6.
     OffsetDrift(f64),
+}
+
+/// The name of a channel in the cases of the baseline.
+fn channel_name(channel: Channel) -> String {
+    match channel {
+        Channel::Awgn => "awgn".to_string(),
+        Channel::Mild => "mild".to_string(),
+        Channel::OffsetDrift(offset) => format!("offset{offset}_drift"),
+    }
 }
 
 /// The stages of a channel, applied in order.
@@ -245,6 +269,8 @@ struct Receiver {
     noisy: Vec<Complex64>,
     input: Vec<C32>,
     soft: Vec<f32>,
+    /// The digest of every soft bit out until the receiver is done (the baseline of M44.1).
+    digest: Digest,
 }
 
 impl Receiver {
@@ -262,6 +288,7 @@ impl Receiver {
             noisy: Vec::with_capacity(CHUNK + 64),
             input: Vec::with_capacity(CHUNK + 64),
             soft: vec![0.0; CALL_SYMBOLS * b],
+            digest: Digest::new(),
         }
     }
 
@@ -270,6 +297,7 @@ impl Receiver {
     }
 
     fn push(&mut self, soft: &[f32]) {
+        self.digest.f32s(soft);
         let mut syms = symbols(soft, bps(self.order));
         if self.skip > 0 {
             let k = self.skip.min(syms.len());
@@ -403,6 +431,14 @@ fn ber_run(
                 s.spawn(move || rx.process(clean));
             }
         });
+    }
+    let table = baseline_table();
+    for (rx, &(taps, ebn0)) in rxs.iter().zip(runs) {
+        let case = format!(
+            "qam{order}_{}_seed{seed}_taps{taps}_ebn0_{ebn0}",
+            channel_name(channel)
+        );
+        table.check(&case, &rx.digest).unwrap();
     }
     rxs.iter()
         .zip(runs)

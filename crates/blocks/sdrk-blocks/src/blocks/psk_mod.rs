@@ -1,29 +1,33 @@
 //! `psk_mod`: BPSK, QPSK and 8PSK modulator (soft bits to root-raised-cosine shaped symbols),
 //! coherent or differential, with the QPSK variants pi/4-DQPSK and offset QPSK.
 
-use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
+use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
-use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 
 use super::costas::{check_f64, check_order};
-use super::symbol_demap::{C8, PSK8_GRAY, S8};
-use super::{check_count, head, head_mut, tail, tail_mut, unknown};
+use super::interpolate::InterpolateBlock;
+use super::iq_offset::{IqOffsetBlock, IqOffsetConfig, IqPart};
+use super::qam_mod::{modulate, pulse_stage};
+use super::symbol_map::{
+    SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
+};
+use super::unknown;
+use super::{check_count, head_mut};
 use crate::block::{Block, BlockTiming, ParamValue};
+use crate::chain::Chain;
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
-use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
+use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN};
 use crate::error::{Error, Result};
 use crate::storage::{Plan, Storage};
 
-/// Symbols per piece the block processes at a time (the size of its symbol buffer).
+/// The capacity in symbols of the buffer between `symbol_map` and the interpolation (and with
+/// `offset` in samples of the buffer between the interpolation and `iq_offset`).
 pub const PSK_MOD_CHUNK: usize = 256;
 
 /// The largest `samples_per_symbol` of `psk_mod`.
 const MAX_SPS: usize = 64;
-
-/// `1 / sqrt(2)` rounded once to `f32`.
-const H: f32 = core::f32::consts::FRAC_1_SQRT_2;
 
 /// The names of the `variant` choice, in index order.
 const VARIANT_OPTIONS: &[&str] = &["plain", "pi4", "offset"];
@@ -130,8 +134,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         (bits 00), +3 pi/4 (01), -3 pi/4 (11) or -pi/4 (10). The variant offset (order 4, not \
         differential, even samples_per_symbol) is OQPSK: the quadrature part is delayed by \
         samples_per_symbol / 2 output samples after the pulse shaping, which keeps the \
-        envelope away from zero. The symbols are interpolated by samples_per_symbol with the \
-        root-raised-cosine \
+        envelope away from zero. The symbols are interpolated by samples_per_symbol with the root-raised-cosine \
         pulse (rolloff, span symbols) scaled by sqrt(samples_per_symbol), so the matched \
         filter of psk_demod gives amplitude 1 at the symbol centres. The output rate is the \
         bit rate times samples_per_symbol / bits per symbol; the group delay is span / 2 \
@@ -209,62 +212,6 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     ],
     required: &["samples_per_symbol"],
 };
-
-/// The constellation point at the phase `k pi / 8` (`k` mod 16), each part rounded once to
-/// `f32`; the multiples of `pi / 8` keep the points exact while the differential phase runs
-/// (D613). The even entries are the eight points of M40 at multiples of `pi / 4` (BPSK, QPSK
-/// and the differential phase), the odd ones the 8PSK points (`cos(pi / 8)`, `sin(pi / 8)`).
-pub(crate) const fn point16(k: u8) -> C32 {
-    let (re, im) = match k & 15 {
-        0 => (1.0, 0.0),
-        1 => (C8, S8),
-        2 => (H, H),
-        3 => (S8, C8),
-        4 => (0.0, 1.0),
-        5 => (-S8, C8),
-        6 => (-H, H),
-        7 => (-C8, S8),
-        8 => (-1.0, 0.0),
-        9 => (-C8, -S8),
-        10 => (-H, -H),
-        11 => (-S8, -C8),
-        12 => (0.0, -1.0),
-        13 => (S8, -C8),
-        14 => (H, -H),
-        _ => (C8, -S8),
-    };
-    C32 { re, im }
-}
-
-/// The phase index (in units of `pi / 8`) of the symbol of `bits` (1, 2 or 3 soft bits, above
-/// 0 is a 1). BPSK: 1 -> 0, 0 -> 8. QPSK (Gray, plain): (1, 1) -> 2, (0, 1) -> 6, (0, 0) ->
-/// 10, (1, 0) -> 14. pi/4-DQPSK (the increments of M40.1 §2): (0, 0) -> 2 (`+pi/4`), (0, 1)
-/// -> 6 (`+3 pi/4`), (1, 1) -> 10 (`-3 pi/4`), (1, 0) -> 14 (`-pi/4`). 8PSK: `2 k + 1` with `k`
-/// the entry `b0 4 + b1 2 + b2` of [`PSK8_GRAY`].
-pub(super) fn phase_index(bits: &[f32], pi4: bool) -> u8 {
-    match bits {
-        [b] => {
-            if *b > 0.0 {
-                0
-            } else {
-                8
-            }
-        }
-        [b0, b1] => match (*b0 > 0.0, *b1 > 0.0, pi4) {
-            (true, true, false) | (false, false, true) => 2,
-            (false, true, _) => 6,
-            (false, false, false) | (true, true, true) => 10,
-            (true, false, _) => 14,
-        },
-        [b0, b1, b2, ..] => {
-            let g =
-                usize::from(*b0 > 0.0) * 4 + usize::from(*b1 > 0.0) * 2 + usize::from(*b2 > 0.0);
-            let k = PSK8_GRAY.get(g).copied().unwrap_or(0);
-            2 * k + 1
-        }
-        [] => 0,
-    }
-}
 
 /// Configuration of [`PskModBlock`].
 ///
@@ -388,6 +335,24 @@ impl PskModConfig {
         }
     }
 
+    /// The configuration of the `symbol_map` stage: the constellation of `order`, `differential`
+    /// and the variant `pi4` (`offset` acts after the pulse filter and maps as `plain`).
+    fn map_config(&self) -> SymbolMapConfig {
+        SymbolMapConfig {
+            constellation: match self.order {
+                8 => SymbolMapConstellation::Psk8,
+                4 => SymbolMapConstellation::Qpsk,
+                _ => SymbolMapConstellation::Bpsk,
+            },
+            differential: self.differential,
+            variant: if self.variant == PskVariant::Pi4 {
+                SymbolMapVariant::Pi4
+            } else {
+                SymbolMapVariant::Plain
+            },
+        }
+    }
+
     /// The half symbol of the `offset` delay in output samples (0 for the other variants).
     fn half(&self) -> usize {
         if self.variant == PskVariant::Offset {
@@ -406,19 +371,23 @@ impl PskModConfig {
     }
 }
 
+/// The stages of `psk_mod`: `symbol_map` then the interpolation.
+type PskModStages<S> = Chain<SymbolMapBlock<S>, InterpolateBlock<C32, S>, S>;
+
 /// BPSK, QPSK and 8PSK modulator: `f32` soft bits in (one per sample), `C32` out at
 /// `samples_per_symbol` samples per symbol.
 ///
-/// Every symbol is one of the sixteen `f32` points at multiples of 22.5 degrees (BPSK, QPSK
-/// and their differential phase use the even ones at multiples of 45 degrees, 8PSK the odd
-/// ones; the differential phase runs in units of `pi / 8`); the interpolation is the kernel
-/// `fir_interpolate` through the facade with the taps `rrc(rolloff, sps, span) sqrt(sps)` as
-/// `f32`. With the variant `offset` the imaginary part of the filter output then passes a
-/// delay of `sps / 2` samples (a ring of `sps / 2` `f32`, zeros at the start). A call takes
-/// `min(input / bits, output / sps)` whole symbols, in pieces of at most [`PSK_MOD_CHUNK`].
-/// Timing: constant ratio `sps / bits`, delay `span bits / 2` input samples (`offset`:
-/// `(span bits + 2) / 2`, the half symbol of the quadrature part is one bit). Storage: the
-/// taps, the filter history, a symbol buffer and for `offset` the ring.
+/// A composite block (M44.1 §4): [`SymbolMapBlock`] (`bpsk`, `qpsk` or `8psk` from `order`,
+/// with `differential` and the variant `plain` or `pi4`: one of the sixteen `f32` points at
+/// multiples of 22.5 degrees, the differential phase in units of `pi / 8`) then
+/// [`InterpolateBlock::with_taps`] with the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`
+/// (the kernel `fir_interpolate` through the facade), as a [`Chain`] whose buffer holds
+/// [`PSK_MOD_CHUNK`] symbols; with the variant `offset` the output of the chain then passes
+/// [`IqOffsetBlock`] in place with `samples` `sps / 2` (the imaginary part delayed through a
+/// ring of `sps / 2` `f32`, zeros at the start). A call takes `min(input / bits, output / sps)`
+/// whole symbols. Timing: constant ratio `sps / bits`, delay `span bits / 2` input samples
+/// (`offset`: `(span bits + 2) / 2`, the half symbol of the quadrature part is one bit).
+/// Storage: the taps, the filter history, the buffer of the chain and for `offset` the ring.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -438,59 +407,52 @@ impl PskModConfig {
 /// ```
 pub struct PskModBlock<S: Storage> {
     config: PskModConfig,
-    bps: usize,
-    sps: usize,
-    ratio: Ratio,
-    fir: FirInterpState<C32, S::Buf<f32>, S::Buf<C32>>,
-    buf: S::Buf<C32>,
-    /// The quadrature delay of `offset` (`sps / 2` samples); `None` for the other variants.
-    ring: Option<S::Buf<f32>>,
-    /// The differential phase in units of `pi / 8`.
-    phase: u8,
+    stages: PskModStages<S>,
+    /// The delay of the quadrature part for `offset`; `None` for the other variants.
+    offset: Option<IqOffsetBlock<S>>,
 }
 
 impl<S: Storage> core::fmt::Debug for PskModBlock<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PskModBlock")
             .field("config", &self.config)
-            .field("phase", &self.phase)
             .finish_non_exhaustive()
     }
 }
 
 impl<S: Storage> PskModBlock<S> {
-    /// Designs the pulse and creates the block; taps, history and the symbol buffer come
-    /// from `storage`.
+    /// Designs the pulse and creates the block; taps, history, the buffer of the chain and the
+    /// ring of `offset` come from `storage`.
     ///
     /// # Errors
     /// As [`PskModConfig::validate`]; `Storage` when the storage is too small.
-    pub fn new(config: &PskModConfig, _rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &PskModConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate()?;
-        let sps = config.samples_per_symbol;
-        let rrc = Rrc::new(config.rolloff, sps, config.span)?;
-        let n = rrc.len();
-        let gain = libm::sqrt(sps as f64);
-        let mut taps = storage.alloc::<f32>(n)?;
-        for (k, t) in taps.as_mut().iter_mut().enumerate() {
-            *t = (rrc.tap(k) * gain) as f32;
-        }
-        let hist = storage.alloc::<C32>(n.div_ceil(sps))?;
-        let buf = storage.alloc::<C32>(PSK_MOD_CHUNK)?;
+        let map = SymbolMapBlock::new(&config.map_config(), rate_in, storage)?;
+        let pulse = pulse_stage(
+            config.rolloff,
+            config.samples_per_symbol,
+            config.span,
+            storage,
+        )?;
+        let stages = Chain::new(map, pulse, PSK_MOD_CHUNK, storage)?;
         let half = config.half();
-        let ring = if half > 0 {
-            Some(storage.alloc::<f32>(half)?)
+        let offset = if half > 0 {
+            Some(IqOffsetBlock::new(
+                &IqOffsetConfig {
+                    samples: half,
+                    part: IqPart::Imag,
+                },
+                rate_in,
+                storage,
+            )?)
         } else {
             None
         };
         Ok(Self {
             config: *config,
-            bps: config.bits_per_symbol(),
-            sps,
-            ratio: config.ratio()?,
-            fir: FirInterpState::new(taps, hist, sps)?,
-            buf,
-            ring,
-            phase: 0,
+            stages,
+            offset,
         })
     }
 
@@ -525,7 +487,7 @@ impl<S: Storage> PskModBlock<S> {
 
     /// Number of taps of the pulse (`span samples_per_symbol + 1`).
     pub fn num_taps(&self) -> usize {
-        self.fir.taps().len()
+        self.stages.second().num_taps()
     }
 }
 
@@ -538,75 +500,38 @@ impl<S: Storage> Block for PskModBlock<S> {
     }
 
     fn process(&mut self, input: &[f32], output: &mut [C32]) -> Result<Progress> {
-        let (bps, sps) = (self.bps, self.sps);
-        let (mut consumed, mut produced) = (0usize, 0usize);
-        loop {
-            let syms = ((input.len() - consumed) / bps)
-                .min((output.len() - produced) / sps)
-                .min(PSK_MOD_CHUNK);
-            if syms == 0 {
-                break;
-            }
-            let bits = head(tail(input, consumed)?, syms * bps)?;
-            let buf = head_mut(self.buf.as_mut(), syms)?;
-            let mut phase = self.phase;
-            let pi4 = self.config.variant == PskVariant::Pi4;
-            for (s, b) in buf.iter_mut().zip(bits.chunks_exact(bps)) {
-                let k = phase_index(b, pi4);
-                *s = if self.config.differential {
-                    phase = phase.wrapping_add(k) & 15;
-                    point16(phase)
-                } else {
-                    point16(k)
-                };
-            }
-            self.phase = phase;
-            let out = head_mut(tail_mut(output, produced)?, syms * sps)?;
-            let p = <Sdrk as FirInterpolate<C32>>::fir_interpolate(
-                &Sdrk,
-                &mut self.fir,
-                head(self.buf.as_ref(), syms)?,
-                out,
-            )?;
-            if p.consumed != syms {
-                return Err(Error::Core(sdrk_core::Error::Internal(
-                    "psk_mod filter did not take the whole piece",
-                )));
-            }
-            if let Some(ring) = self.ring.as_mut() {
-                // The piece is whole symbols, so a multiple of the ring length: every block of
-                // `sps / 2` samples swaps its imaginary parts with the ring, which delays them
-                // by `sps / 2` samples and needs no position.
-                let ring = ring.as_mut();
-                for block in out.chunks_exact_mut(ring.len()) {
-                    for (y, r) in block.iter_mut().zip(ring.iter_mut()) {
-                        core::mem::swap(&mut y.im, r);
-                    }
-                }
-            }
-            consumed += syms * bps;
-            produced += p.produced;
+        let p = modulate(
+            &mut self.stages,
+            self.config.bits_per_symbol(),
+            self.config.samples_per_symbol,
+            input,
+            output,
+            "psk_mod stages did not take the whole piece",
+        )?;
+        if let Some(offset) = self.offset.as_mut() {
+            offset.process_in_place(head_mut(output, p.produced)?);
         }
-        Ok(Progress { consumed, produced })
+        Ok(p)
     }
 
     fn timing(&self) -> BlockTiming {
+        // The figures of the block of M40.1, as it reported them: the delay of the chain plus,
+        // with `offset`, the half symbol (one bit) of the quadrature part, which `iq_offset`
+        // does not report.
+        let bits = self.config.bits_per_symbol();
+        let offset = usize::from(self.offset.is_some());
         BlockTiming {
-            ratio: self.ratio,
+            ratio: self.config.ratio().unwrap_or(Ratio::ONE),
             kind: RatioKind::Constant,
-            delay: Delay::new(
-                (self.config.span * self.bps + 2 * usize::from(self.ring.is_some())) as u64,
-                2,
-            )
-            .unwrap_or(Delay::ZERO),
+            delay: Delay::new((self.config.span * bits + 2 * offset) as u64, 2)
+                .unwrap_or(Delay::ZERO),
         }
     }
 
     fn reset(&mut self) {
-        self.fir.reset();
-        self.phase = 0;
-        if let Some(ring) = self.ring.as_mut() {
-            ring.as_mut().fill(0.0);
+        self.stages.reset();
+        if let Some(offset) = self.offset.as_mut() {
+            offset.reset();
         }
     }
 
@@ -622,6 +547,6 @@ impl<S: Storage> Block for PskModBlock<S> {
     }
 
     fn min_input(&self) -> usize {
-        self.bps
+        self.config.bits_per_symbol()
     }
 }

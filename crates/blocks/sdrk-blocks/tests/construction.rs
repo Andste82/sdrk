@@ -39,10 +39,11 @@ use sdrk_blocks::{
     SymbolSyncBlock, SymbolSyncConfig, Ted,
 };
 use sdrk_blocks::{
-    CostasBlock, CostasConfig, FrameRotations, MorseDecodeBlock, MorseDecodeConfig,
-    MorseEncodeBlock, MorseEncodeConfig, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
-    PskVariant, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, RdsDecodeBlock,
-    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    CostasBlock, CostasConfig, FrameRotations, InterpolateBlock, IqOffsetBlock, IqOffsetConfig,
+    IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
+    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QamDemodBlock,
+    QamDemodConfig, QamModBlock, QamModConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -365,6 +366,38 @@ fn psk_blocks_storage_is_exact() {
             |a| PskDemodBlock::new(&cfg, r, a).map(|_| ()),
         );
     }
+    // M44.1: symbol_map (no storage), iq_offset (its ring) and the interpolation with given
+    // taps
+    for constellation in [
+        SymbolMapConstellation::Bpsk,
+        SymbolMapConstellation::Psk8,
+        SymbolMapConstellation::Qam64,
+    ] {
+        let cfg = SymbolMapConfig {
+            constellation,
+            ..SymbolMapConfig::default()
+        };
+        let bytes = SymbolMapBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 0);
+        check_exact_storage(bytes, |a| SymbolMapBlock::new(&cfg, r, a).map(|_| ()));
+    }
+    for (samples, part) in [(1, IqPart::Imag), (4, IqPart::Real), (512, IqPart::Imag)] {
+        let cfg = IqOffsetConfig { samples, part };
+        let bytes = IqOffsetBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 4 * samples);
+        check_exact_storage(bytes, |a| IqOffsetBlock::new(&cfg, r, a).map(|_| ()));
+    }
+    for (n, factor) in [(1, 1), (81, 8), (2049, 64)] {
+        let taps = || (0..n).map(|k| k as f64 / n as f64);
+        check_exact_storage(
+            InterpolateBlock::<C32, A<'_>>::storage_bytes_with_taps(n, factor).unwrap(),
+            |a| InterpolateBlock::<C32, _>::with_taps(taps(), factor, a).map(|_| ()),
+        );
+        check_exact_storage(
+            InterpolateBlock::<CQ15, A<'_>>::storage_bytes_with_taps(n, factor).unwrap(),
+            |a| InterpolateBlock::<CQ15, _>::with_taps(taps(), factor, a).map(|_| ()),
+        );
+    }
     // M44: qam_mod and qam_demod (with and without the equalizer)
     for (order, sps, span) in [(16, 8, 10), (64, 2, 4), (16, 64, 32)] {
         let cfg = QamModConfig {
@@ -545,6 +578,10 @@ fn no_block_is_larger_than_512_bytes() {
     check::<PskModBlock<sdrk_testkit::VecStorage>>("PskModBlock<Vec>");
     check::<PskDemodBlock<A<'static>>>("PskDemodBlock");
     check::<PskDemodBlock<sdrk_testkit::VecStorage>>("PskDemodBlock<Vec>");
+    check::<SymbolMapBlock<A<'static>>>("SymbolMapBlock");
+    check::<SymbolMapBlock<sdrk_testkit::VecStorage>>("SymbolMapBlock<Vec>");
+    check::<IqOffsetBlock<A<'static>>>("IqOffsetBlock");
+    check::<IqOffsetBlock<sdrk_testkit::VecStorage>>("IqOffsetBlock<Vec>");
     check::<QamModBlock<A<'static>>>("QamModBlock");
     check::<QamModBlock<sdrk_testkit::VecStorage>>("QamModBlock<Vec>");
     check::<QamDemodBlock<A<'static>>>("QamDemodBlock");
@@ -663,6 +700,17 @@ fn public_types_are_send() {
     assert_send::<FrameRotations>();
     assert_sync::<FrameRotations>();
     assert_sync::<SymbolDemapConfig>();
+    assert_send::<SymbolMapBlock<A<'static>>>();
+    assert_send::<SymbolMapBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<SymbolMapBlock<A<'static>>>();
+    assert_send::<SymbolMapConfig>();
+    assert_sync::<SymbolMapConstellation>();
+    assert_sync::<SymbolMapVariant>();
+    assert_send::<IqOffsetBlock<A<'static>>>();
+    assert_send::<IqOffsetBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<IqOffsetBlock<A<'static>>>();
+    assert_sync::<IqOffsetConfig>();
+    assert_sync::<IqPart>();
     assert_send::<SymbolDemapConstellation>();
     fn symbol_demap_elem<T: SymbolDemapElem + Send + Sync>() {}
     symbol_demap_elem::<f32>();

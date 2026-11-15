@@ -1,13 +1,15 @@
 //! `qam_mod`: 16-QAM and 64-QAM modulator (soft bits to root-raised-cosine shaped symbols).
 
-use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
+use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::Qam;
-use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 
 use super::costas::check_f64;
-use super::{check_count, head, head_mut, tail, tail_mut, unknown};
+use super::interpolate::InterpolateBlock;
+use super::symbol_map::{SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation};
+use super::{check_count, head, head_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
+use crate::chain::Chain;
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
@@ -15,7 +17,7 @@ use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
 use crate::error::{Error, Result};
 use crate::storage::{Plan, Storage};
 
-/// Symbols per piece the block processes at a time (the size of its symbol buffer).
+/// The capacity in symbols of the buffer between `symbol_map` and the interpolation.
 pub const QAM_MOD_CHUNK: usize = 256;
 
 /// The largest `samples_per_symbol` of `qam_mod`.
@@ -227,35 +229,33 @@ impl QamModConfig {
     }
 }
 
-/// The symbol of `K` soft bits (the first the most significant, above 0 is a 1).
-#[inline]
-fn symbol_of<const K: usize>(bits: &[f32; K]) -> u32 {
-    bits.iter()
-        .fold(0u32, |s, &b| (s << 1) | u32::from(b > 0.0))
-}
+/// The stages of `qam_mod`: `symbol_map` then the interpolation with the pulse.
+type QamModStages<S> = Chain<SymbolMapBlock<S>, InterpolateBlock<C32, S>, S>;
 
-/// The points of the symbols of `K` bits each in `bits` (whole symbols) to `buf`.
-#[inline]
-fn map_points<const K: usize>(points: &[C32], bits: &[f32], buf: &mut [C32]) {
-    for (s, b) in buf.iter_mut().zip(bits.chunks_exact(K)) {
-        // The symbol has `K` bits, below the table length.
-        *s = <&[f32; K]>::try_from(b)
-            .ok()
-            .and_then(|b| points.get(symbol_of(b) as usize))
-            .copied()
-            .unwrap_or_default();
-    }
+/// The pulse of the modulators `qam_mod` and `psk_mod`: the `span sps + 1` taps
+/// `rrc(rolloff, sps, span) sqrt(sps)` in `f64`, rounded once to `f32` by
+/// [`InterpolateBlock::with_taps`].
+pub(crate) fn pulse_stage<S: Storage>(
+    rolloff: f64,
+    sps: usize,
+    span: usize,
+    storage: &mut S,
+) -> Result<InterpolateBlock<C32, S>> {
+    let rrc = Rrc::new(rolloff, sps, span)?;
+    let gain = libm::sqrt(sps as f64);
+    InterpolateBlock::with_taps((0..rrc.len()).map(|k| rrc.tap(k) * gain), sps, storage)
 }
 
 /// 16-QAM and 64-QAM modulator: `f32` soft bits in (one per sample), `C32` out at
 /// `samples_per_symbol` samples per symbol.
 ///
-/// Every symbol is the `f32` point of `sdrk_core::kernels::constellation::Qam` of its bits (M44
-/// §1); the interpolation is the kernel `fir_interpolate` through the facade with the taps
-/// `rrc(rolloff, sps, span) sqrt(sps)` as `f32`, as in `psk_mod`. A call takes
-/// `min(input / bits, output / sps)` whole symbols, in pieces of at most [`QAM_MOD_CHUNK`].
-/// Timing: constant ratio `sps / bits`, delay `span bits / 2` input samples. Storage: the taps,
-/// the filter history and a symbol buffer.
+/// A composite block (M44.1 §4): [`SymbolMapBlock`] (`qam16` or `qam64` from `order`, the `f32`
+/// points of `sdrk_core::kernels::constellation::Qam`, M44 §1) then
+/// [`InterpolateBlock::with_taps`] with the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`
+/// (the kernel `fir_interpolate` through the facade, as in `psk_mod`), as a [`Chain`] whose
+/// buffer holds [`QAM_MOD_CHUNK`] symbols. A call takes `min(input / bits, output / sps)` whole
+/// symbols. Timing: constant ratio `sps / bits`, delay `span bits / 2` input samples. Storage:
+/// the taps, the filter history and the buffer of the chain.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -275,12 +275,10 @@ fn map_points<const K: usize>(points: &[C32], bits: &[f32], buf: &mut [C32]) {
 /// ```
 pub struct QamModBlock<S: Storage> {
     config: QamModConfig,
-    qam: Qam,
     bps: usize,
     sps: usize,
     ratio: Ratio,
-    fir: FirInterpState<C32, S::Buf<f32>, S::Buf<C32>>,
-    buf: S::Buf<C32>,
+    stages: QamModStages<S>,
 }
 
 impl<S: Storage> core::fmt::Debug for QamModBlock<S> {
@@ -292,32 +290,33 @@ impl<S: Storage> core::fmt::Debug for QamModBlock<S> {
 }
 
 impl<S: Storage> QamModBlock<S> {
-    /// Designs the pulse and creates the block; taps, history and the symbol buffer come
-    /// from `storage`.
+    /// Designs the pulse and creates the block; taps, history and the buffer of the chain
+    /// come from `storage`.
     ///
     /// # Errors
     /// As [`QamModConfig::validate`]; `Storage` when the storage is too small.
-    pub fn new(config: &QamModConfig, _rate_in: Rate, storage: &mut S) -> Result<Self> {
+    pub fn new(config: &QamModConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate()?;
-        let qam = qam_of_order(config.order)?;
+        let constellation = match qam_of_order(config.order)? {
+            Qam::Qam64 => SymbolMapConstellation::Qam64,
+            _ => SymbolMapConstellation::Qam16,
+        };
+        let map = SymbolMapBlock::new(
+            &SymbolMapConfig {
+                constellation,
+                ..SymbolMapConfig::default()
+            },
+            rate_in,
+            storage,
+        )?;
         let sps = config.samples_per_symbol;
-        let rrc = Rrc::new(config.rolloff, sps, config.span)?;
-        let n = rrc.len();
-        let gain = libm::sqrt(sps as f64);
-        let mut taps = storage.alloc::<f32>(n)?;
-        for (k, t) in taps.as_mut().iter_mut().enumerate() {
-            *t = (rrc.tap(k) * gain) as f32;
-        }
-        let hist = storage.alloc::<C32>(n.div_ceil(sps))?;
-        let buf = storage.alloc::<C32>(QAM_MOD_CHUNK)?;
+        let pulse = pulse_stage(config.rolloff, sps, config.span, storage)?;
         Ok(Self {
             config: *config,
-            qam,
-            bps: qam.bits_per_symbol(),
+            bps: config.bits_per_symbol(),
             sps,
             ratio: config.ratio()?,
-            fir: FirInterpState::new(taps, hist, sps)?,
-            buf,
+            stages: Chain::new(map, pulse, QAM_MOD_CHUNK, storage)?,
         })
     }
 
@@ -348,8 +347,30 @@ impl<S: Storage> QamModBlock<S> {
 
     /// Number of taps of the pulse (`span samples_per_symbol + 1`).
     pub fn num_taps(&self) -> usize {
-        self.fir.taps().len()
+        self.stages.second().num_taps()
     }
+}
+
+/// Runs whole symbols through the stages of a modulator: `min(input / bps, output / sps)`
+/// symbols, so that no bit is taken whose samples do not fit (the buffer of the chain is empty
+/// after every call).
+pub(crate) fn modulate<B: Block<In = f32, Out = C32>>(
+    stages: &mut B,
+    bps: usize,
+    sps: usize,
+    input: &[f32],
+    output: &mut [C32],
+    what: &'static str,
+) -> Result<Progress> {
+    let syms = (input.len() / bps).min(output.len() / sps);
+    if syms == 0 {
+        return Ok(Progress::default());
+    }
+    let p = stages.process(head(input, syms * bps)?, head_mut(output, syms * sps)?)?;
+    if p.consumed != syms * bps || p.produced != syms * sps {
+        return Err(Error::Core(sdrk_core::Error::Internal(what)));
+    }
+    Ok(p)
 }
 
 impl<S: Storage> Block for QamModBlock<S> {
@@ -361,42 +382,19 @@ impl<S: Storage> Block for QamModBlock<S> {
     }
 
     fn process(&mut self, input: &[f32], output: &mut [C32]) -> Result<Progress> {
-        let (bps, sps) = (self.bps, self.sps);
-        let points = self.qam.point_table();
-        let (mut consumed, mut produced) = (0usize, 0usize);
-        loop {
-            let syms = ((input.len() - consumed) / bps)
-                .min((output.len() - produced) / sps)
-                .min(QAM_MOD_CHUNK);
-            if syms == 0 {
-                break;
-            }
-            let bits = head(tail(input, consumed)?, syms * bps)?;
-            let buf = head_mut(self.buf.as_mut(), syms)?;
-            // The bits of a symbol are a constant of the order, so the compiler unrolls them.
-            match self.qam {
-                Qam::Qam64 => map_points::<6>(points, bits, buf),
-                _ => map_points::<4>(points, bits, buf),
-            }
-            let out = head_mut(tail_mut(output, produced)?, syms * sps)?;
-            let p = <Sdrk as FirInterpolate<C32>>::fir_interpolate(
-                &Sdrk,
-                &mut self.fir,
-                head(self.buf.as_ref(), syms)?,
-                out,
-            )?;
-            if p.consumed != syms {
-                return Err(Error::Core(sdrk_core::Error::Internal(
-                    "qam_mod filter did not take the whole piece",
-                )));
-            }
-            consumed += syms * bps;
-            produced += p.produced;
-        }
-        Ok(Progress { consumed, produced })
+        modulate(
+            &mut self.stages,
+            self.bps,
+            self.sps,
+            input,
+            output,
+            "qam_mod stages did not take the whole piece",
+        )
     }
 
     fn timing(&self) -> BlockTiming {
+        // The figures of the block of M44, as it reported them (the delay of the chain is the
+        // same value, `span / 2` symbols of the interpolation).
         BlockTiming {
             ratio: self.ratio,
             kind: RatioKind::Constant,
@@ -405,7 +403,7 @@ impl<S: Storage> Block for QamModBlock<S> {
     }
 
     fn reset(&mut self) {
-        self.fir.reset();
+        self.stages.reset();
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {

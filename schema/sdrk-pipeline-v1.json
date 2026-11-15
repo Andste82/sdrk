@@ -2898,6 +2898,59 @@
           },
           {
             "additionalProperties": false,
+            "description": "Delays the imaginary or the real part of a complex signal against the other part (the offset of OQPSK).",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "iq_offset"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "part": {
+                    "default": "imag",
+                    "description": "The part that is delayed: imag (the imaginary part) or real. Typical: imag in a transmitter, real in a receiver. Build-time.",
+                    "enum": [
+                      "imag",
+                      "real"
+                    ],
+                    "type": "string"
+                  },
+                  "samples": {
+                    "description": "The delay of the part in samples, 1 to 512. Required. Unit: samples. Typical: samples_per_symbol / 2 for OQPSK. Build-time.",
+                    "maximum": 512,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "samples"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Magnitude (envelope) of complex samples.",
             "properties": {
               "align": {
@@ -4762,6 +4815,66 @@
                     "maximum": 1000000000.0,
                     "minimum": 1e-9,
                     "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Turns soft bits into the points of a constellation (BPSK to 64-QAM), one sample per symbol.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "symbol_map"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The constellation: bpsk (1 bit per symbol), qpsk (2), 8psk (3), qam16 (4) or qam64 (6), the names of symbol_demap. Typical: bpsk; qpsk, 8psk, qam16 or qam64 for more bits per symbol. Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
+                  "differential": {
+                    "default": false,
+                    "description": "Differential coding (bpsk, qpsk and 8psk only): each symbol adds its phase to the previous one. Typical: false; true for a receiver without carrier recovery. Build-time.",
+                    "type": "boolean"
+                  },
+                  "variant": {
+                    "default": "plain",
+                    "description": "plain or pi4 (pi/4-DQPSK: needs qpsk and differential). Typical: plain; pi4 for pi/4-DQPSK (TETRA). Build-time.",
+                    "enum": [
+                      "plain",
+                      "pi4"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"

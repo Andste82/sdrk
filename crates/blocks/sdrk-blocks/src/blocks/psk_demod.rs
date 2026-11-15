@@ -1199,7 +1199,7 @@ impl<S: Storage> OffsetLoop<S> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::psk_mod::{phase_index, point16};
+    use super::super::symbol_map::{phase_index, point16};
     use super::{SoftMap, demod_bits};
     use sdrk_core::C32;
 

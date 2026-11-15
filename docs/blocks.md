@@ -628,7 +628,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `am_mod`, `ssb_mod` | AM and SSB transmit | M35 (delivered) |
 | `fm_stereo_mod` | FM stereo encoder (pilot, 38 kHz subcarrier) | M36 (delivered) |
 | `frame_encode`, `frame_decode` | test framing of `sdrk-proto` (sync word, length, CRC) | M37 (delivered) |
-| `symbol_sync`, `slice` | symbol timing recovery; symbol to soft bits | M38 (delivered) |
+| `symbol_sync`, `slice` | symbol timing recovery; symbol to soft bits (`slice` becomes `symbol_demap` in M44.1) | M38 (delivered) |
 | `fsk_demod`/`fsk_mod`, `afc` | FSK, GFSK, GMSK, AFSK (parameters, not kinds); automatic frequency control | M39 (delivered; the AFSK flows in M39.1, delivered) |
 | `ook_demod`/`ook_mod`, `hdlc_decode`/`hdlc_encode`, `adsb_decode` | on-off keying, HDLC framing, Mode S/ADS-B | M39.1 (delivered) |
 | `costas`, `psk_demod`/`psk_mod` | carrier recovery (parameter `constellation` `bpsk`/`qpsk`/`8psk`/`qam16`/`qam64`, `order` 2/4/8 until M44); PSK with variants (QPSK, DQPSK, 8PSK, π/4-DQPSK, OQPSK) as parameters | M40 (delivered: orders 2 and 4, coherent and differential); M40.1 (8PSK, π/4-DQPSK, OQPSK) |
@@ -637,6 +637,10 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `equalize` | adaptive equalizer (CMA, then decision-directed NLMS, optional decision feedback, phase tracker); options `equalizer_taps` and `equalizer_feedback_taps` of `psk_demod` | M43 (delivered) |
 | `morse_encode`, `morse_decode` | Morse code (CW): text to the key envelope, the envelope to words | M47 (delivered) |
 | `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 (delivered) |
+| `symbol_map`/`symbol_demap` | bits to the symbol of a constellation (BPSK to 64-QAM, M44.2 to 1024-QAM) and back to soft bits; the pair of `subcarrier_map`/`subcarrier_demap` | M44.1 (`symbol_demap` is the renamed `slice`) |
+| `iq_offset` | delay of the imaginary or the real part (OQPSK, both sides) | M44.1 |
+| `qam_acquire` | QAM frequency acquisition by the fourth power | M44.1 |
+| `qam_frame_encode`/`qam_frame_decode` | packets to QAM samples and back, with a frame-level lock watch (composite blocks) | M44.1 |
 | `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45 (delivered) |
 | `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 (delivered) |
 | `sensor_decode` | pulse trains to sensor readings as JSON text packets (433 MHz OOK and 868 MHz FSK devices, repeats merged) | M46 (block, kind and the flows `ism433_sensors` / `ism868_sensors` delivered, D1145) |

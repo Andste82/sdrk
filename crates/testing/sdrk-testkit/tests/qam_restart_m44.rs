@@ -35,6 +35,16 @@
 //!   Es/N0 12 dB with the equalizer at +-0.12497 cycles per symbol, where the estimate of a
 //!   verify window can wrap to the other edge of `[-0.125, 0.125)`: no restart over 40000
 //!   symbols, the estimate within 1e-4 modulo a quarter cycle per symbol.
+//! - **A signal back after a gap is received again** (seed 816, F3 of the review of I44-13):
+//!   16-QAM at Es/N0 24 dB and 64-QAM at 30 dB, with and without the equalizer, for 20000
+//!   symbols, then a gap of five check intervals (20480 symbols) of Gaussian noise at the
+//!   signal's noise floor or at its power (an AGC that turned the noise up), then the same
+//!   signal on the same frequency for 40000 symbols: the estimate, kept over the gap by the
+//!   check by frequency, is within 1e-4 of the offset, and from 16384 symbols after the gap the
+//!   receiver is locked and keeps one alignment within the BER bound above. The equalizer of
+//!   64-QAM at 30 dB adapted to the gap at the signal's power does not converge on the signal
+//!   again and no check restarts it (the verify window agrees with the loops); that case is
+//!   printed, not asserted (I44-17).
 //!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
@@ -66,9 +76,13 @@ const OFFSET: f64 = 0.001;
 /// around the alignment a window is compared at.
 const SLIP_WINDOW: usize = 2000;
 const ALIGN_SYMBOLS: usize = 400;
-const SLIP_LAGS: usize = 3;
+const SLIP_LAGS: i64 = 3;
+/// Symbols of the gap of `a_signal_back_after_a_gap_is_received_again` (five check intervals of
+/// `qam_demod`), and the symbols after its end within which the receiver takes the signal again.
+const GAP_SYMBOLS: usize = 5 * 4096;
+const BACK_WITHIN: usize = 4 * 4096;
 /// The largest lag in symbols between the sent and the received symbols.
-const MAX_LAG: usize = 80;
+const MAX_LAG: i64 = 80;
 
 fn bps(order: u32) -> usize {
     if order == 64 { 6 } else { 4 }
@@ -173,20 +187,24 @@ fn demod_all(block: &mut QamDemodBlock<VecStorage>, input: &[C32]) -> Vec<f32> {
 
 /// The bit errors from the received symbol `from` on against `sent[j - lead - lag]` at the
 /// alignment (rotation and lag) with the fewest bit errors over its first [`ALIGN_SYMBOLS`]
-/// (the lag searched within `lead +- MAX_LAG` symbols of `lead`, the symbols of the lead-in):
+/// (the lag searched within `lead +- MAX_LAG` symbols of `lead`, the symbols of the lead-in; a
+/// lag below `lead` is a receiver that lost symbols, for example in a gap of the signal):
 /// the BER over the rest and the windows of [`SLIP_WINDOW`] symbols whose fewest bit errors
 /// are at another rotation or at another lag within [`SLIP_LAGS`] (a lost or extra symbol or a
 /// new rotation).
 fn errors(order: u32, sent: &[u32], rx: &[u32], from: usize, lead: usize) -> (f64, u64) {
     let half = (bps(order) / 2) as u32;
     let back = |s: u32, r: u32| rotate_symbol(s, half, (4 - r) % 4);
-    let err = |j: usize, r: u32, o: usize| {
-        sent.get(j.wrapping_sub(o))
+    let err = |j: usize, r: u32, o: i64| {
+        usize::try_from(j as i64 - o)
+            .ok()
+            .and_then(|t| sent.get(t))
             .map_or(bps(order) as u32, |&t| (back(rx[j], r) ^ t).count_ones())
     };
-    let mut best = (0u32, 0usize, u32::MAX);
+    let lead = lead as i64;
+    let mut best = (0u32, 0i64, u32::MAX);
     for r in 0..4 {
-        for o in lead.saturating_sub(MAX_LAG)..lead + MAX_LAG {
+        for o in lead - MAX_LAG..lead + MAX_LAG {
             let e = (from..from + ALIGN_SYMBOLS).map(|j| err(j, r, o)).sum();
             if e < best.2 {
                 best = (r, o, e);
@@ -206,10 +224,10 @@ fn errors(order: u32, sent: &[u32], rx: &[u32], from: usize, lead: usize) -> (f6
         .collect::<Vec<_>>()
         .chunks_exact(SLIP_WINDOW)
     {
-        let count = |rr: u32, oo: usize| w.iter().map(|&j| err(j, rr, oo)).sum::<u32>();
+        let count = |rr: u32, oo: i64| w.iter().map(|&j| err(j, rr, oo)).sum::<u32>();
         let here = count(r, o);
         let other = (0..4u32)
-            .flat_map(|rr| (o.saturating_sub(SLIP_LAGS)..=o + SLIP_LAGS).map(move |oo| (rr, oo)))
+            .flat_map(|rr| (o - SLIP_LAGS..=o + SLIP_LAGS).map(move |oo| (rr, oo)))
             .filter(|&p| p != (r, o))
             .any(|(rr, oo)| count(rr, oo) < here);
         slips += u64::from(other);
@@ -400,5 +418,86 @@ fn an_estimate_at_the_edge_of_the_range_is_kept() {
         );
         assert_eq!(block.restarts(), 0, "offset {offset}");
         assert!(d < 1e-4, "offset {offset}: acquired {f}");
+    }
+}
+
+#[test]
+fn a_signal_back_after_a_gap_is_received_again() {
+    // F3 of the review of I44-13: the check by frequency keeps the estimate over noise after a
+    // transmission ends (the verify windows find no clear peak), and the equalizer goes on
+    // adapting to the noise in the decision mode. The same signal on the same frequency after
+    // the gap must be received again. (order, Es/N0 in dB, the gap at the signal's power (an
+    // AGC that turned the noise up) or at its noise floor, the equalizer_taps whose receivers
+    // take the signal again; the others are printed, I44-17)
+    let cases: [(u32, f64, bool, &[usize]); 4] = [
+        (16, 24.0, false, &[11, 0]),
+        (16, 24.0, true, &[11, 0]),
+        (64, 30.0, false, &[11, 0]),
+        (64, 30.0, true, &[0]),
+    ];
+    let (before, gap, after) = (20_000usize, GAP_SYMBOLS, 40_000usize);
+    let results: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = cases
+            .iter()
+            .flat_map(|&(order, esn0, loud, holds)| {
+                [11usize, 0].map(move |taps| (order, esn0, loud, taps, holds.contains(&taps)))
+            })
+            .map(|(order, esn0, loud, taps, holds)| {
+                s.spawn(move || {
+                    let n = before + gap + after;
+                    let (mut input, sent, power) = weak_signal(order, n, esn0, OFFSET, 816);
+                    // the noise of the signal (Es/N0 = SPS power / variance) or the signal power
+                    let var = if loud {
+                        power
+                    } else {
+                        power * SPS as f64 / 10f64.powf(esn0 / 10.0)
+                    };
+                    let sigma = (var / 2.0).sqrt();
+                    let mut rng = Pcg32::new(816, 2);
+                    for c in &mut input[before * SPS..(before + gap) * SPS] {
+                        *c = C32::new((sigma * rng.normal()) as f32, (sigma * rng.normal()) as f32);
+                    }
+                    let mut block = demod(order, taps);
+                    let mut soft = demod_all(&mut block, &input[..(before + gap) * SPS]);
+                    let in_gap = block.restarts();
+                    soft.extend(demod_all(&mut block, &input[(before + gap) * SPS..]));
+                    let rx = symbols(&soft, bps(order));
+                    let (ber, slips) = errors(order, &sent, &rx, before + gap + BACK_WITHIN, 0);
+                    let what = format!(
+                        "{order}-QAM, equalizer_taps {taps}, Es/N0 {esn0} dB, the gap at {}",
+                        if loud {
+                            "the signal power"
+                        } else {
+                            "the noise floor"
+                        }
+                    );
+                    let state = (
+                        in_gap,
+                        block.restarts(),
+                        block.locked(),
+                        block.acquired_frequency(),
+                    );
+                    (what, esn0, order, holds, state, ber, slips)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for (what, _, _, _, (in_gap, restarts, locked, acquired), ber, slips) in &results {
+        eprintln!(
+            "{what}: restarts {in_gap} up to the end of the gap, {restarts} at the end, locked \
+             {locked}, acquired {acquired:?}, BER from {BACK_WITHIN} symbols after the gap \
+             {ber:.4e}, windows off the alignment {slips}"
+        );
+    }
+    for (what, esn0, order, holds, (_, _, locked, acquired), ber, slips) in &results {
+        let f = acquired.unwrap();
+        assert!((f - OFFSET).abs() < 1e-4, "{what}: acquired {f}");
+        if *holds {
+            let edge = theory(*order, esn0 - 1.5);
+            assert!(*locked, "{what}: lock at the end");
+            assert_eq!(*slips, 0, "{what}");
+            assert!(*ber <= edge, "{what}: BER {ber:.4e} above {edge:.4e}");
+        }
     }
 }

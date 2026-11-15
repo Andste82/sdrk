@@ -1,0 +1,23 @@
+[package]
+name = "sdrk-hackrf"
+description = "SDRk driver for the HackRF One: the device traits over the HackRF USB protocol, spoken directly over nusb (no libhackrf, no libusb)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Tests that need a HackRF One on the USB bus; they are also #[ignore]d:
+# cargo test -p sdrk-hackrf --features hw-tests -- --ignored --test-threads 1
+hw-tests = []
+
+[dependencies]
+sdrk-device = { path = "../../core/sdrk-device" }
+nusb = "0.2"
+
+[dev-dependencies]
+sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
+
+[lints]
+workspace = true

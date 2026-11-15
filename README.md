@@ -26,6 +26,8 @@ Milestones M00 to M15, M19 to M25, M24.1 and M25.1 are delivered: the kernels, t
 | `sdrk-blocks` | `crates/blocks` | self-describing blocks, filter design, storage |
 | `sdrk-pipeline` | `crates/pipeline` | the JSON/YAML pipeline: model, validation, runner |
 | `sdrk-io` | `crates/io` | file I/O: raw, SigMF, WAV; JSON Lines packet files |
+| `sdrk-rtlsdr` | `crates/drivers` | driver for RTL-SDR dongles (RTL2832U with R820T, R820T2, R828D) over `rtl-sdr-rs` |
+| `sdrk-hackrf` | `crates/drivers` | driver for the HackRF One, the USB protocol of its firmware spoken directly over `nusb` |
 | `sdrk-testkit` | `crates/testing` | test helpers, golden vectors, virtual devices |
 
 The layers and their dependency rules are in [docs/architecture.md](docs/architecture.md); everything up to `sdrk-blocks` is `no_std` and heap-free.

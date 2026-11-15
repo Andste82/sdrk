@@ -28,6 +28,9 @@ pub enum Layer {
     Pipeline,
     /// `crates/io/*` (heap allowed).
     Io,
+    /// `crates/drivers/*`: hardware drivers that implement the device traits over USB (heap and
+    /// `std` allowed); depend on the device crate only.
+    Driver,
     /// `crates/testing/*`; may depend on any library layer.
     Testing,
     /// Everything else (bindings, examples, targets, benches, xtask, tests).
@@ -45,7 +48,7 @@ impl Layer {
             Layer::Facade => 3,
             Layer::Proto => 4,
             Layer::Blocks => 5,
-            Layer::Pipeline | Layer::Io => 6,
+            Layer::Pipeline | Layer::Io | Layer::Driver => 6,
             Layer::Testing => 7,
             Layer::App => 8,
         }
@@ -83,12 +86,13 @@ impl Layer {
     ///
     /// The rank decides, with two exceptions: `crates/proto` sits above the facade only so that
     /// nothing below `crates/blocks` may depend on it, and itself depends on `sdrk-device` only;
-    /// `crates/io` uses the types of `crates/core` only (R2).
+    /// `crates/io` uses the types of `crates/core` only (R2); `crates/drivers` depends on
+    /// `sdrk-device` only.
     #[must_use]
     pub fn may_depend_on(self, to: Layer) -> bool {
         match self {
             Layer::App => true,
-            Layer::Proto => to == Layer::Device,
+            Layer::Proto | Layer::Driver => to == Layer::Device,
             Layer::Io => matches!(to, Layer::Device | Layer::Core),
             Layer::Testing => !matches!(to, Layer::App | Layer::Testing),
             _ => !matches!(to, Layer::Testing | Layer::App) && to.rank() < self.rank(),
@@ -116,6 +120,7 @@ pub fn layer_of(rel_dir: &Path, name: &str) -> Layer {
         ["crates", "blocks", ..] => Layer::Blocks,
         ["crates", "pipeline", ..] => Layer::Pipeline,
         ["crates", "io", ..] => Layer::Io,
+        ["crates", "drivers", ..] => Layer::Driver,
         ["crates", "testing", ..] => Layer::Testing,
         // Everything else is the top layer: `examples/*`, `tests/system` (system tests),
         // `bindings/*`, `targets/*`, `benches/*`, `xtask`.
@@ -315,6 +320,10 @@ mod tests {
         );
         assert_eq!(l("crates/io/sdrk-io", "sdrk-io"), Layer::Io);
         assert_eq!(
+            l("crates/drivers/sdrk-rtlsdr", "sdrk-rtlsdr"),
+            Layer::Driver
+        );
+        assert_eq!(
             l("crates/testing/sdrk-testkit", "sdrk-testkit"),
             Layer::Testing
         );
@@ -350,6 +359,13 @@ mod tests {
         assert!(!Layer::Io.may_depend_on(Layer::Blocks));
         assert!(!Layer::Io.may_depend_on(Layer::Facade));
         assert!(!Layer::Io.may_depend_on(Layer::Pipeline));
+        // `crates/drivers`: the device crate only; the top layer may use them.
+        assert!(Layer::Driver.may_depend_on(Layer::Device));
+        assert!(!Layer::Driver.may_depend_on(Layer::Core));
+        assert!(!Layer::Driver.may_depend_on(Layer::Driver));
+        assert!(!Layer::Driver.heap_free());
+        assert!(Layer::App.may_depend_on(Layer::Driver));
+        assert!(!Layer::Blocks.may_depend_on(Layer::Driver));
         assert!(Layer::Testing.may_depend_on(Layer::Pipeline));
         assert!(!Layer::Pipeline.may_depend_on(Layer::Testing));
         assert!(Layer::App.may_depend_on(Layer::Testing));

@@ -1,4 +1,4 @@
-//! The blocks of M44: the `slice` constellations `qam16` and `qam64` (test 1: the soft-bit
+//! The blocks of M44: the `symbol_demap` constellations `qam16` and `qam64` (test 1: the soft-bit
 //! signs of every point derived from the mapping of `sdrk_core::kernels::constellation`, the
 //! piecewise-linear max-log values bit for bit, the agreement of every sign with the grid
 //! decision, the rates, the parameter checks, the extremes and 20 cut plans of seed 607), and the
@@ -31,8 +31,8 @@ use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, CostasConstellation, EqConstellation, EqMode, EqualizeBlock,
     EqualizeConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet,
     PacketFlags, ParamValue, PortType, QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP,
-    QAM_ACQUISITION_SYMBOLS, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock,
-    SliceConfig, SliceConstellation,
+    QAM_ACQUISITION_SYMBOLS, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig,
+    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation,
 };
 use sdrk_core::kernels::constellation::{Qam, rotate_symbol};
 use sdrk_core::kernels::costas::{Costas, CostasState};
@@ -47,20 +47,27 @@ use sdrk_testkit::{Pcg32, VecStorage};
 /// The seed of the cut plans and signals of M44 (test 8).
 const SEED: u64 = 607;
 
-const QAMS: [(SliceConstellation, Qam); 2] = [
-    (SliceConstellation::Qam16, Qam::Qam16),
-    (SliceConstellation::Qam64, Qam::Qam64),
+const QAMS: [(SymbolDemapConstellation, Qam); 2] = [
+    (SymbolDemapConstellation::Qam16, Qam::Qam16),
+    (SymbolDemapConstellation::Qam64, Qam::Qam64),
 ];
 
-fn slicer(constellation: SliceConstellation, scale: f64) -> SliceBlock<C32, VecStorage> {
-    let cfg = SliceConfig {
+fn slicer(
+    constellation: SymbolDemapConstellation,
+    scale: f64,
+) -> SymbolDemapBlock<C32, VecStorage> {
+    let cfg = SymbolDemapConfig {
         constellation,
         scale,
     };
-    SliceBlock::<C32, _>::new(&cfg, rate(25_000), &mut VecStorage).unwrap()
+    SymbolDemapBlock::<C32, _>::new(&cfg, rate(25_000), &mut VecStorage).unwrap()
 }
 
-fn slice_all(constellation: SliceConstellation, scale: f64, input: &[C32]) -> Vec<f32> {
+fn symbol_demap_all(
+    constellation: SymbolDemapConstellation,
+    scale: f64,
+    input: &[C32],
+) -> Vec<f32> {
     let bits = constellation.bits_per_symbol();
     let mut out = vec![0.0f32; bits * input.len()];
     let p = slicer(constellation, scale)
@@ -109,24 +116,24 @@ fn the_qam_constellations_take_c32_and_give_their_bits() {
     for (c, q) in QAMS {
         assert_eq!(c.bits_per_symbol(), q.bits_per_symbol());
         assert_eq!(c.input_type(), PortType::C32);
-        let cfg = SliceConfig {
+        let cfg = SymbolDemapConfig {
             constellation: c,
             scale: 1.0,
         };
         assert_eq!(
-            SliceBlock::<C32, VecStorage>::rate_out(&cfg, rate(25_000)).unwrap(),
+            SymbolDemapBlock::<C32, VecStorage>::rate_out(&cfg, rate(25_000)).unwrap(),
             rate(25_000 * q.bits_per_symbol() as u64)
         );
-        assert!(SliceBlock::<f32, _>::new(&cfg, rate(25_000), &mut VecStorage).is_err());
+        assert!(SymbolDemapBlock::<f32, _>::new(&cfg, rate(25_000), &mut VecStorage).is_err());
         let t = slicer(c, 1.0).timing();
         assert_eq!(t.ratio, Ratio::new(q.bits_per_symbol() as u64, 1).unwrap());
         assert_eq!((t.kind, t.delay), (RatioKind::Constant, Delay::ZERO));
     }
-    let mut cfg = SliceConfig::default();
+    let mut cfg = SymbolDemapConfig::default();
     // The options are appended: qam16 is choice 5, qam64 choice 6.
     for (i, c) in [
-        (5u16, SliceConstellation::Qam16),
-        (6, SliceConstellation::Qam64),
+        (5u16, SymbolDemapConstellation::Qam16),
+        (6, SymbolDemapConstellation::Qam64),
     ] {
         cfg.set("constellation", ParamValue::Choice(i)).unwrap();
         assert_eq!(cfg.constellation, c);
@@ -143,7 +150,7 @@ fn every_point_gives_the_signs_of_its_mapping() {
         let k = q.bits_per_symbol();
         let points: Vec<C32> = (0..q.points() as u32).map(|s| q.point(s)).collect();
         for scale in [1.0, 0.25, 3.0] {
-            let out = slice_all(c, scale, &points);
+            let out = symbol_demap_all(c, scale, &points);
             same_bits(&reference(q, scale as f32, &points), &out, "points");
             for (s, bits) in out.chunks_exact(k).enumerate() {
                 for (j, &b) in bits.iter().enumerate() {
@@ -172,7 +179,7 @@ fn the_signs_agree_with_the_grid_decision() {
         let input: Vec<C32> = (0..4000)
             .map(|_| C32::new(0.7 * rng.normal() as f32, 0.7 * rng.normal() as f32))
             .collect();
-        let out = slice_all(c, 1.0, &input);
+        let out = symbol_demap_all(c, 1.0, &input);
         same_bits(&reference(q, 1.0, &input), &out, "random");
         let near = |x: f32| {
             let v = x * q.sqrt_energy();
@@ -191,7 +198,13 @@ fn the_signs_agree_with_the_grid_decision() {
         }
         assert!(checked > 3900, "{checked}");
         let want = out.clone();
-        check_block(&want, &input, 607, || slicer(c, 1.0), "qam slice cut plans");
+        check_block(
+            &want,
+            &input,
+            607,
+            || slicer(c, 1.0),
+            "qam symbol_demap cut plans",
+        );
     }
 }
 
@@ -209,7 +222,7 @@ fn the_qam_slicer_handles_the_extremes() {
             C32::new(f32::INFINITY, f32::NEG_INFINITY),
             C32::new(f32::MAX, 0.0),
         ];
-        let out = slice_all(c, 1.0, &input);
+        let out = symbol_demap_all(c, 1.0, &input);
         same_f32_bits(&reference(q, 1.0, &input), &out, "extremes");
         assert!(out[..2 * k].iter().all(|b| b.is_finite()));
         let nan = &out[2 * k..3 * k];

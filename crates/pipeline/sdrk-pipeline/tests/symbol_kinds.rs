@@ -1,8 +1,8 @@
-//! The kinds `symbol_sync` and `slice` (M38): registration, the cost `2 + 24 / sps` and 1, the
-//! figures (nominal rate, delay), `rate_unsupported` below 2 samples per symbol, the type checks
-//! (`symbol_sync` and `slice` take `c32` or `f32`, the constellation decides which), the
-//! run-time parameter `scale`, and a push-mode chain `symbol_sync` -> `slice` that equals the
-//! blocks.
+//! The kinds `symbol_sync` and `symbol_demap` (M38): registration, the cost `2 + 24 / sps` and 1,
+//! the figures (nominal rate, delay), `rate_unsupported` below 2 samples per symbol, the type
+//! checks (`symbol_sync` and `symbol_demap` take `c32` or `f32`, the constellation decides which),
+//! the run-time parameter `scale`, and a push-mode chain `symbol_sync` -> `symbol_demap` that
+//! equals the blocks.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -23,7 +23,8 @@ mod common;
 
 use sdrk::{C32, Delay, Rate};
 use sdrk_blocks::{
-    Block, SliceBlock, SliceConfig, SliceConstellation, SymbolSyncBlock, SymbolSyncConfig,
+    Block, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolSyncBlock,
+    SymbolSyncConfig,
 };
 use sdrk_pipeline::{BuildOptions, DiagCode, InputData, Registry, VecStorage};
 use sdrk_testkit::Pcg32;
@@ -42,19 +43,19 @@ fn single(kind: &str, ty: &str, rate: u64, params: Value) -> Value {
     })
 }
 
-/// `symbol_sync` then `slice` on an input of type `ty`.
+/// `symbol_sync` then `symbol_demap` on an input of type `ty`.
 fn chain(ty: &str, rate: u64, sync: Value, slice: Value) -> Value {
     json!({
         "sdrk": 1, "name": "t", "settings": { "precision": "f32", "max_chunk": 1024 },
         "inputs": { "in": { "type": ty, "rate_hz": rate } },
         "nodes": {
             "sync": { "kind": "symbol_sync", "params": sync },
-            "slice": { "kind": "slice", "params": slice }
+            "symbol_demap": { "kind": "symbol_demap", "params": slice }
         },
         "edges": [
             { "from": "in", "to": "sync" },
-            { "from": "sync", "to": "slice" },
-            { "from": "slice", "to": "bits" }
+            { "from": "sync", "to": "symbol_demap" },
+            { "from": "symbol_demap", "to": "bits" }
         ],
         "outputs": { "bits": { "type": "stream" } }
     })
@@ -76,9 +77,9 @@ fn the_kinds_are_registered() {
     let f = registry.factory("symbol_sync").unwrap();
     assert_eq!(f.kernels(), ["symbol_sync"]);
     assert_eq!(f.description().kind, "symbol_sync");
-    let f = registry.factory("slice").unwrap();
+    let f = registry.factory("symbol_demap").unwrap();
     assert!(f.kernels().is_empty());
-    assert_eq!(f.description().kind, "slice");
+    assert_eq!(f.description().kind, "symbol_demap");
     assert_eq!(registry.descriptions().count(), 72);
 }
 
@@ -165,7 +166,7 @@ fn symbol_sync_needs_the_symbol_rate_and_two_samples_per_symbol() {
 }
 
 #[test]
-fn slice_checks_the_type_per_constellation() {
+fn symbol_demap_checks_the_type_per_constellation() {
     for (ty, constellation, bits, cost) in [
         ("f32", "real", 1u64, 1.0),
         ("c32", "bpsk", 1, 1.0),
@@ -175,7 +176,7 @@ fn slice_checks_the_type_per_constellation() {
         ("c32", "qam64", 6, 18.0),
     ] {
         let report = validate(&single(
-            "slice",
+            "symbol_demap",
             ty,
             1200,
             json!({ "constellation": constellation }),
@@ -187,7 +188,7 @@ fn slice_checks_the_type_per_constellation() {
         assert_eq!(node.delay_samples_in.reduced(), Delay::ZERO.reduced());
     }
     // The default is bpsk.
-    assert!(validate(&single("slice", "c32", 1200, json!({}))).is_ok());
+    assert!(validate(&single("symbol_demap", "c32", 1200, json!({}))).is_ok());
     for (ty, constellation) in [
         ("c32", "real"),
         ("f32", "bpsk"),
@@ -196,7 +197,7 @@ fn slice_checks_the_type_per_constellation() {
         ("f32", "qam64"),
     ] {
         let (path, code) = first_error(&single(
-            "slice",
+            "symbol_demap",
             ty,
             1200,
             json!({ "constellation": constellation }),
@@ -205,10 +206,10 @@ fn slice_checks_the_type_per_constellation() {
         assert_eq!(path, "nodes.n.params.constellation");
     }
     for ty in ["cq15", "q15"] {
-        let (_, code) = first_error(&single("slice", ty, 1200, json!({})));
+        let (_, code) = first_error(&single("symbol_demap", ty, 1200, json!({})));
         assert_eq!(code, DiagCode::TypeMismatch, "{ty}");
     }
-    assert!(!validate(&single("slice", "c32", 1200, json!({ "scale": 0 }))).is_ok());
+    assert!(!validate(&single("symbol_demap", "c32", 1200, json!({ "scale": 0 }))).is_ok());
 }
 
 /// Shaped BPSK (half-sine pulses, overlapping by half a symbol) with noise.
@@ -246,11 +247,12 @@ fn the_chain_equals_the_blocks_and_scale_changes_at_run_time() {
     let mut symbols = vec![C32::default(); input.len()];
     let p = sync.process(&input, &mut symbols).unwrap();
     symbols.truncate(p.produced);
-    let slice_cfg = SliceConfig {
-        constellation: SliceConstellation::Qpsk,
+    let symbol_demap_cfg = SymbolDemapConfig {
+        constellation: SymbolDemapConstellation::Qpsk,
         scale: 2.0,
     };
-    let mut slice = SliceBlock::<C32, VecStorage>::new(&slice_cfg, r, &mut VecStorage).unwrap();
+    let mut slice =
+        SymbolDemapBlock::<C32, VecStorage>::new(&symbol_demap_cfg, r, &mut VecStorage).unwrap();
     let mut want = vec![0.0f32; 2 * symbols.len()];
     slice.process(&symbols, &mut want).unwrap();
     // The pipeline in pieces of up to 1000 samples.
@@ -282,9 +284,9 @@ fn the_chain_equals_the_blocks_and_scale_changes_at_run_time() {
             .step_by(2)
             .all(|v| v.abs() > 1.0)
     );
-    assert!(p.set_param("slice", "scale", json!(4.0)).is_ok());
+    assert!(p.set_param("symbol_demap", "scale", json!(4.0)).is_ok());
     assert!(
-        p.set_param("slice", "constellation", json!("bpsk"))
+        p.set_param("symbol_demap", "constellation", json!("bpsk"))
             .is_err()
     );
     assert!(p.set_param("sync", "loop_bw", json!(0.02)).is_err());

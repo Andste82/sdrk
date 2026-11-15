@@ -52,10 +52,10 @@ use sdrk_blocks::{
     RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
     RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
     ScaleBlock, ScaleConfig, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
-    SensorEncodeConfig, SliceBlock, SliceConfig, SliceConstellation, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolSyncBlock, SymbolSyncConfig, Ted,
-    ToComplexBlock, all_descriptions,
+    SensorEncodeConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolSyncBlock,
+    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -124,7 +124,7 @@ fn there_are_sixty_one_unique_kinds() {
         "frame_encode",
         "frame_decode",
         "symbol_sync",
-        "slice",
+        "symbol_demap",
         "fsk_mod",
         "fsk_demod",
         "afc",
@@ -362,7 +362,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("frame_encode", |n| FrameEncodeConfig::default().get(n), &[]);
     defaults_match("frame_decode", |n| FrameDecodeConfig::default().get(n), &[]);
     defaults_match("symbol_sync", |n| SymbolSyncConfig::default().get(n), &[]);
-    defaults_match("slice", |n| SliceConfig::default().get(n), &[]);
+    defaults_match("symbol_demap", |n| SymbolDemapConfig::default().get(n), &[]);
     defaults_match("fsk_mod", |n| FskModConfig::default().get(n), &[]);
     defaults_match("fsk_demod", |n| FskDemodConfig::default().get(n), &[]);
     defaults_match("afc", |n| AfcConfig::default().get(n), &[]);
@@ -510,7 +510,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("frame_encode", FrameEncodeConfig);
     round_trip!("frame_decode", FrameDecodeConfig);
     round_trip!("symbol_sync", SymbolSyncConfig);
-    round_trip!("slice", SliceConfig);
+    round_trip!("symbol_demap", SymbolDemapConfig);
     round_trip!("fsk_mod", FskModConfig);
     round_trip!("fsk_demod", FskDemodConfig);
     round_trip!("afc", AfcConfig);
@@ -785,16 +785,16 @@ fn blocks_accept_and_report_every_described_parameter() {
         &mut SymbolSyncBlock::<f32, _>::new(&sync, rate(19_000), &mut s).unwrap(),
     );
     check_block_params(
-        "slice",
-        &mut SliceBlock::<C32, _>::new(&SliceConfig::default(), r, &mut s).unwrap(),
+        "symbol_demap",
+        &mut SymbolDemapBlock::<C32, _>::new(&SymbolDemapConfig::default(), r, &mut s).unwrap(),
     );
-    let real = SliceConfig {
-        constellation: SliceConstellation::Real,
-        ..SliceConfig::default()
+    let real = SymbolDemapConfig {
+        constellation: SymbolDemapConstellation::Real,
+        ..SymbolDemapConfig::default()
     };
     check_block_params(
-        "slice",
-        &mut SliceBlock::<f32, _>::new(&real, r, &mut s).unwrap(),
+        "symbol_demap",
+        &mut SymbolDemapBlock::<f32, _>::new(&real, r, &mut s).unwrap(),
     );
     let fsk = FskModConfig {
         samples_per_symbol: 4,
@@ -1068,7 +1068,7 @@ fn am_mod_and_ssb_mod_describe_their_ports_and_parameters() {
 /// `cq15`; `fm_stereo_mod` turns `c32` into `f32`, its only runtime parameter is `pilot`; both
 /// blocks of `preemph_limit` share the description.
 /// The kinds of M38: `symbol_sync` keeps the type (`c32` or `f32`) and requires the symbol
-/// rate, all its parameters are build parameters; `slice` takes `c32` or `f32` and outputs
+/// rate, all its parameters are build parameters; `symbol_demap` takes `c32` or `f32` and outputs
 /// `f32` soft bits, its only runtime parameter is `scale`; the details state the soft-bit
 /// convention and the chain position.
 #[test]
@@ -1099,7 +1099,7 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     for word in ["matched filter", "agc", "variable", "ted_gain", "1/1000 Hz"] {
         assert!(sync.details.contains(word), "symbol_sync details: {word}");
     }
-    let slice = find("slice");
+    let slice = find("symbol_demap");
     assert_eq!(slice.inputs[0].types, [PortType::C32, PortType::F32]);
     assert_eq!(slice.outputs[0].types, [PortType::F32]);
     assert!(slice.required.is_empty());
@@ -1128,7 +1128,7 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
         "2 / sigma^2",
         "symbol_sync",
     ] {
-        assert!(slice.details.contains(word), "slice details: {word}");
+        assert!(slice.details.contains(word), "symbol_demap details: {word}");
     }
     let cfg = SymbolSyncConfig {
         symbol_rate_hz: 1187.5,
@@ -1139,7 +1139,8 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     assert!(std::ptr::eq(b.description(), sync));
     assert_eq!(b.param("ted"), Ok(ParamValue::Choice(1)));
     let b =
-        SliceBlock::<C32, _>::new(&SliceConfig::default(), rate(1000), &mut VecStorage).unwrap();
+        SymbolDemapBlock::<C32, _>::new(&SymbolDemapConfig::default(), rate(1000), &mut VecStorage)
+            .unwrap();
     assert!(std::ptr::eq(b.description(), slice));
 }
 

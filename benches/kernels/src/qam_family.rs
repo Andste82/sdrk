@@ -1,14 +1,15 @@
-//! The QAM entries of M44: `qam_soft_bits_qam16`, `qam_soft_bits_qam64`, `slice_qam16_block`,
-//! `slice_qam64_block`, `costas_qam16`, `costas_qam16_fallback`, `costas_qam64`,
-//! `costas_qam64_fallback`, `equalize_qam16`, `equalize_qam16_fallback`, `equalize_qam64`,
-//! `equalize_qam64_fallback`, `qam_mod_block`, `qam_demod_block` and `frame_decode_four_block`.
+//! The QAM entries of M44: `qam_soft_bits_qam16`, `qam_soft_bits_qam64`,
+//! `symbol_demap_qam16_block`, `symbol_demap_qam64_block`, `costas_qam16`, `costas_qam16_fallback`,
+//! `costas_qam64`, `costas_qam64_fallback`, `equalize_qam16`, `equalize_qam16_fallback`,
+//! `equalize_qam64`, `equalize_qam64_fallback`, `qam_mod_block`, `qam_demod_block` and
+//! `frame_decode_four_block`.
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
 //! | `qam_soft_bits_qam16` | the kernel `qam_soft_bits` with `Qam16` through the facade | our fallback (`info`) | one input symbol (four soft bits) |
 //! | `qam_soft_bits_qam64` | the kernel `qam_soft_bits` with `Qam64` through the facade | our fallback (`info`) | one input symbol (six soft bits) |
-//! | `slice_qam16_block` | `sdrk_blocks::SliceBlock` with `qam16` | none (`info`) | one input symbol (four soft bits) |
-//! | `slice_qam64_block` | `sdrk_blocks::SliceBlock` with `qam64` | none (`info`) | one input symbol (six soft bits) |
+//! | `symbol_demap_qam16_block` | `sdrk_blocks::SymbolDemapBlock` with `qam16` | none (`info`) | one input symbol (four soft bits) |
+//! | `symbol_demap_qam64_block` | `sdrk_blocks::SymbolDemapBlock` with `qam64` | none (`info`) | one input symbol (six soft bits) |
 //! | `costas_qam16` | facade (= the fallback) | none (`info`) | one symbol |
 //! | `costas_qam16_fallback` | our fallback | GNU Radio's `constellation_receiver_cb` | one symbol |
 //! | `equalize_qam16` | facade (= the fallback's loop, D841) | none (`info`) | one symbol |
@@ -28,7 +29,7 @@
 //! where it can. No library computes the same soft bits: liquid-dsp's `modemcf_demodulate_soft`
 //! and GNU Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value
 //! (D1201), so the kernel entries are our own code, judged against our fallback as information
-//! (`Family::Own`). The block `slice` calls the kernel through the facade; its entries
+//! (`Family::Own`). The block `symbol_demap` calls the kernel through the facade; its entries
 //! (`Family::Own` as well, `ours` and `fallback` the same block code) measure the kernel with
 //! the block around it.
 //!
@@ -87,8 +88,8 @@ use sdrk::kernels::equalize::{EqConstellation, EqParams, Equalize, EqualizeState
 use sdrk::{C32, Fallback, Rate, Sdrk};
 use sdrk_blocks::{
     ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet, PacketFlags,
-    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SliceBlock, SliceConfig,
-    SliceConstellation,
+    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SymbolDemapBlock, SymbolDemapConfig,
+    SymbolDemapConstellation,
 };
 use sdrk_core::Reference;
 use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
@@ -121,7 +122,7 @@ impl QamSoftBitsK {
 
 /// One call with the scale 1 hidden from the optimizer (`black_box`), so that the fallback,
 /// inlined here, keeps its products with the scale as every caller with a run-time scale does
-/// (the block `slice` and `qam_demod`).
+/// (the block `symbol_demap` and `qam_demod`).
 #[inline(never)]
 fn soft_bits_call<K: QamSoftBits<C32>>(k: &K, qam: Qam, x: &[C32], out: &mut [f32]) {
     let _ = black_box(k.qam_soft_bits(qam, black_box(x), out, black_box(1.0)));
@@ -168,37 +169,37 @@ impl Kernel for QamSoftBitsK {
     }
 }
 
-/// The block `slice` with a QAM constellation over `n` symbols per call.
-pub(crate) struct SliceQamBlockK {
+/// The block `symbol_demap` with a QAM constellation over `n` symbols per call.
+pub(crate) struct SymbolDemapQamBlockK {
     qam: Qam,
-    block: SliceBlock<C32, ArenaStorage<'static>>,
+    block: SymbolDemapBlock<C32, ArenaStorage<'static>>,
     input: Vec<C32>,
     out: Vec<f32>,
 }
 
-impl SliceQamBlockK {
+impl SymbolDemapQamBlockK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
         let constellation = match qam {
-            Qam::Qam16 => SliceConstellation::Qam16,
-            _ => SliceConstellation::Qam64,
+            Qam::Qam16 => SymbolDemapConstellation::Qam16,
+            _ => SymbolDemapConstellation::Qam64,
         };
-        let cfg = SliceConfig {
+        let cfg = SymbolDemapConfig {
             constellation,
             scale: 1.0,
         };
-        let block = SliceBlock::new(
+        let block = SymbolDemapBlock::new(
             &cfg,
             Rate::hz(25_000).expect("rate"),
             &mut ArenaStorage::new(&mut []),
         )
-        .expect("slice block");
+        .expect("symbol_demap block");
         let input = (0..layout.n)
             .map(|_| {
                 let p = qam.point(rng.next_u32());
                 C32::new(p.re + 0.05 * rng.unit(), p.im + 0.05 * rng.unit())
             })
             .collect();
-        SliceQamBlockK {
+        SymbolDemapQamBlockK {
             qam,
             block,
             input,
@@ -208,7 +209,11 @@ impl SliceQamBlockK {
 }
 
 #[inline(never)]
-fn slice_call(block: &mut SliceBlock<C32, ArenaStorage<'static>>, x: &[C32], out: &mut [f32]) {
+fn symbol_demap_call(
+    block: &mut SymbolDemapBlock<C32, ArenaStorage<'static>>,
+    x: &[C32],
+    out: &mut [f32],
+) {
     let _ = block.process(black_box(x), out);
 }
 
@@ -227,14 +232,14 @@ fn axis_f64(qam: Qam, x: f32, out: &mut Vec<f64>) {
     }
 }
 
-impl Kernel for SliceQamBlockK {
+impl Kernel for SymbolDemapQamBlockK {
     fn run(&mut self, which: Impl, k: usize) {
         for _ in 0..k {
             match which {
                 Impl::Ours | Impl::Fallback => {
-                    slice_call(&mut self.block, &self.input, &mut self.out);
+                    symbol_demap_call(&mut self.block, &self.input, &mut self.out);
                 }
-                other => unreachable!("slice_qam has no {other:?}"),
+                other => unreachable!("symbol_demap_qam has no {other:?}"),
             }
             black_box(&self.out);
         }
@@ -245,7 +250,7 @@ impl Kernel for SliceQamBlockK {
         if !self.supports(which) {
             return 0.0;
         }
-        slice_call(&mut self.block, &self.input, &mut self.out);
+        symbol_demap_call(&mut self.block, &self.input, &mut self.out);
         let mut want = Vec::with_capacity(self.out.len());
         for y in &self.input {
             axis_f64(self.qam, y.re, &mut want);

@@ -1,4 +1,5 @@
-//! M38 test 7: the test flow `tests/flows/bpsk_sync_test.json` (`symbol_sync` -> `slice bpsk`
+//! M38 test 7: the test flow `tests/flows/bpsk_sync_test.json` (`symbol_sync` -> `symbol_demap
+//! bpsk`
 //! -> `frame_decode`) decodes 100 frames that a `frame_encode` pipeline made and a test-side
 //! raised-cosine modulator sent.
 //!

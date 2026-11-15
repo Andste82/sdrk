@@ -73,7 +73,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         half of the bits selects the in-phase level, the second half the quadrature level, \
         each by the Gray code of the level index i (i XOR (i >> 1)); the level value is \
         2 i - (m - 1) with m = 4 or 8 levels per axis, scaled by 1 / sqrt(E) with E = 10 or 42 \
-        (unit average power). These are the constellations qam16 and qam64 of slice, equalize \
+        (unit average power). These are the constellations qam16 and qam64 of symbol_demap, \
+        equalize \
         and costas. The symbols are interpolated by samples_per_symbol with the \
         root-raised-cosine pulse (rolloff, span symbols) scaled by sqrt(samples_per_symbol), \
         so the matched filter of qam_demod gives the points at the symbol centres. The output \

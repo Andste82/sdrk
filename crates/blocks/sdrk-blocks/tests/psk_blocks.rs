@@ -31,7 +31,7 @@ use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
     PSK8_GRAY, Packet, PacketFlags, ParamValue, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, SliceBlock, SliceConfig, SliceConstellation,
+    PskModConfig, PskVariant, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation,
 };
 use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
@@ -1076,12 +1076,12 @@ fn psk8_reference(scale: f32, y: C32) -> [f32; 3] {
 }
 
 #[test]
-fn slice_8psk_gives_max_log_soft_bits() {
-    let cfg = SliceConfig {
-        constellation: SliceConstellation::Psk8,
+fn symbol_demap_8psk_gives_max_log_soft_bits() {
+    let cfg = SymbolDemapConfig {
+        constellation: SymbolDemapConstellation::Psk8,
         scale: 2.0,
     };
-    let mut slice = SliceBlock::<C32, _>::new(&cfg, rate(1200), &mut VecStorage).unwrap();
+    let mut slice = SymbolDemapBlock::<C32, _>::new(&cfg, rate(1200), &mut VecStorage).unwrap();
     // The 8 points, the 8 boundaries k pi / 4, both at 0.5, random symbols, zero and specials.
     let mut input: Vec<C32> = Vec::new();
     for amp in [1.0f64, 0.5] {
@@ -1121,15 +1121,15 @@ fn slice_8psk_gives_max_log_soft_bits() {
     assert_eq!(slice.timing().ratio, Ratio::new(3, 1).unwrap());
     let p = slice.process(&input, &mut out[..8]).unwrap();
     assert_eq!((p.consumed, p.produced), (2, 6));
-    assert!(SliceBlock::<f32, _>::new(&cfg, rate(1200), &mut VecStorage).is_err());
-    assert_eq!(SliceConstellation::Psk8.bits_per_symbol(), 3);
+    assert!(SymbolDemapBlock::<f32, _>::new(&cfg, rate(1200), &mut VecStorage).is_err());
+    assert_eq!(SymbolDemapConstellation::Psk8.bits_per_symbol(), 3);
     assert_eq!(
-        SliceBlock::<C32, VecStorage>::rate_out(&cfg, rate(1200)).unwrap(),
+        SymbolDemapBlock::<C32, VecStorage>::rate_out(&cfg, rate(1200)).unwrap(),
         rate(3600)
     );
-    let mut c = SliceConfig::default();
+    let mut c = SymbolDemapConfig::default();
     c.set("constellation", ParamValue::Choice(4)).unwrap();
-    assert_eq!(c.constellation, SliceConstellation::Psk8);
+    assert_eq!(c.constellation, SymbolDemapConstellation::Psk8);
     assert_eq!(c.get("constellation"), Ok(ParamValue::Choice(4)));
 }
 

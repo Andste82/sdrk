@@ -863,26 +863,26 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
     }
 }
 
-/// A protocol entry of `sdrk-proto` or a packet block of M37: no backends, so ours and the
-/// fallback are the same code; a "sample" is a byte (CRCs), a bit (frame decoder) or a signal
-/// sample of one bit (the blocks `frame_encode` and `frame_decode`), and the buffers are plain
-/// vectors, so there is no misaligned variant. `family` is [`Family::GnuRadio`] for the CRCs
-/// (GNU Radio's `gr::digital::crc`, D527) and [`Family::Own`] (information only) for the
-/// framing, which no library has. The RDS blocks of M41 (`rds_demod_block`, one multiplex
-/// sample; `rds_decode_block`, one soft bit) and the Morse blocks of M47 (`morse_encode_block`,
-/// one output sample; `morse_decode_block`, one input sample) use the same shape: blocks that
-/// no library has, information only. So do the channelizer blocks of M45 (`channelize_block`,
-/// one input sample: the kernel entry `channelize` with the block around it, whose library
-/// comparison is that kernel entry; `channel_select_block`, one output sample, a strided copy;
-/// D928) and the two channel banks of M45 test 9 (`channel_bank_channelize`, one channelizer and
-/// eight `channel_select` blocks, and `channel_bank_ddc`, eight `ddc` blocks for the same eight
-/// channels, one input sample each; the comparison is between the two banks, D930) and the band
-/// pulse detector of M45.1 (`band_pulse_detect_block`, one lane value; no non-GPL library has
-/// it, D962). The QAM slicer of M44 (`slice_qam16_block`, `slice_qam64_block`, one input
-/// symbol each) is the block around the kernel `qam_soft_bits`, whose soft bits no library
-/// computes the same way (D1201, D1412): information too, as are the QAM blocks `qam_mod_block` (one output sample) and `qam_demod_block` (one input
-/// sample), chains of kernels with entries of their own (D1216), and `frame_decode_four_block`
-/// (one soft bit, `frame_decode` with `rotations` `four`).
+/// A protocol entry of `sdrk-proto` or a packet block of M37: no backends, so ours and the fallback
+/// are the same code; a "sample" is a byte (CRCs), a bit (frame decoder) or a signal sample of one
+/// bit (the blocks `frame_encode` and `frame_decode`), and the buffers are plain vectors, so there
+/// is no misaligned variant. `family` is [`Family::GnuRadio`] for the CRCs (GNU Radio's
+/// `gr::digital::crc`, D527) and [`Family::Own`] (information only) for the framing, which no
+/// library has. The RDS blocks of M41 (`rds_demod_block`, one multiplex sample; `rds_decode_block`,
+/// one soft bit) and the Morse blocks of M47 (`morse_encode_block`, one output sample;
+/// `morse_decode_block`, one input sample) use the same shape: blocks that no library has,
+/// information only. So do the channelizer blocks of M45 (`channelize_block`, one input sample: the
+/// kernel entry `channelize` with the block around it, whose library comparison is that kernel
+/// entry; `channel_select_block`, one output sample, a strided copy; D928) and the two channel
+/// banks of M45 test 9 (`channel_bank_channelize`, one channelizer and eight `channel_select`
+/// blocks, and `channel_bank_ddc`, eight `ddc` blocks for the same eight channels, one input sample
+/// each; the comparison is between the two banks, D930) and the band pulse detector of M45.1
+/// (`band_pulse_detect_block`, one lane value; no non-GPL library has it, D962). The QAM slicer of
+/// M44 (`symbol_demap_qam16_block`, `symbol_demap_qam64_block`, one input symbol each) is the block
+/// around the kernel `qam_soft_bits`, whose soft bits no library computes the same way (D1201,
+/// D1412): information too, as are the QAM blocks `qam_mod_block` (one output sample) and
+/// `qam_demod_block` (one input sample), chains of kernels with entries of their own (D1216), and
+/// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -1159,8 +1159,8 @@ pub static KERNELS: [KernelSpec; 231] = [
     proto("band_pulse_detect_block", Family::Own),
     spec("qam_soft_bits_qam16", Family::Own, false),
     spec("qam_soft_bits_qam64", Family::Own, false),
-    proto("slice_qam16_block", Family::Own),
-    proto("slice_qam64_block", Family::Own),
+    proto("symbol_demap_qam16_block", Family::Own),
+    proto("symbol_demap_qam64_block", Family::Own),
     proto("qam_mod_block", Family::Own),
     proto("qam_demod_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
@@ -4798,8 +4798,8 @@ mod tests {
             "channel_bank_channelize",
             "channel_bank_ddc",
             "band_pulse_detect_block",
-            "slice_qam16_block",
-            "slice_qam64_block",
+            "symbol_demap_qam16_block",
+            "symbol_demap_qam64_block",
             "qam_mod_block",
             "qam_demod_block",
             "qam_demod_search_block",
@@ -4883,14 +4883,14 @@ mod tests {
             );
             assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
         }
-        // The block `slice` has entries only for its QAM constellations, which run the kernel
-        // `qam_soft_bits` with the block around it (M44, D1201, D1412).
+        // The block `symbol_demap` has entries only for its QAM constellations, which run the
+        // kernel `qam_soft_bits` with the block around it (M44, D1201, D1412).
         assert!(
             KERNELS
                 .iter()
-                .filter(|s| s.name.starts_with("slice"))
+                .filter(|s| s.name.starts_with("symbol_demap"))
                 .map(|s| s.name)
-                .eq(["slice_qam16_block", "slice_qam64_block"])
+                .eq(["symbol_demap_qam16_block", "symbol_demap_qam64_block"])
         );
     }
 

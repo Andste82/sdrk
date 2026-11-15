@@ -570,12 +570,12 @@ fn inverted_bpsk_frames_are_found_with_rotations_both() {
     }
 }
 
-/// The constellation `8psk` of `slice` (M40.1): `c32` only, three soft bits per symbol, cost 16
-/// (D644); `f32` is `invalid_value` at `params.constellation`.
+/// The constellation `8psk` of `symbol_demap` (M40.1): `c32` only, three soft bits per symbol, cost
+/// 16 (D644); `f32` is `invalid_value` at `params.constellation`.
 #[test]
-fn slice_takes_8psk() {
+fn symbol_demap_takes_8psk() {
     let report = validate(&single(
-        "slice",
+        "symbol_demap",
         "c32",
         4800,
         json!({ "constellation": "8psk" }),
@@ -584,7 +584,7 @@ fn slice_takes_8psk() {
     assert_eq!(report.nodes[0].rate_out, Rate::hz(14_400).unwrap());
     assert_eq!(report.cost_per_input_sample, 16.0);
     let (path, code, _) = first_error(&single(
-        "slice",
+        "symbol_demap",
         "f32",
         4800,
         json!({ "constellation": "8psk" }),

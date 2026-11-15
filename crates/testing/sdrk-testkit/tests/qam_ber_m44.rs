@@ -1,5 +1,6 @@
 //! M44 tests 3 to 6: `qam_mod` -> channel -> noise -> `qam_demod` (RRC matched filter,
-//! `symbol_sync`, `equalize`, `costas` with the QAM constellation, the soft bits of `slice`).
+//! `symbol_sync`, `equalize`, `costas` with the QAM constellation, the soft bits of
+//! `symbol_demap`).
 //!
 //! - **Test 3, 16-QAM BER (AWGN)** (seed 602): within 1 dB of the Gray-coded approximation
 //!   `P_b = (4/k) (1 - 1/sqrt(M)) Q(sqrt(3k/(M-1) Eb/N0))` at Eb/N0 12 and 14 dB over 10^6 bits.

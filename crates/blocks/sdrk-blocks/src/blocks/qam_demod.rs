@@ -18,7 +18,7 @@ use super::psk_demod::{
     to_u32, work_len,
 };
 use super::qam_mod::{ORDER_PARAM, order_of_value, qam_of_order};
-use super::slice::qam_soft_bits;
+use super::symbol_demap::qam_soft_bits;
 use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -93,7 +93,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         of the fourth power of the equalizer's output over its last 256 blind symbols after the \
         estimate; equalizer_taps 0 leaves it out), the decision-directed carrier \
         loop costas, which tracks the phase (constellation qam16 or qam64, carrier_bw, \
-        damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of slice qam16 or \
+        damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of symbol_demap \
+        qam16 or \
         qam64 (scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
         carrier loop). The 90 degree ambiguity of the square constellation is not resolved: use \
         frame_decode with rotations four and bits_per_symbol 4 or 6. The output rate is the \
@@ -846,8 +847,8 @@ type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C3
 /// `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded samples per symbol), the kernel
 /// `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), the kernel `equalize` (when
 /// `equalizer_taps` is above 0), the kernel `costas` with the constellation `qam16` or `qam64`, and
-/// the soft bits of `slice` `qam16` or `qam64` (scale 1), the same functions as the blocks. Until
-/// it has found the carrier offset, the frequency acquisition (I44-3, I44-4) collects the
+/// the soft bits of `symbol_demap` `qam16` or `qam64` (scale 1), the same functions as the blocks.
+/// Until it has found the carrier offset, the frequency acquisition (I44-3, I44-4) collects the
 /// normalized fourth powers of the symbols of the timing loop in windows of
 /// [`QAM_ACQUISITION_SYMBOLS`] from symbol [`QAM_ACQUISITION_SKIP`] on and estimates the offset
 /// from their spectrum (the kernel `fft`); the equalizer and the carrier loop run in two calls

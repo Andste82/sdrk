@@ -1,4 +1,4 @@
-"""Block cases of the PSK variants (M40.1): the max-log soft bits of the ``slice`` constellation ``8psk``.
+"""Block cases of the PSK variants (M40.1): the max-log soft bits of the ``symbol_demap`` constellation ``8psk``.
 
 The soft bits are a fixed float32 computation (M40.1 section 1, D642), so the expected values come
 from an exact float32 model with the ``f32model`` helpers, one operation at a time: the points
@@ -51,8 +51,8 @@ def psk8_bits(scale, yr, yi):
     return out
 
 
-@case(kernel="blocks", name="slice_8psk_c32", seed=0)
-def slice_8psk_c32(rng):
+@case(kernel="blocks", name="symbol_demap_8psk_c32", seed=0)
+def symbol_demap_8psk_c32(rng):
     del rng  # deterministic corner values
     scale = 2.5
     x = []
@@ -77,7 +77,7 @@ def slice_8psk_c32(rng):
         arrays={"input": Array("cf32", x), "expected": Array("f32", expected)},
         tolerance={"class": "bit_exact"},
         model="float32",
-        notes="slice constellation 8psk (M40.1 section 1): the inputs are exp(j k pi / 8) for k = 0 "
+        notes="symbol_demap constellation 8psk (M40.1 section 1): the inputs are exp(j k pi / 8) for k = 0 "
         "to 15 at amplitude 1, then at 0.5 (even k the decision boundaries k pi / 4 of the octants, "
         "odd k the 8 points), each part rounded once to float32; expected are the three soft bits "
         "b0, b1, b2 per symbol, scale ((m0 - m1) * 0.25) with m0 (m1) the smallest squared distance "

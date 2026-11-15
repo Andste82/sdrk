@@ -1,5 +1,5 @@
 //! M38 tests 2 and 3: the lock of the Gardner symbol synchronizer (seed 494) and the bit error
-//! rate of BPSK through `symbol_sync` -> `slice` -> `BerMeter` (Gardner, seed 495;
+//! rate of BPSK through `symbol_sync` -> `symbol_demap` -> `BerMeter` (Gardner, seed 495;
 //! Mueller–Müller, seed 496). The measured values are printed (run with `--nocapture` to see
 //! them).
 //!
@@ -38,7 +38,8 @@
 use num_complex::Complex64;
 use sdrk::{Rate, Sdrk};
 use sdrk_blocks::{
-    Block, SliceBlock, SliceConfig, SliceConstellation, SymbolSyncBlock, SymbolSyncConfig, Ted,
+    Block, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolSyncBlock,
+    SymbolSyncConfig, Ted,
 };
 use sdrk_core::C32;
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
@@ -282,13 +283,13 @@ impl MatchedFilter {
     }
 }
 
-/// One receiver: noise, matched filter, `symbol_sync`, `slice bpsk`, `BerMeter`.
+/// One receiver: noise, matched filter, `symbol_sync`, `symbol_demap bpsk`, `BerMeter`.
 struct Receiver {
     ebn0_db: f64,
     awgn: Awgn,
     mf: MatchedFilter,
     sync: SymbolSyncBlock<C32, VecStorage>,
-    slice: SliceBlock<C32, VecStorage>,
+    slice: SymbolDemapBlock<C32, VecStorage>,
     meter: BerMeter,
     skipped: usize,
     symbols: Vec<C32>,
@@ -315,11 +316,11 @@ impl Receiver {
         };
         let sync = SymbolSyncBlock::new(&sync_cfg, fs, &mut storage).unwrap();
         assert_eq!(sync.sps_estimate(), sps);
-        let slice_cfg = SliceConfig {
-            constellation: SliceConstellation::Bpsk,
+        let symbol_demap_cfg = SymbolDemapConfig {
+            constellation: SymbolDemapConstellation::Bpsk,
             scale: 1.0,
         };
-        let slice = SliceBlock::new(&slice_cfg, fs, &mut storage).unwrap();
+        let slice = SymbolDemapBlock::new(&symbol_demap_cfg, fs, &mut storage).unwrap();
         Self {
             ebn0_db,
             awgn: Awgn::from_ebn0(ebn0_db, 1, sps, power, seed).unwrap(),

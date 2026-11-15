@@ -1,6 +1,6 @@
 //! The blocks of M38: `SymbolSyncBlock` (the kernel `symbol_sync` through the facade: whole and
 //! in 20 cut plans of seed 493, exact ratio from the symbol rate, the rate rule, no storage,
-//! output-full resubmission) and `SliceBlock` (the table of §3 at corner values, the QPSK bit
+//! output-full resubmission) and `SymbolDemapBlock` (the table of §3 at corner values, the QPSK bit
 //! order, the runtime `scale`, the timing; test 4 of M38).
 #![allow(
     clippy::unwrap_used,
@@ -21,8 +21,8 @@ use common::{check_block, check_exact_storage, rate, run_block};
 use num_complex::Complex64;
 use sdrk::{C32, CQ15, Delay, Ratio, RatioKind, Sample, Sdrk};
 use sdrk_blocks::{
-    ArenaStorage, Block, Error, ParamValue, SliceBlock, SliceConfig, SliceConstellation,
-    StreamElem, SymbolSyncBlock, SymbolSyncConfig, Ted,
+    ArenaStorage, Block, Error, ParamValue, StreamElem, SymbolDemapBlock, SymbolDemapConfig,
+    SymbolDemapConstellation, SymbolSyncBlock, SymbolSyncConfig, Ted,
 };
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
 use sdrk_device::Rate;
@@ -332,7 +332,7 @@ fn symbol_sync_needs_two_samples_per_symbol_and_no_storage() {
     }
 }
 
-// ---- slice ----------------------------------------------------------------------------------
+// ---- symbol_demap ------------------------------------------------------------------------------
 
 /// Corner values of a component: zeros of both signs, the smallest subnormal, the extremes,
 /// infinities and ordinary values.
@@ -349,15 +349,15 @@ const CORNERS: [f32; 10] = [
     -1.5,
 ];
 
-fn slice_block<T: sdrk_blocks::SliceElem>(
-    c: SliceConstellation,
+fn symbol_demap_block<T: sdrk_blocks::SymbolDemapElem>(
+    c: SymbolDemapConstellation,
     scale: f64,
-) -> SliceBlock<T, VecStorage> {
-    let cfg = SliceConfig {
+) -> SymbolDemapBlock<T, VecStorage> {
+    let cfg = SymbolDemapConfig {
         constellation: c,
         scale,
     };
-    SliceBlock::new(&cfg, rate(1000), &mut VecStorage).unwrap()
+    SymbolDemapBlock::new(&cfg, rate(1000), &mut VecStorage).unwrap()
 }
 
 /// `f32` values equal bit for bit, NaN with NaN.
@@ -372,11 +372,11 @@ fn same_f32(want: &[f32], got: &[f32], what: &str) {
 }
 
 #[test]
-fn slice_follows_the_table_at_corner_values() {
+fn symbol_demap_follows_the_table_at_corner_values() {
     for scale in [1.0, 2.5, 1e-9, 1e9] {
         let s = scale as f32;
         // real: s x
-        let mut b = slice_block::<f32>(SliceConstellation::Real, scale);
+        let mut b = symbol_demap_block::<f32>(SymbolDemapConstellation::Real, scale);
         let mut out = vec![7.0f32; CORNERS.len() + 1];
         let p = b.process(&CORNERS, &mut out).unwrap();
         assert_eq!((p.consumed, p.produced), (CORNERS.len(), CORNERS.len()));
@@ -388,13 +388,13 @@ fn slice_follows_the_table_at_corner_values() {
             .iter()
             .flat_map(|&re| CORNERS.iter().map(move |&im| C32::new(re, im)))
             .collect();
-        let mut b = slice_block::<C32>(SliceConstellation::Bpsk, scale);
+        let mut b = symbol_demap_block::<C32>(SymbolDemapConstellation::Bpsk, scale);
         let mut out = vec![0.0f32; symbols.len()];
         let p = b.process(&symbols, &mut out).unwrap();
         assert_eq!((p.consumed, p.produced), (symbols.len(), symbols.len()));
         let want: Vec<f32> = symbols.iter().map(|c| s * c.re).collect();
         same_f32(&want, &out, "bpsk");
-        let mut b = slice_block::<C32>(SliceConstellation::Qpsk, scale);
+        let mut b = symbol_demap_block::<C32>(SymbolDemapConstellation::Qpsk, scale);
         let mut out = vec![0.0f32; 2 * symbols.len()];
         let p = b.process(&symbols, &mut out).unwrap();
         assert_eq!((p.consumed, p.produced), (symbols.len(), 2 * symbols.len()));
@@ -402,7 +402,7 @@ fn slice_follows_the_table_at_corner_values() {
         same_f32(&want, &out, "qpsk");
     }
     // NaN passes through as NaN.
-    let mut b = slice_block::<C32>(SliceConstellation::Qpsk, 1.0);
+    let mut b = symbol_demap_block::<C32>(SymbolDemapConstellation::Qpsk, 1.0);
     let mut out = [0.0f32; 2];
     b.process(&[C32::new(f32::NAN, -1.0)], &mut out).unwrap();
     assert!(out[0].is_nan());
@@ -412,20 +412,20 @@ fn slice_follows_the_table_at_corner_values() {
 /// The QPSK bit order: bit 0 from `re`, bit 1 from `im` (Gray), so the four quadrants give
 /// the bit pairs 11, 01, 00, 10 (bit 0 first), with `> 0` meaning 1.
 #[test]
-fn slice_qpsk_bit_order() {
+fn symbol_demap_qpsk_bit_order() {
     let quadrants = [
         C32::new(0.7, 0.7),
         C32::new(-0.7, 0.7),
         C32::new(-0.7, -0.7),
         C32::new(0.7, -0.7),
     ];
-    let mut b = slice_block::<C32>(SliceConstellation::Qpsk, 1.0);
+    let mut b = symbol_demap_block::<C32>(SymbolDemapConstellation::Qpsk, 1.0);
     let mut out = [0.0f32; 8];
     b.process(&quadrants, &mut out).unwrap();
     let bits: Vec<u8> = out.iter().map(|&x| u8::from(x > 0.0)).collect();
     assert_eq!(bits, [1, 1, 0, 1, 0, 0, 1, 0]);
     // An odd output room takes only whole symbols.
-    let mut b = slice_block::<C32>(SliceConstellation::Qpsk, 1.0);
+    let mut b = symbol_demap_block::<C32>(SymbolDemapConstellation::Qpsk, 1.0);
     let mut out = [9.0f32; 5];
     let p = b.process(&quadrants, &mut out).unwrap();
     assert_eq!((p.consumed, p.produced), (2, 4));
@@ -435,8 +435,8 @@ fn slice_qpsk_bit_order() {
 }
 
 #[test]
-fn slice_scale_is_a_runtime_parameter() {
-    let mut b = slice_block::<C32>(SliceConstellation::Bpsk, 1.0);
+fn symbol_demap_scale_is_a_runtime_parameter() {
+    let mut b = symbol_demap_block::<C32>(SymbolDemapConstellation::Bpsk, 1.0);
     let mut out = [0.0f32; 1];
     b.process(&[C32::new(0.5, 3.0)], &mut out).unwrap();
     assert_eq!(out[0], 0.5);
@@ -459,49 +459,53 @@ fn slice_scale_is_a_runtime_parameter() {
 }
 
 #[test]
-fn slice_timing_rate_storage_and_types() {
+fn symbol_demap_timing_rate_storage_and_types() {
     let r = rate(1200);
     for (c, bits) in [
-        (SliceConstellation::Real, 1u64),
-        (SliceConstellation::Bpsk, 1),
-        (SliceConstellation::Qpsk, 2),
+        (SymbolDemapConstellation::Real, 1u64),
+        (SymbolDemapConstellation::Bpsk, 1),
+        (SymbolDemapConstellation::Qpsk, 2),
     ] {
-        let cfg = SliceConfig {
+        let cfg = SymbolDemapConfig {
             constellation: c,
             scale: 1.0,
         };
-        let t = if c == SliceConstellation::Real {
-            let b = SliceBlock::<f32, VecStorage>::new(&cfg, r, &mut VecStorage).unwrap();
-            assert!(SliceBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage).is_err());
+        let t = if c == SymbolDemapConstellation::Real {
+            let b = SymbolDemapBlock::<f32, VecStorage>::new(&cfg, r, &mut VecStorage).unwrap();
+            assert!(SymbolDemapBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage).is_err());
             assert_eq!(
-                SliceBlock::<f32, VecStorage>::rate_out(&cfg, r).unwrap(),
+                SymbolDemapBlock::<f32, VecStorage>::rate_out(&cfg, r).unwrap(),
                 rate(1200 * bits)
             );
-            check_exact_storage(0, |a| SliceBlock::<f32, A<'_>>::new(&cfg, r, a).map(|_| ()));
+            check_exact_storage(0, |a| {
+                SymbolDemapBlock::<f32, A<'_>>::new(&cfg, r, a).map(|_| ())
+            });
             b.timing()
         } else {
-            let b = SliceBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage).unwrap();
+            let b = SymbolDemapBlock::<C32, VecStorage>::new(&cfg, r, &mut VecStorage).unwrap();
             assert!(matches!(
-                SliceBlock::<f32, VecStorage>::new(&cfg, r, &mut VecStorage),
+                SymbolDemapBlock::<f32, VecStorage>::new(&cfg, r, &mut VecStorage),
                 Err(Error::InvalidParameter {
                     name: "constellation",
                     ..
                 })
             ));
             assert_eq!(
-                SliceBlock::<C32, VecStorage>::rate_out(&cfg, r).unwrap(),
+                SymbolDemapBlock::<C32, VecStorage>::rate_out(&cfg, r).unwrap(),
                 rate(1200 * bits)
             );
-            check_exact_storage(0, |a| SliceBlock::<C32, A<'_>>::new(&cfg, r, a).map(|_| ()));
+            check_exact_storage(0, |a| {
+                SymbolDemapBlock::<C32, A<'_>>::new(&cfg, r, a).map(|_| ())
+            });
             b.timing()
         };
         assert_eq!(t.ratio, Ratio::new(bits, 1).unwrap());
         assert_eq!(t.kind, RatioKind::Constant);
         assert_eq!(t.delay, Delay::ZERO);
         assert_eq!(
-            SliceBlock::<C32, VecStorage>::storage_bytes(
-                &SliceConfig {
-                    constellation: SliceConstellation::Qpsk,
+            SymbolDemapBlock::<C32, VecStorage>::storage_bytes(
+                &SymbolDemapConfig {
+                    constellation: SymbolDemapConstellation::Qpsk,
                     scale: 1.0
                 },
                 r
@@ -511,7 +515,7 @@ fn slice_timing_rate_storage_and_types() {
     }
 }
 
-/// `slice` after `symbol_sync` in the cut plans: the soft bits of a chunked run equal the
+/// `symbol_demap` after `symbol_sync` in the cut plans: the soft bits of a chunked run equal the
 /// whole run (the slicer has no state, the synchronizer is block-size invariant).
 #[test]
 fn symbol_sync_then_slice_is_block_size_invariant() {
@@ -527,7 +531,7 @@ fn symbol_sync_then_slice_is_block_size_invariant() {
         &want,
         &symbols,
         SEED,
-        || slice_block::<C32>(SliceConstellation::Bpsk, 3.0),
-        "slice bpsk",
+        || symbol_demap_block::<C32>(SymbolDemapConstellation::Bpsk, 3.0),
+        "symbol_demap bpsk",
     );
 }

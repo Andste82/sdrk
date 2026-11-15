@@ -143,13 +143,15 @@ pub use blocks::sensor_decode::{
 pub use blocks::sensor_encode::{
     SENSOR_ENCODE_MAX_REPEATS, SENSOR_ENCODE_PACKETS, SensorEncodeBlock, SensorEncodeConfig,
 };
-pub use blocks::slice::{PSK8_GRAY, SliceBlock, SliceConfig, SliceConstellation, SliceElem};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};
 pub use blocks::ssb_mod::{SSB_MOD_CHUNK, SsbModBlock, SsbModConfig};
 pub use blocks::stereo_matrix::StereoMatrixBlock;
 pub use blocks::stereo_pll::{StereoPllBlock, StereoPllConfig};
+pub use blocks::symbol_demap::{
+    PSK8_GRAY, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolDemapElem,
+};
 pub use blocks::symbol_sync::{SymbolSyncBlock, SymbolSyncConfig};
 pub use blocks::to_complex::ToComplexBlock;
 pub use chain::{CHAIN_DESCRIPTION, Chain};

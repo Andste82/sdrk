@@ -1,7 +1,7 @@
 {
   "sdrk": 1,
   "name": "bpsk-sync-test",
-  "description": "Test flow of M38 (test 7, not an example): raised-cosine BPSK at 4.1 samples per symbol through symbol_sync, slice bpsk and frame_decode back to packets.",
+  "description": "Test flow of M38 (test 7, not an example): raised-cosine BPSK at 4.1 samples per symbol through symbol_sync, symbol_demap bpsk and frame_decode back to packets.",
   "settings": {
     "precision": "f32",
     "max_chunk": 4096
@@ -21,8 +21,8 @@
         "ted": "gardner"
       }
     },
-    "slice": {
-      "kind": "slice",
+    "symbol_demap": {
+      "kind": "symbol_demap",
       "params": {
         "constellation": "bpsk"
       }
@@ -36,8 +36,8 @@
   },
   "edges": [
     { "from": "rx", "to": "sync" },
-    { "from": "sync", "to": "slice" },
-    { "from": "slice", "to": "dec" },
+    { "from": "sync", "to": "symbol_demap" },
+    { "from": "symbol_demap", "to": "dec" },
     { "from": "dec", "to": "out" }
   ],
   "outputs": {

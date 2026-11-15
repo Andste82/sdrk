@@ -571,8 +571,8 @@ pub const KERNELS: [&str; 231] = [
     "channel_bank_channelize",
     "channel_bank_ddc",
     "band_pulse_detect_block",
-    "slice_qam16_block",
-    "slice_qam64_block",
+    "symbol_demap_qam16_block",
+    "symbol_demap_qam64_block",
     "costas_qam16",
     "costas_qam16_fallback",
     "equalize_qam16",
@@ -797,12 +797,12 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
         "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
         "channelize_block" => Box::new(channelize_family::ChannelizeBlockK::new(rng, layout)),
-        "slice_qam16_block" => Box::new(qam_family::SliceQamBlockK::new(
+        "symbol_demap_qam16_block" => Box::new(qam_family::SymbolDemapQamBlockK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam16,
         )),
-        "slice_qam64_block" => Box::new(qam_family::SliceQamBlockK::new(
+        "symbol_demap_qam64_block" => Box::new(qam_family::SymbolDemapQamBlockK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam64,

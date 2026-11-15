@@ -587,6 +587,10 @@ jobs:
           chrome-version: stable
           install-chromedriver: true
       - uses: browser-actions/setup-geckodriver@latest
+        with:
+          # Authenticated: the anonymous GitHub API limit of the shared
+          # runner addresses was exhausted and failed this step.
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: browser-actions/setup-firefox@v1
         with:
           firefox-version: latest

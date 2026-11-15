@@ -52,7 +52,11 @@ pub const QAM_TRACKER_PULL_BW: f64 = 0.005;
 /// check after an estimate on, D1622): narrow, so that `costas` does the phase tracking (D1618),
 /// but not 0: the decision-directed equalizer slips on a frequency error of its input of 2e-6
 /// cycles per symbol already, which no estimate reaches, and the carrier loop after it cannot
-/// take that error out of its input.
+/// take that error out of its input. Measured after the same pull-in (D1626): 0 (the frequency
+/// the tracker pulled in, then held) fails the restart tests and the flow test 7 (442 of 1000
+/// packets on seed 606); 0.0005 and 0.001 pass every test but lose the signal more often than
+/// 0.0015 on the signals of the comparison of D1618 (alignment changes per 1e5 symbols over
+/// three sets 1513.65 and 1365.34 against 1146.68).
 pub const QAM_TRACKER_HOLD_BW: f64 = 0.0015;
 
 /// The default loop bandwidth of the symbol timing of `qam_demod` (half that of `psk_demod`:

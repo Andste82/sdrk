@@ -79,22 +79,26 @@ impl Drop for Reattach {
     reason = "the futures of nusb are waited on in place; this runs once per open, on a thread with the default stack"
 )]
 fn detach_kernel_driver(info: &UsbInfo) -> Option<Reattach> {
-    let target = nusb::list_devices()
+    let candidates: Vec<nusb::DeviceInfo> = nusb::list_devices()
         .wait()
         .ok()?
         .filter(|d| d.vendor_id() == info.vendor_id && d.product_id() == info.product_id)
-        .find(|d| {
-            let (bus, ports) = bus_location(d);
-            bus == info.bus && ports == info.ports
-        })?;
-    let (bus, ports) = bus_location(&target);
-    let chain = ports
-        .iter()
-        .map(u8::to_string)
-        .collect::<Vec<_>>()
-        .join(".");
-    // The driver bound to interface 0 (configuration 1), as sysfs names it.
-    let link = format!("/sys/bus/usb/devices/{bus}-{chain}:1.0/driver");
+        .collect();
+    // By bus location; else the only dongle of this kind on the bus.
+    let at = candidates.iter().position(|d| {
+        let (bus, ports) = bus_location(d);
+        bus == info.bus && ports == info.ports
+    });
+    let target = match at {
+        Some(n) => candidates.into_iter().nth(n)?,
+        None if candidates.len() == 1 => candidates.into_iter().next()?,
+        None => return None,
+    };
+    // The driver bound to interface 0 (configuration 1): sysfs lists the
+    // interface as `<device>:1.0` inside the directory of the device.
+    let dir = target.sysfs_path();
+    let name = dir.file_name()?.to_str()?;
+    let link = dir.join(format!("{name}:1.0")).join("driver");
     let driver = std::fs::read_link(&link).ok()?;
     if driver.file_name().is_none_or(|n| n == "usbfs") {
         return None;

@@ -45,6 +45,18 @@
 //!   64-QAM at 30 dB adapted to the gap at the signal's power does not converge on the signal
 //!   again and no check restarts it (the verify window agrees with the loops); that case is
 //!   printed, not asserted (I44-17).
+//! - **The decision mode starts at the phase of the output** (seed 817, I44-17): 64-QAM at
+//!   Es/N0 18 and 19 dB, 0.0005 cycles per symbol and 20 ppm of clock drift (the signals of the
+//!   comparison with GNU Radio of D1618), with 11 equalizer taps and with 15 taps and `sync_bw`
+//!   0.002, over 60000 symbols: from symbol 10000 on one alignment, no restart, and the BER at
+//!   most the Gray approximation at Es/N0 1 dB lower. Before the hand-over of the equalizer to the
+//!   decision mode turned its tracker by the fourth-power phase of its output (D1700), all four
+//!   receivers slipped (18 to 23 of the 25 windows off the first alignment, BER 0.38 to 0.44):
+//!   the decision mode, started up to 40 degrees off, pulled the tracker's frequency into a false
+//!   state that `costas` behind it hid from the verify window. And 16-QAM with 11 taps at Es/N0
+//!   20 and 23 dB and 0.001 cycles per symbol without drift (the receivers of D1627 that
+//!   converged after their CMA symbols on a false state, MSE 0.06 and the weights' energy 0.54):
+//!   the same assertions.
 //!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
@@ -64,7 +76,7 @@ use sdrk::Rate;
 use sdrk_blocks::{Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::rotate_symbol;
-use sdrk_testkit::channel::{Awgn, FrequencyOffset, Impairment};
+use sdrk_testkit::channel::{Awgn, ClockDrift, FrequencyOffset, Impairment};
 use sdrk_testkit::{Pcg32, VecStorage};
 
 /// Samples per symbol and the symbol rate (the sample rate is `SPS` times it).
@@ -499,5 +511,110 @@ fn a_signal_back_after_a_gap_is_received_again() {
             assert_eq!(*slips, 0, "{what}");
             assert!(*ber <= edge, "{what}: BER {ber:.4e} above {edge:.4e}");
         }
+    }
+}
+
+/// `n` random symbols of the seed through `qam_mod`, turned by `offset` (cycles per symbol), its
+/// clock stretched by `ppm`, with Gaussian noise at `esn0_db` (the measured mean power after the
+/// ramp of the filter): the signals of the comparison of D1618. The samples and the sent symbols.
+fn drifting_signal(
+    order: u32,
+    n: usize,
+    esn0_db: f64,
+    offset: f64,
+    ppm: f64,
+    seed: u64,
+) -> (Vec<C32>, Vec<u32>) {
+    let k = bps(order);
+    let mut rng = Pcg32::new(seed, 1);
+    let bits: Vec<f32> = (0..(n + 64) * k)
+        .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+        .collect();
+    let cfg = QamModConfig {
+        order,
+        samples_per_symbol: SPS,
+        ..QamModConfig::default()
+    };
+    let rate = Rate::hz(SYMBOL_RATE * k as u64).unwrap();
+    let mut tx = QamModBlock::<VecStorage>::new(&cfg, rate, &mut VecStorage).unwrap();
+    let mut sig = vec![C32::default(); n * SPS];
+    assert_eq!(tx.process(&bits, &mut sig).unwrap().produced, sig.len());
+    let mut cur: Vec<Complex64> = sig
+        .iter()
+        .map(|c| Complex64::new(f64::from(c.re), f64::from(c.im)))
+        .collect();
+    let fs = (SYMBOL_RATE as usize * SPS) as f64;
+    let mut stages: [Box<dyn Impairment>; 2] = [
+        Box::new(FrequencyOffset::new(offset * SYMBOL_RATE as f64, fs).unwrap()),
+        Box::new(ClockDrift::new(ppm).unwrap()),
+    ];
+    for s in &mut stages {
+        let mut next = Vec::with_capacity(cur.len() + 64);
+        s.process(&cur, &mut next);
+        cur = next;
+    }
+    let body = &cur[100 * SPS..];
+    let power = body.iter().map(Complex64::norm_sqr).sum::<f64>() / body.len() as f64;
+    let ebn0 = esn0_db - 10.0 * (k as f64).log10();
+    let mut awgn = Awgn::from_ebn0(ebn0, k as u32, SPS as f64, power, seed + 100).unwrap();
+    let mut noisy = Vec::with_capacity(cur.len());
+    awgn.process(&cur, &mut noisy);
+    let input = noisy
+        .iter()
+        .map(|c| C32::new(c.re as f32, c.im as f32))
+        .collect();
+    (input, symbols(&bits, k))
+}
+
+#[test]
+fn the_decision_mode_starts_at_the_phase_of_the_output() {
+    // (order, Es/N0 in dB, equalizer_taps, sync_bw, offset in cycles per symbol, drift in ppm)
+    let cases = [
+        (64u32, 18.0, 11usize, 0.005, 0.0005, 20.0),
+        (64, 18.0, 15, 0.002, 0.0005, 20.0),
+        (64, 19.0, 11, 0.005, 0.0005, 20.0),
+        (64, 19.0, 15, 0.002, 0.0005, 20.0),
+        (16, 20.0, 11, 0.005, OFFSET, 0.0),
+        (16, 23.0, 11, 0.005, OFFSET, 0.0),
+    ];
+    let n = 60_000;
+    let results: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = cases
+            .iter()
+            .map(|&(order, esn0, taps, sync_bw, offset, ppm)| {
+                s.spawn(move || {
+                    let (input, sent) = drifting_signal(order, n, esn0, offset, ppm, 817);
+                    let cfg = QamDemodConfig {
+                        order,
+                        symbol_rate_hz: SYMBOL_RATE as f64,
+                        equalizer_taps: taps,
+                        sync_bw,
+                        ..QamDemodConfig::default()
+                    };
+                    let rate = Rate::hz(SYMBOL_RATE * SPS as u64).unwrap();
+                    let mut block = QamDemodBlock::new(&cfg, rate, &mut VecStorage).unwrap();
+                    let soft = demod_all(&mut block, &input);
+                    let rx = symbols(&soft, bps(order));
+                    let (ber, slips) = errors(order, &sent, &rx, 10_000, 0);
+                    let what = format!(
+                        "{order}-QAM, equalizer_taps {taps}, sync_bw {sync_bw}, Es/N0 {esn0} dB"
+                    );
+                    (what, order, esn0, block.restarts(), ber, slips)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for (what, order, esn0, restarts, ber, slips) in &results {
+        eprintln!(
+            "{what}: restarts {restarts}, BER at the first alignment {ber:.4e} (bound {:.4e}), \
+             windows off it {slips}",
+            theory(*order, esn0 - 1.0)
+        );
+    }
+    for (what, order, esn0, restarts, ber, slips) in &results {
+        assert_eq!(*slips, 0, "{what}: one alignment from symbol 10000 on");
+        assert_eq!(*restarts, 0, "{what}");
+        assert!(*ber <= theory(*order, esn0 - 1.0), "{what}: BER {ber}");
     }
 }

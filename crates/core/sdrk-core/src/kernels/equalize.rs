@@ -495,6 +495,21 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
         self.phase
     }
 
+    /// Sets the tracker phase in units of `2^-32` turn (a phase estimate from outside, as the
+    /// hand-over of `qam_demod` to the decision mode); the weights, the mode and the frequency
+    /// integrator stay.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::equalize::{EqParams, EqualizeState}, C32};
+    /// let mut st = EqualizeState::new([C32::default(); 3], [C32::default(); 3], EqParams::default())?;
+    /// st.set_phase(0x4000_0000);
+    /// assert_eq!((st.phase(), st.frequency()), (0x4000_0000, 0.0));
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn set_phase(&mut self, phase: u32) {
+        self.phase = phase;
+    }
+
     /// The tracker's frequency integrator in cycles per symbol.
     pub fn frequency(&self) -> f32 {
         self.freq

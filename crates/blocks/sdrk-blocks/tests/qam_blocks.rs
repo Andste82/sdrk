@@ -562,6 +562,10 @@ fn received(order: u32, sps: usize, n_sym: usize, noise: f64, stream: u64) -> Ve
 const ACQ_SKIP: usize = 256;
 const ACQ_SYMBOLS: usize = 512;
 const ACQ_FFT: usize = 1024;
+/// The blind (CMA) symbols of the equalizer of `qam_demod`, and the last of them over which the
+/// hand-over to the decision mode measures the phase of its output.
+const BLIND: usize = 1000;
+const HANDOVER: usize = 256;
 
 /// The frequency acquisition of `qam_demod` written out (M44, I44-3, I44-4) over the symbols
 /// `x` of the timing loop: the smoothed power `p = p + (|x|^2 - p) / 64` (from 0, finite
@@ -636,7 +640,11 @@ fn acquire_kernels(x: &[C32]) -> Option<(usize, f64)> {
 /// of M44 §2 in `f32` ([`axis_bits`]); the equalizer and the carrier loop run in two calls split
 /// after the symbol at which the frequency acquisition ([`acquire_kernels`]) used its estimate
 /// `f`, which then goes to the equalizer's tracker (and the carrier loop's frequency to 0), or
-/// without the equalizer to the carrier loop.
+/// without the equalizer to the carrier loop; and the hand-over of the equalizer to the decision
+/// mode (I44-17): the calls split after the 1000th symbol as well, the fourth powers `(z^2)^2` of
+/// the equalizer's outputs `z` of the symbols 744 to 999 from the estimate on summed in `f32` in
+/// their order, and before the decision mode the tracker's phase turned by
+/// `round(atan2(-sum.im, -sum.re) / (8 pi) 2^32)` units of `2^-32` turn.
 fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32> {
     let q = if cfg.order == 16 {
         Qam::Qam16
@@ -694,10 +702,31 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
     // `qam_demod_searches_again_when_the_loop_does_not_lock` tests it.
     assert!(acquired.is_none_or(|(n, _)| syms.len() < n + QAM_ACQUISITION_CHECK));
     let mut y = vec![C32::default(); syms.len()];
-    for (from, to) in [(0, split), (split, syms.len())] {
+    let mut cuts = vec![0, split, syms.len()];
+    if eq.is_some() && BLIND < syms.len() {
+        cuts.push(BLIND);
+    }
+    cuts.sort_unstable();
+    cuts.dedup();
+    let mut sum = C32::default();
+    for w in cuts.windows(2) {
+        let (from, to) = (w[0], w[1]);
         let mut e = syms[from..to].to_vec();
         if let Some(eq) = eq.as_mut() {
             <Sdrk as Equalize>::equalize(&Sdrk, eq, &syms[from..to], &mut e).unwrap();
+            for (j, z) in (from..to).zip(&e) {
+                if acquired.is_some() && j >= split && (BLIND - HANDOVER..BLIND).contains(&j) {
+                    let a = C32::new(z.re * z.re - z.im * z.im, 2.0 * z.re * z.im);
+                    let q4 = C32::new(a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
+                    sum = C32::new(sum.re + q4.re, sum.im + q4.im);
+                }
+            }
+            if to == BLIND && split < BLIND && sum != C32::default() {
+                let phi = libm::atan2(f64::from(-sum.im), f64::from(-sum.re))
+                    / (8.0 * std::f64::consts::PI);
+                let step = (phi * 4_294_967_296.0).round() as i64 as u32;
+                eq.set_phase(eq.phase().wrapping_add(step));
+            }
         }
         <Sdrk as Costas>::costas(&Sdrk, &mut st, &e, &mut y[from..to]).unwrap();
         if let Some((n, f)) = acquired.filter(|&(n, _)| n == to) {

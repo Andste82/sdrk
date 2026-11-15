@@ -89,7 +89,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         equalize (constellation qam16 or qam64 of the order, equalizer_taps taps, no feedback \
         taps, mu_cma 0.05, mu_dd 0.005, 1000 CMA symbols, then decision-directed; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
-        frequency tracker; equalizer_taps 0 leaves it out), the decision-directed carrier \
+        frequency tracker; at the switch to the decision mode the tracker turns by the phase \
+        of the fourth power of the equalizer's output over its last 256 blind symbols after the \
+        estimate; equalizer_taps 0 leaves it out), the decision-directed carrier \
         loop costas, which tracks the phase (constellation qam16 or qam64, carrier_bw, \
         damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of slice qam16 or \
         qam64 (scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
@@ -406,6 +408,9 @@ pub const QAM_ACQUISITION_CHECK: usize = 4096;
 /// loops of D1622 that hold a signal stay within 1.1e-4 of the carrier, the estimate within
 /// 7e-5 of it, while loops that did not converge wander up to 3e-4 and more).
 pub const QAM_ACQUISITION_VERIFY_TOLERANCE: f64 = 2e-4;
+/// The blind (CMA) symbols of the equalizer, at most, before its switch to the decision mode over
+/// which the hand-over measures the phase of its output (I44-17, [`QamDemodBlock`]).
+pub const QAM_HANDOVER_SYMBOLS: usize = 256;
 /// The smoothing factor of the symbol power `p` by which the fourth powers are normalized
 /// (`p = p + ACQUISITION_POWER_ALPHA (|x|^2 - p)`, a time constant of 64 symbols), so that a
 /// level that still changes (an AGC that settles) does not weight the end of the window more.
@@ -443,6 +448,27 @@ const ACQUISITION_POWER_ALPHA: f32 = 1.0 / 64.0;
 /// over noise, which the blind equalizer adapted to) starts the equalizer again from its start
 /// weights and blind symbols (D1619); and a correct estimate of a weak signal is kept (D1605,
 /// D1608, D1618).
+///
+/// The hand-over of the equalizer from its blind (CMA) symbols to the decision mode (I44-17): the
+/// CMA is blind to the phase, and the decision-directed phase tracker that runs during it, at
+/// [`QAM_TRACKER_PULL_BW`] on decisions of an output that has not converged yet, leaves the output
+/// at the switch at any phase within the quarter turn. Started there 10 to 40 degrees off, the
+/// decision mode of 64-QAM at Es/N0 18 and 19 dB pulled the tracker's frequency away from a correct
+/// estimate (5.08e-4 to 6.3e-4 cycles per symbol against a carrier at 5.0e-4) into a false state in
+/// which the output turns, the decisions are wrong, the weights shrink (energy 0.98 -> 0.50) and
+/// `costas` behind it follows the turn, so that the sum of the frequencies that the verify window
+/// checks stays within its tolerance. So at the switch the tracker turns by the phase of the fourth
+/// power of the output, the feed-forward estimate of the carrier phase of square QAM modulo the
+/// quarter turn (`E[s^4]` is real and negative: the mean of `z^4` is `E[s^4] e^(j 4 phi)` for an
+/// output `z = s e^(j phi)`), over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after an
+/// estimate (before it the tracker turns at frequency 0 and the phase of the output runs).
+///
+/// The acquisition times the hand-over as well (it makes the estimate that arms it and the starts
+/// of the equalizer, and it splits the runs): [`Acquisition::remaining`] ends a run at the switch,
+/// [`Acquisition::hand_over`] measures and turns, and the sum of the fourth powers lives in the
+/// first slot of the window buffer, which is idle while an estimate is held (from the estimate to
+/// the first check, [`QAM_ACQUISITION_CHECK`] symbols, while the switch comes at most the blind
+/// symbols after it).
 struct Acquisition<S: Storage> {
     /// The twiddles of the FFT (the plan is made from them for each estimate, so that the block
     /// stays small).
@@ -466,10 +492,24 @@ struct Acquisition<S: Storage> {
     estimate: f64,
     /// The smoothed symbol power.
     power: f32,
+    /// Whether the receiver has the equalizer (only then the hand-over runs).
+    with_eq: bool,
+    /// The blind symbols of the equalizer left before its switch to the decision mode; 0 when it
+    /// is past (the steady state) or without the equalizer.
+    blind_left: u32,
+    /// Whether an estimate went to the equalizer's tracker since its start (only then the phase of
+    /// its output stands still and is measured).
+    armed: bool,
 }
 
+// The sum of the hand-over lives in the window buffer of the acquisition, idle from an estimate
+// to the first check after it: the switch to the decision mode must come before that check.
+const _: () = assert!(DEFAULT_CMA_SYMBOLS as usize <= QAM_ACQUISITION_CHECK);
+
 impl<S: Storage> Acquisition<S> {
-    fn new(storage: &mut S) -> Result<Self> {
+    /// The acquisition of a receiver with the equalizer (`with_eq`; its `DEFAULT_CMA_SYMBOLS`
+    /// blind symbols, the configuration of [`QamDemodConfig::equalizer`]) or without it.
+    fn new(storage: &mut S, with_eq: bool) -> Result<Self> {
         let mut twiddles = storage.alloc::<C32>(ACQUISITION_FFT / 2)?;
         FftPlan::new(ACQUISITION_FFT, twiddles.as_mut())?;
         Ok(Self {
@@ -482,6 +522,9 @@ impl<S: Storage> Acquisition<S> {
             restarts: 0,
             estimate: f64::NAN,
             power: 0.0,
+            with_eq,
+            blind_left: if with_eq { DEFAULT_CMA_SYMBOLS } else { 0 },
+            armed: false,
         })
     }
 
@@ -499,12 +542,26 @@ impl<S: Storage> Acquisition<S> {
         self.restarts = 0;
         self.estimate = f64::NAN;
         self.power = 0.0;
+        self.start_equalizer();
+    }
+
+    /// The equalizer starts (again) from its start weights and blind symbols: the hand-over waits
+    /// for its blind symbols and an estimate.
+    fn start_equalizer(&mut self) {
+        self.blind_left = if self.with_eq { DEFAULT_CMA_SYMBOLS } else { 0 };
+        self.armed = false;
     }
 
     /// Symbols until the acquisition acts next (the end of the window of a search or of a
-    /// verify window, while an estimate is held the check).
+    /// verify window, while an estimate is held the check), or until the switch of the equalizer
+    /// to the decision mode when that comes first (the hand-over).
     fn remaining(&self) -> usize {
-        (self.next - self.seen) as usize
+        let r = (self.next - self.seen) as usize;
+        if self.blind_left == 0 {
+            r
+        } else {
+            r.min(self.blind_left as usize)
+        }
     }
 
     /// Takes the next symbols (at most [`Acquisition::remaining`]).
@@ -593,6 +650,16 @@ impl<S: Storage> Acquisition<S> {
         if let Some(f) = self.estimate_now()? {
             let fresh = !self.missed;
             self.missed = false;
+            if !fresh {
+                // `apply` starts the equalizer again.
+                self.start_equalizer();
+            }
+            if self.with_eq {
+                self.armed = true;
+                if let Some(sum) = self.buf.as_mut().first_mut() {
+                    *sum = C32::new(0.0, 0.0);
+                }
+            }
             self.estimate = f;
             self.phase = Phase::Held;
             self.seen = 0;
@@ -608,11 +675,53 @@ impl<S: Storage> Acquisition<S> {
     /// The search again from the start of its window (the power `p` kept).
     fn restart(&mut self) -> Step {
         self.restarts = self.restarts.saturating_add(1);
+        // `restart` (the function of the block) starts the equalizer again.
+        self.start_equalizer();
         self.phase = Phase::Search;
         self.missed = false;
         self.seen = 0;
         self.next = WINDOW_END;
         Step::Restart
+    }
+
+    /// The hand-over after a run `z` of outputs of the equalizer `eq` (at most `blind_left`
+    /// symbols, [`Acquisition::remaining`]): when armed, the fourth powers `(z^2)^2` of those
+    /// among the last [`QAM_HANDOVER_SYMBOLS`] blind symbols into the sum (in `f32`, in their
+    /// order, finite ones only), and at the switch, when the sum is not 0, the tracker's phase
+    /// grows by `round(atan2(-sum.im, -sum.re) / (8 pi) 2^32)` units of `2^-32` turn: the mean of
+    /// `z^4` is `E[s^4] e^(j 4 phi)` with `E[s^4]` real and negative, so `arg(-sum) / 4` is the
+    /// phase `phi` of the output in `(-1/8, 1/8]` turn, which the tracker turns back by its phase
+    /// (out of line: only the runs of the blind symbols get here).
+    #[inline(never)]
+    #[cold]
+    fn hand_over(&mut self, eq: &mut EqState<S>, z: &[C32]) {
+        let left = self.blind_left as usize;
+        let Some(sum) = self.buf.as_mut().first_mut() else {
+            return;
+        };
+        if self.armed {
+            for (i, v) in z.iter().enumerate() {
+                // The blind symbols left after this one.
+                if left.saturating_sub(i + 1) < QAM_HANDOVER_SYMBOLS {
+                    let a = C32::new(v.re * v.re - v.im * v.im, 2.0 * v.re * v.im);
+                    let q = C32::new(a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
+                    if q.re.is_finite() && q.im.is_finite() {
+                        *sum = C32::new(sum.re + q.re, sum.im + q.im);
+                    }
+                }
+            }
+        }
+        // `z.len() <= left` (the runs end at the switch).
+        self.blind_left = left.saturating_sub(z.len()) as u32;
+        if self.blind_left == 0 {
+            if self.armed && (sum.re != 0.0 || sum.im != 0.0) {
+                let phi = libm::atan2(-f64::from(sum.im), -f64::from(sum.re))
+                    / (4.0 * core::f64::consts::TAU);
+                let step = libm::round(phi * 4_294_967_296.0) as i64 as u32;
+                eq.set_phase(eq.phase().wrapping_add(step));
+            }
+            self.armed = false;
+        }
     }
 
     fn estimate_now(&mut self) -> Result<Option<f64>> {
@@ -733,32 +842,34 @@ type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C3
 /// 16-QAM and 64-QAM demodulator: `C32` in, `f32` soft bits out (`bits_per_symbol` per symbol,
 /// above 0 is a 1).
 ///
-/// Per piece of at most [`QAM_DEMOD_CHUNK`] input samples: the kernel `fir` (matched filter,
-/// taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded samples per symbol),
-/// the kernel `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), the kernel
-/// `equalize` (when `equalizer_taps` is above 0), the kernel `costas` with the constellation
-/// `qam16` or `qam64`, and the soft bits of `slice` `qam16` or `qam64` (scale 1), the same
-/// functions as the blocks. Until it has found the carrier offset, the frequency acquisition
-/// (I44-3, I44-4) collects the normalized fourth powers of the symbols of the timing loop in
-/// windows of [`QAM_ACQUISITION_SYMBOLS`] from symbol [`QAM_ACQUISITION_SKIP`] on and estimates the
-/// offset from their spectrum (the kernel `fft`); the equalizer and the carrier loop run in two
-/// calls split after the symbol that completes a window, and a clear estimate goes to the
-/// frequency integrator of the equalizer's phase tracker (the carrier loop's frequency to 0; the
-/// tracker at [`QAM_TRACKER_PULL_BW`] until the first check after the estimate, then at
+/// Per piece of at most [`QAM_DEMOD_CHUNK`] input samples: the kernel `fir` (matched filter, taps
+/// `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded samples per symbol), the kernel
+/// `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), the kernel `equalize` (when
+/// `equalizer_taps` is above 0), the kernel `costas` with the constellation `qam16` or `qam64`, and
+/// the soft bits of `slice` `qam16` or `qam64` (scale 1), the same functions as the blocks. Until
+/// it has found the carrier offset, the frequency acquisition (I44-3, I44-4) collects the
+/// normalized fourth powers of the symbols of the timing loop in windows of
+/// [`QAM_ACQUISITION_SYMBOLS`] from symbol [`QAM_ACQUISITION_SKIP`] on and estimates the offset
+/// from their spectrum (the kernel `fft`); the equalizer and the carrier loop run in two calls
+/// split after the symbol that completes a window, and a clear estimate goes to the frequency
+/// integrator of the equalizer's phase tracker (the carrier loop's frequency to 0; the tracker at
+/// [`QAM_TRACKER_PULL_BW`] until the first check after the estimate, then at
 /// [`QAM_TRACKER_HOLD_BW`], so that `costas` does the phase tracking, D1618, D1622), or, without
 /// the equalizer, to the carrier loop (after windows without a clear peak the equalizer first
-/// starts again from its start weights and blind symbols). While an estimate is in use the
-/// acquisition checks the loop every [`QAM_ACQUISITION_CHECK`] symbols and, after a check
-/// without lock, takes a new window of the fourth powers in the next interval (the calls split
-/// at the checks and at the end of that window as well); when it shows the loops on a wrong
-/// frequency or not converged, the equalizer starts again from its start weights and blind
-/// symbols, the frequencies go to 0 and the acquisition searches again (D1421, D1605, D1618,
-/// D1623). Soft bits that do not fit into the output wait in a buffer and are written first by the next call (which then consumes no input). Timing: variable ratio
-/// `symbol_rate bits / fs`, delay `(span + equalizer_taps - 1) n / 2 + 1` input samples.
-/// Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32` (filter
-/// output, symbols, waiting soft bits as `f32`), the 1024 `C32` of the acquisition's FFT and
-/// its 512 twiddles, and for `equalizer_taps` `t > 0` the `t` weights and the `t` history
-/// values of the equalizer.
+/// starts again from its start weights and blind symbols). The calls split at the equalizer's
+/// switch to the decision mode as well, where its tracker turns by the fourth-power phase of its
+/// output over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after the estimate (I44-17). While
+/// an estimate is in use the acquisition checks the loop every [`QAM_ACQUISITION_CHECK`] symbols
+/// and, after a check without lock, takes a new window of the fourth powers in the next interval
+/// (the calls split at the checks and at the end of that window as well); when it shows the loops
+/// on a wrong frequency or not converged, the equalizer starts again from its start weights and
+/// blind symbols, the frequencies go to 0 and the acquisition searches again (D1421, D1605, D1618,
+/// D1623). Soft bits that do not fit into the output wait in a buffer and are written first by the
+/// next call (which then consumes no input). Timing: variable ratio `symbol_rate bits / fs`, delay
+/// `(span + equalizer_taps - 1) n / 2 + 1` input samples. Storage: the taps, the filter history,
+/// one work buffer of `512 + 128 bits` `C32` (filter output, symbols, waiting soft bits as `f32`),
+/// the 1024 `C32` of the acquisition's FFT and its 512 twiddles, and for `equalizer_taps` `t > 0`
+/// the `t` weights and the `t` history values of the equalizer.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -839,7 +950,7 @@ impl<S: Storage> QamDemodBlock<S> {
             Some(e) => Some(e.state(storage)?),
             None => None,
         };
-        let acq = Acquisition::new(storage)?;
+        let acq = Acquisition::new(storage, eq.is_some())?;
         let block = SymbolSyncBlock::<C32, S>::new(&config.sync(), rate_in, storage)?;
         let ratio = block.timing().ratio.mul(Ratio::new(bps as u64, 1)?)?;
         let costas = CostasState::new(
@@ -988,7 +1099,7 @@ impl<S: Storage> QamDemodBlock<S> {
             self.acq.collect(src);
             let dst = head_mut(tail_mut(a, at)?, end - at)?;
             match self.eq.as_mut() {
-                Some(eq) => <Sdrk as Equalize>::equalize(&Sdrk, eq, src, dst)?,
+                Some(eq) => equalize::<S>(eq, &mut self.acq, src, dst)?,
                 None => dst.copy_from_slice(src),
             }
             let out = head_mut(tail_mut(b, at)?, end - at)?;
@@ -1005,6 +1116,22 @@ impl<S: Storage> QamDemodBlock<S> {
         }
         Ok(ns)
     }
+}
+
+/// The kernel `equalize` over a run, then the hand-over of the equalizer to the decision mode
+/// while its blind symbols last ([`Acquisition::hand_over`], I44-17).
+#[inline]
+fn equalize<S: Storage>(
+    eq: &mut EqState<S>,
+    acq: &mut Acquisition<S>,
+    src: &[C32],
+    dst: &mut [C32],
+) -> sdrk_core::Result<()> {
+    <Sdrk as Equalize>::equalize(&Sdrk, eq, src, dst)?;
+    if acq.blind_left != 0 {
+        acq.hand_over(eq, dst);
+    }
+    Ok(())
 }
 
 /// The frequency of the loops in cycles per symbol: the carrier loop's plus that of the

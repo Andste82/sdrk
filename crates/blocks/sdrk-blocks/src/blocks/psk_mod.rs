@@ -6,7 +6,7 @@ use sdrk_core::C32;
 use sdrk_core::kernels::interp::{FirInterpState, FirInterpolate};
 
 use super::costas::{check_f64, check_order};
-use super::slice::{C8, PSK8_GRAY, S8};
+use super::symbol_demap::{C8, PSK8_GRAY, S8};
 use super::{check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -120,9 +120,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         pulse.",
     details: "Reads one soft bit per input sample (above 0 is a 1, anything else, NaN \
         included, a 0; frame_encode produces them) and maps 1 (order 2, BPSK), 2 (order 4, \
-        QPSK) or 3 (order 8, 8PSK) bits to a symbol with the Gray mapping of slice: BPSK (2 b \
-        - 1, 0), QPSK ((2 b0 - 1) / sqrt(2), (2 b1 - 1) / sqrt(2)), so bit 1 is positive; 8PSK \
-        exp(j (2 pi k / 8 + pi / 8)) with k from the Gray code b0 b1 b2 (000 -> 0, 001 -> 1, \
+        QPSK) or 3 (order 8, 8PSK) bits to a symbol with the Gray mapping of symbol_demap: BPSK \
+        (2 b - 1, 0), QPSK ((2 b0 - 1) / sqrt(2), (2 b1 - 1) / sqrt(2)), so bit 1 is positive; \
+        8PSK exp(j (2 pi k / 8 + pi / 8)) with k from the Gray code b0 b1 b2 (000 -> 0, 001 -> 1, \
         011 -> 2, 010 -> 3, 110 -> 4, 111 -> 5, 101 -> 6, 100 -> 7). With differential set, \
         the phase of a symbol is the phase of the previous symbol plus the phase of the mapped \
         symbol (start phase 0), which psk_demod with differential undoes without a carrier \
@@ -130,7 +130,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         (bits 00), +3 pi/4 (01), -3 pi/4 (11) or -pi/4 (10). The variant offset (order 4, not \
         differential, even samples_per_symbol) is OQPSK: the quadrature part is delayed by \
         samples_per_symbol / 2 output samples after the pulse shaping, which keeps the \
-        envelope away from zero. The symbols are interpolated by samples_per_symbol with the root-raised-cosine \
+        envelope away from zero. The symbols are interpolated by samples_per_symbol with the \
+        root-raised-cosine \
         pulse (rolloff, span symbols) scaled by sqrt(samples_per_symbol), so the matched \
         filter of psk_demod gives amplitude 1 at the symbol centres. The output rate is the \
         bit rate times samples_per_symbol / bits per symbol; the group delay is span / 2 \

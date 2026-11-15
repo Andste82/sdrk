@@ -20,8 +20,8 @@ use crate::kinds::{
     NcoKind, NoiseBlankKind, OokDemodKind, OokModKind, PreemphLimitKind, PskDemodKind, PskModKind,
     PulseKeyKind, QamDemodKind, QamModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind,
     RdsEncodeKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind,
-    SensorDecodeKind, SensorEncodeKind, SliceKind, SpectrumKind, SquelchKind, SsbDemodKind,
-    SsbModKind, StereoMatrixKind, StereoPllKind, SymbolSyncKind, ToComplexKind,
+    SensorDecodeKind, SensorEncodeKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind,
+    StereoMatrixKind, StereoPllKind, SymbolDemapKind, SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -326,7 +326,7 @@ impl Registry {
         register::<FrameEncodeKind>(&mut factories);
         register::<FrameDecodeKind>(&mut factories);
         register::<SymbolSyncKind>(&mut factories);
-        register::<SliceKind>(&mut factories);
+        register::<SymbolDemapKind>(&mut factories);
         register::<FskModKind>(&mut factories);
         register::<FskDemodKind>(&mut factories);
         register::<AfcKind>(&mut factories);

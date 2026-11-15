@@ -1,7 +1,7 @@
-//! Golden tests of M40.1: the `slice` constellation `8psk` (`blocks/slice_8psk_c32`, the max-log
-//! soft bits at the 8 points and the 8 decision boundaries) through `SliceBlock`, bit for bit,
-//! in one call and one symbol per call. The order-8 Costas case `costas/8psk_lock_c32_8192` is
-//! run by `golden_m40.rs` with the cases of M40.
+//! Golden tests of M40.1: the `symbol_demap` constellation `8psk` (`blocks/symbol_demap_8psk_c32`,
+//! the max-log soft bits at the 8 points and the 8 decision boundaries) through `SymbolDemapBlock`,
+//! bit for bit, in one call and one symbol per call. The order-8 Costas case
+//! `costas/8psk_lock_c32_8192` is run by `golden_m40.rs` with the cases of M40.
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -11,13 +11,13 @@
 )]
 
 use sdrk::{C32, Rate};
-use sdrk_blocks::{Block, SliceBlock, SliceConfig, SliceConstellation};
+use sdrk_blocks::{Block, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation};
 use sdrk_testkit::golden::{self, Array, Tolerance};
 use sdrk_testkit::{VecStorage, bit_exact};
 
 #[test]
-fn slice_8psk_matches_the_float32_model() {
-    let case = golden::load("blocks", "slice_8psk_c32").unwrap();
+fn symbol_demap_8psk_matches_the_float32_model() {
+    let case = golden::load("blocks", "symbol_demap_8psk_c32").unwrap();
     assert_eq!(case.param_str("constellation").unwrap(), "8psk");
     assert_eq!(case.tolerance, Tolerance::BitExact);
     let Array::CF32(input) = case.array("input").unwrap() else {
@@ -28,12 +28,12 @@ fn slice_8psk_matches_the_float32_model() {
     };
     assert_eq!(want.len(), 3 * input.len());
     assert_eq!(case.param_u64("symbols").unwrap() as usize, input.len());
-    let cfg = SliceConfig {
-        constellation: SliceConstellation::Psk8,
+    let cfg = SymbolDemapConfig {
+        constellation: SymbolDemapConstellation::Psk8,
         scale: case.param_f64("scale").unwrap(),
     };
     let rate = Rate::hz(1000).unwrap();
-    let mut slice = SliceBlock::<C32, _>::new(&cfg, rate, &mut VecStorage).unwrap();
+    let mut slice = SymbolDemapBlock::<C32, _>::new(&cfg, rate, &mut VecStorage).unwrap();
     let mut out = vec![0.0f32; want.len()];
     let p = slice.process(input, &mut out).unwrap();
     assert_eq!((p.consumed, p.produced), (input.len(), want.len()));

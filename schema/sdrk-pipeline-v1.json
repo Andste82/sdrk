@@ -4333,61 +4333,6 @@
           },
           {
             "additionalProperties": false,
-            "description": "Turns symbols into soft bits: f32 values whose sign is the bit and whose size is the confidence.",
-            "properties": {
-              "align": {
-                "$ref": "#/$defs/AlignMode"
-              },
-              "backend": {
-                "$ref": "#/$defs/BackendSpec"
-              },
-              "description": {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              "group": {
-                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
-                "pattern": "^[a-z][a-z0-9_]{0,63}$",
-                "type": "string"
-              },
-              "kind": {
-                "const": "slice"
-              },
-              "params": {
-                "additionalProperties": false,
-                "properties": {
-                  "constellation": {
-                    "default": "bpsk",
-                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 and qam64 for QAM. Build-time.",
-                    "enum": [
-                      "real",
-                      "bpsk",
-                      "qpsk",
-                      "fsk4",
-                      "8psk",
-                      "qam16",
-                      "qam64"
-                    ],
-                    "type": "string"
-                  },
-                  "scale": {
-                    "default": 1.0,
-                    "description": "Factor of every soft bit. Typical: 1.0; 2 / sigma^2 for log-likelihood ratios. Runtime.",
-                    "maximum": 1000000000.0,
-                    "minimum": 1e-9,
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "required": [
-              "kind"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
             "description": "Computes averaged power spectra in dB relative to full scale as frames.",
             "properties": {
               "align": {
@@ -4762,6 +4707,61 @@
                       "mono"
                     ],
                     "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Turns symbols into soft bits: f32 values whose sign is the bit and whose size is the confidence.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "symbol_demap"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 and qam64 for QAM. Build-time.",
+                    "enum": [
+                      "real",
+                      "bpsk",
+                      "qpsk",
+                      "fsk4",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
+                  "scale": {
+                    "default": 1.0,
+                    "description": "Factor of every soft bit. Typical: 1.0; 2 / sigma^2 for log-likelihood ratios. Runtime.",
+                    "maximum": 1000000000.0,
+                    "minimum": 1e-9,
+                    "type": "number"
                   }
                 },
                 "type": "object"

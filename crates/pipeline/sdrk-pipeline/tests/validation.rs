@@ -199,9 +199,16 @@ fn a_structure_error_stops_the_graph_stage() {
 }
 
 #[test]
-fn the_kind_names_before_m24_1_are_unknown() {
-    // M24.1 renamed four kinds without aliases: the old names are like any unregistered name.
-    for old in ["resampler", "halfband", "real_to_complex", "fm_stereo"] {
+fn the_kind_names_before_m24_1_and_m44_1_are_unknown() {
+    // M24.1 renamed four kinds and M44.1 `slice` without aliases: the old names are like any
+    // unregistered name.
+    for old in [
+        "resampler",
+        "halfband",
+        "real_to_complex",
+        "fm_stereo",
+        "slice",
+    ] {
         let mut doc = base();
         doc["nodes"]["g"] = json!({ "kind": old });
         let report = validate_value(&doc);

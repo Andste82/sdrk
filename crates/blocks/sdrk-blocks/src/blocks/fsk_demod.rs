@@ -9,7 +9,7 @@ use sdrk_core::kernels::demod::{QuadDemod, QuadDemodState};
 use sdrk_core::kernels::symbol_sync::SymbolSync;
 
 use super::fsk_mod::bits_per_symbol;
-use super::slice::fsk4_bits;
+use super::symbol_demap::fsk4_bits;
 use super::symbol_sync::SymbolSyncBlock;
 use super::{HZ_LIMIT, head, head_mut, hz, multiply_rate, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -55,8 +55,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         Gardner detector at symbol_rate_hz with loop_bw (the detector slope of boxcar \
         filtered rectangular FSK is built in, so for plain FSK loop_bw keeps its meaning) \
         and a slicer: 2 levels \
-        give one soft bit per symbol, the level itself (slice real); 4 levels give two, -v \
-        and |v| - 2/3 (slice fsk4). A soft bit above 0 means bit 1, so the output feeds \
+        give one soft bit per symbol, the level itself (symbol_demap real); 4 levels give two, -v \
+        and |v| - 2/3 (symbol_demap fsk4). A soft bit above 0 means bit 1, so the output feeds \
         frame_decode directly. Place it after a ddc that filters the channel (and an afc \
         when the carrier may be off); the input level does not matter. The sample rate must \
         be at least 4 times the symbol rate. The output rate follows the clock of the \
@@ -300,7 +300,7 @@ impl FskDemodConfig {
 ///
 /// Per piece of at most [`FSK_DEMOD_CHUNK`] input samples the block calls `quad_demod`,
 /// `resample_real` (the boxcar with `L = M = 1`) and `symbol_sync` once each, then maps the
-/// symbols to soft bits (2 levels: the level; 4 levels: the `fsk4` map of `slice`). A piece
+/// symbols to soft bits (2 levels: the level; 4 levels: the `fsk4` map of `symbol_demap`). A piece
 /// can give more symbols than the output has room for; the rest waits in the block and comes
 /// out first in the next call (at most one piece of symbols). Timing: `RatioKind::Variable`
 /// with the nominal ratio `bits_per_symbol symbol_rate / fs`, delay `round(sps) / 2 + 1`

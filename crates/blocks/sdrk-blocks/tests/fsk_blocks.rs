@@ -1,7 +1,7 @@
 //! The blocks of M39: `FskModBlock` (the level maps of 2-FSK and 4-FSK, a constant level gives
 //! exactly the deviation, the Gaussian pulse, the runtime `deviation_hz`, timing and exact
 //! storage), `FskDemodBlock` (the loop back from `fsk_mod`, `rate_unsupported` below 4 samples
-//! per symbol, the variable timing, exact storage, small outputs), the `fsk4` map of `slice`
+//! per symbol, the variable timing, exact storage, small outputs), the `fsk4` map of `symbol_demap`
 //! at corner values, and `AfcBlock` (convergence, the readings, `hold`, the limit, `reset`,
 //! NaN input); all three blocks are chunk invariant with the 20 plans of seed 537.
 #![allow(
@@ -24,8 +24,8 @@ use common::{check_exact_storage, rate, run_block, same_bits, twenty_plans};
 use sdrk::{C32, Delay, Ratio, RatioKind};
 use sdrk_blocks::{
     AFC_PIECE, AfcBlock, AfcConfig, ArenaStorage, Block, Error, FmModBlock, FmModConfig,
-    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, ParamValue, SliceBlock, SliceConfig,
-    SliceConstellation, TED_GAIN_2FSK, TED_GAIN_4FSK,
+    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, ParamValue, SymbolDemapBlock,
+    SymbolDemapConfig, SymbolDemapConstellation, TED_GAIN_2FSK, TED_GAIN_4FSK,
 };
 use sdrk_testkit::{Pcg32, VecStorage};
 
@@ -494,12 +494,12 @@ fn fsk_demod_timing_rates_storage_and_checks() {
 }
 
 #[test]
-fn slice_fsk4_follows_the_table_at_corner_values() {
-    let cfg = SliceConfig {
-        constellation: SliceConstellation::Fsk4,
+fn symbol_demap_fsk4_follows_the_table_at_corner_values() {
+    let cfg = SymbolDemapConfig {
+        constellation: SymbolDemapConstellation::Fsk4,
         scale: 2.0,
     };
-    let mut slice = SliceBlock::<f32, _>::new(&cfg, rate(1200), &mut VecStorage).unwrap();
+    let mut slice = SymbolDemapBlock::<f32, _>::new(&cfg, rate(1200), &mut VecStorage).unwrap();
     let third = 1.0f32 / 3.0;
     let two_thirds = 2.0f32 / 3.0;
     let input = [1.0f32, third, -third, -1.0, 0.0, two_thirds, 3.0];
@@ -519,11 +519,11 @@ fn slice_fsk4_follows_the_table_at_corner_values() {
     assert_eq!(slice.timing().ratio, Ratio::new(2, 1).unwrap());
     let p = slice.process(&input, &mut out[..5]).unwrap();
     assert_eq!((p.consumed, p.produced), (2, 4));
-    assert!(SliceBlock::<C32, _>::new(&cfg, rate(1200), &mut VecStorage).is_err());
-    assert_eq!(SliceConstellation::Fsk4.bits_per_symbol(), 2);
-    let mut cfg = SliceConfig::default();
+    assert!(SymbolDemapBlock::<C32, _>::new(&cfg, rate(1200), &mut VecStorage).is_err());
+    assert_eq!(SymbolDemapConstellation::Fsk4.bits_per_symbol(), 2);
+    let mut cfg = SymbolDemapConfig::default();
     cfg.set("constellation", ParamValue::Choice(3)).unwrap();
-    assert_eq!(cfg.constellation, SliceConstellation::Fsk4);
+    assert_eq!(cfg.constellation, SymbolDemapConstellation::Fsk4);
     assert_eq!(cfg.get("constellation"), Ok(ParamValue::Choice(3)));
 }
 

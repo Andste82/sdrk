@@ -46,7 +46,7 @@ impl QamSoftBits<C32> for Fallback {
         let c = qam.sqrt_energy();
         // The scale 1 has a loop of its own without the products (`1 v = v` exactly for every
         // value but NaN, whose bits are not part of the contract): the soft bits of `qam_demod`
-        // and of the default `slice`.
+        // and of the default `symbol_demap`.
         match (qam, scale == 1.0) {
             (Qam::Qam16, true) => qam16(1.0, c, x, output),
             (Qam::Qam16, false) => qam16(scale, c, x, output),

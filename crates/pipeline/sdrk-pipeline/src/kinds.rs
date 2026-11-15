@@ -36,10 +36,10 @@ use sdrk_blocks::{
     RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
     RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
     ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
-    SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SliceBlock, SliceConfig,
-    SliceConstellation, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
+    SymbolDemapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3061,14 +3061,14 @@ impl Kind for SymbolSyncKind {
     }
 }
 
-// ---------------------------------------------------------------------- slice
+// --------------------------------------------------------------- symbol_demap
 
-pub(crate) struct SliceKind;
+pub(crate) struct SymbolDemapKind;
 
-impl Kind for SliceKind {
-    type Cfg = SliceConfig;
+impl Kind for SymbolDemapKind {
+    type Cfg = SymbolDemapConfig;
 
-    const KIND: &'static str = "slice";
+    const KIND: &'static str = "symbol_demap";
     fn kernels() -> &'static [&'static str] {
         &[]
     }
@@ -3080,25 +3080,30 @@ impl Kind for SliceKind {
             _ => Self::kernels(),
         }
     }
-    fn default_cfg() -> SliceConfig {
-        SliceConfig::default()
+    fn default_cfg() -> SymbolDemapConfig {
+        SymbolDemapConfig::default()
     }
-    fn set(cfg: &mut SliceConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+    fn set(cfg: &mut SymbolDemapConfig, name: &str, value: ParamValue) -> BlockResult<()> {
         cfg.set(name, value)
     }
-    fn plan(cfg: &SliceConfig, input: PortType, rate: Rate, _p: Precision) -> BlockResult<Figures> {
+    fn plan(
+        cfg: &SymbolDemapConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
         // A constellation that does not take the input type is `InvalidParameter` of
         // `constellation` (`invalid_value`).
         let (rate_out, memory_bytes) = match input {
             PortType::C32 => (
-                SliceBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
-                SliceBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+                SymbolDemapBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+                SymbolDemapBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
             ),
             PortType::F32 => (
-                SliceBlock::<f32, VecStorage>::rate_out(cfg, rate)?,
-                SliceBlock::<f32, VecStorage>::storage_bytes(cfg, rate)?,
+                SymbolDemapBlock::<f32, VecStorage>::rate_out(cfg, rate)?,
+                SymbolDemapBlock::<f32, VecStorage>::storage_bytes(cfg, rate)?,
             ),
-            _ => return Err(mismatch("slice needs c32 or f32 samples")),
+            _ => return Err(mismatch("symbol_demap needs c32 or f32 samples")),
         };
         Ok(Figures {
             rate_out,
@@ -3108,9 +3113,9 @@ impl Kind for SliceKind {
             // products by sqrt(E), two magnitudes, two differences and four products; qam64:
             // two products, four magnitudes, four differences and six products (D1200).
             cost: match cfg.constellation {
-                SliceConstellation::Psk8 => 16.0,
-                SliceConstellation::Qam16 => 10.0,
-                SliceConstellation::Qam64 => 18.0,
+                SymbolDemapConstellation::Psk8 => 16.0,
+                SymbolDemapConstellation::Qam16 => 10.0,
+                SymbolDemapConstellation::Qam64 => 18.0,
                 _ => 1.0,
             },
             taps: 0,
@@ -3120,18 +3125,18 @@ impl Kind for SliceKind {
         })
     }
     fn build(
-        cfg: &SliceConfig,
+        cfg: &SymbolDemapConfig,
         input: PortType,
         rate: Rate,
         _p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         if input == PortType::F32 {
-            Ok(Box::new(StreamNode::new(SliceBlock::<f32, _>::new(
+            Ok(Box::new(StreamNode::new(SymbolDemapBlock::<f32, _>::new(
                 cfg, rate, st,
             )?)))
         } else {
-            Ok(Box::new(StreamNode::new(SliceBlock::<C32, _>::new(
+            Ok(Box::new(StreamNode::new(SymbolDemapBlock::<C32, _>::new(
                 cfg, rate, st,
             )?)))
         }
@@ -3632,9 +3637,9 @@ impl Kind for QamDemodKind {
         Ok(Figures {
             rate_out: QamDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: QamDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
-            // The matched filter 4 span per input sample; per symbol the timing loop 10 (the
-            // 40 of `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D1206), the
-            // soft bits of `slice` 10 or 18 (D1200) and the equalizer 8 per weight (D830; D1212).
+            // The matched filter 4 span per input sample; per symbol the timing loop 10 (the 40 of
+            // `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D1206), the soft bits
+            // of `symbol_demap` 10 or 18 (D1200) and the equalizer 8 per weight (D830; D1212).
             cost: 4.0 * cfg.span as f64
                 + (55.0 + if cfg.order == 64 { 18.0 } else { 10.0 }) / sps
                 + 8.0 * cfg.equalizer_taps as f64 / sps,

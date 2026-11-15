@@ -63,13 +63,13 @@ pub mod rotate;
 pub mod scale;
 pub mod sensor_decode;
 pub mod sensor_encode;
-pub mod slice;
 pub mod spectrum;
 pub mod squelch;
 pub mod ssb_demod;
 pub mod ssb_mod;
 pub mod stereo_matrix;
 pub mod stereo_pll;
+pub mod symbol_demap;
 pub mod symbol_sync;
 pub mod to_complex;
 

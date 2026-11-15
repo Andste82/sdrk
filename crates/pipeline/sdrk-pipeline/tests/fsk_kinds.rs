@@ -1,6 +1,6 @@
 //! The kinds of M39: `fsk_mod`, `fsk_demod` and `afc` (registration with their kernels, the
 //! costs `8 + span sps`, `12 + round(sps) + 24 / sps` and 20, rates and delays, type checks,
-//! `rate_unsupported` below 4 samples per symbol), the constellation `fsk4` of `slice`, the
+//! `rate_unsupported` below 4 samples per symbol), the constellation `fsk4` of `symbol_demap`, the
 //! readings of `afc` in the statistics and its runtime `hold`, and a push-mode chain `afc` ->
 //! `fsk_demod` that equals the blocks bit for bit.
 #![allow(
@@ -226,7 +226,7 @@ fn afc_costs_20_and_slice_takes_fsk4() {
     assert_eq!(code, DiagCode::TypeMismatch);
     // fsk4 takes f32 and gives two soft bits per symbol.
     let report = validate(&single(
-        "slice",
+        "symbol_demap",
         "f32",
         4800,
         json!({ "constellation": "fsk4" }),
@@ -234,7 +234,7 @@ fn afc_costs_20_and_slice_takes_fsk4() {
     assert!(report.is_ok(), "{}", report.to_json());
     assert_eq!(report.nodes[0].rate_out, Rate::hz(9600).unwrap());
     let (path, code) = first_error(&single(
-        "slice",
+        "symbol_demap",
         "c32",
         4800,
         json!({ "constellation": "fsk4" }),

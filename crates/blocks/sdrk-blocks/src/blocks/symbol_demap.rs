@@ -1,4 +1,4 @@
-//! `slice`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
+//! `symbol_demap`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
 //! QPSK, 4-FSK levels, 8PSK (max-log soft bits) and 16-/64-QAM (piecewise-linear max-log soft
 //! bits, the kernel `qam_soft_bits`). A stateless per-symbol map.
 
@@ -22,9 +22,9 @@ use crate::storage::{Plan, Storage};
 const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4", "8psk", "qam16", "qam64"];
 
 /// The Gray mapping of 8PSK (M40.1 §1): entry `g = b0 4 + b1 2 + b2` (bit 0 first, the most
-/// significant) is the symbol index `k` of the point `exp(j (2 pi k / 8 + pi / 8))`:
-/// `000 -> 0, 001 -> 1, 011 -> 2, 010 -> 3, 110 -> 4, 111 -> 5, 101 -> 6, 100 -> 7`, so
-/// neighbouring points differ in one bit. Shared by `slice` (`8psk`), `psk_mod` and the tests.
+/// significant) is the symbol index `k` of the point `exp(j (2 pi k / 8 + pi / 8))`: `000 -> 0, 001
+/// -> 1, 011 -> 2, 010 -> 3, 110 -> 4, 111 -> 5, 101 -> 6, 100 -> 7`, so neighbouring points differ
+/// in one bit. Shared by `symbol_demap` (`8psk`), `psk_mod` and the tests.
 ///
 /// ```
 /// use sdrk_blocks::PSK8_GRAY;
@@ -78,9 +78,9 @@ const MIN_SCALE: f64 = 1e-9;
 /// Largest `scale` (D553).
 const MAX_SCALE: f64 = 1e9;
 
-/// Description of the `slice` block.
+/// Description of the `symbol_demap` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
-    kind: "slice",
+    kind: "symbol_demap",
     summary: "Turns symbols into soft bits: f32 values whose sign is the bit and whose size is \
         the confidence.",
     details: "Maps every input symbol to bits-per-symbol soft bits in the order of the \
@@ -146,15 +146,15 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &[],
 };
 
-/// The symbol alphabet of [`SliceBlock`].
+/// The symbol alphabet of [`SymbolDemapBlock`].
 ///
 /// ```
-/// use sdrk_blocks::SliceConstellation;
-/// assert_eq!(SliceConstellation::Qpsk.bits_per_symbol(), 2);
+/// use sdrk_blocks::SymbolDemapConstellation;
+/// assert_eq!(SymbolDemapConstellation::Qpsk.bits_per_symbol(), 2);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum SliceConstellation {
+pub enum SymbolDemapConstellation {
     /// Real levels (`f32` input), one bit: `scale x`.
     Real,
     /// BPSK (`C32` input), one bit: `scale re`.
@@ -179,7 +179,7 @@ pub enum SliceConstellation {
     Qam64,
 }
 
-impl SliceConstellation {
+impl SymbolDemapConstellation {
     /// Soft bits per input symbol.
     pub const fn bits_per_symbol(self) -> usize {
         match self {
@@ -194,10 +194,10 @@ impl SliceConstellation {
     /// The input type the constellation takes.
     ///
     /// ```
-    /// use sdrk_blocks::{PortType, SliceConstellation};
-    /// assert_eq!(SliceConstellation::Real.input_type(), PortType::F32);
-    /// assert_eq!(SliceConstellation::Bpsk.input_type(), PortType::C32);
-    /// assert_eq!(SliceConstellation::Fsk4.input_type(), PortType::F32);
+    /// use sdrk_blocks::{PortType, SymbolDemapConstellation};
+    /// assert_eq!(SymbolDemapConstellation::Real.input_type(), PortType::F32);
+    /// assert_eq!(SymbolDemapConstellation::Bpsk.input_type(), PortType::C32);
+    /// assert_eq!(SymbolDemapConstellation::Fsk4.input_type(), PortType::F32);
     /// ```
     pub const fn input_type(self) -> PortType {
         match self {
@@ -231,27 +231,27 @@ impl SliceConstellation {
     }
 }
 
-/// Configuration of [`SliceBlock`].
+/// Configuration of [`SymbolDemapBlock`].
 ///
 /// ```
-/// use sdrk_blocks::{SliceConfig, SliceConstellation};
-/// let cfg = SliceConfig::default();
-/// assert_eq!((cfg.constellation, cfg.scale), (SliceConstellation::Bpsk, 1.0));
+/// use sdrk_blocks::{SymbolDemapConfig, SymbolDemapConstellation};
+/// let cfg = SymbolDemapConfig::default();
+/// assert_eq!((cfg.constellation, cfg.scale), (SymbolDemapConstellation::Bpsk, 1.0));
 /// assert!(cfg.validate().is_ok());
-/// assert!(SliceConfig { scale: 0.0, ..cfg }.validate().is_err());
+/// assert!(SymbolDemapConfig { scale: 0.0, ..cfg }.validate().is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SliceConfig {
+pub struct SymbolDemapConfig {
     /// The symbol alphabet.
-    pub constellation: SliceConstellation,
+    pub constellation: SymbolDemapConstellation,
     /// Factor of every soft bit (1e-9 to 1e9; changeable at run time).
     pub scale: f64,
 }
 
-impl Default for SliceConfig {
+impl Default for SymbolDemapConfig {
     fn default() -> Self {
         Self {
-            constellation: SliceConstellation::Bpsk,
+            constellation: SymbolDemapConstellation::Bpsk,
             scale: 1.0,
         }
     }
@@ -270,7 +270,7 @@ fn check_scale(v: f64) -> Result<()> {
     }
 }
 
-impl SliceConfig {
+impl SymbolDemapConfig {
     /// Checks the range of `scale`.
     ///
     /// # Errors
@@ -288,7 +288,7 @@ impl SliceConfig {
         p.check(&value)?;
         match p.name {
             "constellation" => {
-                self.constellation = SliceConstellation::from_index(value.as_choice()?);
+                self.constellation = SymbolDemapConstellation::from_index(value.as_choice()?);
             }
             "scale" => self.scale = value.as_f64()?,
             _ => return unknown(),
@@ -309,28 +309,28 @@ impl SliceConfig {
     }
 }
 
-/// An input sample type of [`SliceBlock`]: `f32` (constellations `real` and `fsk4`) or `C32`
+/// An input sample type of [`SymbolDemapBlock`]: `f32` (constellations `real` and `fsk4`) or `C32`
 /// (`bpsk`, `qpsk`, `8psk`, `qam16`, `qam64`).
 ///
 /// ```
-/// use sdrk_blocks::SliceElem;
+/// use sdrk_blocks::SymbolDemapElem;
 /// use sdrk::C32;
 /// assert_eq!(C32::new(0.5, -2.0).parts(), (0.5, -2.0));
 /// assert_eq!(0.25f32.parts(), (0.25, 0.0));
 /// ```
-pub trait SliceElem: StreamElem {
+pub trait SymbolDemapElem: StreamElem {
     /// Real and imaginary part (`f32`: the value and 0).
     fn parts(self) -> (f32, f32);
 }
 
-impl SliceElem for f32 {
+impl SymbolDemapElem for f32 {
     #[inline]
     fn parts(self) -> (f32, f32) {
         (self, 0.0)
     }
 }
 
-impl SliceElem for C32 {
+impl SymbolDemapElem for C32 {
     #[inline]
     fn parts(self) -> (f32, f32) {
         (self.re, self.im)
@@ -339,8 +339,8 @@ impl SliceElem for C32 {
 
 /// The soft bits of the symbols in `input`, `scale * component` each: one per symbol (`re`) or,
 /// with `qpsk`, two (`re`, then `im`). Takes `min(input.len(), output.len() / bits)` symbols
-/// and returns that count (shared by `slice` and `psk_demod`).
-pub(crate) fn soft_bits<T: SliceElem>(
+/// and returns that count (shared by `symbol_demap` and `psk_demod`).
+pub(crate) fn soft_bits<T: SymbolDemapElem>(
     qpsk: bool,
     scale: f32,
     input: &[T],
@@ -371,36 +371,38 @@ pub(crate) fn soft_bits<T: SliceElem>(
 /// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3); for `8psk` they
 /// are `(m0 - m1) * 0.25` from the squared distances to the points; for `qam16` and `qam64`
 /// `v`, `2 - |v|` (and `4 - |v|`, `2 - ||v| - 4|`) per axis with `v = component * √E` (one
-/// `f32` product, `√E` rounded once to `f32`; see [`SliceConstellation`]).
+/// `f32` product, `√E` rounded once to `f32`; see [`SymbolDemapConstellation`]).
 /// A call takes `min(input.len(), output.len() / bits_per_symbol)` symbols. Timing: constant
 /// ratio `bits_per_symbol / 1`, delay 0. The block needs no storage.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
-/// use sdrk_blocks::{ArenaStorage, Block, ParamValue, SliceBlock, SliceConfig, SliceConstellation};
+/// use sdrk_blocks::{
+///     ArenaStorage, Block, ParamValue, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation,
+/// };
 /// let mut arena = ArenaStorage::new(&mut []);
-/// let cfg = SliceConfig { constellation: SliceConstellation::Qpsk, scale: 2.0 };
-/// let mut slice = SliceBlock::<C32, _>::new(&cfg, Rate::hz(1200)?, &mut arena)?;
+/// let cfg = SymbolDemapConfig { constellation: SymbolDemapConstellation::Qpsk, scale: 2.0 };
+/// let mut demap = SymbolDemapBlock::<C32, _>::new(&cfg, Rate::hz(1200)?, &mut arena)?;
 /// let mut bits = [0.0f32; 4];
-/// let p = slice.process(&[C32::new(0.5, -1.0), C32::new(-0.25, 0.75)], &mut bits)?;
+/// let p = demap.process(&[C32::new(0.5, -1.0), C32::new(-0.25, 0.75)], &mut bits)?;
 /// assert_eq!((p.consumed, p.produced), (2, 4));
 /// assert_eq!(bits, [1.0, -2.0, -0.5, 1.5]); // re (bit 0), then im (bit 1)
-/// slice.set_param("scale", ParamValue::F64(1.0))?;
+/// demap.set_param("scale", ParamValue::F64(1.0))?;
 /// // `real` needs f32 symbols
-/// let real = SliceConfig { constellation: SliceConstellation::Real, scale: 1.0 };
-/// assert!(SliceBlock::<C32, _>::new(&real, Rate::hz(1200)?, &mut arena).is_err());
+/// let real = SymbolDemapConfig { constellation: SymbolDemapConstellation::Real, scale: 1.0 };
+/// assert!(SymbolDemapBlock::<C32, _>::new(&real, Rate::hz(1200)?, &mut arena).is_err());
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug)]
-pub struct SliceBlock<T: SliceElem, S: Storage> {
-    config: SliceConfig,
+pub struct SymbolDemapBlock<T: SymbolDemapElem, S: Storage> {
+    config: SymbolDemapConfig,
     scale: f32,
     _marker: PhantomData<fn() -> (T, S)>,
 }
 
-impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
+impl<T: SymbolDemapElem, S: Storage> SymbolDemapBlock<T, S> {
     /// Checks the range and that the constellation takes `T`.
-    fn check(config: &SliceConfig) -> Result<()> {
+    fn check(config: &SymbolDemapConfig) -> Result<()> {
         config.validate()?;
         if config.constellation.input_type() == T::PORT_TYPE {
             Ok(())
@@ -419,7 +421,7 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
     /// `OutOfRange` for `scale`; `InvalidParameter` for a constellation that does not take
     /// `T` (`real` and `fsk4` need `f32`, `bpsk`, `qpsk`, `8psk`, `qam16` and `qam64` need
     /// `C32`).
-    pub fn new(config: &SliceConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
+    pub fn new(config: &SymbolDemapConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         Self::check(config)?;
         Ok(Self {
             config: *config,
@@ -431,8 +433,8 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
     /// Exact bytes of storage the block needs (zero).
     ///
     /// # Errors
-    /// As [`SliceBlock::new`].
-    pub fn storage_bytes(config: &SliceConfig, _rate_in: Rate) -> Result<usize> {
+    /// As [`SymbolDemapBlock::new`].
+    pub fn storage_bytes(config: &SymbolDemapConfig, _rate_in: Rate) -> Result<usize> {
         Self::check(config)?;
         Ok(Plan::default().bytes())
     }
@@ -440,14 +442,14 @@ impl<T: SliceElem, S: Storage> SliceBlock<T, S> {
     /// Output rate: the input rate times the bits per symbol.
     ///
     /// # Errors
-    /// As [`SliceBlock::new`].
-    pub fn rate_out(config: &SliceConfig, rate_in: Rate) -> Result<Rate> {
+    /// As [`SymbolDemapBlock::new`].
+    pub fn rate_out(config: &SymbolDemapConfig, rate_in: Rate) -> Result<Rate> {
         Self::check(config)?;
         multiply_rate(rate_in, config.constellation.bits_per_symbol())
     }
 }
 
-impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
+impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
     type In = T;
     type Out = f32;
 
@@ -458,8 +460,8 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
     fn process(&mut self, input: &[T], output: &mut [f32]) -> Result<Progress> {
         let s = self.scale;
         let n = match self.config.constellation {
-            SliceConstellation::Qpsk => soft_bits(true, s, input, output),
-            SliceConstellation::Fsk4 => {
+            SymbolDemapConstellation::Qpsk => soft_bits(true, s, input, output),
+            SymbolDemapConstellation::Fsk4 => {
                 for (o, &x) in output.chunks_exact_mut(2).zip(input) {
                     let v = x.parts().0;
                     if let [b0, b1] = o {
@@ -468,15 +470,15 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
                 }
                 input.len().min(output.len() / 2)
             }
-            SliceConstellation::Psk8 => {
+            SymbolDemapConstellation::Psk8 => {
                 for (o, &x) in output.chunks_exact_mut(3).zip(input) {
                     let (re, im) = x.parts();
                     o.copy_from_slice(&psk8_bits(s, re, im));
                 }
                 input.len().min(output.len() / 3)
             }
-            SliceConstellation::Qam16 => qam_soft_bits(Qam::Qam16, s, input, output)?,
-            SliceConstellation::Qam64 => qam_soft_bits(Qam::Qam64, s, input, output)?,
+            SymbolDemapConstellation::Qam16 => qam_soft_bits(Qam::Qam16, s, input, output)?,
+            SymbolDemapConstellation::Qam64 => qam_soft_bits(Qam::Qam64, s, input, output)?,
             _ => soft_bits(false, s, input, output),
         };
         Ok(Progress {
@@ -518,7 +520,7 @@ impl<T: SliceElem, S: Storage> Block for SliceBlock<T, S> {
 }
 
 /// The two soft bits of a 4-FSK level `v` with the factor `s`: `s (-v)` (bit 0, 1 for the
-/// negative levels) and `s (|v| - 2/3)` (bit 1, 1 for the outer levels). Shared by `slice`
+/// negative levels) and `s (|v| - 2/3)` (bit 1, 1 for the outer levels). Shared by `symbol_demap`
 /// (`fsk4`) and `fsk_demod`.
 #[inline]
 pub(crate) fn fsk4_bits(s: f32, v: f32) -> (f32, f32) {
@@ -531,7 +533,7 @@ pub(crate) fn fsk4_bits(s: f32, v: f32) -> (f32, f32) {
 /// `i` is 0 (1). Each minimum starts at the first point of its set in index order and takes a
 /// later point only when it is strictly nearer (`d < m`), so a tie keeps the lower index and a
 /// NaN distance propagates; an infinite input gives `inf - inf`, a NaN soft bit (D642). Shared
-/// by `slice` (`8psk`) and `psk_demod`.
+/// by `symbol_demap` (`8psk`) and `psk_demod`.
 #[inline]
 pub(crate) fn psk8_bits(s: f32, re: f32, im: f32) -> [f32; 3] {
     let mut dist = [0.0f32; 8];
@@ -563,14 +565,13 @@ pub(crate) fn psk8_bits(s: f32, re: f32, im: f32) -> [f32; 3] {
 }
 
 /// The QAM soft bits (M44 §2) of the symbols in `input` with the factor `s`, by the kernel
-/// `qam_soft_bits` of the facade (the SIMD backend where the build has it): takes
-/// `min(input.len(), output.len() / bits)` symbols and returns that count (shared by `slice` and
-/// `qam_demod`).
+/// `qam_soft_bits` of the facade (the SIMD backend where the build has it): takes `min(input.len(),
+/// output.len() / bits)` symbols and returns that count (shared by `symbol_demap` and `qam_demod`).
 ///
 /// # Errors
 /// `Core(Internal)` if `T` is not `C32` (the constructors allow the QAM constellations only for `C32`).
 #[inline]
-pub(crate) fn qam_soft_bits<T: SliceElem>(
+pub(crate) fn qam_soft_bits<T: SymbolDemapElem>(
     qam: Qam,
     s: f32,
     input: &[T],
@@ -585,7 +586,9 @@ pub(crate) fn qam_soft_bits<T: SliceElem>(
     match (symbols, output.get_mut(..n * bits)) {
         (Some(x), Some(o)) => Sdrk.qam_soft_bits(qam, x, o, s)?,
         _ => {
-            return Err(sdrk_core::Error::Internal("slice: QAM soft bits need C32 symbols").into());
+            return Err(
+                sdrk_core::Error::Internal("symbol_demap: QAM soft bits need C32 symbols").into(),
+            );
         }
     }
     Ok(n)

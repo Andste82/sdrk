@@ -395,7 +395,7 @@ pub fn all_descriptions() -> &'static [&'static BlockDescription] {
         &crate::blocks::frame_encode::DESCRIPTION,
         &crate::blocks::frame_decode::DESCRIPTION,
         &crate::blocks::symbol_sync::DESCRIPTION,
-        &crate::blocks::slice::DESCRIPTION,
+        &crate::blocks::symbol_demap::DESCRIPTION,
         &crate::blocks::fsk_mod::DESCRIPTION,
         &crate::blocks::fsk_demod::DESCRIPTION,
         &crate::blocks::afc::DESCRIPTION,

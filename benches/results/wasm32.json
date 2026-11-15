@@ -5133,32 +5133,6 @@
           "status": "dev",
           "verdict": "warn"
         },
-        "slice_qam16_block": {
-          "compared_with": "sdrk fallback",
-          "goal": true,
-          "other_instr_per_sample": 14.79,
-          "ours_instr_per_sample": 14.79,
-          "ratio": 1.0,
-          "snr_db": {
-            "other": 149.16,
-            "ours": 149.16
-          },
-          "status": "info",
-          "verdict": "info"
-        },
-        "slice_qam64_block": {
-          "compared_with": "sdrk fallback",
-          "goal": true,
-          "other_instr_per_sample": 23.79,
-          "ours_instr_per_sample": 23.79,
-          "ratio": 1.0,
-          "snr_db": {
-            "other": 145.98,
-            "ours": 145.98
-          },
-          "status": "info",
-          "verdict": "info"
-        },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
           "goal": true,
@@ -5401,6 +5375,32 @@
           "snr_db": {
             "other": 53.72,
             "ours": 53.62
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 14.79,
+          "ours_instr_per_sample": 14.79,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 149.16,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 23.79,
+          "ours_instr_per_sample": 23.79,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 145.98,
+            "ours": 145.98
           },
           "status": "info",
           "verdict": "info"

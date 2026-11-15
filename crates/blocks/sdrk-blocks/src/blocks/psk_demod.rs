@@ -20,7 +20,7 @@ use super::equalize::{
     constellation_of_order,
 };
 use super::psk_mod::{PskVariant, VARIANT_PARAM, bits_of_order, check_variant};
-use super::slice::{psk8_bits, soft_bits};
+use super::symbol_demap::{psk8_bits, soft_bits};
 use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -69,7 +69,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         max_deviation 0.005, ted_gain 1) and, for coherent detection, the Costas loop costas \
         (carrier_bw, damping 0.7071, max_offset cycles per symbol); with differential set the \
         loop is replaced by z_k = y_k conj(y_k-1) (y_-1 = 1). The symbols become soft bits as \
-        slice does (BPSK re; QPSK re then im; 8PSK the max-log soft bits of slice 8psk): \
+        symbol_demap does (BPSK re; QPSK re then im; 8PSK the max-log soft bits of symbol_demap \
+        8psk): \
         above 0 is a 1. The variant pi4 (order 4, differential) maps z_k back to the bits of \
         pi/4-DQPSK: -im for bit 0, then -re for bit 1. The variant offset (order 4, not \
         differential, even samples per symbol) has its own carrier loop at the sample rate: \
@@ -487,7 +488,7 @@ impl PskDemodConfig {
 /// the kernel `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), then the kernel
 /// `costas` of the order (coherent) or the differential product `z_k = y_k conj(y_(k-1))`
 /// with `y_(-1) = 1` (`f32`: `(y.re p.re + y.im p.im, y.im p.re - y.re p.im)`), and the
-/// soft bits of `slice` (scale 1: BPSK `re`, QPSK `re` then `im`, 8PSK the max-log bits of
+/// soft bits of `symbol_demap` (scale 1: BPSK `re`, QPSK `re` then `im`, 8PSK the max-log bits of
 /// `8psk`; the variant `pi4` gives `-im` then `-re`). The variant `offset` replaces `costas` by a carrier loop at the sample
 /// rate before the timing loop (D686 to D688): between two strobes the matched-filter
 /// output is derotated with the kernel `rotate`, the in-phase part is delayed by `n / 2`
@@ -914,7 +915,7 @@ enum SoftMap {
     /// `-im`, then `-re`: the quadrants of `z_k` back to the bit pairs of pi/4-DQPSK
     /// (`+pi/4` is `00`, `+3 pi/4` `01`, `-3 pi/4` `11`, `-pi/4` `10`).
     Pi4,
-    /// The max-log soft bits of `slice` `8psk`.
+    /// The max-log soft bits of `symbol_demap` `8psk`.
     Psk8,
 }
 

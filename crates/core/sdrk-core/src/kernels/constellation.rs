@@ -416,7 +416,7 @@ impl Qam {
     }
 }
 
-/// The piecewise-linear max-log soft bits of a square QAM (M44 §2): the kernel of `slice`
+/// The piecewise-linear max-log soft bits of a square QAM (M44 §2): the kernel of `symbol_demap`
 /// `qam16` / `qam64` and of `qam_demod`.
 ///
 /// Per axis, in-phase first (the components in memory order, `re` then `im` of every symbol),

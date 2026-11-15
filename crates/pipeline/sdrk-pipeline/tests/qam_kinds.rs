@@ -107,8 +107,8 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
             "{params}"
         );
     }
-    // `slice` names `qam_soft_bits` for the QAM constellations only (I44-1, D1412).
-    let f = registry.factory("slice").unwrap();
+    // `symbol_demap` names `qam_soft_bits` for the QAM constellations only (I44-1, D1412).
+    let f = registry.factory("symbol_demap").unwrap();
     assert_eq!(f.kernels(), [""; 0]);
     for (constellation, kernels) in [
         ("qam16", &["qam_soft_bits"][..]),

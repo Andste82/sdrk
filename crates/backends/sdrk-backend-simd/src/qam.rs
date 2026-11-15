@@ -25,11 +25,11 @@
 //!   output vectors instead of eight for the interleave of three streams, and the products with
 //!   the scale on whole output vectors.
 //!
-//! Every path has a loop for the scale 1, which leaves out the products with the scale (`1 v`
-//! is `v` exactly for every value but NaN), as the fallback has: the soft bits of `qam_demod`
-//! and of the default `slice`. The loops run blocks of four steps, then single steps (on NEON
-//! and wasm32 blocks of two steps only); the paths take whole vectors of components (a multiple
-//! of two, whole symbols) and the fallback does the rest.
+//! Every path has a loop for the scale 1, which leaves out the products with the scale (`1 v` is
+//! `v` exactly for every value but NaN), as the fallback has: the soft bits of `qam_demod` and of
+//! the default `symbol_demap`. The loops run blocks of four steps, then single steps (on NEON and
+//! wasm32 blocks of two steps only); the paths take whole vectors of components (a multiple of two,
+//! whole symbols) and the fallback does the rest.
 
 use fearless_simd::Simd as SimdToken;
 use sdrk_core::kernels::constellation::{Qam, QamSoftBits, check_soft_bits_len};

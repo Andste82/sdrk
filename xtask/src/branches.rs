@@ -117,17 +117,20 @@ pub fn parse_cachegrind(text: &str) -> anyhow::Result<Branches> {
 ///   section 2.8 (11 to 18, common case 13).
 /// - `znver4`: 13, Software Optimization Guide for the AMD Zen4 Microarchitecture (57647
 ///   Rev. 1.00), section 2.8 (11 to 18, common case 13).
-/// - `cortex-a72`: 15 and `cortex-a76`: 11, provisional: Arm's software optimization guides give
-///   no figure (Cortex-A72, UAN 0016A, section 4.2 only says that a mispredict costs more than
-///   a conditional instruction); the values are Arm's own microarchitecture disclosures, to be
-///   confirmed by the maintainer (open item I44-15).
+/// - `cortex-a72`: 20, measured on a Raspberry Pi 4 (D1628): 19.56 cycles per misprediction
+///   from the PMU (`cpu_cycles`, `br_mis_pred`) on a data-dependent `tbz` with paths of equal
+///   length, and a slope of 19.61 over a random share of 0 to 100 %. Arm's Cortex-A72 software
+///   optimization guide (UAN 0016A) gives no figure.
+/// - `cortex-a76`: 11, provisional: the Cortex-A76 software optimization guide could not be
+///   obtained; the value is Arm's own microarchitecture disclosure, to be confirmed (open item
+///   I44-15).
 #[must_use]
 pub fn penalty(cpu: &str) -> Option<f64> {
     match cpu {
-        "skylake" | "alderlake" | "sapphirerapids" => Some(20.0),
+        // The same value from different sources: Intel's manual and the measurement of D1628.
+        "skylake" | "alderlake" | "sapphirerapids" | "cortex-a72" => Some(20.0),
         "znver2" => Some(16.0),
         "znver3" | "znver4" => Some(13.0),
-        "cortex-a72" => Some(15.0),
         "cortex-a76" => Some(11.0),
         _ => None,
     }

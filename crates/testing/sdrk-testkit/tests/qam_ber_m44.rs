@@ -25,7 +25,7 @@
 //! `QamModBlock` (4 samples per symbol, roll-off 0.35, span 10) -> the channel of the test
 //! (`FrequencyOffset` and `ClockDrift`, or `Multipath::mild(4.0)`, or nothing) ->
 //! `Awgn::from_ebn0` (the test's seed) with the measured mean power of the signal after the
-//! channel -> `QamDemodBlock` with its defaults (`equalizer_taps` 11, `carrier_bw` 0.005) and the
+//! channel -> `QamDemodBlock` with its defaults (`equalizer_taps` 11, `carrier_bw` 0.0025) and the
 //! `equalizer_taps` of the test. The symbols of the first 3000 symbols (tests 3 to 5: the 1000
 //! CMA symbols and 2000 in decision mode) or 5000 symbols (test 6) are skipped; the next 400
 //! received symbols fix the alignment with the sent symbols (the lag of 0 to 79 symbols and the
@@ -558,7 +558,7 @@ fn qam64_offset_and_drift_acquire_within_5000_symbols() {
 /// Large offsets (I44-3, I44-4; seeds 771 to 774): 16-QAM at Eb/N0 14 dB and 64-QAM at 18 dB
 /// with 0.04 cycles per symbol (the 1 kHz of test 7) and -0.1 (near the edge of the range of
 /// +-0.125 of the fourth power) and 20 ppm drift acquire within 5000 symbols with the block
-/// defaults (`carrier_bw` 0.005): lock at symbol 5000 and the windows of tests 6 and 4.
+/// defaults (`carrier_bw` 0.0025): lock at symbol 5000 and the windows of tests 6 and 4.
 #[test]
 fn large_offsets_acquire_within_5000_symbols() {
     for (order, offset, seed, ebn0, window) in [

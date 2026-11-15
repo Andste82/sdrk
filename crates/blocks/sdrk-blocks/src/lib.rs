@@ -117,7 +117,8 @@ pub use blocks::pulse_key::{
 };
 pub use blocks::qam_demod::{
     QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS,
-    QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig,
+    QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QAM_TRACKER_HOLD_BW, QAM_TRACKER_PULL_BW,
+    QamDemodBlock, QamDemodConfig,
 };
 pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};

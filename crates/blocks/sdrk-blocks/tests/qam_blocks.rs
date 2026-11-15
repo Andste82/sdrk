@@ -631,11 +631,12 @@ fn acquire_kernels(x: &[C32]) -> Option<(usize, f64)> {
 
 /// `qam_demod` composed from the kernels: the matched filter, `symbol_sync` (Gardner at the
 /// exact samples per symbol), `equalize` (the QAM constellation, no feedback, `mu_cma` 0.05,
-/// `mu_dd` 0.02, 1000 CMA symbols, the tracker at `carrier_bw`), `costas` with the QAM
-/// constellation, and the soft bits of M44 §2 in `f32` ([`axis_bits`]); the equalizer and the
-/// carrier loop run in two calls split after the symbol at which the frequency acquisition
-/// ([`acquire_kernels`]) used its estimate `f`, which then goes to the equalizer's tracker (and
-/// the carrier loop's frequency to 0), or without the equalizer to the carrier loop.
+/// `mu_dd` 0.005, 1000 CMA symbols, the tracker at the pull-in bandwidth 0.005 of D1622: the
+/// input ends before the first check), `costas` with the QAM constellation, and the soft bits
+/// of M44 §2 in `f32` ([`axis_bits`]); the equalizer and the carrier loop run in two calls split
+/// after the symbol at which the frequency acquisition ([`acquire_kernels`]) used its estimate
+/// `f`, which then goes to the equalizer's tracker (and the carrier loop's frequency to 0), or
+/// without the equalizer to the carrier loop.
 fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32> {
     let q = if cfg.order == 16 {
         Qam::Qam16
@@ -673,9 +674,9 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
                 },
                 feedback_taps: 0,
                 mu_cma: 0.05,
-                mu_dd: 0.02,
+                mu_dd: 0.005,
                 cma_symbols: 1000,
-                phase_bw: cfg.carrier_bw,
+                phase_bw: 0.005,
             },
         )
         .unwrap()
@@ -1213,7 +1214,7 @@ fn qam_demod_searches_again_when_the_loop_does_not_lock() {
     // on the signal shows it away from the loops (D1618), and the acquisition searches again and
     // finds the signal; after the noise lead without an estimate the equalizer, adapted to the
     // noise, starts again at the estimate (D1619) (16-QAM at 4 samples per symbol, offset 0.001 cycles per symbol, the block
-    // defaults with `carrier_bw` 0.005).
+    // defaults with `carrier_bw` 0.0025).
     assert_eq!(QAM_ACQUISITION_CHECK, 4096);
     let fs = rate(38_400);
     let n_sig = 12_000;

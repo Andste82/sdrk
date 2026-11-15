@@ -863,7 +863,7 @@ fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
 const DEMOD_WARMUP: usize = 6;
 
 /// The block `qam_demod` (16-QAM at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps,
-/// `carrier_bw` 0.005, `sync_bw` 0.005) reading `n` input samples per call: the output of
+/// `carrier_bw` 0.0025, `sync_bw` 0.005) reading `n` input samples per call: the output of
 /// `qam_mod` for `n / 8` random symbols (repeated every call; `n / 8` is whole symbols, so the
 /// symbol clock stays on the grid), turned by 0.3 rad with uniform noise of ±0.02 per component.
 /// The state lives across the calls; the warm-up runs in `new`.

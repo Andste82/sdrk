@@ -4377,9 +4377,9 @@
         },
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
-          "goal": false,
-          "other_instr_per_sample": 144.53,
-          "ours_instr_per_sample": 144.54,
+          "goal": true,
+          "other_instr_per_sample": 144.58,
+          "ours_instr_per_sample": 144.58,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4391,8 +4391,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 160.24,
-          "ours_instr_per_sample": 160.24,
+          "other_instr_per_sample": 160.28,
+          "ours_instr_per_sample": 160.28,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

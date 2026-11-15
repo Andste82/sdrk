@@ -37,11 +37,12 @@ nodes:
   # Demodulator: root-raised-cosine matched filter (roll-off 0.35, span 10, as the
   # transmitter), Gardner symbol timing, the frequency acquisition (a fourth-power estimate of
   # the carrier offset, up to +-0.125 cycles per symbol = +-3.1 kHz at 25 kBd), the blind
-  # equalizer (1000 CMA symbols, then decision-directed) and the decision-directed carrier
-  # loop of 16-QAM with the default carrier_bw 0.005: the acquisition hands the offset to the
-  # loops, so they need no wide bandwidth for a carrier 1 kHz off (the M44 flow test delivers
-  # 999 to 1000 of 1000 packets on five seeds, against 986 to 993 with the former carrier_bw
-  # 0.1 and no acquisition). The values that differ from the defaults:
+  # equalizer (1000 CMA symbols, then decision-directed with mu_dd 0.005 and a narrow phase
+  # tracker) and the decision-directed carrier loop of 16-QAM with the default carrier_bw
+  # 0.0025 (D1618, D1622): the acquisition hands the offset to the loops, so they need no wide
+  # bandwidth for a carrier 1 kHz off (the M44 flow test delivers at least 995 of 1000 packets
+  # at every rotation on six seeds, against 986 to 993 with the former carrier_bw 0.1 and no
+  # acquisition). The values that differ from the defaults:
   # - equalizer_taps 15 (default 11): the multipath of the test channel reaches 2.7 symbols.
   # - sync_bw 0.002 (default 0.005): less timing jitter on 16-QAM.
   demod:

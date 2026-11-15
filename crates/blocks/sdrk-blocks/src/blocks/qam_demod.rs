@@ -12,9 +12,7 @@ use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
 use sdrk_core::num::flush_denormal;
 
 use super::costas::{DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW, check_f64};
-use super::equalize::{
-    DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_MU_DD, DEFAULT_TAPS, EQ_TAPS, EqualizeConfig,
-};
+use super::equalize::{DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_TAPS, EQ_TAPS, EqualizeConfig};
 use super::psk_demod::{
     MIN_SYMBOL_RATE_HZ, SPS_TOLERANCE, SYNC_MAX_DEVIATION, check_equalizer_taps, split_work,
     to_u32, work_len,
@@ -35,8 +33,27 @@ use crate::{SymbolSyncConfig, Ted};
 /// Input samples per piece the block processes at a time (the size of its work buffers).
 pub const QAM_DEMOD_CHUNK: usize = 256;
 
-/// The default loop bandwidth of the carrier loop and the phase tracker of `qam_demod` (M44 §4).
-const DEFAULT_CARRIER_BW: f64 = 0.005;
+/// The default loop bandwidth of the carrier loop of `qam_demod` (M44 §4; 0.0025 since the
+/// maintainer's decision D1618: 0.005 slipped the carrier phase at 16-QAM Es/N0 10 dB and 64-QAM
+/// 16 dB).
+const DEFAULT_CARRIER_BW: f64 = 0.0025;
+
+/// The step size of the decision-directed mode of the equalizer of `qam_demod` (D1618; the
+/// `equalize` default is 0.02).
+const QAM_MU_DD: f64 = 0.005;
+
+/// The bandwidth of the equalizer's phase tracker of `qam_demod` from the start, a `reset` or a
+/// restart until the first check after an estimate (the pull-in, D1622): the former tracker of
+/// D829 at the former `carrier_bw` 0.005; it takes the error of the estimate (up to 5.6e-5
+/// cycles per symbol, D1406) out of the equalizer's input.
+pub const QAM_TRACKER_PULL_BW: f64 = 0.005;
+
+/// The bandwidth of the equalizer's phase tracker of `qam_demod` after the pull-in (from the first
+/// check after an estimate on, D1622): narrow, so that `costas` does the phase tracking (D1618),
+/// but not 0: the decision-directed equalizer slips on a frequency error of its input of 2e-6
+/// cycles per symbol already, which no estimate reaches, and the carrier loop after it cannot
+/// take that error out of its input.
+pub const QAM_TRACKER_HOLD_BW: f64 = 0.0015;
 
 /// The default loop bandwidth of the symbol timing of `qam_demod` (half that of `psk_demod`:
 /// the self-noise of the Gardner detector on 64-QAM costs 0.9 dB at 0.01, D1215).
@@ -60,16 +77,19 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         acquisition (the carrier offset from the spectrum of the fourth powers of 512 symbols \
         from symbol 256 on, range +-0.125 cycles per symbol, repeated on the next 512 symbols \
         until its peak stands clear of the noise; the offset then goes to the phase tracker of \
-        the equalizer, or to the carrier loop without it; every 4096 symbols after that the \
-        lock of the carrier loop is checked, and without lock the equalizer starts again and \
-        the acquisition searches again), the adaptive equalizer \
+        the equalizer, or to the carrier loop without the equalizer; every 4096 \
+        symbols after that the lock of the carrier loop is checked, and after a check without \
+        lock a new window of the fourth powers that shows a clear carrier more than 0.0002 \
+        cycles per symbol away from the loops starts the equalizer again and the acquisition \
+        searches again), the adaptive equalizer \
         equalize (constellation qam16 or qam64 of the order, equalizer_taps taps, no feedback \
-        taps, mu_cma 0.05, mu_dd 0.02, 1000 CMA symbols, then decision-directed with its \
-        phase tracker at carrier_bw; equalizer_taps 0 leaves it out), the decision-directed \
-        carrier loop costas (constellation qam16 or qam64, carrier_bw, damping 0.7071, \
-        max_offset 0.05 cycles per symbol) and the soft bits of slice qam16 or qam64 (scale \
-        1): above 0 is a 1. This is the order of psk_demod (equalizer before the carrier \
-        loop). The 90 degree ambiguity of the square constellation is not resolved: use \
+        taps, mu_cma 0.05, mu_dd 0.005, 1000 CMA symbols, then decision-directed; its phase \
+        tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
+        frequency tracker; equalizer_taps 0 leaves it out), the decision-directed carrier \
+        loop costas, which tracks the phase (constellation qam16 or qam64, carrier_bw, \
+        damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of slice qam16 or \
+        qam64 (scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
+        carrier loop). The 90 degree ambiguity of the square constellation is not resolved: use \
         frame_decode with rotations four and bits_per_symbol 4 or 6. The output rate is the \
         symbol rate times the bits per symbol and follows the clock of the signal (variable \
         ratio); the equalizer adds (equalizer_taps - 1) / 2 symbols of delay.",
@@ -156,10 +176,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 max: MAX_LOOP_BW,
                 default: Some(DEFAULT_CARRIER_BW),
             },
-            typical: "0.005; wider for phase noise",
+            typical: "0.0025; wider for phase noise",
             mutability: Mutability::Build,
-            description: "Loop bandwidth of the carrier loop and of the equalizer's phase \
-                tracker, normalized to the symbol rate.",
+            description: "Loop bandwidth of the carrier loop, normalized to the symbol rate.",
         },
     ],
     required: &["symbol_rate_hz"],
@@ -171,7 +190,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// use sdrk_blocks::QamDemodConfig;
 /// let cfg = QamDemodConfig { order: 16, symbol_rate_hz: 25_000.0, ..QamDemodConfig::default() };
 /// assert_eq!(cfg.samples_per_symbol(sdrk::Rate::hz(200_000)?)?, 8);
-/// assert_eq!((cfg.equalizer_taps, cfg.carrier_bw), (11, 0.005));
+/// assert_eq!((cfg.equalizer_taps, cfg.carrier_bw), (11, 0.0025));
 /// // 7.5 samples per symbol is not within 1 % of an integer
 /// assert!(cfg.validate(sdrk::Rate::hz(187_500)?).is_err());
 /// # Ok::<(), sdrk_blocks::Error>(())
@@ -190,14 +209,13 @@ pub struct QamDemodConfig {
     pub equalizer_taps: usize,
     /// Loop bandwidth of the symbol timing (0.0001 to 0.1).
     pub sync_bw: f64,
-    /// Loop bandwidth of the carrier loop and of the equalizer's phase tracker (0.0001 to
-    /// 0.2).
+    /// Loop bandwidth of the carrier loop (0.0001 to 0.2).
     pub carrier_bw: f64,
 }
 
 impl Default for QamDemodConfig {
     /// Order 16, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
-    /// `rolloff` 0.35, `span` 10, `equalizer_taps` 11, `sync_bw` 0.005, `carrier_bw` 0.005.
+    /// `rolloff` 0.35, `span` 10, `equalizer_taps` 11, `sync_bw` 0.005, `carrier_bw` 0.0025.
     fn default() -> Self {
         Self {
             order: 16,
@@ -235,8 +253,10 @@ impl QamDemodConfig {
     }
 
     /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward taps,
-    /// no feedback, the QAM constellation of the order, the step sizes and CMA symbols of the
-    /// `equalize` defaults and the phase tracker at `carrier_bw` (M44 §4, D829).
+    /// no feedback, the QAM constellation of the order, `mu_cma` and the CMA symbols of the
+    /// `equalize` defaults, `mu_dd` 0.005 (D1618) and the phase tracker at
+    /// [`QAM_TRACKER_PULL_BW`] (the block narrows it to [`QAM_TRACKER_HOLD_BW`] at the first check
+    /// after an estimate, D1622).
     pub fn equalizer(&self) -> Option<EqualizeConfig> {
         (self.equalizer_taps != 0).then(|| EqualizeConfig {
             taps: self.equalizer_taps,
@@ -246,9 +266,9 @@ impl QamDemodConfig {
                 _ => EqConstellation::Qam16,
             },
             mu_cma: DEFAULT_MU_CMA,
-            mu_dd: DEFAULT_MU_DD,
+            mu_dd: QAM_MU_DD,
             cma_symbols: DEFAULT_CMA_SYMBOLS,
-            phase_bw: self.carrier_bw,
+            phase_bw: QAM_TRACKER_PULL_BW,
         })
     }
 
@@ -370,15 +390,18 @@ const ACQUISITION_MIN_PEAK: f32 = 12.0;
 /// lock keeps the estimate; after a check without lock a new window of the fourth powers (the
 /// verify window) is taken, and when it shows a clear carrier away from the frequency of the
 /// loops the estimate counts as wrong or out of date (a false alarm on noise, a narrowband
-/// interferer before the signal, a new transmission on another frequency): the equalizer starts
+/// interferer before the signal, a new transmission on another frequency, or loops that did not
+/// converge on a correct estimate and wander about the carrier, D1623): the equalizer starts
 /// again from its start weights and blind symbols, the frequencies go to 0, and the acquisition
 /// searches again from the start of its window. A verify window without a clear peak (noise, or
 /// a weak signal whose lock level noise also reaches) keeps the estimate.
 pub const QAM_ACQUISITION_CHECK: usize = 4096;
 /// The largest distance in cycles per symbol between a clear estimate of the verify window and
-/// the frequency of the loops for which the estimate is kept (four bins of the estimate's FFT);
-/// beyond it the loops sit on a wrong frequency (D1605, D1618).
-pub const QAM_ACQUISITION_VERIFY_TOLERANCE: f64 = 1e-3;
+/// the frequency of the loops for which the estimate is kept; beyond it the loops sit on a wrong
+/// frequency or have not converged on the signal (D1605, D1618; 2e-4 since D1623: the narrow
+/// loops of D1622 that hold a signal stay within 1.1e-4 of the carrier, the estimate within
+/// 7e-5 of it, while loops that did not converge wander up to 3e-4 and more).
+pub const QAM_ACQUISITION_VERIFY_TOLERANCE: f64 = 2e-4;
 /// The smoothing factor of the symbol power `p` by which the fourth powers are normalized
 /// (`p = p + ACQUISITION_POWER_ALPHA (|x|^2 - p)`, a time constant of 64 symbols), so that a
 /// level that still changes (an AGC that settles) does not weight the end of the window more.
@@ -555,7 +578,7 @@ impl<S: Storage> Acquisition<S> {
                     self.phase = Phase::Verify;
                     self.next = WINDOW_END;
                 }
-                Ok(Step::Nothing)
+                Ok(Step::Check)
             }
         }
     }
@@ -680,6 +703,9 @@ enum Step {
     /// frequency of the loops: start again (the equalizer blind from its start weights, the
     /// frequencies 0) and search.
     Restart,
+    /// A check: the pull-in after an estimate is over, the equalizer's phase tracker narrows
+    /// to [`QAM_TRACKER_HOLD_BW`] (D1622).
+    Check,
 }
 
 /// `x^4 / (p p)` in `f32`: `a = x^2 = (x.re x.re - x.im x.im, 2 x.re x.im)`,
@@ -713,15 +739,17 @@ type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C3
 /// windows of [`QAM_ACQUISITION_SYMBOLS`] from symbol [`QAM_ACQUISITION_SKIP`] on and estimates the
 /// offset from their spectrum (the kernel `fft`); the equalizer and the carrier loop run in two
 /// calls split after the symbol that completes a window, and a clear estimate goes to the
-/// equalizer's phase tracker (the carrier loop's frequency to 0) or, without the equalizer, to
-/// the carrier loop (after windows without a clear peak the equalizer first starts again from
-/// its start weights and blind symbols). While an estimate is in use the acquisition checks the
-/// loop every [`QAM_ACQUISITION_CHECK`] symbols and, after a check without lock, takes a new
-/// window of the fourth powers in the next interval (the calls split at the checks and at the
-/// end of that window as well); when it shows the loops on a wrong frequency, the equalizer
-/// starts again from its start weights and blind symbols, the frequencies go to 0 and the
-/// acquisition searches again (D1421, D1605, D1618). Soft bits
-/// that do not fit into the output wait in a buffer and are written first by the next call (which then consumes no input). Timing: variable ratio
+/// frequency integrator of the equalizer's phase tracker (the carrier loop's frequency to 0; the
+/// tracker at [`QAM_TRACKER_PULL_BW`] until the first check after the estimate, then at
+/// [`QAM_TRACKER_HOLD_BW`], so that `costas` does the phase tracking, D1618, D1622), or, without
+/// the equalizer, to the carrier loop (after windows without a clear peak the equalizer first
+/// starts again from its start weights and blind symbols). While an estimate is in use the
+/// acquisition checks the loop every [`QAM_ACQUISITION_CHECK`] symbols and, after a check
+/// without lock, takes a new window of the fourth powers in the next interval (the calls split
+/// at the checks and at the end of that window as well); when it shows the loops on a wrong
+/// frequency or not converged, the equalizer starts again from its start weights and blind
+/// symbols, the frequencies go to 0 and the acquisition searches again (D1421, D1605, D1618,
+/// D1623). Soft bits that do not fit into the output wait in a buffer and are written first by the next call (which then consumes no input). Timing: variable ratio
 /// `symbol_rate bits / fs`, delay `(span + equalizer_taps - 1) n / 2 + 1` input samples.
 /// Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32` (filter
 /// output, symbols, waiting soft bits as `f32`), the 1024 `C32` of the acquisition's FFT and
@@ -966,6 +994,7 @@ impl<S: Storage> QamDemodBlock<S> {
             match self.acq.take(costas, frequency)? {
                 Step::Estimate { f, fresh } => apply::<S>(&mut self.eq, &mut self.costas, f, fresh),
                 Step::Restart => restart::<S>(&mut self.eq, &mut self.costas),
+                Step::Check => settle::<S>(&mut self.eq),
                 Step::Nothing => {}
             }
             at = end;
@@ -980,11 +1009,13 @@ fn loops_frequency<S: Storage>(costas: &CostasState, eq: Option<&EqState<S>>) ->
     costas.frequency() + eq.map_or(0.0, |e| f64::from(e.frequency()))
 }
 
-/// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer its
-/// phase tracker takes `f` and the carrier loop starts again from frequency 0 (it sees the
-/// equalizer output turned back by the tracker); without it the carrier loop takes `f` (within
-/// its `max_offset`). An estimate that is not `fresh` (after windows without a clear peak) first
-/// starts the equalizer again from its start weights and blind symbols (D1619).
+/// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer the
+/// frequency integrator of its phase tracker takes `f` (the output is turned back at that rate,
+/// and the tracker, at [`QAM_TRACKER_PULL_BW`] until the next check, takes out the error of the
+/// estimate) and the carrier loop starts again from frequency 0 (it sees the turned-back
+/// equalizer output); without it the carrier loop takes `f` (within its `max_offset`). An
+/// estimate that is not `fresh` (after windows without a clear peak) first starts the equalizer
+/// again from its start weights and blind symbols (D1619).
 fn apply<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState, f: f64, fresh: bool) {
     match eq.as_mut() {
         Some(eq) => {
@@ -998,14 +1029,25 @@ fn apply<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState, f: f
     }
 }
 
+/// The end of the pull-in of the equalizer's phase tracker at a check (D1622): the tracker at
+/// [`QAM_TRACKER_HOLD_BW`], its phase and frequency kept (`costas` then does the phase tracking).
+fn settle<S: Storage>(eq: &mut Option<EqState<S>>) {
+    if let Some(eq) = eq.as_mut() {
+        // A valid bandwidth: the call cannot fail.
+        let _ = eq.set_phase_bw(QAM_TRACKER_HOLD_BW);
+    }
+}
+
 /// Starts the loops again after a verify window of the acquisition that found the loops on a
 /// wrong frequency (D1421, D1605, D1618): the equalizer from its start (the start weights, the
-/// blind CMA symbols, its tracker at 0), the carrier loop's frequency 0 (its phase and lock
-/// detector go on). An equalizer that adapted to noise or to an interferer before the signal
-/// does not converge on it in the decision mode.
+/// blind CMA symbols, its tracker at 0 and at [`QAM_TRACKER_PULL_BW`]), the carrier loop's
+/// frequency 0 (its phase and lock detector go on). An equalizer that adapted to noise or to an
+/// interferer before the signal does not converge on it in the decision mode.
 fn restart<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState) {
     if let Some(eq) = eq.as_mut() {
         eq.reset();
+        // A valid bandwidth: the call cannot fail.
+        let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
     }
     costas.set_frequency(0.0);
 }
@@ -1075,6 +1117,8 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         self.len = 0;
         if let Some(eq) = self.eq.as_mut() {
             eq.reset();
+            // A valid bandwidth: the call cannot fail.
+            let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
         }
         self.acq.reset();
     }

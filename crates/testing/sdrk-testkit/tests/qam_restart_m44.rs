@@ -58,6 +58,11 @@
 //!   converged after their CMA symbols on a false state, MSE 0.06 and the weights' energy 0.54):
 //!   the same assertions.
 //!
+//! The soft bits of every receiver keep the bits of the baseline of M44.1 (spec §5, test 5;
+//! `sdrk_testkit::baseline`, table `qam_restart` of `tests/baseline/m44_1`), per SIMD level. The
+//! signals use the logarithms, powers, sines and cosines of `libm`, so that they are the same
+//! bits on every host.
+//!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
 #![allow(
@@ -76,8 +81,19 @@ use sdrk::Rate;
 use sdrk_blocks::{Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::rotate_symbol;
+use sdrk_testkit::baseline::{self, Baseline, Digest};
 use sdrk_testkit::channel::{Awgn, ClockDrift, FrequencyOffset, Impairment};
 use sdrk_testkit::{Pcg32, VecStorage};
+
+/// The table of the baseline of M44.1 at the SIMD level of this build.
+fn baseline_table() -> Baseline {
+    Baseline::load(
+        "m44_1",
+        "qam_restart",
+        baseline::level(sdrk_backend_simd::level_name()),
+    )
+    .unwrap()
+}
 
 /// Samples per symbol and the symbol rate (the sample rate is `SPS` times it).
 const SPS: usize = 4;
@@ -171,7 +187,7 @@ fn weak_signal(
         .process(&wide, &mut turned);
     let body = &turned[100 * SPS..];
     let power = body.iter().map(Complex64::norm_sqr).sum::<f64>() / body.len() as f64;
-    let ebn0 = esn0_db - 10.0 * (k as f64).log10();
+    let ebn0 = esn0_db - 10.0 * libm::log10(k as f64);
     let mut awgn = Awgn::from_ebn0(ebn0, k as u32, SPS as f64, power, seed + 100).unwrap();
     let mut noisy = Vec::with_capacity(turned.len());
     awgn.process(&turned, &mut noisy);
@@ -257,6 +273,7 @@ fn a_correct_estimate_below_the_lock_level_is_kept() {
         (64, 0, 18.0),
     ];
     let n = 100_000;
+    let table = &baseline_table();
     let results: Vec<_> = std::thread::scope(|s| {
         let handles: Vec<_> = cases
             .iter()
@@ -265,6 +282,8 @@ fn a_correct_estimate_below_the_lock_level_is_kept() {
                     let (input, sent, _) = weak_signal(order, n, esn0, OFFSET, 780);
                     let mut block = demod(order, taps);
                     let soft = demod_all(&mut block, &input);
+                    let case = format!("kept_qam{order}_taps{taps}_esn0_{esn0}");
+                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, 5000, 0);
                     (block.restarts(), block.acquired_frequency(), ber, slips)
@@ -303,6 +322,7 @@ fn a_weak_signal_the_loops_hold_is_not_restarted() {
         (64, 17.0, 815, &[11, 0]),
     ];
     let n = 200_000;
+    let table = &baseline_table();
     let results: Vec<_> = std::thread::scope(|s| {
         let handles: Vec<_> = cases
             .iter()
@@ -314,6 +334,8 @@ fn a_weak_signal_the_loops_hold_is_not_restarted() {
                     let (input, sent, _) = weak_signal(order, n, esn0, OFFSET, seed);
                     let mut block = demod(order, taps);
                     let soft = demod_all(&mut block, &input);
+                    let case = format!("held_qam{order}_taps{taps}_esn0_{esn0}");
+                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, 5000, 0);
                     let what = format!("{order}-QAM, equalizer_taps {taps}, Es/N0 {esn0} dB");
@@ -351,6 +373,7 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
         (64, 0, 18.0, true),
     ];
     let n = 60_000;
+    let table = &baseline_table();
     let results: Vec<_> = std::thread::scope(|s| {
         let handles: Vec<_> = cases
             .iter()
@@ -363,7 +386,7 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
                     let mut input: Vec<C32> = (0..SPS * 1000)
                         .map(|j| {
                             let ph = core::f64::consts::TAU * 0.06 * j as f64 / SPS as f64;
-                            C32::new((amp * ph.cos()) as f32, (amp * ph.sin()) as f32)
+                            C32::new((amp * libm::cos(ph)) as f32, (amp * libm::sin(ph)) as f32)
                         })
                         .collect();
                     if noise_first {
@@ -377,6 +400,9 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
                     input.extend_from_slice(&sig);
                     let mut block = demod(order, taps);
                     let soft = demod_all(&mut block, &input);
+                    let first = if noise_first { "noise" } else { "carrier" };
+                    let case = format!("dropped_qam{order}_taps{taps}_esn0_{esn0}_{first}");
+                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, rx.len() - 20_400, lead);
                     (block.restarts(), block.acquired_frequency(), ber, slips)
@@ -416,10 +442,14 @@ fn an_estimate_at_the_edge_of_the_range_is_kept() {
     // 16-QAM signal (Es/N0 12 dB, below the lock level, so every check verifies) with the
     // equalizer, whose tracker holds the offset (`max_offset` of the carrier loop is 0.05).
     let n = 40_000;
+    let table = baseline_table();
     for (i, offset) in [0.124_97f64, -0.124_97].into_iter().enumerate() {
         let (input, _, _) = weak_signal(16, n, 12.0, offset, 782 + i as u64);
         let mut block = demod(16, 11);
-        demod_all(&mut block, &input);
+        let soft = demod_all(&mut block, &input);
+        table
+            .check(&format!("edge_offset{offset}"), &Digest::of_f32(&soft))
+            .unwrap();
         let f = block.acquired_frequency().unwrap();
         let d = f - offset;
         let d = (d - 0.25 * (4.0 * d).round()).abs();
@@ -448,6 +478,7 @@ fn a_signal_back_after_a_gap_is_received_again() {
         (64, 30.0, true, &[0]),
     ];
     let (before, gap, after) = (20_000usize, GAP_SYMBOLS, 40_000usize);
+    let table = &baseline_table();
     let results: Vec<_> = std::thread::scope(|s| {
         let handles: Vec<_> = cases
             .iter()
@@ -462,7 +493,7 @@ fn a_signal_back_after_a_gap_is_received_again() {
                     let var = if loud {
                         power
                     } else {
-                        power * SPS as f64 / 10f64.powf(esn0 / 10.0)
+                        power * SPS as f64 / libm::pow(10.0, esn0 / 10.0)
                     };
                     let sigma = (var / 2.0).sqrt();
                     let mut rng = Pcg32::new(816, 2);
@@ -473,6 +504,9 @@ fn a_signal_back_after_a_gap_is_received_again() {
                     let mut soft = demod_all(&mut block, &input[..(before + gap) * SPS]);
                     let in_gap = block.restarts();
                     soft.extend(demod_all(&mut block, &input[(before + gap) * SPS..]));
+                    let at = if loud { "loud" } else { "floor" };
+                    let case = format!("gap_qam{order}_taps{taps}_esn0_{esn0}_{at}");
+                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, before + gap + BACK_WITHIN, 0);
                     let what = format!(
@@ -555,7 +589,7 @@ fn drifting_signal(
     }
     let body = &cur[100 * SPS..];
     let power = body.iter().map(Complex64::norm_sqr).sum::<f64>() / body.len() as f64;
-    let ebn0 = esn0_db - 10.0 * (k as f64).log10();
+    let ebn0 = esn0_db - 10.0 * libm::log10(k as f64);
     let mut awgn = Awgn::from_ebn0(ebn0, k as u32, SPS as f64, power, seed + 100).unwrap();
     let mut noisy = Vec::with_capacity(cur.len());
     awgn.process(&cur, &mut noisy);
@@ -578,6 +612,7 @@ fn the_decision_mode_starts_at_the_phase_of_the_output() {
         (16, 23.0, 11, 0.005, OFFSET, 0.0),
     ];
     let n = 60_000;
+    let table = &baseline_table();
     let results: Vec<_> = std::thread::scope(|s| {
         let handles: Vec<_> = cases
             .iter()
@@ -594,6 +629,10 @@ fn the_decision_mode_starts_at_the_phase_of_the_output() {
                     let rate = Rate::hz(SYMBOL_RATE * SPS as u64).unwrap();
                     let mut block = QamDemodBlock::new(&cfg, rate, &mut VecStorage).unwrap();
                     let soft = demod_all(&mut block, &input);
+                    let case = format!(
+                        "handover_qam{order}_taps{taps}_sync{sync_bw}_esn0_{esn0}_offset{offset}"
+                    );
+                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, 10_000, 0);
                     let what = format!(

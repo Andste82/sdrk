@@ -31,5 +31,10 @@ sdrk-io = { path = "../../io/sdrk-io" }
 sdrk-proto = { path = "../../proto/sdrk-proto" }
 sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
 
+# The name of the SIMD level for the baselines of M44.1 (`sdrk_testkit::baseline`); only the
+# facade and test code may depend on a backend.
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dev-dependencies]
+sdrk-backend-simd = { path = "../../backends/sdrk-backend-simd", features = ["std"] }
+
 [lints]
 workspace = true

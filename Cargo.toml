@@ -9,6 +9,8 @@ members = [
     "crates/blocks/sdrk-blocks",
     "crates/pipeline/sdrk-pipeline",
     "crates/io/sdrk-io",
+    "crates/drivers/sdrk-rtlsdr",
+    "crates/drivers/sdrk-hackrf",
     "bindings/wasm",
     "examples/fm-receiver",
     "examples/fm-transmitter",

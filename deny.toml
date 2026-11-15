@@ -19,6 +19,11 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.9
+# The RTL-SDR driver of `crates/drivers/sdrk-rtlsdr` (decision D1709): MPL-2.0 is copyleft per
+# file only; SDRk uses the crate unmodified, so its own code keeps MIT OR Apache-2.0.
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "rtl-sdr-rs" },
+]
 
 [bans]
 multiple-versions = "warn"

@@ -13,10 +13,13 @@ The folder of a crate is its layer. A crate may depend only on crates in lower l
 | `crates/blocks` | `sdrk-blocks` | facade, core, proto | yes |
 | `crates/pipeline` | `sdrk-pipeline` | blocks, proto, facade, core | no |
 | `crates/io` | `sdrk-io` | core (types only) | no |
+| `crates/drivers` | `sdrk-rtlsdr`, `sdrk-hackrf` | `sdrk-device` only | no (`std`, USB) |
 | `crates/testing` | `sdrk-testkit` | any library crate | `no_std` by default, feature `std` |
 | `bindings/*`, `examples/*`, `targets/*`, `benches/*`, `xtask` | — | anything | no |
 
 `sdrk-proto` (M37) holds protocol logic without signal processing: the packet type `Packet` with its flags, table-driven CRCs (CRC-16/CCITT-FALSE, CRC-16/X-25, CRC-32/ISO-HDLC, the Mode S CRC-24) and the test framing `frame`. It depends on `sdrk-device` only, and nothing below `crates/blocks` depends on it: `cargo xtask check layers` ranks the folder above the facade and below the blocks and allows it the device crate alone. It is heap-free, so `cargo xtask bare-metal` builds it for `thumbv7em-none-eabihf`. `sdrk-io` does not use it: its JSON Lines packet files have their own record type ([io.md](io.md#packet-files-json-lines)), and `check layers` allows `crates/io` the crates of `crates/core` only.
+
+`crates/drivers` (D1708) holds the hardware drivers: each implements the traits of `sdrk-device` for one family of devices over USB (`nusb`, pure Rust, no C libraries) and depends on `sdrk-device` alone, so a driver never pulls in the kernels and never another driver. The folder ranks with `crates/io` and `crates/pipeline`; only the top layer (applications, examples, `tests/system`) and hosts outside this repository such as sdrk-remote use the drivers. Keeping them in this workspace means that the traits and their implementations change in one pull request and that a host pins one revision for both. Each driver separates its logic from the transport (`Driver`/`Radio` traits) and has a simulated bus (`fake`) for tests without hardware; tests that need the device are behind the feature `hw-tests` and `#[ignore]`.
 
 ## Principles
 

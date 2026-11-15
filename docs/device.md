@@ -1,6 +1,6 @@
 # Device API (`sdrk-device`)
 
-`sdrk-device` is the lowest crate of SDRk. It is `no_std`, heap-free and has no dependencies. External drivers depend only on this crate. It defines the shared error classification, raw sample formats, exact time types, the synchronous and asynchronous RX/TX stream traits and the optional control capabilities. The conformance checks that drivers run against these traits are in `sdrk-testkit` (see [Conformance checks](#conformance-checks)); sample conversion (`convert`, `view_cq15`, `view_c32`) is in `sdrk-core` since M05, see `docs/kernels.md`.
+`sdrk-device` is the lowest crate of SDRk. It is `no_std`, heap-free and has no dependencies. Drivers depend only on this crate; the drivers of this repository are in `crates/drivers` ([Drivers](#drivers)). It defines the shared error classification, raw sample formats, exact time types, the synchronous and asynchronous RX/TX stream traits and the optional control capabilities. The conformance checks that drivers run against these traits are in `sdrk-testkit` (see [Conformance checks](#conformance-checks)); sample conversion (`convert`, `view_cq15`, `view_c32`) is in `sdrk-core` since M05, see `docs/kernels.md`.
 
 ## Errors
 
@@ -138,3 +138,16 @@ The device API was checked against the SoapySDR `Device.hpp` and `Constants.h` (
 | Sensors | `listSensors`, `getSensorInfo`, `readSensor` (device and channel level) | none | gap: temperature, lock detect, RSSI; add as an optional trait |
 | Registers, GPIO, I2C, SPI, UART | `listRegisterInterfaces`, `readRegister*`, `writeRegister*`, `listGPIOBanks`, `readGPIO*`, `writeGPIO*`, `readI2C`, `writeI2C`, `transactSPI`, `listUARTs`, `readUART`, `writeUART` | none | out of scope: low-level access belongs to the driver |
 | Settings | `getSettingInfo`, `readSetting`, `writeSetting` (device and channel level) | none | gap: arbitrary key/value settings are not typed; a driver exposes its own typed API |
+
+## Drivers
+
+The drivers in `crates/drivers` (D1708) implement these traits for real hardware. They need `std` and USB access and depend on `sdrk-device` alone.
+
+| Crate | Device | USB driver | Traits | Own methods |
+| --- | --- | --- | --- | --- |
+| `sdrk-rtlsdr` | RTL2832U with R820T, R820T2, R828D (RTL-SDR Blog V4 with upconverter); `rx0`, `cu8` | `rtl-sdr-rs` 0.4.3 over `nusb` (MPL-2.0, used unmodified, D1709) | `Device`, `Tuner`, `RateControl`, `GainControl`, `RxStream` | `set_ppm`, `set_bias_tee`, `set_direct_sampling` |
+| `sdrk-hackrf` | HackRF One (half duplex); `rx0` and `tx0`, `cs8` | the firmware protocol spoken directly over `nusb` (D1710) | `Device`, `Tuner`, `RateControl`, `BandwidthControl`, `GainControl`, `RxStream`, `TxStream` | `set_bias_tee`, `set_clkout`, `tx_off`, `set_overall_db` |
+
+Both report the first block of a stream with a host-time anchor (`TimeSource::Host`), drop transfers the reader does not take in time (`OVERFLOW` and `GAP_BEFORE` on the next block, the index advanced by the lost samples) and fail a stream with `Disconnected` when the device is unplugged. A setter of the RTL-SDR works while the stream runs: the reading pauses, and the next block carries `GAP_BEFORE`. The HackRF keeps the values of each channel and puts them on the hardware when the stream of the channel starts and at once while it runs; it switches the transmitter off when it is opened, stopped and dropped, switches to transmit only with the first samples written and switches the RF amplifier only through its own gain stage `amp` (the gain without a stage leaves it off). Its TX stream reports each underrun of the firmware with `UNDERRUN` and a played-out burst with `BURST_END` from `poll_status`.
+
+Access to the devices: on Linux a udev rule for the user (and, for the RTL-SDR, the kernel DVB driver `dvb_usb_rtl28xxu` blacklisted); on Windows the `WinUSB` driver, installed with Zadig.

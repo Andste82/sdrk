@@ -59,6 +59,7 @@ sdrk/
 │   ├── blocks/     sdrk-blocks
 │   ├── pipeline/   sdrk-pipeline            ← heap allowed from here up
 │   ├── io/         sdrk-io
+│   ├── drivers/    sdrk-rtlsdr, sdrk-hackrf (std, USB; D1708)
 │   └── testing/    sdrk-testkit
 ├── bindings/       wasm/ (c/, python/ when needed)
 ├── schema/         generated JSON Schema (versioned)
@@ -293,7 +294,7 @@ Two follow-up projects build on the library, each in its own repo with its own p
 
 **Outside this repo:**
 
-- **Device drivers** (RTL-SDR, HackRF, SoapySDR, LR2021, SX1255, ESP-SDR …), implementing `sdrk-device`. Recommendation: driver logic separate from transport — native via `nusb`, browser via WebUSB/Web Serial.
+- **Further device drivers** (SoapySDR, LR2021, SX1255, ESP-SDR …), implementing `sdrk-device`. Recommendation: driver logic separate from transport — native via `nusb`, browser via WebUSB/Web Serial. The drivers for RTL-SDR and HackRF are in this repository since D1708 (`crates/drivers`), so that the traits and their implementations share one revision.
 - Browser demos, desktop apps, graphical flow editors
 - FutureSDR integration
 

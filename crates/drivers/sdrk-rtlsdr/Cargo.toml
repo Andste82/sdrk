@@ -1,0 +1,26 @@
+[package]
+name = "sdrk-rtlsdr"
+description = "SDRk driver for RTL-SDR dongles (RTL2832U with R820T, R820T2, R828D): the device traits over the pure-Rust rtl-sdr-rs USB driver."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Tests that need an RTL-SDR on the USB bus; they are also #[ignore]d:
+# cargo test -p sdrk-rtlsdr --features hw-tests -- --ignored
+hw-tests = []
+
+[dependencies]
+sdrk-device = { path = "../../core/sdrk-device" }
+# Pure-Rust RTL2832U/R82xx driver over nusb (no librtlsdr, no libusb); MPL-2.0, used
+# unmodified (D1709).
+rtl-sdr-rs = "0.4.3"
+nusb = "0.2"
+
+[dev-dependencies]
+sdrk-testkit = { path = "../../testing/sdrk-testkit", features = ["std"] }
+
+[lints]
+workspace = true

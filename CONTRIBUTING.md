@@ -38,4 +38,4 @@ Every kernel change follows the measurement policy (decisions D32 to D34):
 
 ## Publishing order
 
-`sdrk-device`, `sdrk-core`, the backends, `sdrk`, `sdrk-blocks`, `sdrk-io`, `sdrk-pipeline`, `sdrk-testkit`.
+`sdrk-device`, `sdrk-core`, the backends, `sdrk`, `sdrk-blocks`, `sdrk-io`, `sdrk-pipeline`, `sdrk-testkit`, the drivers (`sdrk-rtlsdr`, `sdrk-hackrf`).

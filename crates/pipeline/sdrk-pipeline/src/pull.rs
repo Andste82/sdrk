@@ -433,7 +433,7 @@ impl Pipeline {
             // produces (a QPSK `psk_mod` takes whole symbols of two bits, D620): idle samples
             // are added until the output moves, for a bounded number of rounds.
             for _ in 0..IDLE_ROUNDS {
-                if self.step_idle(enc, k)? == 0 {
+                if self.step_idle_some(enc, k)? == 0 {
                     self.run()?;
                     break;
                 }
@@ -447,6 +447,22 @@ impl Pipeline {
             return Err(internal("the packet encoder of a pull made no progress"));
         }
         Ok(())
+    }
+
+    /// [`step_idle`](Self::step_idle) of the encoder `enc` with room for `k` samples, the room
+    /// doubled (up to [`IDLE_ROUNDS`] times) while the encoder produces nothing: an encoder
+    /// that writes whole symbols of several samples (`qam_frame_encode`, M44.1) needs room for
+    /// one symbol. Returns the samples produced.
+    fn step_idle_some(&mut self, enc: usize, k: usize) -> Result<usize> {
+        let mut k = k.max(1);
+        for _ in 0..IDLE_ROUNDS {
+            let produced = self.step_idle(enc, k)?;
+            if produced > 0 {
+                return Ok(produced);
+            }
+            k = k.saturating_mul(2);
+        }
+        Ok(0)
     }
 
     /// Whether node `ni` has unread packets in the stream of the packet input `ii`.
@@ -632,10 +648,19 @@ impl Pipeline {
             return Err(internal("a packet encoder without a stream"));
         };
         let enc_end = at(&self.streams, enc_out)?.next_idx();
-        let mut left = ceil_delay(lead_in);
+        // `lead_in` counts samples at the `rate_hz` of the packet input; the encoder's output
+        // runs at its own rate (`qam_frame_encode` writes `sps / bits` samples per bit).
+        let in_rate = at(&self.inputs, at(&self.outputs, oi)?.input)?.rate;
+        let enc_rate = at(&self.nodes, enc)?.rate_out;
+        let mut left = u64::try_from(
+            u128::from(ceil_delay(lead_in))
+                .saturating_mul(u128::from(enc_rate.num()) * u128::from(in_rate.den()))
+                .div_ceil(u128::from(enc_rate.den()) * u128::from(in_rate.num()).max(1)),
+        )
+        .unwrap_or(u64::MAX);
         while left > 0 {
             let chunk = usize::try_from(left).unwrap_or(usize::MAX);
-            let produced = self.step_idle(enc, chunk)?;
+            let produced = self.step_idle_some(enc, chunk)?;
             self.run()?;
             if produced == 0 {
                 return Err(Error::OutputFull(at(&self.outputs, oi)?.name.clone()));

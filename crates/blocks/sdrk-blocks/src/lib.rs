@@ -126,6 +126,13 @@ pub use blocks::qam_demod::{
     QAM_WATCH_WEIGHT_ENERGY_16, QAM_WATCH_WEIGHT_ENERGY_64, QamDemodBlock, QamDemodConfig,
     QamDemodLock,
 };
+pub use blocks::qam_frame_decode::{
+    QAM_FRAME_DECODE_PARAMS, QAM_FRAME_TIMEOUT, QAM_FRAME_WATCH_LAG, QamFrameDecodeBlock,
+    QamFrameDecodeConfig,
+};
+pub use blocks::qam_frame_encode::{
+    QAM_FRAME_ENCODE_PARAMS, QamFrameEncodeBlock, QamFrameEncodeConfig,
+};
 pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::rds_decode::{RdsDecodeBlock, RdsDecodeConfig};
@@ -172,7 +179,9 @@ pub use design::{BiquadResponse, DesignSpec, DesignWindow};
 pub use drift::{DriftConfig, DriftController};
 pub use error::{Error, Result};
 pub use fork::{FORK_DESCRIPTION, Fork};
-pub use lock_watch::{LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
+pub use lock_watch::{
+    FrameWatch, LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch,
+};
 pub use param_map::ParamMap;
 pub use ports::{
     ChainEnd, ChainItem, Clocked, Frame, FrameOut, Lanes, LanesMut, LanesRef, Packets, Ports,

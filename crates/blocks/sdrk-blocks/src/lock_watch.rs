@@ -108,6 +108,11 @@ pub enum LockTransition {
         /// The estimate of the verify window in cycles per symbol.
         frequency: f64,
     },
+    /// Any state -> `Search`: a watch outside the controller found the receiver without output
+    /// for too long (the frame watch of `qam_frame_decode`, M44.1 §7: no frame with `CRC_OK`
+    /// within `frame_timeout` symbols while frames are expected, [`FrameWatch`]); the receiver
+    /// starts again as on `Restart`.
+    Silence,
 }
 
 impl LockTransition {
@@ -125,7 +130,7 @@ impl LockTransition {
     pub fn action(&self) -> LockAction {
         match self {
             Self::AcquireAfterMiss { .. } | Self::Return { .. } => LockAction::RestartEqualizer,
-            Self::Restart | Self::Shrink => LockAction::RestartAll,
+            Self::Restart | Self::Shrink | Self::Silence => LockAction::RestartAll,
             Self::SettleUnlocked | Self::Doubt => LockAction::Verify,
             Self::Miss | Self::Acquire { .. } | Self::Settle | Self::Hold | Self::Confirm => {
                 LockAction::Keep
@@ -338,8 +343,8 @@ impl<P: LockPolicy> LockWatch<P> {
         (!self.acquired.is_nan()).then_some(self.acquired)
     }
 
-    /// Restarts since the start or `reset`: `Restart` and `Shrink` (the whole receiver) and
-    /// `Return` (the equalizer after a gap).
+    /// Restarts since the start or `reset`: `Restart`, `Shrink` and `Silence` (the whole
+    /// receiver) and `Return` (the equalizer after a gap).
     pub fn restarts(&self) -> u32 {
         self.restarts
     }
@@ -358,6 +363,30 @@ impl<P: LockPolicy> LockWatch<P> {
         let on = self.recovery();
         *self = Self::new();
         self.set_recovery(on);
+    }
+
+    /// A watch outside the controller asks for a restart of the whole receiver (the frame watch
+    /// of `qam_frame_decode`): from any state to `Search`, counted in
+    /// [`restarts`](LockWatch::restarts).
+    ///
+    /// ```
+    /// use sdrk_blocks::{LockAction, LockPolicy, LockState, LockTransition, LockWatch};
+    /// struct Policy;
+    /// impl LockPolicy for Policy {
+    ///     const CHECK: u16 = 4096;
+    ///     const TOLERANCE: f64 = 2e-4;
+    ///     const WEIGHT_CHECKS: u8 = 2;
+    ///     const GAP_WINDOWS: u8 = 6;
+    /// }
+    /// let mut w = LockWatch::<Policy>::new();
+    /// w.window(Some(0.001), 0.0);
+    /// let t = w.silence();
+    /// assert_eq!((t, t.action()), (LockTransition::Silence, LockAction::RestartAll));
+    /// assert_eq!((w.state(), w.restarts()), (LockState::Search, 1));
+    /// ```
+    pub fn silence(&mut self) -> LockTransition {
+        self.enter_search();
+        LockTransition::Silence
     }
 
     /// To `Search` after a restart of the whole receiver.
@@ -468,6 +497,104 @@ impl<P: LockPolicy> LockWatch<P> {
             self.set_state(LockState::Verify);
             LockTransition::Doubt
         })
+    }
+}
+
+/// The watch at frame level of a receiver with a frame layer (M44.1 §7, the composite
+/// `qam_frame_decode`): it decides, from the frames with `CRC_OK` that the decoder finds, at
+/// which symbol the receiver starts again (`LockWatch::silence`, the action `RestartAll`).
+///
+/// Symbols count from the start or `reset` of the receiver. After a first frame with `CRC_OK`
+/// since the start, a `reset` or the last restart by the watch, frames are expected
+/// ([`expected`](FrameWatch::expected)), and the timeout ends `timeout` symbols after the last
+/// symbol of the last such frame ([`deadline`](FrameWatch::deadline)). A frame that ends after
+/// the timeout ran out, or at or before the symbol of the last restart, does not count: the
+/// restart has happened or will happen, whenever the decoder sees the frame. A `timeout` of 0
+/// turns the watch off.
+///
+/// ```
+/// use sdrk_blocks::FrameWatch;
+/// let mut w = FrameWatch::new(16_384);
+/// assert_eq!(w.deadline(), None); // nothing expected yet
+/// w.frame_ok(1_000);
+/// assert_eq!(w.deadline(), Some(17_384));
+/// w.restarted(17_640);
+/// assert_eq!((w.deadline(), w.restarts()), (None, 1));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameWatch {
+    timeout: u32,
+    restarts: u32,
+    /// The last symbol of the last frame with `CRC_OK` that counts; `None`: no frame expected.
+    last_ok: Option<u64>,
+    /// The symbol of the last restart by the watch.
+    restarted: Option<u64>,
+}
+
+impl FrameWatch {
+    /// A watch with the timeout `timeout` in symbols (0 = off), nothing expected yet.
+    pub const fn new(timeout: u32) -> Self {
+        Self {
+            timeout,
+            restarts: 0,
+            last_ok: None,
+            restarted: None,
+        }
+    }
+
+    /// The timeout in symbols (0 = off).
+    pub const fn timeout(&self) -> u32 {
+        self.timeout
+    }
+
+    /// Restarts by the watch since the start or `reset`.
+    pub const fn restarts(&self) -> u32 {
+        self.restarts
+    }
+
+    /// Whether frames are expected (a frame with `CRC_OK` since the start, a `reset` or the last
+    /// restart).
+    pub const fn expected(&self) -> bool {
+        self.last_ok.is_some()
+    }
+
+    /// The decoder found a frame with `CRC_OK` whose last bit lies in the symbol `end`.
+    pub fn frame_ok(&mut self, end: u64) {
+        if self.restarted.is_some_and(|r| end <= r) {
+            return;
+        }
+        self.last_ok = match self.last_ok {
+            None => Some(end),
+            Some(last)
+                if self.timeout != 0 && end > last.saturating_add(u64::from(self.timeout)) =>
+            {
+                Some(last)
+            }
+            Some(last) => Some(last.max(end)),
+        };
+    }
+
+    /// The symbol at which the timeout ends when no frame with `CRC_OK` comes (`None` when
+    /// nothing is expected or the watch is off).
+    pub fn deadline(&self) -> Option<u64> {
+        if self.timeout == 0 {
+            return None;
+        }
+        self.last_ok
+            .map(|l| l.saturating_add(u64::from(self.timeout)))
+    }
+
+    /// The receiver started again at the symbol `at`: nothing is expected until the next frame
+    /// with `CRC_OK` that ends after `at`.
+    pub fn restarted(&mut self, at: u64) {
+        self.last_ok = None;
+        self.restarted = Some(at);
+        self.restarts = self.restarts.saturating_add(1);
+    }
+
+    /// As after [`new`](FrameWatch::new), the timeout kept.
+    pub fn reset(&mut self) {
+        *self = Self::new(self.timeout);
     }
 }
 

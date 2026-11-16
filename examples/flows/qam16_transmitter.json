@@ -22,23 +22,18 @@
         "transition_hz": 60000
       }
     },
-    "enc": {
-      "kind": "frame_encode",
-      "params": {
-        "idle": "pn9",
-        "preamble_bytes": 4
-      }
-    },
     "level": {
       "kind": "scale",
       "params": {
         "gain_db": -6
       }
     },
-    "mod": {
-      "kind": "qam_mod",
+    "tx": {
+      "kind": "qam_frame_encode",
       "params": {
+        "idle": "pn9",
         "order": 16,
+        "preamble_bytes": 4,
         "rolloff": 0.35,
         "samples_per_symbol": 8,
         "span": 10
@@ -48,14 +43,10 @@
   "edges": [
     {
       "from": "msg",
-      "to": "enc"
+      "to": "tx"
     },
     {
-      "from": "enc",
-      "to": "mod"
-    },
-    {
-      "from": "mod",
+      "from": "tx",
       "to": "level"
     },
     {

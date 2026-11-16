@@ -26,16 +26,6 @@ nodes:
       cutoff_hz: 50000
       interpolation: 5
       transition_hz: 60000
-  # Encoder: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, length, payload and CRC-16, one
-  # +1/-1 sample per bit. Between packets the encoder sends the bits of the PN9 sequence
-  # (idle pn9): random-looking 16-QAM symbols on which the receiver's timing loop, frequency
-  # acquisition and blind equalizer keep training while there is nothing to send (idle
-  # preamble would be one constant symbol, bits 0101 of 0x55).
-  enc:
-    kind: frame_encode
-    params:
-      idle: pn9
-      preamble_bytes: 4
   # Level: -6 dB. The points of qam_mod have unit average power (the corners at 0.95 in I and
   # Q), and the overlapping pulses of a roll-off of 0.35 peak at about 1.5 in I or Q; at
   # -6 dB the peaks stay at about 0.75, inside the cs16 range (full scale 1), with no clipping.
@@ -43,25 +33,31 @@ nodes:
     kind: scale
     params:
       gain_db: -6
-  # 16-QAM modulator: Gray mapping (the first two bits of a symbol select the in-phase level,
+  # Framing and modulation in one block (qam_frame_encode = frame_encode -> qam_mod, M44.1).
+  # Framing: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, length, payload and CRC-16.
+  # Between packets the bits of the PN9 sequence (idle pn9): random-looking 16-QAM symbols on
+  # which the receiver's timing loop, frequency acquisition and blind equalizer keep training
+  # while there is nothing to send (idle preamble would be one constant symbol, bits 0101 of
+  # 0x55). Modulation: Gray mapping (the first two bits of a symbol select the in-phase level,
   # the last two the quadrature level), root-raised-cosine pulse with roll-off 0.35 over 10
   # symbols, 8 samples per symbol (200 kHz). order 64 gives 64-QAM (six bits per symbol: set
   # rate_hz to 150000 for 25 kBd).
-  mod:
-    kind: qam_mod
+  tx:
+    kind: qam_frame_encode
     params:
+      idle: pn9
       order: 16
+      preamble_bytes: 4
       rolloff: 0.35
       samples_per_symbol: 8
       span: 10
 edges:
-  - { from: msg, to: enc }
-  - { from: enc, to: mod }
-  - { from: mod, to: level }
+  - { from: msg, to: tx }
+  - { from: tx, to: level }
   - { from: level, to: duc }
   - { from: duc, to: rf }
 # Raw signed 16-bit IQ; underrun zeros is the default of raw outputs (a packet input never
-# underruns: the encoder sends its idle signal instead).
+# underruns: qam_frame_encode sends its idle signal instead).
 outputs:
   rf:
     type: stream

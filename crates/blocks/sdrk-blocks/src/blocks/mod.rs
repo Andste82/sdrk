@@ -53,6 +53,8 @@ pub mod psk_mod;
 pub mod pulse_key;
 pub mod qam_acquire;
 pub mod qam_demod;
+pub mod qam_frame_decode;
+pub mod qam_frame_encode;
 pub mod qam_mod;
 pub mod quad_demod;
 pub mod rds_decode;

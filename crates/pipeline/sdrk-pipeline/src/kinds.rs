@@ -32,7 +32,8 @@ use sdrk_blocks::{
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
     PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, QamAcquireBlock, QamAcquireConfig,
-    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
+    QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
+    QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
     RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
     RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
     ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
@@ -3822,6 +3823,125 @@ impl Kind for QamDemodKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(QamDemodBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------- qam_frame_encode
+
+pub(crate) struct QamFrameEncodeKind;
+
+impl Kind for QamFrameEncodeKind {
+    type Cfg = QamFrameEncodeConfig;
+
+    const KIND: &'static str = "qam_frame_encode";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate"]
+    }
+    fn default_cfg() -> QamFrameEncodeConfig {
+        QamFrameEncodeConfig::default()
+    }
+    fn set(cfg: &mut QamFrameEncodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &QamFrameEncodeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::Packets {
+            return Err(mismatch("qam_frame_encode needs packets"));
+        }
+        // `rate` is the `rate_hz` of the packet input: the bit rate.
+        let block = QamFrameEncodeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        Ok(Figures {
+            rate_out: QamFrameEncodeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: QamFrameEncodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The costs of the pair per bit: `frame_encode` 1, `qam_mod` 4 span.
+            cost: 1.0 + 4.0 * cfg.qam.span as f64,
+            taps: block.modulator().num_taps(),
+            delay: block.timing().delay,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &QamFrameEncodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketInNode::new(QamFrameEncodeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------- qam_frame_decode
+
+pub(crate) struct QamFrameDecodeKind;
+
+impl Kind for QamFrameDecodeKind {
+    type Cfg = QamFrameDecodeConfig;
+
+    const KIND: &'static str = "qam_frame_decode";
+    fn kernels() -> &'static [&'static str] {
+        QamDemodKind::kernels()
+    }
+    /// As `qam_demod`: `equalizer_taps` 0 leaves out `equalize`.
+    fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
+        QamDemodKind::kernels_for(params)
+    }
+    fn default_cfg() -> QamFrameDecodeConfig {
+        QamFrameDecodeConfig::default()
+    }
+    fn set(cfg: &mut QamFrameDecodeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &QamFrameDecodeConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("qam_frame_decode needs c32 samples"));
+        }
+        // The figures of the pair: the soft bits of `qam_demod`, at most one packet per
+        // `MIN_FRAME_BITS` (56) of them as for `frame_decode`.
+        let memory_bytes = QamFrameDecodeBlock::<VecStorage>::storage_bytes(cfg, rate)?;
+        let demod = QamDemodKind::plan(&cfg.demod, input, rate, p)?;
+        let sps = rate.as_f64() / cfg.demod.symbol_rate_hz;
+        Ok(Figures {
+            rate_out: demod.rate_out.scale(sdrk::Ratio::new(1, 56)?)?,
+            memory_bytes,
+            // The costs of the pair: `qam_demod`, and `frame_decode` with the rotations `four`, 4
+            // per soft bit (D1213), `bits / sps` soft bits per input sample.
+            cost: demod.cost + 4.0 * cfg.demod.bits_per_symbol() as f64 / sps,
+            taps: demod.taps,
+            delay: demod.delay,
+            min_input: demod.min_input,
+            output: stream(PortType::Packets),
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        QamDemodKind::adjust(e, d);
+    }
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporaries of the block and the node separately; the real frame is small"
+    )]
+    fn build(
+        cfg: &QamFrameDecodeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(PacketOutNode::new(QamFrameDecodeBlock::new(
             cfg, rate, st,
         )?)))
     }

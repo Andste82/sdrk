@@ -2,7 +2,7 @@
 # qam16_transmitter: 1 MS/s IQ in, the packets of the test framing out.
 sdrk: 1
 name: qam16-receiver
-description: "Receive 16-QAM at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, demodulator with symbol timing, equalizer and carrier recovery, and the decoded packets of the test framing."
+description: "Receive 16-QAM at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, and qam_frame_decode (symbol timing, equalizer, carrier recovery and the decoded packets of the test framing, with a watch at frame level)."
 settings:
   precision: f32
   max_chunk: 4096
@@ -23,32 +23,32 @@ nodes:
       attack_s: 0.02
       reference_db: 0
       release_s: 0.02
-  # Decoder: max_sync_errors 2 accepts a sync word with up to 2 wrong bits on a noisy link.
-  # rotations four with bits_per_symbol 4 tests the sync word in the four rotations of the
-  # 16-QAM symbols: the decision-directed carrier loop may lock 0, 90, 180 or 270 degrees off,
-  # and the decoder undoes the rotation it found. The quarter turns are reported in bits 16
-  # and 17 of the packet flags.
-  dec:
-    kind: frame_decode
-    params:
-      bits_per_symbol: 4
-      max_sync_errors: 2
-      rotations: four
-  # Demodulator: root-raised-cosine matched filter (roll-off 0.35, span 10, as the
+  # Demodulator and decoder in one block (qam_frame_decode = qam_demod -> frame_decode,
+  # M44.1). Demodulator: root-raised-cosine matched filter (roll-off 0.35, span 10, as the
   # transmitter), Gardner symbol timing, the frequency acquisition (a fourth-power estimate of
   # the carrier offset, up to +-0.125 cycles per symbol = +-3.1 kHz at 25 kBd), the blind
   # equalizer (1000 CMA symbols, then decision-directed with mu_dd 0.005 and a narrow phase
   # tracker) and the decision-directed carrier loop of 16-QAM with the default carrier_bw
   # 0.0025 (D1618, D1622): the acquisition hands the offset to the loops, so they need no wide
-  # bandwidth for a carrier 1 kHz off (the M44 flow test delivers at least 995 of 1000 packets
-  # at every rotation on six seeds, against 986 to 993 with the former carrier_bw 0.1 and no
-  # acquisition). The values that differ from the defaults:
+  # bandwidth for a carrier 1 kHz off. The values that differ from the defaults:
   # - equalizer_taps 15 (default 11): the multipath of the test channel reaches 2.7 symbols.
   # - sync_bw 0.002 (default 0.005): less timing jitter on 16-QAM.
-  demod:
-    kind: qam_demod
+  # Decoder: rotations four with bits_per_symbol 4 (set by the block from the order) tests the
+  # sync word in the four rotations of the 16-QAM symbols: the decision-directed carrier loop
+  # may lock 0, 90, 180 or 270 degrees off, and the decoder undoes the rotation it found; the
+  # quarter turns are reported in bits 16 and 17 of the packet flags. max_sync_errors 2 accepts
+  # a sync word with up to 2 wrong bits on a noisy link.
+  # Frame watch: after a first packet with CRC_OK, no packet with CRC_OK for frame_timeout
+  # symbols (16384, the default, about 0.66 s at 25 kBd) starts the demodulator again; it takes
+  # a receiver out of a state in which it delivers nothing although the signal is there. A
+  # sender that pauses longer between packets (with the idle signal on the air) only costs a
+  # new acquisition; frame_timeout 0 turns the watch off.
+  rx:
+    kind: qam_frame_decode
     params:
       equalizer_taps: 15
+      frame_timeout: 16384
+      max_sync_errors: 2
       order: 16
       symbol_rate_hz: 25000
       sync_bw: 0.002
@@ -63,13 +63,12 @@ nodes:
 edges:
   - { from: rf, to: tune }
   - { from: tune, to: agc }
-  - { from: agc, to: demod }
-  - { from: demod, to: dec }
-  - { from: dec, to: packets }
+  - { from: agc, to: rx }
+  - { from: rx, to: packets }
 outputs:
-  # The decoded packets, with CRC_OK, the rotation and the soft-bit index of their sync word
-  # (100000 bit/s).
+  # The decoded packets, with CRC_OK, the rotation and the index of the 200 kHz input sample of
+  # the demodulator at the first symbol of their sync word.
   packets:
     type: packets
     queue: 1024
-    description: "The decoded packets with CRC_OK and the sample index of their sync word"
+    description: "The decoded packets with CRC_OK and the input sample index of their sync word"

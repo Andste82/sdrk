@@ -1,7 +1,7 @@
 {
   "sdrk": 1,
   "name": "qam16-receiver",
-  "description": "Receive 16-QAM at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, demodulator with symbol timing, equalizer and carrier recovery, and the decoded packets of the test framing.",
+  "description": "Receive 16-QAM at 25 kBd from a 1 MHz baseband: down converter, automatic gain control, and qam_frame_decode (symbol timing, equalizer, carrier recovery and the decoded packets of the test framing, with a watch at frame level).",
   "settings": {
     "precision": "f32",
     "max_chunk": 4096
@@ -22,18 +22,12 @@
         "release_s": 0.02
       }
     },
-    "dec": {
-      "kind": "frame_decode",
-      "params": {
-        "bits_per_symbol": 4,
-        "max_sync_errors": 2,
-        "rotations": "four"
-      }
-    },
-    "demod": {
-      "kind": "qam_demod",
+    "rx": {
+      "kind": "qam_frame_decode",
       "params": {
         "equalizer_taps": 15,
+        "frame_timeout": 16384,
+        "max_sync_errors": 2,
         "order": 16,
         "symbol_rate_hz": 25000,
         "sync_bw": 0.002
@@ -59,14 +53,10 @@
     },
     {
       "from": "agc",
-      "to": "demod"
+      "to": "rx"
     },
     {
-      "from": "demod",
-      "to": "dec"
-    },
-    {
-      "from": "dec",
+      "from": "rx",
       "to": "packets"
     }
   ],
@@ -74,7 +64,7 @@
     "packets": {
       "type": "packets",
       "queue": 1024,
-      "description": "The decoded packets with CRC_OK and the sample index of their sync word"
+      "description": "The decoded packets with CRC_OK and the input sample index of their sync word"
     }
   }
 }

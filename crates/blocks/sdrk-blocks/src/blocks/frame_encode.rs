@@ -60,6 +60,49 @@ const IDLE_OPTIONS: &[&str] = &["zero", "preamble", "pn9"];
 /// Bits of one period of the `pn9` idle signal (511 bytes).
 const PN9_IDLE_BITS: usize = 8 * PN9_PERIOD;
 
+/// The `preamble_bytes` parameter of `frame_encode` and `qam_frame_encode`.
+pub(crate) const PREAMBLE_BYTES_PARAM: ParamDesc = ParamDesc {
+    name: "preamble_bytes",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: 0,
+        max: 32,
+        default: Some(4),
+    },
+    typical: "4; more for receivers that need time to settle",
+    mutability: Mutability::Build,
+    description: "Bytes 0x55 sent before the sync word of every frame.",
+};
+
+/// The `idle` parameter of `frame_encode` and `qam_frame_encode`.
+pub(crate) const IDLE_PARAM: ParamDesc = ParamDesc {
+    name: "idle",
+    unit: Unit::None,
+    kind: ParamKind::Choice {
+        options: IDLE_OPTIONS,
+        default: 0,
+    },
+    typical: "zero; preamble to keep a receiver's clock recovery busy; pn9 for QAM \
+            and PSK receivers",
+    mutability: Mutability::Build,
+    description: "What is sent between frames: zero sends 0.0, preamble the bits of \
+            0x55 as +1/-1, pn9 the bits of the PN9 sequence as +1/-1.",
+};
+
+/// The `whitening` parameter of `frame_encode` and `qam_frame_encode`.
+pub(crate) const ENCODE_WHITENING_PARAM: ParamDesc = ParamDesc {
+    name: "whitening",
+    unit: Unit::None,
+    kind: ParamKind::Choice {
+        options: WHITENING_OPTIONS,
+        default: 0,
+    },
+    typical: "none; pn9 for links whose data has long runs of equal bits",
+    mutability: Mutability::Build,
+    description: "Whitening of length, payload and CRC: none, or pn9 (XOR with the PN9 \
+            sequence).",
+};
+
 /// Description of the `frame_encode` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "frame_encode",
@@ -89,45 +132,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         types: &[PortType::F32],
         description: "One sample per bit: +1.0 for 1, -1.0 for 0; idle samples between frames.",
     }],
-    params: &[
-        ParamDesc {
-            name: "preamble_bytes",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 0,
-                max: 32,
-                default: Some(4),
-            },
-            typical: "4; more for receivers that need time to settle",
-            mutability: Mutability::Build,
-            description: "Bytes 0x55 sent before the sync word of every frame.",
-        },
-        ParamDesc {
-            name: "idle",
-            unit: Unit::None,
-            kind: ParamKind::Choice {
-                options: IDLE_OPTIONS,
-                default: 0,
-            },
-            typical: "zero; preamble to keep a receiver's clock recovery busy; pn9 for QAM \
-                and PSK receivers",
-            mutability: Mutability::Build,
-            description: "What is sent between frames: zero sends 0.0, preamble the bits of \
-                0x55 as +1/-1, pn9 the bits of the PN9 sequence as +1/-1.",
-        },
-        ParamDesc {
-            name: "whitening",
-            unit: Unit::None,
-            kind: ParamKind::Choice {
-                options: WHITENING_OPTIONS,
-                default: 0,
-            },
-            typical: "none; pn9 for links whose data has long runs of equal bits",
-            mutability: Mutability::Build,
-            description: "Whitening of length, payload and CRC: none, or pn9 (XOR with the PN9 \
-                sequence).",
-        },
-    ],
+    params: &[PREAMBLE_BYTES_PARAM, IDLE_PARAM, ENCODE_WHITENING_PARAM],
     required: &[],
 };
 
@@ -328,6 +333,11 @@ impl<S: Storage> FrameEncodeBlock<S> {
     /// ```
     pub fn frame_samples(&self, payload_len: usize) -> usize {
         frame_bits(payload_len, self.config.preamble_bytes)
+    }
+
+    /// The configuration of the block.
+    pub fn config(&self) -> FrameEncodeConfig {
+        self.config
     }
 
     /// Whether a frame is being written (its packet is the first of the next call).

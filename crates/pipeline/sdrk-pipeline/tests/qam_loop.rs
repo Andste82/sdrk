@@ -30,7 +30,8 @@
 //! The baseline of M44.1 (spec §5, test 5; `sdrk_testkit::baseline`, table `qam_loop` of
 //! `tests/baseline/m44_1`): the `cs16` bytes of the transmitter and the soft bits of the
 //! `qam_demod` node of the receiver flow (the flow up to `demod`, its output read as a stream) at
-//! the four rotations keep their bits, per SIMD level.
+//! the four rotations keep their bits, per SIMD level; the shipped transmitter flow on
+//! `qam_frame_encode` and the flow with the pair give the same bytes.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -130,6 +131,11 @@ fn transmit(packets: &[Packet]) -> Vec<Complex64> {
 
 /// [`transmit`] with the transmitter flow `spec`.
 fn transmit_with(spec: &str, packets: &[Packet]) -> Vec<Complex64> {
+    transmit_pull(spec, packets, PULL_BYTES)
+}
+
+/// [`transmit_with`] with `pull` bytes per pull.
+fn transmit_pull(spec: &str, packets: &[Packet], pull: usize) -> Vec<Complex64> {
     let mut tx = build(spec);
     let mut source = Sender {
         packets: packets.to_vec(),
@@ -137,12 +143,12 @@ fn transmit_with(spec: &str, packets: &[Packet]) -> Vec<Complex64> {
         open: false,
     };
     let mut out = Vec::new();
-    let mut bytes = vec![0u8; PULL_BYTES];
+    let mut bytes = vec![0u8; pull];
     let mut tail_from = None;
     loop {
         source.open = out.len() >= LEAD_SYMBOLS * SPS;
         let (n, _) = tx.pull("rf", &mut bytes, &mut source).unwrap();
-        assert_eq!(n, PULL_BYTES, "a packet input never underruns");
+        assert_eq!(n, pull, "a packet input never underruns");
         out.extend(bytes.chunks_exact(4).map(|iq| {
             Complex64::new(
                 f64::from(i16::from_le_bytes([iq[0], iq[1]])) / 32768.0,
@@ -437,14 +443,17 @@ fn the_qam16_flows_keep_the_baseline_of_m44_1() {
     )
     .unwrap();
     let packets = random_packets();
-    // the `cs16` bytes of the transmitter of the pair (the samples of `transmit` are exactly the
-    // `cs16` values over 32768): in pull mode the idle symbols between the frames follow the room
-    // the pipeline gives the encoder, which for `qam_frame_encode` counts samples, not bits, so
-    // the bytes of the composite flow are checked by the receiver below and by the equality of
-    // the blocks (`qam_frame_blocks`, D1578)
+    // the `cs16` bytes of the shipped transmitter flow on `qam_frame_encode` and of the flow with
+    // the pair `frame_encode` -> `qam_mod` it replaces (built from the parameters of the `tx`
+    // node) are the same, and equal the baseline of the pair before M44.1 (§7, D1582)
     let pair = transmit_with(&pair_transmitter(), &packets);
+    let composite = transmit(&packets);
+    assert!(
+        composite == pair,
+        "the flow on qam_frame_encode differs from the flow with the pair"
+    );
     let mut digest = Digest::new();
-    for v in &pair {
+    for v in &composite {
         for x in [v.re, v.im] {
             digest.bytes(&((x * 32768.0) as i16).to_le_bytes());
         }
@@ -462,5 +471,18 @@ fn the_qam16_flows_keep_the_baseline_of_m44_1() {
     });
     for (q, d) in digests.iter().enumerate() {
         table.check(&format!("soft_turn{q}"), d).unwrap();
+    }
+}
+
+/// M44.1 §7: the shipped transmitter flow on `qam_frame_encode` gives the bytes of the flow with
+/// the pair `frame_encode` -> `qam_mod` at any room of the pull (one sample, an odd number of
+/// samples, more than a frame; D1582).
+#[test]
+fn the_transmitter_flow_equals_the_pair_at_any_pull_size() {
+    let packets: Vec<Packet> = random_packets().into_iter().take(100).collect();
+    for pull in [4, 1000, 65_536] {
+        let composite = transmit_pull(&flow("qam16_transmitter"), &packets, pull);
+        let pair = transmit_pull(&pair_transmitter(), &packets, pull);
+        assert!(composite == pair, "pull {pull}: the flows differ");
     }
 }

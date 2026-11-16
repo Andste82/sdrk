@@ -117,8 +117,8 @@ pub enum LockTransition {
 
 impl LockTransition {
     /// The action of the transition (M44.1 §2.3): `AcquireAfterMiss` and `Return` start the
-    /// equalizer again, `Restart` and `Shrink` the whole receiver, `SettleUnlocked` and `Doubt`
-    /// take a verify window, every other transition keeps the receiver running.
+    /// equalizer again, `Restart`, `Shrink` and `Silence` the whole receiver, `SettleUnlocked`
+    /// and `Doubt` take a verify window, every other transition keeps the receiver running.
     ///
     /// ```
     /// use sdrk_blocks::{LockAction, LockTransition};

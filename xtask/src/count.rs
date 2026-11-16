@@ -882,8 +882,11 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// around the kernel `qam_soft_bits`, whose soft bits no library computes the same way (D1201,
 /// D1412): information too, as are the QAM blocks `qam_mod_block` (one output sample) and
 /// `qam_demod_block` (one input sample), chains of kernels with entries of their own (D1216), the
-/// PSK modulator block `psk_mod_block` of M44.1 (one output sample), and `frame_decode_four_block`
-/// (one soft bit, `frame_decode` with `rotations` `four`).
+/// PSK modulator block `psk_mod_block` of M44.1 (one output sample), the building blocks and
+/// composites of M44.1 `symbol_map_block` (one output symbol), `iq_offset_block` (one sample),
+/// `qam_acquire_block` (one input symbol), `qam_frame_encode_block` (one output sample) and
+/// `qam_frame_decode_block` (one input sample), and `frame_decode_four_block` (one soft bit,
+/// `frame_decode` with `rotations` `four`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -907,7 +910,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 232] = [
+pub static KERNELS: [KernelSpec; 237] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1166,6 +1169,11 @@ pub static KERNELS: [KernelSpec; 232] = [
     proto("qam_demod_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
     proto("psk_mod_block", Family::Own),
+    proto("symbol_map_block", Family::Own),
+    proto("iq_offset_block", Family::Own),
+    proto("qam_acquire_block", Family::Own),
+    proto("qam_frame_encode_block", Family::Own),
+    proto("qam_frame_decode_block", Family::Own),
     proto("frame_decode_four_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
@@ -4807,6 +4815,11 @@ mod tests {
             "qam_demod_search_block",
             "frame_decode_four_block",
             "psk_mod_block",
+            "symbol_map_block",
+            "iq_offset_block",
+            "qam_acquire_block",
+            "qam_frame_encode_block",
+            "qam_frame_decode_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {

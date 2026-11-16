@@ -357,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 232] = [
+pub const KERNELS: [&str; 237] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -590,6 +590,11 @@ pub const KERNELS: [&str; 232] = [
     "equalize_qam64",
     "equalize_qam64_fallback",
     "psk_mod_block",
+    "symbol_map_block",
+    "iq_offset_block",
+    "qam_acquire_block",
+    "qam_frame_encode_block",
+    "qam_frame_decode_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -837,6 +842,11 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         )),
         "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(rng, layout)),
         "psk_mod_block" => Box::new(qam_family::PskModBlockK::new(rng, layout)),
+        "symbol_map_block" => Box::new(qam_family::SymbolMapBlockK::new(rng, layout)),
+        "iq_offset_block" => Box::new(qam_family::IqOffsetBlockK::new(rng, layout)),
+        "qam_acquire_block" => Box::new(qam_family::QamAcquireBlockK::new(rng, layout)),
+        "qam_frame_encode_block" => Box::new(qam_family::QamFrameEncodeBlockK::new(rng, layout)),
+        "qam_frame_decode_block" => Box::new(qam_family::QamFrameDecodeBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),

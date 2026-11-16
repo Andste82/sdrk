@@ -2,7 +2,8 @@
 //! `symbol_demap_qam16_block`, `symbol_demap_qam64_block`, `costas_qam16`, `costas_qam16_fallback`,
 //! `costas_qam64`, `costas_qam64_fallback`, `equalize_qam16`, `equalize_qam16_fallback`,
 //! `equalize_qam64`, `equalize_qam64_fallback`, `qam_mod_block`, `qam_demod_block` and
-//! `frame_decode_four_block`, and the PSK modulator entry of M44.1 `psk_mod_block`.
+//! `frame_decode_four_block`, and the entries of M44.1 `psk_mod_block`, `symbol_map_block`,
+//! `iq_offset_block`, `qam_acquire_block`, `qam_frame_encode_block` and `qam_frame_decode_block`.
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -22,6 +23,11 @@
 //! | `psk_mod_block` | `sdrk_blocks::PskModBlock`, QPSK | none (`info`) | one output sample |
 //! | `qam_demod_block` | `sdrk_blocks::QamDemodBlock`, 16-QAM | none (`info`) | one input sample |
 //! | `frame_decode_four_block` | `sdrk_blocks::FrameDecodeBlock` with `rotations` `four` | none (`info`) | one input sample (one soft bit) |
+//! | `symbol_map_block` | `sdrk_blocks::SymbolMapBlock` with `qam16` | none (`info`) | one output symbol |
+//! | `iq_offset_block` | `sdrk_blocks::IqOffsetBlock`, `imag`, 4 samples | none (`info`) | one sample |
+//! | `qam_acquire_block` | `sdrk_blocks::QamAcquireBlock`, `correct` false, searching | none (`info`) | one input symbol |
+//! | `qam_frame_encode_block` | `sdrk_blocks::QamFrameEncodeBlock`, 16-QAM | none (`info`) | one output sample |
+//! | `qam_frame_decode_block` | `sdrk_blocks::QamFrameDecodeBlock`, 16-QAM | none (`info`) | one input sample |
 //!
 //! The kernel `qam_soft_bits` (I44-1, D1412) puts both components of every symbol on the
 //! integer grid (`v = x √E`) and forms the piecewise-linear max-log soft bits of M44 §2 (`v`,
@@ -49,6 +55,14 @@
 //! `psk_mod_block` (M44.1 §8, the baseline before `psk_mod` becomes a composite) is the block
 //! `psk_mod` with coherent QPSK at 8 samples per symbol, roll-off 0.35 and span 10 (the flow
 //! `qpsk_transmitter`), writing 4096 output samples (512 symbols) per call, as `qam_mod_block`.
+//! The building blocks and composites of M44.1 (§8) have entries of their own, information like
+//! the blocks above: `symbol_map_block` (`qam16`, 4096 symbols per call, the first stage of
+//! `qam_mod`), `iq_offset_block` (`imag`, 4 samples, the last stage of `psk_mod` with `offset`),
+//! `qam_acquire_block` (`correct` false while it searches on noise, the share of the acquisition
+//! in `qam_demod_search_block`), `qam_frame_encode_block` (`frame_encode` -> `qam_mod`, 16-QAM at
+//! 8 samples per symbol, 32-byte frames back to back) and `qam_frame_decode_block` (`qam_demod`
+//! with the workload of `qam_demod_block` carrying 32-byte frames -> `frame_decode` with
+//! `rotations` `four` and the frame watch).
 //!
 //! Workload: 4096 symbols per call, random points of the constellation with uniform noise of
 //! ±0.05 per component, scale 1.
@@ -91,9 +105,12 @@ use sdrk::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk::kernels::equalize::{EqConstellation, EqParams, Equalize, EqualizeState};
 use sdrk::{C32, Fallback, Rate, Sdrk};
 use sdrk_blocks::{
-    ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet, PacketFlags,
-    PskModBlock, PskModConfig, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig,
-    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation,
+    ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeConfig, FrameRotations,
+    IqOffsetBlock, IqOffsetConfig, IqPart, Packet, PacketFlags, PskModBlock, PskModConfig,
+    QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock,
+    QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig,
+    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    SymbolMapConstellation,
 };
 use sdrk_core::Reference;
 use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
@@ -1281,6 +1298,528 @@ impl Kernel for FrameDecodeFourBlockK {
         match which {
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
+        }
+    }
+}
+
+/// The block `symbol_map` with `qam16` (the first stage of `qam_mod`, M44.1 §2.1) mapping the
+/// bits of `n` symbols per call to `n` points.
+pub(crate) struct SymbolMapBlockK {
+    block: SymbolMapBlock<ArenaStorage<'static>>,
+    bits: Vec<f32>,
+    out: Vec<C32>,
+}
+
+impl SymbolMapBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let cfg = SymbolMapConfig {
+            constellation: SymbolMapConstellation::Qam16,
+            ..SymbolMapConfig::default()
+        };
+        let block = SymbolMapBlock::new(&cfg, block_rate(100_000), &mut ArenaStorage::new(&mut []))
+            .expect("symbol_map block");
+        SymbolMapBlockK {
+            block,
+            bits: qam16_bits(rng, layout.n),
+            out: vec![C32::default(); layout.n],
+        }
+    }
+}
+
+#[inline(never)]
+fn symbol_map_call(
+    block: &mut SymbolMapBlock<ArenaStorage<'static>>,
+    bits: &[f32],
+    out: &mut [C32],
+) {
+    let _ = block.process(black_box(bits), out);
+}
+
+/// The 16-QAM level of one axis in `f64` from two bits (Gray, M44 §1): `(2 i - 3) / sqrt(10)`.
+fn qam16_level_f64(b: &[f32]) -> f64 {
+    let g = usize::from(b[0] > 0.0) * 2 + usize::from(b[1] > 0.0);
+    let i = (0..4usize).find(|&i| i ^ (i >> 1) == g).unwrap_or(0);
+    #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+    let v = (2 * i) as f64 - 3.0;
+    v / 10f64.sqrt()
+}
+
+impl Kernel for SymbolMapBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    symbol_map_call(&mut self.block, &self.bits, &mut self.out);
+                }
+                other => unreachable!("symbol_map_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// One call against the points of M44 §1 in `f64`.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        symbol_map_call(&mut self.block, &self.bits, &mut self.out);
+        let want: Vec<f64> = self
+            .bits
+            .chunks_exact(4)
+            .flat_map(|b| [qam16_level_f64(&b[..2]), qam16_level_f64(&b[2..])])
+            .collect();
+        snr_db(&want, &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The offset of `iq_offset_block` in samples: half a symbol at the 8 samples per symbol of the
+/// flow `oqpsk_transmitter` (`psk_mod` with `offset`).
+const IQ_OFFSET_SAMPLES: usize = BLOCK_SPS / 2;
+
+/// The block `iq_offset` (`part` `imag`, 4 samples; the last stage of `psk_mod` with `offset`,
+/// M44.1 §2.4) over `n` samples of random values in ±1 per call, in place as in `psk_mod` (the
+/// buffer is delayed again by every call; the copy of `Block::process` is a `memcpy` that glibc
+/// does with `rep movsb` under the counters of `avx2` and `avx512`, which count every byte as one
+/// execution, the artifact of the cycle tables).
+pub(crate) struct IqOffsetBlockK {
+    block: IqOffsetBlock<ArenaStorage<'static>>,
+    input: Vec<C32>,
+    out: Vec<C32>,
+}
+
+impl IqOffsetBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let cfg = IqOffsetConfig {
+            samples: IQ_OFFSET_SAMPLES,
+            part: IqPart::Imag,
+        };
+        let rate = block_rate(100_000);
+        let bytes =
+            IqOffsetBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
+        let input: Vec<C32> = (0..layout.n)
+            .map(|_| C32::new(rng.unit(), rng.unit()))
+            .collect();
+        IqOffsetBlockK {
+            block: IqOffsetBlock::new(&cfg, rate, &mut leaked_arena(bytes))
+                .expect("iq_offset block"),
+            out: input.clone(),
+            input,
+        }
+    }
+}
+
+#[inline(never)]
+fn iq_offset_call(block: &mut IqOffsetBlock<ArenaStorage<'static>>, data: &mut [C32]) {
+    block.process_in_place(black_box(data));
+}
+
+impl Kernel for IqOffsetBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    iq_offset_call(&mut self.block, &mut self.out);
+                }
+                other => unreachable!("iq_offset_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// 999 when one call from the reset state gives the real parts unchanged and the imaginary
+    /// parts 4 samples later (zero before), bit for bit; 0 otherwise.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        self.out.copy_from_slice(&self.input);
+        iq_offset_call(&mut self.block, &mut self.out);
+        let ok = self.out.iter().enumerate().all(|(t, y)| {
+            let im = t
+                .checked_sub(IQ_OFFSET_SAMPLES)
+                .map_or(0.0, |j| self.input[j].im);
+            y.re.to_bits() == self.input[t].re.to_bits() && y.im.to_bits() == im.to_bits()
+        });
+        if ok { 999.0 } else { 0.0 }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The block `qam_acquire` with `correct` `false` (the mode of `qam_demod`, M44.1 §2.2) while it
+/// searches, in place as in `qam_demod` (`correct` `false` leaves the buffer as it is; the copy
+/// of `Block::process` is the `rep movsb` artifact of `iq_offset_block`): `n` symbols of circular
+/// complex Gaussian noise of unit power per call (no signal, the same every call), so every symbol goes through the normalized fourth power and
+/// every 512 symbols through the 1024-point `fft` and the peak search; the share of the
+/// acquisition in `qam_demod_search_block`.
+pub(crate) struct QamAcquireBlockK {
+    block: QamAcquireBlock<ArenaStorage<'static>>,
+    input: Vec<C32>,
+    out: Vec<C32>,
+}
+
+impl QamAcquireBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let cfg = QamAcquireConfig::default();
+        let rate = block_rate(25_000);
+        let bytes =
+            QamAcquireBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
+        // Circular complex Gaussian noise (Box-Muller): uniform noise in a square has a fourth
+        // power with a mean, a clear peak at 0 that ends the search.
+        let input: Vec<C32> = (0..layout.n)
+            .map(|_| {
+                let u = 0.5 * (rng.unit() + 1.0);
+                let r = (-u.max(1e-12).ln()).sqrt();
+                let (s, c) = (core::f32::consts::PI * rng.unit()).sin_cos();
+                C32::new(r * c, r * s)
+            })
+            .collect();
+        let mut k = QamAcquireBlockK {
+            block: QamAcquireBlock::new(&cfg, rate, &mut leaked_arena(bytes))
+                .expect("qam_acquire block"),
+            out: input.clone(),
+            input,
+        };
+        // Past the skip of the first search, as in the steady state of a search.
+        qam_acquire_call(&mut k.block, &mut k.out);
+        k
+    }
+}
+
+#[inline(never)]
+fn qam_acquire_call(block: &mut QamAcquireBlock<ArenaStorage<'static>>, data: &mut [C32]) {
+    let _ = block.process_in_place(black_box(data));
+}
+
+impl Kernel for QamAcquireBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    qam_acquire_call(&mut self.block, &mut self.out);
+                }
+                other => unreachable!("qam_acquire_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// 999 when after a call the buffer is the input bit for bit (`correct` `false`) and the
+    /// block still searches (no estimate taken from the noise), 0 otherwise.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.run(which, 1);
+        let same = self
+            .out
+            .iter()
+            .zip(&self.input)
+            .all(|(y, x)| y.re.to_bits() == x.re.to_bits() && y.im.to_bits() == x.im.to_bits());
+        if same && self.block.estimate().is_none() && self.block.active() {
+            999.0
+        } else {
+            0.0
+        }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// Payload and preamble bytes of the frames of `qam_frame_encode_block` and
+/// `qam_frame_decode_block` (the frames of `frame_decode_block`).
+const QAM_FRAME_PAYLOAD: usize = 32;
+const QAM_FRAME_PREAMBLE: usize = 4;
+
+/// A random packet of [`QAM_FRAME_PAYLOAD`] bytes.
+fn qam_frame_packet(rng: &mut Pcg32) -> Packet {
+    let payload: Vec<u8> = (0..QAM_FRAME_PAYLOAD)
+        .map(|_| rng.next_u32() as u8)
+        .collect();
+    Packet::new(0, PacketFlags::NONE, &payload).expect("packet")
+}
+
+/// The bits of the frame of `p` as soft bits `+-1`.
+fn qam_frame_soft(p: &Packet) -> Vec<f32> {
+    let mut f = vec![0u8; frame::frame_bits(QAM_FRAME_PAYLOAD, QAM_FRAME_PREAMBLE)];
+    frame::encode(p, QAM_FRAME_PREAMBLE, Whitening::None, &mut f).expect("frame");
+    f.iter().map(|&b| if b == 1 { 1.0 } else { -1.0 }).collect()
+}
+
+/// The block `qam_frame_encode` (M44.1 §7: `frame_encode` -> `qam_mod`, 16-QAM at 8 samples per
+/// symbol, 4-byte preamble, the flow `qam16_transmitter`) writing `n` output samples per call
+/// from back-to-back frames of 32-byte payloads.
+pub(crate) struct QamFrameEncodeBlockK {
+    block: QamFrameEncodeBlock<ArenaStorage<'static>>,
+    packets: Vec<Packet>,
+    /// Packets consumed so far (the next call starts there; wraps around).
+    next: usize,
+    out: Vec<C32>,
+}
+
+impl QamFrameEncodeBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let cfg = QamFrameEncodeConfig {
+            frame: FrameEncodeConfig {
+                preamble_bytes: QAM_FRAME_PREAMBLE,
+                ..FrameEncodeConfig::default()
+            },
+            qam: qam_mod_config(),
+        };
+        let rate = block_rate(100_000);
+        let bytes = QamFrameEncodeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate)
+            .expect("storage");
+        let per = frame::frame_bits(QAM_FRAME_PAYLOAD, QAM_FRAME_PREAMBLE);
+        // Enough packets for two calls, so the second call resumes a cut frame.
+        let count = (2 * layout.n / BLOCK_SPS * 4).div_ceil(per) + 1;
+        QamFrameEncodeBlockK {
+            block: QamFrameEncodeBlock::new(&cfg, rate, &mut leaked_arena(bytes))
+                .expect("qam_frame_encode block"),
+            packets: (0..count).map(|_| qam_frame_packet(rng)).collect(),
+            next: 0,
+            out: vec![C32::default(); layout.n],
+        }
+    }
+}
+
+#[inline(never)]
+fn qam_frame_encode_call(
+    block: &mut QamFrameEncodeBlock<ArenaStorage<'static>>,
+    packets: &[Packet],
+    out: &mut [C32],
+) -> usize {
+    block
+        .process(black_box(packets), out)
+        .map_or(usize::MAX, |p| p.consumed)
+}
+
+impl Kernel for QamFrameEncodeBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    if self.next >= self.packets.len() / 2 {
+                        self.block.reset();
+                        self.next = 0;
+                    }
+                    let consumed = qam_frame_encode_call(
+                        &mut self.block,
+                        &self.packets[self.next..],
+                        &mut self.out,
+                    );
+                    self.next += consumed;
+                }
+                other => unreachable!("qam_frame_encode_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// One call from the reset state against `qam_mod` in `f64` (the model of `qam_mod_block`)
+    /// of the bits of the frames back to back.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        self.next = 0;
+        self.run(which, 1);
+        let mut bits: Vec<f32> = self.packets.iter().flat_map(qam_frame_soft).collect();
+        bits.truncate(self.out.len() / BLOCK_SPS * 4);
+        let want: Vec<f64> = qam_mod_f64(&bits)
+            .into_iter()
+            .flat_map(|(re, im)| [re, im])
+            .collect();
+        snr_db(&want, &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+/// The block `qam_frame_decode` (M44.1 §7: `qam_demod` with the configuration of
+/// `qam_demod_block` -> `frame_decode` with `rotations` `four`, the frame watch at its default
+/// 16384 symbols; the flow `qam16_receiver`) reading `n` input samples per call: the signal of
+/// `qam_demod_block` with whole frames of 32-byte payloads back to back as the bits (the rest of
+/// the `n / 8` symbols zero bits), repeated every call. The state lives across the calls; the
+/// warm-up of `qam_demod_block` runs in `new`.
+pub(crate) struct QamFrameDecodeBlockK {
+    block: QamFrameDecodeBlock<ArenaStorage<'static>>,
+    input: Vec<C32>,
+    payloads: Vec<Vec<u8>>,
+    got: Vec<Packet>,
+    produced: usize,
+}
+
+#[inline(never)]
+fn qam_frame_decode_call(
+    block: &mut QamFrameDecodeBlock<ArenaStorage<'static>>,
+    input: &[C32],
+    got: &mut [Packet],
+) -> usize {
+    block
+        .process(black_box(input), got)
+        .map_or(0, |p| p.produced)
+}
+
+impl QamFrameDecodeBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        let n = layout.n;
+        let per = frame::frame_bits(QAM_FRAME_PAYLOAD, QAM_FRAME_PREAMBLE);
+        let room = n / BLOCK_SPS * 4;
+        let packets: Vec<Packet> = (0..room / per).map(|_| qam_frame_packet(rng)).collect();
+        let mut bits: Vec<f32> = packets.iter().flat_map(qam_frame_soft).collect();
+        bits.resize(room, -1.0);
+        let mut tx = qam_mod_block();
+        let mut sig = vec![C32::default(); n];
+        // Two passes: the second starts with the pulse tails of the first, as the repeated
+        // input does at every call.
+        let _ = tx.process(&bits, &mut sig);
+        let _ = tx.process(&bits, &mut sig);
+        let (s, c) = 0.3f32.sin_cos();
+        let input = sig
+            .iter()
+            .map(|x| {
+                C32::new(
+                    x.re * c - x.im * s + 0.02 * rng.unit(),
+                    x.re * s + x.im * c + 0.02 * rng.unit(),
+                )
+            })
+            .collect();
+        let cfg = QamFrameDecodeConfig {
+            demod: QamDemodConfig {
+                order: 16,
+                symbol_rate_hz: 25_000.0,
+                ..QamDemodConfig::default()
+            },
+            ..QamFrameDecodeConfig::default()
+        };
+        let rate = block_rate(200_000);
+        let bytes = QamFrameDecodeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate)
+            .expect("storage");
+        let mut k = QamFrameDecodeBlockK {
+            block: QamFrameDecodeBlock::new(&cfg, rate, &mut leaked_arena(bytes))
+                .expect("qam_frame_decode block"),
+            input,
+            payloads: packets.iter().map(|p| p.data().to_vec()).collect(),
+            // Room for every frame of a call (one frame is more than 56 soft bits).
+            got: vec![Packet::default(); n / 56 + 1],
+            produced: 0,
+        };
+        for _ in 0..DEMOD_WARMUP {
+            k.produced = qam_frame_decode_call(&mut k.block, &k.input, &mut k.got);
+        }
+        k
+    }
+}
+
+impl Kernel for QamFrameDecodeBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    self.produced =
+                        qam_frame_decode_call(&mut self.block, &self.input, &mut self.got);
+                }
+                other => unreachable!("qam_frame_decode_block has no {other:?}"),
+            }
+            black_box(&self.got);
+        }
+    }
+
+    /// 999 when one call after the warm-up gives at least all frames of a call but one, every
+    /// one with `CRC_OK` and a sent payload, 0 otherwise.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.run(which, 1);
+        let got = &self.got[..self.produced];
+        let ok = got.len() + 1 >= self.payloads.len()
+            && got.iter().all(|g| {
+                g.flags.contains(PacketFlags::CRC_OK)
+                    && self.payloads.iter().any(|p| g.data() == p.as_slice())
+            });
+        if ok { 999.0 } else { 0.0 }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Impl, Layout, prepare};
+
+    /// Every entry of the building blocks and composites of M44.1 runs its workload as described:
+    /// the accuracy check passes for ours and for the fallback.
+    #[test]
+    fn the_m44_1_block_entries_pass_their_accuracy_check() {
+        let layout = Layout {
+            n: 4096,
+            misaligned: false,
+        };
+        for name in [
+            "symbol_map_block",
+            "iq_offset_block",
+            "qam_acquire_block",
+            "qam_frame_encode_block",
+            "qam_frame_decode_block",
+        ] {
+            for which in [Impl::Ours, Impl::Fallback] {
+                let mut k = prepare(name, layout).expect(name);
+                // Two calls more, as in the steady state of the count.
+                k.run(which, 2);
+                let a = k.accuracy(which);
+                assert!(a >= 130.0, "{name} {}: {a}", which.name());
+            }
         }
     }
 }

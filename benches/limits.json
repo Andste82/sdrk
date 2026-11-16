@@ -5517,5 +5517,155 @@
       "status": "info",
       "waiver": "`psk_mod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "symbol_map_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_map_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "iq_offset_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles and instructions per sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles and instructions per sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles and instructions per sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles and instructions per sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles and instructions per sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles and instructions per sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`iq_offset_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "qam_acquire_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles and instructions per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`qam_acquire_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "qam_frame_encode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`qam_frame_encode_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "qam_frame_decode_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per input sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`qam_frame_decode_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

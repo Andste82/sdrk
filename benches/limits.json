@@ -5487,5 +5487,35 @@
     "simd128": {
       "status": "release"
     }
+  },
+  "psk_mod_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is the block `psk_mod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol: per symbol the Gray point of the table of sixteen points, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code); it is the baseline of `psk_mod` before it becomes a composite in M44.1"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is the block `psk_mod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol: per symbol the Gray point of the table of sixteen points, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code); it is the baseline of `psk_mod` before it becomes a composite in M44.1"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is the block `psk_mod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol: per symbol the Gray point of the table of sixteen points, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code); it is the baseline of `psk_mod` before it becomes a composite in M44.1"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is the block `psk_mod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol: per symbol the Gray point of the table of sixteen points, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code); it is the baseline of `psk_mod` before it becomes a composite in M44.1"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is the block `psk_mod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol: per symbol the Gray point of the table of sixteen points, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code); it is the baseline of `psk_mod` before it becomes a composite in M44.1"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is the block `psk_mod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol: per symbol the Gray point of the table of sixteen points, then the root-raised-cosine interpolation of the kernel `fir_interpolate`, which has its own entry against its library reference. No library has the same block (liquid-dsp's `modemcf` maps without pulse shaping; GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code); it is the baseline of `psk_mod` before it becomes a composite in M44.1"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`psk_mod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

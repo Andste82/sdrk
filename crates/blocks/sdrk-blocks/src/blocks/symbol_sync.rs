@@ -355,10 +355,11 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
 /// ```
 #[derive(Debug)]
 pub struct SymbolSyncBlock<T: Sample, S: Storage> {
-    config: SymbolSyncConfig,
+    /// The symbol rate as configured; the other parameters are read from the state, so that a
+    /// composite of building blocks stays small (M44.1 §1).
+    symbol_rate_hz: f64,
     state: SymbolSyncState<T>,
     ratio: Ratio,
-    min_input: usize,
     _storage: PhantomData<fn() -> S>,
 }
 
@@ -379,10 +380,9 @@ impl<T: Sample, S: Storage> SymbolSyncBlock<T, S> {
             config.ted_gain,
         )?;
         Ok(Self {
-            config: *config,
+            symbol_rate_hz: config.symbol_rate_hz,
             state,
             ratio: d.ratio,
-            min_input: min_input(d.sps, config.max_deviation),
             _storage: PhantomData,
         })
     }
@@ -412,6 +412,40 @@ impl<T: Sample, S: Storage> SymbolSyncBlock<T, S> {
     /// The kernel state (for inspection).
     pub fn state(&self) -> &SymbolSyncState<T> {
         &self.state
+    }
+
+    /// The configuration of the block: the symbol rate as configured, the loop parameters from
+    /// the state.
+    pub fn config(&self) -> SymbolSyncConfig {
+        SymbolSyncConfig {
+            symbol_rate_hz: self.symbol_rate_hz,
+            ted: self.state.ted(),
+            loop_bw: self.state.loop_bw(),
+            damping: self.state.damping(),
+            max_deviation: self.state.max_deviation(),
+            ted_gain: self.state.ted_gain(),
+        }
+    }
+
+    /// Starts the timing loop again: the history cleared, the first strobe at input sample 1,
+    /// `omega` at the nominal samples per symbol and the integrator at 0, as after construction.
+    /// The same as [`reset`](Block::reset), as a control call of a composite (M44.1 §3).
+    /// Forwards to `SymbolSyncState::reset`.
+    ///
+    /// ```
+    /// use sdrk::Rate;
+    /// use sdrk_blocks::{ArenaStorage, Block, SymbolSyncBlock, SymbolSyncConfig};
+    /// let cfg = SymbolSyncConfig { symbol_rate_hz: 1000.0, ..SymbolSyncConfig::default() };
+    /// let mut sync = SymbolSyncBlock::<f32, _>::new(&cfg, Rate::hz(4000)?, &mut ArenaStorage::new(&mut []))?;
+    /// let x: Vec<f32> = (0..400).map(|n| if (n / 4) % 3 == 0 { 1.0 } else { -1.0 }).collect();
+    /// let mut y = vec![0.0f32; 200];
+    /// sync.process(&x, &mut y)?;
+    /// sync.restart();
+    /// assert_eq!(sync.sps_estimate(), 4.0);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn restart(&mut self) {
+        self.state.reset();
     }
 }
 
@@ -462,10 +496,10 @@ where
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        self.config.get(name)
+        self.config().get(name)
     }
 
     fn min_input(&self) -> usize {
-        self.min_input
+        min_input(self.state.sps(), self.state.max_deviation())
     }
 }

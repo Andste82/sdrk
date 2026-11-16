@@ -647,3 +647,42 @@ fn qam_demod_keeps_its_full_output_on_a_short_signal() {
     t.check_vector(&case.name, &baseline::f32_bytes(&soft))
         .unwrap();
 }
+
+/// The frequency acquisition of `qam_demod` (test 3 of M44.1): after every call of 4096 input
+/// samples the acquired frequency (its `f64` bits, all ones before the first estimate), the
+/// restarts and the lock of the carrier loop, on every signal of `qam_blocks`. Recorded from the
+/// block before it became a composite, so that the estimates of `qam_acquire` inside the composite
+/// are checked window by window against those of the old block.
+#[test]
+fn qam_demod_keeps_its_acquired_frequencies() {
+    let t = table("qam_acquire");
+    let cases = demod_cases();
+    let results: Vec<(String, Digest)> = std::thread::scope(|s| {
+        let handles: Vec<_> = cases
+            .iter()
+            .map(|case| {
+                s.spawn(move || {
+                    let mut block = demod_block(case);
+                    let mut room = vec![0.0f32; 16_384];
+                    let mut d = Digest::new();
+                    for piece in case.input.chunks(4096) {
+                        let mut at = 0;
+                        while at < piece.len() {
+                            let p = block.process(&piece[at..], &mut room).unwrap();
+                            at += p.consumed;
+                        }
+                        let f = block.acquired_frequency().map_or(u64::MAX, f64::to_bits);
+                        d.bytes(&f.to_le_bytes());
+                        d.bytes(&block.restarts().to_le_bytes());
+                        d.bytes(&[u8::from(block.locked())]);
+                    }
+                    (case.name.clone(), d)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for (name, digest) in &results {
+        t.check(name, digest).unwrap();
+    }
+}

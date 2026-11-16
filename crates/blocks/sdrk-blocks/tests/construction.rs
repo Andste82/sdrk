@@ -41,9 +41,10 @@ use sdrk_blocks::{
 use sdrk_blocks::{
     CostasBlock, CostasConfig, FrameRotations, InterpolateBlock, IqOffsetBlock, IqOffsetConfig,
     IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
-    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QamDemodBlock,
-    QamDemodConfig, QamModBlock, QamModConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
-    RdsDemodConfig, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
+    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QamAcquireBlock,
+    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, RdsDecodeBlock,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolMapBlock, SymbolMapConfig,
+    SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -387,6 +388,12 @@ fn psk_blocks_storage_is_exact() {
         assert_eq!(bytes, 4 * samples);
         check_exact_storage(bytes, |a| IqOffsetBlock::new(&cfg, r, a).map(|_| ()));
     }
+    for correct in [false, true] {
+        let cfg = QamAcquireConfig { correct };
+        let bytes = QamAcquireBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 8 * (512 + 1024));
+        check_exact_storage(bytes, |a| QamAcquireBlock::new(&cfg, r, a).map(|_| ()));
+    }
     for (n, factor) in [(1, 1), (81, 8), (2049, 64)] {
         let taps = || (0..n).map(|k| k as f64 / n as f64);
         check_exact_storage(
@@ -582,6 +589,8 @@ fn no_block_is_larger_than_512_bytes() {
     check::<SymbolMapBlock<sdrk_testkit::VecStorage>>("SymbolMapBlock<Vec>");
     check::<IqOffsetBlock<A<'static>>>("IqOffsetBlock");
     check::<IqOffsetBlock<sdrk_testkit::VecStorage>>("IqOffsetBlock<Vec>");
+    check::<QamAcquireBlock<A<'static>>>("QamAcquireBlock");
+    check::<QamAcquireBlock<sdrk_testkit::VecStorage>>("QamAcquireBlock<Vec>");
     check::<QamModBlock<A<'static>>>("QamModBlock");
     check::<QamModBlock<sdrk_testkit::VecStorage>>("QamModBlock<Vec>");
     check::<QamDemodBlock<A<'static>>>("QamDemodBlock");
@@ -598,6 +607,14 @@ fn no_block_is_larger_than_512_bytes() {
 }
 
 fn assert_send<T: Send>() {}
+
+/// A lock policy for the send and sync checks of `LockWatch`.
+struct Policy;
+
+impl sdrk_blocks::LockPolicy for Policy {
+    const CHECK: u16 = 4096;
+    const TOLERANCE: f64 = 2e-4;
+}
 fn assert_sync<T: Sync>() {}
 
 #[test]
@@ -710,6 +727,16 @@ fn public_types_are_send() {
     assert_send::<IqOffsetBlock<sdrk_testkit::VecStorage>>();
     assert_sync::<IqOffsetBlock<A<'static>>>();
     assert_sync::<IqOffsetConfig>();
+    assert_send::<QamAcquireBlock<A<'static>>>();
+    assert_send::<QamAcquireBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<QamAcquireBlock<A<'static>>>();
+    assert_send::<QamAcquireConfig>();
+    assert_sync::<QamAcquireConfig>();
+    assert_send::<sdrk_blocks::LockWatch<Policy>>();
+    assert_sync::<sdrk_blocks::LockWatch<Policy>>();
+    assert_send::<sdrk_blocks::LockState>();
+    assert_send::<sdrk_blocks::LockTransition>();
+    assert_send::<sdrk_blocks::AcquireWindow>();
     assert_sync::<IqPart>();
     assert_send::<SymbolDemapConstellation>();
     fn symbol_demap_elem<T: SymbolDemapElem + Send + Sync>() {}

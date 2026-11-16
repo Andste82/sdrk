@@ -3689,6 +3689,45 @@
           },
           {
             "additionalProperties": false,
+            "description": "Estimates the carrier offset of 16-QAM or 64-QAM symbols by the fourth power and optionally turns it out.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "qam_acquire"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "correct": {
+                    "default": false,
+                    "description": "Whether the output is turned back by the estimate (true) or is the input (false). Typical: false behind a receiver that takes the estimate; true in front of a costas. Build-time.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Demodulates 16-QAM or 64-QAM to soft bits: matched filter, symbol timing, equalizer and carrier recovery.",
             "properties": {
               "align": {

@@ -43,6 +43,7 @@ pub mod design;
 mod drift;
 mod error;
 mod fork;
+mod lock_watch;
 mod param_map;
 mod ports;
 mod sample;
@@ -116,10 +117,12 @@ pub use blocks::pulse_key::{
     PULSE_KEY_OFF, PULSE_KEY_ON, PULSE_KEY_PAIRS, PULSE_KEY_QUEUE, PulseKeyBlock, PulseKeyConfig,
     PulseKeyMode,
 };
+pub use blocks::qam_acquire::{
+    AcquireWindow, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QamAcquireBlock, QamAcquireConfig,
+};
 pub use blocks::qam_demod::{
-    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS,
-    QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QAM_HANDOVER_SYMBOLS, QAM_TRACKER_HOLD_BW,
-    QAM_TRACKER_PULL_BW, QamDemodBlock, QamDemodConfig,
+    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QAM_HANDOVER_SYMBOLS,
+    QAM_TRACKER_HOLD_BW, QAM_TRACKER_PULL_BW, QamDemodBlock, QamDemodConfig,
 };
 pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
@@ -167,6 +170,7 @@ pub use design::{BiquadResponse, DesignSpec, DesignWindow};
 pub use drift::{DriftConfig, DriftController};
 pub use error::{Error, Result};
 pub use fork::{FORK_DESCRIPTION, Fork};
+pub use lock_watch::{LockPolicy, LockState, LockTransition, LockWatch};
 pub use param_map::ParamMap;
 pub use ports::{
     ChainEnd, ChainItem, Clocked, Frame, FrameOut, Lanes, LanesMut, LanesRef, Packets, Ports,

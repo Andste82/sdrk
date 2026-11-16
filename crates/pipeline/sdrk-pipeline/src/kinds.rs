@@ -31,10 +31,10 @@ use sdrk_blocks::{
     MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, QamDemodBlock, QamDemodConfig,
-    QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig, RESAMPLE_TUNED_PHASES,
-    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
-    RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, QamAcquireBlock, QamAcquireConfig,
+    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
     ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
     SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
     SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
@@ -3682,6 +3682,58 @@ impl Kind for IqOffsetKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(IqOffsetBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ qam_acquire
+
+pub(crate) struct QamAcquireKind;
+
+impl Kind for QamAcquireKind {
+    type Cfg = QamAcquireConfig;
+
+    const KIND: &'static str = "qam_acquire";
+    fn kernels() -> &'static [&'static str] {
+        &["fft"]
+    }
+    fn default_cfg() -> QamAcquireConfig {
+        QamAcquireConfig::default()
+    }
+    fn set(cfg: &mut QamAcquireConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &QamAcquireConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("qam_acquire needs c32 symbols"));
+        }
+        Ok(Figures {
+            rate_out: QamAcquireBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: QamAcquireBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // While searching, the normalized fourth power per symbol (about 10) and a 1024-point
+            // `fft` with the peak search per window of 512 symbols (about 10 per symbol); the
+            // correction adds a sine, a cosine and the product (D1561).
+            cost: if cfg.correct { 40.0 } else { 20.0 },
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &QamAcquireConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(QamAcquireBlock::new(
             cfg, rate, st,
         )?)))
     }

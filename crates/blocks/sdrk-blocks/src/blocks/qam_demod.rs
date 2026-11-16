@@ -1,25 +1,30 @@
 //! `qam_demod`: 16-QAM and 64-QAM demodulator (matched filter, symbol timing, frequency
-//! acquisition, equalizer, decision-directed carrier recovery, soft bits).
+//! acquisition, equalizer, decision-directed carrier recovery, soft bits), a composite of the
+//! building blocks `fir`, `symbol_sync`, `qam_acquire`, `equalize`, `costas` and `symbol_demap`
+//! with the lock state machine `LockWatch` (M44.1 §5).
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::Qam;
-use sdrk_core::kernels::costas::{Costas, CostasConstellation, CostasState};
-use sdrk_core::kernels::equalize::{EqConstellation, Equalize, EqualizeState};
-use sdrk_core::kernels::fft::{Direction, Fft, FftPlan, Scaling};
+use sdrk_core::kernels::costas::CostasConstellation;
+use sdrk_core::kernels::equalize::{EqConstellation, EqualizeState};
 use sdrk_core::kernels::filter::{Fir, FirState};
-use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
-use sdrk_core::num::flush_denormal;
 
-use super::costas::{DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW, check_f64};
-use super::equalize::{DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_TAPS, EQ_TAPS, EqualizeConfig};
+use super::costas::{
+    CostasBlock, CostasConfig, DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW,
+    check_f64,
+};
+use super::equalize::{
+    DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig,
+};
 use super::psk_demod::{
     MIN_SYMBOL_RATE_HZ, SPS_TOLERANCE, SYNC_MAX_DEVIATION, check_equalizer_taps, split_work,
-    to_u32, work_len,
+    work_len,
 };
+use super::qam_acquire::{AcquireWindow, QamAcquireBlock, QamAcquireConfig};
 use super::qam_mod::{ORDER_PARAM, order_of_value, qam_of_order};
-use super::symbol_demap::qam_soft_bits;
-use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
+use super::symbol_demap::{SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation};
+use super::symbol_sync::SymbolSyncBlock;
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -27,8 +32,12 @@ use crate::describe::{
 };
 use crate::design::{RRC_MAX_SPAN, RRC_MAX_SPS, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
 use crate::error::{Error, Result};
+use crate::lock_watch::{LockPolicy, LockState, LockTransition, LockWatch};
 use crate::storage::{Plan, Storage};
 use crate::{SymbolSyncConfig, Ted};
+
+/// The state of the equalizer of `qam_demod` on the storage `S`.
+type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C32>>;
 
 /// Input samples per piece the block processes at a time (the size of its work buffers).
 pub const QAM_DEMOD_CHUNK: usize = 256;
@@ -379,29 +388,16 @@ impl QamDemodConfig {
     }
 }
 
-/// Symbols skipped after a start or `reset` before the frequency acquisition collects its
-/// first window (the pull-in of the timing loop).
-pub const QAM_ACQUISITION_SKIP: usize = 256;
-/// Symbols of the fourth-power frequency estimate of `qam_demod`.
-pub const QAM_ACQUISITION_SYMBOLS: usize = 512;
-/// The symbol of a search (counted from its start) at which its window is complete.
-const WINDOW_END: u32 = (QAM_ACQUISITION_SKIP + QAM_ACQUISITION_SYMBOLS) as u32;
-/// The FFT size of the estimate: the symbols zero-padded to twice their number.
-const ACQUISITION_FFT: usize = 2 * QAM_ACQUISITION_SYMBOLS;
-/// The smallest peak of the periodogram of the fourth powers, relative to their energy
-/// (`|X_k|^2 >= ACQUISITION_MIN_PEAK sum |q_n|^2`), for which the estimate is used. Gaussian
-/// noise reaches it in 2 of 10000 windows; QAM gives 13 to 46 in the tests (D1403).
-const ACQUISITION_MIN_PEAK: f32 = 12.0;
-/// Symbols after a used estimate, and then between two checks, at which the acquisition checks
-/// the carrier loop (D1421, decided by frequency since D1618): a check at which the loop reports
-/// lock keeps the estimate; after a check without lock a new window of the fourth powers (the
-/// verify window) is taken, and when it shows a clear carrier away from the frequency of the
-/// loops the estimate counts as wrong or out of date (a false alarm on noise, a narrowband
-/// interferer before the signal, a new transmission on another frequency, or loops that did not
-/// converge on a correct estimate and wander about the carrier, D1623): the equalizer starts
-/// again from its start weights and blind symbols, the frequencies go to 0, and the acquisition
-/// searches again from the start of its window. A verify window without a clear peak (noise, or
-/// a weak signal whose lock level noise also reaches) keeps the estimate.
+/// Symbols after a used estimate, and then between two checks, at which the controller of
+/// `qam_demod` checks the carrier loop (D1421, decided by frequency since D1618): a check at which
+/// the loop reports lock keeps the estimate; after a check without lock a new window of the
+/// fourth powers (the verify window) is taken, and when it shows a clear carrier away from the
+/// frequency of the loops the estimate counts as wrong or out of date (a false alarm on noise, a
+/// narrowband interferer before the signal, a new transmission on another frequency, or loops
+/// that did not converge on a correct estimate and wander about the carrier, D1623): the
+/// equalizer starts again from its start weights and blind symbols, the frequencies go to 0, and
+/// the acquisition searches again from the start of its window. A verify window without a clear
+/// peak (noise, or a weak signal whose lock level noise also reaches) keeps the estimate.
 pub const QAM_ACQUISITION_CHECK: usize = 4096;
 /// The largest distance in cycles per symbol between a clear estimate of the verify window and
 /// the frequency of the loops for which the estimate is kept; beyond it the loops sit on a wrong
@@ -412,46 +408,24 @@ pub const QAM_ACQUISITION_VERIFY_TOLERANCE: f64 = 2e-4;
 /// The blind (CMA) symbols of the equalizer, at most, before its switch to the decision mode over
 /// which the hand-over measures the phase of its output (I44-17, [`QamDemodBlock`]).
 pub const QAM_HANDOVER_SYMBOLS: usize = 256;
-/// The smoothing factor of the symbol power `p` by which the fourth powers are normalized
-/// (`p = p + ACQUISITION_POWER_ALPHA (|x|^2 - p)`, a time constant of 64 symbols), so that a
-/// level that still changes (an AGC that settles) does not weight the end of the window more.
-const ACQUISITION_POWER_ALPHA: f32 = 1.0 / 64.0;
 
-/// The frequency acquisition of `qam_demod` (I44-3, I44-4, D1403): a feed-forward estimate of
-/// the carrier offset from the fourth powers of the symbols of the timing loop, made during the
-/// blind (CMA) symbols of the equalizer when the signal is there from the start.
+/// The thresholds and time limits of the controller of `qam_demod`.
+struct QamLock;
+
+impl LockPolicy for QamLock {
+    const CHECK: u16 = QAM_ACQUISITION_CHECK as u16;
+    const TOLERANCE: f64 = QAM_ACQUISITION_VERIFY_TOLERANCE;
+}
+
+// The check fits the counter of `LockWatch`, and the switch of the equalizer to the decision
+// mode comes before the first check after an estimate (the hand-over runs in `PullIn`).
+const _: () = assert!(QAM_ACQUISITION_CHECK <= u16::MAX as usize);
+const _: () = assert!(DEFAULT_CMA_SYMBOLS as usize <= QAM_ACQUISITION_CHECK);
+
+/// The hand-over of the equalizer from its blind (CMA) symbols to the decision mode (I44-17,
+/// D1700): the action of the state `PullIn` at the switch.
 ///
-/// Per symbol `x` the smoothed power `p = flush(p + (|x|^2 - p) / 64)` (finite values only,
-/// from 0 at the start). From symbol [`QAM_ACQUISITION_SKIP`] on, windows of
-/// [`QAM_ACQUISITION_SYMBOLS`] symbols of `q = x^4 / (p p)` (0 when not finite or `p` is not above 0;
-/// the normalization keeps a level that still settles, as behind an AGC, from weighting the
-/// end of the window more). For square QAM the mean of `x^4` is `E[s^4] e^(j 2 pi 4 f n)` with
-/// the offset `f` in cycles per symbol (`E[s^4]` = -0.68 and -0.62 at unit power, not 0). The
-/// periodogram of `q` zero-padded to `ACQUISITION_FFT` points (the kernel `fft`) has its
-/// largest bin `k` near `4 f ACQUISITION_FFT`; the parabola through the magnitudes of the bins
-/// `k - 1`, `k`, `k + 1` refines it, and `f = ((k + delta) / ACQUISITION_FFT wrapped into
-/// [-0.5, 0.5)) / 4`, the range `[-0.125, 0.125)` cycles per symbol of the fourth power. The
-/// estimate is used when the peak stands clear of the noise (`|X_k|^2 >= ACQUISITION_MIN_PEAK
-/// sum |q_n|^2`); otherwise the next window follows. After a used estimate the acquisition
-/// counts symbols; every [`QAM_ACQUISITION_CHECK`] symbols it checks the loop. A locked loop
-/// keeps the estimate. A check without lock keeps it as well and verifies it in the next
-/// interval with the window of the search (symbols 256 to 767 of the interval, the power `p`
-/// running from symbol 0): a clear estimate more than [`QAM_ACQUISITION_VERIFY_TOLERANCE`] away
-/// from the frequency of the loops, modulo the quarter cycle per symbol the fourth power cannot
-/// resolve, restarts the receiver (the equalizer from its start weights and blind symbols, the
-/// frequencies 0) and the acquisition searches again (the power `p` kept, the window again after
-/// [`QAM_ACQUISITION_SKIP`] symbols); anything else keeps it (D1618: the lock level of a weak
-/// signal that the loops hold correctly, 16-QAM at Es/N0 10 dB and below, 64-QAM at 16 dB and
-/// below, is that of noise, so the level cannot tell the two apart; the frequency can). So an
-/// estimate from noise or from an interferer, or an equalizer adapted to them, before the signal
-/// does not hold the receiver off the signal (D1421): the first verify window on the signal
-/// shows it on another frequency; an estimate after windows without a clear peak (the search ran
-/// over noise, which the blind equalizer adapted to) starts the equalizer again from its start
-/// weights and blind symbols (D1619); and a correct estimate of a weak signal is kept (D1605,
-/// D1608, D1618).
-///
-/// The hand-over of the equalizer from its blind (CMA) symbols to the decision mode (I44-17): the
-/// CMA is blind to the phase, and the decision-directed phase tracker that runs during it, at
+/// The CMA is blind to the phase, and the decision-directed phase tracker that runs during it, at
 /// [`QAM_TRACKER_PULL_BW`] on decisions of an output that has not converged yet, leaves the output
 /// at the switch at any phase within the quarter turn. Started there 10 to 40 degrees off, the
 /// decision mode of 64-QAM at Es/N0 18 and 19 dB pulled the tracker's frequency away from a correct
@@ -463,230 +437,41 @@ const ACQUISITION_POWER_ALPHA: f32 = 1.0 / 64.0;
 /// quarter turn (`E[s^4]` is real and negative: the mean of `z^4` is `E[s^4] e^(j 4 phi)` for an
 /// output `z = s e^(j phi)`), over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after an
 /// estimate (before it the tracker turns at frequency 0 and the phase of the output runs).
-///
-/// The acquisition times the hand-over as well (it makes the estimate that arms it and the starts
-/// of the equalizer, and it splits the runs): [`Acquisition::remaining`] ends a run at the switch,
-/// [`Acquisition::hand_over`] measures and turns, and the sum of the fourth powers lives in the
-/// first slot of the window buffer, which is idle while an estimate is held (from the estimate to
-/// the first check, [`QAM_ACQUISITION_CHECK`] symbols, while the switch comes at most the blind
-/// symbols after it).
-struct Acquisition<S: Storage> {
-    /// The twiddles of the FFT (the plan is made from them for each estimate, so that the block
-    /// stays small).
-    twiddles: S::Buf<C32>,
-    /// The fourth powers, then the spectrum.
-    buf: S::Buf<C32>,
-    /// Symbols seen since the start, a restart (both counted from 0) or the last window
-    /// without a clear peak (counted from [`QAM_ACQUISITION_SKIP`] then), up to the end of the
-    /// window; while an estimate is in use, the symbols since it or the last check.
-    seen: u32,
-    /// The value of `seen` at which the acquisition acts next: the end of a window or a check.
-    next: u32,
-    /// What the acquisition does with the symbols.
-    phase: Phase,
-    /// Whether a window of this search had no clear peak.
-    missed: bool,
-    /// Restarts since the start or `reset` (saturating).
-    restarts: u32,
-    /// The last used estimate, NaN while there is none (an `f64` instead of an `Option` keeps
-    /// the block within its size budget).
-    estimate: f64,
-    /// The smoothed symbol power.
-    power: f32,
-    /// Whether the receiver has the equalizer (only then the hand-over runs).
-    with_eq: bool,
+#[derive(Clone, Copy, Debug)]
+struct HandOver {
+    /// The sum of the fourth powers of the output.
+    sum: C32,
     /// The blind symbols of the equalizer left before its switch to the decision mode; 0 when it
-    /// is past (the steady state) or without the equalizer.
-    blind_left: u32,
+    /// is past (the steady state) or without the equalizer (at most `DEFAULT_CMA_SYMBOLS`).
+    blind_left: u16,
     /// Whether an estimate went to the equalizer's tracker since its start (only then the phase of
     /// its output stands still and is measured).
     armed: bool,
 }
 
-// The sum of the hand-over lives in the window buffer of the acquisition, idle from an estimate
-// to the first check after it: the switch to the decision mode must come before that check.
-const _: () = assert!(DEFAULT_CMA_SYMBOLS as usize <= QAM_ACQUISITION_CHECK);
-
-impl<S: Storage> Acquisition<S> {
-    /// The acquisition of a receiver with the equalizer (`with_eq`; its `DEFAULT_CMA_SYMBOLS`
-    /// blind symbols, the configuration of [`QamDemodConfig::equalizer`]) or without it.
-    fn new(storage: &mut S, with_eq: bool) -> Result<Self> {
-        let mut twiddles = storage.alloc::<C32>(ACQUISITION_FFT / 2)?;
-        FftPlan::new(ACQUISITION_FFT, twiddles.as_mut())?;
-        Ok(Self {
-            twiddles,
-            buf: storage.alloc::<C32>(ACQUISITION_FFT)?,
-            seen: 0,
-            next: WINDOW_END,
-            phase: Phase::Search,
-            missed: false,
-            restarts: 0,
-            estimate: f64::NAN,
-            power: 0.0,
-            with_eq,
-            blind_left: if with_eq { DEFAULT_CMA_SYMBOLS } else { 0 },
+impl HandOver {
+    /// The equalizer (`with_eq`) starts (again) from its start weights and blind symbols: the
+    /// hand-over waits for its blind symbols and an estimate.
+    fn start(with_eq: bool) -> Self {
+        Self {
+            sum: C32::new(0.0, 0.0),
+            blind_left: if with_eq {
+                DEFAULT_CMA_SYMBOLS as u16
+            } else {
+                0
+            },
             armed: false,
-        })
-    }
-
-    fn plan(plan: &mut Plan) -> Result<()> {
-        plan.add::<C32>(ACQUISITION_FFT / 2)?;
-        plan.add::<C32>(ACQUISITION_FFT)?;
-        Ok(())
-    }
-
-    fn reset(&mut self) {
-        self.seen = 0;
-        self.next = WINDOW_END;
-        self.phase = Phase::Search;
-        self.missed = false;
-        self.restarts = 0;
-        self.estimate = f64::NAN;
-        self.power = 0.0;
-        self.start_equalizer();
-    }
-
-    /// The equalizer starts (again) from its start weights and blind symbols: the hand-over waits
-    /// for its blind symbols and an estimate.
-    fn start_equalizer(&mut self) {
-        self.blind_left = if self.with_eq { DEFAULT_CMA_SYMBOLS } else { 0 };
-        self.armed = false;
-    }
-
-    /// Symbols until the acquisition acts next (the end of the window of a search or of a
-    /// verify window, while an estimate is held the check), or until the switch of the equalizer
-    /// to the decision mode when that comes first (the hand-over).
-    fn remaining(&self) -> usize {
-        let r = (self.next - self.seen) as usize;
-        if self.blind_left == 0 {
-            r
-        } else {
-            r.min(self.blind_left as usize)
         }
     }
 
-    /// Takes the next symbols (at most [`Acquisition::remaining`]).
-    fn collect(&mut self, x: &[C32]) {
-        // `Verify` ends at the end of its window.
-        if !matches!(self.phase, Phase::Search | Phase::Verify) {
-            // `x.len() <= remaining() <= QAM_ACQUISITION_CHECK`.
-            self.seen += x.len() as u32;
-            return;
-        }
-        let buf = self.buf.as_mut();
-        for &v in x {
-            let p = v.re * v.re + v.im * v.im;
-            if p.is_finite() {
-                self.power =
-                    flush_denormal(self.power + ACQUISITION_POWER_ALPHA * (p - self.power));
-            }
-            let n = self.seen as usize;
-            if let Some(i) = n
-                .checked_sub(QAM_ACQUISITION_SKIP)
-                .filter(|&i| i < QAM_ACQUISITION_SYMBOLS)
-            {
-                // The fourth power, and the zero of the padding that the last FFT overwrote (a
-                // store per symbol instead of clearing the padding at once).
-                if let Some(slot) = buf.get_mut(i) {
-                    *slot = normalized_fourth_power(v, self.power);
-                }
-                if let Some(pad) = buf.get_mut(i + QAM_ACQUISITION_SYMBOLS) {
-                    *pad = C32::new(0.0, 0.0);
-                }
-            }
-            self.seen += 1;
-        }
-    }
-
-    /// At the end of a window the estimate in cycles per symbol when its peak is clear (then
-    /// the acquisition holds it until a check), else nothing and the next window follows. While
-    /// an estimate is held, a check at which the lock detector of `costas` reports lock keeps it,
-    /// and a check without lock keeps it and takes the verify window in the next interval, whose
-    /// clear estimate away from `frequency()` (the frequency of the loops in cycles per symbol)
-    /// starts the search again ([`Step::Restart`]). Nothing happens between these points.
-    #[inline]
-    fn take(&mut self, costas: &CostasState, frequency: impl Fn() -> f64) -> Result<Step> {
-        if self.seen != self.next {
-            return Ok(Step::Nothing);
-        }
-        self.act(costas, frequency)
-    }
-
-    /// The work of [`Acquisition::take`] at the points where the acquisition acts (out of line:
-    /// once per window or check).
-    #[inline(never)]
-    #[cold]
-    fn act(&mut self, costas: &CostasState, frequency: impl Fn() -> f64) -> Result<Step> {
-        match self.phase {
-            Phase::Search => self.window_end(),
-            Phase::Verify => {
-                // The end of the verify window; the check follows at the end of the interval.
-                self.phase = Phase::Held;
-                self.next = QAM_ACQUISITION_CHECK as u32;
-                if let Some(f) = self.estimate_now()?
-                    && fourth_power_distance(f, frequency()) > QAM_ACQUISITION_VERIFY_TOLERANCE
-                {
-                    return Ok(self.restart());
-                }
-                Ok(Step::Nothing)
-            }
-            Phase::Held => {
-                // A check: with lock the next interval only counts, without it the next
-                // interval takes the verify window.
-                self.seen = 0;
-                if costas.locked() {
-                    self.next = QAM_ACQUISITION_CHECK as u32;
-                } else {
-                    self.phase = Phase::Verify;
-                    self.next = WINDOW_END;
-                }
-                Ok(Step::Check)
-            }
-        }
-    }
-
-    /// The end of a search window: an estimate with a clear peak is held, else the next window
-    /// follows.
-    fn window_end(&mut self) -> Result<Step> {
-        if let Some(f) = self.estimate_now()? {
-            let fresh = !self.missed;
-            self.missed = false;
-            if !fresh {
-                // `apply` starts the equalizer again.
-                self.start_equalizer();
-            }
-            if self.with_eq {
-                self.armed = true;
-                if let Some(sum) = self.buf.as_mut().first_mut() {
-                    *sum = C32::new(0.0, 0.0);
-                }
-            }
-            self.estimate = f;
-            self.phase = Phase::Held;
-            self.seen = 0;
-            self.next = QAM_ACQUISITION_CHECK as u32;
-            Ok(Step::Estimate { f, fresh })
-        } else {
-            self.missed = true;
-            self.seen = QAM_ACQUISITION_SKIP as u32;
-            Ok(Step::Nothing)
-        }
-    }
-
-    /// The search again from the start of its window (the power `p` kept).
-    fn restart(&mut self) -> Step {
-        self.restarts = self.restarts.saturating_add(1);
-        // `restart` (the function of the block) starts the equalizer again.
-        self.start_equalizer();
-        self.phase = Phase::Search;
-        self.missed = false;
-        self.seen = 0;
-        self.next = WINDOW_END;
-        Step::Restart
+    /// An estimate went to the equalizer's tracker: the sum starts at 0.
+    fn arm(&mut self) {
+        self.armed = true;
+        self.sum = C32::new(0.0, 0.0);
     }
 
     /// The hand-over after a run `z` of outputs of the equalizer `eq` (at most `blind_left`
-    /// symbols, [`Acquisition::remaining`]): when armed, the fourth powers `(z^2)^2` of those
+    /// symbols, the runs end at the switch): when armed, the fourth powers `(z^2)^2` of those
     /// among the last [`QAM_HANDOVER_SYMBOLS`] blind symbols into the sum (in `f32`, in their
     /// order, finite ones only), and at the switch, when the sum is not 0, the tracker's phase
     /// grows by `round(atan2(-sum.im, -sum.re) / (8 pi) 2^32)` units of `2^-32` turn: the mean of
@@ -695,11 +480,8 @@ impl<S: Storage> Acquisition<S> {
     /// (out of line: only the runs of the blind symbols get here).
     #[inline(never)]
     #[cold]
-    fn hand_over(&mut self, eq: &mut EqState<S>, z: &[C32]) {
-        let left = self.blind_left as usize;
-        let Some(sum) = self.buf.as_mut().first_mut() else {
-            return;
-        };
+    fn run<S: Storage>(&mut self, eq: &mut EqualizeBlock<S>, z: &[C32]) {
+        let left = usize::from(self.blind_left);
         if self.armed {
             for (i, v) in z.iter().enumerate() {
                 // The blind symbols left after this one.
@@ -707,174 +489,66 @@ impl<S: Storage> Acquisition<S> {
                     let a = C32::new(v.re * v.re - v.im * v.im, 2.0 * v.re * v.im);
                     let q = C32::new(a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
                     if q.re.is_finite() && q.im.is_finite() {
-                        *sum = C32::new(sum.re + q.re, sum.im + q.im);
+                        self.sum = C32::new(self.sum.re + q.re, self.sum.im + q.im);
                     }
                 }
             }
         }
-        // `z.len() <= left` (the runs end at the switch).
-        self.blind_left = left.saturating_sub(z.len()) as u32;
+        // `z.len() <= left`.
+        self.blind_left = left.saturating_sub(z.len()) as u16;
         if self.blind_left == 0 {
+            let sum = self.sum;
             if self.armed && (sum.re != 0.0 || sum.im != 0.0) {
                 let phi = libm::atan2(-f64::from(sum.im), -f64::from(sum.re))
                     / (4.0 * core::f64::consts::TAU);
                 let step = libm::round(phi * 4_294_967_296.0) as i64 as u32;
-                eq.set_phase(eq.phase().wrapping_add(step));
+                eq.set_phase(eq.state().phase().wrapping_add(step));
             }
             self.armed = false;
         }
     }
-
-    fn estimate_now(&mut self) -> Result<Option<f64>> {
-        let buf = self.buf.as_mut();
-        // The padding `buf[512..]` was zeroed by `collect`, symbol by symbol.
-        let energy: f32 = buf
-            .get(..QAM_ACQUISITION_SYMBOLS)
-            .unwrap_or_default()
-            .iter()
-            .map(|v| v.re * v.re + v.im * v.im)
-            .sum();
-        let plan = FftPlan::from_twiddles(ACQUISITION_FFT, self.twiddles.as_ref())?;
-        <Sdrk as Fft<C32>>::fft(&Sdrk, &plan, buf, Direction::Forward, Scaling::Default)?;
-        let power = |v: &C32| v.re * v.re + v.im * v.im;
-        let mut bin = 0usize;
-        let mut peak = -1.0f32;
-        for (i, v) in buf.iter().enumerate() {
-            let p = power(v);
-            if p > peak {
-                peak = p;
-                bin = i;
-            }
-        }
-        if !(energy.is_finite() && peak.is_finite() && energy > 0.0)
-            || peak < ACQUISITION_MIN_PEAK * energy
-        {
-            return Ok(None);
-        }
-        let size = ACQUISITION_FFT;
-        let mag = |i: usize| {
-            buf.get(i % size)
-                .map_or(0.0, |v| libm::sqrt(f64::from(power(v))))
-        };
-        let (below, top, above) = (mag(bin + size - 1), mag(bin), mag(bin + 1));
-        let den = below - 2.0 * top + above;
-        let delta = if den < 0.0 {
-            0.5 * (below - above) / den
-        } else {
-            0.0
-        };
-        let mut cycles = (bin as f64 + delta) / size as f64;
-        if cycles >= 0.5 {
-            cycles -= 1.0;
-        }
-        Ok(Some(cycles / 4.0))
-    }
-
-    /// The estimate, if one was made and used.
-    fn frequency(&self) -> Option<f64> {
-        (!self.estimate.is_nan()).then_some(self.estimate)
-    }
 }
-
-/// The distance in cycles per symbol of two carrier frequencies modulo the quarter cycle per
-/// symbol that the fourth power of square QAM, and so the estimate, cannot resolve (D1608): an
-/// estimate wrapped into `[-0.125, 0.125)` and loops just across the edge are 0.25 apart, the
-/// same carrier for the window. In `[0, 0.125]`.
-fn fourth_power_distance(a: f64, b: f64) -> f64 {
-    let d = a - b;
-    libm::fabs(d - 0.25 * libm::round(4.0 * d))
-}
-
-/// What the frequency acquisition of `qam_demod` does with the symbols.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Phase {
-    /// Searching: the windows of the fourth powers.
-    Search,
-    /// An estimate in use after a check without lock: the window of the search (symbols 256 to
-    /// 767 of the interval) verifies the estimate (D1605, D1618).
-    Verify,
-    /// An estimate in use, no window until the check (after the estimate, a check with lock or
-    /// a verify window that kept the estimate): the steady state of a receiver runs in calls
-    /// split only at the checks.
-    Held,
-}
-
-/// What the frequency acquisition asks of the loops after a run of symbols.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Step {
-    /// Nothing.
-    Nothing,
-    /// Use the estimate (cycles per symbol).
-    Estimate {
-        /// The estimate in cycles per symbol.
-        f: f64,
-        /// Whether it is the first window since the start, a `reset` or a restart; after a
-        /// window without a clear peak (noise) the equalizer adapted to that and starts again
-        /// (D1619).
-        fresh: bool,
-    },
-    /// The verify window after a check without lock showed a clear carrier away from the
-    /// frequency of the loops: start again (the equalizer blind from its start weights, the
-    /// frequencies 0) and search.
-    Restart,
-    /// A check: the pull-in after an estimate is over, the equalizer's phase tracker narrows
-    /// to [`QAM_TRACKER_HOLD_BW`] (D1622).
-    Check,
-}
-
-/// `x^4 / (p p)` in `f32`: `a = x^2 = (x.re x.re - x.im x.im, 2 x.re x.im)`,
-/// `q = a^2 = (a.re a.re - a.im a.im, 2 a.re a.im)`, each part divided by `p p`; 0 when `p` is
-/// not above 0 or the result is not finite.
-#[inline]
-fn normalized_fourth_power(x: C32, p: f32) -> C32 {
-    let a = C32::new(x.re * x.re - x.im * x.im, 2.0 * x.re * x.im);
-    let pp = p * p;
-    let q = C32::new((a.re * a.re - a.im * a.im) / pp, (2.0 * a.re * a.im) / pp);
-    if p > 0.0 && q.re.is_finite() && q.im.is_finite() {
-        q
-    } else {
-        C32::new(0.0, 0.0)
-    }
-}
-
-/// The state of the equalizer of `qam_demod` on the storage `S`.
-type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C32>>;
 
 /// 16-QAM and 64-QAM demodulator: `C32` in, `f32` soft bits out (`bits_per_symbol` per symbol,
-/// above 0 is a 1).
+/// above 0 is a 1), a composite of building blocks with a controller (M44.1 §5).
 ///
-/// Per piece of at most [`QAM_DEMOD_CHUNK`] input samples: the kernel `fir` (matched filter, taps
-/// `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded samples per symbol), the kernel
-/// `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), the kernel `equalize` (when
-/// `equalizer_taps` is above 0), the kernel `costas` with the constellation `qam16` or `qam64`, and
-/// the soft bits of `symbol_demap` `qam16` or `qam64` (scale 1), the same functions as the blocks.
-/// Until it has found the carrier offset, the frequency acquisition (I44-3, I44-4) collects the
-/// normalized fourth powers of the symbols of the timing loop in windows of
-/// [`QAM_ACQUISITION_SYMBOLS`] from symbol [`QAM_ACQUISITION_SKIP`] on and estimates the offset
-/// from their spectrum (the kernel `fft`); the equalizer and the carrier loop run in two calls
-/// split after the symbol that completes a window, and a clear estimate goes to the frequency
+/// The building blocks, per piece of at most [`QAM_DEMOD_CHUNK`] input samples: the kernel `fir`
+/// (the matched filter, taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded
+/// samples per symbol), [`SymbolSyncBlock`] (Gardner at the exact `fs / symbol_rate_hz`),
+/// [`QamAcquireBlock`] (`correct` false: it only estimates), [`EqualizeBlock`] (when
+/// `equalizer_taps` is above 0), [`CostasBlock`] with the constellation `qam16` or `qam64`, and
+/// [`SymbolDemapBlock`] `qam16` or `qam64` (scale 1). Every sample the block writes comes from
+/// them; it only holds them, one work buffer and the controller.
+///
+/// The controller is the state machine [`LockWatch`] (the states `Search`, `PullIn`, `Track` and
+/// `Verify`, [`state`](QamDemodBlock::state)) and the hand-over of the equalizer, between the
+/// calls of the building blocks: the symbols of the timing loop of a piece run through the
+/// acquisition, the equalizer and the carrier loop in runs that end where an acquisition window
+/// completes, where a check falls (every [`QAM_ACQUISITION_CHECK`] symbols after an estimate) and
+/// at the equalizer's switch to the decision mode; after each run the controller carries out the
+/// named transition ([`LockTransition`]): in `Search` a clear window goes to the frequency
 /// integrator of the equalizer's phase tracker (the carrier loop's frequency to 0; the tracker at
 /// [`QAM_TRACKER_PULL_BW`] until the first check after the estimate, then at
 /// [`QAM_TRACKER_HOLD_BW`], so that `costas` does the phase tracking, D1618, D1622), or, without
 /// the equalizer, to the carrier loop (after windows without a clear peak the equalizer first
-/// starts again from its start weights and blind symbols). The calls split at the equalizer's
-/// switch to the decision mode as well, where its tracker turns by the fourth-power phase of its
-/// output over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after the estimate (I44-17). While
-/// an estimate is in use the acquisition checks the loop every [`QAM_ACQUISITION_CHECK`] symbols
-/// and, after a check without lock, takes a new window of the fourth powers in the next interval
-/// (the calls split at the checks and at the end of that window as well); when it shows the loops
-/// on a wrong frequency or not converged, the equalizer starts again from its start weights and
-/// blind symbols, the frequencies go to 0 and the acquisition searches again (D1421, D1605, D1618,
-/// D1623). Soft bits that do not fit into the output wait in a buffer and are written first by the
-/// next call (which then consumes no input). Timing: variable ratio `symbol_rate bits / fs`, delay
-/// `(span + equalizer_taps - 1) n / 2 + 1` input samples. Storage: the taps, the filter history,
-/// one work buffer of `512 + 128 bits` `C32` (filter output, symbols, waiting soft bits as `f32`),
-/// the 1024 `C32` of the acquisition's FFT and its 512 twiddles, and for `equalizer_taps` `t > 0`
-/// the `t` weights and the `t` history values of the equalizer.
+/// starts again from its start weights and blind symbols, D1619); in `PullIn` the tracker turns at
+/// the switch by the fourth-power phase of the equalizer's output over the last
+/// [`QAM_HANDOVER_SYMBOLS`] blind symbols after the estimate (I44-17, D1700); a check without lock
+/// takes a verify window, and when it shows the loops on a wrong frequency or not converged, the
+/// equalizer starts again from its start weights and blind symbols, the frequencies go to 0 and
+/// the acquisition searches again (D1421, D1605, D1618, D1623). The output is bit for bit that of
+/// the block of M44 with the fix of I44-17 (M44.1 test 5). Soft bits that do not fit into the
+/// output wait in a buffer and are written first by the next call (which then consumes no input).
+/// Timing: variable ratio `symbol_rate bits / fs`, delay `(span + equalizer_taps - 1) n / 2 + 1`
+/// input samples. Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32`
+/// (filter output, symbols, waiting soft bits as `f32`), for `equalizer_taps` `t > 0` the `t`
+/// weights and the `t` history values of the equalizer, and the 1024 `C32` of the acquisition's
+/// FFT and its 512 twiddles.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
-/// use sdrk_blocks::{ArenaStorage, Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig};
+/// use sdrk_blocks::{ArenaStorage, Block, LockState, QamDemodBlock, QamDemodConfig, QamModBlock,
+///     QamModConfig};
 /// let rate = Rate::hz(4000)?; // 1000 symbols per second, 4 samples per symbol
 /// let tx = QamModConfig { order: 16, samples_per_symbol: 4, ..QamModConfig::default() };
 /// let rx = QamDemodConfig { order: 16, symbol_rate_hz: 1000.0, ..QamDemodConfig::default() };
@@ -882,6 +556,7 @@ type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C3
 /// let mut arena = ArenaStorage::new(&mut mem);
 /// let mut m = QamModBlock::new(&tx, Rate::hz(4000)?, &mut arena)?;
 /// let mut d = QamDemodBlock::new(&rx, rate, &mut arena)?;
+/// assert_eq!(d.state(), LockState::Search);
 /// let bits: Vec<f32> = (0..16_000u32).map(|k| if (k * 7 + k / 5) % 3 == 0 { 1.0 } else { -1.0 }).collect();
 /// let mut sig = vec![C32::default(); 16_000];
 /// let p = m.process(&bits, &mut sig)?;
@@ -890,43 +565,40 @@ type EqState<S> = EqualizeState<<S as Storage>::Buf<C32>, <S as Storage>::Buf<C3
 /// let q = d.process(&sig, &mut soft)?;
 /// assert_eq!(q.consumed, 16_000);
 /// assert!((15_900..=16_000).contains(&q.produced));
+/// assert_eq!(d.state(), LockState::PullIn);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct QamDemodBlock<S: Storage> {
-    config: QamDemodConfig,
-    qam: Qam,
-    /// Bits per symbol and the rounded samples per symbol.
-    bps: u32,
-    sps: u32,
-    ratio: Ratio,
+    /// The matched filter (the kernel `fir` with given taps).
     fir: FirState<C32, S::Buf<f32>, S::Buf<C32>>,
-    sync: SymbolSyncState<C32>,
-    costas: CostasState,
+    sync: SymbolSyncBlock<C32, S>,
+    /// The acquisition, the equalizer and the carrier loop with the controller.
+    rx: Loops<S>,
+    demap: SymbolDemapBlock<C32, S>,
     /// One work buffer `[a | b | pending]` (`split_work` of `psk_demod`): `a` the
     /// matched-filter output, then the equalized symbols; `b` the symbols of `symbol_sync`,
     /// then those of the carrier loop; `pending` (as `f32`) the soft bits that did not fit into
     /// the output, `pending[at..len]`.
     work: S::Buf<C32>,
-    at: u32,
-    len: u32,
-    /// The equalizer before the carrier loop; `None` for `equalizer_taps` 0.
-    eq: Option<EqState<S>>,
-    /// The frequency acquisition.
-    acq: Acquisition<S>,
+    /// The roll-off of the matched filter (the only parameter no building block holds).
+    rolloff: f64,
+    at: u16,
+    len: u16,
 }
 
 impl<S: Storage> core::fmt::Debug for QamDemodBlock<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("QamDemodBlock")
-            .field("config", &self.config)
-            .field("costas", &self.costas)
+            .field("config", &self.config())
+            .field("state", &self.rx.watch.state())
+            .field("costas", self.rx.costas.state())
             .finish_non_exhaustive()
     }
 }
 
 impl<S: Storage> QamDemodBlock<S> {
-    /// Designs the matched filter and creates the block; taps, history and work buffers come
-    /// from `storage`.
+    /// Designs the matched filter and creates the block of its building blocks; taps, history,
+    /// the work buffer, the equalizer and the acquisition come from `storage`, in this order.
     ///
     /// # Errors
     /// As [`QamDemodConfig::validate`]; `Storage` when the storage is too small.
@@ -945,38 +617,51 @@ impl<S: Storage> QamDemodBlock<S> {
             *t = (rrc.tap(k) * gain) as f32;
         }
         let hist = storage.alloc::<C32>(taps_len - 1)?;
-        let bps = qam.bits_per_symbol();
-        let work = storage.alloc::<C32>(work_len(bps))?;
+        let work = storage.alloc::<C32>(work_len(qam.bits_per_symbol()))?;
         let eq = match config.equalizer() {
-            Some(e) => Some(e.state(storage)?),
+            Some(e) => Some(EqualizeBlock::new(&e, rate_in, storage)?),
             None => None,
         };
-        let acq = Acquisition::new(storage, eq.is_some())?;
-        let block = SymbolSyncBlock::<C32, S>::new(&config.sync(), rate_in, storage)?;
-        let ratio = block.timing().ratio.mul(Ratio::new(bps as u64, 1)?)?;
-        let costas = CostasState::new(
-            match qam {
-                Qam::Qam64 => CostasConstellation::Qam64,
-                _ => CostasConstellation::Qam16,
+        let acquire = QamAcquireBlock::new(&QamAcquireConfig { correct: false }, rate_in, storage)?;
+        let sync = SymbolSyncBlock::<C32, S>::new(&config.sync(), rate_in, storage)?;
+        let (costas_c, demap_c) = match qam {
+            Qam::Qam64 => (CostasConstellation::Qam64, SymbolDemapConstellation::Qam64),
+            _ => (CostasConstellation::Qam16, SymbolDemapConstellation::Qam16),
+        };
+        let costas = CostasBlock::new(
+            &CostasConfig {
+                constellation: costas_c,
+                loop_bw: config.carrier_bw,
+                damping: DEFAULT_DAMPING,
+                max_offset: DEFAULT_MAX_OFFSET,
             },
-            config.carrier_bw,
-            DEFAULT_DAMPING,
-            DEFAULT_MAX_OFFSET,
+            rate_in,
+            storage,
         )?;
+        let demap = SymbolDemapBlock::new(
+            &SymbolDemapConfig {
+                constellation: demap_c,
+                scale: 1.0,
+            },
+            rate_in,
+            storage,
+        )?;
+        let hand = HandOver::start(eq.is_some());
         Ok(Self {
-            config: *config,
-            qam,
-            bps: to_u32(bps)?,
-            sps: to_u32(n)?,
-            ratio,
             fir: FirState::new(taps, hist)?,
-            sync: *block.state(),
-            costas,
+            sync,
+            rx: Loops {
+                acquire,
+                eq,
+                costas,
+                watch: LockWatch::new(),
+                hand,
+            },
+            demap,
             work,
+            rolloff: config.rolloff,
             at: 0,
             len: 0,
-            eq,
-            acq,
         })
     }
 
@@ -995,7 +680,7 @@ impl<S: Storage> QamDemodBlock<S> {
         if let Some(e) = config.equalizer() {
             e.plan(&mut plan)?;
         }
-        Acquisition::<S>::plan(&mut plan)?;
+        QamAcquireBlock::<S>::plan(&mut plan)?;
         Ok(plan.bytes())
     }
 
@@ -1009,6 +694,26 @@ impl<S: Storage> QamDemodBlock<S> {
         Ok(sym.scale(Ratio::new(config.bits_per_symbol() as u64, 1)?)?)
     }
 
+    /// The configuration of the block, from its building blocks (the roll-off from the block).
+    pub fn config(&self) -> QamDemodConfig {
+        let sync = self.sync.config();
+        let n = self.samples_per_symbol();
+        QamDemodConfig {
+            order: if self.bits() == 6 { 64 } else { 16 },
+            symbol_rate_hz: sync.symbol_rate_hz,
+            rolloff: self.rolloff,
+            span: (self.num_taps() - 1) / n.max(1),
+            equalizer_taps: self.rx.eq.as_ref().map_or(0, |e| e.state().taps()),
+            sync_bw: sync.loop_bw,
+            carrier_bw: self.rx.costas.state().loop_bw(),
+        }
+    }
+
+    /// Bits per symbol (4 or 6).
+    fn bits(&self) -> usize {
+        self.demap.config().constellation.bits_per_symbol()
+    }
+
     /// Number of taps of the matched filter (`span n + 1`).
     pub fn num_taps(&self) -> usize {
         self.fir.taps().len()
@@ -1016,45 +721,51 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// The integer samples per symbol of the matched filter.
     pub fn samples_per_symbol(&self) -> usize {
-        self.sps as usize
+        // `sps` within 1 % of the integer `n` (2 to 1024), as `QamDemodConfig::derive`.
+        libm::floor(self.sync.state().sps() + 0.5) as usize
+    }
+
+    /// The state of the controller (M44.1 §5).
+    pub fn state(&self) -> LockState {
+        self.rx.watch.state()
     }
 
     /// Whether the carrier loop reports lock (the lock detector of `costas`: the decision error
     /// against the QAM grid, D1400).
     pub fn locked(&self) -> bool {
-        self.costas.locked()
+        self.rx.costas.locked()
     }
 
     /// The smoothed lock metric of the carrier loop (`CostasState::lock_level`: about 1 at
     /// lock, about 0 and below on noise).
     pub fn lock_level(&self) -> f32 {
-        self.costas.lock_level()
+        self.rx.costas.lock_level()
     }
 
     /// The estimated carrier offset in cycles per symbol: the frequency of the carrier loop plus
     /// that of the equalizer's phase tracker (which holds the acquired frequency).
     pub fn frequency(&self) -> f64 {
-        loops_frequency::<S>(&self.costas, self.eq.as_ref())
+        loops_frequency(&self.rx.costas, self.rx.eq.as_ref())
     }
 
     /// The carrier offset in cycles per symbol last found by the frequency acquisition (the
     /// fourth-power estimate over windows of 512 symbols from symbol 256 after a start, a
-    /// `reset` or a check of the carrier loop without lock, the first whose spectral peak stands
-    /// clear of the noise); `None` before the first.
+    /// `reset` or a restart, the first whose spectral peak stands clear of the noise; kept over a
+    /// restart until the next); `None` before the first.
     pub fn acquired_frequency(&self) -> Option<f64> {
-        self.acq.frequency()
+        self.rx.watch.acquired()
     }
 
-    /// How often the frequency acquisition restarted the receiver since its start or `reset`
-    /// (a verify window after a check without lock that found the loops on a wrong frequency,
-    /// D1421, D1605, D1618).
+    /// How often the controller restarted the receiver since its start or `reset` (a verify
+    /// window after a check without lock that found the loops on a wrong frequency, D1421,
+    /// D1605, D1618).
     pub fn restarts(&self) -> u32 {
-        self.acq.restarts
+        self.rx.watch.restarts()
     }
 
     /// The state of the equalizer (`None` for `equalizer_taps` 0).
     pub fn equalizer(&self) -> Option<&EqState<S>> {
-        self.eq.as_ref()
+        self.rx.eq.as_ref().map(EqualizeBlock::state)
     }
 
     /// The current estimate of the samples per symbol of the timing loop.
@@ -1064,13 +775,13 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// Writes waiting soft bits to `output`; returns how many.
     fn flush(&mut self, output: &mut [f32]) -> Result<usize> {
-        let (at, len) = (self.at as usize, self.len as usize);
+        let (at, len) = (usize::from(self.at), usize::from(self.len));
         let (_, _, pending) = split_work(self.work.as_mut())?;
         let waiting = head(tail(pending, at)?, len - at)?;
         let k = waiting.len().min(output.len());
         head_mut(output, k)?.copy_from_slice(head(waiting, k)?);
         // `k <= len <= QAM_DEMOD_CHUNK bits`.
-        self.at += k as u32;
+        self.at += k as u16;
         if self.at == self.len {
             self.at = 0;
             self.len = 0;
@@ -1084,110 +795,154 @@ impl<S: Storage> QamDemodBlock<S> {
         let m = piece.len();
         let (a, b, _) = split_work(self.work.as_mut())?;
         <Sdrk as Fir<C32>>::fir(&Sdrk, &mut self.fir, piece, head_mut(a, m)?)?;
-        let p = <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, &mut self.sync, head(a, m)?, b)?;
+        let p = self.sync.process(head(a, m)?, b)?;
         if p.consumed != m {
             return Err(Error::Core(sdrk_core::Error::Internal(
                 "qam_demod timing loop did not take the whole piece",
             )));
         }
         let ns = p.produced;
-        // `b` -> `a` (the equalizer, or a copy without it) -> `b` (the carrier loop), in runs
-        // that end where the frequency acquisition completes its window.
+        // `b` -> the acquisition (in place, unchanged) -> `a` (the equalizer, or a copy without
+        // it) -> `b` (the carrier loop), in runs that end where the controller acts.
         let mut at = 0;
         while at < ns {
-            let end = ns.min(at + self.acq.remaining());
-            let src = head(tail(b, at)?, end - at)?;
-            self.acq.collect(src);
-            let dst = head_mut(tail_mut(a, at)?, end - at)?;
-            match self.eq.as_mut() {
-                Some(eq) => equalize::<S>(eq, &mut self.acq, src, dst)?,
-                None => dst.copy_from_slice(src),
-            }
-            let out = head_mut(tail_mut(b, at)?, end - at)?;
-            <Sdrk as Costas>::costas(&Sdrk, &mut self.costas, dst, out)?;
-            let (costas, eq) = (&self.costas, &self.eq);
-            let frequency = || loops_frequency::<S>(costas, eq.as_ref());
-            match self.acq.take(costas, frequency)? {
-                Step::Estimate { f, fresh } => apply::<S>(&mut self.eq, &mut self.costas, f, fresh),
-                Step::Restart => restart::<S>(&mut self.eq, &mut self.costas),
-                Step::Check => settle::<S>(&mut self.eq),
-                Step::Nothing => {}
-            }
+            let end = ns.min(at + self.rx.remaining());
+            self.rx.run(
+                head_mut(tail_mut(b, at)?, end - at)?,
+                head_mut(tail_mut(a, at)?, end - at)?,
+            )?;
             at = end;
         }
         Ok(ns)
     }
 }
 
-/// The kernel `equalize` over a run, then the hand-over of the equalizer to the decision mode
-/// while its blind symbols last ([`Acquisition::hand_over`], I44-17).
-#[inline]
-fn equalize<S: Storage>(
-    eq: &mut EqState<S>,
-    acq: &mut Acquisition<S>,
-    src: &[C32],
-    dst: &mut [C32],
-) -> sdrk_core::Result<()> {
-    <Sdrk as Equalize>::equalize(&Sdrk, eq, src, dst)?;
-    if acq.blind_left != 0 {
-        acq.hand_over(eq, dst);
+/// The building blocks that the controller drives (the acquisition, the equalizer, the carrier
+/// loop) with the controller itself (the lock state machine and the hand-over).
+struct Loops<S: Storage> {
+    acquire: QamAcquireBlock<S>,
+    /// The equalizer before the carrier loop; `None` for `equalizer_taps` 0.
+    eq: Option<EqualizeBlock<S>>,
+    costas: CostasBlock<S>,
+    watch: LockWatch<QamLock>,
+    hand: HandOver,
+}
+
+impl<S: Storage> Loops<S> {
+    /// Symbols until the controller acts next: the end of the acquisition window, the check, or
+    /// the switch of the equalizer to the decision mode when that comes first (the hand-over).
+    fn remaining(&self) -> usize {
+        let r = self.acquire.remaining().min(self.watch.remaining());
+        match self.hand.blind_left {
+            0 => r,
+            b => r.min(usize::from(b)),
+        }
     }
-    Ok(())
+
+    /// A run of symbols `src` (the symbols of the timing loop, at most
+    /// [`remaining`](Loops::remaining)): the acquisition in place (unchanged), the equalizer into
+    /// `dst` (or a copy without it), the carrier loop back into `src`, then the controller.
+    #[inline]
+    fn run(&mut self, src: &mut [C32], dst: &mut [C32]) -> Result<()> {
+        let window = self.acquire.process_in_place(src)?;
+        match self.eq.as_mut() {
+            Some(eq) => {
+                eq.process(src, dst)?;
+                if self.hand.blind_left != 0 {
+                    self.hand.run(eq, dst);
+                }
+            }
+            None => dst.copy_from_slice(src),
+        }
+        self.costas.process(dst, src)?;
+        self.control(src.len(), window);
+        Ok(())
+    }
+
+    /// The controller after a run of `n` symbols: the window or the check that ended the run, as
+    /// the transition of the state machine (nothing between these points).
+    #[inline]
+    fn control(&mut self, n: usize, window: Option<AcquireWindow>) {
+        let t = match window {
+            Some(w) => {
+                let loops = loops_frequency(&self.costas, self.eq.as_ref());
+                self.watch.advance(n, false);
+                Some(self.watch.window(w.estimate, loops))
+            }
+            None => self.watch.advance(n, self.costas.locked()),
+        };
+        if let Some(t) = t {
+            self.transition(t);
+        }
+    }
+
+    /// Carries out a transition of the state machine (out of line: once per window or check).
+    #[inline(never)]
+    #[cold]
+    fn transition(&mut self, t: LockTransition) {
+        match t {
+            LockTransition::Acquire { frequency } => self.pull_in(frequency),
+            LockTransition::AcquireAfterMiss { frequency } => {
+                // The equalizer adapted to the noise of the windows without a clear peak.
+                if let Some(eq) = self.eq.as_mut() {
+                    eq.restart();
+                }
+                self.hand = HandOver::start(self.eq.is_some());
+                self.pull_in(frequency);
+            }
+            LockTransition::Settle => self.settle(),
+            LockTransition::SettleUnlocked => {
+                self.settle();
+                self.acquire.verify();
+            }
+            LockTransition::Doubt => self.acquire.verify(),
+            LockTransition::Restart => {
+                if let Some(eq) = self.eq.as_mut() {
+                    eq.restart();
+                    // A valid bandwidth: the call cannot fail.
+                    let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
+                }
+                self.costas.set_frequency(0.0);
+                self.hand = HandOver::start(self.eq.is_some());
+                self.acquire.search();
+            }
+            // `Miss` (the acquisition takes the next window itself), `Hold` and `Confirm`.
+            _ => {}
+        }
+    }
+
+    /// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer the
+    /// frequency integrator of its phase tracker takes `f` (the output is turned back at that rate,
+    /// and the tracker, at [`QAM_TRACKER_PULL_BW`] until the next check, takes out the error of the
+    /// estimate), the carrier loop starts again from frequency 0 (it sees the turned-back
+    /// equalizer output) and the hand-over is armed; without it the carrier loop takes `f`
+    /// (within its `max_offset`).
+    fn pull_in(&mut self, f: f64) {
+        match self.eq.as_mut() {
+            Some(eq) => {
+                self.hand.arm();
+                eq.set_frequency(f);
+                self.costas.set_frequency(0.0);
+            }
+            None => self.costas.set_frequency(f),
+        }
+    }
+
+    /// The end of the pull-in of the equalizer's phase tracker at the first check (D1622): the
+    /// tracker at [`QAM_TRACKER_HOLD_BW`], its phase and frequency kept (`costas` then does the
+    /// phase tracking).
+    fn settle(&mut self) {
+        if let Some(eq) = self.eq.as_mut() {
+            // A valid bandwidth: the call cannot fail.
+            let _ = eq.set_phase_bw(QAM_TRACKER_HOLD_BW);
+        }
+    }
 }
 
 /// The frequency of the loops in cycles per symbol: the carrier loop's plus that of the
 /// equalizer's phase tracker.
-fn loops_frequency<S: Storage>(costas: &CostasState, eq: Option<&EqState<S>>) -> f64 {
-    costas.frequency() + eq.map_or(0.0, |e| f64::from(e.frequency()))
-}
-
-/// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer the
-/// frequency integrator of its phase tracker takes `f` (the output is turned back at that rate,
-/// and the tracker, at [`QAM_TRACKER_PULL_BW`] until the next check, takes out the error of the
-/// estimate) and the carrier loop starts again from frequency 0 (it sees the turned-back
-/// equalizer output); without it the carrier loop takes `f` (within its `max_offset`). An
-/// estimate that is not `fresh` (after windows without a clear peak) first starts the equalizer
-/// again from its start weights and blind symbols (D1619).
-fn apply<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState, f: f64, fresh: bool) {
-    match eq.as_mut() {
-        Some(eq) => {
-            if !fresh {
-                eq.reset();
-            }
-            eq.set_frequency(f as f32);
-            costas.set_frequency(0.0);
-        }
-        None => costas.set_frequency(f),
-    }
-}
-
-/// The end of the pull-in of the equalizer's phase tracker at a check (D1622): the tracker at
-/// [`QAM_TRACKER_HOLD_BW`], its phase and frequency kept (`costas` then does the phase tracking).
-fn settle<S: Storage>(eq: &mut Option<EqState<S>>) {
-    if let Some(eq) = eq.as_mut() {
-        // A valid bandwidth: the call cannot fail.
-        let _ = eq.set_phase_bw(QAM_TRACKER_HOLD_BW);
-    }
-}
-
-/// Starts the loops again after a verify window of the acquisition that found the loops on a
-/// wrong frequency (D1421, D1605, D1618): the equalizer from its start (the start weights, the
-/// blind CMA symbols, its tracker at 0 and at [`QAM_TRACKER_PULL_BW`]), the carrier loop's
-/// frequency 0 (its phase and lock detector go on). An equalizer that adapted to noise or to an
-/// interferer before the signal does not converge on it in the decision mode.
-fn restart<S: Storage>(eq: &mut Option<EqState<S>>, costas: &mut CostasState) {
-    if let Some(eq) = eq.as_mut() {
-        eq.reset();
-        // A valid bandwidth: the call cannot fail.
-        let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
-    }
-    costas.set_frequency(0.0);
-}
-
-/// The soft bits of the symbols in `input` (scale 1); takes `min(input.len(), output.len() /
-/// bits)` symbols and returns that count.
-fn demod_bits(qam: Qam, input: &[C32], output: &mut [f32]) -> Result<usize> {
-    qam_soft_bits(qam, 1.0, input, output)
+fn loops_frequency<S: Storage>(costas: &CostasBlock<S>, eq: Option<&EqualizeBlock<S>>) -> f64 {
+    costas.frequency() + eq.map_or(0.0, |e| f64::from(e.state().frequency()))
 }
 
 impl<S: Storage> Block for QamDemodBlock<S> {
@@ -1201,7 +956,6 @@ impl<S: Storage> Block for QamDemodBlock<S> {
     fn process(&mut self, input: &[C32], output: &mut [f32]) -> Result<Progress> {
         let mut produced = self.flush(output)?;
         let mut consumed = 0usize;
-        let qam = self.qam;
         while self.len == 0 && produced < output.len() {
             let m = (input.len() - consumed).min(QAM_DEMOD_CHUNK);
             if m == 0 {
@@ -1209,16 +963,16 @@ impl<S: Storage> Block for QamDemodBlock<S> {
             }
             let ns = self.symbols(head(tail(input, consumed)?, m)?)?;
             consumed += m;
-            let bps = self.bps as usize;
             let (_, b, pending) = split_work(self.work.as_mut())?;
             let syms = head(b, ns)?;
-            let direct = demod_bits(qam, syms, tail_mut(output, produced)?)?;
-            produced += direct * bps;
-            let rest = tail(syms, direct)?;
+            let direct = self.demap.process(syms, tail_mut(output, produced)?)?;
+            produced += direct.produced;
+            let rest = tail(syms, direct.consumed)?;
             if !rest.is_empty() {
-                let n = demod_bits(qam, rest, pending)?;
+                let n = self.demap.process(rest, pending)?.produced;
                 self.at = 0;
-                self.len = to_u32(n * bps)?;
+                self.len = u16::try_from(n)
+                    .map_err(|_| Error::Core(sdrk_core::Error::Internal("qam_demod count")))?;
                 produced += self.flush(tail_mut(output, produced)?)?;
             }
         }
@@ -1226,15 +980,16 @@ impl<S: Storage> Block for QamDemodBlock<S> {
     }
 
     fn timing(&self) -> BlockTiming {
-        let n = self.sps as usize;
+        let n = self.samples_per_symbol();
+        let c = self.config();
+        let bits = Ratio::new(self.bits() as u64, 1).unwrap_or(Ratio::ONE);
         BlockTiming {
-            ratio: self.ratio,
+            ratio: self.sync.timing().ratio.mul(bits).unwrap_or(Ratio::ONE),
             kind: RatioKind::Variable,
             // The matched filter `span n / 2` plus one sample of the timing loop, and the
             // equalizer `(taps - 1) / 2` symbols of `n` input samples (as `psk_demod`).
             delay: Delay::new(
-                (self.config.span * n + 2 + self.config.equalizer_taps.saturating_sub(1) * n)
-                    as u64,
+                (c.span * n + 2 + c.equalizer_taps.saturating_sub(1) * n) as u64,
                 2,
             )
             .unwrap_or(Delay::ZERO),
@@ -1244,15 +999,17 @@ impl<S: Storage> Block for QamDemodBlock<S> {
     fn reset(&mut self) {
         self.fir.reset();
         self.sync.reset();
-        self.costas.reset();
+        self.rx.costas.reset();
         self.at = 0;
         self.len = 0;
-        if let Some(eq) = self.eq.as_mut() {
+        if let Some(eq) = self.rx.eq.as_mut() {
             eq.reset();
             // A valid bandwidth: the call cannot fail.
             let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
         }
-        self.acq.reset();
+        self.rx.acquire.reset();
+        self.rx.watch.reset();
+        self.rx.hand = HandOver::start(self.rx.eq.is_some());
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
@@ -1263,36 +1020,10 @@ impl<S: Storage> Block for QamDemodBlock<S> {
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        self.config.get(name)
+        self.config().get(name)
     }
 
     fn min_input(&self) -> usize {
-        sync_min_input(self.sync.sps(), SYNC_MAX_DEVIATION)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::fourth_power_distance;
-
-    /// The verify step of the acquisition compares the frequencies modulo a quarter cycle per
-    /// symbol (D1608): the two sides of the edge of the estimate's range are one carrier.
-    #[test]
-    fn the_verify_distance_wraps_at_a_quarter_cycle() {
-        let close = |a: f64, b: f64, want: f64| {
-            let d = fourth_power_distance(a, b);
-            assert!((d - want).abs() < 1e-12, "{a} {b}: {d} against {want}");
-        };
-        close(0.001, 0.001, 0.0);
-        close(0.0012, 0.001, 2e-4);
-        close(-0.12495, 0.12495, 1e-4);
-        close(0.12495, -0.12495, 1e-4);
-        close(-0.125, 0.125, 0.0);
-        // loops that drifted past the edge of the range
-        close(-0.1249, 0.1253, 2e-4);
-        close(0.06, 0.001, 0.059);
-        close(0.1, -0.1, 0.05);
-        close(0.125, 0.0, 0.125);
-        assert!(fourth_power_distance(0.0, f64::NAN).is_nan());
+        self.sync.min_input()
     }
 }

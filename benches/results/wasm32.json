@@ -4414,8 +4414,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 607.63,
-          "ours_instr_per_sample": 607.63,
+          "other_instr_per_sample": 607.64,
+          "ours_instr_per_sample": 607.64,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

@@ -4442,8 +4442,8 @@
         },
         "qam_frame_decode_block": {
           "compared_with": "sdrk fallback",
-          "goal": false,
-          "other_instr_per_sample": 188.52,
+          "goal": true,
+          "other_instr_per_sample": 188.53,
           "ours_instr_per_sample": 188.53,
           "ratio": 1.0,
           "snr_db": {

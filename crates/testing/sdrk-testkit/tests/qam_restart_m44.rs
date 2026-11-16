@@ -58,10 +58,12 @@
 //!   converged after their CMA symbols on a false state, MSE 0.06 and the weights' energy 0.54):
 //!   the same assertions.
 //!
-//! The soft bits of every receiver keep the bits of the baseline of M44.1 (spec §5, test 5;
-//! `sdrk_testkit::baseline`, table `qam_restart` of `tests/baseline/m44_1`), per SIMD level. The
-//! signals use the logarithms, powers, sines and cosines of `libm`, so that they are the same
-//! bits on every host.
+//! The soft bits of every receiver with the recovery of M44.1 §6 off (`set_recovery(false)`, the
+//! receiver of step 1) keep the bits of the baseline of M44.1 (spec §5, test 5;
+//! `sdrk_testkit::baseline`, table `qam_restart` of `tests/baseline/m44_1`), per SIMD level; the
+//! assertions above hold for the receivers with the recovery on, as `qam_demod` is built (M44.1
+//! test 8). The signals use the logarithms, powers, sines and cosines of `libm`, so that they are
+//! the same bits on every host.
 //!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
@@ -143,6 +145,19 @@ fn demod(order: u32, taps: usize) -> QamDemodBlock<VecStorage> {
         &mut VecStorage,
     )
     .unwrap()
+}
+
+/// Runs `input` through `block` with the recovery of M44.1 §6 off (the receiver of step 1,
+/// `set_recovery(false)`) and checks its soft bits against the baseline of `case` (M44.1 test 5).
+fn check_step_one(
+    table: &Baseline,
+    case: &str,
+    mut block: QamDemodBlock<VecStorage>,
+    input: &[C32],
+) {
+    block.set_recovery(false);
+    let soft = demod_all(&mut block, input);
+    table.check(case, &Digest::of_f32(&soft)).unwrap();
 }
 
 /// The symbols (`k` bits each, the first the most significant) of the soft bits `soft`.
@@ -283,7 +298,7 @@ fn a_correct_estimate_below_the_lock_level_is_kept() {
                     let mut block = demod(order, taps);
                     let soft = demod_all(&mut block, &input);
                     let case = format!("kept_qam{order}_taps{taps}_esn0_{esn0}");
-                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
+                    check_step_one(table, &case, demod(order, taps), &input);
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, 5000, 0);
                     (block.restarts(), block.acquired_frequency(), ber, slips)
@@ -335,7 +350,7 @@ fn a_weak_signal_the_loops_hold_is_not_restarted() {
                     let mut block = demod(order, taps);
                     let soft = demod_all(&mut block, &input);
                     let case = format!("held_qam{order}_taps{taps}_esn0_{esn0}");
-                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
+                    check_step_one(table, &case, demod(order, taps), &input);
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, 5000, 0);
                     let what = format!("{order}-QAM, equalizer_taps {taps}, Es/N0 {esn0} dB");
@@ -402,7 +417,7 @@ fn a_wrong_estimate_is_dropped_before_a_weak_signal() {
                     let soft = demod_all(&mut block, &input);
                     let first = if noise_first { "noise" } else { "carrier" };
                     let case = format!("dropped_qam{order}_taps{taps}_esn0_{esn0}_{first}");
-                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
+                    check_step_one(table, &case, demod(order, taps), &input);
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, rx.len() - 20_400, lead);
                     (block.restarts(), block.acquired_frequency(), ber, slips)
@@ -506,7 +521,7 @@ fn a_signal_back_after_a_gap_is_received_again() {
                     soft.extend(demod_all(&mut block, &input[(before + gap) * SPS..]));
                     let at = if loud { "loud" } else { "floor" };
                     let case = format!("gap_qam{order}_taps{taps}_esn0_{esn0}_{at}");
-                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
+                    check_step_one(table, &case, demod(order, taps), &input);
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, before + gap + BACK_WITHIN, 0);
                     let what = format!(
@@ -632,7 +647,12 @@ fn the_decision_mode_starts_at_the_phase_of_the_output() {
                     let case = format!(
                         "handover_qam{order}_taps{taps}_sync{sync_bw}_esn0_{esn0}_offset{offset}"
                     );
-                    table.check(&case, &Digest::of_f32(&soft)).unwrap();
+                    check_step_one(
+                        table,
+                        &case,
+                        QamDemodBlock::new(&cfg, rate, &mut VecStorage).unwrap(),
+                        &input,
+                    );
                     let rx = symbols(&soft, bps(order));
                     let (ber, slips) = errors(order, &sent, &rx, 10_000, 0);
                     let what = format!(

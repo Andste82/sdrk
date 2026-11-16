@@ -629,6 +629,84 @@ fn no_block_is_larger_than_512_bytes() {
     check::<ResampleRealBlock<f32, A<'static>>>("ResampleRealBlock<f32>");
     check::<ResampleRealBlock<Q15, A<'static>>>("ResampleRealBlock<Q15>");
     check::<ResampleRealBlock<Q15, sdrk_testkit::VecStorage>>("ResampleRealBlock<Q15, Vec>");
+    // Every other primitive block (the building blocks of the composites among them: `equalize`,
+    // `interpolate`, `frame_encode`, `frame_decode`), except `MorseDecodeBlock` (648 bytes on
+    // `main` since M47, found by this list; open item I44.1-6 for the maintainer).
+    macro_rules! complex {
+        ($($b:ident),*) => {$(
+            check::<sdrk_blocks::$b<C32, A<'static>>>(concat!(stringify!($b), "<C32>"));
+            check::<sdrk_blocks::$b<CQ15, A<'static>>>(concat!(stringify!($b), "<CQ15>"));
+        )*};
+    }
+    macro_rules! real {
+        ($($b:ident),*) => {$(
+            check::<sdrk_blocks::$b<f32, A<'static>>>(concat!(stringify!($b), "<f32>"));
+            check::<sdrk_blocks::$b<Q15, A<'static>>>(concat!(stringify!($b), "<Q15>"));
+        )*};
+    }
+    macro_rules! plain {
+        ($($b:ident),*) => {$(
+            check::<sdrk_blocks::$b<A<'static>>>(stringify!($b));
+            check::<sdrk_blocks::$b<sdrk_testkit::VecStorage>>(concat!(stringify!($b), "<Vec>"));
+        )*};
+    }
+    complex!(
+        AddBlock,
+        AmModBlock,
+        DecimateBlock,
+        DeemphasisBlock,
+        HalfbandDecimateBlock,
+        ImagPartBlock,
+        InterpolateBlock,
+        MagBlock,
+        MakeComplexBlock,
+        MulBlock,
+        NcoBlock,
+        NcoRealBlock,
+        NoiseBlankBlock,
+        QuadDemodBlock,
+        RealPartBlock,
+        RealToIqBlock,
+        RotateBlock,
+        SsbModBlock,
+        StereoMatrixBlock,
+        StereoPllBlock,
+        ToComplexBlock
+    );
+    real!(
+        AddRealBlock,
+        ConvertRealBlock,
+        DecimateRealBlock,
+        DeemphasisRealBlock,
+        HalfbandDecimateRealBlock,
+        InterpolateRealBlock,
+        MulRealBlock
+    );
+    plain!(
+        AdsbDecodeBlock,
+        AdsbParseBlock,
+        AfcBlock,
+        AutoNotchRealBlock,
+        BandPulseDetectBlock,
+        ChannelizeBlock,
+        EqualizeBlock,
+        FmStereoRdsModBlock,
+        FrameDecodeBlock,
+        FrameEncodeBlock,
+        FskModBlock,
+        HdlcDecodeBlock,
+        HdlcEncodeBlock,
+        MorseEncodeBlock,
+        OokModBlock,
+        PulseKeyBlock,
+        RdsDecodeBlock,
+        RdsDemodBlock,
+        SensorDecodeBlock,
+        SensorEncodeBlock
+    );
+    check::<sdrk_blocks::ChannelSelectBlock>("ChannelSelectBlock");
+    check::<sdrk_blocks::RdsEncodeBlock<f32, A<'static>>>("RdsEncodeBlock<f32>");
+    check::<sdrk_blocks::RdsEncodeBlock<Q15, A<'static>>>("RdsEncodeBlock<Q15>");
 }
 
 /// The composite blocks, the blocks that hold other blocks inline (the explicit list of the

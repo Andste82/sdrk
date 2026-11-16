@@ -32,7 +32,7 @@ use crate::describe::{
 };
 use crate::design::{RRC_MAX_SPAN, RRC_MAX_SPS, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
 use crate::error::{Error, Result};
-use crate::lock_watch::{LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
+use crate::lock_watch::{LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
 use crate::storage::{Plan, Storage};
 use crate::{SymbolSyncConfig, Ted};
 
@@ -984,7 +984,7 @@ const NO_RESTART: u64 = u64::MAX;
 /// the energy of the weights at unit input power, `sum |w|^2` times this power, so that its floor
 /// holds at any level of the input (the AGC of the flow `qam16_receiver` holds the power at about
 /// 1.9), while noise after the end of a signal, whose power is lower, does not count as a
-/// shrinking of the weights (D1576).
+/// shrinking of the weights (D1574).
 #[derive(Clone, Copy, Debug, Default)]
 struct Level {
     /// The sum of `|x|^2` of the finite symbols.
@@ -1108,43 +1108,56 @@ impl<S: Storage> Loops<S> {
         }
     }
 
-    /// Carries out a transition of the state machine (out of line: once per window or check).
+    /// Carries out a transition of the state machine by its action (`LockTransition::action`,
+    /// the one mapping of the transitions to the outputs of M44.1 §2.3; out of line: once per
+    /// window or check).
     #[inline(never)]
     #[cold]
     fn transition(&mut self, t: LockTransition) {
-        match t {
-            LockTransition::Acquire { frequency } => self.pull_in(frequency),
-            // The equalizer adapted to the noise of the windows without a clear peak (in the
-            // search, or in a gap of the signal, M44.1 §6).
-            LockTransition::AcquireAfterMiss { frequency }
-            | LockTransition::Return { frequency } => {
-                if let Some(eq) = self.eq.as_mut() {
-                    eq.restart();
-                    // A valid bandwidth: the call cannot fail.
-                    let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
+        match t.action() {
+            // `Acquire` hands the estimate to the loops, `Settle` ends the pull-in; `Miss` (the
+            // acquisition takes the next window itself), `Hold` and `Confirm` change nothing.
+            LockAction::Keep => {
+                if let Some(f) = t.frequency() {
+                    self.pull_in(f);
+                } else if t == LockTransition::Settle {
+                    self.settle();
                 }
-                self.hand = HandOver::start(self.eq.is_some());
-                self.pull_in(frequency);
             }
-            LockTransition::Settle => self.settle(),
-            LockTransition::SettleUnlocked => {
-                self.settle();
+            // `SettleUnlocked` ends the pull-in too; `Doubt` only takes the window.
+            LockAction::Verify => {
+                if t == LockTransition::SettleUnlocked {
+                    self.settle();
+                }
                 self.acquire.verify();
             }
-            LockTransition::Doubt => self.acquire.verify(),
-            LockTransition::Restart | LockTransition::Shrink | LockTransition::Silence => {
-                if let Some(eq) = self.eq.as_mut() {
-                    eq.restart();
-                    // A valid bandwidth: the call cannot fail.
-                    let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
+            // `AcquireAfterMiss` and `Return`: the equalizer adapted to the noise of the windows
+            // without a clear peak (in the search, or in a gap of the signal, M44.1 §6) starts
+            // again before the estimate goes to the loops.
+            LockAction::RestartEqualizer => {
+                self.restart_equalizer();
+                if let Some(f) = t.frequency() {
+                    self.pull_in(f);
                 }
+            }
+            // `Restart`, `Shrink` and `Silence`: the whole receiver, the acquisition searches.
+            LockAction::RestartAll => {
+                self.restart_equalizer();
                 self.costas.set_frequency(0.0);
-                self.hand = HandOver::start(self.eq.is_some());
                 self.acquire.search();
             }
-            // `Miss` (the acquisition takes the next window itself), `Hold` and `Confirm`.
-            _ => {}
         }
+    }
+
+    /// Starts the equalizer again (its start weights, the tracker at [`QAM_TRACKER_PULL_BW`])
+    /// and arms the hand-over of a new pull-in.
+    fn restart_equalizer(&mut self) {
+        if let Some(eq) = self.eq.as_mut() {
+            eq.restart();
+            // A valid bandwidth: the call cannot fail.
+            let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
+        }
+        self.hand = HandOver::start(self.eq.is_some());
     }
 
     /// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer the
